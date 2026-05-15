@@ -1,0 +1,374 @@
+[
+  {
+    "id": 1,
+    "groupName": "PickMaster Twin 3 Team",
+    "title": "Solar Power Optimizer",
+    "discipline": "Engineering",
+    "disciplines": [
+      "Engineering",
+      "Sustainability"
+    ],
+    "year": "2026",
+    "industry": "Energy",
+    "industryPartner": "ABB",
+    "academicSupervisor": "Dr. Nguyen Van A",
+    "program": "Engineering",
+    "studyProgram": "Engineering",
+    "summary": "A system that optimizes solar panel output using predictive analytics and environmental data. - [Demo Validated]",
+    "background": "Solar systems often operate below optimal efficiency because weather conditions and load patterns change throughout the day.",
+    "solution": "The team designed a predictive optimization model that analyzes environmental inputs and recommends more efficient operating settings.",
+    "posterText": "This project investigates how predictive analytics can improve solar panel performance and support sustainable energy management.",
+    "teamMembers": [
+      "Nguyen Quang Son",
+      "Pham Nguyen Nhat Duy",
+      "Duong Hai Nam"
+    ],
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/solar-power-optimizer.jpg",
+    "citations": [
+      "Author A",
+      "'Predictive Solar Optimization",
+      "' 2024."
+    ],
+    "status": "published",
+    "internalNotes": "Initial demo project.",
+    "lastUpdated": "2026-05-15T20:12:40.599Z",
+    "imageAlt": "Solar Power Optimizer preview",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ]
+  },
+  {
+    "id": 2,
+    "groupName": "Food Traceability Team",
+    "title": "Smart Food Traceability",
+    "discipline": "Food Tech",
+    "disciplines": [
+      "Food Tech",
+      "IT"
+    ],
+    "year": "2026",
+    "industry": "Agriculture",
+    "industryPartner": "GreenFarm Vietnam",
+    "academicSupervisor": "Dr. Tran Thi B",
+    "program": "Food Technology",
+    "studyProgram": "Food Technology",
+    "summary": "A digital traceability platform that improves transparency and safety in food supply chains.",
+    "background": "Food supply chains involve multiple handling stages and weak visibility can reduce trust and make incidents harder to trace.",
+    "solution": "The team developed a digital platform that stores and presents traceability records in a structured format.",
+    "posterText": "The platform improves transparency in the food supply chain by helping users track product origin, logistics, and handling updates.",
+    "teamMembers": [
+      "Tran Minh Chau",
+      "Le Thi Phuong",
+      "Nguyen Anh Khoa"
+    ],
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/smart-food-traceability.jpg",
+    "citations": [
+      "Author C, 'Digital Traceability in Agriculture,' 2024."
+    ],
+    "status": "published",
+    "internalNotes": "Initial demo project.",
+    "lastUpdated": "2026-05-16T01:51:18Z",
+    "imageAlt": "Smart Food Traceability preview",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ]
+  },
+  {
+    "id": 3,
+    "groupName": "Therapy Robotics Team",
+    "title": "Robotics Therapy Assistant",
+    "discipline": "Robotics",
+    "disciplines": [
+      "Robotics",
+      "Software Engineering"
+    ],
+    "year": "2026",
+    "industry": "Healthcare",
+    "industryPartner": "Future Health Lab",
+    "academicSupervisor": "Dr. Le Hoang C",
+    "program": "Software Engineering",
+    "studyProgram": "Software Engineering",
+    "summary": "An assistive robotic concept designed to support rehabilitation and therapy activities.",
+    "background": "Therapy and rehabilitation programs often require repetitive assisted movement and close supervision.",
+    "solution": "The team designed an assistive robotics concept that supports rehabilitation workflows through guided actions.",
+    "posterText": "This project explores how assistive robotics can support rehabilitation settings and reduce repetitive workload for care providers.",
+    "teamMembers": [
+      "Pham Gia Huy",
+      "Nguyen Bao Tram",
+      "Vo Minh Duc"
+    ],
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/robotics-therapy-assistant.jpg",
+    "citations": [
+      "Author D, 'Assistive Robotics in Rehabilitation,' 2022."
+    ],
+    "status": "approved",
+    "internalNotes": "Ready for publishing.",
+    "lastUpdated": "2026-05-16T01:51:18Z",
+    "imageAlt": "Robotics Therapy Assistant preview",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ]
+  },
+  {
+    "id": 4,
+    "groupName": "Campus Dashboard Team",
+    "title": "Campus Sustainability Dashboard",
+    "discipline": "IT",
+    "disciplines": [
+      "IT",
+      "Sustainability"
+    ],
+    "year": "2026",
+    "industry": "Sustainability",
+    "industryPartner": "RMIT Sustainability Office",
+    "academicSupervisor": "Dr. Pham Thi D",
+    "program": "Information Technology",
+    "studyProgram": "Information Technology",
+    "summary": "A dashboard that visualizes campus energy, waste, and sustainability metrics in one place.",
+    "background": "Sustainability initiatives often generate fragmented data across different systems.",
+    "solution": "The team built a dashboard concept that consolidates sustainability metrics into a single interface.",
+    "posterText": "The dashboard centralizes data related to energy use, waste management, and environmental initiatives for easier monitoring.",
+    "teamMembers": [
+      "Nguyen Minh Quan",
+      "Do Ha Linh",
+      "Tran Gia Bao"
+    ],
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/campus-sustainability-dashboard.jpg",
+    "citations": [
+      "Author F, 'Sustainability Dashboards for Higher Education,' 2024."
+    ],
+    "status": "pending_review",
+    "internalNotes": "Needs supervisor review.",
+    "lastUpdated": "2026-05-16T01:51:18Z",
+    "imageAlt": "Campus Sustainability Dashboard preview",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ]
+  },
+  {
+    "id": 5,
+    "groupName": "AI Triage Team",
+    "title": "Emergency Triage Assistant",
+    "discipline": "IT",
+    "disciplines": [
+      "IT",
+      "Healthcare"
+    ],
+    "year": "2026",
+    "industry": "Healthcare",
+    "industryPartner": "CityCare Hospital",
+    "academicSupervisor": "Dr. Bui Thanh E",
+    "program": "Information Technology",
+    "studyProgram": "Information Technology",
+    "summary": "A triage support tool that helps prioritize emergency cases based on structured patient inputs.",
+    "background": "Emergency departments face congestion and inconsistent prioritization during peak periods.",
+    "solution": "The system uses structured symptom and urgency inputs to assist frontline staff in prioritization decisions.",
+    "posterText": "This project proposes an emergency triage assistant that supports faster and more consistent prioritization decisions.",
+    "teamMembers": [
+      "Le Thanh Nhi",
+      "Nguyen Hoang My",
+      "Tran Duc Khang"
+    ],
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/emergency-triage-assistant.jpg",
+    "citations": [
+      "Author G, 'Digital Support Tools for Emergency Triage,' 2023."
+    ],
+    "status": "draft",
+    "internalNotes": "Incomplete submission.",
+    "lastUpdated": "2026-05-16T01:51:18Z",
+    "imageAlt": "Emergency Triage Assistant preview",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ]
+  },
+  {
+    "id": 6,
+    "groupName": "Smart Irrigation Team",
+    "title": "IoT Smart Irrigation Network",
+    "discipline": "Engineering",
+    "disciplines": [
+      "Engineering",
+      "Agriculture"
+    ],
+    "year": "2025",
+    "industry": "Agriculture",
+    "industryPartner": "AgriSense Co.",
+    "academicSupervisor": "Dr. Dao Minh F",
+    "program": "Engineering",
+    "studyProgram": "Engineering",
+    "summary": "An IoT-based irrigation system that adjusts watering schedules using sensor data.",
+    "background": "Traditional irrigation practices often waste water and fail to respond to changing soil conditions.",
+    "solution": "The team built a sensor-driven irrigation control network that automates watering decisions.",
+    "posterText": "The project uses soil moisture and environmental sensors to improve irrigation efficiency and reduce water waste.",
+    "teamMembers": [
+      "Hoang Minh Dat",
+      "Vu Khanh Linh",
+      "Nguyen Duc Tai"
+    ],
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/iot-smart-irrigation-network.jpg",
+    "citations": [
+      "Author H, 'Smart Irrigation with IoT Sensors,' 2024."
+    ],
+    "status": "published",
+    "internalNotes": "Completed 2025 project.",
+    "lastUpdated": "2026-05-16T02:03:00Z",
+    "imageAlt": "IoT Smart Irrigation Network preview",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ]
+  },
+  {
+    "id": 7,
+    "groupName": "SecureLearn Team",
+    "title": "Learning Platform Access Control",
+    "discipline": "Software Engineering",
+    "disciplines": [
+      "Software Engineering",
+      "Cybersecurity"
+    ],
+    "year": "2025",
+    "industry": "Education",
+    "industryPartner": "EduGate",
+    "academicSupervisor": "Dr. Huynh Gia G",
+    "program": "Software Engineering",
+    "studyProgram": "Software Engineering",
+    "summary": "A role-based access control system for academic learning platforms.",
+    "background": "Large education platforms often struggle to enforce consistent permission rules across roles.",
+    "solution": "The team designed and prototyped a role-based access control model with clear permission policies.",
+    "posterText": "This project improves platform security and governance by applying structured access-control policies across users and roles.",
+    "teamMembers": [
+      "Vo Anh Thu",
+      "Le Quang Vinh",
+      "Pham Thanh Long"
+    ],
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/learning-platform-access-control.jpg",
+    "citations": [
+      "Author I, 'Role-Based Access Control in Education Systems,' 2022."
+    ],
+    "status": "approved",
+    "internalNotes": "Final approval granted.",
+    "lastUpdated": "2026-05-16T02:03:00Z",
+    "imageAlt": "Learning Platform Access Control preview",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ]
+  },
+  {
+    "id": 8,
+    "groupName": "SupplyVision Team",
+    "title": "Warehouse Computer Vision Audit",
+    "discipline": "AI",
+    "disciplines": [
+      "AI",
+      "Logistics"
+    ],
+    "year": "2025",
+    "industry": "Logistics",
+    "industryPartner": "FastChain Logistics",
+    "academicSupervisor": "Dr. Tran Huy H",
+    "program": "Artificial Intelligence",
+    "studyProgram": "Artificial Intelligence",
+    "summary": "A computer vision system that assists with shelf auditing and item verification in warehouses.",
+    "background": "Manual shelf checks are slow and error-prone in high-volume warehouse environments.",
+    "solution": "The project applies computer vision to identify mismatches and support faster auditing workflows.",
+    "posterText": "This project uses image-based recognition to improve item verification and inventory auditing in logistics environments.",
+    "teamMembers": [
+      "Nguyen Hai Yen",
+      "Tran Bao Anh",
+      "Duong Minh Kha"
+    ],
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/warehouse-computer-vision-audit.jpg",
+    "citations": [
+      "Author J, 'Computer Vision for Warehouse Operations,' 2024."
+    ],
+    "status": "pending_review",
+    "internalNotes": "Waiting for partner feedback.",
+    "lastUpdated": "2026-05-16T02:03:00Z",
+    "imageAlt": "Warehouse Computer Vision Audit preview",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ]
+  },
+  {
+    "id": 9,
+    "groupName": "ChainLink Team",
+    "title": "Blockchain Supply Chain Tracker",
+    "discipline": "IT",
+    "disciplines": [
+      "IT",
+      "Logistics"
+    ],
+    "year": "2024",
+    "industry": "Logistics",
+    "industryPartner": "ChainLogix",
+    "academicSupervisor": "Dr. Ngo Van I",
+    "program": "Information Technology",
+    "studyProgram": "Information Technology",
+    "summary": "A blockchain-based solution for tracking high-value goods in global supply chains.",
+    "background": "Counterfeiting and document fraud are major risks in the international transport of luxury goods.",
+    "solution": "The team implemented a private blockchain network to record immutable ownership transfers.",
+    "posterText": "This project leverages blockchain technology to create a transparent and fraud-resistant tracking system for luxury logistics.",
+    "teamMembers": [
+      "Pham Minh Tu",
+      "Nguyen Hoang Anh",
+      "Tran Thu Trang"
+    ],
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/blockchain-supply-chain.jpg",
+    "citations": [
+      "Author K, 'Blockchain in Logistics,' 2023."
+    ],
+    "status": "draft",
+    "internalNotes": "Draft for archive purposes.",
+    "lastUpdated": "2026-05-16T02:03:00Z",
+    "imageAlt": "Blockchain Supply Chain Tracker preview",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ]
+  },
+  {
+    "id": 10,
+    "groupName": "EduVR Team",
+    "title": "VR Education Explorer",
+    "discipline": "Design",
+    "disciplines": [
+      "Design",
+      "Software Engineering"
+    ],
+    "year": "2024",
+    "industry": "Education",
+    "industryPartner": "EduTech Solutions",
+    "academicSupervisor": "Dr. Ly Thi J",
+    "program": "Digital Media",
+    "studyProgram": "Digital Media",
+    "summary": "An immersive VR experience designed to teach complex biological concepts in high schools.",
+    "background": "Traditional 2D textbooks often fail to engage students with 3D biological structures.",
+    "solution": "The team built a VR environment that allows students to interact with 3D cellular models.",
+    "posterText": "This project uses immersive VR to transform biological education and improve student engagement with complex science topics.",
+    "teamMembers": [
+      "Dang Hoang Nam",
+      "Bui Thanh Tung",
+      "Nguyen Ngoc Mai"
+    ],
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/vr-education-explorer.jpg",
+    "citations": [
+      "Author L, 'VR in the Classroom,' 2024."
+    ],
+    "status": "published",
+    "internalNotes": "Highly successful 2024 project.",
+    "lastUpdated": "2026-05-16T02:03:00Z",
+    "imageAlt": "VR Education Explorer preview",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ]
+  }
+]

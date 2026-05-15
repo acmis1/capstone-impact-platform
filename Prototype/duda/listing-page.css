@@ -1,0 +1,133 @@
+/* Duda Listing Page Styles */
+.duda-showcase-root {
+    font-family: 'Inter', sans-serif;
+    color: #ffffff;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px;
+}
+
+.showcase-header {
+    text-align: center;
+    margin-bottom: 60px;
+}
+
+.showcase-header h1 {
+    font-size: 3rem;
+    font-weight: 800;
+    margin-bottom: 10px;
+    background: linear-gradient(135deg, #60a5fa 0%, #a855f7 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.year-section {
+    margin-bottom: 80px;
+}
+
+.year-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 30px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    color: #60a5fa;
+}
+
+.projects-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 30px;
+}
+
+.project-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+}
+
+.project-card:hover {
+    transform: translateY(-10px);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: #60a5fa;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.card-image-wrapper {
+    position: relative;
+    height: 200px;
+    overflow: hidden;
+}
+
+.card-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+}
+
+.project-card:hover .card-image {
+    transform: scale(1.1);
+}
+
+.card-content {
+    padding: 25px;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.card-tag {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #60a5fa;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.card-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 15px;
+    line-height: 1.3;
+}
+
+.card-summary {
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.6;
+    margin-bottom: 25px;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.btn-learn-more {
+    margin-top: auto;
+    padding: 12px 24px;
+    background: #60a5fa;
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    text-align: center;
+    transition: background 0.3s ease;
+}
+
+.btn-learn-more:hover {
+    background: #3b82f6;
+}
+
+.loading-state {
+    text-align: center;
+    padding: 100px;
+    font-size: 1.2rem;
+    color: rgba(255, 255, 255, 0.5);
+}

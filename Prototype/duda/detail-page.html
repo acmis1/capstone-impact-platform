@@ -1,0 +1,62 @@
+<!-- Detail View Template (Populated by bodyend.html) -->
+<div class="detail-container">
+    <button id="btn-back" class="btn-back">← Back to Showcase</button>
+    
+    <div class="detail-layout">
+        <div class="detail-main">
+            <h1 id="detail-title"></h1>
+            <div class="detail-meta">
+                <span id="detail-program"></span> • <span id="detail-year"></span>
+            </div>
+
+            <section class="detail-section">
+                <h3>Executive Summary</h3>
+                <p id="detail-summary"></p>
+            </section>
+
+            <section class="detail-section">
+                <h3>Problem & Background</h3>
+                <p id="detail-background"></p>
+            </section>
+
+            <section class="detail-section">
+                <h3>Our Solution</h3>
+                <p id="detail-solution"></p>
+            </section>
+
+            <!-- Snapshot Gallery -->
+            <section id="detail-snapshots-section" class="detail-section">
+                <h3>Project Snapshots</h3>
+                <div id="snapshots-grid" class="snapshots-grid"></div>
+            </section>
+        </div>
+
+        <aside class="detail-sidebar">
+            <div class="sidebar-card">
+                <img id="detail-poster" class="sidebar-poster" alt="Project Poster">
+                <div class="sidebar-content">
+                    <h4>The Team</h4>
+                    <ul id="detail-team"></ul>
+                    
+                    <h4>Industry</h4>
+                    <p id="detail-industry"></p>
+
+                    <h4>Discipline</h4>
+                    <p id="detail-discipline"></p>
+
+                    <a id="btn-get-poster" class="btn-primary" target="_blank">Get Project Poster</a>
+                </div>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<!-- Lightbox Modal -->
+<div id="duda-lightbox" class="lightbox-modal" style="display: none;">
+    <span class="lightbox-close">&times;</span>
+    <div class="lightbox-content-wrapper">
+        <img id="lightbox-img" class="lightbox-img">
+        <button class="lightbox-prev">‹</button>
+        <button class="lightbox-next">›</button>
+    </div>
+</div>

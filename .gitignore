@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+Prototype/node_modules/
+
+# build outputs
+dist/
+Prototype/dist/
+
+# environment files
+.env
+.env.local
+Prototype/.env
+Prototype/.env.local
+
+# logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# optional local temp files
+.vscode/
+.idea/

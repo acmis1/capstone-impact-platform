@@ -1,0 +1,241 @@
+<script>
+/**
+ * Capstone Impact Showcase - Duda Public Layer Script
+ * This script handles fetching the stable JSON feed and rendering the 
+ * listing and detail views dynamically.
+ */
+
+// --- CONFIGURATION ---
+// IMPORTANT: This value is configured once in the Duda site settings. 
+// The Admin/CMS updates the contents behind this URL; staff should not 
+// change this URL manually when adding new projects or years.
+const CAPSTONE_FEED_URL = "https://REPLACE-WITH-STABLE-PUBLIC-FEED/capstones-latest.json";
+
+// --- STATE ---
+let allProjects = [];
+let currentProject = null;
+let currentSnapshotIndex = 0;
+
+// --- UTILS ---
+const escapeHTML = (str) => {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+};
+
+const getQueryParam = (name) => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(name);
+};
+
+// --- CORE LOGIC ---
+const initShowcase = async () => {
+    const container = document.getElementById('capstone-showcase-container');
+    if (!container) return;
+
+    try {
+        const response = await fetch(CAPSTONE_FEED_URL);
+        if (!response.ok) throw new Error('Failed to fetch feed');
+        allProjects = await response.json();
+
+        // Check if we are in detail view
+        const projectId = getQueryParam('id');
+        if (projectId) {
+            showDetail(projectId);
+        } else {
+            renderListing();
+        }
+    } catch (err) {
+        console.error('Showcase Error:', err);
+        document.getElementById('year-sections-container').innerHTML = 
+            `<p class="error-state">Unable to load projects at this time.</p>`;
+    }
+
+    // Handle browser back button
+    window.addEventListener('popstate', () => {
+        const id = getQueryParam('id');
+        if (id) showDetail(id);
+        else renderListing();
+    });
+};
+
+const renderListing = () => {
+    const listingView = document.getElementById('capstone-listing-view');
+    const detailView = document.getElementById('capstone-detail-view');
+    const container = document.getElementById('year-sections-container');
+
+    listingView.style.display = 'block';
+    detailView.style.display = 'none';
+    
+    // Group by year
+    const groups = allProjects.reduce((acc, p) => {
+        acc[p.year] = acc[p.year] || [];
+        acc[p.year].push(p);
+        return acc;
+    }, {});
+
+    const sortedYears = Object.keys(groups).sort((a, b) => b - a);
+
+    container.innerHTML = sortedYears.map(year => `
+        <section class="year-section">
+            <h2 class="year-title">${year} Projects</h2>
+            <div class="projects-grid">
+                ${groups[year].map(p => `
+                    <div class="project-card" onclick="navigateToDetail('${p.id}')">
+                        <div class="card-image-wrapper">
+                            <img src="${p.poster || 'https://via.placeholder.com/400x200?text=No+Poster'}" 
+                                 class="card-image" 
+                                 alt="${escapeHTML(p.imageAlt || p.title)}">
+                        </div>
+                        <div class="card-content">
+                            <div class="card-tag">${escapeHTML(p.program)}</div>
+                            <h3 class="card-title">${escapeHTML(p.title)}</h3>
+                            <p class="card-summary">${escapeHTML(p.summary)}</p>
+                            <button class="btn-learn-more">Learn More</button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </section>
+    `).join('');
+};
+
+const navigateToDetail = (id) => {
+    const newURL = window.location.protocol + "//" + window.location.host + window.location.pathname + '?id=' + id;
+    window.history.pushState({ path: newURL }, '', newURL);
+    showDetail(id);
+};
+
+const showDetail = (id) => {
+    const project = allProjects.find(p => String(p.id) === String(id));
+    if (!project) {
+        renderListing();
+        return;
+    }
+
+    currentProject = project;
+    const listingView = document.getElementById('capstone-listing-view');
+    const detailView = document.getElementById('capstone-detail-view');
+
+    listingView.style.display = 'none';
+    detailView.style.display = 'block';
+    window.scrollTo(0, 0);
+
+    // Inject Template
+    detailView.innerHTML = `
+        <div class="detail-container">
+            <button class="btn-back" onclick="goBack()">← Back to Showcase</button>
+            <div class="detail-layout">
+                <div class="detail-main">
+                    <h1>${escapeHTML(project.title)}</h1>
+                    <div class="detail-meta">
+                        ${escapeHTML(project.program)} • ${project.year}
+                    </div>
+
+                    <section class="detail-section">
+                        <h3>Executive Summary</h3>
+                        <p>${escapeHTML(project.summary)}</p>
+                    </section>
+
+                    <section class="detail-section">
+                        <h3>Problem & Background</h3>
+                        <p>${escapeHTML(project.background)}</p>
+                    </section>
+
+                    <section class="detail-section">
+                        <h3>Our Solution</h3>
+                        <p>${escapeHTML(project.solution)}</p>
+                    </section>
+
+                    ${project.snapshots && project.snapshots.length > 0 ? `
+                        <section class="detail-section">
+                            <h3>Project Snapshots</h3>
+                            <div class="snapshots-grid">
+                                ${project.snapshots.map((url, idx) => `
+                                    <div class="snapshot-item" onclick="openLightbox(${idx})">
+                                        <img src="${url}" alt="Snapshot ${idx + 1}">
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </section>
+                    ` : ''}
+                </div>
+
+                <aside class="detail-sidebar">
+                    <div class="sidebar-card">
+                        <img src="${project.poster}" class="sidebar-poster" alt="Project Poster">
+                        <div class="sidebar-content">
+                            <h4>The Team</h4>
+                            <ul>
+                                ${project.teamMembers.map(m => `<li>${escapeHTML(m)}</li>`).join('')}
+                            </ul>
+                            
+                            <h4>Industry</h4>
+                            <p>${escapeHTML(project.industry)}</p>
+
+                            <h4>Discipline</h4>
+                            <p>${escapeHTML(project.discipline)}</p>
+
+                            <a href="${project.poster}" class="btn-primary" target="_blank">Get Project Poster</a>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    `;
+};
+
+const goBack = () => {
+    const newURL = window.location.protocol + "//" + window.location.host + window.location.pathname;
+    window.history.pushState({ path: newURL }, '', newURL);
+    renderListing();
+};
+
+// --- LIGHTBOX LOGIC ---
+const openLightbox = (index) => {
+    if (!currentProject || !currentProject.snapshots) return;
+    currentSnapshotIndex = index;
+    
+    // Create lightbox if not exists
+    let lb = document.getElementById('duda-lightbox');
+    if (!lb) {
+        lb = document.createElement('div');
+        lb.id = 'duda-lightbox';
+        lb.className = 'lightbox-modal';
+        lb.innerHTML = `
+            <span class="lightbox-close" onclick="closeLightbox()">&times;</span>
+            <div class="lightbox-content-wrapper">
+                <img id="lightbox-img" class="lightbox-img">
+                <button class="lightbox-prev" onclick="changeSnapshot(-1)">‹</button>
+                <button class="lightbox-next" onclick="changeSnapshot(1)">›</button>
+            </div>
+        `;
+        document.body.appendChild(lb);
+    }
+
+    updateLightbox();
+    lb.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+};
+
+const updateLightbox = () => {
+    const img = document.getElementById('lightbox-img');
+    if (img && currentProject.snapshots[currentSnapshotIndex]) {
+        img.src = currentProject.snapshots[currentSnapshotIndex];
+    }
+};
+
+const changeSnapshot = (dir) => {
+    currentSnapshotIndex = (currentSnapshotIndex + dir + currentProject.snapshots.length) % currentProject.snapshots.length;
+    updateLightbox();
+};
+
+const closeLightbox = () => {
+    document.getElementById('duda-lightbox').style.display = 'none';
+    document.body.style.overflow = 'auto';
+};
+
+// --- INIT ---
+document.addEventListener('DOMContentLoaded', initShowcase);
+</script>
