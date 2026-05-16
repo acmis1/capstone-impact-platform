@@ -37,6 +37,42 @@
     "academicSupervisor": "Dr. Nguyen Van A"
   },
   {
+    "id": 2,
+    "year": "2026",
+    "title": "Smart Food Traceability",
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/smart-food-traceability.jpg",
+    "program": "Food Technology",
+    "summary": "A digital traceability platform that improves transparency and safety in food supply chains.",
+    "imageAlt": "Smart Food Traceability preview",
+    "industry": "Agriculture",
+    "solution": "The team developed a digital platform that stores and presents traceability records in a structured format.",
+    "citations": [
+      "Author C",
+      "'Digital Traceability in Agriculture",
+      "' 2024."
+    ],
+    "groupName": "Food Traceability Team",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ],
+    "background": "Food supply chains involve multiple handling stages and weak visibility can reduce trust and make incidents harder to trace.",
+    "discipline": "Food Tech",
+    "posterText": "The platform improves transparency in the food supply chain by helping users track product origin, logistics, and handling updates.",
+    "disciplines": [
+      "Food Tech",
+      "IT"
+    ],
+    "teamMembers": [
+      "Tran Minh Chau",
+      "Le Thi Phuong",
+      "Nguyen Anh Khoa"
+    ],
+    "studyProgram": "Food Technology",
+    "industryPartner": "GreenFarm Vietnam",
+    "academicSupervisor": "Dr. Tran Thi B"
+  },
+  {
     "id": 3,
     "year": "2026",
     "title": "Robotics Therapy Assistant",
