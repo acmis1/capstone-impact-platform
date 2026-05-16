@@ -28,6 +28,8 @@ Use the following step-by-step script during live demonstrations.
 ### Setup
 1. Open the **Render Admin/CMS** URL in a browser.
 2. Enter the **staging access key** in the sidebar field.
+3. **Check Staging Persistence**: If using Render Free, look at the **Staging State Backup** panel on the dashboard. 
+   - If "Cloud Backup Exists" is **Yes**, click **"Restore Admin State"** to ensure the demo data is up-to-date and hasn't been reset to the default GitHub version.
 
 ### Dashboard & Publishing Workflow
 3. Observe the **Dashboard** — it shows the project summary and publishing controls.
@@ -97,7 +99,7 @@ These features are **out of scope** for the prototype and are planned for produc
 | Limitation | Detail |
 | :--- | :--- |
 | **Render Free spin-down** | The free-tier service spins down after inactivity. The first request after idle may take 30–60 seconds. |
-| **No persistent disk (Free tier)** | `db.json` edits may reset after a redeploy or restart. Data persistence requires a paid Render Disk or volume. |
+| **Render Free Tier persistence** | Render Free has no persistent disk. Local edits reset on restart. Use the **Supabase Admin State Backup** panel on the dashboard to Restore state if it resets. |
 | **Shared access key** | The staging access key is a single shared secret — it is not a production auth system. |
 | **Flat-file `db.json`** | Not safe for concurrent multi-user editing or production workloads. |
 | **Production requirements** | Production should use proper authentication (RMIT SSO), a database-backed persistence layer, and managed file upload storage. |
@@ -118,7 +120,8 @@ Run through this checklist before any stakeholder demo.
 | 6 | Supabase feed URL returns updated JSON | ☐ |
 | 7 | Duda listing page shows approved projects | ☐ |
 | 8 | Archive → Publish removes project from Duda | ☐ |
-| 9 | No secrets committed (`.env` is in `.gitignore`) | ☐ |
+| 9 | Admin State Restore works (if persistence reset) | ☐ |
+| 10 | No secrets committed (`.env` is in `.gitignore`) | ☐ |
 
 ---
 

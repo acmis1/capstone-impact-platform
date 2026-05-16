@@ -2,9 +2,7 @@
 
 This guide explains how to deploy the Admin/CMS prototype to a temporary staging environment (e.g., Render, Railway, or a private Node.js server) for stakeholder review.
 
-> [!WARNING]
-> This is a **Prototype** and **Staging** environment only. 
-> 1. **Persistence**: It uses a flat-file `db.json`. Changes are lost if the hosting provider uses ephemeral storage (e.g., Heroku without volumes). Render/Railway with "Disks" or persistent volumes is required if you want to keep changes across restarts.
+> 1. **Persistence**: It uses a flat-file `db.json`. On platforms with ephemeral storage (e.g., Render Free Tier), local changes are lost on restart. We provide a **Supabase Admin State Backup** workaround to recover state manually or automatically on startup.
 > 2. **Concurrency**: The system is not designed for concurrent multi-user editing. 
 > 3. **Security**: Only "Access Key" protection is implemented. It is not a full identity-based auth system.
 
@@ -35,6 +33,9 @@ Set the following variables in your hosting provider's dashboard:
 | `ADMIN_ACCESS_KEY` | (Optional) A secret string required to Save/Publish changes. |
 | `DATA_DIR` | (Optional) Path to persistent storage for `db.json` (e.g., `/data`). |
 | `PUBLIC_FEED_DIR` | (Optional) Path to persistent storage for the public feed (e.g., `/data/public`). |
+| `ENABLE_ADMIN_STATE_BACKUP` | Set to `true` to enable cloud backup/restore for the full admin database. |
+| `SUPABASE_ADMIN_STATE_BUCKET` | Private bucket name for admin backups (e.g., `admin-state`). |
+| `SUPABASE_ADMIN_STATE_FILE` | Filename for the admin backup (e.g., `admin-db-latest.json`). |
 
 ## Persistent Storage Setup (Render/Railway)
 To ensure your data survives redeploys:
@@ -46,6 +47,23 @@ To ensure your data survives redeploys:
    - The server will automatically create these folders if they are missing.
    - If `db.json` is missing from the volume, it will be seeded from the local repository template.
    - Without these variables, the server defaults to repo-local `data/` and `public/` folders, which are typically reset on every redeploy.
+
+## Render Free Tier Workaround: Admin State Backup
+If you are using the Render Free Tier (which does NOT support persistent disks), use the following configuration to ensure your data is not lost:
+
+1. **Supabase Bucket**: Create a **PRIVATE** bucket in your Supabase storage (e.g., `admin-state`).
+2. **Environment Variables**:
+   - `ENABLE_ADMIN_STATE_BACKUP=true`
+   - `SUPABASE_ADMIN_STATE_BUCKET=admin-state`
+   - `SUPABASE_ADMIN_STATE_FILE=admin-db-latest.json`
+3. **How it works**:
+   - **Automatic Backup**: Every time you Save/Update a project in the CMS, the server automatically uploads the full `db.json` to your private Supabase bucket.
+   - **Startup Restore**: When Render restarts your service, the server will automatically attempt to download the latest `admin-db-latest.json` from Supabase and restore it to the local disk before starting.
+   - **Manual Controls**: You can trigger a manual Backup or Restore from the **Dashboard** in the "Staging State Backup" panel.
+4. **Safety**: 
+   - The admin backup file contains internal notes and unpublished fields. 
+   - **CRITICAL**: Ensure the bucket is **PRIVATE** so it is not accessible to the public. 
+   - The server uses your `SUPABASE_SERVICE_ROLE_KEY` to access it.
 
 ### 3. Start Command
 The server will automatically serve the API and the static React build:

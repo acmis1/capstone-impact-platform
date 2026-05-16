@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
 import { publishToCloud } from './utils/supabasePublisher.js';
+import { backupAdminState, restoreAdminState, getAdminStateBackupStatus } from './utils/adminStateBackup.js';
 
 dotenv.config();
 
@@ -38,6 +39,24 @@ if (!fs.existsSync(DB_PATH) && fs.existsSync(LOCAL_SEED_DB)) {
   fs.copyFileSync(LOCAL_SEED_DB, DB_PATH);
 }
 
+// ---------------------------------------------------------
+// Startup Restore: Try to recover state from cloud if on Render/Staging
+// ---------------------------------------------------------
+const initRestore = async () => {
+  if (process.env.ENABLE_ADMIN_STATE_BACKUP === 'true') {
+    console.log('Admin state backup enabled. Attempting to restore from cloud...');
+    const result = await restoreAdminState(DB_PATH);
+    if (result.success) {
+      console.log(`Successfully restored admin state from cloud. Records: ${result.recordCount}`);
+      // Regenerate feed from restored data
+      generatePublicFeed();
+    } else {
+      console.warn(`Cloud restore skipped or failed: ${result.error}. Falling back to local disk.`);
+    }
+  }
+};
+initRestore();
+
 // Helper to read DB
 const readDB = () => {
   if (!fs.existsSync(DB_PATH)) return [];
@@ -48,6 +67,13 @@ const readDB = () => {
 // Helper to write DB
 const writeDB = (data) => {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+  
+  // Background backup (Do not block)
+  if (process.env.ENABLE_ADMIN_STATE_BACKUP === 'true') {
+    backupAdminState(DB_PATH).then(res => {
+      if (!res.success) console.warn('Saved locally, but cloud backup failed:', res.error);
+    });
+  }
 };
 
 /**
@@ -266,6 +292,49 @@ app.get('/api/feed-status', (req, res) => {
     });
   } else {
     res.json({ exists: false });
+  }
+});
+
+// 8. Admin State Backup Management
+app.get('/api/admin-state/status', async (req, res) => {
+  try {
+    const status = await getAdminStateBackupStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin-state/backup', adminAuth, async (req, res) => {
+  try {
+    const result = await backupAdminState(DB_PATH);
+    if (result.success) {
+      res.json({ success: true, message: 'Admin state backed up successfully.', ...result });
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/admin-state/restore', adminAuth, async (req, res) => {
+  try {
+    const result = await restoreAdminState(DB_PATH);
+    if (result.success) {
+      // Regenerate local feed after restore
+      const feedResult = generatePublicFeed();
+      res.json({ 
+        success: true, 
+        message: 'Admin state restored successfully.', 
+        ...result,
+        feed: feedResult 
+      });
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
