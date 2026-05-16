@@ -24,6 +24,7 @@
       "Duong Hai Nam"
     ],
     "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/solar-power-optimizer.jpg",
+    "posterPdf": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
     "citations": [
       "Author A",
       "'Predictive Solar Optimization",
@@ -31,12 +32,15 @@
     ],
     "status": "published",
     "internalNotes": "Initial demo project.",
-    "lastUpdated": "2026-05-15T20:12:40.599Z",
+    "lastUpdated": "2026-05-16T11:58:30.521Z",
     "imageAlt": "Solar Power Optimizer preview",
     "snapshots": [
       "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
       "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    ]
+    ],
+    "archivedAt": "2026-05-16T11:20:03.705Z",
+    "archiveReason": "bad",
+    "publishedAt": "2026-05-16T11:58:30.521Z"
   },
   {
     "id": 2,
@@ -66,14 +70,16 @@
     "citations": [
       "Author C, 'Digital Traceability in Agriculture,' 2024."
     ],
-    "status": "published",
+    "status": "archived",
     "internalNotes": "Initial demo project.",
     "lastUpdated": "2026-05-16T01:51:18Z",
     "imageAlt": "Smart Food Traceability preview",
     "snapshots": [
       "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
       "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    ]
+    ],
+    "archivedAt": "2026-05-16T11:44:55.812Z",
+    "archiveReason": "Testing"
   },
   {
     "id": 3,
@@ -103,9 +109,9 @@
     "citations": [
       "Author D, 'Assistive Robotics in Rehabilitation,' 2022."
     ],
-    "status": "approved",
+    "status": "published",
     "internalNotes": "Ready for publishing.",
-    "lastUpdated": "2026-05-16T01:51:18Z",
+    "lastUpdated": "2026-05-16T10:11:00Z",
     "imageAlt": "Robotics Therapy Assistant preview",
     "snapshots": [
       "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
@@ -138,16 +144,19 @@
     ],
     "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/campus-sustainability-dashboard.jpg",
     "citations": [
-      "Author F, 'Sustainability Dashboards for Higher Education,' 2024."
+      "Author F",
+      "'Sustainability Dashboards for Higher Education",
+      "' 2024."
     ],
-    "status": "pending_review",
+    "status": "published",
     "internalNotes": "Needs supervisor review.",
-    "lastUpdated": "2026-05-16T01:51:18Z",
+    "lastUpdated": "2026-05-16T10:15:00.562Z",
     "imageAlt": "Campus Sustainability Dashboard preview",
     "snapshots": [
       "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
       "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    ]
+    ],
+    "publishedAt": "2026-05-16T10:15:00.562Z"
   },
   {
     "id": 5,
@@ -249,16 +258,20 @@
     ],
     "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/learning-platform-access-control.jpg",
     "citations": [
-      "Author I, 'Role-Based Access Control in Education Systems,' 2022."
+      "Author I",
+      "'Role-Based Access Control in Education Systems",
+      "' 2022."
     ],
-    "status": "approved",
+    "status": "archived",
     "internalNotes": "Final approval granted.",
-    "lastUpdated": "2026-05-16T02:03:00Z",
+    "lastUpdated": "2026-05-16T11:59:12.684Z",
     "imageAlt": "Learning Platform Access Control preview",
     "snapshots": [
       "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
       "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    ]
+    ],
+    "archivedAt": "2026-05-16T11:59:12.671Z",
+    "archiveReason": "bad"
   },
   {
     "id": 8,
@@ -286,16 +299,21 @@
     ],
     "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/warehouse-computer-vision-audit.jpg",
     "citations": [
-      "Author J, 'Computer Vision for Warehouse Operations,' 2024."
+      "Author J",
+      "'Computer Vision for Warehouse Operations",
+      "' 2024."
     ],
-    "status": "pending_review",
+    "status": "archived",
     "internalNotes": "Waiting for partner feedback.",
-    "lastUpdated": "2026-05-16T02:03:00Z",
+    "lastUpdated": "2026-05-16T11:59:02.307Z",
     "imageAlt": "Warehouse Computer Vision Audit preview",
     "snapshots": [
       "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
       "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    ]
+    ],
+    "publishedAt": "2026-05-16T11:45:15.768Z",
+    "archivedAt": "2026-05-16T11:59:02.291Z",
+    "archiveReason": "bad"
   },
   {
     "id": 9,

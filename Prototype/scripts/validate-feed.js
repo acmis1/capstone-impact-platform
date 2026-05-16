@@ -25,7 +25,10 @@ try {
 
   const forbidden = [
     'status', 'internalNotes', 'lastUpdated', 'adminId', 'validationErrors', 
-    'validationWarnings', 'staffNotes', 'privateNotes'
+    'validationWarnings', 'staffNotes', 'privateNotes', 'reviewNotes', 
+    'missingItems', 'previewUrl', 'previewSentAt', 'studentConfirmedAt', 
+    'publishedAt', 'archivedAt', 'archiveReason', 'validationFlags', 'ocrStatus', 
+    'adminId', 'staffNotes', 'privateNotes'
   ];
 
   let errors = 0;
@@ -93,6 +96,11 @@ try {
 
     if (p.snapshots && !Array.isArray(p.snapshots)) {
       console.error(`[Project ${pId}] Invalid snapshots: must be an array`);
+      errors++;
+    }
+
+    if (p.posterPdf && (typeof p.posterPdf !== 'string' || p.posterPdf.trim() === '')) {
+      console.error(`[Project ${pId}] Invalid posterPdf: must be a non-empty string`);
       errors++;
     }
   });

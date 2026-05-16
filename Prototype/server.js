@@ -39,18 +39,53 @@ const writeDB = (data) => {
 const generatePublicFeed = () => {
   const projects = readDB();
   
+  // Rule: Only Approved or Published records go to the public showcase
   const publicProjects = projects
     .filter(p => p.status === 'approved' || p.status === 'published')
     .map(({ 
-      status, internalNotes, lastUpdated, adminId, 
-      validationErrors, validationWarnings, staffNotes, privateNotes, 
+      status, 
+      internalNotes, 
+      reviewNotes, 
+      missingItems, 
+      previewUrl, 
+      previewSentAt, 
+      studentConfirmedAt, 
+      publishedAt, 
+      archivedAt, 
+      archiveReason,
+      validationFlags, 
+      ocrStatus, 
+      adminId, 
+      validationErrors, 
+      validationWarnings, 
+      staffNotes, 
+      privateNotes, 
+      lastUpdated, 
+      // Ensure we don't accidentally include new internal fields
       ...publicFields 
     }) => publicFields);
 
   fs.writeFileSync(FEED_PATH, JSON.stringify(publicProjects, null, 2));
 
+  const archivedCount = projects.filter(p => p.status === 'archived').length;
+  const excludedStatuses = projects
+    .filter(p => p.status !== 'approved' && p.status !== 'published')
+    .reduce((acc, p) => {
+      acc[p.status] = (acc[p.status] || 0) + 1;
+      return acc;
+    }, {});
+
   return {
     count: publicProjects.length,
+    archivedCount,
+    excludedCount: projects.length - publicProjects.length,
+    excludedStatuses,
+    includedProjects: projects
+      .filter(p => p.status === 'approved' || p.status === 'published')
+      .map(p => ({ title: p.title, status: p.status })),
+    excludedArchived: projects
+      .filter(p => p.status === 'archived')
+      .map(p => p.title),
     path: '/capstones-latest.json',
     timestamp: new Date().toISOString()
   };
@@ -77,7 +112,7 @@ app.post('/api/projects', (req, res) => {
   const newProject = {
     ...req.body,
     id: Date.now(),
-    status: 'draft',
+    status: 'submitted',
     lastUpdated: new Date().toISOString()
   };
   projects.push(newProject);
@@ -87,20 +122,27 @@ app.post('/api/projects', (req, res) => {
 
 // 4. Update project
 app.put('/api/projects/:id', (req, res) => {
-  const projects = readDB();
-  const index = projects.findIndex(p => p.id === parseInt(req.params.id));
-  if (index !== -1) {
-    projects[index] = { 
-      ...projects[index], 
-      ...req.body, 
-      lastUpdated: new Date().toISOString() 
-    };
-    writeDB(projects);
-    res.json(projects[index]);
-  } else {
-    res.status(404).send('Project not found');
+  console.log(`PUT /api/projects/${req.params.id}`, req.body);
+  try {
+    const projects = readDB();
+    const index = projects.findIndex(p => p.id === parseInt(req.params.id));
+    if (index !== -1) {
+      projects[index] = { 
+        ...projects[index], 
+        ...req.body, 
+        lastUpdated: new Date().toISOString() 
+      };
+      writeDB(projects);
+      res.json(projects[index]);
+    } else {
+      res.status(404).json({ error: 'Project not found' });
+    }
+  } catch (err) {
+    console.error('Error in PUT /api/projects:', err);
+    res.status(500).json({ error: err.message });
   }
 });
+
 
 // 5. Generate local public feed
 app.post('/api/generate-feed', (req, res) => {
@@ -122,9 +164,34 @@ app.post('/api/publish-cloud-feed', async (req, res) => {
     const cloudResult = await publishToCloud(FEED_PATH);
     
     if (cloudResult.success) {
+      // SUCCESS: Transition all approved records to published
+      const projects = readDB();
+      let updatedCount = 0;
+      
+      const updatedProjects = projects.map(p => {
+        if (p.status === 'approved') {
+          updatedCount++;
+          return {
+            ...p,
+            status: 'published',
+            publishedAt: new Date().toISOString(),
+            lastUpdated: new Date().toISOString()
+          };
+        }
+        return p;
+      });
+
+      if (updatedCount > 0) {
+        writeDB(updatedProjects);
+        // Regenerate local feed to ensure timestamps/status consistency (even if status is stripped)
+        generatePublicFeed();
+      }
+
       res.json({
         ...cloudResult,
-        count: generationResult.count
+        ...generationResult,
+        updatedCount,
+        message: `Successfully synced ${generationResult.count} records to the official showcase. ${updatedCount} approved records transitioned to Published. Excluded ${generationResult.archivedCount} archived records.`
       });
     } else {
       res.status(500).json(cloudResult);
@@ -164,4 +231,6 @@ app.get('/api/feed-status', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Admin API server running at http://localhost:${PORT}`);
+  // Generate local feed on startup
+  generatePublicFeed();
 });

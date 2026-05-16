@@ -1,20 +1,17 @@
 <script>
 /**
  * Capstone Impact Showcase - Duda Public Layer Script
- * This script handles fetching the stable JSON feed and rendering the 
- * listing and detail views dynamically.
+ * Refactored for Dedicated Page Routing and Premium Detail Design.
  */
 
 // --- CONFIGURATION ---
-// IMPORTANT: This value is configured once in the Duda site settings. 
-// The Admin/CMS updates the contents behind this URL; staff should not 
-// change this URL manually when adding new projects or years.
-const CAPSTONE_FEED_URL = "https://REPLACE-WITH-STABLE-PUBLIC-FEED/capstones-latest.json";
+// IMPORTANT: This is the verified stable public feed URL. 
+// Do not use the older similar-looking URL.
+const CAPSTONE_FEED_URL = "https://xojnnhilqaldxoilmxli.supabase.co/storage/v1/object/public/feeds/capstones-latest.json";
 
 // --- STATE ---
 let allProjects = [];
-let currentProject = null;
-let currentSnapshotIndex = 0;
+let isInitialized = false;
 
 // --- UTILS ---
 const escapeHTML = (str) => {
@@ -29,213 +26,361 @@ const getQueryParam = (name) => {
     return params.get(name);
 };
 
+const buildDetailUrl = (projectId) => {
+    // Standardizing on /project-detail?id=...
+    const path = window.location.pathname.includes('project-detail') ? '' : 'project-detail';
+    return `${path}?id=${projectId}`;
+};
+
+const saveSelectedProject = (id) => {
+    localStorage.setItem('selectedProjectId', id);
+};
+
 // --- CORE LOGIC ---
-const initShowcase = async () => {
-    const container = document.getElementById('capstone-showcase-container');
-    if (!container) return;
+
+const initShowcase = async (retryCount = 0) => {
+    if (isInitialized) return;
+
+    const listingContainer = document.getElementById('capstone-project-grid');
+    const detailContainer = document.getElementById('project-detail');
+
+    if (!listingContainer && !detailContainer) {
+        if (retryCount < 10) {
+            setTimeout(() => initShowcase(retryCount + 1), 500);
+        }
+        return;
+    }
+
+    isInitialized = true;
+    console.log('[Showcase] Capstone script loaded');
 
     try {
-        const response = await fetch(CAPSTONE_FEED_URL);
-        if (!response.ok) throw new Error('Failed to fetch feed');
+        const feedRequestUrl = `${CAPSTONE_FEED_URL}?v=${Date.now()}`;
+        console.log('[Showcase] Fetching feed:', feedRequestUrl);
+        
+        const response = await fetch(feedRequestUrl, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}: Failed to fetch feed.`);
+        
         allProjects = await response.json();
+        console.log(`[Showcase] Records received: ${allProjects.length}`);
+        console.log('[Showcase] Project titles:', allProjects.map(p => p.title));
 
-        // Check if we are in detail view
-        const projectId = getQueryParam('id');
-        if (projectId) {
-            showDetail(projectId);
-        } else {
+        // Routing logic
+        if (detailContainer && window.location.pathname.includes('project-detail')) {
+            const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
+            if (projectId) {
+                showDetail(projectId);
+            } else {
+                detailContainer.innerHTML = '<p style="color:#111; text-align:center; padding:50px;">Project not specified. <a href="sst-school-projects" style="color:#3b82f6;">Return to Showcase</a></p>';
+            }
+        } else if (listingContainer) {
+            localStorage.removeItem('selectedProjectId');
             renderListing();
         }
     } catch (err) {
-        console.error('Showcase Error:', err);
-        document.getElementById('year-sections-container').innerHTML = 
-            `<p class="error-state">Unable to load projects at this time.</p>`;
+        console.error('[Showcase] Error:', err);
+        const errorHtml = `
+            <div class="capstone-inline-error">
+                <strong>Unable to load projects.</strong><br>
+                ${err.message}<br>
+                <small>Check CAPSTONE_FEED_URL and public bucket access.</small>
+            </div>
+        `;
+        if (listingContainer) listingContainer.innerHTML = errorHtml;
+        if (detailContainer) detailContainer.innerHTML = errorHtml;
     }
-
-    // Handle browser back button
-    window.addEventListener('popstate', () => {
-        const id = getQueryParam('id');
-        if (id) showDetail(id);
-        else renderListing();
-    });
 };
 
 const renderListing = () => {
-    const listingView = document.getElementById('capstone-listing-view');
-    const detailView = document.getElementById('capstone-detail-view');
-    const container = document.getElementById('year-sections-container');
+    const grid = document.getElementById('capstone-project-grid');
+    if (!grid) return;
 
-    listingView.style.display = 'block';
-    detailView.style.display = 'none';
-    
-    // Group by year
+    // Clear container to prevent duplicate cards or stale static content
+    grid.innerHTML = "";
+
+    if (allProjects.length === 0) {
+        grid.innerHTML = '<p style="text-align:center; padding: 40px; color: #ffffff;">No projects found in the feed.</p>';
+        return;
+    }
+
     const groups = allProjects.reduce((acc, p) => {
-        acc[p.year] = acc[p.year] || [];
-        acc[p.year].push(p);
+        const year = p.year || 'Unknown';
+        acc[year] = acc[year] || [];
+        acc[year].push(p);
         return acc;
     }, {});
 
     const sortedYears = Object.keys(groups).sort((a, b) => b - a);
+    console.log('[Showcase] Years detected:', sortedYears);
 
-    container.innerHTML = sortedYears.map(year => `
-        <section class="year-section">
-            <h2 class="year-title">${year} Projects</h2>
-            <div class="projects-grid">
+    grid.innerHTML = sortedYears.map(year => `
+        <div class="capstone-year-section">
+            <h2 class="capstone-year-heading">${year} Projects</h2>
+            <div class="capstone-projects-grid">
                 ${groups[year].map(p => `
-                    <div class="project-card" onclick="navigateToDetail('${p.id}')">
-                        <div class="card-image-wrapper">
-                            <img src="${p.poster || 'https://via.placeholder.com/400x200?text=No+Poster'}" 
-                                 class="card-image" 
-                                 alt="${escapeHTML(p.imageAlt || p.title)}">
-                        </div>
-                        <div class="card-content">
-                            <div class="card-tag">${escapeHTML(p.program)}</div>
-                            <h3 class="card-title">${escapeHTML(p.title)}</h3>
-                            <p class="card-summary">${escapeHTML(p.summary)}</p>
-                            <button class="btn-learn-more">Learn More</button>
-                        </div>
+                    <div class="capstone-card" onclick="handleProjectClick('${p.id}')">
+                        <img class="capstone-card-image" src="${p.poster || 'https://via.placeholder.com/400x600?text=No+Poster'}" alt="${escapeHTML(p.title)}" loading="lazy">
+                        <button class="capstone-card-btn">Learn More</button>
                     </div>
                 `).join('')}
             </div>
-        </section>
+        </div>
     `).join('');
+
+    console.log('[Showcase] Listing render complete');
 };
 
-const navigateToDetail = (id) => {
-    const newURL = window.location.protocol + "//" + window.location.host + window.location.pathname + '?id=' + id;
-    window.history.pushState({ path: newURL }, '', newURL);
-    showDetail(id);
+const handleProjectClick = (id) => {
+    saveSelectedProject(id);
+    window.location.href = buildDetailUrl(id);
 };
 
 const showDetail = (id) => {
+    const container = document.getElementById('project-detail');
+    if (!container) return;
+
     const project = allProjects.find(p => String(p.id) === String(id));
     if (!project) {
-        renderListing();
+        container.innerHTML = '<p style="color:#111; text-align:center; padding:50px;">Project not found. <a href="sst-school-projects" style="color:#3b82f6;">Back to Showcase</a></p>';
         return;
     }
 
-    currentProject = project;
-    const listingView = document.getElementById('capstone-listing-view');
-    const detailView = document.getElementById('capstone-detail-view');
-
-    listingView.style.display = 'none';
-    detailView.style.display = 'block';
     window.scrollTo(0, 0);
+    container.innerHTML = renderProjectDetail(project);
+};
 
-    // Inject Template
-    detailView.innerHTML = `
-        <div class="detail-container">
-            <button class="btn-back" onclick="goBack()">← Back to Showcase</button>
-            <div class="detail-layout">
-                <div class="detail-main">
-                    <h1>${escapeHTML(project.title)}</h1>
-                    <div class="detail-meta">
-                        ${escapeHTML(project.program)} • ${project.year}
+const renderProjectDetail = (project) => {
+    return `
+        <div class="detail-header">
+            <button class="btn-back" onclick="goBack()">
+                <span class="back-icon">←</span> Return to Showcase
+            </button>
+            <div class="detail-title-block">
+                <h1>${escapeHTML(project.title)}</h1>
+                <p class="detail-meta">
+                    <span class="meta-program">${escapeHTML(project.program)}</span>
+                    <span class="meta-sep">|</span>
+                    <span class="meta-year">${project.year}</span>
+                </p>
+                ${project.summary ? `
+                    <p class="section-text" style="margin-top: 2.5rem; font-style: italic; opacity: 0.9;">
+                        ${escapeHTML(project.summary)}
+                    </p>
+                ` : ''}
+            </div>
+        </div>
+
+        <div class="detail-content-grid">
+            <div class="detail-main">
+                ${project.background ? `
+                    <div class="detail-section">
+                        <h3 class="section-title">Background</h3>
+                        <p class="section-text">${escapeHTML(project.background)}</p>
                     </div>
+                ` : ''}
 
-                    <section class="detail-section">
-                        <h3>Executive Summary</h3>
-                        <p>${escapeHTML(project.summary)}</p>
-                    </section>
+                ${project.solution ? `
+                    <div class="detail-section">
+                        <h3 class="section-title">The Solution</h3>
+                        <p class="section-text">${escapeHTML(project.solution)}</p>
+                    </div>
+                ` : ''}
 
-                    <section class="detail-section">
-                        <h3>Problem & Background</h3>
-                        <p>${escapeHTML(project.background)}</p>
-                    </section>
-
-                    <section class="detail-section">
-                        <h3>Our Solution</h3>
-                        <p>${escapeHTML(project.solution)}</p>
-                    </section>
-
-                    ${project.snapshots && project.snapshots.length > 0 ? `
-                        <section class="detail-section">
-                            <h3>Project Snapshots</h3>
-                            <div class="snapshots-grid">
-                                ${project.snapshots.map((url, idx) => `
-                                    <div class="snapshot-item" onclick="openLightbox(${idx})">
-                                        <img src="${url}" alt="Snapshot ${idx + 1}">
+                ${project.snapshots && project.snapshots.length > 0 ? `
+                    <div class="detail-section">
+                        <h3 class="section-title">Project Snapshots</h3>
+                        <div class="snapshot-grid">
+                            ${project.snapshots.map((url, idx) => `
+                                <div class="snapshot-card" onclick="openLightbox(${idx})">
+                                    <div class="snapshot-inner">
+                                        <img src="${url}" alt="Snapshot ${idx + 1}" loading="lazy">
+                                        <div class="snapshot-overlay">
+                                            <span class="view-icon">🔍</span>
+                                        </div>
                                     </div>
-                                `).join('')}
-                            </div>
-                        </section>
-                    ` : ''}
-                </div>
-
-                <aside class="detail-sidebar">
-                    <div class="sidebar-card">
-                        <img src="${project.poster}" class="sidebar-poster" alt="Project Poster">
-                        <div class="sidebar-content">
-                            <h4>The Team</h4>
-                            <ul>
-                                ${project.teamMembers.map(m => `<li>${escapeHTML(m)}</li>`).join('')}
-                            </ul>
-                            
-                            <h4>Industry</h4>
-                            <p>${escapeHTML(project.industry)}</p>
-
-                            <h4>Discipline</h4>
-                            <p>${escapeHTML(project.discipline)}</p>
-
-                            <a href="${project.poster}" class="btn-primary" target="_blank">Get Project Poster</a>
+                                </div>
+                            `).join('')}
                         </div>
                     </div>
-                </aside>
+                ` : ''}
+
+                <div class="detail-section">
+                    <h3 class="section-title">The Team</h3>
+                    <div class="team-container">
+                        ${project.groupName ? `<p class="group-name">${escapeHTML(project.groupName)}</p>` : ''}
+                        <ul class="team-chips">
+                            ${Array.isArray(project.teamMembers) ? project.teamMembers.map(m => `<li class="team-chip">${escapeHTML(m)}</li>`).join('') : `<li class="team-chip">${escapeHTML(project.teamMembers)}</li>`}
+                        </ul>
+                    </div>
+                </div>
+
+                ${project.citations && project.citations.length > 0 ? `
+                    <div class="detail-section">
+                        <h3 class="section-title">Citations</h3>
+                        <div class="team-container" style="padding: 1.5rem 2rem;">
+                            <ul class="metadata-list" style="gap: 1rem;">
+                                ${(Array.isArray(project.citations) ? project.citations : [project.citations]).map(c => `
+                                    <li style="font-size: 0.95rem; color: #cbd5e1; list-style: none;">• ${escapeHTML(c)}</li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                ` : ''}
             </div>
+
+            <aside class="detail-sidebar">
+                <div class="sticky-sidebar">
+                    <div class="sidebar-poster-card">
+                        <img src="${project.poster || 'https://via.placeholder.com/400x600?text=No+Poster'}" alt="${escapeHTML(project.imageAlt || project.title)}" class="poster-img">
+                    </div>
+
+                    ${(project.posterPdf || project.poster) ? `
+                        <div class="sidebar-action">
+                            <a href="${project.posterPdf || project.poster}" class="btn-get-poster" target="_blank" rel="noopener noreferrer">
+                                ${project.posterPdf ? 'Get Project Poster (PDF)' : 'View Project Poster'}
+                            </a>
+                        </div>
+                    ` : ''}
+
+                    <div class="sidebar-metadata-card">
+                        <h4 class="card-title">Project Details</h4>
+                        <div class="metadata-list">
+                            <div class="metadata-item">
+                                <span class="metadata-label">Industry Partner</span>
+                                <p class="metadata-value">${escapeHTML(project.industryPartner) || 'N/A'}</p>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Academic Supervisor</span>
+                                <p class="metadata-value">${escapeHTML(project.academicSupervisor) || 'N/A'}</p>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Disciplines</span>
+                                <p class="metadata-value">
+                                    ${Array.isArray(project.disciplines) ? escapeHTML(project.disciplines.join(', ')) : escapeHTML(project.disciplines) || 'N/A'}
+                                </p>
+                            </div>
+                            ${project.industry ? `
+                                <div class="metadata-item">
+                                    <span class="metadata-label">Industry Sector</span>
+                                    <p class="metadata-value">${escapeHTML(project.industry)}</p>
+                                </div>
+                            ` : ''}
+                            <div class="metadata-item">
+                                <span class="metadata-label">Program</span>
+                                <p class="metadata-value">${escapeHTML(project.program) || 'N/A'}</p>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Year</span>
+                                <p class="metadata-value">${project.year || 'N/A'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
         </div>
     `;
 };
 
 const goBack = () => {
-    const newURL = window.location.protocol + "//" + window.location.host + window.location.pathname;
-    window.history.pushState({ path: newURL }, '', newURL);
-    renderListing();
-};
+    window.location.href = 'sst-school-projects';
+};// --- LIGHTBOX LOGIC ---
+let currentSnapshotIndex = 0;
+let lightboxKeyHandler = null;
+let previousBodyOverflow = "";
 
-// --- LIGHTBOX LOGIC ---
 const openLightbox = (index) => {
-    if (!currentProject || !currentProject.snapshots) return;
-    currentSnapshotIndex = index;
+    const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
+    const project = allProjects.find(p => String(p.id) === String(projectId));
+    if (!project || !project.snapshots) return;
     
-    // Create lightbox if not exists
-    let lb = document.getElementById('duda-lightbox');
+    currentSnapshotIndex = index;
+    console.log(`[Showcase] Opening lightbox for snapshot ${index + 1} of ${project.snapshots.length}`, project.snapshots[index]);
+    
+    let lb = document.getElementById('capstone-lightbox');
     if (!lb) {
         lb = document.createElement('div');
-        lb.id = 'duda-lightbox';
-        lb.className = 'lightbox-modal';
+        lb.id = 'capstone-lightbox';
+        // Massive z-index to stay above Duda headers/layers
+        lb.style.cssText = "position:fixed; inset:0; z-index:2147483647; display:none; align-items:center; justify-content:center; background:rgba(2, 6, 23, 0.9); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); font-family:sans-serif; transition: all 0.3s ease;";
         lb.innerHTML = `
-            <span class="lightbox-close" onclick="closeLightbox()">&times;</span>
-            <div class="lightbox-content-wrapper">
-                <img id="lightbox-img" class="lightbox-img">
-                <button class="lightbox-prev" onclick="changeSnapshot(-1)">‹</button>
-                <button class="lightbox-next" onclick="changeSnapshot(1)">›</button>
+            <div class="capstone-lightbox-backdrop" style="position:absolute; inset:0; cursor:zoom-out;" onclick="closeLightbox()"></div>
+            <div class="capstone-lightbox-content" style="position:relative; z-index:10; width:100%; height:100%; display:flex; align-items:center; justify-content:center; pointer-events:none;">
+                <button type="button" class="capstone-lightbox-close" style="position:absolute; top:24px; right:24px; width:48px; height:48px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; z-index:20; pointer-events:auto; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="closeLightbox()" aria-label="Close" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">&times;</button>
+                
+                <div class="capstone-lightbox-nav-wrapper" style="position:relative; display:flex; align-items:center; justify-content:center; width:100%; height:100%; pointer-events:auto;">
+                    <button type="button" class="capstone-lightbox-prev" style="position:absolute; left:24px; width:64px; height:64px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="event.stopPropagation(); changeSnapshot(-1)" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">‹</button>
+                    
+                    <div id="capstone-lightbox-img-container" style="max-width:90vw; max-height:85vh; display:flex; align-items:center; justify-content:center; position:relative;">
+                        <img id="capstone-lightbox-img" style="max-width:100%; max-height:85vh; object-fit:contain; border-radius:12px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.1); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);" onclick="event.stopPropagation()">
+                        <div id="capstone-lightbox-error" style="display:none; color:#fff; text-align:center; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.5); padding:24px; border-radius:12px; backdrop-filter:blur(8px);">Snapshot image failed to load.</div>
+                    </div>
+                    
+                    <button type="button" class="capstone-lightbox-next" style="position:absolute; right:24px; width:64px; height:64px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="event.stopPropagation(); changeSnapshot(1)" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">›</button>
+                </div>
             </div>
         `;
         document.body.appendChild(lb);
+
+        const img = document.getElementById('capstone-lightbox-img');
+        img.onerror = () => {
+            console.error("[Showcase] Snapshot failed to load:", img.src);
+            document.getElementById('capstone-lightbox-error').style.display = 'block';
+            img.style.display = 'none';
+        };
+        img.onload = () => {
+            document.getElementById('capstone-lightbox-error').style.display = 'none';
+            img.style.display = 'block';
+        };
     }
 
-    updateLightbox();
+    updateLightbox(project);
     lb.style.display = 'flex';
+    
+    // Scroll Lock Safety
+    previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+
+    // Add Esc key listener
+    if (lightboxKeyHandler) document.removeEventListener('keydown', lightboxKeyHandler);
+    lightboxKeyHandler = (e) => {
+        if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'ArrowLeft') changeSnapshot(-1);
+        if (e.key === 'ArrowRight') changeSnapshot(1);
+    };
+    document.addEventListener('keydown', lightboxKeyHandler);
 };
 
-const updateLightbox = () => {
-    const img = document.getElementById('lightbox-img');
-    if (img && currentProject.snapshots[currentSnapshotIndex]) {
-        img.src = currentProject.snapshots[currentSnapshotIndex];
+const updateLightbox = (project) => {
+    const img = document.getElementById('capstone-lightbox-img');
+    if (img && project.snapshots[currentSnapshotIndex]) {
+        img.src = project.snapshots[currentSnapshotIndex];
     }
 };
 
 const changeSnapshot = (dir) => {
-    currentSnapshotIndex = (currentSnapshotIndex + dir + currentProject.snapshots.length) % currentProject.snapshots.length;
-    updateLightbox();
+    const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
+    const project = allProjects.find(p => String(p.id) === String(projectId));
+    if (!project || !project.snapshots) return;
+    currentSnapshotIndex = (currentSnapshotIndex + dir + project.snapshots.length) % project.snapshots.length;
+    updateLightbox(project);
 };
 
 const closeLightbox = () => {
-    document.getElementById('duda-lightbox').style.display = 'none';
-    document.body.style.overflow = 'auto';
+    console.log("[Showcase] Closing lightbox");
+    const lb = document.getElementById('capstone-lightbox');
+    if (lb) lb.style.display = 'none';
+    
+    // Restore Scroll
+    document.body.style.overflow = previousBodyOverflow;
+    
+    if (lightboxKeyHandler) {
+        document.removeEventListener('keydown', lightboxKeyHandler);
+        lightboxKeyHandler = null;
+    }
 };
 
-// --- INIT ---
-document.addEventListener('DOMContentLoaded', initShowcase);
+// --- RUNTIME ---
+document.addEventListener('DOMContentLoaded', () => initShowcase());
+window.addEventListener('load', () => initShowcase());
+
 </script>

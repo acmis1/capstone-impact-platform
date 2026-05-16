@@ -1,133 +1,107 @@
-/* Duda Listing Page Styles */
-.duda-showcase-root {
-    font-family: 'Inter', sans-serif;
-    color: #ffffff;
+/* Capstone Impact Showcase - Listing Page Styles (Poster-Only Design) */
+
+#capstone-showcase-root {
+    width: 100%;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 40px 20px;
+    padding: 20px 0;
+    font-family: 'Inter', sans-serif;
+    background: transparent; /* Ensure gradient background shows through */
 }
 
-.showcase-header {
-    text-align: center;
-    margin-bottom: 60px;
-}
-
-.showcase-header h1 {
-    font-size: 3rem;
-    font-weight: 800;
-    margin-bottom: 10px;
-    background: linear-gradient(135deg, #60a5fa 0%, #a855f7 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.year-section {
+/* Year Section Styling */
+.capstone-year-section {
     margin-bottom: 80px;
+    background: transparent;
 }
 
-.year-title {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: 30px;
-    padding-bottom: 10px;
-    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
-    color: #60a5fa;
+.capstone-year-heading {
+    color: #ffffff;
+    background: transparent;
+    padding: 0 10px;
+    margin-bottom: 40px;
+    font-size: 2.5rem;
+    font-weight: 800;
+    text-align: left;
+    border: none;
+    box-shadow: none;
 }
 
-.projects-grid {
+/* Poster Grid */
+.capstone-projects-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 30px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 50px 40px; /* More vertical gap for the button */
+    padding: 0 10px;
+    background: transparent;
 }
 
-.project-card {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 20px;
-    overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+/* Poster Card Design (Transparent) */
+.capstone-card {
+    background: transparent;
+    border-radius: 0;
+    overflow: visible;
+    transition: transform 0.3s ease;
     cursor: pointer;
     display: flex;
     flex-direction: column;
+    align-items: center;
+    height: auto;
+    box-shadow: none;
+    border: none;
 }
 
-.project-card:hover {
+.capstone-card:hover {
     transform: translateY(-10px);
-    background: rgba(255, 255, 255, 0.08);
-    border-color: #60a5fa;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
 
-.card-image-wrapper {
-    position: relative;
-    height: 200px;
-    overflow: hidden;
-}
-
-.card-image {
+.capstone-card-image {
     width: 100%;
-    height: 100%;
+    aspect-ratio: 2/3; /* Standard poster ratio */
     object-fit: cover;
-    transition: transform 0.5s ease;
+    border-radius: 8px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+    margin-bottom: 20px;
 }
 
-.project-card:hover .card-image {
-    transform: scale(1.1);
-}
-
-.card-content {
-    padding: 25px;
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-}
-
-.card-tag {
-    font-size: 0.75rem;
+/* Learn More Button (White Pill) */
+.capstone-card-btn {
+    background: transparent;
+    color: #ffffff;
+    border: 2px solid #ffffff;
+    padding: 10px 25px;
+    border-radius: 50px;
+    font-weight: 600;
+    text-align: center;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
     text-transform: uppercase;
     letter-spacing: 1px;
-    color: #60a5fa;
-    margin-bottom: 10px;
-    font-weight: 600;
+    width: fit-content;
 }
 
-.card-title {
-    font-size: 1.25rem;
-    font-weight: 700;
-    margin-bottom: 15px;
-    line-height: 1.3;
+.capstone-card-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(1.05);
 }
 
-.card-summary {
-    font-size: 0.95rem;
-    color: rgba(255, 255, 255, 0.7);
-    line-height: 1.6;
-    margin-bottom: 25px;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.btn-learn-more {
-    margin-top: auto;
-    padding: 12px 24px;
-    background: #60a5fa;
-    color: #ffffff;
-    border: none;
-    border-radius: 10px;
-    font-weight: 600;
+/* Error State */
+.capstone-inline-error {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #ef4444;
     text-align: center;
-    transition: background 0.3s ease;
+    margin: 20px 0;
 }
 
-.btn-learn-more:hover {
-    background: #3b82f6;
-}
-
-.loading-state {
-    text-align: center;
-    padding: 100px;
-    font-size: 1.2rem;
-    color: rgba(255, 255, 255, 0.5);
+@media (max-width: 768px) {
+    .capstone-year-heading {
+        font-size: 1.8rem;
+    }
+    .capstone-projects-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 40px 20px;
+    }
 }

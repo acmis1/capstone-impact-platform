@@ -24,46 +24,13 @@
       "Duong Hai Nam"
     ],
     "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/solar-power-optimizer.jpg",
+    "posterPdf": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
     "citations": [
       "Author A",
       "'Predictive Solar Optimization",
       "' 2024."
     ],
     "imageAlt": "Solar Power Optimizer preview",
-    "snapshots": [
-      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    ]
-  },
-  {
-    "id": 2,
-    "groupName": "Food Traceability Team",
-    "title": "Smart Food Traceability",
-    "discipline": "Food Tech",
-    "disciplines": [
-      "Food Tech",
-      "IT"
-    ],
-    "year": "2026",
-    "industry": "Agriculture",
-    "industryPartner": "GreenFarm Vietnam",
-    "academicSupervisor": "Dr. Tran Thi B",
-    "program": "Food Technology",
-    "studyProgram": "Food Technology",
-    "summary": "A digital traceability platform that improves transparency and safety in food supply chains.",
-    "background": "Food supply chains involve multiple handling stages and weak visibility can reduce trust and make incidents harder to trace.",
-    "solution": "The team developed a digital platform that stores and presents traceability records in a structured format.",
-    "posterText": "The platform improves transparency in the food supply chain by helping users track product origin, logistics, and handling updates.",
-    "teamMembers": [
-      "Tran Minh Chau",
-      "Le Thi Phuong",
-      "Nguyen Anh Khoa"
-    ],
-    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/smart-food-traceability.jpg",
-    "citations": [
-      "Author C, 'Digital Traceability in Agriculture,' 2024."
-    ],
-    "imageAlt": "Smart Food Traceability preview",
     "snapshots": [
       "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
       "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
@@ -104,6 +71,42 @@
     ]
   },
   {
+    "id": 4,
+    "groupName": "Campus Dashboard Team",
+    "title": "Campus Sustainability Dashboard",
+    "discipline": "IT",
+    "disciplines": [
+      "IT",
+      "Sustainability"
+    ],
+    "year": "2026",
+    "industry": "Sustainability",
+    "industryPartner": "RMIT Sustainability Office",
+    "academicSupervisor": "Dr. Pham Thi D",
+    "program": "Information Technology",
+    "studyProgram": "Information Technology",
+    "summary": "A dashboard that visualizes campus energy, waste, and sustainability metrics in one place.",
+    "background": "Sustainability initiatives often generate fragmented data across different systems.",
+    "solution": "The team built a dashboard concept that consolidates sustainability metrics into a single interface.",
+    "posterText": "The dashboard centralizes data related to energy use, waste management, and environmental initiatives for easier monitoring.",
+    "teamMembers": [
+      "Nguyen Minh Quan",
+      "Do Ha Linh",
+      "Tran Gia Bao"
+    ],
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/campus-sustainability-dashboard.jpg",
+    "citations": [
+      "Author F",
+      "'Sustainability Dashboards for Higher Education",
+      "' 2024."
+    ],
+    "imageAlt": "Campus Sustainability Dashboard preview",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ]
+  },
+  {
     "id": 6,
     "groupName": "Smart Irrigation Team",
     "title": "IoT Smart Irrigation Network",
@@ -132,40 +135,6 @@
       "Author H, 'Smart Irrigation with IoT Sensors,' 2024."
     ],
     "imageAlt": "IoT Smart Irrigation Network preview",
-    "snapshots": [
-      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    ]
-  },
-  {
-    "id": 7,
-    "groupName": "SecureLearn Team",
-    "title": "Learning Platform Access Control",
-    "discipline": "Software Engineering",
-    "disciplines": [
-      "Software Engineering",
-      "Cybersecurity"
-    ],
-    "year": "2025",
-    "industry": "Education",
-    "industryPartner": "EduGate",
-    "academicSupervisor": "Dr. Huynh Gia G",
-    "program": "Software Engineering",
-    "studyProgram": "Software Engineering",
-    "summary": "A role-based access control system for academic learning platforms.",
-    "background": "Large education platforms often struggle to enforce consistent permission rules across roles.",
-    "solution": "The team designed and prototyped a role-based access control model with clear permission policies.",
-    "posterText": "This project improves platform security and governance by applying structured access-control policies across users and roles.",
-    "teamMembers": [
-      "Vo Anh Thu",
-      "Le Quang Vinh",
-      "Pham Thanh Long"
-    ],
-    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/learning-platform-access-control.jpg",
-    "citations": [
-      "Author I, 'Role-Based Access Control in Education Systems,' 2022."
-    ],
-    "imageAlt": "Learning Platform Access Control preview",
     "snapshots": [
       "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
       "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
