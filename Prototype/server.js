@@ -13,8 +13,30 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const DB_PATH = path.join(__dirname, 'data', 'db.json');
-const FEED_PATH = path.join(__dirname, 'public', 'capstones-latest.json');
+
+// Persistent Path Configuration
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const PUBLIC_FEED_DIR = process.env.PUBLIC_FEED_DIR || path.join(__dirname, 'public');
+
+const DB_PATH = path.join(DATA_DIR, 'db.json');
+const FEED_PATH = path.join(PUBLIC_FEED_DIR, 'capstones-latest.json');
+
+// Ensure directories exist
+if (!fs.existsSync(DATA_DIR)) {
+  console.log(`Creating DATA_DIR: ${DATA_DIR}`);
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+if (!fs.existsSync(PUBLIC_FEED_DIR)) {
+  console.log(`Creating PUBLIC_FEED_DIR: ${PUBLIC_FEED_DIR}`);
+  fs.mkdirSync(PUBLIC_FEED_DIR, { recursive: true });
+}
+
+// Seed db.json if missing from DATA_DIR
+const LOCAL_SEED_DB = path.join(__dirname, 'data', 'db.json');
+if (!fs.existsSync(DB_PATH) && fs.existsSync(LOCAL_SEED_DB)) {
+  console.log(`Seeding db.json from local template to: ${DB_PATH}`);
+  fs.copyFileSync(LOCAL_SEED_DB, DB_PATH);
+}
 
 // Helper to read DB
 const readDB = () => {
@@ -104,6 +126,9 @@ const adminAuth = (req, res, next) => {
 
 // 1. Static Assets (Public and Build)
 app.use(express.static('public'));
+if (process.env.PUBLIC_FEED_DIR) {
+  app.use(express.static(process.env.PUBLIC_FEED_DIR));
+}
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // API Routes

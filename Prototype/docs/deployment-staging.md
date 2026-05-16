@@ -33,6 +33,19 @@ Set the following variables in your hosting provider's dashboard:
 | `SUPABASE_FEED_BUCKET` | Usually `feeds`. |
 | `SUPABASE_FEED_FILE` | Usually `capstones-latest.json`. |
 | `ADMIN_ACCESS_KEY` | (Optional) A secret string required to Save/Publish changes. |
+| `DATA_DIR` | (Optional) Path to persistent storage for `db.json` (e.g., `/data`). |
+| `PUBLIC_FEED_DIR` | (Optional) Path to persistent storage for the public feed (e.g., `/data/public`). |
+
+## Persistent Storage Setup (Render/Railway)
+To ensure your data survives redeploys:
+1. **Mount a Disk/Volume**: In your hosting dashboard, create a persistent volume and mount it at `/data`.
+2. **Set Environment Variables**:
+   - `DATA_DIR=/data`
+   - `PUBLIC_FEED_DIR=/data/public`
+3. **Behavior**: 
+   - The server will automatically create these folders if they are missing.
+   - If `db.json` is missing from the volume, it will be seeded from the local repository template.
+   - Without these variables, the server defaults to repo-local `data/` and `public/` folders, which are typically reset on every redeploy.
 
 ### 3. Start Command
 The server will automatically serve the API and the static React build:
