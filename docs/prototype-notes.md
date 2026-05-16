@@ -2,41 +2,70 @@
 
 ## Project Context
 **Project**: Capstone Impact Platform Redesign
-**Strategy**: Hybrid Architecture (Admin/CMS + Stable JSON Feed + Duda)
+**Strategy**: Hybrid Publishing Workflow (Admin/CMS + Stable JSON Feed + Duda)
+
+## Workflow & Status Model
+The system uses a refined submission-review-publish lifecycle:
+
+| Status | Meaning |
+| :--- | :--- |
+| **Draft** | Internal staff draft or incomplete record. |
+| **Submitted** | Student/group submission received from portal (Conceptual). |
+| **Awaiting OCR** | Files uploaded and waiting for AI/OCR extraction. |
+| **In Review** | Admin is checking extracted fields and validation flags. |
+| **Changes Requested** | Admin requested updates from the student group. |
+| **Preview Sent** | A simulated preview link has been sent to students. |
+| **Student Confirmed** | Student group confirmed the preview is acceptable. |
+| **Approved** | Admin approved for publishing (Pending Duda sync). |
+| **Published** | Record is live in the official public Duda feed. |
+| **Archived** | Historical or hidden record. |
+
+### Approved vs Published
+*   **Approved**: The record is ready and will be included in the next "Publish to Duda" batch.
+*   **Published**: The record is live on the public site. Records automatically move from *Approved* to *Published* after a successful cloud sync.
 
 ## Feature Status
-- [x] Admin UI for record management
-- [x] Workflow states (Draft, Pending, Approved, Published)
-- [x] Automatic JSON feed generation
-- [x] **NEW: Cloud Sync to Stable URL (Supabase)**
-- [x] Duda-compatible public preview
-- [x] Interactive snapshot gallery/lightbox
+- [x] Admin UI with full workflow lifecycle
+- [x] Status-based dashboard and repository
+- [x] Workflow Action Panel (Conceptual actions)
+- [x] Automatic JSON feed generation (Approved + Published)
+- [x] Cloud Sync with Auto-Status Transition
+- [x] Duda-compatible script logic
+- [x] Premium snapshot lightbox
+- [x] Poster PDF file handling
+
+## Production Vision (Phase 2)
+The current prototype uses **manual URL-based media** to demonstrate the feed architecture. The production workflow will add:
+
+1. **Integrated File Storage**: Direct uploads to RMIT-approved cloud buckets.
+2. **Assistive AI/OCR**: Automatic metadata suggestion from posters (Conceptual flags shown in form).
+3. **Student Portal**: Secure interface for groups to submit, view review notes, and confirm previews.
+4. **Automated Messaging**: Real email/notifications for "Changes Requested" and "Preview Sent".
 
 ## Stakeholder Demo Script
 
-### Part 1: Admin Workflow (Local)
-1. **Login**: Launch `npm run dev`.
-2. **Dashboard**: Show the "System Overview" and current record counts.
-3. **Edit**: Open a project (e.g., "AI-Powered Recycling"), change the title to "AI-Powered Recycling v2", and save.
-4. **Approve**: Move the record status to "Approved".
-5. **Sync**: Click **"Sync Local Feed"**.
-6. **Verify**: Open `public/capstones-latest.json` to show the update.
+### Part 1: Submission & Review
+1. **Dashboard**: Show the **Submission & Publishing Workflow** panel.
+2. **Project Repository**: Point out the new status badges and the **Add / Import Submission** button.
+3. **Workflow Actions**: Open a "Submitted" project.
+   - Show the **Workflow Action Panel**.
+   - **Request Changes**: Enter a note and show the generated message preview.
+   - **AI/OCR Flags**: Highlight the conceptual analysis flags (Title Match, Confidence, etc.).
+   - **Preview**: Click "Send Preview Link" to show the simulated link behavior.
+   - **Approval**: Mark the project as **Approved**.
 
-### Part 2: Cloud Publishing (The Hybrid Proof)
-1. **Pre-requisite**: Ensure Supabase `.env` is configured.
-2. **Publish**: Click **"Publish to Stable URL"**.
-3. **Confirm**: Show the success message and the cloud URL.
-4. **Live Verification**: Open the cloud URL in a browser to prove the file is now public.
+### Part 2: Batch Publishing
+1. **Approval State**: Show that the project is now "Approved" in the list.
+2. **Publish**: Click **"Publish to Duda"**.
+3. **Transition**: Observe the success message: *"X approved records changed to Published."*
+4. **Live Verification**: Check the list again to see the "Published" status.
 
-### Part 3: Duda Integration (Presentation)
-1. **The Stable Link**: Show `bodyend.html` and point out the `CAPSTONE_FEED_URL`.
-2. **Instant Update**: (If Duda is live) Refresh the Duda showcase to show "AI-Powered Recycling v2" appearing automatically.
+### Part 3: Presentation (Duda Site)
+1. **Showcase**: Demonstrate that only "Published" (and "Approved") records appear on the Duda site.
+2. **Media**: Verify "Get Project Poster" and Gallery Lightbox behavior.
 
-## Setup Instructions (Technical Staff)
+## Technical Setup
 1. `npm install`
-2. `npm run dev` (starts backend on 5000 and frontend on 5173)
-3. Copy `.env.example` to `.env` and add Supabase credentials.
-4. Ensure the `feeds` bucket in Supabase is **Public**.
-
-## Validation
-Run `npm run validate-feed` to ensure the public JSON schema is 100% Duda-compatible.
+2. `npm run dev`
+3. Copy `.env.example` to `.env` with Supabase keys.
+4. Run `npm run validate-feed` to check public schema safety.

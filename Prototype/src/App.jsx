@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './styles.css';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = '/api';
 
 function App() {
   const [projects, setProjects] = useState([]);
@@ -15,6 +15,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(-1);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [adminKey, setAdminKey] = useState(localStorage.getItem('capstone_admin_key') || '');
 
   useEffect(() => {
     fetchProjects();
@@ -64,7 +65,13 @@ function App() {
   const handlePublishCloud = async () => {
     setCloudStatus({ type: 'info', message: 'Syncing to official showcase...' });
     try {
-      const res = await fetch(`${API_URL}/publish-cloud-feed`, { method: 'POST' });
+      const res = await fetch(`${API_URL}/publish-cloud-feed`, { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey
+        }
+      });
       const data = await res.json();
       if (res.ok) {
         // Success message with detailed diagnostics
@@ -130,7 +137,10 @@ function App() {
 
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey
+        },
         body: JSON.stringify(projectToSave),
       });
 
@@ -165,7 +175,12 @@ function App() {
 
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/generate-feed`, { method: 'POST' });
+      const res = await fetch(`${API_URL}/generate-feed`, { 
+        method: 'POST',
+        headers: {
+          'x-admin-key': adminKey
+        }
+      });
       const data = await res.json();
       if (data.success) {
         const excludedDetail = data.excludedStatuses ? 
@@ -478,7 +493,10 @@ function App() {
                     try {
                       const res = await fetch(`${API_URL}/projects/${updatedProject.id}`, {
                         method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 
+                          'Content-Type': 'application/json',
+                          'x-admin-key': adminKey
+                        },
                         body: JSON.stringify(updatedProject),
                       });
                       
@@ -834,10 +852,26 @@ function App() {
             Local Preview (Dev Only)
           </button>
         </nav>
-        <div className="sidebar-footer">
-          <p style={{fontSize: '0.7rem', opacity: 0.6, padding: '0.5rem 1.5rem'}}>
-            Production feed hosted at Supabase Storage.
-          </p>
+        <div className="sidebar-footer" style={{ marginTop: 'auto', padding: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+          <label style={{ display: 'block', fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', marginBottom: '0.5rem' }}>STAGING ACCESS KEY</label>
+          <input 
+            type="password" 
+            value={adminKey} 
+            onChange={(e) => {
+              setAdminKey(e.target.value);
+              localStorage.setItem('capstone_admin_key', e.target.value);
+            }} 
+            style={{ 
+              width: '100%', 
+              background: 'rgba(0,0,0,0.2)', 
+              border: '1px solid rgba(255,255,255,0.2)', 
+              borderRadius: '4px', 
+              color: 'white', 
+              padding: '0.4rem',
+              fontSize: '0.8rem'
+            }} 
+            placeholder="Enter Key..."
+          />
         </div>
       </aside>
 

@@ -12,13 +12,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 const DB_PATH = path.join(__dirname, 'data', 'db.json');
 const FEED_PATH = path.join(__dirname, 'public', 'capstones-latest.json');
-
-app.use(cors());
-app.use(express.json());
-app.use(express.static('public'));
 
 // Helper to read DB
 const readDB = () => {
@@ -91,14 +87,33 @@ const generatePublicFeed = () => {
   };
 };
 
+app.use(cors());
+app.use(express.json());
+
+// Middleware: Simple Admin Access Protection (Optional)
+const adminAuth = (req, res, next) => {
+  const adminKey = process.env.ADMIN_ACCESS_KEY;
+  // If no key is configured in environment, allow all (for local dev convenience)
+  if (!adminKey) return next();
+  
+  const clientKey = req.headers['x-admin-key'];
+  if (clientKey === adminKey) return next();
+  
+  res.status(401).json({ error: 'Unauthorized: Admin Access Key required.' });
+};
+
+// 1. Static Assets (Public and Build)
+app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'dist')));
+
 // API Routes
 
-// 1. List all projects
+// Read-only projects list
 app.get('/api/projects', (req, res) => {
   res.json(readDB());
 });
 
-// 2. Get single project
+// Read-only single project
 app.get('/api/projects/:id', (req, res) => {
   const projects = readDB();
   const project = projects.find(p => p.id === parseInt(req.params.id));
@@ -106,8 +121,8 @@ app.get('/api/projects/:id', (req, res) => {
   else res.status(404).send('Project not found');
 });
 
-// 3. Create project
-app.post('/api/projects', (req, res) => {
+// Protected: Create project
+app.post('/api/projects', adminAuth, (req, res) => {
   const projects = readDB();
   const newProject = {
     ...req.body,
@@ -120,8 +135,8 @@ app.post('/api/projects', (req, res) => {
   res.status(201).json(newProject);
 });
 
-// 4. Update project
-app.put('/api/projects/:id', (req, res) => {
+// Protected: Update project
+app.put('/api/projects/:id', adminAuth, (req, res) => {
   console.log(`PUT /api/projects/${req.params.id}`, req.body);
   try {
     const projects = readDB();
@@ -144,8 +159,8 @@ app.put('/api/projects/:id', (req, res) => {
 });
 
 
-// 5. Generate local public feed
-app.post('/api/generate-feed', (req, res) => {
+// Protected: Generate local public feed
+app.post('/api/generate-feed', adminAuth, (req, res) => {
   try {
     const result = generatePublicFeed();
     res.json({ success: true, ...result });
@@ -154,8 +169,8 @@ app.post('/api/generate-feed', (req, res) => {
   }
 });
 
-// 6. Publish to cloud stable URL
-app.post('/api/publish-cloud-feed', async (req, res) => {
+// Protected: Publish to cloud stable URL
+app.post('/api/publish-cloud-feed', adminAuth, async (req, res) => {
   try {
     // Ensure local feed is up to date first
     const generationResult = generatePublicFeed();
@@ -229,8 +244,14 @@ app.get('/api/feed-status', (req, res) => {
   }
 });
 
+// Wildcard SPA Fallback (Must be LAST)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 app.listen(PORT, () => {
-  console.log(`Admin API server running at http://localhost:${PORT}`);
+  console.log(`Admin API server running on port ${PORT}`);
   // Generate local feed on startup
   generatePublicFeed();
 });
+
