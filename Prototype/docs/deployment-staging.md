@@ -69,3 +69,7 @@ If `ADMIN_ACCESS_KEY` is configured:
 4. **Publish Test**: Click "Publish to Duda" on the Dashboard.
 5. **Verify Cloud**: Check the [Official Supabase Feed](https://xojnnhilqaldxoilmxli.supabase.co/storage/v1/object/public/feeds/capstones-latest.json) to see if it updated.
 6. **Verify Duda**: Refresh your Duda live site to see the changes reflected.
+
+## Demo Readiness
+
+For the full stakeholder demo script, deployed URLs, and final validation checklist, see **[Demo Readiness](./demo-readiness.md)**.
