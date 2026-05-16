@@ -16,12 +16,10 @@ function App() {
   const [lightboxIndex, setLightboxIndex] = useState(-1);
   const [statusFilter, setStatusFilter] = useState('all');
   const [adminKey, setAdminKey] = useState(localStorage.getItem('capstone_admin_key') || '');
-  const [adminBackupStatus, setAdminBackupStatus] = useState(null);
 
   useEffect(() => {
     fetchProjects();
     fetchFeedStatus();
-    fetchAdminBackupStatus();
   }, []);
 
   // Handle scroll lock and Esc key for lightbox
@@ -61,61 +59,6 @@ function App() {
       setCloudUrl(data.cloudUrl);
     } catch (err) {
       console.error('Error fetching feed status:', err);
-    }
-  };
-  const fetchAdminBackupStatus = async () => {
-    try {
-      const res = await fetch(`${API_URL}/admin-state/status`);
-      const data = await res.json();
-      setAdminBackupStatus(data);
-    } catch (err) {
-      console.error('Error fetching admin backup status:', err);
-    }
-  };
-
-  const handleAdminBackup = async () => {
-    if (!window.confirm("Manually backup the current Admin/CMS state to cloud storage?")) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/admin-state/backup`, { 
-        method: 'POST',
-        headers: { 'x-admin-key': adminKey }
-      });
-      const data = await res.json();
-      if (res.ok) {
-        alert("Admin state backed up successfully.");
-        fetchAdminBackupStatus();
-      } else {
-        alert("Backup failed: " + (data.error || 'Unknown error'));
-      }
-    } catch (err) {
-      alert("Network error while backing up.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAdminRestore = async () => {
-    if (!window.confirm("RESTORE Admin/CMS state from cloud? This will overwrite your current local database. Are you sure?")) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/admin-state/restore`, { 
-        method: 'POST',
-        headers: { 'x-admin-key': adminKey }
-      });
-      const data = await res.json();
-      if (res.ok) {
-        alert(`Successfully restored ${data.recordCount} records from cloud.`);
-        fetchProjects();
-        fetchFeedStatus();
-        fetchAdminBackupStatus();
-      } else {
-        alert("Restore failed: " + (data.error || 'Unknown error'));
-      }
-    } catch (err) {
-      alert("Network error while restoring.");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -408,82 +351,6 @@ function App() {
           </div>
         </div>
 
-        <div className="staging-backup-panel" style={{ 
-          background: 'white', 
-          padding: '2rem', 
-          borderRadius: '12px', 
-          marginTop: '2rem', 
-          boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-          border: '1px solid var(--border)'
-        }}>
-          <h3 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>Staging State Backup</h3>
-          <p className="subtitle" style={{ marginBottom: '1.5rem' }}>Used only for staging to work around Render Free non-persistent storage. Production should use a real database.</p>
-          
-          <div className="backup-status-grid" style={{ 
-            display: 'grid', 
-            gridTemplateColumns: '1fr 1fr', 
-            gap: '2rem',
-            alignItems: 'start'
-          }}>
-            <div className="status-info">
-              {adminBackupStatus ? (
-                <>
-                  <div className="info-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Status:</span>
-                    <span style={{ fontWeight: 'bold', color: adminBackupStatus.enabled ? 'var(--success)' : 'var(--danger)' }}>
-                      {adminBackupStatus.enabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  {adminBackupStatus.enabled && (
-                    <>
-                      <div className="info-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Cloud Backup Exists:</span>
-                        <span>{adminBackupStatus.exists ? 'Yes' : 'No'}</span>
-                      </div>
-                      {adminBackupStatus.lastModified && (
-                        <div className="info-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                          <span style={{ color: 'var(--text-muted)' }}>Last Backup:</span>
-                          <span>{new Date(adminBackupStatus.lastModified).toLocaleString()}</span>
-                        </div>
-                      )}
-                      {adminBackupStatus.error && (
-                        <div className="error-text" style={{ fontSize: '0.8rem', color: 'var(--danger)', marginTop: '0.5rem' }}>
-                          Config Error: {adminBackupStatus.error}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </>
-              ) : (
-                <p style={{ fontSize: '0.9rem' }}>Checking backup status...</p>
-              )}
-            </div>
-
-            <div className="backup-actions">
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                <button 
-                  onClick={handleAdminBackup} 
-                  className="btn-outline" 
-                  disabled={loading || !adminBackupStatus?.enabled}
-                  style={{ flex: 1 }}
-                >
-                  Backup Admin State
-                </button>
-                <button 
-                  onClick={handleAdminRestore} 
-                  className="btn-outline" 
-                  disabled={loading || !adminBackupStatus?.exists}
-                  style={{ flex: 1, borderColor: 'var(--warning)', color: 'var(--warning)' }}
-                >
-                  Restore Admin State
-                </button>
-              </div>
-              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '1rem' }}>
-                Note: Restoration will overwrite the local JSON database with the latest cloud version. Use only if Render disk has reset.
-              </p>
-            </div>
-          </div>
-        </div>
       </section>
     );
   };

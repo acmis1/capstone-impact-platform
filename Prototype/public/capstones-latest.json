@@ -1,177 +1,177 @@
 [
   {
     "id": 1,
-    "groupName": "PickMaster Twin 3 Team",
-    "title": "Solar Power Optimizer",
-    "discipline": "Engineering",
-    "disciplines": [
-      "Engineering",
-      "Sustainability"
-    ],
     "year": "2026",
-    "industry": "Energy",
-    "industryPartner": "ABB",
-    "academicSupervisor": "Dr. Nguyen Van A",
-    "program": "Engineering",
-    "studyProgram": "Engineering",
-    "summary": "A system that optimizes solar panel output using predictive analytics and environmental data. - [Demo Validated]",
-    "background": "Solar systems often operate below optimal efficiency because weather conditions and load patterns change throughout the day.",
-    "solution": "The team designed a predictive optimization model that analyzes environmental inputs and recommends more efficient operating settings.",
-    "posterText": "This project investigates how predictive analytics can improve solar panel performance and support sustainable energy management.",
-    "teamMembers": [
-      "Nguyen Quang Son",
-      "Pham Nguyen Nhat Duy",
-      "Duong Hai Nam"
-    ],
+    "title": "Solar Power Optimizer",
     "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/solar-power-optimizer.jpg",
-    "posterPdf": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+    "program": "Engineering",
+    "summary": "A system that optimizes solar panel output using predictive analytics and environmental data. - [Demo Validated]",
+    "imageAlt": "Solar Power Optimizer preview",
+    "industry": "Energy",
+    "solution": "The team designed a predictive optimization model that analyzes environmental inputs and recommends more efficient operating settings.",
     "citations": [
       "Author A",
       "'Predictive Solar Optimization",
       "' 2024."
     ],
-    "imageAlt": "Solar Power Optimizer preview",
+    "groupName": "PickMaster Twin 3 Team",
+    "posterPdf": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
     "snapshots": [
       "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
       "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    ]
+    ],
+    "background": "Solar systems often operate below optimal efficiency because weather conditions and load patterns change throughout the day.",
+    "discipline": "Engineering",
+    "posterText": "This project investigates how predictive analytics can improve solar panel performance and support sustainable energy management.",
+    "disciplines": [
+      "Engineering",
+      "Sustainability"
+    ],
+    "teamMembers": [
+      "Nguyen Quang Son",
+      "Pham Nguyen Nhat Duy",
+      "Duong Hai Nam"
+    ],
+    "studyProgram": "Engineering",
+    "industryPartner": "ABB",
+    "academicSupervisor": "Dr. Nguyen Van A"
   },
   {
     "id": 3,
-    "groupName": "Therapy Robotics Team",
+    "year": "2026",
     "title": "Robotics Therapy Assistant",
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/robotics-therapy-assistant.jpg",
+    "program": "Software Engineering",
+    "summary": "An assistive robotic concept designed to support rehabilitation and therapy activities.",
+    "imageAlt": "Robotics Therapy Assistant preview",
+    "industry": "Healthcare",
+    "solution": "The team designed an assistive robotics concept that supports rehabilitation workflows through guided actions.",
+    "citations": [
+      "Author D, 'Assistive Robotics in Rehabilitation,' 2022."
+    ],
+    "groupName": "Therapy Robotics Team",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ],
+    "background": "Therapy and rehabilitation programs often require repetitive assisted movement and close supervision.",
     "discipline": "Robotics",
+    "posterText": "This project explores how assistive robotics can support rehabilitation settings and reduce repetitive workload for care providers.",
     "disciplines": [
       "Robotics",
       "Software Engineering"
     ],
-    "year": "2026",
-    "industry": "Healthcare",
-    "industryPartner": "Future Health Lab",
-    "academicSupervisor": "Dr. Le Hoang C",
-    "program": "Software Engineering",
-    "studyProgram": "Software Engineering",
-    "summary": "An assistive robotic concept designed to support rehabilitation and therapy activities.",
-    "background": "Therapy and rehabilitation programs often require repetitive assisted movement and close supervision.",
-    "solution": "The team designed an assistive robotics concept that supports rehabilitation workflows through guided actions.",
-    "posterText": "This project explores how assistive robotics can support rehabilitation settings and reduce repetitive workload for care providers.",
     "teamMembers": [
       "Pham Gia Huy",
       "Nguyen Bao Tram",
       "Vo Minh Duc"
     ],
-    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/robotics-therapy-assistant.jpg",
-    "citations": [
-      "Author D, 'Assistive Robotics in Rehabilitation,' 2022."
-    ],
-    "imageAlt": "Robotics Therapy Assistant preview",
-    "snapshots": [
-      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    ]
+    "studyProgram": "Software Engineering",
+    "industryPartner": "Future Health Lab",
+    "academicSupervisor": "Dr. Le Hoang C"
   },
   {
     "id": 4,
-    "groupName": "Campus Dashboard Team",
-    "title": "Campus Sustainability Dashboard",
-    "discipline": "IT",
-    "disciplines": [
-      "IT",
-      "Sustainability"
-    ],
     "year": "2026",
-    "industry": "Sustainability",
-    "industryPartner": "RMIT Sustainability Office",
-    "academicSupervisor": "Dr. Pham Thi D",
-    "program": "Information Technology",
-    "studyProgram": "Information Technology",
-    "summary": "A dashboard that visualizes campus energy, waste, and sustainability metrics in one place.",
-    "background": "Sustainability initiatives often generate fragmented data across different systems.",
-    "solution": "The team built a dashboard concept that consolidates sustainability metrics into a single interface.",
-    "posterText": "The dashboard centralizes data related to energy use, waste management, and environmental initiatives for easier monitoring.",
-    "teamMembers": [
-      "Nguyen Minh Quan",
-      "Do Ha Linh",
-      "Tran Gia Bao"
-    ],
+    "title": "Campus Sustainability Dashboard",
     "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/campus-sustainability-dashboard.jpg",
+    "program": "Information Technology",
+    "summary": "A dashboard that visualizes campus energy, waste, and sustainability metrics in one place.",
+    "imageAlt": "Campus Sustainability Dashboard preview",
+    "industry": "Sustainability",
+    "solution": "The team built a dashboard concept that consolidates sustainability metrics into a single interface.",
     "citations": [
       "Author F",
       "'Sustainability Dashboards for Higher Education",
       "' 2024."
     ],
-    "imageAlt": "Campus Sustainability Dashboard preview",
+    "groupName": "Campus Dashboard Team",
     "snapshots": [
       "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
       "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    ]
+    ],
+    "background": "Sustainability initiatives often generate fragmented data across different systems.",
+    "discipline": "IT",
+    "posterText": "The dashboard centralizes data related to energy use, waste management, and environmental initiatives for easier monitoring.",
+    "disciplines": [
+      "IT",
+      "Sustainability"
+    ],
+    "teamMembers": [
+      "Nguyen Minh Quan",
+      "Do Ha Linh",
+      "Tran Gia Bao"
+    ],
+    "studyProgram": "Information Technology",
+    "industryPartner": "RMIT Sustainability Office",
+    "academicSupervisor": "Dr. Pham Thi D"
   },
   {
     "id": 6,
-    "groupName": "Smart Irrigation Team",
+    "year": "2025",
     "title": "IoT Smart Irrigation Network",
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/iot-smart-irrigation-network.jpg",
+    "program": "Engineering",
+    "summary": "An IoT-based irrigation system that adjusts watering schedules using sensor data.",
+    "imageAlt": "IoT Smart Irrigation Network preview",
+    "industry": "Agriculture",
+    "solution": "The team built a sensor-driven irrigation control network that automates watering decisions.",
+    "citations": [
+      "Author H, 'Smart Irrigation with IoT Sensors,' 2024."
+    ],
+    "groupName": "Smart Irrigation Team",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ],
+    "background": "Traditional irrigation practices often waste water and fail to respond to changing soil conditions.",
     "discipline": "Engineering",
+    "posterText": "The project uses soil moisture and environmental sensors to improve irrigation efficiency and reduce water waste.",
     "disciplines": [
       "Engineering",
       "Agriculture"
     ],
-    "year": "2025",
-    "industry": "Agriculture",
-    "industryPartner": "AgriSense Co.",
-    "academicSupervisor": "Dr. Dao Minh F",
-    "program": "Engineering",
-    "studyProgram": "Engineering",
-    "summary": "An IoT-based irrigation system that adjusts watering schedules using sensor data.",
-    "background": "Traditional irrigation practices often waste water and fail to respond to changing soil conditions.",
-    "solution": "The team built a sensor-driven irrigation control network that automates watering decisions.",
-    "posterText": "The project uses soil moisture and environmental sensors to improve irrigation efficiency and reduce water waste.",
     "teamMembers": [
       "Hoang Minh Dat",
       "Vu Khanh Linh",
       "Nguyen Duc Tai"
     ],
-    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/iot-smart-irrigation-network.jpg",
-    "citations": [
-      "Author H, 'Smart Irrigation with IoT Sensors,' 2024."
-    ],
-    "imageAlt": "IoT Smart Irrigation Network preview",
-    "snapshots": [
-      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    ]
+    "studyProgram": "Engineering",
+    "industryPartner": "AgriSense Co.",
+    "academicSupervisor": "Dr. Dao Minh F"
   },
   {
     "id": 10,
-    "groupName": "EduVR Team",
+    "year": "2024",
     "title": "VR Education Explorer",
+    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/vr-education-explorer.jpg",
+    "program": "Digital Media",
+    "summary": "An immersive VR experience designed to teach complex biological concepts in high schools.",
+    "imageAlt": "VR Education Explorer preview",
+    "industry": "Education",
+    "solution": "The team built a VR environment that allows students to interact with 3D cellular models.",
+    "citations": [
+      "Author L, 'VR in the Classroom,' 2024."
+    ],
+    "groupName": "EduVR Team",
+    "snapshots": [
+      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
+    ],
+    "background": "Traditional 2D textbooks often fail to engage students with 3D biological structures.",
     "discipline": "Design",
+    "posterText": "This project uses immersive VR to transform biological education and improve student engagement with complex science topics.",
     "disciplines": [
       "Design",
       "Software Engineering"
     ],
-    "year": "2024",
-    "industry": "Education",
-    "industryPartner": "EduTech Solutions",
-    "academicSupervisor": "Dr. Ly Thi J",
-    "program": "Digital Media",
-    "studyProgram": "Digital Media",
-    "summary": "An immersive VR experience designed to teach complex biological concepts in high schools.",
-    "background": "Traditional 2D textbooks often fail to engage students with 3D biological structures.",
-    "solution": "The team built a VR environment that allows students to interact with 3D cellular models.",
-    "posterText": "This project uses immersive VR to transform biological education and improve student engagement with complex science topics.",
     "teamMembers": [
       "Dang Hoang Nam",
       "Bui Thanh Tung",
       "Nguyen Ngoc Mai"
     ],
-    "poster": "https://raw.githubusercontent.com/acmis1/capstone-impact-demo-assets/main/posters/vr-education-explorer.jpg",
-    "citations": [
-      "Author L, 'VR in the Classroom,' 2024."
-    ],
-    "imageAlt": "VR Education Explorer preview",
-    "snapshots": [
-      "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800",
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800"
-    ]
+    "studyProgram": "Digital Media",
+    "industryPartner": "EduTech Solutions",
+    "academicSupervisor": "Dr. Ly Thi J"
   }
 ]

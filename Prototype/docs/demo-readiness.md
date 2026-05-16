@@ -1,6 +1,6 @@
 # Demo Readiness — Capstone Impact Platform Prototype
 
-> **Last updated:** 2026-05-16
+> **Last updated:** 2026-05-17
 >
 > This document is the single reference for stakeholder demonstrations of the Capstone Impact Platform prototype.
 
@@ -28,8 +28,7 @@ Use the following step-by-step script during live demonstrations.
 ### Setup
 1. Open the **Render Admin/CMS** URL in a browser.
 2. Enter the **staging access key** in the sidebar field.
-3. **Check Staging Persistence**: If using Render Free, look at the **Staging State Backup** panel on the dashboard. 
-   - If "Cloud Backup Exists" is **Yes**, click **"Restore Admin State"** to ensure the demo data is up-to-date and hasn't been reset to the default GitHub version.
+3. **Note on Persistence**: Even on the Render Free Tier, project records are now persisted in the **Supabase Database**. No manual restore steps are needed after a server restart.
 
 ### Dashboard & Publishing Workflow
 3. Observe the **Dashboard** — it shows the project summary and publishing controls.
@@ -49,7 +48,7 @@ Use the following step-by-step script during live demonstrations.
 9. Set the project status to **Approved** and click **Save & Update Record**.
 10. Return to the **Dashboard**.
 11. Click **"Generate Local Feed"** — confirm the feed file is generated with correct record count.
-12. Click **"Publish to Duda"** — confirm the feed is uploaded to Supabase.
+12. Click **"Publish to Duda"** — confirm the feed is uploaded to Supabase and the project status transitions to **Published**.
 
 ### Verification — Feed & Duda
 13. Open the **Supabase Stable Feed URL** in a new tab — show the JSON contains the approved project.
@@ -59,16 +58,16 @@ Use the following step-by-step script during live demonstrations.
 ### Archive / Removal Flow
 16. Return to the Admin/CMS and open the published project.
 17. Click **"Archive Project"** and provide an optional reason.
-18. Click **Save & Update Record**.
-19. Return to the Dashboard and click **"Publish to Duda"** again.
-20. Refresh the **Supabase feed** — the archived project should no longer appear.
-21. Refresh the **Duda listing** — the archived project card should be gone.
+18. Return to the Dashboard and click **"Publish to Duda"** again.
+19. Refresh the **Supabase feed** — the archived project should no longer appear.
+20. Refresh the **Duda listing** — the archived project card should be gone.
 
 ---
 
 ## 3. What This Prototype Proves
 
 - ✅ Admin/CMS can manage capstone project records end-to-end.
+- ✅ **Cloud Persistence**: Records survive server restarts and redeploys without local disk storage.
 - ✅ Non-technical staff do not need to edit JSON, GitHub, or Duda code manually.
 - ✅ A stable public feed URL (`capstones-latest.json`) remains unchanged — consumers always fetch the same endpoint.
 - ✅ The Duda public layer updates dynamically from approved public data.
@@ -86,7 +85,6 @@ These features are **out of scope** for the prototype and are planned for produc
 - ❌ Real preview email sent to student groups.
 - ❌ Real student confirmation link.
 - ❌ Production authentication and role management (RMIT SSO, RBAC).
-- ❌ Production database with concurrency support.
 - ❌ Production media upload automation (direct file upload to cloud storage).
 
 ---
@@ -99,10 +97,8 @@ These features are **out of scope** for the prototype and are planned for produc
 | Limitation | Detail |
 | :--- | :--- |
 | **Render Free spin-down** | The free-tier service spins down after inactivity. The first request after idle may take 30–60 seconds. |
-| **Render Free Tier persistence** | Render Free has no persistent disk. Local edits reset on restart. Use the **Supabase Admin State Backup** panel on the dashboard to Restore state if it resets. |
 | **Shared access key** | The staging access key is a single shared secret — it is not a production auth system. |
-| **Flat-file `db.json`** | Not safe for concurrent multi-user editing or production workloads. |
-| **Production requirements** | Production should use proper authentication (RMIT SSO), a database-backed persistence layer, and managed file upload storage. |
+| **Production requirements** | Production should use proper authentication (RMIT SSO) and managed file upload storage. |
 
 ---
 
@@ -113,15 +109,14 @@ Run through this checklist before any stakeholder demo.
 | # | Check | Pass? |
 | :--- | :--- | :---: |
 | 1 | Render app loads (Dashboard visible) | ☐ |
-| 2 | `/api/projects` returns JSON project array | ☐ |
+| 2 | `/api/projects` returns JSON project array from database | ☐ |
 | 3 | `/capstones-latest.json` returns the public feed | ☐ |
 | 4 | "Generate Local Feed" completes without error | ☐ |
 | 5 | "Publish to Duda" completes without error | ☐ |
 | 6 | Supabase feed URL returns updated JSON | ☐ |
 | 7 | Duda listing page shows approved projects | ☐ |
 | 8 | Archive → Publish removes project from Duda | ☐ |
-| 9 | Admin State Restore works (if persistence reset) | ☐ |
-| 10 | No secrets committed (`.env` is in `.gitignore`) | ☐ |
+| 9 | No secrets committed (`.env` is in `.gitignore`) | ☐ |
 
 ---
 

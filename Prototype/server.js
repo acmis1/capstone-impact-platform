@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
 import { publishToCloud } from './utils/supabasePublisher.js';
-import { backupAdminState, restoreAdminState, getAdminStateBackupStatus } from './utils/adminStateBackup.js';
+import * as projectStore from './utils/projectStore.js';
 
 dotenv.config();
 
@@ -39,49 +39,33 @@ if (!fs.existsSync(DB_PATH) && fs.existsSync(LOCAL_SEED_DB)) {
   fs.copyFileSync(LOCAL_SEED_DB, DB_PATH);
 }
 
-// ---------------------------------------------------------
-// Startup Restore: Try to recover state from cloud if on Render/Staging
-// ---------------------------------------------------------
-const initRestore = async () => {
-  if (process.env.ENABLE_ADMIN_STATE_BACKUP === 'true') {
-    console.log('Admin state backup enabled. Attempting to restore from cloud...');
-    const result = await restoreAdminState(DB_PATH);
-    if (result.success) {
-      console.log(`Successfully restored admin state from cloud. Records: ${result.recordCount}`);
-      // Regenerate feed from restored data
-      generatePublicFeed();
-    } else {
-      console.warn(`Cloud restore skipped or failed: ${result.error}. Falling back to local disk.`);
+// Seed Supabase if empty on startup
+const seedIfNecessary = async () => {
+  try {
+    const localData = [];
+    if (fs.existsSync(DB_PATH)) {
+      const data = fs.readFileSync(DB_PATH, 'utf8');
+      localData.push(...JSON.parse(data));
+    } else if (fs.existsSync(LOCAL_SEED_DB)) {
+      const data = fs.readFileSync(LOCAL_SEED_DB, 'utf8');
+      localData.push(...JSON.parse(data));
     }
+    
+    if (localData.length > 0) {
+      await projectStore.seedProjectsIfEmpty(localData);
+    }
+  } catch (err) {
+    console.warn('Seeding check failed (this is normal if DB is already set up):', err.message);
   }
 };
-initRestore();
-
-// Helper to read DB
-const readDB = () => {
-  if (!fs.existsSync(DB_PATH)) return [];
-  const data = fs.readFileSync(DB_PATH, 'utf8');
-  return JSON.parse(data);
-};
-
-// Helper to write DB
-const writeDB = (data) => {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-  
-  // Background backup (Do not block)
-  if (process.env.ENABLE_ADMIN_STATE_BACKUP === 'true') {
-    backupAdminState(DB_PATH).then(res => {
-      if (!res.success) console.warn('Saved locally, but cloud backup failed:', res.error);
-    });
-  }
-};
+seedIfNecessary();
 
 /**
  * REUSABLE HELPER: Generate the local public feed
  * This strips internal fields and only includes approved/published records.
  */
-const generatePublicFeed = () => {
-  const projects = readDB();
+const generatePublicFeed = async () => {
+  const projects = await projectStore.getProjects();
   
   // Rule: Only Approved or Published records go to the public showcase
   const publicProjects = projects
@@ -160,49 +144,48 @@ app.use(express.static(path.join(__dirname, 'dist')));
 // API Routes
 
 // Read-only projects list
-app.get('/api/projects', (req, res) => {
-  res.json(readDB());
+app.get('/api/projects', async (req, res) => {
+  try {
+    const projects = await projectStore.getProjects();
+    res.json(projects);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Read-only single project
-app.get('/api/projects/:id', (req, res) => {
-  const projects = readDB();
-  const project = projects.find(p => p.id === parseInt(req.params.id));
-  if (project) res.json(project);
-  else res.status(404).send('Project not found');
+app.get('/api/projects/:id', async (req, res) => {
+  try {
+    const project = await projectStore.getProjectById(parseInt(req.params.id));
+    if (project) res.json(project);
+    else res.status(404).send('Project not found');
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Protected: Create project
-app.post('/api/projects', adminAuth, (req, res) => {
-  const projects = readDB();
-  const newProject = {
-    ...req.body,
-    id: Date.now(),
-    status: 'submitted',
-    lastUpdated: new Date().toISOString()
-  };
-  projects.push(newProject);
-  writeDB(projects);
-  res.status(201).json(newProject);
+app.post('/api/projects', adminAuth, async (req, res) => {
+  try {
+    const newProject = {
+      ...req.body,
+      id: Date.now(),
+      status: 'submitted',
+      lastUpdated: new Date().toISOString()
+    };
+    const created = await projectStore.createProject(newProject);
+    res.status(201).json(created);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Protected: Update project
-app.put('/api/projects/:id', adminAuth, (req, res) => {
+app.put('/api/projects/:id', adminAuth, async (req, res) => {
   console.log(`PUT /api/projects/${req.params.id}`, req.body);
   try {
-    const projects = readDB();
-    const index = projects.findIndex(p => p.id === parseInt(req.params.id));
-    if (index !== -1) {
-      projects[index] = { 
-        ...projects[index], 
-        ...req.body, 
-        lastUpdated: new Date().toISOString() 
-      };
-      writeDB(projects);
-      res.json(projects[index]);
-    } else {
-      res.status(404).json({ error: 'Project not found' });
-    }
+    const updated = await projectStore.updateProject(parseInt(req.params.id), req.body);
+    res.json(updated);
   } catch (err) {
     console.error('Error in PUT /api/projects:', err);
     res.status(500).json({ error: err.message });
@@ -211,9 +194,9 @@ app.put('/api/projects/:id', adminAuth, (req, res) => {
 
 
 // Protected: Generate local public feed
-app.post('/api/generate-feed', adminAuth, (req, res) => {
+app.post('/api/generate-feed', adminAuth, async (req, res) => {
   try {
-    const result = generatePublicFeed();
+    const result = await generatePublicFeed();
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -224,33 +207,29 @@ app.post('/api/generate-feed', adminAuth, (req, res) => {
 app.post('/api/publish-cloud-feed', adminAuth, async (req, res) => {
   try {
     // Ensure local feed is up to date first
-    const generationResult = generatePublicFeed();
+    const generationResult = await generatePublicFeed();
 
     // Publish to cloud
     const cloudResult = await publishToCloud(FEED_PATH);
     
     if (cloudResult.success) {
       // SUCCESS: Transition all approved records to published
-      const projects = readDB();
+      const projects = await projectStore.getProjects();
       let updatedCount = 0;
       
-      const updatedProjects = projects.map(p => {
+      for (const p of projects) {
         if (p.status === 'approved') {
           updatedCount++;
-          return {
-            ...p,
+          await projectStore.updateProject(p.id, {
             status: 'published',
-            publishedAt: new Date().toISOString(),
-            lastUpdated: new Date().toISOString()
-          };
+            publishedAt: new Date().toISOString()
+          });
         }
-        return p;
-      });
+      }
 
       if (updatedCount > 0) {
-        writeDB(updatedProjects);
-        // Regenerate local feed to ensure timestamps/status consistency (even if status is stripped)
-        generatePublicFeed();
+        // Regenerate local feed to ensure timestamps/status consistency
+        await generatePublicFeed();
       }
 
       res.json({
@@ -295,57 +274,19 @@ app.get('/api/feed-status', (req, res) => {
   }
 });
 
-// 8. Admin State Backup Management
-app.get('/api/admin-state/status', async (req, res) => {
-  try {
-    const status = await getAdminStateBackupStatus();
-    res.json(status);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/admin-state/backup', adminAuth, async (req, res) => {
-  try {
-    const result = await backupAdminState(DB_PATH);
-    if (result.success) {
-      res.json({ success: true, message: 'Admin state backed up successfully.', ...result });
-    } else {
-      res.status(500).json(result);
-    }
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.post('/api/admin-state/restore', adminAuth, async (req, res) => {
-  try {
-    const result = await restoreAdminState(DB_PATH);
-    if (result.success) {
-      // Regenerate local feed after restore
-      const feedResult = generatePublicFeed();
-      res.json({ 
-        success: true, 
-        message: 'Admin state restored successfully.', 
-        ...result,
-        feed: feedResult 
-      });
-    } else {
-      res.status(500).json(result);
-    }
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
 // Wildcard SPA Fallback (Must be LAST)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Admin API server running on port ${PORT}`);
   // Generate local feed on startup
-  generatePublicFeed();
+  try {
+    await generatePublicFeed();
+  } catch (err) {
+    console.warn('Initial feed generation skipped (DB not ready?):', err.message);
+  }
 });
 
