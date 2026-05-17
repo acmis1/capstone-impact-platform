@@ -679,7 +679,7 @@ function App() {
             <div className="duda-grid">
               {published.filter(p => p.year === year).map(p => (
                 <div key={p.id} className="duda-card">
-                  <div className="card-image">
+                  <div className="card-image" style={{ cursor: 'pointer' }} onClick={() => { setPreviewProject(p); setView('detail'); }}>
                     <img src={p.poster || 'https://via.placeholder.com/400x600?text=No+Poster'} alt={p.imageAlt || p.title} />
                   </div>
                   <div className="card-content">

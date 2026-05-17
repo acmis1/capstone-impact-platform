@@ -118,9 +118,11 @@ const renderListing = () => {
             <h2 class="capstone-year-heading">${year} Projects</h2>
             <div class="capstone-projects-grid">
                 ${groups[year].map(p => `
-                    <div class="capstone-card" onclick="handleProjectClick('${p.id}')">
-                        <img class="capstone-card-image" src="${p.poster || 'https://via.placeholder.com/400x600?text=No+Poster'}" alt="${escapeHTML(p.title)}" loading="lazy">
-                        <button class="capstone-card-btn">Learn More</button>
+                    <div class="capstone-card">
+                        <button class="capstone-poster-link" type="button" onclick="handleProjectClick('${p.id}')" aria-label="View ${escapeHTML(p.title)} project detail">
+                            <img class="capstone-card-image" src="${p.poster || 'https://via.placeholder.com/400x600?text=No+Poster'}" alt="${escapeHTML(p.title)}" loading="lazy">
+                        </button>
+                        <button class="capstone-card-btn" type="button" onclick="handleProjectClick('${p.id}')">Learn More</button>
                     </div>
                 `).join('')}
             </div>

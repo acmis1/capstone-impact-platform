@@ -485,12 +485,7 @@ button {
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: border-color 0.3s;
   backdrop-filter: blur(10px);
-}
-
-.duda-card:hover {
-  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .card-image {
@@ -505,7 +500,7 @@ button {
   transition: transform 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
-.duda-card:hover .card-image img {
+.card-image:hover img {
   transform: translateY(-6px) scale(1.03);
 }
 
