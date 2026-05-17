@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
-import { publishToCloud } from './utils/supabasePublisher.js';
+import { publishToCloud, getPublishedFeedStatus } from './utils/supabasePublisher.js';
 import * as projectStore from './utils/projectStore.js';
 
 dotenv.config();
@@ -273,6 +273,16 @@ app.get('/api/feed-status', (req, res) => {
     });
   } else {
     res.json({ exists: false });
+  }
+});
+
+// 8. Get published cloud feed status (Supabase stable URL count)
+app.get('/api/published-feed-status', async (req, res) => {
+  try {
+    const status = await getPublishedFeedStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ exists: false, error: err.message });
   }
 });
 

@@ -9,6 +9,7 @@ function App() {
   const [currentProject, setCurrentProject] = useState(null);
   const [previewProject, setPreviewProject] = useState(null);
   const [feedStatus, setFeedStatus] = useState({ exists: false });
+  const [publishedStatus, setPublishedStatus] = useState({ exists: false });
   const [cloudStatus, setCloudStatus] = useState(null);
   const [cloudUrl, setCloudUrl] = useState(null);
   const [message, setMessage] = useState(null);
@@ -20,6 +21,7 @@ function App() {
   useEffect(() => {
     fetchProjects();
     fetchFeedStatus();
+    fetchPublishedStatus();
   }, []);
 
   // Handle scroll lock and Esc key for lightbox
@@ -62,6 +64,16 @@ function App() {
     }
   };
 
+  const fetchPublishedStatus = async () => {
+    try {
+      const res = await fetch(`${API_URL}/published-feed-status`);
+      const data = await res.json();
+      setPublishedStatus(data);
+    } catch (err) {
+      console.error('Error fetching published feed status:', err);
+    }
+  };
+
   const handlePublishCloud = async () => {
     setCloudStatus({ type: 'info', message: 'Syncing to official showcase...' });
     try {
@@ -85,6 +97,7 @@ function App() {
         setCloudUrl(data.publicUrl);
         fetchProjects(); // Refresh to see status changes
         fetchFeedStatus();
+        fetchPublishedStatus();
       } else {
         setCloudStatus({ type: 'error', message: data.error || 'Official sync failed.' });
       }
@@ -150,6 +163,7 @@ function App() {
         setMessage('Project saved successfully!');
         fetchProjects();
         fetchFeedStatus();
+        fetchPublishedStatus();
         setTimeout(() => {
           setView('list');
           setMessage(null);
@@ -192,7 +206,7 @@ function App() {
           </div>
           <div className="stat-card border-published">
             <label>Live on Duda</label>
-            <div className="stat-val">{getStatusCount('published')}</div>
+            <div className="stat-val">{publishedStatus.exists ? publishedStatus.count : 0}</div>
           </div>
         </div>
 
@@ -268,22 +282,22 @@ function App() {
           <div className="feed-status-card" style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', border: '1px solid var(--border)' }}>
             <h3 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Showcase Distribution</h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-              Local Preview updates automatically after approved project records are saved. Use Publish to Duda only when the preview is ready to update the external test showcase.
+              Local Preview updates automatically after records are saved. The public Duda showcase updates only after clicking Publish to Duda.
             </p>
             
-            {feedStatus?.exists ? (
+            {publishedStatus?.exists ? (
               <div className="feed-info" style={{ marginBottom: '1.5rem' }}>
                 <div className="info-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
                   <span style={{ color: 'var(--text-muted)' }}>Public Records Count:</span>
-                  <span className="highlight" style={{ fontWeight: 'bold', color: 'var(--success)' }}>{feedStatus.count}</span>
+                  <span className="highlight" style={{ fontWeight: 'bold', color: 'var(--success)' }}>{publishedStatus.count}</span>
                 </div>
                 <div className="info-row" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                   <span style={{ color: 'var(--text-muted)' }}>Last Distribution:</span>
-                  <span>{new Date(feedStatus.lastUpdated).toLocaleString()}</span>
+                  <span>{new Date(publishedStatus.lastPublished).toLocaleString()}</span>
                 </div>
               </div>
             ) : (
-              <p style={{ marginBottom: '1.5rem' }}>Public feed has not been generated yet.</p>
+              <p style={{ marginBottom: '1.5rem' }}>Public showcase has not been published yet.</p>
             )}
 
             <div className="feed-actions" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
@@ -469,6 +483,7 @@ function App() {
                         alert("Project successfully ARCHIVED. It is now removed from the pending public queue.");
                         fetchProjects();
                         fetchFeedStatus();
+                        fetchPublishedStatus();
                         setView('list');
                         setMessage("Project archived and saved.");
                         setTimeout(() => setMessage(null), 3000);
