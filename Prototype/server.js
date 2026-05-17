@@ -174,6 +174,7 @@ app.post('/api/projects', adminAuth, async (req, res) => {
       lastUpdated: new Date().toISOString()
     };
     const created = await projectStore.createProject(newProject);
+    await generatePublicFeed();
     res.status(201).json(created);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -185,6 +186,7 @@ app.put('/api/projects/:id', adminAuth, async (req, res) => {
   console.log(`PUT /api/projects/${req.params.id}`, req.body);
   try {
     const updated = await projectStore.updateProject(parseInt(req.params.id), req.body);
+    await generatePublicFeed();
     res.json(updated);
   } catch (err) {
     console.error('Error in PUT /api/projects:', err);

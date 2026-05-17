@@ -149,6 +149,7 @@ function App() {
       if (res.ok) {
         setMessage('Project saved successfully!');
         fetchProjects();
+        fetchFeedStatus();
         setTimeout(() => {
           setView('list');
           setMessage(null);
@@ -161,40 +162,6 @@ function App() {
     } catch (err) {
       console.error('Error in handleSave catch block:', err);
       setMessage(`Error saving project: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGenerateFeed = async () => {
-    if (view === 'edit') {
-      if (!window.confirm("You have unsaved changes in the editor. These will NOT be included in the feed until you click 'Save & Update Record'. Proceed anyway?")) {
-        return;
-      }
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/generate-feed`, { 
-        method: 'POST',
-        headers: {
-          'x-admin-key': adminKey
-        }
-      });
-      const data = await res.json();
-      if (data.success) {
-        const excludedDetail = data.excludedStatuses ? 
-          Object.entries(data.excludedStatuses).map(([s, c]) => `${c} ${s}`).join(', ') : 
-          `${data.archivedCount || 0} archived`;
-
-        const diag = `Local Preview feed updated with ${data.count} projects. Excluded: ${excludedDetail}.`;
-        setMessage(diag);
-        fetchFeedStatus();
-        setTimeout(() => setMessage(null), 8000);
-      }
-    } catch (err) {
-      console.error('Error generating feed:', err);
-      setMessage('Error updating local feed.');
     } finally {
       setLoading(false);
     }
@@ -301,7 +268,7 @@ function App() {
           <div className="feed-status-card" style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', border: '1px solid var(--border)' }}>
             <h3 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Showcase Distribution</h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-              Manage how project data is synchronized to the public showcase.
+              Local Preview updates automatically after approved project records are saved. Use Publish to Duda only when the preview is ready to update the external test showcase.
             </p>
             
             {feedStatus?.exists ? (
@@ -319,10 +286,7 @@ function App() {
               <p style={{ marginBottom: '1.5rem' }}>Public feed has not been generated yet.</p>
             )}
 
-            <div className="feed-actions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <button onClick={handleGenerateFeed} className="btn-outline" style={{ width: '100%' }} title="Updates the local feed file (capstones-latest.json) for immediate previewing. Does NOT update the live Duda site.">
-                Generate Local Feed
-              </button>
+            <div className="feed-actions" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
               <button onClick={handlePublishCloud} className="btn-primary" style={{ width: '100%' }} title="Syncs the local feed to the official Supabase storage. This update is what Duda actually displays.">
                 Publish to Duda
               </button>
@@ -504,6 +468,7 @@ function App() {
                       if (res.ok) {
                         alert("Project successfully ARCHIVED. It is now removed from the pending public queue.");
                         fetchProjects();
+                        fetchFeedStatus();
                         setView('list');
                         setMessage("Project archived and saved.");
                         setTimeout(() => setMessage(null), 3000);
@@ -885,7 +850,6 @@ function App() {
               {view === 'edit' && 'Review Project Metadata'}
             </div>
             <div className="header-actions">
-              <button className="btn-generate-header" onClick={handleGenerateFeed}>Generate Feed</button>
             </div>
           </header>
         )}

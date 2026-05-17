@@ -59,7 +59,7 @@ npm run server
 1. **Source of Truth**: All Admin/CMS edits are saved directly to the Supabase `projects` table.
 2. **Initial Seeding**: On the very first startup, if the database table is empty, the server will automatically seed it from the local `data/db.json` file.
 3. **Restarts**: When the server restarts (e.g., Render Free sleep or redeploy), it fetches the latest records from the database. No manual "Restore" is required.
-4. **Public Feed**: The public feed (stable URL) is generated from these database records only when you click **Publish to Duda**.
+4. **Public Feed**: The local preview feed updates automatically after approved project records are saved. The official external test showcase (stable URL) is synchronized to this updated preview only when you click **Publish to Duda**.
 
 ## Access Protection
 If `ADMIN_ACCESS_KEY` is configured:

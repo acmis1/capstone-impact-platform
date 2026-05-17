@@ -45,10 +45,9 @@ Use the following step-by-step script during live demonstrations.
 8. **Explain**: AI/OCR-assisted text extraction is conceptual in this prototype — the `posterText` field is manually entered or imported.
 
 ### Approval & Publishing
-9. Set the project status to **Approved** and click **Save & Update Record**.
-10. Return to the **Dashboard**.
-11. Click **"Generate Local Feed"** — confirm the feed file is generated with correct record count.
-12. Click **"Publish to Duda"** — confirm the feed is uploaded to Supabase and the project status transitions to **Published**.
+9. Set the project status to **Approved** and click **Save & Update Record**. (This automatically regenerates the local preview feed).
+10. Return to the **Dashboard** — observe that the public record counts update.
+11. Click **"Publish to Duda"** — confirm the feed is uploaded to Supabase and the project status transitions to **Published**.
 
 ### Verification — Feed & Duda
 13. Open the **Supabase Stable Feed URL** in a new tab — show the JSON contains the approved project.
@@ -111,7 +110,7 @@ Run through this checklist before any stakeholder demo.
 | 1 | Render app loads (Dashboard visible) | ☐ |
 | 2 | `/api/projects` returns JSON project array from database | ☐ |
 | 3 | `/capstones-latest.json` returns the public feed | ☐ |
-| 4 | "Generate Local Feed" completes without error | ☐ |
+| 4 | Local preview feed updates automatically after save | ☐ |
 | 5 | "Publish to Duda" completes without error | ☐ |
 | 6 | Supabase feed URL returns updated JSON | ☐ |
 | 7 | Duda listing page shows approved projects | ☐ |
