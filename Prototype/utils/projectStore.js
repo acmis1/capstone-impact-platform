@@ -248,6 +248,7 @@ export async function generatePublicProjects() {
       sampleImportId,
       packageValidation,
       pendingRemovalFromPublic,
+      publicRemovalCompletedAt,
       archivedFromStatus,
       ...publicFields 
     }) => publicFields);

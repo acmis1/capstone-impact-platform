@@ -1047,6 +1047,7 @@ const generatePublicFeed = async () => {
       sampleImportId,
       packageValidation,
       pendingRemovalFromPublic,
+      publicRemovalCompletedAt,
       archivedFromStatus,
       // Ensure we don't accidentally include new internal fields
       ...publicFields 
@@ -1524,6 +1525,8 @@ app.post('/api/publish-cloud-feed', adminAuth, async (req, res) => {
       // SUCCESS: Transition all approved records to published and stamp metadata
       const projects = await projectStore.getProjects();
       let updatedCount = 0;
+      let removalCompletedCount = 0;
+      const removalCompletedAt = new Date().toISOString();
       
       for (const p of projects) {
         if (p.status === 'approved' || p.status === 'published') {
@@ -1538,6 +1541,12 @@ app.post('/api/publish-cloud-feed', adminAuth, async (req, res) => {
             updatePayload.publishedAt = updatePayload.lastPublishedAt;
           }
           await projectStore.updateProject(p.id, updatePayload);
+        } else if (p.status === 'archived' && p.pendingRemovalFromPublic === true) {
+          removalCompletedCount++;
+          await projectStore.updateProject(p.id, {
+            pendingRemovalFromPublic: false,
+            publicRemovalCompletedAt: removalCompletedAt
+          });
         }
       }
 
@@ -1548,7 +1557,8 @@ app.post('/api/publish-cloud-feed', adminAuth, async (req, res) => {
         ...cloudResult,
         ...generationResult,
         updatedCount,
-        message: `Successfully synced ${generationResult.count} records to the official showcase. ${updatedCount} approved records transitioned to Published. Excluded ${generationResult.archivedCount} archived records.`
+        removalCompletedCount,
+        message: `Successfully synced ${generationResult.count} records to the official showcase. ${updatedCount} approved records transitioned to Published. Excluded ${generationResult.archivedCount} archived records. ${removalCompletedCount} archived records completed public removal.`
       });
     } else {
       res.status(500).json(cloudResult);

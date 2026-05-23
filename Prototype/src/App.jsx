@@ -96,8 +96,11 @@ const getDudaSyncStatus = (project) => {
   }
 
   if (status === 'archived') {
-    if (project.pendingRemovalFromPublic || wasPreviouslyPublished) {
+    if (project.pendingRemovalFromPublic) {
       return { label: 'Pending removal', code: 'pending_removal' };
+    }
+    if (project.publicRemovalCompletedAt || wasPreviouslyPublished) {
+      return { label: 'Removed', code: 'removed' };
     }
     return { label: 'Not public', code: 'not_public' };
   }
@@ -136,7 +139,7 @@ const canPermanentlyDeleteArchivedRecord = (project) => {
   const status = String(project.status || '').toLowerCase();
   const sync = getDudaSyncStatus(project);
 
-  return status === 'archived' && sync.code === 'not_public' && !project.pendingRemovalFromPublic;
+  return status === 'archived' && !project.pendingRemovalFromPublic && ['not_public', 'removed'].includes(sync.code);
 };
 
 const hasBlockingValidationFlag = (value) => {
