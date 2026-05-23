@@ -131,6 +131,51 @@ export async function replaceProject(id, fullRecord) {
 }
 
 /**
+ * Creates or replaces a full project record without regenerating public feeds.
+ */
+export async function upsertProject(project) {
+  if (!supabase) throw new Error('Supabase client not initialized');
+
+  const record = {
+    id: project.id,
+    data: project,
+    updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await supabase
+    .from('projects')
+    .upsert(record, { onConflict: 'id' })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data.data;
+}
+
+/**
+ * Uploads an import asset to the configured Supabase Storage bucket.
+ */
+export async function uploadProjectAsset(storagePath, buffer, contentType) {
+  if (!supabase) throw new Error('Supabase client not initialized');
+
+  const bucketName = process.env.SUPABASE_ASSET_BUCKET || 'project-assets';
+  const { error } = await supabase.storage
+    .from(bucketName)
+    .upload(storagePath, buffer, {
+      contentType,
+      upsert: true
+    });
+
+  if (error) throw error;
+
+  const { data: { publicUrl } } = supabase.storage
+    .from(bucketName)
+    .getPublicUrl(storagePath);
+
+  return publicUrl;
+}
+
+/**
  * Seeds the projects table if it is currently empty.
  * Returns true if seeding occurred, false otherwise.
  */
@@ -198,6 +243,29 @@ export async function generatePublicProjects() {
       staffNotes, 
       privateNotes, 
       lastUpdated, 
+      importBatchId,
+      sourceFolder,
+      sampleImportId,
+      packageValidation,
+      pendingRemovalFromPublic,
+      archivedFromStatus,
       ...publicFields 
     }) => publicFields);
+}
+
+/**
+ * Deletes a project record by ID. Safety checks are enforced by the caller.
+ */
+export async function deleteProject(id) {
+  if (!supabase) throw new Error('Supabase client not initialized');
+
+  const { data, error } = await supabase
+    .from('projects')
+    .delete()
+    .eq('id', id)
+    .select('data')
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? { success: true, project: data.data } : { success: false, project: null };
 }
