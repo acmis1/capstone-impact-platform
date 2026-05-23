@@ -15,20 +15,20 @@ if (!fs.existsSync(FEED_PATH)) {
 
 try {
   const projects = JSON.parse(fs.readFileSync(FEED_PATH, 'utf8'));
-  
+
   const required = [
-    'id', 'groupName', 'title', 'discipline', 'disciplines', 'year', 'industry', 
-    'industryPartner', 'academicSupervisor', 'program', 'studyProgram', 'summary', 
-    'background', 'solution', 'posterText', 'teamMembers', 'poster', 'citations',
+    'id', 'groupName', 'title', 'discipline', 'disciplines', 'year', 'industry',
+    'industryPartner', 'academicSupervisor', 'program', 'studyProgram', 'summary',
+    'background', 'solution', 'posterText', 'teamMembers', 'citations',
     'snapshots'
   ];
 
   const forbidden = [
-    'status', 'internalNotes', 'lastUpdated', 'adminId', 'validationErrors', 
-    'validationWarnings', 'staffNotes', 'privateNotes', 'reviewNotes', 
-    'missingItems', 'previewUrl', 'previewSentAt', 'studentConfirmedAt', 
-    'publishedAt', 'archivedAt', 'archiveReason', 'validationFlags', 'ocrStatus', 
-    'adminId', 'staffNotes', 'privateNotes'
+    'status', 'internalNotes', 'lastUpdated', 'adminId', 'validationErrors',
+    'validationWarnings', 'staffNotes', 'privateNotes', 'reviewNotes',
+    'missingItems', 'previewUrl', 'previewSentAt', 'studentConfirmedAt',
+    'publishedAt', 'archivedAt', 'archiveReason', 'validationFlags', 'ocrStatus',
+    'importBatchId', 'sourceFolder', 'sampleImportId', 'packageValidation'
   ];
 
   let errors = 0;
@@ -39,9 +39,11 @@ try {
     process.exit(1);
   }
 
+  const urlPattern = /^(https?:\/\/)[^\s/$.?#].[^\s]*$/i;
+
   projects.forEach((p, idx) => {
     const pId = p.id || `index_${idx}`;
-    
+
     // 1. Check Required Fields
     required.forEach(field => {
       if (p[field] === undefined) {
@@ -58,12 +60,94 @@ try {
       }
     });
 
-    // 3. Type and Content Validation
+    // 3. Poster Asset Validation (poster OR posterPdf is required)
+    if (!p.poster && !p.posterPdf) {
+      console.error(`[Project ${pId}] Error: A project must have at least one public poster asset (poster or posterPdf must not be empty).`);
+      errors++;
+    } else if (!p.poster || !p.posterPdf) {
+      console.log(`[Project ${pId}] WARNING: Only one poster asset provided: ${p.poster ? 'Poster Image' : 'Poster PDF'}. Both are preferred but not mandatory.`);
+      warnings++;
+    }
+
+    // 4. Accessibility Text Validation (Warning if missing, not error)
+    if (!p.accessibilityText || p.accessibilityText.trim() === '') {
+      console.log(`[Project ${pId}] WARNING: Missing accessibility text (accessibilityText).`);
+      warnings++;
+    }
+
+    // 5. URL Format Checks
+    const checkUrl = (url, fieldName) => {
+      if (url && !urlPattern.test(url)) {
+        console.error(`[Project ${pId}] Invalid URL format for ${fieldName}: "${url}"`);
+        errors++;
+      }
+    };
+    checkUrl(p.poster, 'poster');
+    checkUrl(p.posterPdf, 'posterPdf');
+    checkUrl(p.videoUrl, 'videoUrl');
+    checkUrl(p.demoUrl, 'demoUrl');
+    checkUrl(p.repositoryUrl, 'repositoryUrl');
+    if (Array.isArray(p.snapshots)) {
+      p.snapshots.forEach((snap, snapIdx) => {
+        checkUrl(snap, `snapshots[${snapIdx}]`);
+      });
+    }
+
+    // 6. Layout Configuration Validation
+    if (p.layoutConfig) {
+      if (typeof p.layoutConfig !== 'object' || Array.isArray(p.layoutConfig)) {
+        console.error(`[Project ${pId}] layoutConfig must be an object`);
+        errors++;
+      } else {
+        const { templateId, featuredMedia, sectionOrder, hiddenSections } = p.layoutConfig;
+
+        const validTemplates = ['poster_showcase', 'technical_detail', 'media_rich'];
+        if (templateId && !validTemplates.includes(templateId)) {
+          console.error(`[Project ${pId}] Invalid layoutConfig.templateId: "${templateId}". Must be one of: ${validTemplates.join(', ')}`);
+          errors++;
+        }
+
+        const validMedia = ['poster', 'video', 'snapshots', 'none'];
+        if (featuredMedia && !validMedia.includes(featuredMedia)) {
+          console.error(`[Project ${pId}] Invalid layoutConfig.featuredMedia: "${featuredMedia}". Must be one of: ${validMedia.join(', ')}`);
+          errors++;
+        }
+
+        if (sectionOrder && !Array.isArray(sectionOrder)) {
+          console.error(`[Project ${pId}] layoutConfig.sectionOrder must be an array`);
+          errors++;
+        }
+
+        if (hiddenSections && !Array.isArray(hiddenSections)) {
+          console.error(`[Project ${pId}] layoutConfig.hiddenSections must be an array`);
+          errors++;
+        }
+      }
+    }
+
+    // 7. External Links Validation
+    if (p.externalLinks) {
+      if (!Array.isArray(p.externalLinks)) {
+        console.error(`[Project ${pId}] externalLinks must be an array of link objects`);
+        errors++;
+      } else {
+        p.externalLinks.forEach((link, linkIdx) => {
+          if (typeof link !== 'object' || !link.label || !link.url) {
+            console.error(`[Project ${pId}] Invalid externalLink at index ${linkIdx}: must contain both label and url`);
+            errors++;
+          } else {
+            checkUrl(link.url, `externalLinks[${linkIdx}].url`);
+          }
+        });
+      }
+    }
+
+    // 8. Basic Field Type & Non-Emptiness checks
     if (p.title && (typeof p.title !== 'string' || p.title.trim() === '')) {
       console.error(`[Project ${pId}] Invalid title: must be non-empty string`);
       errors++;
     }
-    
+
     if (p.summary && (typeof p.summary !== 'string' || p.summary.trim() === '')) {
       console.error(`[Project ${pId}] Invalid summary: must be non-empty string`);
       errors++;
@@ -96,11 +180,6 @@ try {
 
     if (p.snapshots && !Array.isArray(p.snapshots)) {
       console.error(`[Project ${pId}] Invalid snapshots: must be an array`);
-      errors++;
-    }
-
-    if (p.posterPdf && (typeof p.posterPdf !== 'string' || p.posterPdf.trim() === '')) {
-      console.error(`[Project ${pId}] Invalid posterPdf: must be a non-empty string`);
       errors++;
     }
   });

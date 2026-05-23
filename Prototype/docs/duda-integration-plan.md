@@ -66,6 +66,49 @@ Follow these steps to update the live Duda site:
 2.  Open the live site in an Incognito window to verify.
 3.  Check the browser console; you should see logs starting with `[Showcase]`.
 
-## 6. Feed Source
+---
+
+## 8. Dynamic Client-Side Presentation & Layout Engine (New in v2)
+
+The Duda public showcase rendering script (`bodyend.html`) has been refactored in Prototype v2 to support administrative layout control dynamically on the client side.
+
+> [!NOTE]
+> **Key Architectural Boundaries:**
+> - **CMS-Controlled Presets:** These layout options are custom presentation templates rendered dynamically by the client script inside a single reusable Duda detail page. They are **not** native Duda page templates, meaning you do not need to create or maintain separate physical pages in Duda.
+> - **Supported Blocks:** Administrative staff can freely reorder or toggle the visibility of any supported content blocks (background, solution, snapshots, video, and links) through the CMS dashboard.
+> - **Developer Extensibility:** Adding brand new content block types or implementing completely different visual grid styles/CSS structures still requires developer extension of the `bodyend.html` rendering logic.
+> - **Self-Contained Module Styling:** The project detail renderer scopes styles to `#project-detail` and preset classes. It does not style `body` or `html`, and each preset defines its own readable backgrounds, cards, metadata, and CTA colors so it works on Duda's white/light page background.
+
+### Dynamic Feed Fetching & Routing
+- The script intercepts page loading on `/project-detail?id=...`.
+- It fetches the stable feed `feeds/capstones-latest.json` with aggressive cache busting (`?v=TIMESTAMP`).
+- It extracts the `layoutConfig` object from the matching project record. If no configuration is provided, it falls back to the standard `poster_showcase` template and default section ordering.
+
+### CSS Flex/Grid Dynamic Ordering & Visibility
+- **Presets & Grid Structuring**:
+  - The script maps the chosen `templateId` (`poster_showcase`, `technical_detail`, `media_rich`) to high-fidelity container CSS classes (e.g. `layout-preset-poster_showcase`, `layout-preset-technical_detail`, `layout-preset-media_rich`).
+  - These presets use modern CSS Grid and Flexbox rules to reorganize text and media columns responsively, creating three highly distinct visual structures:
+    - **Poster Showcase (`poster_showcase`) - Exhibition/poster-first page**: Presents the project like a capstone exhibition wall. The poster is the first-screen centrepiece, metadata appears as compact chips/tags, the poster PDF button is prominent, and visible snapshots appear as a horizontal highlight strip below the hero.
+    - **Technical Detail (`technical_detail`) - Formal report/article-first page**: Uses a light paper/report panel, dark readable text, numbered section headings, and a table-of-contents/sidebar index. The poster is a small appendix/support asset rather than a hero.
+    - **Media Rich (`media_rich`) - Demo/media-first page**: Uses a full-width cinema/gallery hero at the top. Video is preferred first, snapshots become a large gallery hero when no video exists, and the poster is only primary when it is the only media. Demo, repository, and external links render as large Project Launchpad CTA buttons.
+- **Hero Element Elevations**:
+  - The elevated media element defined in `featuredMedia` (`poster`, `video`, `snapshots`, or `none`) is extracted from the normal content flow where that preset uses a featured treatment. The Media Rich preset prefers video first, then snapshots, then poster fallback.
+- **Section Ordering & Visibility**:
+  - Administrative staff can freely reorder or toggle the visibility of any supported content blocks (background, solution, snapshots, video, and links) through the CMS dashboard. The rendering loop iterates over `layoutConfig.sectionOrder`, checking `layoutConfig.hiddenSections` to skip hidden elements while rendering approved content blocks sequentially.
+  - This architecture achieves absolute presentation control without modifying native Duda layouts or creating redundant pages.
+  - Adding brand-new content block types or implementing completely different visual grid styles/CSS structures still requires developer extension of the `bodyend.html` rendering logic.
+
+---
+
+## 8.5 Publishing State & Duda Sync Alignment
+
+To prevent confusing simple CMS record saves with live public site distribution, the platform manages **CMS Lifecycle Status** and **Duda Sync Status** separately.
+
+- **Status Separation**: A project's CMS Status can be `Published` while its Duda Sync Status is `Unpublished CMS changes`. This indicates that although the project is live on Duda, staff have made local updates (such as changing a layout preset or editing descriptions) that will not appear live until they click the **Publish to Duda** button from the dashboard.
+- **Stable Fingerprinting**: The CMS calculates a cryptographic-style fingerprint (hash) of the public-facing subset of each project. When a publish succeeds, the current fingerprint is saved as `lastPublishedPublicHash`. If subsequent CMS changes alter any public details, the current hash deviates from the last published hash, immediately alerting staff that Duda is out of sync.
+
+---
+
+## 9. Feed Source
 Official Stable Feed URL:
 `https://xojnnhilqaldxoilmxli.supabase.co/storage/v1/object/public/feeds/capstones-latest.json`

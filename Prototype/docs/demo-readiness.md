@@ -44,22 +44,57 @@ Use the following step-by-step script during live demonstrations.
    - `posterText` field (long-form poster text)
 8. **Explain**: AI/OCR-assisted text extraction is conceptual in this prototype — the `posterText` field is manually entered or imported.
 
+### Simulated Demo Batch Workflow (New in v2)
+9. Click **"Import Projects"** in the sidebar.
+10. Scroll to the bottom and click **"Load Demo Example"** to simulate scanning 5 incoming student submissions:
+    - Point out that 3 packages are identified as **Valid** (all required fields present, layout preset selected, valid URLs).
+    - Point out 1 package flagged as **Warning** (missing accessibility text warning, and contains unsupported file types in package assets: `.exe` and `.zip` which are flagged).
+    - Point out 1 package marked as **Error** (missing both poster image and poster PDF, has invalid video/GitHub URLs, and selects an invalid layout preset).
+11. Observe the clean visual representation of the scans. Point out how warnings and errors are formatted to help administrative staff pinpoint package issues.
+12. Explain **Deduplication Safeguards**: The simulated loading prevents duplicate imports by checking `id`, `sourceFolder`, and `sampleImportId` against existing projects.
+13. Click **"Map Valid Projects to CMS"**. Confirm that the 4 valid or warning-only projects are mapped to Supabase database with status **In Review** and stable integer IDs, while the error-ridden package is safely blocked.
+
+### Real Folder Import & Rich Media Handling (Phase 3 Final Demo)
+14. Navigate to **"Projects"** and click **"+ Import project folders"**.
+15. Select **"Batch Folder"** option.
+16. Select the fresh external demo batch folder:
+    `d:\IT RMIT\Capstone\capstone-import-batch-demo-final`
+17. Click **"Scan & Import Batch"** and point out the real import process:
+    - **smart-campus-navigation**: Successfully imported (`IMPORTED`) with stable ID `202637527`. It includes a real **60-second H.264 video** (5.25 MB, demo-safe placeholder) at `media/demo-video.mp4`, two high-resolution 1920x1080 snapshots, poster image, and PDF document.
+    - **robotics-safety-monitor**: Successfully imported with warnings (`IMPORTED WITH WARNINGS`) with stable ID `202620724`. It intentionally omits `accessibility.txt` to trigger a warning, contains one high-resolution 1920x1080 snapshot, and poster image/PDF.
+18. In the results table, click **"Edit & Review"** for *Smart Campus Navigation Assistant*:
+    - Observe the status is set to **In Review** and Duda Sync is **Not public / Draft**.
+    - Verify that the poster image, poster PDF link, and high-resolution snapshots load perfectly.
+    - Confirm the video URL exists in the CMS record and is available in the Media Rich layout preview.
+19. Now click **"+ Import project folders"** again, select **"Single Project Folder"** option, and select `d:\IT RMIT\Capstone\capstone-import-batch-demo-final\smart-campus-navigation`.
+20. Click **"Scan & Import Project"** to demonstrate **repeatability and upserts**. Verify that it safely updates the existing record (`202637527`) instead of duplicating, and the video asset remains correctly attached.
+
+### CMS Layout Panel & Presentation Editing (New in v2)
+21. Navigate back to **"Projects"** and select one of the imported records (e.g. *Smart Campus Navigation Assistant*).
+22. Click **Edit & Review** and scroll to **Section C: Public Layout & Presets**.
+23. Demonstrate changing the **Layout Preset Template** (e.g. from `poster_showcase` to `media_rich` or `technical_detail`).
+24. Demonstrate modifying the **Featured Media Element** (e.g. choosing `snapshots` or `video` as hero).
+25. Show how content blocks can be vertically reordered (clicking ▲ Up / ▼ Down) or toggled on/off (Show checkbox).
+26. Highlight the warning disclaimer: *This configures the showcase dynamic rendering layout and does not create native Duda pages.*
+27. Demonstrate adding custom links in the **External Links** field using the `Label | URL` format.
+28. Save the changes, set the project to **Approved**, and sync it to the showcase feed.
+
 ### Approval & Publishing
-9. Set the project status to **Approved** and click **Save & Update Record**. (This automatically regenerates the local preview feed).
-10. Return to the **Dashboard** — observe that the public record counts update.
-11. Click **"Publish to Duda"** — confirm the feed is uploaded to Supabase and the project status transitions to **Published**.
+29. Set the project status to **Approved** and click **Save & Update Record**. (This automatically regenerates the local preview feed).
+30. Return to the **Dashboard** — observe that the public record counts update.
+31. Click **"Publish to Duda"** — confirm the feed is uploaded to Supabase and the project status transitions to **Published**.
 
 ### Verification — Feed & Duda
-13. Open the **Supabase Stable Feed URL** in a new tab — show the JSON contains the approved project.
-14. Open the **Duda Public Listing URL** — refresh the page and show the project card appears.
-15. Click the project card to navigate to the **Detail Page** and confirm all fields render.
+32. Open the **Supabase Stable Feed URL** in a new tab — show the JSON contains the approved project.
+33. Open the **Duda Public Listing URL** — refresh the page and show the project card appears.
+34. Click the project card to navigate to the **Detail Page** and confirm all fields render.
 
 ### Archive / Removal Flow
-16. Return to the Admin/CMS and open the published project.
-17. Click **"Archive Project"** and provide an optional reason.
-18. Return to the Dashboard and click **"Publish to Duda"** again.
-19. Refresh the **Supabase feed** — the archived project should no longer appear.
-20. Refresh the **Duda listing** — the archived project card should be gone.
+35. Return to the Admin/CMS and open the published project.
+36. Click **"Archive Project"** and provide an optional reason.
+37. Return to the Dashboard and click **"Publish to Duda"** again.
+38. Refresh the **Supabase feed** — the archived project should no longer appear.
+39. Refresh the **Duda listing** — the archived project card should be gone.
 
 ---
 
@@ -72,6 +107,13 @@ Use the following step-by-step script during live demonstrations.
 - ✅ The Duda public layer updates dynamically from approved public data.
 - ✅ Poster images, poster PDF links, and snapshot galleries are supported in the data model and rendered on Duda.
 - ✅ Archive/removal workflow prevents removed projects from appearing on the live site after republishing.
+- ✅ **Batch Folder Import & Pre-validation**: Dynamic scanning, reporting, and blocking of invalid packages, and mapping compliant ones with stable IDs in a safe, draft-like `in_review` state.
+- ✅ **Robust Deduplication**: Prevention of duplicate imports using `id`, `sourceFolder`, and `sampleImportId` checks.
+- ✅ **Staff Layout Control**: CMS-controlled visual presets inside one reusable Duda detail page: Poster Showcase is exhibition/poster-first, Technical Detail is formal report/article-first, and Media Rich is demo/media-first. Staff can reorder/hide supported blocks, but these are not native Duda page templates.
+- ✅ **Self-Contained Detail Module**: The embedded project detail renderer defines its own readable backgrounds, cards, metadata, and CTA colors so it remains usable on Duda's white/light page background.
+- ✅ **Enhanced Media Fields**: Responsive rendering of code repositories, interactive demos, embedded videos, accessibility screen reader text, and custom link lists.
+- ✅ **Real Folder Import & Rich Media Handling**: Live frontend folder selection and relative-path manifest import E2E flow. Proven to handle high-resolution poster images/snapshots and a real 60-second H.264 video file (`media/demo-video.mp4`) safely uploaded to Supabase Storage and stored in CMS draft review records.
+- ✅ **Repeatable Folder Import (Upsert)**: Proven that re-scanning/re-importing the same project folder updates the existing record cleanly while keeping the rich video/media assets correctly mapped without duplicating.
 
 ---
 
@@ -84,20 +126,33 @@ These features are **out of scope** for the prototype and are planned for produc
 - ❌ Real preview email sent to student groups.
 - ❌ Real student confirmation link.
 - ❌ Production authentication and role management (RMIT SSO, RBAC).
-- ❌ Production media upload automation (direct file upload to cloud storage).
-
----
-
-## 5. Known Staging Limitations
-
-> [!WARNING]
-> The current deployment is a **staging prototype**. Be aware of the following:
+- ❌ Production media upload automation (direct resumable client-to-cloud storage upload). Simple multipart uploads are used for prototype demo safety with a 100 MB limit.
+- ❌ Real ZIP file upload, extraction, and validation.
+- ❌ Dynamic generation of brand-new native Duda pages or native Duda layout templates.
+- ❌ Real Excel spreadsheet reading/checking.
 
 | Limitation | Detail |
 | :--- | :--- |
 | **Render Free spin-down** | The free-tier service spins down after inactivity. The first request after idle may take 30–60 seconds. |
 | **Shared access key** | The staging access key is a single shared secret — it is not a production auth system. |
 | **Production requirements** | Production should use proper authentication (RMIT SSO) and managed file upload storage. |
+
+---
+
+## 5. Two-Tier Status Model (New in v2.1)
+
+To prevent confusion between administrative actions inside the CMS workspace and live public showcase updates, Prototype v2.1 introduces a **two-tier status architecture**:
+
+1. **CMS Lifecycle Status** (Internal administrative gates):
+   - `Draft` / `Submitted` / `In Review` / `Changes Requested` / `Preview Sent` / `Student Confirmed` / `Approved` / `Published` / `Archived`
+2. **Duda Sync / Showcase Status** (Shows whether changes are live publicly):
+   - **Synced / Up to date**: Project is live on Duda and matches the current CMS record.
+   - **Unpublished CMS changes**: Project is live on Duda, but staff have made saves in the CMS (e.g. edited text or changed layout templates) that are not yet visible to the public.
+   - **Pending publish**: Project is marked Approved by staff but not yet distributed to Duda.
+   - **Pending removal**: Project is archived in the CMS but still live on Duda until next Publish to Duda is triggered.
+   - **Not public / Draft**: Project is draft/review and is not live.
+
+This prevents staff from assuming that clicking "Save CMS Changes" instantly updates the live Duda site. Live updates only occur when clicking **Publish to Duda** from the dashboard.
 
 ---
 
