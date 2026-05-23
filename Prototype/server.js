@@ -276,7 +276,7 @@ const selectMetadataFile = (entries) => {
 
   const exactXlsx = names.filter(item => item.name === 'project-details.xlsx');
   if (exactXlsx.length > 0) {
-    return { file: exactXlsx[0].entry, type: 'xlsx' };
+    return { file: exactXlsx[0].entry.file, type: 'xlsx' };
   }
 
   const friendlyXlsx = names.filter(item =>
@@ -286,12 +286,12 @@ const selectMetadataFile = (entries) => {
     return { error: 'Multiple project details files found. Keep only one details workbook.' };
   }
   if (friendlyXlsx.length === 1) {
-    return { file: friendlyXlsx[0].entry, type: 'xlsx' };
+    return { file: friendlyXlsx[0].entry.file, type: 'xlsx' };
   }
 
   const exactCsv = names.filter(item => item.name === 'project-details.csv');
   if (exactCsv.length > 0) {
-    return { file: exactCsv[0].entry, type: 'csv' };
+    return { file: exactCsv[0].entry.file, type: 'csv' };
   }
 
   const friendlyCsv = names.filter(item =>
@@ -301,12 +301,12 @@ const selectMetadataFile = (entries) => {
     return { error: 'Multiple project details files found. Keep only one details workbook.' };
   }
   if (friendlyCsv.length === 1) {
-    return { file: friendlyCsv[0].entry, type: 'csv' };
+    return { file: friendlyCsv[0].entry.file, type: 'csv' };
   }
 
   const projectJson = names.find(item => item.name === 'project.json');
   if (projectJson) {
-    return { file: projectJson.entry, type: 'json' };
+    return { file: projectJson.entry.file, type: 'json' };
   }
 
   return {
@@ -331,11 +331,13 @@ const normalizeTemplateId = (value) => {
   const normalized = normalizeKey(value);
   const layoutMap = {
     postershowcase: 'poster_showcase',
+    standardpostershowcase: 'poster_showcase',
     posterfirstshowcase: 'poster_showcase',
     poster: 'poster_showcase',
     technicalreport: 'technical_detail',
     reportfirstlayout: 'technical_detail',
     technicaldetail: 'technical_detail',
+    technicaldetailshowcase: 'technical_detail',
     mediarichshowcase: 'media_rich',
     mediarich: 'media_rich',
     videoandgalleryshowcase: 'media_rich'
@@ -368,7 +370,10 @@ const sanitizeMetadataObject = (rawObj) => {
     solutionimpact: 'solution',
     solution: 'solution',
     teammembers: 'teamMembers',
+    teammember: 'teamMembers',
     team: 'teamMembers',
+    studentnames: 'teamMembers',
+    students: 'teamMembers',
     groupname: 'groupName',
     group: 'groupName',
     supervisor: 'supervisor',
@@ -425,40 +430,112 @@ const sanitizeMetadataObject = (rawObj) => {
   return metadata;
 };
 
-const parseXlsxMetadata = (buffer, warnings) => {
-  const workbook = XLSX.read(buffer, { type: 'buffer' });
-  let sheet = workbook.Sheets['Project Details'];
-  if (!sheet) {
-    const firstSheetName = workbook.SheetNames[0];
-    if (!firstSheetName) {
-      throw new Error('Excel workbook has no sheets');
+const getCellValueDefensive = (cell, workbook) => {
+  if (!cell) return '';
+
+  // 1. If cell type is shared string: 's'
+  if (cell.t === 's') {
+    const sharedStrings = workbook.Strings;
+    const index = cell.v;
+    if (typeof index === 'number') {
+      if (!sharedStrings) {
+        throw new Error(`Shared string table is missing for cell index ${index}`);
+      }
+      if (index < 0 || index >= sharedStrings.length) {
+        throw new Error(`Invalid shared string index ${index} (table size: ${sharedStrings.length})`);
+      }
+      const ssEntry = sharedStrings[index];
+      if (!ssEntry) return '';
+      return typeof ssEntry === 'string' ? ssEntry : (ssEntry.t || ssEntry.v || '');
     }
-    sheet = workbook.Sheets[firstSheetName];
+    if (typeof cell.v === 'string') {
+      return cell.v;
+    }
   }
 
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-  if (rows.length === 0) {
-    throw new Error('Empty Excel worksheet');
+  // 2. Support inlineStr cells by reading inline text / cell.v or cell.w
+  if (cell.t === 'inlineStr') {
+    return cell.v !== undefined ? String(cell.v) : (cell.w || '');
   }
 
-  const headers = rows[0].map(h => String(h || '').trim());
-  const dataRows = rows.slice(1).filter(row => row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== ''));
-  if (dataRows.length === 0) {
-    throw new Error('Excel worksheet has headers but no data row');
-  }
-  if (dataRows.length > 1) {
-    warnings.push('Excel file has multiple data rows. Only the first data row will be imported.');
+  // 3. Support direct string cells using the cell value directly: 'str'
+  if (cell.t === 'str') {
+    return cell.v !== undefined ? String(cell.v) : '';
   }
 
-  const firstDataRow = dataRows[0];
-  const rawObj = {};
-  headers.forEach((header, index) => {
-    if (!header) return;
-    rawObj[header] = firstDataRow[index];
-  });
+  // 4. Preserve support for numeric values and plain values
+  if (cell.v !== undefined && cell.v !== null) {
+    return String(cell.v);
+  }
 
-  return sanitizeMetadataObject(rawObj);
+  return '';
 };
+
+const parseXlsxMetadata = (buffer, warnings) => {
+  if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
+    throw new Error('Excel workbook buffer is empty or invalid');
+  }
+
+  try {
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    let sheet = workbook.Sheets['Project Details'];
+    if (!sheet) {
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) {
+        throw new Error('Excel workbook has no sheets');
+      }
+      sheet = workbook.Sheets[firstSheetName];
+    }
+
+    const ref = sheet['!ref'];
+    if (!ref) {
+      throw new Error('Empty Excel worksheet (no range ref found)');
+    }
+
+    let range;
+    try {
+      range = XLSX.utils.decode_range(ref);
+    } catch (e) {
+      throw new Error(`Invalid range reference format in sheet: ${ref}`);
+    }
+
+    const rows = [];
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      const row = [];
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cellAddress = XLSX.utils.encode_cell({ r, c });
+        const cell = sheet[cellAddress];
+        row.push(getCellValueDefensive(cell, workbook));
+      }
+      rows.push(row);
+    }
+
+    if (rows.length === 0) {
+      throw new Error('Empty Excel worksheet');
+    }
+
+    const headers = rows[0].map(h => String(h || '').trim());
+    const dataRows = rows.slice(1).filter(row => row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== ''));
+    if (dataRows.length === 0) {
+      throw new Error('Excel worksheet has headers but no data row');
+    }
+    if (dataRows.length > 1) {
+      warnings.push('Excel file has multiple data rows. Only the first data row will be imported.');
+    }
+
+    const firstDataRow = dataRows[0];
+    const rawObj = {};
+    headers.forEach((header, index) => {
+      if (!header) return;
+      rawObj[header] = firstDataRow[index];
+    });
+
+    return sanitizeMetadataObject(rawObj);
+  } catch (err) {
+    throw err;
+  }
+};
+
 
 const parseCsvMetadata = (buffer, warnings) => {
   const csvText = buffer.toString('utf8');
@@ -672,7 +749,7 @@ const uploadPreparedAssets = async (batchId, projectSlug, prepared) => {
 const buildImportedProjectRecord = (id, batchId, projectFolder, prepared, uploadedAssets) => {
   const metadata = prepared.metadata;
   const status = prepared.warnings.length > 0 ? 'warning' : 'valid';
-  const students = Array.isArray(metadata.students) ? metadata.students : [];
+  const students = Array.isArray(metadata.teamMembers) ? metadata.teamMembers : (Array.isArray(metadata.students) ? metadata.students : []);
   const externalLinks = Array.isArray(metadata.externalLinks) ? metadata.externalLinks : [];
   const uploadedVideoUrl = uploadedAssets.media['demo-video.mp4'];
 
