@@ -112,9 +112,7 @@ const canDeleteImportedRecord = (project) => {
   const sync = getDudaSyncStatus(project);
 
   return imported &&
-    ['draft', 'submitted', 'in_review', 'archived'].includes(status) &&
-    status !== 'approved' &&
-    status !== 'published' &&
+    ['submitted', 'in_review'].includes(status) &&
     sync.code === 'not_public';
 };
 
@@ -122,6 +120,22 @@ const canArchiveRecord = (project) => {
   if (!project) return false;
   const status = String(project.status || '').toLowerCase();
   return status === 'approved' || status === 'published';
+};
+
+const canDeleteDraftRecord = (project) => {
+  if (!project) return false;
+  const status = String(project.status || '').toLowerCase();
+  const sync = getDudaSyncStatus(project);
+
+  return status === 'draft' && sync.code === 'not_public';
+};
+
+const canPermanentlyDeleteArchivedRecord = (project) => {
+  if (!project) return false;
+  const status = String(project.status || '').toLowerCase();
+  const sync = getDudaSyncStatus(project);
+
+  return status === 'archived' && sync.code === 'not_public' && !project.pendingRemovalFromPublic;
 };
 
 const hasBlockingValidationFlag = (value) => {
@@ -445,6 +459,7 @@ function App() {
   const [originalProject, setOriginalProject] = useState(null);
   const [selectedProjectIds, setSelectedProjectIds] = useState([]);
   const [bulkApproveResult, setBulkApproveResult] = useState(null);
+  const [openRowActionsId, setOpenRowActionsId] = useState(null);
   const [expandedSections, setExpandedSections] = useState({
     validation: true,
     content: true,
@@ -798,6 +813,7 @@ function App() {
     if (!window.confirm(confirmMessage)) return;
 
     setLoading(true);
+    setOpenRowActionsId(null);
     try {
       const res = await fetch(`${API_URL}/projects/${project.id}`, {
         method: 'DELETE',
@@ -835,6 +851,7 @@ function App() {
     if (!window.confirm(confirmMessage)) return;
 
     setLoading(true);
+    setOpenRowActionsId(null);
     try {
       const res = await fetch(`${API_URL}/projects/${project.id}/archive`, {
         method: 'POST',
@@ -857,6 +874,49 @@ function App() {
       if (view === 'edit') setView('list');
     } catch (err) {
       setMessage(`Archive failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePermanentDeleteProject = async (project) => {
+    if (!project) return;
+
+    const status = String(project.status || '').toLowerCase();
+    let confirmMessage = '';
+
+    if (status === 'draft') {
+      confirmMessage = 'This will permanently remove this draft CMS record. It is not public.';
+    } else if (status === 'archived') {
+      confirmMessage = 'This permanently deletes the archived CMS record. Only continue if it is no longer public.';
+    } else {
+      setMessage('This record is not eligible for permanent deletion.');
+      return;
+    }
+
+    if (!window.confirm(confirmMessage)) return;
+
+    setLoading(true);
+    setOpenRowActionsId(null);
+    try {
+      const res = await fetch(`${API_URL}/projects/${project.id}/permanent-delete`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey
+        }
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || res.statusText);
+      }
+
+      setMessage('CMS record permanently deleted.');
+      await fetchProjects();
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      setMessage(`Permanent delete failed: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -1196,9 +1256,36 @@ function App() {
               const sync = getDudaSyncStatus(p);
               const canHardDelete = canDeleteImportedRecord(p);
               const canArchive = canArchiveRecord(p);
+              const canDeleteDraft = canDeleteDraftRecord(p);
+              const canDeleteArchived = canPermanentlyDeleteArchivedRecord(p);
               const approvePreview = getBulkApprovePreview(p);
               const isSelected = selectedProjectIds.includes(p.id);
               const checkboxId = `select-project-${p.id}`;
+              const lifecycleActions = [];
+              if (canArchive) {
+                lifecycleActions.push({
+                  label: 'Archive / remove from showcase',
+                  onClick: () => handleArchiveProject(p)
+                });
+              }
+              if (canHardDelete) {
+                lifecycleActions.push({
+                  label: 'Delete imported record',
+                  onClick: () => handleDeleteProject(p)
+                });
+              }
+              if (canDeleteDraft) {
+                lifecycleActions.push({
+                  label: 'Delete draft record',
+                  onClick: () => handlePermanentDeleteProject(p)
+                });
+              }
+              if (canDeleteArchived) {
+                lifecycleActions.push({
+                  label: 'Permanently delete archived record',
+                  onClick: () => handlePermanentDeleteProject(p)
+                });
+              }
               return (
                 <tr key={p.id}>
                   <td>
@@ -1246,25 +1333,69 @@ function App() {
                   <td><span className={`status-pill ${p.status}`}>{p.status.replace('_', ' ')}</span></td>
                   <td><span className={`status-pill sync-${sync.code}`}>{sync.label}</span></td>
                   <td>
-                    <button className="btn-outline" onClick={() => handleEdit(p)}>Edit & Review</button>
-                    {canArchive && (
-                      <button
-                        className="btn-outline"
-                        style={{ color: '#92400e', borderColor: '#fde68a', background: '#fffbeb', marginLeft: '0.5rem' }}
-                        onClick={() => handleArchiveProject(p)}
-                      >
-                        Archive / remove from showcase
-                      </button>
-                    )}
-                    {canHardDelete && (
-                      <button
-                        className="btn-outline"
-                        style={{ color: '#dc2626', borderColor: '#fee2e2', background: '#fef2f2', marginLeft: '0.5rem' }}
-                        onClick={() => handleDeleteProject(p)}
-                      >
-                        Delete imported record
-                      </button>
-                    )}
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <button className="btn-outline" onClick={() => handleEdit(p)}>Edit & Review</button>
+                      {lifecycleActions.length > 0 && (
+                        <div style={{ position: 'relative', display: 'inline-block' }}>
+                          <button
+                            type="button"
+                            className="btn-outline"
+                            onClick={() => setOpenRowActionsId(prev => prev === p.id ? null : p.id)}
+                            aria-haspopup="menu"
+                            aria-expanded={openRowActionsId === p.id}
+                            title="More actions"
+                            style={{ padding: '0.45rem 0.75rem' }}
+                          >
+                            More
+                          </button>
+                          {openRowActionsId === p.id && (
+                            <div
+                              role="menu"
+                              aria-label="More actions"
+                              style={{
+                                position: 'absolute',
+                                right: 0,
+                                top: 'calc(100% + 6px)',
+                                zIndex: 20,
+                                minWidth: '230px',
+                                background: '#fff',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '8px',
+                                boxShadow: '0 12px 30px rgba(15, 23, 42, 0.14)',
+                                padding: '0.35rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.25rem'
+                              }}
+                            >
+                              {lifecycleActions.map(action => (
+                                <button
+                                  key={action.label}
+                                  type="button"
+                                  className="btn-outline"
+                                  style={{
+                                    justifyContent: 'flex-start',
+                                    width: '100%',
+                                    padding: '0.45rem 0.65rem',
+                                    fontSize: '0.82rem',
+                                    textAlign: 'left',
+                                    color: action.label.includes('Archive') ? '#92400e' : '#dc2626',
+                                    borderColor: action.label.includes('Archive') ? '#fde68a' : '#fee2e2',
+                                    background: action.label.includes('Archive') ? '#fffbeb' : '#fef2f2'
+                                  }}
+                                  onClick={() => {
+                                    setOpenRowActionsId(null);
+                                    action.onClick();
+                                  }}
+                                >
+                                  {action.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

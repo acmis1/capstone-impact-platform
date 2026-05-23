@@ -698,7 +698,8 @@ const PUBLIC_FEED_DIR = process.env.PUBLIC_FEED_DIR || path.join(__dirname, 'pub
 
 const DB_PATH = path.join(DATA_DIR, 'db.json');
 const FEED_PATH = path.join(PUBLIC_FEED_DIR, 'capstones-latest.json');
-const SAFE_DELETE_STATUSES = new Set(['draft', 'submitted', 'in_review', 'archived']);
+const SAFE_DELETE_STATUSES = new Set(['submitted', 'in_review']);
+const PERMANENT_DELETE_STATUSES = new Set(['draft', 'archived']);
 const BULK_APPROVE_STATUSES = new Set(['draft', 'submitted', 'in_review']);
 
 const getProjectStatus = (project) => String(project?.status || '').toLowerCase();
@@ -729,7 +730,7 @@ const getSafeDeleteBlocker = (project, projectId) => {
   }
 
   if (!SAFE_DELETE_STATUSES.has(status)) {
-    return 'Hard delete is only allowed for draft, submitted, in_review, or archived records.';
+    return 'Hard delete is only allowed for draft, submitted, or in_review imported records.';
   }
 
   if (status === 'approved' || status === 'published') {
@@ -742,6 +743,28 @@ const getSafeDeleteBlocker = (project, projectId) => {
 
   if (isProjectInPublicFeed(projectId)) {
     return 'Records present in the public feed cannot be hard-deleted.';
+  }
+
+  return null;
+};
+
+const getPermanentDeleteBlocker = (project, projectId) => {
+  const status = getProjectStatus(project);
+
+  if (status === 'approved' || status === 'published') {
+    return 'Published or approved records cannot be permanently deleted.';
+  }
+
+  if (!PERMANENT_DELETE_STATUSES.has(status)) {
+    return 'Permanent delete is only allowed for draft or archived records.';
+  }
+
+  if (isProjectInPublicFeed(projectId)) {
+    return 'Records present in the public feed cannot be permanently deleted.';
+  }
+
+  if (project?.pendingRemovalFromPublic === true) {
+    return 'Records pending removal from the public showcase cannot be permanently deleted yet.';
   }
 
   return null;
@@ -1299,6 +1322,41 @@ app.delete('/api/projects/:id', adminAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('Error in DELETE /api/projects:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Protected: Permanent delete for non-public draft/archived records
+app.delete('/api/projects/:id/permanent-delete', adminAuth, async (req, res) => {
+  const projectId = Number(req.params.id);
+  if (!Number.isInteger(projectId)) {
+    return res.status(400).json({ error: 'Invalid project ID.' });
+  }
+
+  console.log(`DELETE /api/projects/${projectId}/permanent-delete request`);
+  try {
+    const project = await projectStore.getProjectById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found.' });
+    }
+
+    const blocker = getPermanentDeleteBlocker(project, projectId);
+    if (blocker) {
+      return res.status(403).json({ error: `Safety violation: ${blocker}` });
+    }
+
+    const deletion = await projectStore.deleteProject(projectId);
+    if (!deletion.success) {
+      return res.status(404).json({ error: 'Project was not deleted because it no longer exists.' });
+    }
+
+    res.json({
+      success: true,
+      deletedId: projectId,
+      message: 'Permanently deleted the CMS record.'
+    });
+  } catch (err) {
+    console.error('Error in DELETE /api/projects/:id/permanent-delete:', err);
     res.status(500).json({ error: err.message });
   }
 });
