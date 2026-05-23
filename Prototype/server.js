@@ -266,12 +266,45 @@ const normalizeKey = (key) => {
   return String(key || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 };
 
+const normalizeTemplateId = (value) => {
+  const normalized = normalizeKey(value);
+  const layoutMap = {
+    postershowcase: 'poster_showcase',
+    posterfirstshowcase: 'poster_showcase',
+    poster: 'poster_showcase',
+    technicalreport: 'technical_detail',
+    reportfirstlayout: 'technical_detail',
+    technicaldetail: 'technical_detail',
+    mediarichshowcase: 'media_rich',
+    mediarich: 'media_rich',
+    videoandgalleryshowcase: 'media_rich'
+  };
+  return layoutMap[normalized] || String(value || '').trim();
+};
+
+const normalizeFeaturedMedia = (value) => {
+  const normalized = normalizeKey(value);
+  const mediaMap = {
+    auto: 'auto',
+    poster: 'poster',
+    gallery: 'gallery',
+    projectsnapshots: 'gallery',
+    snapshots: 'gallery',
+    video: 'video'
+  };
+  return mediaMap[normalized] || String(value || '').trim();
+};
+
 const sanitizeMetadataObject = (rawObj) => {
   const metadata = {};
   const keyMap = {
+    projecttitle: 'title',
     title: 'title',
+    shortpublicsummary: 'summary',
     summary: 'summary',
+    projectbackground: 'background',
     background: 'background',
+    solutionimpact: 'solution',
     solution: 'solution',
     teammembers: 'teamMembers',
     team: 'teamMembers',
@@ -280,12 +313,17 @@ const sanitizeMetadataObject = (rawObj) => {
     supervisor: 'supervisor',
     academicsupervisor: 'supervisor',
     industrypartner: 'industryPartner',
+    industrysector: 'industry',
     industry: 'industry',
-    program: 'program',
     studyprogram: 'program',
+    program: 'program',
+    primarydiscipline: 'discipline',
     discipline: 'discipline',
+    projectyear: 'year',
     year: 'year',
+    showcaselayout: 'templateId',
     templateid: 'templateId',
+    mainmediatofeature: 'featuredMedia',
     featuredmedia: 'featuredMedia',
     accessibilitytext: 'accessibilityText'
   };
@@ -300,6 +338,12 @@ const sanitizeMetadataObject = (rawObj) => {
           .split(/[,;]/)
           .map(name => name.trim())
           .filter(Boolean);
+      }
+      if (targetKey === 'templateId') {
+        cleanedVal = normalizeTemplateId(cleanedVal);
+      }
+      if (targetKey === 'featuredMedia') {
+        cleanedVal = normalizeFeaturedMedia(cleanedVal);
       }
       metadata[targetKey] = cleanedVal;
     }
@@ -499,7 +543,7 @@ const validateAndPrepareProject = (projectFolder) => {
     templateId = 'poster_showcase';
   }
 
-  const allowedFeaturedMedia = ['poster', 'video', 'snapshots', 'none'];
+  const allowedFeaturedMedia = ['auto', 'poster', 'video', 'gallery', 'snapshots', 'none'];
   let featuredMedia = metadata?.featuredMedia || 'poster';
   if (!allowedFeaturedMedia.includes(featuredMedia)) {
     warnings.push('unknown featuredMedia fallback');
@@ -843,6 +887,8 @@ const generatePublicFeed = async () => {
       sourceFolder,
       sampleImportId,
       packageValidation,
+      pendingRemovalFromPublic,
+      archivedFromStatus,
       // Ensure we don't accidentally include new internal fields
       ...publicFields 
     }) => publicFields);
@@ -899,10 +945,10 @@ app.use(express.static(path.join(__dirname, 'dist')));
 app.get('/api/download-template', (req, res) => {
   try {
     const headers = [
-      'title', 'summary', 'background', 'solution', 'teamMembers',
-      'groupName', 'supervisor', 'industryPartner', 'industry',
-      'program', 'discipline', 'year', 'templateId', 'featuredMedia',
-      'accessibilityText'
+      'Project title', 'Short public summary', 'Project background', 'Solution / impact',
+      'Team members', 'Group name', 'Academic supervisor', 'Industry partner',
+      'Industry sector', 'Study program', 'Primary discipline', 'Project year',
+      'Showcase layout', 'Main media to feature', 'Accessibility text'
     ];
     const exampleRow = [
       'Smart Campus Navigation Assistant',
@@ -917,14 +963,25 @@ app.get('/api/download-template', (req, res) => {
       'Bachelor of Software Engineering',
       'Software Engineering',
       '2026',
-      'media_rich',
-      'video',
+      'Media-rich showcase',
+      'Video',
       '3D campus model showing Building 10 with interactive path lines.'
+    ];
+    const optionsRows = [
+      ['Field', 'Allowed values', 'Notes'],
+      ['Showcase layout', 'Poster showcase', 'Poster-first public showcase for standard poster projects.'],
+      ['Showcase layout', 'Technical report', 'Report-first layout for text-heavy technical projects.'],
+      ['Showcase layout', 'Media-rich showcase', 'Video or gallery-led showcase for richer media packages.'],
+      ['Main media to feature', 'Auto', 'Let the system choose the best available media.'],
+      ['Main media to feature', 'Poster', 'Feature the poster image first.'],
+      ['Main media to feature', 'Gallery', 'Feature project snapshots first.'],
+      ['Main media to feature', 'Video', 'Feature the project video first when supplied.']
     ];
 
     const ws = XLSX.utils.aoa_to_sheet([headers, exampleRow]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Project Details');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(optionsRows), 'Options');
 
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Disposition', 'attachment; filename=project-details.xlsx');
@@ -1144,6 +1201,54 @@ app.post('/api/projects/bulk-approve', adminAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('Error in POST /api/projects/bulk-approve:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Protected: Archive public workflow record without publishing or deleting assets
+app.post('/api/projects/:id/archive', adminAuth, async (req, res) => {
+  const projectId = Number(req.params.id);
+  if (!Number.isInteger(projectId)) {
+    return res.status(400).json({ error: 'Invalid project ID.' });
+  }
+
+  try {
+    const project = await projectStore.getProjectById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found.' });
+    }
+
+    const status = getProjectStatus(project);
+    if (status === 'archived') {
+      return res.json({
+        success: true,
+        project,
+        message: 'Project is already archived.'
+      });
+    }
+
+    if (!['approved', 'published', 'draft', 'submitted', 'in_review'].includes(status)) {
+      return res.status(400).json({ error: 'Project status is not eligible for archive workflow.' });
+    }
+
+    const wasPublicWorkflow = status === 'approved' || status === 'published' || isProjectInPublicFeed(projectId) || hasPublishedMarker(project);
+    const archived = await projectStore.updateProject(projectId, {
+      status: 'archived',
+      archivedAt: new Date().toISOString(),
+      archivedFromStatus: project.status || '',
+      archiveReason: req.body?.reason || 'Archived from CMS workflow',
+      pendingRemovalFromPublic: wasPublicWorkflow
+    });
+
+    res.json({
+      success: true,
+      project: archived,
+      message: wasPublicWorkflow
+        ? 'Project archived and marked for removal from the public showcase on the next Duda publish.'
+        : 'Project archived.'
+    });
+  } catch (err) {
+    console.error('Error in POST /api/projects/:id/archive:', err);
     res.status(500).json({ error: err.message });
   }
 });

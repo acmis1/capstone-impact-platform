@@ -56,7 +56,7 @@ Use the following step-by-step script during live demonstrations.
 
 ### Real Folder Import & Rich Media Handling (Phase 3 Final Demo)
 14. Navigate to **"Projects"** and click **"+ Import project folders"** to open the **Project Import Workspace**.
-15. Point out the **"Download Excel template"** button in the header. Explain that RMIT administrative staff can download a pre-formatted Excel template (`project-details.xlsx`) to easily manage metadata without writing JSON.
+15. Point out the **"Download Excel template"** button in the header. Explain that RMIT administrative staff can download a pre-formatted Excel template (`project-details.xlsx`) with friendly column names such as **Project title**, **Showcase layout**, and **Main media to feature**.
 16. Select the **"Batch Folder"** option.
 17. Select the fresh external demo batch folder containing our new Excel worksheets:
     `d:\IT RMIT\Capstone\capstone-import-batch-demo-final`
@@ -93,8 +93,8 @@ Use the following step-by-step script during live demonstrations.
 
 ### Archive / Removal Flow
 35. Return to the Admin/CMS and open the published project.
-36. Click **"Archive Project"** and provide an optional reason.
-37. Return to the Dashboard and click **"Publish to Duda"** again.
+36. Click **"Archive / remove from showcase"**. Explain that this archives the CMS record and marks it for removal from the public showcase, but does not delete the record or publish immediately.
+37. Return to the Dashboard and click **"Publish to Duda"** again only when stakeholders intentionally want the public showcase updated.
 38. Refresh the **Supabase feed** — the archived project should no longer appear.
 39. Refresh the **Duda listing** — the archived project card should be gone.
 
@@ -117,6 +117,9 @@ Use the following step-by-step script during live demonstrations.
 - ✅ **Real Folder Import & Rich Media Handling**: Live frontend folder selection and relative-path manifest import E2E flow. Proven to handle high-resolution poster images/snapshots and a real 60-second H.264 video file (`media/demo-video.mp4`) safely uploaded to Supabase Storage and stored in CMS draft review records.
 - ✅ **Repeatable Folder Import (Upsert)**: Proven that re-scanning/re-importing the same project folder updates the existing record cleanly while keeping the rich video/media assets correctly mapped without duplicating.
 
+- âœ… **Staff-Friendly Excel Metadata**: The downloaded `project-details.xlsx` template uses human-readable headers and maps friendly layout/media choices into internal CMS values automatically.
+- âœ… **CMS-Only Review Controls**: Imported review records can be safely deleted before publication, selected records can be bulk-approved, and public records can be archived without publishing to Duda immediately.
+
 ---
 
 ## 4. What It Does Not Prove Yet
@@ -131,7 +134,7 @@ These features are **out of scope** for the prototype and are planned for produc
 - ❌ Production media upload automation (direct resumable client-to-cloud storage upload). Simple multipart uploads are used for prototype demo safety with a 100 MB limit.
 - ❌ Real ZIP file upload, extraction, and validation.
 - ❌ Dynamic generation of brand-new native Duda pages or native Duda layout templates.
-- ❌ Real Excel spreadsheet reading/checking.
+- ❌ Production spreadsheet governance such as locked template cells, staff permissions, and automated cross-checking against official school datasets.
 
 | Limitation | Detail |
 | :--- | :--- |

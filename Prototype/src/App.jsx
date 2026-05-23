@@ -95,7 +95,7 @@ const getDudaSyncStatus = (project) => {
   }
 
   if (status === 'archived') {
-    if (wasPreviouslyPublished) {
+    if (project.pendingRemovalFromPublic || wasPreviouslyPublished) {
       return { label: 'Pending removal', code: 'pending_removal' };
     }
     return { label: 'Not public', code: 'not_public' };
@@ -116,6 +116,12 @@ const canDeleteImportedRecord = (project) => {
     status !== 'approved' &&
     status !== 'published' &&
     sync.code === 'not_public';
+};
+
+const canArchiveRecord = (project) => {
+  if (!project) return false;
+  const status = String(project.status || '').toLowerCase();
+  return status === 'approved' || status === 'published';
 };
 
 const hasBlockingValidationFlag = (value) => {
@@ -818,6 +824,44 @@ function App() {
     }
   };
 
+  const handleArchiveProject = async (project) => {
+    if (!project) return;
+    if (!canArchiveRecord(project)) {
+      setMessage('This record is not eligible for archive workflow.');
+      return;
+    }
+
+    const confirmMessage = 'This will archive the CMS record and mark it for removal from the public showcase on the next Duda publish. It will not delete the record now.';
+    if (!window.confirm(confirmMessage)) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/projects/${project.id}/archive`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey
+        },
+        body: JSON.stringify({ reason: 'Archived by staff' })
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || res.statusText);
+      }
+
+      setMessage('CMS record archived. It will be removed from the public showcase on the next Duda publish.');
+      setCurrentProject(prev => prev && prev.id === project.id ? data.project : prev);
+      await fetchProjects();
+      setTimeout(() => setMessage(null), 4000);
+      if (view === 'edit') setView('list');
+    } catch (err) {
+      setMessage(`Archive failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleBulkApprove = async () => {
     const selectedProjects = projects.filter(project => selectedProjectIds.includes(project.id));
     const eligibleSelectedIds = selectedProjects
@@ -1151,12 +1195,15 @@ function App() {
             {filteredProjects.map(p => {
               const sync = getDudaSyncStatus(p);
               const canHardDelete = canDeleteImportedRecord(p);
+              const canArchive = canArchiveRecord(p);
               const approvePreview = getBulkApprovePreview(p);
               const isSelected = selectedProjectIds.includes(p.id);
+              const checkboxId = `select-project-${p.id}`;
               return (
                 <tr key={p.id}>
                   <td>
                     <input
+                      id={checkboxId}
                       type="checkbox"
                       aria-label={`Select ${p.title}`}
                       checked={isSelected}
@@ -1169,13 +1216,30 @@ function App() {
                     />
                   </td>
                   <td>
-                    <strong>{p.title}</strong>
-                    {(p.importBatchId || p.sourceFolder) && (
-                      <span className="status-pill submitted" style={{ marginLeft: '8px', fontSize: '0.7rem', padding: '1px 6px' }}>Imported</span>
-                    )}
-                    {approvePreview.hasWarnings && (
-                      <span className="status-pill awaiting_ocr" style={{ marginLeft: '8px', fontSize: '0.7rem', padding: '1px 6px' }}>Warnings</span>
-                    )}
+                    <label
+                      htmlFor={checkboxId}
+                      style={{
+                        display: 'block',
+                        padding: '0.35rem 0.4rem',
+                        margin: '-0.35rem -0.4rem',
+                        borderRadius: '6px',
+                        cursor: 'pointer'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = '#f8fafc';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      <strong>{p.title}</strong>
+                      {(p.importBatchId || p.sourceFolder) && (
+                        <span className="status-pill submitted" style={{ marginLeft: '8px', fontSize: '0.7rem', padding: '1px 6px' }}>Imported</span>
+                      )}
+                      {approvePreview.hasWarnings && (
+                        <span className="status-pill awaiting_ocr" style={{ marginLeft: '8px', fontSize: '0.7rem', padding: '1px 6px' }}>Warnings</span>
+                      )}
+                    </label>
                   </td>
                   <td>{p.year}</td>
                   <td>{p.program}</td>
@@ -1183,6 +1247,15 @@ function App() {
                   <td><span className={`status-pill sync-${sync.code}`}>{sync.label}</span></td>
                   <td>
                     <button className="btn-outline" onClick={() => handleEdit(p)}>Edit & Review</button>
+                    {canArchive && (
+                      <button
+                        className="btn-outline"
+                        style={{ color: '#92400e', borderColor: '#fde68a', background: '#fffbeb', marginLeft: '0.5rem' }}
+                        onClick={() => handleArchiveProject(p)}
+                      >
+                        Archive / remove from showcase
+                      </button>
+                    )}
                     {canHardDelete && (
                       <button
                         className="btn-outline"
@@ -1843,8 +1916,10 @@ function App() {
                               }
                             })}
                           >
+                            <option value="auto">Auto (Best Available Media)</option>
                             <option value="poster" disabled={!hasPosterImage}>Poster Image {!hasPosterImage ? " (Unavailable)" : ""}</option>
                             <option value="video" disabled={!hasVideo}>Project Video {!hasVideo ? " (Unavailable)" : ""}</option>
+                            <option value="gallery" disabled={!hasSnapshots}>Gallery {!hasSnapshots ? " (Unavailable)" : ""}</option>
                             <option value="snapshots" disabled={!hasSnapshots}>Project Snapshots / Gallery {!hasSnapshots ? " (Unavailable)" : ""}</option>
                             <option value="none">None (Text Main Focus)</option>
                           </select>
@@ -2275,48 +2350,14 @@ function App() {
                     <button type="button" className="btn-success btn-action btn-approve" style={{ width: '100%', background: 'var(--success)', color: 'white', padding: '0.5rem', fontSize: '0.8rem', fontWeight: 'bold' }} onClick={() => setProjectStatus('approved')}>Approve for Publish</button>
 
                     {(currentProject.status === 'published' || currentProject.status === 'approved') && (
-                      <button type="button" className="btn-outline btn-action btn-archive" style={{ width: '100%', borderColor: 'var(--danger)', color: 'var(--danger)', padding: '0.4rem', fontSize: '0.75rem' }} onClick={async () => {
-                        if (window.confirm("Archive this project? It will be removed from the official showcase after the next 'Publish to Duda' action.")) {
-                          const reason = prompt("Optional: Archive Reason (e.g. 'Project Withdrawn', 'Incorrect Data'):");
-
-                          const baseProject = prepareProjectForSave(currentProject);
-                          const updatedProject = {
-                            ...baseProject,
-                            status: 'archived',
-                            archivedAt: new Date().toISOString(),
-                            archiveReason: reason || 'Archived by staff'
-                          };
-
-                          setLoading(true);
-                          try {
-                            const res = await fetch(`${API_URL}/projects/${updatedProject.id}`, {
-                              method: 'PUT',
-                              headers: {
-                                'Content-Type': 'application/json',
-                                'x-admin-key': adminKey
-                              },
-                              body: JSON.stringify(updatedProject),
-                            });
-
-                            if (res.ok) {
-                              alert("Project successfully ARCHIVED. It is now removed from the pending public queue.");
-                              fetchProjects();
-                              fetchFeedStatus();
-                              fetchPublishedStatus();
-                              setView('list');
-                              setMessage("Project archived and saved.");
-                              setTimeout(() => setMessage(null), 3000);
-                            } else {
-                              const errorData = await res.json().catch(() => ({}));
-                              alert("Error archiving project: " + (errorData.error || res.statusText));
-                            }
-                          } catch (err) {
-                            alert("Network error while archiving.");
-                          } finally {
-                            setLoading(false);
-                          }
-                        }
-                      }}>Archive Project</button>
+                      <button
+                        type="button"
+                        className="btn-outline btn-action btn-archive"
+                        style={{ width: '100%', borderColor: 'var(--danger)', color: 'var(--danger)', padding: '0.4rem', fontSize: '0.75rem' }}
+                        onClick={() => handleArchiveProject(currentProject)}
+                      >
+                        Archive / remove from showcase
+                      </button>
                     )}
                   </div>
                 </div>

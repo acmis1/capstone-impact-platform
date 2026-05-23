@@ -7,14 +7,52 @@ The primary, stakeholder-friendly workflow is browser-based folder upload:
 - **Single Project Folder Import**: Staff selects one project folder containing a single project's assets and `project-details.xlsx` (one project folder = one project).
 - **Batch Folder Import**: Staff selects one parent folder containing multiple project folders (one parent folder = batch folder import). Each project folder should contain its own `project-details.xlsx`.
 - **Metadata Fallbacks**: If `project-details.xlsx` is missing, the scanner automatically falls back to `project-details.csv` and then `project.json` (in that order).
+- **Staff-Friendly Metadata**: The Excel template uses human-readable column names such as `Project title`, `Short public summary`, `Showcase layout`, and `Main media to feature`. The backend maps these to internal fields automatically.
 - **Frontend Behavior**: The frontend uses folder selection (browser directory upload) and sends the files' relative paths to the backend through a file manifest.
 - **Backend Endpoint**: The backend endpoint is `POST /api/import-folder`.
 
 Staff should not be forced to manually create or manage ZIP files for importing. ZIP parsing is not the primary workflow.
 
+## Staff-Friendly Excel Metadata
+
+The downloaded `project-details.xlsx` template is the preferred staff format. It intentionally avoids technical field names as the primary interface.
+
+| Staff column | Internal field |
+| :--- | :--- |
+| Project title | `title` |
+| Short public summary | `summary` |
+| Project background | `background` |
+| Solution / impact | `solution` |
+| Team members | `teamMembers` |
+| Group name | `groupName` |
+| Academic supervisor | `supervisor` |
+| Industry partner | `industryPartner` |
+| Industry sector | `industry` |
+| Study program | `program` |
+| Primary discipline | `discipline` |
+| Project year | `year` |
+| Showcase layout | `templateId` |
+| Main media to feature | `featuredMedia` |
+| Accessibility text | `accessibilityText` |
+
+Friendly values are normalised automatically:
+- `Poster showcase`, `Poster-first showcase`, or `Poster` -> `poster_showcase`
+- `Technical report`, `Report-first layout`, or `Technical detail` -> `technical_detail`
+- `Media-rich showcase`, `Media rich`, or `Video and gallery showcase` -> `media_rich`
+- `Auto`, `Poster`, `Gallery`, and `Video` are accepted for featured media.
+
+Technical headers such as `templateId`, `featuredMedia`, and older `project.json` files remain supported for backwards compatibility.
+
 ## Fallback / Future ZIP Package Option
 - ZIP upload is an optional/future fallback only.
 - Do not describe ZIP as the main demo or import path. It is reserved solely for cases where folder selection is unsupported or where a pre-existing archive must be processed directly.
+
+## Review Cleanup and Archive Rules
+
+- Imported review records can be safely hard-deleted only before publication, when they are non-public CMS review records and are not present in the public feed.
+- Published or approved records must not be hard-deleted from the repository. Staff should use **Archive / remove from showcase** first.
+- Archiving preserves the CMS database row and Supabase Storage assets, marks the record as `archived`, and shows it as pending removal where applicable.
+- Import, safe delete, bulk approval, and archive actions do not publish to Duda and do not update the stable public feed. Public showcase changes happen only after **Publish to Duda**.
 
 ## Meeting-Driven Rationale
 
@@ -460,4 +498,3 @@ For the final stakeholder and advisor demonstration, a fresh external demo impor
 - **Batch Folder Import UI**: Scanned the parent directory and successfully imported 2 records (`importedCount = 2`, `valid = 1`, `warning = 1`, `error = 0`). The valid record (`smart-campus-navigation`) detects and attaches the MP4 video, whereas the warning-level project (`robotics-safety-monitor`) flags a missing accessibility text warning but imports successfully.
 - **Repeatable Single Folder Import UI**: Scanned the `smart-campus-navigation` folder directly. It safely performs an update (upsert) on ID `202637527`, showing that duplicate folder importing is blocked, and the video asset remains correctly attached.
 - **Data & Feed Safety**: Public feed files (`public/capstones-latest.json` and `data/db.json`) remain completely clean and unmodified. The import workflow populates internal draft review records in the CMS database without publishing to Duda or triggering feed regeneration.
-

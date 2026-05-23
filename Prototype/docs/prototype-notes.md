@@ -42,6 +42,7 @@ The Capstone database utilizes a flexible document model stored in Supabase unde
 | `lastPublishedPublicHash` | String | FNV-1a fingerprint hash of the last successfully published public payload. | **Forbidden** (Stripped) | Internal state tracking. Used to detect out-of-sync edits. |
 | `lastPublishedTemplateId` | String | Layout template ID in use when last published. | **Forbidden** (Stripped) | Internal state tracking. |
 | `lastPublishedAt` | String (ISO Date) | Timestamp of last successful public publication. | **Forbidden** (Stripped) | Internal state tracking. |
+| `pendingRemovalFromPublic` | Boolean | Marker that an archived public workflow record should be removed on the next Duda publish. | **Forbidden** (Stripped) | Internal sync/removal tracking. |
 
 ---
 
@@ -54,7 +55,7 @@ RMIT CMS segregates the administrative lifecycle status of a project from its li
 2.  **In Review**: Compliant project folders imported through the workspace are automatically mapped to this status. They represent projects ready for staff verification.
 3.  **Approved**: Set by staff once metadata and layout configurations are verified. This immediately incorporates the project into the *local preview feed* on the Admin server.
 4.  **Published**: Live on the Duda public showcase. This state is reached after clicking **Publish to Duda** on the Dashboard, uploading the feed to Supabase stable storage.
-5.  **Archived**: Record is preserved in Supabase for auditing but completely removed from both local and public feeds.
+5.  **Archived**: Record is preserved in Supabase for auditing. If it was approved or published, it is marked pending removal and leaves the public feed only after the next explicit Publish to Duda action.
 
 ### B. Duda Sync Status
 The sync status is dynamically computed by comparing the current public fields' fingerprint against `lastPublishedPublicHash`:
@@ -72,6 +73,7 @@ Deduplication and project import checks are performed automatically:
 -   **Stable Deterministic ID Generation**: The backend generates stable positive `BigInt` IDs by hashing the academic year and the folder slug (e.g., `2026:smart-campus-navigation` -> `202637527`). This prevents collision with sample IDs and guarantees that re-importing the same project folder will correctly update/upsert the existing CMS record.
 -   **Server-Side Import Upsert**: When a project is re-imported or upserted, existing fields are preserved or updated. Handled assets (such as video files, PDF posters, and high-resolution snapshots) remain correctly attached.
 -   **Excel Metadata Support (`project-details.xlsx`)**: RMIT staff do not need to write technical JSON files. Instead, the CMS primarily parses `project-details.xlsx` inside each project folder. Fallbacks to `project-details.csv` and `project.json` are fully supported for backwards compatibility and test flexibility.
+-   **Friendly Column Mapping**: The staff template uses columns such as `Project title`, `Showcase layout`, and `Main media to feature`. These are normalised into internal fields such as `title`, `templateId`, and `featuredMedia`, while older technical headers continue to work.
 -   **Demo Mode Deduplication**: For the simulated demo loading path, the CMS matches `pkg.id`, `sourceFolder`, and `sampleImportId` against existing projects to block duplicate records.
 -   **Size Validation Safeguards**: The multer upload framework limits total multipart payloads to 100 MB. Import validations trigger a warning if an individual file exceeds 50 MB to prevent performance or database instability. Real 60-second H.264 video assets (e.g. 5.25 MB) and 1920x1080 high-res snapshot images are fully supported and successfully uploaded to Supabase Storage (`project-assets` bucket).
 
@@ -91,7 +93,16 @@ RMIT staff configure visual presentation settings on a per-project basis through
 
 ---
 
-## 5. Future Scope & Enhancements
+## 5. Review Cleanup and Public Removal Controls
+
+- Imported non-public review records can be hard-deleted from the CMS only while they are still draft/review records and absent from the public feed.
+- Published and approved records use **Archive / remove from showcase** instead of hard delete.
+- The archive endpoint updates CMS status to `archived`, preserves the database row and storage assets, and sets `pendingRemovalFromPublic` for public workflow records.
+- Archive, safe delete, and bulk approval do not call `/api/publish-cloud-feed`; public Duda changes require the explicit dashboard publish action.
+
+---
+
+## 6. Future Scope & Enhancements
 
 ### Future enhancement: Media Library / Asset Picker
 A future version could allow staff to browse uploaded assets, preview images/videos/PDFs, select existing media, replace files, and manage asset reuse. This is not part of the current MVP because it requires permissions, search, thumbnails, and asset governance.
