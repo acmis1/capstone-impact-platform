@@ -104,6 +104,64 @@ const getDudaSyncStatus = (project) => {
   return { label: 'Not public', code: 'not_public' };
 };
 
+const canDeleteImportedRecord = (project) => {
+  if (!project) return false;
+
+  const status = String(project.status || '').toLowerCase();
+  const imported = Boolean(project.importBatchId || project.sourceFolder);
+  const sync = getDudaSyncStatus(project);
+
+  return imported &&
+    ['draft', 'submitted', 'in_review', 'archived'].includes(status) &&
+    status !== 'approved' &&
+    status !== 'published' &&
+    sync.code === 'not_public';
+};
+
+const hasBlockingValidationFlag = (value) => {
+  if (!value) return false;
+  if (Array.isArray(value)) return value.some(item => hasBlockingValidationFlag(item));
+  if (typeof value === 'object') {
+    if (value.hasErrors === true) return true;
+    const severity = String(value.severity || value.level || value.type || value.status || '').toLowerCase();
+    if (['error', 'blocking', 'blocker', 'critical'].includes(severity)) return true;
+    return Object.values(value).some(item => hasBlockingValidationFlag(item));
+  }
+  return false;
+};
+
+const getBulkApprovePreview = (project) => {
+  if (!project) return { eligible: false, hasWarnings: false, reason: 'Project not found.' };
+
+  const status = String(project.status || '').toLowerCase();
+  const packageStatus = String(project.packageValidation?.status || '').toLowerCase();
+  const packageErrors = Array.isArray(project.packageValidation?.errors) ? project.packageValidation.errors : [];
+  const validationErrors = Array.isArray(project.validationErrors) ? project.validationErrors : [];
+  const hasRequiredPublicFields = ['title', 'summary', 'program', 'discipline', 'year']
+    .every(field => String(project[field] || '').trim() !== '');
+  const hasRequiredPackageMedia = project.packageValidation?.assets
+    ? Boolean(project.poster && project.posterPdf)
+    : Boolean(project.poster || project.posterPdf);
+  const hasWarnings = packageStatus === 'warning' ||
+    (Array.isArray(project.packageValidation?.warnings) && project.packageValidation.warnings.length > 0) ||
+    project.validationFlags?.hasWarnings === true;
+
+  if (!['draft', 'submitted', 'in_review'].includes(status)) {
+    return { eligible: false, hasWarnings, reason: 'Status is not draft, submitted, or in_review.' };
+  }
+  if (packageStatus === 'error' || packageErrors.length > 0 || validationErrors.length > 0 || hasBlockingValidationFlag(project.validationFlags)) {
+    return { eligible: false, hasWarnings, reason: 'Blocking validation errors exist.' };
+  }
+  if (!hasRequiredPublicFields) {
+    return { eligible: false, hasWarnings, reason: 'Required public fields are incomplete.' };
+  }
+  if (!hasRequiredPackageMedia) {
+    return { eligible: false, hasWarnings, reason: 'Required media assets are incomplete.' };
+  }
+
+  return { eligible: true, hasWarnings, reason: '' };
+};
+
 const SIMULATED_PACKAGES = [
   {
     id: 2026101,
@@ -379,6 +437,8 @@ function App() {
   const [realImportResult, setRealImportResult] = useState(null);
   const [realImportLoading, setRealImportLoading] = useState(false);
   const [originalProject, setOriginalProject] = useState(null);
+  const [selectedProjectIds, setSelectedProjectIds] = useState([]);
+  const [bulkApproveResult, setBulkApproveResult] = useState(null);
   const [expandedSections, setExpandedSections] = useState({
     validation: true,
     content: true,
@@ -721,6 +781,88 @@ function App() {
     }
   };
 
+  const handleDeleteProject = async (project) => {
+    if (!project) return;
+    if (!canDeleteImportedRecord(project)) {
+      setMessage('This record is not eligible for imported-record deletion.');
+      return;
+    }
+
+    const confirmMessage = "This will remove the imported CMS review record only. It will not affect published Duda records.";
+    if (!window.confirm(confirmMessage)) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/projects/${project.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey
+        }
+      });
+
+      if (res.ok) {
+        setMessage('Safely removed the imported CMS review record only.');
+        await fetchProjects();
+        setTimeout(() => {
+          setMessage(null);
+        }, 3000);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Error deleting project: ${errorData.error || res.statusText}`);
+      }
+    } catch (err) {
+      alert(`Error deleting project: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    const selectedProjects = projects.filter(project => selectedProjectIds.includes(project.id));
+    const eligibleSelectedIds = selectedProjects
+      .filter(project => getBulkApprovePreview(project).eligible)
+      .map(project => project.id);
+
+    if (eligibleSelectedIds.length === 0) {
+      setMessage('No selected CMS review records are eligible for approval.');
+      return;
+    }
+
+    if (!window.confirm('Approve selected CMS review records? This does not publish them to Duda.')) {
+      return;
+    }
+
+    setLoading(true);
+    setBulkApproveResult(null);
+
+    try {
+      const res = await fetch(`${API_URL}/projects/bulk-approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey
+        },
+        body: JSON.stringify({ ids: selectedProjectIds })
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || res.statusText);
+      }
+
+      setBulkApproveResult(data);
+      setMessage(`Approved ${data.approvedCount || 0} CMS review records. Skipped ${data.skippedCount || 0}. This does not publish to Duda.`);
+      setSelectedProjectIds([]);
+      await fetchProjects();
+      setTimeout(() => setMessage(null), 4000);
+    } catch (err) {
+      setMessage(`Bulk approval failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getStatusCount = (status) => projects.filter(p => p.status === status).length;
 
   const renderDashboard = () => {
@@ -876,6 +1018,20 @@ function App() {
     const filteredProjects = statusFilter === 'all'
       ? projects
       : projects.filter(p => p.status === statusFilter);
+    const visibleIds = filteredProjects.map(project => project.id);
+    const selectedVisibleIds = visibleIds.filter(id => selectedProjectIds.includes(id));
+    const allVisibleSelected = visibleIds.length > 0 && selectedVisibleIds.length === visibleIds.length;
+    const someVisibleSelected = selectedVisibleIds.length > 0 && !allVisibleSelected;
+    const selectedProjects = projects.filter(project => selectedProjectIds.includes(project.id));
+    const selectedEligibleCount = selectedProjects.filter(project => getBulkApprovePreview(project).eligible).length;
+
+    const toggleSelectAllVisible = (checked) => {
+      if (checked) {
+        setSelectedProjectIds(prev => [...new Set([...prev, ...visibleIds])]);
+      } else {
+        setSelectedProjectIds(prev => prev.filter(id => !visibleIds.includes(id)));
+      }
+    };
 
     return (
       <section className="project-list">
@@ -911,10 +1067,78 @@ function App() {
         <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '15px' }}>
           Use <strong>Import project folders</strong> to create CMS review records from one project folder or a parent batch folder. Importing does not publish to Duda.
         </p>
+        {selectedProjectIds.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem',
+              padding: '0.85rem 1rem',
+              marginBottom: '1rem',
+              border: '1px solid #bfdbfe',
+              background: '#eff6ff',
+              borderRadius: '8px'
+            }}
+          >
+            <div style={{ color: '#1e3a8a', fontSize: '0.88rem' }}>
+              <strong>{selectedProjectIds.length}</strong> CMS review records selected.
+              {' '}
+              <span>{selectedEligibleCount} currently eligible for approval.</span>
+              <span style={{ display: 'block', marginTop: '0.2rem', color: '#475569', fontSize: '0.78rem' }}>
+                This does not publish to Duda.
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={() => setSelectedProjectIds([])}
+              >
+                Clear selection
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={loading || selectedEligibleCount === 0}
+                onClick={handleBulkApprove}
+              >
+                Approve selected
+              </button>
+            </div>
+          </div>
+        )}
+        {bulkApproveResult && (
+          <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', border: '1px solid #bbf7d0', background: '#f0fdf4', borderRadius: '8px', color: '#14532d', fontSize: '0.85rem' }}>
+            <strong>Bulk approval result:</strong> Approved {bulkApproveResult.approvedCount || 0}; skipped {bulkApproveResult.skippedCount || 0}. This does not publish to Duda.
+            {Array.isArray(bulkApproveResult.results) && bulkApproveResult.results.some(result => result.action === 'skipped') && (
+              <ul style={{ margin: '0.5rem 0 0 1rem', padding: 0, color: '#475569' }}>
+                {bulkApproveResult.results
+                  .filter(result => result.action === 'skipped')
+                  .map(result => (
+                    <li key={result.id}>
+                      {result.title || `Project ${result.id}`}: {result.reason}
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+        )}
       <div className="table-container">
         <table>
           <thead>
             <tr>
+              <th style={{ width: '44px' }}>
+                <input
+                  type="checkbox"
+                  aria-label="Select all visible projects"
+                  checked={allVisibleSelected}
+                  ref={input => {
+                    if (input) input.indeterminate = someVisibleSelected;
+                  }}
+                  onChange={e => toggleSelectAllVisible(e.target.checked)}
+                />
+              </th>
               <th>Title</th>
               <th>Year</th>
               <th>Program</th>
@@ -926,12 +1150,31 @@ function App() {
           <tbody>
             {filteredProjects.map(p => {
               const sync = getDudaSyncStatus(p);
+              const canHardDelete = canDeleteImportedRecord(p);
+              const approvePreview = getBulkApprovePreview(p);
+              const isSelected = selectedProjectIds.includes(p.id);
               return (
                 <tr key={p.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${p.title}`}
+                      checked={isSelected}
+                      onChange={e => {
+                        setSelectedProjectIds(prev => e.target.checked
+                          ? [...new Set([...prev, p.id])]
+                          : prev.filter(id => id !== p.id)
+                        );
+                      }}
+                    />
+                  </td>
                   <td>
                     <strong>{p.title}</strong>
                     {(p.importBatchId || p.sourceFolder) && (
                       <span className="status-pill submitted" style={{ marginLeft: '8px', fontSize: '0.7rem', padding: '1px 6px' }}>Imported</span>
+                    )}
+                    {approvePreview.hasWarnings && (
+                      <span className="status-pill awaiting_ocr" style={{ marginLeft: '8px', fontSize: '0.7rem', padding: '1px 6px' }}>Warnings</span>
                     )}
                   </td>
                   <td>{p.year}</td>
@@ -940,6 +1183,15 @@ function App() {
                   <td><span className={`status-pill sync-${sync.code}`}>{sync.label}</span></td>
                   <td>
                     <button className="btn-outline" onClick={() => handleEdit(p)}>Edit & Review</button>
+                    {canHardDelete && (
+                      <button
+                        className="btn-outline"
+                        style={{ color: '#dc2626', borderColor: '#fee2e2', background: '#fef2f2', marginLeft: '0.5rem' }}
+                        onClick={() => handleDeleteProject(p)}
+                      >
+                        Delete imported record
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
@@ -2102,7 +2354,7 @@ function App() {
             <h2>Project Import Workspace</h2>
             <p className="subtitle">Import one project folder or a parent batch folder into the CMS for review.</p>
           </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <button
               type="button"
               className={realImportMode === 'single' ? 'btn-primary' : 'btn-outline'}
@@ -2127,16 +2379,40 @@ function App() {
             >
               🗂️ Batch Folder
             </button>
+            <button
+              type="button"
+              className="btn-outline"
+              style={{
+                marginLeft: '1rem',
+                padding: '0.5rem 1rem',
+                fontSize: '0.85rem',
+                fontWeight: 'bold',
+                color: '#16a34a',
+                borderColor: '#bbf7d0',
+                background: '#f0fdf4',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                cursor: 'pointer'
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open('/api/download-template', '_blank');
+              }}
+            >
+              📥 Download Excel template
+            </button>
           </div>
         </div>
 
         {/* Staff-friendly Import Guide */}
         <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '2rem', fontSize: '0.85rem', color: '#475569' }}>
           <strong>💡 Staff Import Guide:</strong>
-          <ul style={{ margin: '0.5rem 0 0 1.25rem', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <li><strong>Single Project Folder:</strong> Choose one project folder containing <code>project.json</code>, poster image, and poster PDF.</li>
-            <li><strong>Batch Folder:</strong> Choose one parent folder containing multiple project folders. Each project folder must contain its own <code>project.json</code>.</li>
-            <li>Importing creates <strong>CMS review records only (status: <code>In Review</code>)</strong>. It <strong>does not</strong> publish to Duda or update the public feed.</li>
+          <ul style={{ margin: '0.5rem 0 0 1.25rem', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            <li><strong>Single Project Folder:</strong> Choose one project folder containing <code>project-details.xlsx</code>, poster image, and poster PDF.</li>
+            <li><strong>Batch Folder:</strong> Choose one parent folder containing multiple project folders. Each project folder should contain its own <code>project-details.xlsx</code>.</li>
+            <li>Import creates <strong>CMS review records only</strong>. It <strong>does not</strong> publish to Duda or update the public feed.</li>
+            <li><span style={{ color: '#059669', fontWeight: 'bold' }}>Developer fallback:</span> <code>project-details.csv</code> and <code>project.json</code> are still supported for testing/backward compatibility.</li>
             <li>Projects with <strong>Warnings</strong> (e.g. missing accessibility text) can still be reviewed. Projects with <strong>Errors</strong> are <strong>not</strong> imported.</li>
           </ul>
         </div>
@@ -2167,7 +2443,7 @@ function App() {
           </h3>
           <p style={{ color: '#64748b', fontSize: '0.9rem', maxWidth: '450px', margin: '0 auto 1.5rem' }}>
             {realImportMode === 'single'
-              ? 'Click here to choose a local project folder containing project.json and assets.'
+              ? 'Click here to choose a local project folder containing project-details.xlsx and assets.'
               : 'Click here to choose a parent folder containing multiple project folders.'
             }
           </p>

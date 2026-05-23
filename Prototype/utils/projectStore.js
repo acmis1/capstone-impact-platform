@@ -250,3 +250,20 @@ export async function generatePublicProjects() {
       ...publicFields 
     }) => publicFields);
 }
+
+/**
+ * Deletes a project record by ID. Safety checks are enforced by the caller.
+ */
+export async function deleteProject(id) {
+  if (!supabase) throw new Error('Supabase client not initialized');
+
+  const { data, error } = await supabase
+    .from('projects')
+    .delete()
+    .eq('id', id)
+    .select('data')
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? { success: true, project: data.data } : { success: false, project: null };
+}

@@ -4,8 +4,9 @@ This document defines the project package import workflow for the CMS.
 
 ## Primary Workflow: Folder Upload
 The primary, stakeholder-friendly workflow is browser-based folder upload:
-- **Single Project Folder Import**: Staff selects one project folder containing a single project's assets and `project.json` (one project folder = one project).
-- **Batch Folder Import**: Staff selects one parent folder containing multiple project folders (one parent folder = batch folder import).
+- **Single Project Folder Import**: Staff selects one project folder containing a single project's assets and `project-details.xlsx` (one project folder = one project).
+- **Batch Folder Import**: Staff selects one parent folder containing multiple project folders (one parent folder = batch folder import). Each project folder should contain its own `project-details.xlsx`.
+- **Metadata Fallbacks**: If `project-details.xlsx` is missing, the scanner automatically falls back to `project-details.csv` and then `project.json` (in that order).
 - **Frontend Behavior**: The frontend uses folder selection (browser directory upload) and sends the files' relative paths to the backend through a file manifest.
 - **Backend Endpoint**: The backend endpoint is `POST /api/import-folder`.
 
@@ -41,11 +42,11 @@ Stakeholder and advisor direction from the 21 May meeting changes the import mod
 
 ## Primary Single-Project Folder Structure
 
-Single project import starts from one selected folder. The folder contains `project.json` directly:
+Single project import starts from one selected folder. The folder contains `project-details.xlsx` directly:
 
 ```text
 solar-power-optimizer/
-├── project.json
+├── project-details.xlsx
 ├── poster.pdf
 ├── poster.png
 ├── accessibility.txt
@@ -56,7 +57,7 @@ solar-power-optimizer/
 Rules:
 
 - The selected folder name is the source folder and preferred slug.
-- Single mode accepts either a selected folder containing `project.json` directly or a selected parent folder with one child project folder containing `project.json`.
+- Single mode accepts either a selected folder containing `project-details.xlsx` directly or a selected parent folder with one child project folder containing `project-details.xlsx`.
 - Multiple child project folders in single mode should be rejected.
 
 ## Primary Batch Parent Folder Structure
@@ -66,7 +67,7 @@ Batch folder import starts from one selected parent folder. Each immediate child
 ```text
 capstone-import-batch-2026/
 ├── solar-power-optimizer/
-│   ├── project.json
+│   ├── project-details.xlsx
 │   ├── poster.pdf
 │   ├── poster.png
 │   ├── accessibility.txt
@@ -76,7 +77,7 @@ capstone-import-batch-2026/
 │   └── media/
 │       └── demo-video.mp4
 └── smart-food-traceability/
-    ├── project.json
+    ├── project-details.xlsx
     ├── poster.pdf
     ├── poster.jpg
     ├── accessibility.txt

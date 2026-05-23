@@ -55,19 +55,21 @@ Use the following step-by-step script during live demonstrations.
 13. Click **"Map Valid Projects to CMS"**. Confirm that the 4 valid or warning-only projects are mapped to Supabase database with status **In Review** and stable integer IDs, while the error-ridden package is safely blocked.
 
 ### Real Folder Import & Rich Media Handling (Phase 3 Final Demo)
-14. Navigate to **"Projects"** and click **"+ Import project folders"**.
-15. Select **"Batch Folder"** option.
-16. Select the fresh external demo batch folder:
+14. Navigate to **"Projects"** and click **"+ Import project folders"** to open the **Project Import Workspace**.
+15. Point out the **"Download Excel template"** button in the header. Explain that RMIT administrative staff can download a pre-formatted Excel template (`project-details.xlsx`) to easily manage metadata without writing JSON.
+16. Select the **"Batch Folder"** option.
+17. Select the fresh external demo batch folder containing our new Excel worksheets:
     `d:\IT RMIT\Capstone\capstone-import-batch-demo-final`
-17. Click **"Scan & Import Batch"** and point out the real import process:
+18. Click **"Scan & Import Batch"** and point out the real import process:
+    - The scanner reads **`project-details.xlsx`** inside each project folder, falling back to `project-details.csv` or `project.json` if missing.
     - **smart-campus-navigation**: Successfully imported (`IMPORTED`) with stable ID `202637527`. It includes a real **60-second H.264 video** (5.25 MB, demo-safe placeholder) at `media/demo-video.mp4`, two high-resolution 1920x1080 snapshots, poster image, and PDF document.
     - **robotics-safety-monitor**: Successfully imported with warnings (`IMPORTED WITH WARNINGS`) with stable ID `202620724`. It intentionally omits `accessibility.txt` to trigger a warning, contains one high-resolution 1920x1080 snapshot, and poster image/PDF.
-18. In the results table, click **"Edit & Review"** for *Smart Campus Navigation Assistant*:
+19. In the results table, click **"Edit & Review"** for *Smart Campus Navigation Assistant*:
     - Observe the status is set to **In Review** and Duda Sync is **Not public / Draft**.
     - Verify that the poster image, poster PDF link, and high-resolution snapshots load perfectly.
     - Confirm the video URL exists in the CMS record and is available in the Media Rich layout preview.
-19. Now click **"+ Import project folders"** again, select **"Single Project Folder"** option, and select `d:\IT RMIT\Capstone\capstone-import-batch-demo-final\smart-campus-navigation`.
-20. Click **"Scan & Import Project"** to demonstrate **repeatability and upserts**. Verify that it safely updates the existing record (`202637527`) instead of duplicating, and the video asset remains correctly attached.
+20. Now click **"+ Import project folders"** again, select **"Single Project Folder"** option, and select `d:\IT RMIT\Capstone\capstone-import-batch-demo-final\smart-campus-navigation`.
+21. Click **"Scan & Import Project"** to demonstrate **repeatability and upserts**. Verify that it safely updates the existing record (`202637527`) instead of duplicating, and the video asset remains correctly attached.
 
 ### CMS Layout Panel & Presentation Editing (New in v2)
 21. Navigate back to **"Projects"** and select one of the imported records (e.g. *Smart Campus Navigation Assistant*).

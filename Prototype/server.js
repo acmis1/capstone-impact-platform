@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
 import { publishToCloud, getPublishedFeedStatus } from './utils/supabasePublisher.js';
 import * as projectStore from './utils/projectStore.js';
+import * as XLSX from 'xlsx';
 
 dotenv.config();
 
@@ -193,13 +194,19 @@ const stripCommonRoot = (entries) => {
   };
 };
 
+const METADATA_FILES = ['project-details.xlsx', 'project-details.csv', 'project.json'];
+
+const isMetadataFile = (filename) => {
+  return METADATA_FILES.includes(filename.toLowerCase());
+};
+
 const groupProjectFolders = (entries, mode, commonRoot) => {
-  const rootProjectJson = entries.some(entry =>
-    entry.parts.length === 1 && entry.parts[0].toLowerCase() === 'project.json'
+  const rootMetadata = entries.some(entry =>
+    entry.parts.length === 1 && isMetadataFile(entry.parts[0])
   );
 
   if (mode === 'single') {
-    if (rootProjectJson) {
+    if (rootMetadata) {
       return [{ folder: commonRoot || 'project', slug: normalizeSlug(commonRoot || 'project'), entries }];
     }
 
@@ -208,12 +215,12 @@ const groupProjectFolders = (entries, mode, commonRoot) => {
       entries.some(entry =>
         entry.parts[0] === folder &&
         entry.parts.length === 2 &&
-        entry.parts[1].toLowerCase() === 'project.json'
+        isMetadataFile(entry.parts[1])
       )
     );
 
     if (projectFolders.length !== 1) {
-      throw new Error('Single import mode requires one project folder with project.json.');
+      throw new Error('Single import mode requires one project folder with project-details.xlsx, project-details.csv, or project.json.');
     }
 
     const folder = projectFolders[0];
@@ -255,21 +262,199 @@ const deterministicProjectId = (year, slug) => {
   return id;
 };
 
+const normalizeKey = (key) => {
+  return String(key || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+};
+
+const sanitizeMetadataObject = (rawObj) => {
+  const metadata = {};
+  const keyMap = {
+    title: 'title',
+    summary: 'summary',
+    background: 'background',
+    solution: 'solution',
+    teammembers: 'teamMembers',
+    team: 'teamMembers',
+    groupname: 'groupName',
+    group: 'groupName',
+    supervisor: 'supervisor',
+    academicsupervisor: 'supervisor',
+    industrypartner: 'industryPartner',
+    industry: 'industry',
+    program: 'program',
+    studyprogram: 'program',
+    discipline: 'discipline',
+    year: 'year',
+    templateid: 'templateId',
+    featuredmedia: 'featuredMedia',
+    accessibilitytext: 'accessibilityText'
+  };
+
+  Object.entries(rawObj).forEach(([key, val]) => {
+    const norm = normalizeKey(key);
+    const targetKey = keyMap[norm];
+    if (targetKey) {
+      let cleanedVal = val === undefined || val === null ? '' : String(val).trim();
+      if (targetKey === 'teamMembers') {
+        cleanedVal = cleanedVal
+          .split(/[,;]/)
+          .map(name => name.trim())
+          .filter(Boolean);
+      }
+      metadata[targetKey] = cleanedVal;
+    }
+  });
+
+  const allKeys = [
+    'title', 'summary', 'background', 'solution', 'teamMembers',
+    'groupName', 'supervisor', 'industryPartner', 'industry',
+    'program', 'discipline', 'year', 'templateId', 'featuredMedia',
+    'accessibilityText'
+  ];
+  allKeys.forEach(k => {
+    if (metadata[k] === undefined) {
+      metadata[k] = k === 'teamMembers' ? [] : '';
+    }
+  });
+
+  return metadata;
+};
+
+const parseXlsxMetadata = (buffer, warnings) => {
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  let sheet = workbook.Sheets['Project Details'];
+  if (!sheet) {
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) {
+      throw new Error('Excel workbook has no sheets');
+    }
+    sheet = workbook.Sheets[firstSheetName];
+  }
+
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  if (rows.length === 0) {
+    throw new Error('Empty Excel worksheet');
+  }
+
+  const headers = rows[0].map(h => String(h || '').trim());
+  const dataRows = rows.slice(1).filter(row => row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== ''));
+  if (dataRows.length === 0) {
+    throw new Error('Excel worksheet has headers but no data row');
+  }
+  if (dataRows.length > 1) {
+    warnings.push('Excel file has multiple data rows. Only the first data row will be imported.');
+  }
+
+  const firstDataRow = dataRows[0];
+  const rawObj = {};
+  headers.forEach((header, index) => {
+    if (!header) return;
+    rawObj[header] = firstDataRow[index];
+  });
+
+  return sanitizeMetadataObject(rawObj);
+};
+
+const parseCsvMetadata = (buffer, warnings) => {
+  const csvText = buffer.toString('utf8');
+  const rows = [];
+  let currentRow = [];
+  let currentCell = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+    const nextChar = csvText[i + 1];
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (nextChar === '"') {
+          currentCell += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        currentCell += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        currentRow.push(currentCell);
+        currentCell = '';
+      } else if (char === '\n' || char === '\r') {
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
+        currentRow.push(currentCell);
+        rows.push(currentRow);
+        currentRow = [];
+        currentCell = '';
+      } else {
+        currentCell += char;
+      }
+    }
+  }
+  if (currentCell !== '' || currentRow.length > 0) {
+    currentRow.push(currentCell);
+    rows.push(currentRow);
+  }
+
+  const cleanRows = rows.map(r => r.map(c => c.trim())).filter(r => r.some(Boolean));
+  if (cleanRows.length === 0) {
+    throw new Error('Empty CSV file');
+  }
+
+  const headers = cleanRows[0];
+  const dataRows = cleanRows.slice(1);
+  if (dataRows.length === 0) {
+    throw new Error('CSV has headers but no data row');
+  }
+  if (dataRows.length > 1) {
+    warnings.push('CSV file has multiple data rows. Only the first data row will be imported.');
+  }
+
+  const firstDataRow = dataRows[0];
+  const rawObj = {};
+  headers.forEach((header, index) => {
+    if (!header) return;
+    rawObj[header] = firstDataRow[index];
+  });
+
+  return sanitizeMetadataObject(rawObj);
+};
+
 const validateAndPrepareProject = (projectFolder) => {
   const errors = [];
   const warnings = [];
   const entries = projectFolder.entries;
-  const projectJsonFile = findProjectFile(entries, 'project.json');
+
+  const xlsxFile = findProjectFile(entries, 'project-details.xlsx');
+  const csvFile = findProjectFile(entries, 'project-details.csv');
+  const jsonFile = findProjectFile(entries, 'project.json');
   let metadata = null;
 
-  if (!projectJsonFile) {
-    errors.push('missing project.json');
-  } else {
+  if (xlsxFile) {
     try {
-      metadata = JSON.parse(projectJsonFile.file.buffer.toString('utf8'));
+      metadata = parseXlsxMetadata(xlsxFile.file.buffer, warnings);
+    } catch (err) {
+      errors.push(`invalid XLSX: ${err.message}`);
+    }
+  } else if (csvFile) {
+    try {
+      metadata = parseCsvMetadata(csvFile.file.buffer, warnings);
+    } catch (err) {
+      errors.push(`invalid CSV: ${err.message}`);
+    }
+  } else if (jsonFile) {
+    try {
+      metadata = JSON.parse(jsonFile.file.buffer.toString('utf8'));
     } catch {
       errors.push('invalid JSON');
     }
+  } else {
+    errors.push('Missing project details file. Add project-details.xlsx, project-details.csv, or project.json.');
   }
 
   const posterImage = entries.find(entry => {
@@ -469,6 +654,123 @@ const PUBLIC_FEED_DIR = process.env.PUBLIC_FEED_DIR || path.join(__dirname, 'pub
 
 const DB_PATH = path.join(DATA_DIR, 'db.json');
 const FEED_PATH = path.join(PUBLIC_FEED_DIR, 'capstones-latest.json');
+const SAFE_DELETE_STATUSES = new Set(['draft', 'submitted', 'in_review', 'archived']);
+const BULK_APPROVE_STATUSES = new Set(['draft', 'submitted', 'in_review']);
+
+const getProjectStatus = (project) => String(project?.status || '').toLowerCase();
+
+const hasImportMarker = (project) => Boolean(project?.importBatchId || project?.sourceFolder);
+
+const hasPublishedMarker = (project) => Boolean(
+  project?.lastPublishedAt ||
+  project?.lastPublishedPublicHash ||
+  project?.publishedAt
+);
+
+const readPublicFeedProjects = () => {
+  if (!fs.existsSync(FEED_PATH)) return [];
+  const feed = JSON.parse(fs.readFileSync(FEED_PATH, 'utf8'));
+  return Array.isArray(feed) ? feed : [];
+};
+
+const isProjectInPublicFeed = (projectId) => {
+  return readPublicFeedProjects().some(project => String(project.id) === String(projectId));
+};
+
+const getSafeDeleteBlocker = (project, projectId) => {
+  const status = getProjectStatus(project);
+
+  if (!hasImportMarker(project)) {
+    return 'Hard delete is only allowed for imported CMS review records.';
+  }
+
+  if (!SAFE_DELETE_STATUSES.has(status)) {
+    return 'Hard delete is only allowed for draft, submitted, in_review, or archived records.';
+  }
+
+  if (status === 'approved' || status === 'published') {
+    return 'Approved or published records cannot be hard-deleted.';
+  }
+
+  if (hasPublishedMarker(project)) {
+    return 'Records with Duda publish history cannot be hard-deleted.';
+  }
+
+  if (isProjectInPublicFeed(projectId)) {
+    return 'Records present in the public feed cannot be hard-deleted.';
+  }
+
+  return null;
+};
+
+const hasTextValue = (value) => String(value || '').trim() !== '';
+
+const hasBlockingValidationFlag = (value) => {
+  if (!value) return false;
+  if (Array.isArray(value)) {
+    return value.some(item => hasBlockingValidationFlag(item));
+  }
+  if (typeof value === 'object') {
+    if (value.hasErrors === true) return true;
+    const severity = String(value.severity || value.level || value.type || value.status || '').toLowerCase();
+    if (['error', 'blocking', 'blocker', 'critical'].includes(severity)) return true;
+    return Object.values(value).some(item => hasBlockingValidationFlag(item));
+  }
+  return false;
+};
+
+const getBulkApproveBlockers = (project) => {
+  const blockers = [];
+  const status = getProjectStatus(project);
+  const packageStatus = String(project?.packageValidation?.status || '').toLowerCase();
+  const packageErrors = Array.isArray(project?.packageValidation?.errors)
+    ? project.packageValidation.errors
+    : [];
+  const validationErrors = Array.isArray(project?.validationErrors)
+    ? project.validationErrors
+    : [];
+
+  if (!BULK_APPROVE_STATUSES.has(status)) {
+    blockers.push('Status must be draft, submitted, or in_review.');
+  }
+  if (status === 'published') {
+    blockers.push('Published records cannot be bulk-approved.');
+  }
+  if (status === 'archived') {
+    blockers.push('Archived records cannot be bulk-approved.');
+  }
+  if (packageStatus === 'error') {
+    blockers.push('Package validation status is error.');
+  }
+  if (packageErrors.length > 0) {
+    blockers.push(`Package validation has ${packageErrors.length} blocking error${packageErrors.length === 1 ? '' : 's'}.`);
+  }
+  if (validationErrors.length > 0) {
+    blockers.push(`Project validation has ${validationErrors.length} blocking error${validationErrors.length === 1 ? '' : 's'}.`);
+  }
+  if (hasBlockingValidationFlag(project?.validationFlags)) {
+    blockers.push('Validation flags contain blocking or error severity items.');
+  }
+
+  ['title', 'summary', 'program', 'discipline', 'year'].forEach(field => {
+    if (!hasTextValue(project?.[field])) {
+      blockers.push(`Missing required public field: ${field}.`);
+    }
+  });
+
+  if (project?.packageValidation?.assets) {
+    if (!hasTextValue(project.poster)) {
+      blockers.push('Missing poster image required by package validation.');
+    }
+    if (!hasTextValue(project.posterPdf)) {
+      blockers.push('Missing poster PDF required by package validation.');
+    }
+  } else if (!hasTextValue(project?.poster) && !hasTextValue(project?.posterPdf)) {
+    blockers.push('Missing public poster asset.');
+  }
+
+  return blockers;
+};
 
 // Ensure directories exist
 if (!fs.existsSync(DATA_DIR)) {
@@ -593,7 +895,45 @@ if (process.env.PUBLIC_FEED_DIR) {
 }
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// API Routes
+// Public: Download Excel template
+app.get('/api/download-template', (req, res) => {
+  try {
+    const headers = [
+      'title', 'summary', 'background', 'solution', 'teamMembers',
+      'groupName', 'supervisor', 'industryPartner', 'industry',
+      'program', 'discipline', 'year', 'templateId', 'featuredMedia',
+      'accessibilityText'
+    ];
+    const exampleRow = [
+      'Smart Campus Navigation Assistant',
+      'An interactive 3D navigation assistant for RMIT campus visitors.',
+      'RMIT campus can be complex for new visitors to navigate.',
+      'Developed a WebGL-based mobile-friendly interactive 3D campus navigation application.',
+      'John Doe, Jane Smith',
+      'Group A',
+      'Dr. Supervisor Name',
+      'RMIT Property Services',
+      'Technology',
+      'Bachelor of Software Engineering',
+      'Software Engineering',
+      '2026',
+      'media_rich',
+      'video',
+      '3D campus model showing Building 10 with interactive path lines.'
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, exampleRow]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Project Details');
+
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Disposition', 'attachment; filename=project-details.xlsx');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to generate Excel template: ' + err.message });
+  }
+});
 
 // Read-only projects list
 app.get('/api/projects', async (req, res) => {
@@ -747,6 +1087,67 @@ app.post('/api/projects', adminAuth, async (req, res) => {
   }
 });
 
+// Protected: Bulk approve eligible CMS review records only
+app.post('/api/projects/bulk-approve', adminAuth, async (req, res) => {
+  const ids = Array.isArray(req.body?.ids)
+    ? [...new Set(req.body.ids.map(id => Number(id)).filter(Number.isInteger))]
+    : [];
+
+  if (ids.length === 0) {
+    return res.status(400).json({ error: 'Request body must include an ids array.' });
+  }
+
+  try {
+    const results = [];
+
+    for (const id of ids) {
+      const project = await projectStore.getProjectById(id);
+
+      if (!project) {
+        results.push({
+          id,
+          title: '',
+          action: 'skipped',
+          reason: 'Project not found.'
+        });
+        continue;
+      }
+
+      const blockers = getBulkApproveBlockers(project);
+      if (blockers.length > 0) {
+        results.push({
+          id,
+          title: project.title || '',
+          action: 'skipped',
+          reason: blockers.join(' ')
+        });
+        continue;
+      }
+
+      const updated = await projectStore.updateProject(id, { status: 'approved' });
+      results.push({
+        id,
+        title: updated.title || project.title || '',
+        action: 'approved'
+      });
+    }
+
+    const approvedCount = results.filter(result => result.action === 'approved').length;
+    const skippedCount = results.length - approvedCount;
+
+    res.json({
+      success: true,
+      approvedCount,
+      skippedCount,
+      results,
+      message: `Approved ${approvedCount} CMS review record${approvedCount === 1 ? '' : 's'}. Skipped ${skippedCount}. This does not publish to Duda.`
+    });
+  } catch (err) {
+    console.error('Error in POST /api/projects/bulk-approve:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Protected: Update project
 app.put('/api/projects/:id', adminAuth, async (req, res) => {
   console.log(`PUT /api/projects/${req.params.id}`, req.body);
@@ -756,6 +1157,43 @@ app.put('/api/projects/:id', adminAuth, async (req, res) => {
     res.json(updated);
   } catch (err) {
     console.error('Error in PUT /api/projects:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Protected: Safe Delete imported review project record
+app.delete('/api/projects/:id', adminAuth, async (req, res) => {
+  const projectId = Number(req.params.id);
+  if (!Number.isInteger(projectId)) {
+    return res.status(400).json({ error: 'Invalid project ID.' });
+  }
+
+  console.log(`DELETE /api/projects/${projectId} safe delete request`);
+  try {
+    const project = await projectStore.getProjectById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found.' });
+    }
+
+    const blocker = getSafeDeleteBlocker(project, projectId);
+    if (blocker) {
+      return res.status(403).json({ error: `Safety violation: ${blocker}` });
+    }
+
+    const deletion = await projectStore.deleteProject(projectId);
+    if (!deletion.success) {
+      return res.status(404).json({ error: 'Project was not deleted because it no longer exists.' });
+    }
+
+    console.log(`SUCCESS: Safely hard-deleted imported review record ${projectId}`);
+
+    res.json({
+      success: true,
+      deletedId: projectId,
+      message: 'Safely removed the imported CMS review record only.'
+    });
+  } catch (err) {
+    console.error('Error in DELETE /api/projects:', err);
     res.status(500).json({ error: err.message });
   }
 });
