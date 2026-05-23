@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import './styles.css';
 
 const API_URL = '/api';
@@ -460,6 +461,7 @@ function App() {
   const [selectedProjectIds, setSelectedProjectIds] = useState([]);
   const [bulkApproveResult, setBulkApproveResult] = useState(null);
   const [openRowActionsId, setOpenRowActionsId] = useState(null);
+  const [menuCoords, setMenuCoords] = useState(null);
   const [expandedSections, setExpandedSections] = useState({
     validation: true,
     content: true,
@@ -492,6 +494,83 @@ function App() {
       window.removeEventListener('keydown', handleEsc);
     };
   }, [lightboxIndex]);
+
+  useEffect(() => {
+    if (openRowActionsId === null) return;
+
+    const handleClose = () => {
+      setOpenRowActionsId(null);
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setOpenRowActionsId(null);
+      }
+    };
+
+    const handleClickOutside = (e) => {
+      if (e.target.closest('[title="More actions"]')) {
+        return;
+      }
+      setOpenRowActionsId(null);
+    };
+
+    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('resize', handleClose);
+    window.addEventListener('click', handleClickOutside);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
+      window.removeEventListener('click', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openRowActionsId]);
+
+  const getMenuStyles = () => {
+    if (!menuCoords) return { display: 'none' };
+
+    const { top, left, width, height } = menuCoords;
+    const menuWidth = 230;
+
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+
+    const spaceBelow = viewportHeight - (top + height);
+    const openAbove = spaceBelow < 200 && top > 200;
+
+    let finalLeft = left + width - menuWidth;
+    if (finalLeft < 10) {
+      finalLeft = 10;
+    }
+    if (finalLeft + menuWidth > viewportWidth - 10) {
+      finalLeft = viewportWidth - menuWidth - 10;
+    }
+
+    const styles = {
+      position: 'fixed',
+      left: `${finalLeft}px`,
+      zIndex: 9999,
+      minWidth: `${menuWidth}px`,
+      background: '#fff',
+      border: '1px solid #e2e8f0',
+      borderRadius: '8px',
+      boxShadow: '0 12px 30px rgba(15, 23, 42, 0.14)',
+      padding: '0.35rem',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '0.25rem'
+    };
+
+    if (openAbove) {
+      styles.bottom = `${viewportHeight - top + 6}px`;
+    } else {
+      styles.top = `${top + height + 6}px`;
+    }
+
+    return styles;
+  };
 
   const fetchProjects = async () => {
     try {
@@ -1340,7 +1419,16 @@ function App() {
                           <button
                             type="button"
                             className="btn-outline"
-                            onClick={() => setOpenRowActionsId(prev => prev === p.id ? null : p.id)}
+                            onClick={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setMenuCoords({
+                                top: rect.top,
+                                left: rect.left,
+                                width: rect.width,
+                                height: rect.height
+                              });
+                              setOpenRowActionsId(prev => prev === p.id ? null : p.id);
+                            }}
                             aria-haspopup="menu"
                             aria-expanded={openRowActionsId === p.id}
                             title="More actions"
@@ -1348,25 +1436,11 @@ function App() {
                           >
                             More
                           </button>
-                          {openRowActionsId === p.id && (
+                          {openRowActionsId === p.id && createPortal(
                             <div
                               role="menu"
                               aria-label="More actions"
-                              style={{
-                                position: 'absolute',
-                                right: 0,
-                                top: 'calc(100% + 6px)',
-                                zIndex: 20,
-                                minWidth: '230px',
-                                background: '#fff',
-                                border: '1px solid #e2e8f0',
-                                borderRadius: '8px',
-                                boxShadow: '0 12px 30px rgba(15, 23, 42, 0.14)',
-                                padding: '0.35rem',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '0.25rem'
-                              }}
+                              style={getMenuStyles()}
                             >
                               {lifecycleActions.map(action => (
                                 <button
@@ -1391,7 +1465,8 @@ function App() {
                                   {action.label}
                                 </button>
                               ))}
-                            </div>
+                            </div>,
+                            document.body
                           )}
                         </div>
                       )}
@@ -1846,12 +1921,12 @@ function App() {
                     )}
                     <div className="form-grid">
                       <div className="form-group">
-                        <label>Poster image source</label>
+                        <label>Main poster image source</label>
                         <input type="url" value={currentProject.poster || ''} onChange={e => setCurrentProject({...currentProject, poster: e.target.value})} placeholder="https://..." />
                         <p className="field-helper">Production: Secure file upload to RMIT S3.</p>
                       </div>
                       <div className="form-group">
-                        <label>Poster PDF source</label>
+                        <label>Downloadable poster PDF source</label>
                         <input type="url" value={currentProject.posterPdf || ''} onChange={e => setCurrentProject({...currentProject, posterPdf: e.target.value})} placeholder="https://..." />
                         <p className="field-helper">Required for "Get Poster" button in detail page.</p>
                       </div>

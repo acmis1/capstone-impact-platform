@@ -38,9 +38,9 @@ Use the following step-by-step script during live demonstrations.
 5. Select a project and click **Edit & Review** to show the editor.
 6. Demonstrate adding or editing a project record.
 7. Point out the **source files/media fields**:
-   - Poster Image URL
-   - Poster PDF URL
-   - Snapshot gallery URLs
+    - Main poster image source
+    - Downloadable poster PDF source
+    - Project snapshots / gallery sources
    - `posterText` field (long-form poster text)
 8. **Explain**: AI/OCR-assisted text extraction is conceptual in this prototype — the `posterText` field is manually entered or imported.
 
