@@ -2569,7 +2569,28 @@ function App() {
               }}
               onClick={(e) => {
                 e.stopPropagation();
-                window.open('/api/download-template', '_blank');
+                const downloadTemplate = async () => {
+                  try {
+                    const res = await fetch(`/api/download-template?t=${Date.now()}`, {
+                      cache: 'no-store'
+                    });
+                    if (!res.ok) {
+                      throw new Error(`Template download failed: ${res.status}`);
+                    }
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'capstone-project-details-template.xlsx';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                  } catch (err) {
+                    setMessage(`Template download failed: ${err.message}`);
+                  }
+                };
+                downloadTemplate();
               }}
             >
               📥 Download Excel template
@@ -2581,10 +2602,11 @@ function App() {
         <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '2rem', fontSize: '0.85rem', color: '#475569' }}>
           <strong>💡 Staff Import Guide:</strong>
           <ul style={{ margin: '0.5rem 0 0 1.25rem', padding: 0, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            <li><strong>Single Project Folder:</strong> Choose one project folder containing <code>project-details.xlsx</code>, poster image, and poster PDF.</li>
-            <li><strong>Batch Folder:</strong> Choose one parent folder containing multiple project folders. Each project folder should contain its own <code>project-details.xlsx</code>.</li>
+            <li><strong>Single Project Folder:</strong> Choose one project folder containing one project details workbook, poster image, and poster PDF.</li>
+            <li><strong>Batch Folder:</strong> Choose one parent folder containing multiple project folders. Each project folder should contain its own project details workbook.</li>
             <li>Import creates <strong>CMS review records only</strong>. It <strong>does not</strong> publish to Duda or update the public feed.</li>
-            <li><span style={{ color: '#059669', fontWeight: 'bold' }}>Developer fallback:</span> <code>project-details.csv</code> and <code>project.json</code> are still supported for testing/backward compatibility.</li>
+            <li><span style={{ color: '#059669', fontWeight: 'bold' }}>Developer fallback:</span> <code>project-details.xlsx</code>, <code>project-details.csv</code>, and <code>project.json</code> are still supported for testing/backward compatibility.</li>
+            <li>For staff handover, unique names such as <code>smart-campus-navigation-details.xlsx</code> are supported and recommended.</li>
             <li>Projects with <strong>Warnings</strong> (e.g. missing accessibility text) can still be reviewed. Projects with <strong>Errors</strong> are <strong>not</strong> imported.</li>
           </ul>
         </div>
@@ -2615,7 +2637,7 @@ function App() {
           </h3>
           <p style={{ color: '#64748b', fontSize: '0.9rem', maxWidth: '450px', margin: '0 auto 1.5rem' }}>
             {realImportMode === 'single'
-              ? 'Click here to choose a local project folder containing project-details.xlsx and assets.'
+              ? 'Click here to choose a local project folder containing one project details workbook and assets.'
               : 'Click here to choose a parent folder containing multiple project folders.'
             }
           </p>

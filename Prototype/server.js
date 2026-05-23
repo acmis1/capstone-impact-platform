@@ -194,15 +194,30 @@ const stripCommonRoot = (entries) => {
   };
 };
 
-const METADATA_FILES = ['project-details.xlsx', 'project-details.csv', 'project.json'];
+const isProjectDetailsWorkbookName = (filename) => {
+  const name = String(filename || '').toLowerCase();
+  return name === 'project-details.xlsx' ||
+    name.endsWith('-project-details.xlsx') ||
+    name.endsWith('-details.xlsx');
+};
 
-const isMetadataFile = (filename) => {
-  return METADATA_FILES.includes(filename.toLowerCase());
+const isProjectDetailsCsvName = (filename) => {
+  const name = String(filename || '').toLowerCase();
+  return name === 'project-details.csv' ||
+    name.endsWith('-project-details.csv') ||
+    name.endsWith('-details.csv');
+};
+
+const isMetadataFileName = (filename) => {
+  const name = String(filename || '').toLowerCase();
+  return isProjectDetailsWorkbookName(name) ||
+    isProjectDetailsCsvName(name) ||
+    name === 'project.json';
 };
 
 const groupProjectFolders = (entries, mode, commonRoot) => {
   const rootMetadata = entries.some(entry =>
-    entry.parts.length === 1 && isMetadataFile(entry.parts[0])
+    entry.parts.length === 1 && isMetadataFileName(entry.parts[0])
   );
 
   if (mode === 'single') {
@@ -212,15 +227,15 @@ const groupProjectFolders = (entries, mode, commonRoot) => {
 
     const folderNames = new Set(entries.map(entry => entry.parts[0]).filter(Boolean));
     const projectFolders = [...folderNames].filter(folder =>
-      entries.some(entry =>
-        entry.parts[0] === folder &&
-        entry.parts.length === 2 &&
-        isMetadataFile(entry.parts[1])
-      )
+        entries.some(entry =>
+          entry.parts[0] === folder &&
+          entry.parts.length === 2 &&
+          isMetadataFileName(entry.parts[1])
+        )
     );
 
     if (projectFolders.length !== 1) {
-      throw new Error('Single import mode requires one project folder with project-details.xlsx, project-details.csv, or project.json.');
+      throw new Error('Single import mode requires one project folder with a project details workbook, project-details.csv, or project.json.');
     }
 
     const folder = projectFolders[0];
@@ -251,6 +266,52 @@ const groupProjectFolders = (entries, mode, commonRoot) => {
 const findProjectFile = (projectEntries, relativePath) => {
   const target = relativePath.toLowerCase();
   return projectEntries.find(entry => entry.parts.join('/').toLowerCase() === target);
+};
+
+const selectMetadataFile = (entries) => {
+  const names = entries.map(entry => ({
+    entry,
+    name: entry.parts.join('/').toLowerCase()
+  }));
+
+  const exactXlsx = names.filter(item => item.name === 'project-details.xlsx');
+  if (exactXlsx.length > 0) {
+    return { file: exactXlsx[0].entry, type: 'xlsx' };
+  }
+
+  const friendlyXlsx = names.filter(item =>
+    item.name.endsWith('-project-details.xlsx') || item.name.endsWith('-details.xlsx')
+  );
+  if (friendlyXlsx.length > 1) {
+    return { error: 'Multiple project details files found. Keep only one details workbook.' };
+  }
+  if (friendlyXlsx.length === 1) {
+    return { file: friendlyXlsx[0].entry, type: 'xlsx' };
+  }
+
+  const exactCsv = names.filter(item => item.name === 'project-details.csv');
+  if (exactCsv.length > 0) {
+    return { file: exactCsv[0].entry, type: 'csv' };
+  }
+
+  const friendlyCsv = names.filter(item =>
+    item.name.endsWith('-project-details.csv') || item.name.endsWith('-details.csv')
+  );
+  if (friendlyCsv.length > 1) {
+    return { error: 'Multiple project details files found. Keep only one details workbook.' };
+  }
+  if (friendlyCsv.length === 1) {
+    return { file: friendlyCsv[0].entry, type: 'csv' };
+  }
+
+  const projectJson = names.find(item => item.name === 'project.json');
+  if (projectJson) {
+    return { file: projectJson.entry, type: 'json' };
+  }
+
+  return {
+    error: 'Missing project details file. Add one project details workbook, project-details.csv, or project.json.'
+  };
 };
 
 const deterministicProjectId = (year, slug) => {
@@ -474,31 +535,29 @@ const validateAndPrepareProject = (projectFolder) => {
   const warnings = [];
   const entries = projectFolder.entries;
 
-  const xlsxFile = findProjectFile(entries, 'project-details.xlsx');
-  const csvFile = findProjectFile(entries, 'project-details.csv');
-  const jsonFile = findProjectFile(entries, 'project.json');
+  const metadataFile = selectMetadataFile(entries);
   let metadata = null;
 
-  if (xlsxFile) {
+  if (metadataFile.error) {
+    errors.push(metadataFile.error);
+  } else if (metadataFile.type === 'xlsx') {
     try {
-      metadata = parseXlsxMetadata(xlsxFile.file.buffer, warnings);
+      metadata = parseXlsxMetadata(metadataFile.file.buffer, warnings);
     } catch (err) {
       errors.push(`invalid XLSX: ${err.message}`);
     }
-  } else if (csvFile) {
+  } else if (metadataFile.type === 'csv') {
     try {
-      metadata = parseCsvMetadata(csvFile.file.buffer, warnings);
+      metadata = parseCsvMetadata(metadataFile.file.buffer, warnings);
     } catch (err) {
       errors.push(`invalid CSV: ${err.message}`);
     }
-  } else if (jsonFile) {
+  } else if (metadataFile.type === 'json') {
     try {
-      metadata = JSON.parse(jsonFile.file.buffer.toString('utf8'));
+      metadata = JSON.parse(metadataFile.file.buffer.toString('utf8'));
     } catch {
       errors.push('invalid JSON');
     }
-  } else {
-    errors.push('Missing project details file. Add project-details.xlsx, project-details.csv, or project.json.');
   }
 
   const posterImage = entries.find(entry => {
@@ -1007,8 +1066,11 @@ app.get('/api/download-template', (req, res) => {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(optionsRows), 'Options');
 
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    res.setHeader('Content-Disposition', 'attachment; filename=project-details.xlsx');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="capstone-project-details-template.xlsx"');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.send(buffer);
   } catch (err) {
     res.status(500).json({ error: 'Failed to generate Excel template: ' + err.message });
