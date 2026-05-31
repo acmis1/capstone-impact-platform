@@ -81,3 +81,9 @@ This document outlines key open questions that must be resolved during the initi
 *   **Student Preview Confirmation Status**: Should `StudentConfirmation` sign-offs be formalized in the SQL schema for Part 2, or kept as a conceptual student-review workflow to be verified in a future sprint?
 *   **JSON Public Feed Fields**: Are the 19 fields defined in the public feed contract fully comprehensive for the showcase layer, or are there additional student metadata fields required in July?
 *   **CDN Feed Caching**: Will the JSON feed and public assets be served directly from public Supabase Storage buckets, or is the feed fronted by a CDN to handle dynamic bandwidth spikes during high-volume showcase events?
+
+---
+
+> [!TIP]
+> **Consolidated Meeting Agenda**
+> All these open questions, along with the proposed Part 2 architecture and decision matrix, have been compiled into a concise, meeting-ready pack: [july-confirmation-pack.md](file:///d:/IT%20RMIT/Capstone/docs/july-confirmation-pack.md). Use the confirmation pack to guide the alignment session with stakeholders and advisors.
