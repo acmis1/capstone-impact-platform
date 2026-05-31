@@ -1,66 +1,66 @@
 # Security and Maintainability Map: Prototype v2
 
-This document provides a read-only audit and threat model of **Prototype v2** for the Capstone Impact Platform. The purpose of this mapping is to discover and document security vulnerabilities, technical debt, and architectural risks to guide the Part 2 planning phase. 
+This document provides a read-only audit and threat model of **Prototype v2** for the Capstone Impact Platform. The purpose of this mapping is to discover and document security considerations, technical debt, and architectural patterns to guide the Part 2 planning phase.
 
-> [!IMPORTANT]
-> **Read-Only Audit Scope**
-> This map is for planning and audit purposes only. In accordance with break constraints, no code changes, staging database adjustments, or active security patches are to be implemented during the semester break.
+> [!NOTE]
+> **Accuracy Note & Planning Focus**
+> This map is a planning risk register. It identifies potential risks and hardening needs based on the initial codebase of Prototype v2. It should not be read as a claim that every risk is currently exploitable in the exact stated form. In accordance with break constraints, no code changes, staging database adjustments, or active security patches are to be implemented during the semester break.
 
 ---
 
 ## 1. Overview
-Prototype v2 successfully demonstrated the core hybrid publishing architecture: a decoupled Node/Express server and React/Vite frontend managing projects, parsing metadata spreadsheets (`project-details.xlsx`), and publishing clean, approved-only JSON feeds to a stable Supabase public storage bucket.
+Prototype v2 successfully demonstrated the feasibility of the decoupled hybrid publishing architecture: a standalone Node/Express server and React/Vite frontend managing projects, parsing metadata spreadsheets (`project-details.xlsx`), and publishing validated approved-only JSON feeds to a stable Supabase public storage bucket.
 
-However, because the prototype was built to demonstrate visual feasibility and core workflow viability, security and modular maintainability were secondary priorities. This document registers all endpoints, data flows, and code structures to establish a robust hardening backlog for the Part 2 production development.
+Because the prototype was built to demonstrate visual feasibility and core workflow viability, security hardening and modular maintainability are planned as key objectives for the Part 2 production development. This document registers endpoints, data flows, and code structures to establish a robust backlog for the upcoming production phase.
 
 ---
 
 ## 2. Endpoint and Data-Flow Map
 
-The following map outlines every functional endpoint and operational data flow within Prototype v2, tracing inputs, processing logic, and potential security vulnerabilities.
+The following map outlines the functional endpoints and operational data flows within the Prototype v2 codebase, tracing inputs, processing logic, and potential areas for hardening.
 
-| Area / Endpoint or File | Input Source | Processing / Logic Performed | Output or Side Effect | Security Concern | Production Recommendation (Part 2) |
+| Area / Endpoint or File | Input Source | Processing / Logic Performed | Output or Side Effect | Security Consideration | Production Recommendation (Part 2) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`GET /api/projects`** | Public network request. | Queries all project records from the Supabase `projects` database table. | Returns full raw project JSON array. | **Data Leakage**: Exposes internal admin notes, supervisor flags, and workflow audit histories to the public. | Return restricted public view; implement token-based session auth to view raw admin data. |
-| **`POST /api/import`** | `multer` multipart upload (ZIP/folders). | Decodes uploaded ZIPs/folders, parses XLSX metadata defensively, reads media paths, runs rules-first validation checks. | Writes assets to public Supabase Storage bucket; inserts intermediate project draft records. | **Denial of Service (DoS) & Traversal**: Buffers large files directly in memory; vulnerable to relative path bypasses. | Enforce direct-to-storage pre-signed client uploads; process imports inside an asynchronous job queue. |
-| **`POST /api/publish`** | Public API call. | Queries approved records, strips internal fields, updates statuses, pushes updated JSON feed to public storage. | Overwrites public `capstones-latest.json` on Supabase Storage. | **Unauthorized Publishing**: Anyone can trigger a global showcase sync, potentially publishing unapproved drafts or deleting feed data. | Require administrative signatures and authenticated route sessions before running feed compilation. |
-| **`DELETE /api/projects/:id`** | Public network request with ID parameter. | Performs a hard database delete of the target ID record in Supabase. | Permanent deletion of project database records and referenced assets. | **Accidental/Malicious Loss**: Bypasses any confirmation or trash collection; open to arbitrary parameter manipulation. | Implement soft-delete flow (e.g. `archived_at` flags); enforce strict administrative credential checks. |
-| **Duda Body-End Script (`bodyend.html`)** | Static CDN or Duda footer inject. | Runtime fetch of the public JSON URL; client-side route routing; dynamic DOM generation of details/listing grids. | Updates the Duda site DOM with dynamic student showcase assets. | **DOM Manipulation / XSS**: Student-supplied text (HTML/JS) rendered dynamic on the showcase domain. | Sanitize all incoming JSON string cells prior to dynamic element creation; use secure text node builders. |
-| **`GET /api/published-feed-status`** | Public API call. | Fetches metadata about the last feed compile. | Details the current public hash and template counts. | **Information Disclosure**: Exposes internal build variables to unauthenticated agents. | Restrict endpoint behind administration authorization guards. |
+| **`GET /api/projects`** | Public network request. | Queries all project records from the Supabase `projects` database table. | Returns the full raw project JSON array. | **Data Exposure**: Internal metadata, admin flags, and staff notes are visible to client queries. | Return a restricted public view; implement session authentication to view raw admin fields. |
+| **`POST /api/import-folder`** | `multer` multipart upload (folder structure). | Decodes uploaded ZIPs/folders, parses XLSX metadata, registers media paths, and runs rules-first validation. | Writes assets to Supabase Storage; inserts intermediate project draft records. | **Resource Utilization**: Large file uploads buffer in memory; folder structures processed synchronously. | Enforce direct-to-storage pre-signed client uploads; process imports asynchronously in a queue. |
+| **`POST /api/publish-cloud-feed`** | API request with admin key header validation. | Compiles approved/published records, generates feed file, and pushes it to Supabase Storage. | Overwrites public `capstones-latest.json` on Supabase Storage; updates status to 'published'. | **Access Verification**: Bypassing admin access key configuration allows unauthenticated publishing triggers. | Require administrative signatures and robust session verification before running feed sync. |
+| **`DELETE /api/projects/:id`** | API request with ID parameter (Safe Delete). | Enforces safety checks to verify that the imported CMS review record is not public or approved, then deletes it. | Hard delete of targeted CMS project review records that match safety criteria. | **Validation Bypass**: Bypassing delete blocker checks could delete active draft metadata. | Implement soft-delete workflows (e.g. `archived_at` flags); enforce robust authentication checks. |
+| **`DELETE /api/projects/:id/permanent-delete`** | API request with ID parameter (Permanent Delete). | Verifies status is draft or archived, ensures it is not in the public feed, then deletes record. | Hard delete of archived or draft CMS project records. | **Accidental Loss**: Permanent delete lacks a temporary trash recovery flow. | Transition to logical deletion; implement admin-only restore capabilities. |
+| **Duda Body-End Script (`bodyend.html`)** | Static CDN or Duda footer injection. | Fetches the public JSON feed; parses URL query parameters; generates DOM elements dynamically. | Updates the Duda site DOM with student showcase layouts. | **Residual DOM Injection / Unsafe URL Risk**: Potential script execution or media link hijacking if feed values are malformed. | Sanitize incoming JSON fields before DOM creation; enforce strict feed-level validation before publish. |
 
 ---
 
 ## 3. Security Risk Map
 
-The table below catalogs specific security vulnerabilities detected in the Prototype v2 codebase, rating severity and detailing recommendations.
+The table below catalogs specific security considerations in the Prototype v2 codebase, rating severity and detailing recommendations.
 
 | Risk | Current Prototype Evidence | Severity | Why It Matters | Production Recommendation (Part 2) | Fix Before Staging? |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Service Role Key Usage** | `projectStore.js` uses `SUPABASE_SERVICE_ROLE_KEY` for all database query runs. | **High** | Bypasses all Row-Level Security (RLS) policies. Compromise of the server leads to total control over the database. | Restrict database connection clients to normal authenticated roles; enforce RLS policies. | **Yes** |
-| **Missing Authentication** | Express APIs have zero route authentication middleware or session headers. | **High** | Anyone on the web can create, update, delete, or publish projects. | Implement JWT cookie authorization using Supabase Auth. | **Yes** |
-| **Path Traversal Bypass** | `server.js` uses manual string check: `parts.some(p => p === '..' || p === '.')`. | **Medium** | Path parsing can be bypassed by double URL encoding or OS-specific paths (e.g. backslashes on Linux). | Standardize path sanitation using Node's native `path` module with strict character filters. | **Yes** |
-| **Unrestricted File Types** | Checks files using simple extension mappings in `server.js` matching `.jpg`, `.png`, etc. | **High** | Students can rename executable scripts (e.g. `.js`, `.html`) to bypass filters, creating XSS vectors. | Enforce file magic-number binary signature checks to identify true MIME types. | **Yes** |
-| **Unrestricted File Sizes** | Enforces a non-blocking warning rather than a strict hard limit during file parsing. | **Medium** | High-res image/video floods can exceed storage limits and consume free-tier bandwidth caps. | Reject files that exceed strict operational limits (e.g. posters > 5MB, snapshots > 2MB) at the router level. | **Yes** |
-| **Public/Private Asset Separation** | Raw student details and administrative draft flags are uploaded directly to public buckets. | **High** | Sensitive student contact details or draft data may become crawlable by search engines. | Isolate drafts and metadata strictly in private, RLS-backed buckets; public CDN hosts approved files only. | **Yes** |
-| **XSS / HTML Injection** | `bodyend.html` inserts text using dynamic string concatenations into innerHTML elements. | **High** | If a student uploads a title or description containing `<script>`, it executes on the Duda showcase domain. | Use safe client element selectors, static DOM placeholders, and `textContent` to populate student cells. | **Yes** |
-| **CORS Configuration** | Backend uses wildcards `cors({ origin: '*' })` on administrative routes. | **Medium** | Allows cross-origin scripts from malicious sites to trigger administrative commands. | Restrict CORS access exclusively to the verified administration panel domain. | **Yes** |
-| **Plain localPreview Wrapper** | Frontend preview loads un-sanitized layout presets inside raw div elements in the CMS. | **Medium** | Malicious CSS/HTML in student drafts can execute scripts inside the admin session, stealing keys. | Enforce preview sandboxing inside a secure `<iframe>` with strict `sandbox` permissions. | **Yes** |
-| **Hard database deletion** | Admin panel sends direct delete requests to Supabase table. | **Medium** | Accidental click results in permanent data loss with no way to recover without full backups. | Replace hard deletes with soft-deletes (`deleted_at` flags) and admin-only trash restore views. | **Yes** |
-| **Lack of Audit Logs** | State changes (e.g., Draft to Published) occur without logging administrative identities. | **Medium** | No accountability or history logs exist to track who approved or edited sensitive project data. | Implement an `audit_logs` table recording timestamps, user IDs, previous status, and new status. | **No** |
+| **Service Role Key Usage** | `projectStore.js` uses `SUPABASE_SERVICE_ROLE_KEY` for database queries. | **High** | Bypasses Row-Level Security (RLS). A compromise of the backend server yields full access to the database. | Restrict database connections to standard authenticated client roles; enforce strict RLS policies. | **Yes** |
+| **Authentication & Authorization** | Simple `adminAuth` middleware validates `ADMIN_ACCESS_KEY` via `x-admin-key`. | **Medium** | If the key is unconfigured in the environment, the server allows all requests for local development convenience. | Implement production-grade authenticated sessions, role-based access control, and server-side authorization. | **Yes** |
+| **Path Traversal Handling** | `server.js` normalizes paths and rejects absolute, drive-letter, `.` or `..` segments. | **Low** | Basic protection exists; however, hardening is required to prevent bypasses on edge-case path inputs. | Perform canonical path validation using standard system modules; enforce strict filename sanitation rules. | **Yes** |
+| **Upload File Type Validation** | Checks files using basic case-insensitive extension matching (e.g., `.png`, `.jpg`). | **Medium** | Relies on extensions; users could spoof file types to upload arbitrary HTML scripts disguised as images. | Implement binary signature (magic number) verification to detect the true file formats. | **Yes** |
+| **Upload File Size Limits** | `multer` limits total request size (100MB) with a separate warning threshold (50MB). | **Low** | Basic bounds exist; however, per-file limits are not granularly restricted by asset type. | Configure strict per-file and per-file-type size limits (e.g., posters < 5MB) tailored for free-tier storage. | **Yes** |
+| **Public/Private Separation** | Imported media assets are uploaded before final publication. | **Medium** | Public/private asset separation is not production-hardened, potentially exposing intermediate media. | Separate draft/private media from approved public media; ensure only approved public URLs enter the Duda feed. | **Yes** |
+| **XSS / HTML Injection** | Duda script escapes many text fields using `escapeHTML()`, but builds strings via `innerHTML`. | **Medium** | Residual DOM injection or unsafe URL risks remain for image sources, URL fields, and links. | Use safe client DOM construction where practical; enforce rigorous feed-level schema validation. | **Yes** |
+| **CORS Configuration** | Backend uses wildcards `cors({ origin: '*' })` on administrative routes. | **Medium** | Enables cross-origin scripts to access local endpoints if authorization keys are not active. | Restrict CORS access exclusively to the verified administration panel domain. | **Yes** |
+| **Plain localPreview Wrapper** | Frontend preview loads layout presets inside raw div elements in the CMS. | **Medium** | Student-supplied CSS styles can bleed into the admin console, altering the dashboard UI. | Sand-box the draft previews inside an `<iframe>` with strict `sandbox` permissions active. | **Yes** |
+| **Hard Database Deletion** | Safe and permanent delete endpoints perform SQL deletes. | **Medium** | Accidental administrative clicks lead to non-recoverable database losses without backup restoration. | Transition to a soft-delete status pattern (e.g., `deleted_at`) with trash bin recovery options. | **Yes** |
+| **Lack of Audit Logs** | Actions (e.g., publishing feed updates) lack persistent identity logs in the database. | **Medium** | Prevents staff from auditing who performed edits or approved submissions. | Implement a dedicated `audit_logs` table tracking the administrator ID, action, and timestamps. | **No** |
 
 ---
 
 ## 4. Maintainability Risk Map
 
-The table below catalogs technical debt and structural maintainability risks identified in the codebase.
+The table below catalogs technical debt and structural maintainability considerations identified in the codebase.
 
 | Area | Current Issue | Impact | Recommended Part 2 Action |
 | :--- | :--- | :--- | :--- |
-| **Monolithic React App** | `src/App.jsx` exceeds 4,000 lines, mixing layouts, data forms, state sync, and custom CSS sheets. | High developer cognitive load; easy to introduce regressions when editing minor components. | Refactor frontend into a modular directory structure (e.g. `/components`, `/hooks`, `/pages`). |
-| **Hashing Logic Duplication** | FNV-1a deterministic hashing logic is duplicated between `App.jsx` and `server.js`. | Code duplication leads to syncing bugs if one helper is adjusted while the other is neglected. | Extract hashing and slug sanitizers into a shared utility file loaded by both client and server layers. |
-| **Documentation Duplication** | Duplicate files (e.g., `duda-integration-plan.md`) exist in `/docs` and `/Prototype/docs`. | Creates confusion for developers on which document is current. | Explicitly lock `/Prototype/docs` as historical evidence only, declaring `/docs` as the single source of truth. |
-| **Flexible JSON Column** | Schema validation is performed dynamically at runtime inside Express rather than structured SQL cells. | Invalid schema variables can insert silently, leading to rendering failures in Duda. | Implement a strict backend JSON Schema Validator (e.g. `Ajv`) to validate inputs before database writes. |
-| **Monolithic server.js** | Single backend file handles routing, CSV/XLSX decoding, asset management, and Supabase integration. | Difficult to unit test; small route changes can destabilize core ingestion services. | Decouple backend routes into an MVC pattern: routers, controllers, validators, and core services. |
+| **Monolithic React App** | `src/App.jsx` exceeds 196 KB (4,000+ lines), mixing forms, layout templates, CSS, and states. | High developer cognitive load; complex to refactor or unit test. | Split the monolith into modular directories (e.g., `/components`, `/pages`, `/hooks`). |
+| **Hashing Logic Duplication** | FNV-1a deterministic hashing logic is duplicated between `App.jsx` and `server.js`. | Synchronization bugs if one hashing helper is modified while the other remains unchanged. | Extract hashing and slug sanitizers into a shared utility file accessible by both client and server. |
+| **Documentation Duplication** | Duplicate files (e.g., `duda-integration-plan.md`) exist in `/docs` and `/Prototype/docs`. | Developer confusion regarding the active project plan. | Lock `/Prototype/docs` as historical prototype evidence; declare root `/docs` as the single active source. |
+| **Flexible JSON Column** | Supabase table stores full project schema in a single JSONB database column. | Incomplete inputs can insert without strict constraint failures, breaking frontends later. | Enforce rigid backend JSON Schema Validation (e.g., using `Ajv`) before database write triggers. |
+| **Monolithic server.js** | Single backend file handles routing, CSV/XLSX decoding, asset management, and Supabase integration. | Difficult to maintain and write unit tests for. | Decouple backend routes into an MVC pattern: routers, controllers, validators, and core services. |
 
 ---
 
@@ -73,7 +73,7 @@ When the academic break concludes and the Part 2 phase officially launches in Ju
 2.  **Design Production Database Schema**:
     Introduce strict PostgreSQL table constraints on critical columns (e.g. ID patterns, status enums) to prevent database pollution.
 3.  **Establish Media Handling and Public/Private Asset Separation**:
-    Separate data storage paths: intermediate review drafts are written to private buckets, while fully approved showcase images are mirrored to public buckets.
+    Separate data storage paths: intermediate review drafts are written to private buckets, while fully approved showcase images are made available through approved public asset URLs.
 4.  **Enforce Strict Public Feed Schema**:
     Integrate an automated JSON Schema validation gate in the publishing transaction loop. If a feed fails the 19-field validation, halt the sync.
 5.  **Decouple and Modularize the Codebase**:
