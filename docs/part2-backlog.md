@@ -23,6 +23,9 @@ gantt
     Archive & Unpublish          :active, a9, after a8, 3d
 ```
 
+### [1.0] Planning & Design Alignment
+- [ ] **Confirm Schema & Feed Contract**: Enforce alignment sessions in early July to review and lock the production database schema and approved-only public feed contracts with coordinators, academic advisors, and developers prior to any code implementation.
+
 ### [1.1] Ingestion & Inbound Parsing
 - [ ] **Import Project Package**: Implement secure folder-import and ZIP-file upload handlers supporting single-project directories.
 - [ ] **Parse XLSX Metadata**: Build a robust parser for `project-details.xlsx` that extracts core project fields, team rosters, supervisors, disciplines, and citations.

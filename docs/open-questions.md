@@ -73,3 +73,11 @@ This document outlines key open questions that must be resolved during the initi
 ## 11. Handover and Maintenance
 *   **Long-Term Owner**: Once the RuntimeError team graduates, who inside the RMIT IT/academic department will own and maintain the Admin/CMS codebase?
 *   **Security Updates**: How will security patches, Node dependency upgrades, and Supabase security keys be managed post-handover?
+
+---
+
+## 12. Database Schema & Public Feed Contracts
+*   **PostgreSQL Relational Mapping**: Does the academic team approve shifting the unstructured `data` JSONB column model into structured relational tables (separating `MediaAsset`, `ValidationFlag`, and `ApprovalRecord` entities) during Part 2?
+*   **Student Preview Confirmation Status**: Should `StudentConfirmation` sign-offs be formalized in the SQL schema for Part 2, or kept as a conceptual student-review workflow to be verified in a future sprint?
+*   **JSON Public Feed Fields**: Are the 19 fields defined in the public feed contract fully comprehensive for the showcase layer, or are there additional student metadata fields required in July?
+*   **CDN Feed Caching**: Will the JSON feed and public assets be served directly from public Supabase Storage buckets, or is a CDN configuration required to handle dynamic bandwidth spikes during high-volume showcase events?
