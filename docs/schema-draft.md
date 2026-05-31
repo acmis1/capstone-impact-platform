@@ -78,6 +78,8 @@ erDiagram
 *   `import_batch_id`: `foreign_key` referencing `ImportBatch` (Nullable)
 *   `internal_staff_notes`: `text` (Private)
 *   `private_review_comments`: `text` (Private)
+*   `accessibility_text_public`: `text` (Reviewed public accessibility description)
+*   `poster_text_public`: `text` (Reviewed public poster text content)
 *   `created_at`: `timestamp`
 *   `updated_at`: `timestamp`
 
@@ -134,9 +136,11 @@ To ensure absolute privacy compliance, fields must be strictly categorized into 
 | `pending_removal_from_public` (status flags) | `group_name` (Team group) |
 | `admin_id` (record author identity) | `team_members` (Student names array) |
 | `archive_reason` | `academic_supervisor` |
-| `accessibilityText` (Raw text files) | `industry_partner` |
-| Raw path files (e.g. `imports/batch-1/raw-poster.png`) | `snapshots` (Public URLs only) |
-| System timestamps (`deleted_at`, etc.) | `layoutConfig` (Visual presets only) |
+| Raw OCR/extraction logs and private processing notes | `industry_partner` |
+| Raw/private extraction fields | `accessibilityText` (Reviewed public accessibility text) |
+| Raw path files (e.g. `imports/batch-1/raw-poster.png`) | `posterText` (Reviewed public poster text) |
+| System timestamps (`deleted_at`, etc.) | `snapshots` (Public URLs only) |
+| - | `layoutConfig` (Visual presets only) |
 
 ---
 
