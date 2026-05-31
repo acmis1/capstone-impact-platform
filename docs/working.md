@@ -38,6 +38,6 @@ This architecture consists of three distinct layers:
 ## 4. Break Work Scope
 During the current break, all tasks are restricted to safe, non-destructive, and planning-focused operations:
 *   **Planning & Architecture**: Documenting system boundaries, hard constraints, and schema expectations. All break work must be completely reversible and assume a free-tier hosting option to be verified later.
-*   **Code Auditing**: Detailed inspection of Prototype v2 codebase to discover security gaps, technical debt, and areas requiring a redesign for production.
+*   **Code Auditing**: Detailed inspection of Prototype v2 codebase to discover security gaps, technical debt, and areas requiring a redesign for production. A comprehensive, read-only [security-and-maintainability-map.md](file:///d:/IT%20RMIT/Capstone/docs/security-and-maintainability-map.md) has been created to guide Part 2 planning. This mapping is strictly for planning purposes, and no active code changes or deployment modifications have been made.
 *   **Safe Foundation Work**: Restructuring documentation, cleaning up duplicate notes, and organizing a highly structured Part 2 backlog.
 *   **No Active Changes**: No changes to live database configurations, environment variables, or deployed services will be made during this time. **No Duda-facing changes should be made during the break; current Duda prototype evidence must be preserved and reconfirmed in July.**
