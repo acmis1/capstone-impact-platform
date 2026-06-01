@@ -42,8 +42,12 @@ export class SupabaseProjectRepository implements ProjectRepository {
       internalStaffNotes: row.internal_staff_notes || undefined,
       privateReviewComments: row.private_review_comments || undefined,
       validationFlags: row.validation_flags_cache || undefined,
+      validationErrors: row.validation_errors || [],
+      validationWarnings: row.validation_warnings || [],
       pendingRemovalFromPublic: row.pending_removal_from_public || false,
+      publicRemovalCompletedAt: row.public_removal_completed_at || undefined,
       archivedAt: row.archived_at || undefined,
+      archivedFromStatus: row.archived_from_status || undefined,
       archiveReason: row.archive_reason || undefined,
       created_at: row.created_at || undefined,
       updated_at: row.updated_at || undefined
@@ -82,8 +86,12 @@ export class SupabaseProjectRepository implements ProjectRepository {
     if (proj.internalStaffNotes !== undefined) row.internal_staff_notes = proj.internalStaffNotes;
     if (proj.privateReviewComments !== undefined) row.private_review_comments = proj.privateReviewComments;
     if (proj.validationFlags !== undefined) row.validation_flags_cache = proj.validationFlags;
+    if (proj.validationErrors !== undefined) row.validation_errors = proj.validationErrors;
+    if (proj.validationWarnings !== undefined) row.validation_warnings = proj.validationWarnings;
     if (proj.pendingRemovalFromPublic !== undefined) row.pending_removal_from_public = proj.pendingRemovalFromPublic;
+    if (proj.publicRemovalCompletedAt !== undefined) row.public_removal_completed_at = proj.publicRemovalCompletedAt;
     if (proj.archivedAt !== undefined) row.archived_at = proj.archivedAt;
+    if (proj.archivedFromStatus !== undefined) row.archived_from_status = proj.archivedFromStatus;
     if (proj.archiveReason !== undefined) row.archive_reason = proj.archiveReason;
     return row;
   }

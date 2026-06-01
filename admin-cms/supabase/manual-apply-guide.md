@@ -2,15 +2,19 @@
 
 Follow these step-by-step instructions to set up the staging database schema on your newly created `capstone-impact-staging` Supabase project.
 
-## ⚠️ Pre-Flight Safety Checks
+## ⚠️ Pre-Flight Safety Checks & Critical Warnings
 
-* **Check Project Name:** Ensure you are logged into the Supabase Dashboard and have selected the `capstone-impact-staging` project.
-* **DO NOT run these scripts against the old demo project.**
-* **DO NOT connect Duda to this database yet.**
-* **Verify Buckets:** Confirm that the following storage buckets have been created in your staging project:
-  * `project-drafts-private` (Private bucket)
-  * `project-public-assets` (Public bucket)
-  * `public-feeds` (Public bucket)
+> [!WARNING]
+> **DO NOT USE OLD SCRIPT VERSION:** If you copied the database SQL before the June 1st schema correction (which lacked audit trail logs, extended import ingestion fields, and strict RLS definitions), **DO NOT apply it**. Delete any active queries and copy only this corrected version.
+
+> [!IMPORTANT]
+> * **Check Project Name:** Ensure you are logged into the Supabase Dashboard and have selected the `capstone-impact-staging` project.
+> * **DO NOT run these scripts against the old demo project.**
+> * **DO NOT connect Duda to this database yet.**
+> * **Verify Buckets:** Confirm that the following storage buckets have been created in your staging project:
+>   * `project-drafts-private` (Private bucket)
+>   * `project-public-assets` (Public bucket)
+>   * `public-feeds` (Public bucket)
 
 ---
 

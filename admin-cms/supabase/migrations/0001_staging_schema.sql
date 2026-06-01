@@ -1,7 +1,8 @@
 -- Staging database schema foundation for capstone-impact-staging Supabase project
--- 0001_staging_schema.sql
+-- 0001_staging_schema.sql (Corrected)
 
--- Enable UUID extension
+-- Enable pgcrypto for gen_random_uuid() and uuid-ossp
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Programs table
@@ -45,8 +46,14 @@ CREATE TABLE IF NOT EXISTS user_roles (
 -- Import Batches table
 CREATE TABLE IF NOT EXISTS import_batches (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    batch_name TEXT NOT NULL,
+    batch_name TEXT,
+    mode TEXT DEFAULT 'unknown' CONSTRAINT check_import_mode CHECK (mode IN ('single', 'batch', 'manual', 'unknown')),
+    source_folder TEXT,
+    imported_by UUID REFERENCES admin_users(id) ON DELETE SET NULL,
     status TEXT NOT NULL DEFAULT 'pending' CONSTRAINT check_batch_status CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    total_projects INTEGER DEFAULT 0,
+    warning_count INTEGER DEFAULT 0,
+    error_count INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -87,8 +94,12 @@ CREATE TABLE IF NOT EXISTS projects (
     private_review_comments TEXT,
     package_validation JSONB,
     validation_flags_cache JSONB,
+    validation_errors TEXT[] DEFAULT '{}'::TEXT[],
+    validation_warnings TEXT[] DEFAULT '{}'::TEXT[],
     pending_removal_from_public BOOLEAN DEFAULT false,
+    public_removal_completed_at TIMESTAMPTZ,
     archived_at TIMESTAMPTZ,
+    archived_from_status TEXT,
     archive_reason TEXT,
     deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT now(),
@@ -124,27 +135,30 @@ CREATE TABLE IF NOT EXISTS media_assets (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Validation Flags table
+-- Validation Flags table (Rule-level validation records)
 CREATE TABLE IF NOT EXISTS validation_flags (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    has_errors BOOLEAN DEFAULT false,
-    has_warnings BOOLEAN DEFAULT false,
-    missing_accessibility BOOLEAN DEFAULT false,
-    missing_snapshots BOOLEAN DEFAULT false,
-    has_video BOOLEAN DEFAULT false,
-    has_audio BOOLEAN DEFAULT false,
-    has_model_3d BOOLEAN DEFAULT false,
+    severity TEXT NOT NULL CONSTRAINT check_flag_severity CHECK (severity IN ('error', 'warning', 'info')),
+    rule_code TEXT NOT NULL,
+    message TEXT NOT NULL,
+    field_name TEXT,
+    resolved BOOLEAN DEFAULT false,
+    resolved_by UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+    resolved_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Approval Records table
+-- Approval/Audit Records table
 CREATE TABLE IF NOT EXISTS approval_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    approved_by UUID REFERENCES admin_users(id) ON DELETE SET NULL,
-    approved_at TIMESTAMPTZ DEFAULT now(),
-    notes TEXT
+    admin_id UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+    action_taken TEXT NOT NULL CONSTRAINT check_audit_action CHECK (action_taken IN ('request_changes', 'approve', 'publish', 'archive', 'unpublish', 'restore', 'soft_delete', 'update_metadata')),
+    from_status TEXT,
+    to_status TEXT,
+    comments TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Published Snapshots table

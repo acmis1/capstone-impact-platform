@@ -1,11 +1,12 @@
 -- Staging database RLS (Row-Level Security) policies
--- 0002_staging_rls_policies.sql
+-- 0002_staging_rls_policies.sql (Corrected)
 
 -- ⚠️ WARNING & SECURITY NOTICE:
 -- 1. These RLS policies are staging-only foundations. The final production RLS rules must be confirmed later.
 -- 2. Service role operations (e.g. backend operations using createSupabaseAdminClient()) completely bypass RLS.
--- 3. Browser clients must NOT access internal admin/CMS tables directly unless the policy is intentionally designed.
--- 4. The public showcase site (Duda) should be served exclusively from stable, approved public feed JSON files in public storage buckets, not direct table reads.
+-- 3. To maintain strict security and data control, all admin/CMS data access should go exclusively through server API routes using the service role until robust RBAC/claims policies are finalized.
+-- 4. Browser clients must NOT access internal admin/CMS tables directly. Consequently, direct authenticated access to projects, validation_flags, and approval_records is disabled by default.
+-- 5. The public showcase site (Duda) should be served exclusively from stable, approved public feed JSON files in public storage buckets, not direct table reads.
 
 -- Enable Row-Level Security on all tables
 ALTER TABLE programs ENABLE ROW LEVEL SECURITY;
@@ -25,7 +26,7 @@ ALTER TABLE published_snapshots ENABLE ROW LEVEL SECURITY;
 -- ==========================================
 -- 1. LOOKUP TABLES (programs, disciplines, industry_categories)
 -- ==========================================
--- Allow authenticated staging users to read lookup values if needed
+-- Allow authenticated staging users to read lookup values if needed for reference
 CREATE POLICY select_programs_authenticated ON programs
     FOR SELECT TO authenticated USING (true);
 
@@ -38,13 +39,11 @@ CREATE POLICY select_industry_categories_authenticated ON industry_categories
 -- ==========================================
 -- 2. RESTRICTIVE STAGING PLACEHOLDERS FOR ADMIN OPERATIONS
 -- ==========================================
--- Authenticated users (staff/reviewers) can view active projects
-CREATE POLICY select_projects_authenticated ON projects
-    FOR SELECT TO authenticated USING (deleted_at IS NULL);
+-- All operations on internal tables (projects, validation_flags, audit_records, media_assets, snapshots, roles)
+-- by standard authenticated browser clients are blocked by default. Standard operations bypass RLS entirely
+-- via the backend service_role key.
+-- Do not add broad "using (true)" policies on internal admin tables.
 
--- Restrictive insert/update/delete staging placeholders
--- Admins will perform most changes using service_role backend client, bypassing RLS.
--- These RLS placeholders are created to prevent anonymous or default authenticated overrides.
 CREATE POLICY admin_all_programs ON programs
     FOR ALL TO authenticated USING (false) WITH CHECK (false);
 
@@ -88,4 +87,3 @@ CREATE POLICY admin_all_published_snapshots ON published_snapshots
 -- 3. NO ANONYMOUS ACCESS BY DEFAULT
 -- ==========================================
 -- No anonymous public table reads or writes. This guarantees database security from direct browser manipulation.
--- (Explicitly documented here for audit and security mapping purposes).
