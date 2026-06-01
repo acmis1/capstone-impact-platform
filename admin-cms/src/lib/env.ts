@@ -45,12 +45,14 @@ export interface PublicEnv {
   NEXT_PUBLIC_SUPABASE_ANON_KEY: string;
   supabaseUrl: string;
   supabasePublicKey: string;
+  publicKeyType: "publishable" | "legacy_anon_jwt" | "missing" | "unknown";
 }
 
 export interface ServerEnv extends PublicEnv {
   SUPABASE_SECRET_KEY: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   supabaseSecretKey: string;
+  serverKeyType: "secret" | "legacy_service_role_jwt" | "missing" | "unknown";
   SUPABASE_DRAFT_BUCKET: string;
   SUPABASE_PUBLIC_ASSETS_BUCKET: string;
   SUPABASE_PUBLIC_FEEDS_BUCKET: string;
@@ -58,6 +60,19 @@ export interface ServerEnv extends PublicEnv {
 }
 
 export type GeminiEnv = z.infer<typeof geminiEnvSchema>;
+
+/**
+ * Classifies an API key safely without exposing its content.
+ */
+export function classifyKey(key: string | undefined, isServerKey: boolean): "publishable" | "secret" | "legacy_anon_jwt" | "legacy_service_role_jwt" | "missing" | "unknown" {
+  if (!key) return "missing";
+  if (key.startsWith("sb_publishable_")) return "publishable";
+  if (key.startsWith("sb_secret_")) return "secret";
+  if (key.startsWith("eyJhbGci")) {
+    return isServerKey ? "legacy_service_role_jwt" : "legacy_anon_jwt";
+  }
+  return "unknown";
+}
 
 /**
  * Validates and retrieves browser-safe environment variables.
@@ -81,14 +96,16 @@ export function getPublicEnv(): PublicEnv {
   }
 
   const data = parsed.data;
-  const publicKey = data.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || data.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const rawPublicKey = data.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || data.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const keyType = classifyKey(rawPublicKey, false) as PublicEnv["publicKeyType"];
 
   return {
     NEXT_PUBLIC_SUPABASE_URL: data.NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publicKey,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: publicKey,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: rawPublicKey,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: rawPublicKey,
     supabaseUrl: data.NEXT_PUBLIC_SUPABASE_URL,
-    supabasePublicKey: publicKey,
+    supabasePublicKey: rawPublicKey,
+    publicKeyType: keyType,
   };
 }
 
@@ -120,13 +137,15 @@ export function getServerEnv(): ServerEnv {
   }
 
   const data = parsed.data;
-  const secretKey = data.SUPABASE_SECRET_KEY || data.SUPABASE_SERVICE_ROLE_KEY || '';
+  const rawSecretKey = data.SUPABASE_SECRET_KEY || data.SUPABASE_SERVICE_ROLE_KEY || '';
+  const keyType = classifyKey(rawSecretKey, true) as ServerEnv["serverKeyType"];
 
   return {
     ...publicKeys,
-    SUPABASE_SECRET_KEY: secretKey,
-    SUPABASE_SERVICE_ROLE_KEY: secretKey,
-    supabaseSecretKey: secretKey,
+    SUPABASE_SECRET_KEY: rawSecretKey,
+    SUPABASE_SERVICE_ROLE_KEY: rawSecretKey,
+    supabaseSecretKey: rawSecretKey,
+    serverKeyType: keyType,
     SUPABASE_DRAFT_BUCKET: data.SUPABASE_DRAFT_BUCKET,
     SUPABASE_PUBLIC_ASSETS_BUCKET: data.SUPABASE_PUBLIC_ASSETS_BUCKET,
     SUPABASE_PUBLIC_FEEDS_BUCKET: data.SUPABASE_PUBLIC_FEEDS_BUCKET,

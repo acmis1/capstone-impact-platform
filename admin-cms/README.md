@@ -25,12 +25,18 @@ cp .env.example .env.local
 Open `.env.local` and populate the keys for your isolated Supabase staging project:
 *   `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL (e.g. `https://xyz.supabase.co`)
 *   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: Client-safe publishable key (`sb_publishable_...`).
-*   `SUPABASE_SECRET_KEY`: Server-only administrative key (`sb_secret_...`). **NEVER expose to browser code.** Bypasses RLS entirely for administrative operations.
-*   **Legacy Fallbacks (Optional):** If you are using legacy Supabase configurations, you can optionally provide `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`.
-*   `GEMINI_API_KEY`: Google Gemini API key (Optional; keep `GEMINI_ASSISTIVE_EXTRACTION_ENABLED=false` to skip).
+*   `SUPABASE_SECRET_KEY`: Server-only administrative key (`sb_secret_...`). **NEVER expose to browser code.**
+*   **Legacy Fallbacks (Optional):** If you are using legacy Supabase configurations, you can optionally provide `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` (JWT-based token).
 
 > [!WARNING]
 > **NEVER COMMIT `.env.local` to git or expose private keys to standard frontend client-side scripts.**
+
+> [!IMPORTANT]
+> **🔑 Staging Troubleshooting & RLS Bypassing:**
+> * The **latest secret key (`sb_secret_...`)** is preferred.
+> * If your current Supabase JS / PostgREST gateway configuration throws a `permission denied` (42501/403) error under local staging runs using `sb_secret_...`, this indicates PostgREST is unable to extract the `service_role` claim from the new non-JWT token header format in your local setup.
+> * In this case, **use the legacy `SUPABASE_SERVICE_ROLE_KEY` (which is a standard JWT token beginning with `eyJhbGc...`) temporarily** in `.env.local` for this staging repository until the latest-key client gateway configurations are fully verified by Supabase developers in July.
+
 
 
 ---

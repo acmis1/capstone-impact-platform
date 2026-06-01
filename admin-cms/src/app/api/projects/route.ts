@@ -17,8 +17,25 @@ export async function GET() {
       data: projects
     });
   } catch (error: any) {
-    // ⚠️ CRITICAL: DO NOT expose database secrets or detailed connection URIs in the client response
+    // Log the actual error internally for developer auditing
     console.error('[Staging Projects API Error]:', error.message || error);
+    
+    // Check if the error is related to permission denied / RLS
+    const isPermissionError = error.message && (
+      error.message.includes('permission denied') || 
+      error.message.includes('42501')
+    );
+
+    if (isPermissionError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Database permission denied',
+          message: 'The staging database is reachable, but the server key is not being treated as elevated access. Check whether SUPABASE_SECRET_KEY is supported by the current client path or use SUPABASE_SERVICE_ROLE_KEY as temporary staging fallback.'
+        },
+        { status: 403 }
+      );
+    }
     
     return NextResponse.json(
       {
