@@ -274,6 +274,38 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             <div style={{ color: '#9CA3AF', fontSize: '0.85rem', marginTop: '0.25rem' }}>
               <strong>Academic Supervisor:</strong> {project.academicSupervisor || 'N/A'}
             </div>
+            {project.importBatchId && (
+              <div style={{
+                marginTop: '1rem',
+                backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                border: '1px solid rgba(59, 130, 246, 0.1)',
+                borderRadius: '8px',
+                padding: '0.75rem 1rem',
+                fontSize: '0.85rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div>
+                  <strong style={{ color: '#60A5FA', display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', marginBottom: '0.15rem' }}>📦 Ingestion Import Source</strong>
+                  <span style={{ color: '#D1D5DB' }}>Imported via folder <code>{project.sourceFolder}</code></span>
+                </div>
+                <div>
+                  <Link href={`/admin/imports/${project.importBatchId}`} style={{
+                    color: '#3B82F6',
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    padding: '0.3rem 0.6rem',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(59, 130, 246, 0.2)'
+                  }}>
+                    View Import Batch →
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         </ProjectDetailSection>
 

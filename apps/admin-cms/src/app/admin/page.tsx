@@ -52,7 +52,20 @@ export default async function AdminPage() {
             <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800 }}>Admin/CMS Staging Console</h1>
             <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: '#9CA3AF' }}>Operational Workspace — Security & Feed Validation Staged</p>
           </div>
-          <div>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <Link href="/admin/imports" style={{
+              color: '#10B981',
+              textDecoration: 'none',
+              fontSize: '0.95rem',
+              fontWeight: 600,
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              padding: '0.5rem 1rem',
+              borderRadius: '6px',
+              border: '1px solid rgba(16, 185, 129, 0.2)',
+              transition: 'background-color 0.2s',
+            }}>
+              View Import Batches
+            </Link>
             <Link href="/" style={{
               color: '#3B82F6',
               textDecoration: 'none',

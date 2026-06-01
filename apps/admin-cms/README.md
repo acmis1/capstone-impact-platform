@@ -237,6 +237,28 @@ A decoupled offline package ingestion pipeline is integrated to parse local pack
 1. **Import Package**: `npm run import:admin-package`
 2. **Check Import Batches**: `npm run check:admin-imports`
 
+---
+
+## 🔍 Staging Import Review UI
+
+A comprehensive read-only administrative interface is integrated to track and audit import runs:
+
+### ⚙️ How It Works:
+1. **Dashboard Link**: In the header of the primary `/admin` console, a new **"View Import Batches"** action navigates directly to the imports home path: `/admin/imports`.
+2. **Imports List (`/admin/imports`)**:
+   * Lists recent local package ingestion runs (completed/failed status badges, modes, directories, warnings, and errors).
+   * Summarizes run aggregates (total batches shown, warning/error indexes) to assist database operators in analyzing package formats.
+3. **Import Batch Detail (`/admin/imports/{batchId}`)**:
+   * Displays single batch metadata (status, folders, ingestion dates).
+   * Details corresponding imported project links (`/admin/projects/{publicId}`) and status values.
+   * Renders the complete, rules-first lists of **Validation Flags** (severity levels, affected manifest fields, and rule descriptions).
+   * Summarizes all **Staged Private Media Files** uploaded during ingestion (bucket names, storage paths, file names, and draft states).
+4. **Safety Isolation**:
+   * Staged files remain strictly private draft media assets; no public promotion occurs.
+   * Public compile feed index counts remain unchanged.
+   * live showcase presentation paths (Duda integration layers) remain completely isolated.
+
+
 
 
 
