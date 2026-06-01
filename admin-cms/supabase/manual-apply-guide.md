@@ -16,6 +16,12 @@ Follow these step-by-step instructions to set up the staging database schema on 
 >   * `project-public-assets` (Public bucket)
 >   * `public-feeds` (Public bucket)
 
+> [!NOTE]
+> **Staging Environment Expectations & Idempotency:**
+> * These migration scripts are designed primarily for a **clean staging project**.
+> * We have added re-run safety clauses (`DROP TRIGGER IF EXISTS` and `DROP POLICY IF EXISTS`) to allow re-running these scripts.
+> * However, if a partial migration fails midway due to a schema conflict or manual database change, the safest option during this break/staging phase is to **reset the staging database** via the Supabase Dashboard, or execute the manual SQL table teardown script provided at the bottom of this guide.
+
 ---
 
 ## Step-by-Step Setup
@@ -23,14 +29,14 @@ Follow these step-by-step instructions to set up the staging database schema on 
 ### 1. Execute Staging Schema
 1. In the Supabase Dashboard, navigate to the **SQL Editor** from the left navigation panel.
 2. Click **New query** (or "+ New Query").
-3. Open the file [0001_staging_schema.sql](file:///d:/IT%20RMIT/Capstone/admin-cms/supabase/migrations/0001_staging_schema.sql) in your editor and copy its entire contents.
+3. Open the file **`migrations/0001_staging_schema.sql`** in your editor and copy its entire contents.
 4. Paste the SQL query into the Supabase SQL Editor workspace.
 5. Click the **Run** button (or press `Ctrl + Enter` / `Cmd + Enter`).
 6. Ensure the query completes successfully with a `Success` message.
 
 ### 2. Execute RLS Policies
 1. Click **New query** to open a clean editor workspace.
-2. Open the file [0002_staging_rls_policies.sql](file:///d:/IT%20RMIT/Capstone/admin-cms/supabase/migrations/0002_staging_rls_policies.sql) in your editor and copy its entire contents.
+2. Open the file **`migrations/0002_staging_rls_policies.sql`** in your editor and copy its entire contents.
 3. Paste the SQL query into the Supabase SQL Editor.
 4. Click **Run**.
 5. Ensure the query completes successfully.

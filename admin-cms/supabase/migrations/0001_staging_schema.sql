@@ -1,5 +1,5 @@
 -- Staging database schema foundation for capstone-impact-staging Supabase project
--- 0001_staging_schema.sql (Corrected)
+-- 0001_staging_schema.sql (Idempotent)
 
 -- Enable pgcrypto for gen_random_uuid() and uuid-ossp
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -193,6 +193,9 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Re-run safety for trigger creation
+DROP TRIGGER IF EXISTS update_projects_updated_at ON projects;
 
 CREATE TRIGGER update_projects_updated_at
 BEFORE UPDATE ON projects
