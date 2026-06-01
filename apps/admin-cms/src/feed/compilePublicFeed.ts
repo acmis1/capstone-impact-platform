@@ -37,6 +37,7 @@ export function compilePublicFeed(projects: Project[]): PublicFeedRecord[] {
       // Ensure optional fields are handled correctly without introducing empty values or schema issues
       return {
         id: publicRecord.id,
+        publicId: publicRecord.publicId || '',
         title: publicRecord.title || '',
         summary: publicRecord.summary || '',
         background: publicRecord.background || '',

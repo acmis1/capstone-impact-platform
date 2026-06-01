@@ -6,6 +6,7 @@ import { ExternalLink, LayoutConfig } from './project';
  */
 export interface PublicFeedRecord {
   id: number;
+  publicId: string;
   title: string;
   summary: string;
   background: string;

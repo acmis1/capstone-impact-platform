@@ -1,6 +1,5 @@
-import 'server-only';
 import { createHash } from 'crypto';
-import { createSupabaseAdminClient } from '../lib/supabase/admin';
+import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { getServerEnv } from '../lib/env';
 
 /**
@@ -16,7 +15,7 @@ export async function uploadPublicFeedToStorage(params: {
   feedHash: string;
 }> {
   const env = getServerEnv();
-  const supabase = createSupabaseAdminClient();
+  const supabase = createSupabaseAdminClientCore();
 
   const bucket = env.SUPABASE_PUBLIC_FEEDS_BUCKET;
   const fileName = params.feedFileName || env.SUPABASE_PUBLIC_FEED_FILE;

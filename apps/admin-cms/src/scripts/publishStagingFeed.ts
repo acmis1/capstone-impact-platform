@@ -5,13 +5,13 @@ import { SupabaseProjectRepository } from '../repositories/SupabaseProjectReposi
 import { compilePublicFeed } from '../feed/compilePublicFeed';
 import { validatePublicFeed } from '../feed/validatePublicFeed';
 import { uploadPublicFeedToStorage } from '../storage/publicFeedStorage';
-import { createSupabaseAdminClient } from '../lib/supabase/admin';
+import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { getServerEnv } from '../lib/env';
 
 async function publish() {
   const env = getServerEnv();
   const repository = new SupabaseProjectRepository();
-  const supabase = createSupabaseAdminClient();
+  const supabase = createSupabaseAdminClientCore();
 
   console.log('Fetching projects from staging database...');
   let projects;

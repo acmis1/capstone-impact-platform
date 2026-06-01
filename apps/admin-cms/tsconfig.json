@@ -19,8 +19,7 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"],
-      "server-only": ["./src/lib/server-only-mock.ts"]
+      "@/*": ["./src/*"]
     }
   },
   "include": [

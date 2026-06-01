@@ -27,6 +27,7 @@ export interface Project {
   // 1. PUBLIC-SAFE FIELDS (Visible in showcase feed)
   // ==========================================
   id: number; // Deterministic ID generated based on year and slug
+  publicId?: string; // Original public ID (e.g. "2026-slug")
   title: string;
   summary: string;
   background: string;

@@ -1,16 +1,21 @@
-import 'server-only';
-import { createSupabaseAdminClient } from '../lib/supabase/admin';
+import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { Project } from '../domain/project';
 import { ProjectRepository } from './ProjectRepository';
 
 export class SupabaseProjectRepository implements ProjectRepository {
   private getClient() {
-    return createSupabaseAdminClient();
+    return createSupabaseAdminClientCore();
   }
 
   private mapDbToDomain(row: any): Project {
+    const joinedDisciplines = row.project_disciplines?.map((pd: any) => pd.disciplines?.name).filter(Boolean) || [];
+    const finalDisciplines = joinedDisciplines.length > 0 
+      ? joinedDisciplines 
+      : (row.discipline ? [row.discipline] : []);
+
     return {
-      id: parseInt(row.public_id, 10) || this.hashStringToNumber(row.public_id),
+      id: this.hashStringToNumber(row.public_id),
+      publicId: row.public_id,
       title: row.title || '',
       summary: row.summary || '',
       background: row.background || '',
@@ -19,7 +24,7 @@ export class SupabaseProjectRepository implements ProjectRepository {
       program: row.program_name || '',
       studyProgram: row.study_program || '',
       discipline: row.discipline || '',
-      disciplines: row.project_disciplines?.map((pd: any) => pd.disciplines?.name).filter(Boolean) || [],
+      disciplines: finalDisciplines,
       industry: row.industry || '',
       industryPartner: row.industry_partner || '',
       academicSupervisor: row.academic_supervisor || '',
@@ -56,6 +61,7 @@ export class SupabaseProjectRepository implements ProjectRepository {
 
   private mapDomainToDb(proj: Partial<Project>): any {
     const row: any = {};
+    if (proj.publicId !== undefined) row.public_id = proj.publicId;
     if (proj.title !== undefined) row.title = proj.title;
     if (proj.summary !== undefined) row.summary = proj.summary;
     if (proj.background !== undefined) row.background = proj.background;
@@ -102,7 +108,8 @@ export class SupabaseProjectRepository implements ProjectRepository {
     for (let i = 0; i < str.length; i++) {
       hash = str.charCodeAt(i) + ((hash << 5) - hash);
     }
-    return Math.abs(hash);
+    // Limit to safe 32-bit positive integer range
+    return Math.abs(hash) % 2147483647;
   }
 
   async listProjects(): Promise<Project[]> {

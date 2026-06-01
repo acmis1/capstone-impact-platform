@@ -21,7 +21,7 @@ export function validatePublicFeed(feed: any[]): FeedValidationResult {
 
   const validTemplates = ['poster_showcase', 'technical_detail', 'media_rich'];
   const allowedKeys = new Set([
-    'id', 'title', 'summary', 'background', 'solution', 'year',
+    'id', 'publicId', 'title', 'summary', 'background', 'solution', 'year',
     'program', 'studyProgram', 'discipline', 'disciplines', 'industry',
     'industryPartner', 'academicSupervisor', 'groupName', 'teamMembers',
     'poster', 'posterPdf', 'posterText', 'accessibilityText', 'snapshots',
@@ -56,7 +56,7 @@ export function validatePublicFeed(feed: any[]): FeedValidationResult {
 
     // 3. Enforce Required Public Fields
     const requiredFields: (keyof PublicFeedRecord)[] = [
-      'id', 'title', 'summary', 'year', 'program', 'studyProgram',
+      'id', 'publicId', 'title', 'summary', 'year', 'program', 'studyProgram',
       'discipline', 'groupName', 'teamMembers', 'poster', 'posterPdf',
       'layoutConfig'
     ];

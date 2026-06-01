@@ -1,7 +1,7 @@
 import { loadEnvConfig } from '@next/env';
 loadEnvConfig(process.cwd());
 
-import { createSupabaseAdminClient } from '../lib/supabase/admin';
+import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 
 const fakeProjects = [
   {
@@ -20,8 +20,8 @@ const fakeProjects = [
     academic_supervisor: 'Dr. Staging Supervisor',
     group_name: 'Team Staging Alpha',
     team_members: ['Student Alice', 'Student Bob'],
-    poster_url: 'https://jtwpsprlcxpzotppsoqq.supabase.co/storage/v1/object/public/project-public-assets/poster_approved.jpg',
-    poster_pdf_url: 'https://jtwpsprlcxpzotppsoqq.supabase.co/storage/v1/object/public/project-public-assets/poster_approved.pdf',
+    poster_url: 'https://example.com/staging-assets/poster-approved.jpg',
+    poster_pdf_url: 'https://example.com/staging-assets/poster-approved.pdf',
     poster_text_public: 'This is the indexed poster text content for search matching.',
     accessibility_text_public: 'A green poster detailing the software engineering project architecture diagram.',
     snapshots: ['https://placehold.co/600x400/png', 'https://placehold.co/600x400/png'],
@@ -53,8 +53,8 @@ const fakeProjects = [
     academic_supervisor: 'Dr. Staging Advisor',
     group_name: 'Team Staging Beta',
     team_members: ['Student Charlie', 'Student Diane'],
-    poster_url: 'https://jtwpsprlcxpzotppsoqq.supabase.co/storage/v1/object/public/project-public-assets/poster_published.jpg',
-    poster_pdf_url: 'https://jtwpsprlcxpzotppsoqq.supabase.co/storage/v1/object/public/project-public-assets/poster_published.pdf',
+    poster_url: 'https://example.com/staging-assets/poster-published.jpg',
+    poster_pdf_url: 'https://example.com/staging-assets/poster-published.pdf',
     poster_text_public: 'This is the indexed poster text content for published showcase matching.',
     accessibility_text_public: 'A blue poster detailing the cloud machine learning model parameters.',
     snapshots: ['https://placehold.co/600x400/png'],
@@ -86,8 +86,8 @@ const fakeProjects = [
     academic_supervisor: 'Dr. Staging IT Reviewer',
     group_name: 'Team Staging Gamma',
     team_members: ['Student Evan', 'Student Fiona'],
-    poster_url: 'https://jtwpsprlcxpzotppsoqq.supabase.co/storage/v1/object/public/project-public-assets/poster_review.jpg',
-    poster_pdf_url: 'https://jtwpsprlcxpzotppsoqq.supabase.co/storage/v1/object/public/project-public-assets/poster_review.pdf',
+    poster_url: 'https://example.com/staging-assets/poster-review.jpg',
+    poster_pdf_url: 'https://example.com/staging-assets/poster-review.pdf',
     poster_text_public: 'This is the review poster text.',
     accessibility_text_public: 'An orange poster detailing cybersecurity threat vectors.',
     snapshots: [],
@@ -119,8 +119,8 @@ const fakeProjects = [
     academic_supervisor: 'Dr. Staging Archivist',
     group_name: 'Team Staging Delta',
     team_members: ['Student George', 'Student Hannah'],
-    poster_url: 'https://jtwpsprlcxpzotppsoqq.supabase.co/storage/v1/object/public/project-public-assets/poster_archived.jpg',
-    poster_pdf_url: 'https://jtwpsprlcxpzotppsoqq.supabase.co/storage/v1/object/public/project-public-assets/poster_archived.pdf',
+    poster_url: 'https://example.com/staging-assets/poster-archived.jpg',
+    poster_pdf_url: 'https://example.com/staging-assets/poster-archived.pdf',
     poster_text_public: 'Archived poster text.',
     accessibility_text_public: 'A grey poster detailing robotics hardware schematics.',
     snapshots: [],
@@ -141,7 +141,7 @@ const fakeProjects = [
 ];
 
 async function seed() {
-  const supabase = createSupabaseAdminClient();
+  const supabase = createSupabaseAdminClientCore();
   const idsToDelete = fakeProjects.map((p) => p.public_id);
 
   console.log('Seeding staging database with fake projects...');
