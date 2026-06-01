@@ -37,4 +37,14 @@ export interface ProjectRepository {
    * @param id The internal database UUID or public ID
    */
   softDeleteProject(id: string): Promise<void>;
+
+  /**
+   * Safe staging review action transition mapping project workflows and audit tracking.
+   */
+  performReviewAction(params: {
+    publicId: string;
+    action: 'request_changes' | 'approve' | 'archive';
+    comments?: string;
+    adminId?: string | null;
+  }): Promise<Project>;
 }

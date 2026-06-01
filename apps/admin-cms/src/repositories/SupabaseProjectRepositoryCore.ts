@@ -197,4 +197,86 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       throw new Error(`Failed to soft-delete project: ${error.message}`);
     }
   }
+
+  async performReviewAction(params: {
+    publicId: string;
+    action: 'request_changes' | 'approve' | 'archive';
+    comments?: string;
+    adminId?: string | null;
+  }): Promise<Project> {
+    const { publicId, action, comments, adminId } = params;
+
+    // 1. Fetch current project state
+    const { data: dbProject, error: fetchError } = await this.supabase
+      .from('projects')
+      .select('*')
+      .eq('public_id', publicId)
+      .maybeSingle();
+
+    if (fetchError || !dbProject) {
+      throw new Error(`Failed to find target staging project [${publicId}] for review: ${fetchError?.message || 'Not Found'}`);
+    }
+
+    // 2. Validate transition
+    // Dynamic import to prevent dependency cycles if any
+    const { applyReviewActionTransition } = require('../workflow/projectWorkflow');
+    const transition = applyReviewActionTransition(dbProject.status, action);
+
+    if (!transition.allowed || !transition.toStatus) {
+      throw new Error(`Staging transition invalid: ${transition.error || 'Disallowed status change'}`);
+    }
+
+    const fromStatus = dbProject.status;
+    const toStatus = transition.toStatus;
+
+    // 3. Compose status updates
+    const updates: any = {
+      status: toStatus
+    };
+
+    if (action === 'archive') {
+      updates.archived_at = new Date().toISOString();
+      updates.archived_from_status = fromStatus;
+      updates.archive_reason = comments || 'Archived under standard review workflow';
+      updates.pending_removal_from_public = true;
+    } else if (action === 'approve') {
+      // Clear archival info if approved again
+      updates.archived_at = null;
+      updates.archived_from_status = null;
+      updates.archive_reason = null;
+    }
+
+    // 4. Perform database update
+    const { data: updatedProjectRow, error: updateError } = await this.supabase
+      .from('projects')
+      .update(updates)
+      .eq('id', dbProject.id)
+      .select('*, project_disciplines(disciplines(name))')
+      .single();
+
+    if (updateError || !updatedProjectRow) {
+      throw new Error(`Failed to update project status in staging: ${updateError?.message || 'Returned row is null'}`);
+    }
+
+    // 5. Insert audit log inside approval_records
+    const auditRow = {
+      project_id: dbProject.id,
+      admin_id: adminId || null,
+      action_taken: action,
+      from_status: fromStatus,
+      to_status: toStatus,
+      comments: comments || null
+    };
+
+    const { error: auditError } = await this.supabase
+      .from('approval_records')
+      .insert(auditRow);
+
+    if (auditError) {
+      // Log the warning, but do not fail the request completely since database status was successfully updated
+      console.warn(`[Staging Audit Logging Warning]: Failed to insert audit row: ${auditError.message}`);
+    }
+
+    return this.mapDbToDomain(updatedProjectRow);
+  }
 }

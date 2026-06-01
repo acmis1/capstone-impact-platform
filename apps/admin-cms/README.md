@@ -177,4 +177,20 @@ A detailed, read-only administrative inspection panel is available to review ing
 * **Diagnostics & Compliance**: Calculates error/warning arrays in real-time, validating missing public descriptors, required assets, and checking template structures against official schemas.
 * **No Database State Alteration**: Review activities operate entirely in read-only mode, guaranteeing zero write operations occur during review audits.
 
+---
+
+## ⚡ Controlled Staging Review Actions
+
+Staging dashboard inspection routes fully integrate controlled administrative action triggers. These permit school staff to request changes, approve, or archive ingested capstone showcases:
+
+### ⚙️ How It Works:
+1. **Status Transition Logic**: Actions validate state transitions locally:
+   * `APPROVE`: Moves `submitted`, `in_review`, or `changes_requested` to `approved`.
+   * `REQUEST_CHANGES`: Moves `submitted`, `in_review`, or `approved` back to `changes_requested` for corrections.
+   * `ARCHIVE`: Transitions `approved`, `published`, `in_review`, or `changes_requested` projects to `archived`, configuring archival timestamps and setting `pending_removal_from_public = true` to clean public feed indexes.
+2. **Dynamic Button Rendering**: The review trigger component renders buttons on-the-fly, displaying transitions matching standard rules.
+3. **Database Audit Logging**: Triggering a transition performs an atomic status update inside the `projects` table and appends a detailed change record to `approval_records` mapping from/to states and audit comments.
+4. **Staging Security**: These endpoints operate under mock safety rules. Authentication is simulated, Duda remains isolated, and public feeds are not rebuilt automatically.
+
+
 

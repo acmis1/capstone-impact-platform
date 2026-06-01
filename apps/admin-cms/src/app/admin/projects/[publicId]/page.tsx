@@ -5,6 +5,9 @@ import { ProjectStatusBadge } from '../../../../components/admin/ProjectStatusBa
 import { ProjectDetailSection } from '../../../../components/admin/ProjectDetailSection';
 import { ProjectMediaSummary } from '../../../../components/admin/ProjectMediaSummary';
 import { ProjectValidationSummary } from '../../../../components/admin/ProjectValidationSummary';
+import { StagingReviewActions } from '../../../../components/admin/StagingReviewActions';
+import { getAllowedReviewActions } from '../../../../workflow/projectWorkflow';
+import { createSupabaseAdminClientCore } from '../../../../lib/supabase/adminCore';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -19,10 +22,35 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   const { publicId } = await params;
   let project = null;
   let loadError = null;
+  let auditRecords: any[] = [];
 
   try {
     const repository = new SupabaseProjectRepository();
     project = await repository.getProjectByPublicId(publicId);
+
+    if (project) {
+      // Fetch recent approval_records for this project
+      const supabase = createSupabaseAdminClientCore();
+      
+      // Resolve UUID for project
+      const { data: dbProj } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('public_id', publicId)
+        .maybeSingle();
+
+      if (dbProj) {
+        const { data: records, error: recordsError } = await supabase
+          .from('approval_records')
+          .select('*')
+          .eq('project_id', dbProj.id)
+          .order('created_at', { ascending: false });
+
+        if (!recordsError && records) {
+          auditRecords = records;
+        }
+      }
+    }
   } catch (error: any) {
     console.error(`[Staging Project Detail Failure]:`, error.message || error);
     loadError = error.message || 'Unknown staging error';
@@ -124,6 +152,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   }
 
   const isEligible = project.status === 'approved' || project.status === 'published';
+  const allowedActions = getAllowedReviewActions(project.status as any);
 
   return (
     <div style={{
@@ -183,6 +212,15 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             This detail review operates purely on <strong>Staging Data</strong>. No active coordinator or student personal folders are parsed. Live public feed showcase mirrors (Duda presentation layers) remain disconnected. Editing, publishing, and archiving actions are locked during this summer semester development.
           </p>
         </div>
+
+        {/* Dynamic Action Trigger Panel */}
+        <ProjectDetailSection title="⚡ Staging Review Actions" borderColor="#EC4899">
+          <StagingReviewActions
+            publicId={project.publicId || ''}
+            currentStatus={project.status}
+            allowedActions={allowedActions}
+          />
+        </ProjectDetailSection>
 
         {/* B. Project Overview */}
         <ProjectDetailSection title="Project Overview" borderColor="#3B82F6">
@@ -401,6 +439,57 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                 <div><strong>System Updated At:</strong> {project.updated_at || 'N/A'}</div>
               </div>
             </div>
+          </ProjectDetailSection>
+        </div>
+
+        {/* Audit Log / Change History */}
+        <div style={{ marginTop: '1.5rem' }}>
+          <ProjectDetailSection title="📜 Staging Change & Audit Logs" borderColor="#6B7280">
+            {auditRecords.length === 0 ? (
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#9CA3AF', fontStyle: 'italic' }}>
+                No review action logs recorded for this staging project.
+              </p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: '#9CA3AF' }}>
+                      <th style={{ padding: '0.5rem', fontWeight: '600' }}>Timestamp</th>
+                      <th style={{ padding: '0.5rem', fontWeight: '600' }}>Action Taken</th>
+                      <th style={{ padding: '0.5rem', fontWeight: '600' }}>Transition</th>
+                      <th style={{ padding: '0.5rem', fontWeight: '600' }}>Comments/Audit Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditRecords.map((rec) => (
+                      <tr key={rec.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', color: '#D1D5DB' }}>
+                        <td style={{ padding: '0.5rem', fontSize: '0.8rem', color: '#9CA3AF' }}>
+                          {new Date(rec.created_at).toLocaleString()}
+                        </td>
+                        <td style={{ padding: '0.5rem', fontWeight: 'bold' }}>
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '0.15rem 0.4rem',
+                            borderRadius: '4px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            fontSize: '0.75rem',
+                            textTransform: 'uppercase'
+                          }}>
+                            {rec.action_taken.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.5rem' }}>
+                          <code>{rec.from_status}</code> → <code>{rec.to_status}</code>
+                        </td>
+                        <td style={{ padding: '0.5rem', color: '#F59E0B' }}>
+                          {rec.comments || 'N/A'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </ProjectDetailSection>
         </div>
 
