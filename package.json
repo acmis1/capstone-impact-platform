@@ -12,6 +12,8 @@
     "check:feed": "npm run check:sample-feed --workspace=apps/admin-cms",
     "seed:admin-staging": "npm run seed:staging --workspace=apps/admin-cms",
     "check:admin-staging": "npm run check:staging-projects --workspace=apps/admin-cms",
+    "seed:admin-media": "npm run seed:staging-media --workspace=apps/admin-cms",
+    "check:admin-media": "npm run check:staging-media --workspace=apps/admin-cms",
     "publish:admin-feed": "npm run publish:staging-feed --workspace=apps/admin-cms"
   },
   "devDependencies": {

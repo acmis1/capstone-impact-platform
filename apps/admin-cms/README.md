@@ -128,3 +128,38 @@ You can run the identical commands from the repository root:
 1. **Seed Projects:** `npm run seed:admin-staging`
 2. **Check Statuses:** `npm run check:admin-staging`
 3. **Publish Feed:** `npm run publish:admin-feed`
+
+---
+
+## 🖼️ Staging Media Asset Workflow
+
+A secure administrative staging media pipeline is fully integrated to validate, ingest, and promote project showcases:
+
+### ⚙️ How It Works:
+1. **Validation Gates:** Media files are validated locally using strict size caps (images max 5MB, PDFs max 20MB) and allowed MIME structures (PNG, JPEG, WEBP, PDF). Path traversals are explicitly blocked.
+2. **Private Ingestion:** Unapproved draft assets are written to the private `project-drafts-private` storage bucket. These files are restricted and do not generate public showcase URLs.
+3. **Showcase Promotion:** Upon official workflow approval, the backend automatically promotions the media assets from the private bucket to the public `project-public-assets` bucket.
+4. **Public Feed URLs:** Public feeds read only the officially approved and promoted showcase media URLs from the public bucket.
+5. **Video & Duda Constraints:** Videos are stored purely as external showcase metadata links (no heavy video binaries uploaded to staging). Duda remains disconnected during July/August semester breaks to ensure zero production disruptions.
+
+### 🏃 Running Media Workflows:
+
+#### Option A: Running from the App Workspace Directory
+1. **Seed Staging Projects:** `npm run seed:staging`
+2. **Seed Staging Media Assets:** Generates mock images/PDF buffers, uploads drafts, promotes them to public, and links URLs back to database:
+   ```bash
+   npm run seed:staging-media
+   ```
+3. **Verify Staging Media Database State:** Summarizes media uploads, types, and active bucket targets:
+   ```bash
+   npm run check:staging-media
+   ```
+4. **Publish Updated Showcase Feed:** Compiles and publishes the JSON payload with verified media URLs:
+   ```bash
+   npm run publish:staging-feed
+   ```
+
+#### Option B: Running from the Repository Root (Workspaces)
+1. **Seed Media:** `npm run seed:admin-media`
+2. **Verify Media:** `npm run check:admin-media`
+
