@@ -8,8 +8,8 @@ let clientInstance: SupabaseClient | null = null;
  * Creates and retrieves a browser-safe Supabase Client.
  * 
  * Rules:
- * - Only utilizes client-safe public keys validated at runtime.
- * - Under no circumstances does this connection load the SUPABASE_SERVICE_ROLE_KEY.
+ * - Only utilizes client-safe public keys validated at runtime (sb_publishable_... or legacy anon).
+ * - Under no circumstances does this connection load the SUPABASE_SECRET_KEY.
  * - Throws a clear runtime configuration error if client variables are unconfigured.
  */
 export function createSupabaseBrowserClient(): SupabaseClient {
@@ -20,8 +20,8 @@ export function createSupabaseBrowserClient(): SupabaseClient {
   const publicEnv = getPublicEnv();
 
   clientInstance = createClient(
-    publicEnv.NEXT_PUBLIC_SUPABASE_URL,
-    publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    publicEnv.supabaseUrl,
+    publicEnv.supabasePublicKey
   );
 
   return clientInstance;

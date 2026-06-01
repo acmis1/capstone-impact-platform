@@ -24,9 +24,14 @@ cp .env.example .env.local
 
 Open `.env.local` and populate the keys for your isolated Supabase staging project:
 *   `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL (e.g. `https://xyz.supabase.co`)
-*   `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Client-safe anonymous key.
-*   `SUPABASE_SERVICE_ROLE_KEY`: Server-only administrative key (bypasses RLS). **Never expose to client-side scripts.**
+*   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: Client-safe publishable key (`sb_publishable_...`).
+*   `SUPABASE_SECRET_KEY`: Server-only administrative key (`sb_secret_...`). **NEVER expose to browser code.** Bypasses RLS entirely for administrative operations.
+*   **Legacy Fallbacks (Optional):** If you are using legacy Supabase configurations, you can optionally provide `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`.
 *   `GEMINI_API_KEY`: Google Gemini API key (Optional; keep `GEMINI_ASSISTIVE_EXTRACTION_ENABLED=false` to skip).
+
+> [!WARNING]
+> **NEVER COMMIT `.env.local` to git or expose private keys to standard frontend client-side scripts.**
+
 
 ---
 
