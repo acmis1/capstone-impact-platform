@@ -57,8 +57,10 @@ npm run build
 ## 📂 Codebase Architecture
 
 The staging foundation is structured as follows:
-*   `src/app/` — App Router landing pages and administrative status dashboards.
+*   `supabase/` — Database migrations (`0001_staging_schema.sql`, `0002_staging_rls_policies.sql`) and manual apply guidelines.
+*   `src/app/` — App Router landing pages, status dashboards, and API endpoints (`/api/health`, `/api/projects`).
 *   `src/domain/` — Relational domain models mapping Projects, MediaAssets, and WorkflowStates cleanly to eradicate unstructured JSON blobs.
+*   `src/repositories/` — Decoupled repository patterns (`ProjectRepository`, `SupabaseProjectRepository`) for DB operations.
 *   `src/lib/env.ts` — Runtime environment validation powered by `zod`.
 *   `src/lib/supabase/` — Safe client and secure administrative server-side connection wrappers.
 *   `src/lib/gemini/` — Assistive metadata extraction adapter (disabled by default).
@@ -67,3 +69,17 @@ The staging foundation is structured as follows:
 *   `src/storage/` — Documented operational storage guidelines and access policies.
 *   `src/fixtures/` — Fictional mock dataset records representing diverse publication states.
 *   `src/scripts/` — Offline validation script executing compilation checks on startup.
+
+---
+
+## 💾 Database Schema & APIs
+
+The staging database schema is now scaffolded and ready for manual application:
+
+1. **Schema Migration:** Apply `supabase/migrations/0001_staging_schema.sql` and `0002_staging_rls_policies.sql` to your **capstone-impact-staging** project using the Supabase SQL Editor.
+2. **Setup Instructions:** Refer to [supabase/manual-apply-guide.md](file:///d:/IT%20RMIT/Capstone/admin-cms/supabase/manual-apply-guide.md) for full step-by-step instructions.
+3. **No Real Data:** Never populate this database with real stakeholder or student personal data.
+4. **API Endpoints:**
+   * **`GET /api/health`:** Basic health check. Runs completely offline without any database connection.
+   * **`GET /api/projects`:** Retrieves project records from the staging database. Requires `.env.local` to be configured and migrations applied. Includes strict error catching to prevent exposing database keys.
+
