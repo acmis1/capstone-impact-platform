@@ -1,15 +1,30 @@
-import { createClient } from '@supabase/supabase-js';
-import { env } from '../env';
+import 'server-only';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getServerEnv } from '../env';
+
+// Cache server admin instance
+let adminInstance: SupabaseClient | null = null;
 
 /**
- * ⚠️ WARNING: SERVER-SIDE ONLY CLIENT
+ * ⚠️ WARNING: SECURE SERVER-ONLY SUPABASE ADMIN FACTORY
  * 
- * - NEVER expose this client or the SUPABASE_SERVICE_ROLE_KEY to the browser.
- * - This client bypasses Row-Level Security (RLS) policies completely.
- * - Enforce RLS rules at the staging and database configurations; service role key bypasses RLS for operational convenience.
- * - This connection is designed for administrative backend jobs, sync tasks, and staging-only purposes.
+ * - This module is explicitly designated server-only via 'server-only' imports.
+ * - NEVER import or execute this module inside client-side components.
+ * - Under no circumstances should the SUPABASE_SERVICE_ROLE_KEY be exposed to browsers.
+ * - Bypasses database Row-Level Security (RLS) entirely for administrative operations.
+ * - Staging only for now.
  */
-export const supabaseAdmin = createClient(
-  env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder-url.supabase.co',
-  env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-role-key'
-);
+export function createSupabaseAdminClient(): SupabaseClient {
+  if (adminInstance) {
+    return adminInstance;
+  }
+
+  const serverEnv = getServerEnv();
+
+  adminInstance = createClient(
+    serverEnv.NEXT_PUBLIC_SUPABASE_URL,
+    serverEnv.SUPABASE_SERVICE_ROLE_KEY
+  );
+
+  return adminInstance;
+}

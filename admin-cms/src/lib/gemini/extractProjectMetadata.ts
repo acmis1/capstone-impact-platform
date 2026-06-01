@@ -1,5 +1,5 @@
 import { getGeminiClient } from './geminiClient';
-import { env } from '../env';
+import { getOptionalGeminiEnv } from '../env';
 
 export interface AssistiveExtractionResult {
   enabled: boolean;
@@ -25,8 +25,10 @@ export async function extractProjectMetadata(
   posterPdfBuffer: Buffer | null,
   fileName: string
 ): Promise<AssistiveExtractionResult> {
+  const geminiEnv = getOptionalGeminiEnv();
+  
   const result: AssistiveExtractionResult = {
-    enabled: env.GEMINI_ASSISTIVE_EXTRACTION_ENABLED,
+    enabled: geminiEnv.GEMINI_ASSISTIVE_EXTRACTION_ENABLED,
     suggestions: {},
     warnings: [],
   };
