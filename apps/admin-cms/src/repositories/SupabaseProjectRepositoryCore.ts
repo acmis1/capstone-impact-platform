@@ -268,13 +268,14 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       comments: comments || null
     };
 
+    // TODO: Production should replace this two-step update with a Postgres RPC function or transaction-backed server operation.
+    // Workflow action and audit insert must be atomic before real use to guarantee absolute database consistency.
     const { error: auditError } = await this.supabase
       .from('approval_records')
       .insert(auditRow);
 
     if (auditError) {
-      // Log the warning, but do not fail the request completely since database status was successfully updated
-      console.warn(`[Staging Audit Logging Warning]: Failed to insert audit row: ${auditError.message}`);
+      throw new Error(`Project status update completed but audit logging failed; staging data may require manual reset. Details: ${auditError.message}`);
     }
 
     return this.mapDbToDomain(updatedProjectRow);

@@ -189,7 +189,10 @@ Staging dashboard inspection routes fully integrate controlled administrative ac
    * `REQUEST_CHANGES`: Moves `submitted`, `in_review`, or `approved` back to `changes_requested` for corrections.
    * `ARCHIVE`: Transitions `approved`, `published`, `in_review`, or `changes_requested` projects to `archived`, configuring archival timestamps and setting `pending_removal_from_public = true` to clean public feed indexes.
 2. **Dynamic Button Rendering**: The review trigger component renders buttons on-the-fly, displaying transitions matching standard rules.
-3. **Database Audit Logging**: Triggering a transition performs an atomic status update inside the `projects` table and appends a detailed change record to `approval_records` mapping from/to states and audit comments.
+3. **Database Audit Logging & Integrity**:
+   * The current implementation **explicitly blocks success** (returning status 500 / "Audit logging failed") if the audit logging insert to `approval_records` fails, preventing false success reports.
+   * **⚠️ Production Requirements**: Before real administrative use, this two-step operation should be replaced by a database-side Postgres RPC function or a transaction-backed server operation to make both the status change and the audit insert completely atomic.
+   * **No Real Administrative Use**: No real administrative use or data management should take place until proper authentication, authorization, and atomic audit logging are fully implemented and verified.
 4. **Staging Security**: These endpoints operate under mock safety rules. Authentication is simulated, Duda remains isolated, and public feeds are not rebuilt automatically.
 
 

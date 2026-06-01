@@ -45,6 +45,19 @@ export async function POST(
   } catch (error: any) {
     console.error('[Staging Workflow Action API Error]:', error.message || error);
 
+    const isAuditFailure = error.message && error.message.includes('audit logging failed');
+
+    if (isAuditFailure) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Audit logging failed',
+          message: 'Project status update completed but audit logging failed; staging data may require manual reset. Please run "npm run seed:staging" to reset your database baseline.'
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(
       {
         success: false,
