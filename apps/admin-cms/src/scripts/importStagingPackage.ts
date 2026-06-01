@@ -99,9 +99,27 @@ async function run() {
     .eq('public_id', manifest.publicId)
     .maybeSingle();
 
+  // Robust Idempotency Cleanup: Clean database media rows and storage objects before re-upload
+  const { cleanupStagingMediaForProjects } = require('../storage/mediaCleanup');
+  console.log(`Cleaning existing staging media for [${manifest.publicId}] to prevent duplicates...`);
+  const cleanup = await cleanupStagingMediaForProjects([manifest.publicId]);
+  console.log(`🧹 Database media rows deleted:       ${cleanup.removedMediaRows}`);
+  console.log(`🧹 Storage private objects removed:    ${cleanup.removedPrivateObjects}`);
+  console.log(`🧹 Storage public objects removed:     ${cleanup.removedPublicObjects}`);
+
   let projectId: string;
   if (existingProject) {
     console.log(`Updating existing project [${manifest.publicId}]...`);
+    
+    // Clean existing validation flags for this project to prevent accumulation of stale warnings/errors
+    const { error: deleteFlagsError } = await supabase
+      .from('validation_flags')
+      .delete()
+      .eq('project_id', existingProject.id);
+    if (deleteFlagsError) {
+      console.warn(`⚠️ Warning: Failed to clear old validation flags: ${deleteFlagsError.message}`);
+    }
+
     const { data: updatedProj, error: updateError } = await supabase
       .from('projects')
       .update(dbRow)

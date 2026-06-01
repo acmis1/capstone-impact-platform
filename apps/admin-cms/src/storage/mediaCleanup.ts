@@ -12,7 +12,7 @@ export interface CleanupResult {
  * Robustly deletes storage objects and related database media asset records
  * for a list of project public IDs to ensure staging idempotency.
  */
-export async function cleanupFakeStagingMediaForProjects(projectPublicIds: string[]): Promise<CleanupResult> {
+export async function cleanupStagingMediaForProjects(projectPublicIds: string[]): Promise<CleanupResult> {
   const result: CleanupResult = {
     removedPrivateObjects: 0,
     removedPublicObjects: 0,

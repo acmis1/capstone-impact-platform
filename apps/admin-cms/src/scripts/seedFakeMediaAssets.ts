@@ -3,7 +3,7 @@ loadEnvConfig(process.cwd());
 
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { uploadDraftMediaAsset, promoteDraftMediaAssetToPublic } from '../storage/mediaStorage';
-import { cleanupFakeStagingMediaForProjects } from '../storage/mediaCleanup';
+import { cleanupStagingMediaForProjects } from '../storage/mediaCleanup';
 
 async function seedMedia() {
   const supabase = createSupabaseAdminClientCore();
@@ -34,7 +34,7 @@ async function seedMedia() {
   const targetProjectIds = [approvedProject.public_id, publishedProject.public_id];
 
   console.log(`\n--- Cleaning existing fake media files and database rows (Idempotency) ---`);
-  const cleanupResult = await cleanupFakeStagingMediaForProjects(targetProjectIds);
+  const cleanupResult = await cleanupStagingMediaForProjects(targetProjectIds);
   console.log(`🧹 Database media rows deleted:       ${cleanupResult.removedMediaRows}`);
   console.log(`🧹 Storage private objects removed:    ${cleanupResult.removedPrivateObjects}`);
   console.log(`🧹 Storage public objects removed:     ${cleanupResult.removedPublicObjects}`);
