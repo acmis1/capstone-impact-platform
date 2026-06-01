@@ -1,0 +1,14 @@
+{
+  "name": "capstone-impact-platform",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:admin": "npm run dev --workspace=apps/admin-cms",
+    "build:admin": "npm run build --workspace=apps/admin-cms",
+    "typecheck:admin": "npm run typecheck --workspace=apps/admin-cms",
+    "check:feed": "npm run check:sample-feed --workspace=apps/admin-cms"
+  }
+}
