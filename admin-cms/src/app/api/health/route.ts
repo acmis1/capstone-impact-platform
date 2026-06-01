@@ -4,13 +4,15 @@ import { getServerEnv } from '../../../lib/env';
 export async function GET() {
   let supabaseUrlConfigured = false;
   let publicKeyType: any = 'missing';
-  let serverKeyType: any = 'missing';
+  let databaseAdminKeyType: any = 'missing';
+  let databaseAdminKeyMode: any = 'missing';
 
   try {
     const env = getServerEnv();
     supabaseUrlConfigured = !!env.supabaseUrl;
     publicKeyType = env.publicKeyType;
-    serverKeyType = env.serverKeyType;
+    databaseAdminKeyType = env.databaseAdminKeyType;
+    databaseAdminKeyMode = env.databaseAdminKeyMode;
   } catch (e: any) {
     // If loading server env fails, swallow to ensure health check itself stays online
     console.warn('[Staging Health Diagnostic Warning]:', e.message);
@@ -24,7 +26,8 @@ export async function GET() {
     stagingOnly: true,
     supabaseUrlConfigured,
     publicKeyType,
-    serverKeyType,
+    databaseAdminKeyType,
+    databaseAdminKeyMode,
     timestamp: new Date().toISOString()
   });
 }

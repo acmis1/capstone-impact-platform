@@ -25,7 +25,7 @@ const serverEnvSchema = z.object({
   (data) => data.SUPABASE_SECRET_KEY || data.SUPABASE_SERVICE_ROLE_KEY,
   {
     message: 'Either SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY must be provided',
-    path: ['SUPABASE_SECRET_KEY'],
+    path: ['SUPABASE_SERVICE_ROLE_KEY'],
   }
 );
 
@@ -51,8 +51,9 @@ export interface PublicEnv {
 export interface ServerEnv extends PublicEnv {
   SUPABASE_SECRET_KEY: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
-  supabaseSecretKey: string;
-  serverKeyType: "secret" | "legacy_service_role_jwt" | "missing" | "unknown";
+  supabaseDatabaseAdminKey: string;
+  databaseAdminKeyType: "secret" | "legacy_service_role_jwt" | "missing" | "unknown";
+  databaseAdminKeyMode: "legacy_service_role_jwt_preferred" | "secret_key_fallback" | "missing";
   SUPABASE_DRAFT_BUCKET: string;
   SUPABASE_PUBLIC_ASSETS_BUCKET: string;
   SUPABASE_PUBLIC_FEEDS_BUCKET: string;
@@ -111,7 +112,8 @@ export function getPublicEnv(): PublicEnv {
 
 /**
  * Validates and retrieves server-only variables (including client keys).
- * Prioritizes the latest secret key name and falls back to the legacy service role key.
+ * For DB admin operations, prefers legacy SUPABASE_SERVICE_ROLE_KEY JWT for reliable PostgREST bypass,
+ * falling back to SUPABASE_SECRET_KEY.
  * Never prints secret values inside error arrays.
  */
 export function getServerEnv(): ServerEnv {
@@ -137,15 +139,24 @@ export function getServerEnv(): ServerEnv {
   }
 
   const data = parsed.data;
-  const rawSecretKey = data.SUPABASE_SECRET_KEY || data.SUPABASE_SERVICE_ROLE_KEY || '';
-  const keyType = classifyKey(rawSecretKey, true) as ServerEnv["serverKeyType"];
+
+  // 🔑 DB ADMIN SELECTION: Prefer legacy service_role JWT key for database admin access
+  const rawDatabaseAdminKey = data.SUPABASE_SERVICE_ROLE_KEY || data.SUPABASE_SECRET_KEY || '';
+  const keyType = classifyKey(rawDatabaseAdminKey, true) as ServerEnv["databaseAdminKeyType"];
+  
+  const keyMode = data.SUPABASE_SERVICE_ROLE_KEY
+    ? ("legacy_service_role_jwt_preferred" as const)
+    : data.SUPABASE_SECRET_KEY
+    ? ("secret_key_fallback" as const)
+    : ("missing" as const);
 
   return {
     ...publicKeys,
-    SUPABASE_SECRET_KEY: rawSecretKey,
-    SUPABASE_SERVICE_ROLE_KEY: rawSecretKey,
-    supabaseSecretKey: rawSecretKey,
-    serverKeyType: keyType,
+    SUPABASE_SECRET_KEY: data.SUPABASE_SECRET_KEY || '',
+    SUPABASE_SERVICE_ROLE_KEY: data.SUPABASE_SERVICE_ROLE_KEY || '',
+    supabaseDatabaseAdminKey: rawDatabaseAdminKey,
+    databaseAdminKeyType: keyType,
+    databaseAdminKeyMode: keyMode,
     SUPABASE_DRAFT_BUCKET: data.SUPABASE_DRAFT_BUCKET,
     SUPABASE_PUBLIC_ASSETS_BUCKET: data.SUPABASE_PUBLIC_ASSETS_BUCKET,
     SUPABASE_PUBLIC_FEEDS_BUCKET: data.SUPABASE_PUBLIC_FEEDS_BUCKET,

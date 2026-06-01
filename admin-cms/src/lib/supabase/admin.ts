@@ -10,10 +10,9 @@ let adminInstance: SupabaseClient | null = null;
  * 
  * - This module is explicitly designated server-only via 'server-only' imports.
  * - NEVER import or execute this module inside client-side components.
- * - The SUPABASE_SECRET_KEY (or sb_secret_... key) is server-side only. It must never be used in browser code.
- * - It provides elevated backend access and bypasses RLS through the service role.
- * - Legacy service_role JWT keys may be used only as optional staging fallback.
- * - Under no circumstances should the secret key be exposed to browsers.
+ * - Under no circumstances should the admin key be exposed to browsers.
+ * - For database admin operations (PostgREST requests), this prefers the legacy JWT-based
+ *   SUPABASE_SERVICE_ROLE_KEY to bypass RLS, falling back to SUPABASE_SECRET_KEY.
  */
 export function createSupabaseAdminClient(): SupabaseClient {
   if (adminInstance) {
@@ -24,7 +23,7 @@ export function createSupabaseAdminClient(): SupabaseClient {
 
   adminInstance = createClient(
     serverEnv.supabaseUrl,
-    serverEnv.supabaseSecretKey
+    serverEnv.supabaseDatabaseAdminKey
   );
 
   return adminInstance;

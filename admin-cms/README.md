@@ -24,18 +24,18 @@ cp .env.example .env.local
 
 Open `.env.local` and populate the keys for your isolated Supabase staging project:
 *   `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL (e.g. `https://xyz.supabase.co`)
-*   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: Client-safe publishable key (`sb_publishable_...`).
-*   `SUPABASE_SECRET_KEY`: Server-only administrative key (`sb_secret_...`). **NEVER expose to browser code.**
-*   **Legacy Fallbacks (Optional):** If you are using legacy Supabase configurations, you can optionally provide `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` (JWT-based token).
+*   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: Client-safe publishable key (`sb_publishable_...`). Preferred public key.
+*   `SUPABASE_SERVICE_ROLE_KEY`: Server-only administrative key (JWT format, beginning with `eyJhbGc...`). **Preferred staging database admin key** to reliably bypass RLS on PostgREST request paths.
+*   `SUPABASE_SECRET_KEY`: Server-only administrative key (`sb_secret_...`). Supported server-only fallback key. **NEVER expose to browser code.**
 
 > [!WARNING]
 > **NEVER COMMIT `.env.local` to git or expose private keys to standard frontend client-side scripts.**
 
 > [!IMPORTANT]
-> **🔑 Staging Troubleshooting & RLS Bypassing:**
-> * The **latest secret key (`sb_secret_...`)** is preferred.
-> * If your current Supabase JS / PostgREST gateway configuration throws a `permission denied` (42501/403) error under local staging runs using `sb_secret_...`, this indicates PostgREST is unable to extract the `service_role` claim from the new non-JWT token header format in your local setup.
-> * In this case, **use the legacy `SUPABASE_SERVICE_ROLE_KEY` (which is a standard JWT token beginning with `eyJhbGc...`) temporarily** in `.env.local` for this staging repository until the latest-key client gateway configurations are fully verified by Supabase developers in July.
+> **🔑 Staging Database Admin Operations & Key Preference:**
+> * Staging database admin operations **prefer `SUPABASE_SERVICE_ROLE_KEY` first** because standard Supabase JS/PostgREST database requests require the JWT `service_role` signature to bypass Row-Level Security (RLS).
+> * The latest `SUPABASE_SECRET_KEY` (`sb_secret_...`) format is fully supported as a fallback, but in this PostgREST path it may trigger `permission denied` (42501/403) errors if RLS bypass claims cannot be parsed from non-JWT Bearer authentication headers.
+
 
 
 
