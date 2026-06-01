@@ -9,6 +9,12 @@
     "dev:admin": "npm run dev --workspace=apps/admin-cms",
     "build:admin": "npm run build --workspace=apps/admin-cms",
     "typecheck:admin": "npm run typecheck --workspace=apps/admin-cms",
-    "check:feed": "npm run check:sample-feed --workspace=apps/admin-cms"
+    "check:feed": "npm run check:sample-feed --workspace=apps/admin-cms",
+    "seed:admin-staging": "npm run seed:staging --workspace=apps/admin-cms",
+    "check:admin-staging": "npm run check:staging-projects --workspace=apps/admin-cms",
+    "publish:admin-feed": "npm run publish:staging-feed --workspace=apps/admin-cms"
+  },
+  "devDependencies": {
+    "server-only": "^0.0.1"
   }
 }

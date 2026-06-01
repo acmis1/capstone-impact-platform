@@ -8,6 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "check:sample-feed": "tsx src/scripts/checkSampleFeed.ts",
+    "seed:staging": "tsx src/scripts/seedStagingProjects.ts",
+    "check:staging-projects": "tsx src/scripts/checkStagingProjects.ts",
+    "publish:staging-feed": "tsx src/scripts/publishStagingFeed.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

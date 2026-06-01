@@ -90,3 +90,41 @@ The staging database schema is now scaffolded and ready for manual application:
 4. **API Endpoints:**
    * **`GET /api/health`:** Basic health check. Runs completely offline without any database connection.
    * **`GET /api/projects`:** Retrieves project records from the staging database. Requires `.env.local` to be configured and migrations applied. Includes strict error catching to prevent exposing database keys.
+
+---
+
+## 🚀 Staging Seed & Public Feed Publishing
+
+Staging scripts are provided to populate the database with fake cases, audit the workflow records, and publish them to the Supabase storage feed bucket.
+
+### ⚠️ Security & Staging Guidelines
+* **Fake Data Only:** These scripts operate exclusively on synthetic staging parameters. Real RMIT stakeholder personal records or student email indexes are strictly prohibited.
+* **Credentials Required:** These scripts require `apps/admin-cms/.env.local` to be correctly populated with staging URL and database admin JWT credentials.
+* **Duda Showcase Layer Safety:** The public showcase site is **not** connected to this staging feed to guarantee zero disruption to stakeholders during testing.
+
+### 🏃 Command Execution Sequence
+
+#### Option A: Running from the App Workspace Directory
+First navigate into the app workspace:
+```bash
+cd apps/admin-cms
+```
+Then execute the scripts in the following order:
+1. **Seed Fake Staging Projects:** Populates the `projects` table with 4 fake cases (`approved`, `published`, `in_review`, `archived`) and sets up showcase layouts:
+   ```bash
+   npm run seed:staging
+   ```
+2. **Check Database Project Statuses:** Queries the database and reports statuses and public showcase eligibility totals:
+   ```bash
+   npm run check:staging-projects
+   ```
+3. **Publish Showcase Feed:** Compiles approved/published mock records, runs schema validators, uploads the JSON payload to the `public-feeds` bucket, and logs a database snapshot:
+   ```bash
+   npm run publish:staging-feed
+   ```
+
+#### Option B: Running from the Repository Root (Workspaces)
+You can run the identical commands from the repository root:
+1. **Seed Projects:** `npm run seed:admin-staging`
+2. **Check Statuses:** `npm run check:admin-staging`
+3. **Publish Feed:** `npm run publish:admin-feed`
