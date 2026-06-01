@@ -89,7 +89,11 @@ export function ProjectTable({ projects }: ProjectTableProps) {
               >
                 {/* 1. Project Details */}
                 <td style={{ padding: '1.25rem 1.5rem' }}>
-                  <div style={{ fontWeight: '700', color: '#FFFFFF', marginBottom: '0.25rem' }}>{p.title}</div>
+                  <div style={{ fontWeight: '700', color: '#FFFFFF', marginBottom: '0.25rem' }}>
+                    <a href={`/admin/projects/${p.publicId}`} style={{ color: '#3B82F6', textDecoration: 'none' }}>
+                      {p.title}
+                    </a>
+                  </div>
                   <div style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>
                     <code style={{ backgroundColor: '#1E293B', padding: '0.15rem 0.35rem', borderRadius: '4px', color: '#F59E0B' }}>{p.publicId}</code>
                   </div>

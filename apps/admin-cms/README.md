@@ -163,3 +163,18 @@ A secure administrative staging media pipeline is fully integrated to validate, 
 1. **Seed Media:** `npm run seed:admin-media`
 2. **Verify Media:** `npm run check:admin-media`
 
+---
+
+## 🔍 Staging Read-Only Project Detail & Review
+
+A detailed, read-only administrative inspection panel is available to review ingested capstone projects, their public media URLs, layout configurations, and staging compliance matrices:
+
+### ⚙️ Features:
+* **Interactive List Navigation**: Clicking a project title in the `/admin` dashboard routes directly to the detailed inspect path: `/admin/projects/{publicId}`.
+* **Metadata Profile Audit**: Summarizes staging study programs, industry sponsors, academic supervisors, group rosters, and public showcasing states.
+* **Storage Media Checks**: Reviews active poster images, PDFs, snapshots, and video links (verifying whether URLs are promoted and healthy).
+* **Grid Layout Configurations**: Prints CSS showcase grid template IDs, featured media focal alignments, and active section structures.
+* **Diagnostics & Compliance**: Calculates error/warning arrays in real-time, validating missing public descriptors, required assets, and checking template structures against official schemas.
+* **No Database State Alteration**: Review activities operate entirely in read-only mode, guaranteeing zero write operations occur during review audits.
+
+
