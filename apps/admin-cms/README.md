@@ -71,6 +71,7 @@ The staging foundation is structured as follows:
 *   `src/repositories/` — Decoupled repository patterns (`ProjectRepository`, `SupabaseProjectRepository`) for DB operations.
 *   `src/lib/env.ts` — Runtime environment validation powered by `zod`.
 *   `src/lib/supabase/` — Safe client and secure administrative server-side connection wrappers.
+*   `src/import/` — Local metadata package ingestion types, folder parsers, and custom safety rules.
 *   `src/lib/gemini/` — Assistive metadata extraction adapter (disabled by default).
 *   `src/feed/` — Approved-only public JSON feed compilers and schema contract validators.
 *   `src/validation/` — Rules-first metadata review and approval validation engines.
@@ -194,6 +195,48 @@ Staging dashboard inspection routes fully integrate controlled administrative ac
    * **⚠️ Production Requirements**: Before real administrative use, this two-step operation should be replaced by a database-side Postgres RPC function or a transaction-backed server operation to make both the status change and the audit insert completely atomic.
    * **No Real Administrative Use**: No real administrative use or data management should take place until proper authentication, authorization, and atomic audit logging are fully implemented and verified.
 4. **Staging Security**: These endpoints operate under mock safety rules. Authentication is simulated, Duda remains isolated, and public feeds are not rebuilt automatically.
+
+---
+
+## 📦 Staging Ingestion Import Package Workflow
+
+A decoupled offline package ingestion pipeline is integrated to parse local packages, validate metadata/assets against schema bounds, track runs inside import batches, and record detailed validation flags:
+
+### ⚙️ How It Works:
+1. **Fake Fixture Packages**: Local ingestion reads exclusively from fake staging package structures (e.g. `fixtures/import-packages/runtime-import-demo/`) containing:
+   * `project.json` (metadata manifest parameters)
+   * `poster.png` (required high-res poster image)
+   * `poster.pdf` (required academic poster publication PDF)
+   * `snapshot-1.png` (optional recommended snapshot asset)
+2. **Metadata & File Parsers**: Resolves and parses manifest JSON parameters and files securely while enforcing strict bounds checks to prevent path traversal attempts.
+3. **Staging Validation Gate**:
+   * Inspects critical metadata keys (`publicId`, `title`, `summary`, `year`, `program`, `discipline`, `groupName`, `teamMembers`, `layoutConfig`).
+   * Validates poster assets and snapshot files against size caps (images max 5MB, PDFs max 20MB) and allowed MIME structures.
+   * Generates warning structures on missing recommended values (`accessibilityText`, `posterText`, snapshots).
+4. **Ingestion & Tracking**:
+   * Registers a single processing row inside `import_batches` to log folder source tracks, error counts, and warnings.
+   * Upserts the project into the `projects` table mapping statuses directly to `in_review`.
+   * Uploads provided files as **draft private media** using `uploadDraftMediaAsset` (saving objects in private storage buckets).
+   * **No Public Promotion**: Assets are *not* promoted to public buckets, keeping them isolated.
+   * Writes detailed warnings and errors to the `validation_flags` table mapping properties back to the project ID.
+   * Marks the import batch status as `completed`.
+
+### 🏃 Running Package Imports:
+
+#### Option A: Running from the App Workspace Directory
+1. **Import Staging Package**:
+   ```bash
+   npm run import:staging-package
+   ```
+2. **Check Import Batches**: Logs total and recent ingestion run audits:
+   ```bash
+   npm run check:import-batches
+   ```
+
+#### Option B: Running from the Repository Root (Workspaces)
+1. **Import Package**: `npm run import:admin-package`
+2. **Check Import Batches**: `npm run check:admin-imports`
+
 
 
 
