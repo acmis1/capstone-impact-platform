@@ -3,6 +3,7 @@ loadEnvConfig(process.cwd());
 
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { uploadDraftMediaAsset, promoteDraftMediaAssetToPublic } from '../storage/mediaStorage';
+import { cleanupFakeStagingMediaForProjects } from '../storage/mediaCleanup';
 
 async function seedMedia() {
   const supabase = createSupabaseAdminClientCore();
@@ -30,29 +31,27 @@ async function seedMedia() {
     process.exit(1);
   }
 
-  console.log('Clearing existing media_assets rows for idempotency...');
-  const { error: deleteError } = await supabase
-    .from('media_assets')
-    .delete()
-    .in('project_id', [approvedProject.id, publishedProject.id]);
+  const targetProjectIds = [approvedProject.public_id, publishedProject.public_id];
 
-  if (deleteError) {
-    console.error('❌ Failed to clean up legacy media assets:', deleteError.message);
-    process.exit(1);
+  console.log(`\n--- Cleaning existing fake media files and database rows (Idempotency) ---`);
+  const cleanupResult = await cleanupFakeStagingMediaForProjects(targetProjectIds);
+  console.log(`🧹 Database media rows deleted:       ${cleanupResult.removedMediaRows}`);
+  console.log(`🧹 Storage private objects removed:    ${cleanupResult.removedPrivateObjects}`);
+  console.log(`🧹 Storage public objects removed:     ${cleanupResult.removedPublicObjects}`);
+  if (cleanupResult.warnings.length > 0) {
+    console.log('⚠️ Cleanup Warnings:');
+    cleanupResult.warnings.forEach((warn) => console.log(` - ${warn}`));
   }
 
   // --- 1. SEED APPROVED PROJECT MEDIA (Poster Image + Poster PDF) ---
   console.log('\n--- Seeding Media for Approved Staging Showcase ---');
   
-  // A. Fake PNG Buffer (1x1 pixel transparent PNG)
   const fakePng = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
     'base64'
   );
-  // B. Fake PDF Buffer
   const fakePdf = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF');
 
-  // Upload private drafts
   const draftPosterImage = await uploadDraftMediaAsset({
     projectPublicId: approvedProject.public_id,
     projectDbId: approvedProject.id,
@@ -73,7 +72,6 @@ async function seedMedia() {
 
   console.log('Draft media assets successfully uploaded privately.');
 
-  // Promote both to public assets
   const publicPosterImage = await promoteDraftMediaAssetToPublic(draftPosterImage.id);
   const publicPosterPdf = await promoteDraftMediaAssetToPublic(draftPosterPdf.id);
 
@@ -128,9 +126,10 @@ async function seedMedia() {
   console.log('\n====================================================');
   console.log('✅ STAGING WORKSPACE MEDIA SEEDING COMPLETED!');
   console.log('====================================================');
-  console.log(`Approved poster URL:     ${publicPosterImage.publicUrl}`);
-  console.log(`Approved poster PDF URL: ${publicPosterPdf.publicUrl}`);
-  console.log(`Published snapshot URL:  ${publicSnapshotImage.publicUrl}`);
+  console.log('Seeded Public Asset Path Profiles (Excluding full credentials/domains):');
+  console.log(` - Approved Image:  Type: [${publicPosterImage.assetType}] | Bucket: [${publicPosterImage.storageBucket}] | Path: [${publicPosterImage.storagePath}] | Approved: [${publicPosterImage.isPublicApproved}]`);
+  console.log(` - Approved PDF:    Type: [${publicPosterPdf.assetType}] | Bucket: [${publicPosterPdf.storageBucket}] | Path: [${publicPosterPdf.storagePath}] | Approved: [${publicPosterPdf.isPublicApproved}]`);
+  console.log(` - Published Snap:  Type: [${publicSnapshotImage.assetType}] | Bucket: [${publicSnapshotImage.storageBucket}] | Path: [${publicSnapshotImage.storagePath}] | Approved: [${publicSnapshotImage.isPublicApproved}]`);
   console.log('====================================================\n');
 }
 
