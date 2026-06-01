@@ -1,17 +1,17 @@
 import { loadEnvConfig } from '@next/env';
 loadEnvConfig(process.cwd());
 
-import { SupabaseProjectRepository } from '../repositories/SupabaseProjectRepository';
+import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
+import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
 import { compilePublicFeed } from '../feed/compilePublicFeed';
 import { validatePublicFeed } from '../feed/validatePublicFeed';
 import { uploadPublicFeedToStorage } from '../storage/publicFeedStorage';
-import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { getServerEnv } from '../lib/env';
 
 async function publish() {
   const env = getServerEnv();
-  const repository = new SupabaseProjectRepository();
   const supabase = createSupabaseAdminClientCore();
+  const repository = new SupabaseProjectRepositoryCore(supabase);
 
   console.log('Fetching projects from staging database...');
   let projects;

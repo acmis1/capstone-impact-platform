@@ -1,10 +1,12 @@
 import { loadEnvConfig } from '@next/env';
 loadEnvConfig(process.cwd());
 
-import { SupabaseProjectRepository } from '../repositories/SupabaseProjectRepository';
+import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
+import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
 
 async function check() {
-  const repository = new SupabaseProjectRepository();
+  const supabase = createSupabaseAdminClientCore();
+  const repository = new SupabaseProjectRepositoryCore(supabase);
 
   console.log('Querying staging database projects...');
   let projects;
