@@ -81,16 +81,28 @@ The staging foundation is structured as follows:
 
 ---
 
-## 💾 Database Schema & APIs
+## 💾 Database Schema & Administrative Authentication
 
-The staging database schema is now scaffolded and ready for manual application:
+The staging database schema and authentication guards are fully scaffolded:
 
-1. **Schema Migration:** Apply `infra/supabase/migrations/0001_staging_schema.sql` and `infra/supabase/migrations/0002_staging_rls_policies.sql` to your **capstone-impact-staging** project using the Supabase SQL Editor.
-2. **Setup Instructions:** Refer to `infra/supabase/manual-apply-guide.md` for full step-by-step instructions.
-3. **No Real Data:** Never populate this database with real stakeholder or student personal data.
-4. **API Endpoints:**
-   * **`GET /api/health`:** Basic health check. Runs completely offline without any database connection.
-   * **`GET /api/projects`:** Retrieves project records from the staging database. Requires `.env.local` to be configured and migrations applied. Includes strict error catching to prevent exposing database keys.
+1. **Schema Migrations:** Apply `infra/supabase/migrations/0001_staging_schema.sql`, `0002_staging_rls_policies.sql`, and `0003_admin_auth_identity.sql` to your project using the Supabase SQL Editor. See [manual-apply-guide.md](../../infra/supabase/manual-apply-guide.md) for details.
+2. **Identity Linkage (Migration 0003):** Adds the `auth_user_id UUID` column to `admin_users` linked to `auth.users(id)` to bind Auth identities.
+3. **No Public Registration:** Self-registration is disabled. Staging admins must be manually provisioned in the Supabase Dashboard and linked via SQL.
+4. **Client Distinctions:**
+   * **Administrative Database Client (`admin.ts`):** Safe, server-only client using `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS. Only invoked *after* session authorization succeeds.
+   * **Session Server Client (`server.ts`):** Bound to Next.js cookie headers via `@supabase/ssr` `createServerClient`. Used for cookie authentication checks.
+   * **Session Browser Client (`client.ts`):** Standard web client using public keys for client-side Auth helper triggers.
+
+### 👥 Role-Based Access Control (RBAC)
+*   **`admin`**: Full access to view, edit, review, and archive showcases.
+*   **`reviewer`**: Read and review (approve/request changes) rights. Cannot archive or edit.
+*   **`editor`**: Read and edit rights. Cannot review or archive.
+
+### 🛡️ Protected Routes & APIs
+*   **Protected Pages (`/admin/**/*`)**: Inherit the root layout guard at [layout.tsx](src/app/admin/layout.tsx), redirecting unauthorized users to `/login`.
+*   **`GET /api/projects`**: Protected API route requiring `projects.read` permission.
+*   **`POST /api/projects/[publicId]/review-action`**: Protected API route verifying `Origin` CSRF headers, requiring `projects.review` or `projects.archive` based on action, and logging the reviewer's authenticated admin ID.
+*   **`GET /api/health`**: Public endpoint reporting configuration classifications (keys are never exposed).
 
 ---
 
