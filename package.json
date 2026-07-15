@@ -16,7 +16,8 @@
     "check:admin-media": "npm run check:staging-media --workspace=apps/admin-cms",
     "publish:admin-feed": "npm run publish:staging-feed --workspace=apps/admin-cms",
     "import:admin-package": "npm run import:staging-package --workspace=apps/admin-cms",
-    "check:admin-imports": "npm run check:import-batches --workspace=apps/admin-cms"
+    "check:admin-imports": "npm run check:import-batches --workspace=apps/admin-cms",
+    "test:admin": "npm run test:run --workspace=apps/admin-cms"
   },
   "devDependencies": {
     "server-only": "^0.0.1"

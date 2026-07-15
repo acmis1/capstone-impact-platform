@@ -258,7 +258,41 @@ A comprehensive read-only administrative interface is integrated to track and au
    * Public compile feed index counts remain unchanged.
    * live showcase presentation paths (Duda integration layers) remain completely isolated.
 
+---
 
+## 🧪 Automated Testing
 
+This workspace includes a reliable, offline automated test suite powered by [Vitest](https://vitest.dev/) to verify core domain, validation, and workflow logic without requiring any external services or database connections.
 
+### Running Tests
 
+#### Option A: Running from the Repository Root (Convenience Script)
+Run a one-time deterministic test check:
+```bash
+npm run test:admin
+```
+
+#### Option B: Running from the App Workspace Directory
+First navigate into the app folder:
+```bash
+cd apps/admin-cms
+```
+Then execute tests:
+* **Interactive watch mode**: `npm run test`
+* **One-time run mode**: `npm run test:run`
+
+### Covered Features
+* **Public Feed Compiler**: Verifies correct status filtering (approved/published), internal field exclusion, layout default assignment, and mutation safety.
+* **Public Feed Validator**: Tests schema compliance checks, required field rules, layout template checks, and recommended field warning output.
+* **Project Workflow**: Asserts correct state transitions and review action lists for all lifecycle states.
+* **Project Approval & Review Validation**: Validates completeness check gates for both ingestion and publishing approval.
+* **Media Validation**: Verifies file size limits, MIME types, and path safety validation.
+* **Import Package Validation**: Tests manifest verification rules, required files checks, and error/warning outputs.
+
+### Out of Scope (Staging Isolation)
+These unit tests are strictly offline. The following layers are excluded from this baseline and will be tested in separate integration runs:
+* Supabase Database repositories and database operations.
+* Next.js Route Handlers and endpoints.
+* Row-Level Security (RLS) policies.
+* Media Storage uploads and bucket promotions.
+* External service calls (Gemini API, Duda API, Render deployments).
