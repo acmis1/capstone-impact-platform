@@ -15,7 +15,9 @@
     "publish:staging-feed": "tsx src/scripts/publishStagingFeed.ts",
     "import:staging-package": "tsx src/scripts/importStagingPackage.ts",
     "check:import-batches": "tsx src/scripts/checkImportBatches.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@google/genai": "^2.7.0",
@@ -32,6 +34,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tsx": "^4.22.4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }
