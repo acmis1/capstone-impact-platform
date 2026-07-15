@@ -3,6 +3,7 @@ loadEnvConfig(process.cwd());
 
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { evaluateStagingAuthReadiness, AdminIdentityRecord, RoleAssignmentRecord, AuditAttributionRecord } from '../auth/stagingAuthVerification';
+import { isMissingAuthUserIdColumnError } from '../auth/stagingAuthCheckErrors';
 
 /**
  * Read-only script executing SELECT-only queries to check authentication readiness on staging database.
@@ -10,7 +11,7 @@ import { evaluateStagingAuthReadiness, AdminIdentityRecord, RoleAssignmentRecord
  * Rules:
  * - Does not perform updates, inserts, deletes or signUp triggers.
  * - Restricts selected fields to prevent printing email, full name, or credential tokens.
- * - Gracefully maps missing columns to MIGRATION_0003_MISSING status.
+ * - Gracefully maps trusted missing-column errors to MIGRATION_0003_MISSING status.
  * - Exits with status 0 (Ready), 2 (Incomplete Setup), or 1 (Unexpected connection error).
  */
 async function runCheck() {
@@ -18,7 +19,7 @@ async function runCheck() {
   try {
     supabase = createSupabaseAdminClientCore();
   } catch {
-    console.error('STAGING_AUTH_CHECK_FAILED: Failed to construct database client.');
+    console.error('STAGING_AUTH_CHECK_FAILED');
     process.exit(1);
   }
 
@@ -34,12 +35,7 @@ async function runCheck() {
       .select('id, auth_user_id');
 
     if (error) {
-      const isMissingColumn = 
-        error.code === '42703' || 
-        error.message?.includes('column "auth_user_id" does not exist') ||
-        error.message?.includes('auth_user_id');
-        
-      if (isMissingColumn) {
+      if (isMissingAuthUserIdColumnError(error)) {
         migrationPresent = false;
         // Column is missing. Count legacy administrators using ID only.
         const { data: legacyData, error: legacyError } = await supabase
@@ -69,7 +65,7 @@ async function runCheck() {
       });
     }
   } catch {
-    console.error('STAGING_AUTH_CHECK_FAILED: Database connection error on admin_users query.');
+    console.error('STAGING_AUTH_CHECK_FAILED');
     process.exit(1);
   }
 
@@ -90,7 +86,7 @@ async function runCheck() {
       };
     });
   } catch {
-    console.error('STAGING_AUTH_CHECK_FAILED: Database connection error on user_roles query.');
+    console.error('STAGING_AUTH_CHECK_FAILED');
     process.exit(1);
   }
 
@@ -110,7 +106,7 @@ async function runCheck() {
       };
     });
   } catch {
-    console.error('STAGING_AUTH_CHECK_FAILED: Database connection error on approval_records query.');
+    console.error('STAGING_AUTH_CHECK_FAILED');
     process.exit(1);
   }
 

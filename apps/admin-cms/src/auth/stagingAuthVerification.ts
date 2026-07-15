@@ -102,7 +102,7 @@ export function evaluateStagingAuthReadiness(input: VerificationInput): Verifica
     errors.push('NO_LINKED_ADMIN');
   }
 
-  if (input.migrationPresent && linkedAdminCount > 0 && linkedAdminsWithoutRecognizedRole === linkedAdminCount) {
+  if (input.migrationPresent && linkedAdminsWithoutRecognizedRole > 0) {
     errors.push('LINKED_ADMIN_WITHOUT_ROLE');
   }
 
@@ -117,7 +117,7 @@ export function evaluateStagingAuthReadiness(input: VerificationInput): Verifica
   const readyForManualLoginTest =
     input.migrationPresent &&
     linkedAdminCount > 0 &&
-    linkedAdminsWithoutRecognizedRole < linkedAdminCount &&
+    linkedAdminsWithoutRecognizedRole === 0 &&
     invalidRoleAssignmentCount === 0 &&
     errors.length === 0;
 

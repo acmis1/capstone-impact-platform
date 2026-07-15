@@ -159,4 +159,62 @@ describe('Staging Auth Verification Evaluator', () => {
     expect(serialized).not.toContain('password');
     expect(serialized).not.toContain('token');
   });
+
+  describe('Mixed-Admin Readiness Boundaries', () => {
+    it('A. Two linked administrators, only one has a recognized role', () => {
+      const input: VerificationInput = {
+        migrationPresent: true,
+        adminUsers: [
+          { adminUserId: 'admin1', authUserId: validUuid },
+          { adminUserId: 'admin2', authUserId: 'd7170068-bc23-4554-ba5e-f00de7a7872e' },
+        ],
+        userRoles: [
+          { adminUserId: 'admin1', role: 'admin' }
+        ],
+        approvalRecords: [],
+      };
+      const result = evaluateStagingAuthReadiness(input);
+      expect(result.linkedAdminCount).toBe(2);
+      expect(result.linkedAdminsWithoutRecognizedRole).toBe(1);
+      expect(result.errors).toContain('LINKED_ADMIN_WITHOUT_ROLE');
+      expect(result.readyForManualLoginTest).toBe(false);
+    });
+
+    it('B. Two linked administrators, both have recognized roles', () => {
+      const input: VerificationInput = {
+        migrationPresent: true,
+        adminUsers: [
+          { adminUserId: 'admin1', authUserId: validUuid },
+          { adminUserId: 'admin2', authUserId: 'd7170068-bc23-4554-ba5e-f00de7a7872e' },
+        ],
+        userRoles: [
+          { adminUserId: 'admin1', role: 'admin' },
+          { adminUserId: 'admin2', role: 'reviewer' },
+        ],
+        approvalRecords: [],
+      };
+      const result = evaluateStagingAuthReadiness(input);
+      expect(result.linkedAdminsWithoutRecognizedRole).toBe(0);
+      expect(result.readyForManualLoginTest).toBe(true);
+    });
+
+    it('C. One linked administrator with a role plus one unlinked legacy administrator without a role', () => {
+      const input: VerificationInput = {
+        migrationPresent: true,
+        adminUsers: [
+          { adminUserId: 'admin1', authUserId: validUuid },
+          { adminUserId: 'admin2', authUserId: null },
+        ],
+        userRoles: [
+          { adminUserId: 'admin1', role: 'admin' }
+        ],
+        approvalRecords: [],
+      };
+      const result = evaluateStagingAuthReadiness(input);
+      expect(result.linkedAdminCount).toBe(1);
+      expect(result.unlinkedAdminCount).toBe(1);
+      expect(result.linkedAdminsWithoutRecognizedRole).toBe(0);
+      expect(result.readyForManualLoginTest).toBe(true);
+    });
+  });
 });
