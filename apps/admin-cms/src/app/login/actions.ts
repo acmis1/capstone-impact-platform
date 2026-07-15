@@ -1,8 +1,11 @@
 'use server';
 
+import 'server-only';
+
 import { createSupabaseServerClient } from '../../lib/supabase/server';
 import { createSupabaseAdminClient } from '../../lib/supabase/admin';
 import { redirect } from 'next/navigation';
+import { sanitizeRedirectPath } from '../../auth/redirect';
 
 /**
  * Server Action to authenticate administrative users.
@@ -51,9 +54,7 @@ export async function loginAction(prevState: unknown, formData: FormData) {
   }
 
   // Sanitize redirect target path
-  const target = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
-    ? redirectTo
-    : '/admin';
+  const target = sanitizeRedirectPath(redirectTo);
 
   redirect(target);
 }

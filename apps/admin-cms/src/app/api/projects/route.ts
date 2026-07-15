@@ -3,6 +3,7 @@ import { SupabaseProjectRepository } from '../../../repositories/SupabaseProject
 import { requireAdmin } from '../../../auth/requireAdmin';
 import { AdminAuthError } from '../../../auth/authTypes';
 import { hasPermission } from '../../../auth/permissions';
+import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from '../../../auth/authHttp';
 
 /**
  * Endpoint to fetch project records from the staging database.
@@ -19,10 +20,9 @@ export async function GET() {
     const adminContext = await requireAdmin();
     
     if (!hasPermission(adminContext.permissions, 'projects.read')) {
-      return NextResponse.json(
-        { success: false, error: 'Access denied: projects.read permission required.' },
-        { status: 403 }
-      );
+      const status = getAuthErrorHttpStatus('PERMISSION_DENIED');
+      const error = getPublicAuthErrorMessage('PERMISSION_DENIED');
+      return NextResponse.json({ success: false, error }, { status });
     }
 
     // 2. Query repository after authorization success
@@ -36,9 +36,10 @@ export async function GET() {
     });
   } catch (error: unknown) {
     if (error instanceof AdminAuthError) {
-      const status = error.type === 'UNAUTHENTICATED' ? 401 : 403;
+      const status = getAuthErrorHttpStatus(error.type);
+      const errMessage = getPublicAuthErrorMessage(error.type);
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: errMessage },
         { status }
       );
     }
@@ -46,12 +47,11 @@ export async function GET() {
     // Log the actual error internally for developer auditing
     console.error('[Projects API Error]:', error instanceof Error ? error.message : String(error));
     
+    const status = getAuthErrorHttpStatus('UNKNOWN');
+    const errMessage = getPublicAuthErrorMessage('UNKNOWN');
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to retrieve projects from database.'
-      },
-      { status: 500 }
+      { success: false, error: errMessage },
+      { status }
     );
   }
 }

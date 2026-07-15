@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { getPermissionsForRoles, hasPermission, canPerformReviewAction } from './permissions';
 import { validateSameOrigin } from './csrf';
-import { AdminAuthError, AuthErrorType } from './authTypes';
-import { AdminRole } from './authTypes';
+import { AdminAuthError, AdminRole } from './authTypes';
+import { extractSubClaim } from './claims';
+import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from './authHttp';
+import { validateReviewActionInput } from './reviewActionInput';
+import { sanitizeRedirectPath } from './redirect';
 
 describe('Authentication & Authorization Tests (Offline)', () => {
   describe('1. Permission Mapping', () => {
@@ -44,7 +47,6 @@ describe('Authentication & Authorization Tests (Offline)', () => {
       expect(perms).toContain('projects.review');
       expect(perms).toContain('projects.edit');
       expect(perms).not.toContain('projects.archive');
-      // projects.read is present in both roles, but should only appear once
       const readOccurrences = perms.filter(p => p === 'projects.read').length;
       expect(readOccurrences).toBe(1);
       expect(perms.length).toBe(3);
@@ -87,45 +89,164 @@ describe('Authentication & Authorization Tests (Offline)', () => {
     });
   });
 
-  describe('3. Authorization Error Mapping', () => {
-    it('creates correct error types for HTTP mapping', () => {
-      const errMap: Record<AuthErrorType, number> = {
-        UNAUTHENTICATED: 401,
-        ADMIN_NOT_PROVISIONED: 403,
-        PERMISSION_DENIED: 403,
-        CONFIGURATION_FAILURE: 500,
-      };
+  describe('3. Claims Extraction (A)', () => {
+    it('accepts valid subject UUID claim', () => {
+      const validSub = 'd7170068-bc23-4554-ba5e-f00de7a7872d';
+      expect(extractSubClaim({ sub: validSub })).toBe(validSub);
+    });
 
-      Object.entries(errMap).forEach(([type, status]) => {
-        const error = new AdminAuthError(type as AuthErrorType, 'Error message');
-        expect(error.type).toBe(type);
-        
-        const mappedStatus = error.type === 'UNAUTHENTICATED' ? 401 : error.type === 'CONFIGURATION_FAILURE' ? 500 : 403;
-        expect(mappedStatus).toBe(status);
-      });
+    it('rejects missing claims object', () => {
+      expect(() => extractSubClaim(null)).toThrow(AdminAuthError);
+      expect(() => extractSubClaim(undefined)).toThrow(AdminAuthError);
+    });
+
+    it('rejects missing subject claim', () => {
+      expect(() => extractSubClaim({})).toThrow(AdminAuthError);
+      expect(() => extractSubClaim({ email: 'test@test.com' })).toThrow(AdminAuthError);
+    });
+
+    it('rejects empty subject claim', () => {
+      expect(() => extractSubClaim({ sub: '' })).toThrow(AdminAuthError);
+      expect(() => extractSubClaim({ sub: '   ' })).toThrow(AdminAuthError);
+    });
+
+    it('rejects malformed subject UUID format', () => {
+      expect(() => extractSubClaim({ sub: 'invalid-uuid-format' })).toThrow(AdminAuthError);
+      expect(() => extractSubClaim({ sub: 12345 })).toThrow(AdminAuthError);
     });
   });
 
-  describe('4. Same-Origin Validation (CSRF)', () => {
-    it('passes when Origin matches Host exactly (same origin)', () => {
-      expect(validateSameOrigin('http://localhost:3000', 'localhost:3000')).toBe(true);
-      expect(validateSameOrigin('https://example.com', 'example.com')).toBe(true);
-      expect(validateSameOrigin('https://example.com', 'https://example.com')).toBe(true);
+  describe('4. Auth HTTP Mapper (B)', () => {
+    it('maps unauthenticated error correctly', () => {
+      expect(getAuthErrorHttpStatus('UNAUTHENTICATED')).toBe(401);
+      expect(getPublicAuthErrorMessage('UNAUTHENTICATED')).toBe('Authentication required.');
     });
 
-    it('fails when Origin is clearly different from Host', () => {
-      expect(validateSameOrigin('http://malicious.com', 'localhost:3000')).toBe(false);
-      expect(validateSameOrigin('https://hacker.com', 'example.com')).toBe(false);
+    it('maps admin not provisioned error correctly', () => {
+      expect(getAuthErrorHttpStatus('ADMIN_NOT_PROVISIONED')).toBe(403);
+      expect(getPublicAuthErrorMessage('ADMIN_NOT_PROVISIONED')).toBe('Access denied.');
     });
 
-    it('fails safely for malformed Origin headers', () => {
-      expect(validateSameOrigin('not-a-valid-url', 'localhost:3000')).toBe(false);
-      expect(validateSameOrigin('', 'localhost:3000')).toBe(true); // Empty/null matches missing Origin behavior
+    it('maps permission denied error correctly', () => {
+      expect(getAuthErrorHttpStatus('PERMISSION_DENIED')).toBe(403);
+      expect(getPublicAuthErrorMessage('PERMISSION_DENIED')).toBe('Access denied.');
     });
 
-    it('documents and passes missing Origin header (non-browser or programmatic api/tests client)', () => {
-      // Conservative design choice: allow missing origin to support programmatic test runner CLI or server-to-server RPCs
-      expect(validateSameOrigin(null, 'localhost:3000')).toBe(true);
+    it('maps configuration failure error correctly', () => {
+      expect(getAuthErrorHttpStatus('CONFIGURATION_FAILURE')).toBe(500);
+      expect(getPublicAuthErrorMessage('CONFIGURATION_FAILURE')).toBe('Authentication service unavailable.');
+    });
+
+    it('maps unknown errors to internal authentication failure', () => {
+      expect(getAuthErrorHttpStatus('SOME_UNKNOWN_ERROR')).toBe(500);
+      expect(getPublicAuthErrorMessage('SOME_UNKNOWN_ERROR')).toBe('Internal authentication error.');
+    });
+  });
+
+  describe('5. Hardened CSRF Validation (C)', () => {
+    const authorative = 'http://localhost:3000';
+
+    it('passes for exact same origin', () => {
+      expect(validateSameOrigin('http://localhost:3000', authorative)).toBe(true);
+    });
+
+    it('fails for different scheme', () => {
+      expect(validateSameOrigin('https://localhost:3000', authorative)).toBe(false);
+    });
+
+    it('fails for different hostname', () => {
+      expect(validateSameOrigin('http://differenthost:3000', authorative)).toBe(false);
+    });
+
+    it('fails for different port', () => {
+      expect(validateSameOrigin('http://localhost:8080', authorative)).toBe(false);
+    });
+
+    it('fails for malformed origins', () => {
+      expect(validateSameOrigin('not-a-valid-origin-url', authorative)).toBe(false);
+    });
+
+    it('fails for missing or empty origin', () => {
+      expect(validateSameOrigin(null, authorative)).toBe(false);
+      expect(validateSameOrigin('', authorative)).toBe(false);
+      expect(validateSameOrigin('   ', authorative)).toBe(false);
+    });
+  });
+
+  describe('6. Review Action Input Validation (D)', () => {
+    it('passes for valid body and parameters', () => {
+      const result = validateReviewActionInput(
+        { action: 'approve', comments: 'Looks great!' },
+        '2026-showcase-project'
+      );
+      expect(result.valid).toBe(true);
+      if (result.valid) {
+        expect(result.data.action).toBe('approve');
+        expect(result.data.comments).toBe('Looks great!');
+        expect(result.data.publicId).toBe('2026-showcase-project');
+      }
+    });
+
+    it('rejects null, array, and primitive bodies', () => {
+      expect(validateReviewActionInput(null, 'id').valid).toBe(false);
+      expect(validateReviewActionInput([], 'id').valid).toBe(false);
+      expect(validateReviewActionInput('string-body', 'id').valid).toBe(false);
+      expect(validateReviewActionInput(12345, 'id').valid).toBe(false);
+    });
+
+    it('rejects invalid action options', () => {
+      expect(validateReviewActionInput({ action: 'delete' }, 'id').valid).toBe(false);
+      expect(validateReviewActionInput({ action: '' }, 'id').valid).toBe(false);
+    });
+
+    it('passes for optional or empty comments, trimming spaces and converting to undefined', () => {
+      const noComment = validateReviewActionInput({ action: 'archive' }, 'id');
+      expect(noComment.valid).toBe(true);
+      if (noComment.valid) {
+        expect(noComment.data.comments).toBeUndefined();
+      }
+
+      const emptyComment = validateReviewActionInput({ action: 'archive', comments: '   ' }, 'id');
+      expect(emptyComment.valid).toBe(true);
+      if (emptyComment.valid) {
+        expect(emptyComment.data.comments).toBeUndefined();
+      }
+    });
+
+    it('rejects malformed comments (objects, numbers, arrays, booleans, or too long)', () => {
+      expect(validateReviewActionInput({ action: 'approve', comments: 123 }, 'id').valid).toBe(false);
+      expect(validateReviewActionInput({ action: 'approve', comments: {} }, 'id').valid).toBe(false);
+      expect(validateReviewActionInput({ action: 'approve', comments: [] }, 'id').valid).toBe(false);
+      expect(validateReviewActionInput({ action: 'approve', comments: true }, 'id').valid).toBe(false);
+      
+      const hugeComment = 'a'.repeat(4001);
+      expect(validateReviewActionInput({ action: 'approve', comments: hugeComment }, 'id').valid).toBe(false);
+    });
+
+    it('rejects empty or malformed public IDs to prevent injection', () => {
+      expect(validateReviewActionInput({ action: 'approve' }, '   ').valid).toBe(false);
+      expect(validateReviewActionInput({ action: 'approve' }, 'id; DROP TABLE projects;').valid).toBe(false);
+      expect(validateReviewActionInput({ action: 'approve' }, 'id/../traversal').valid).toBe(false);
+      expect(validateReviewActionInput({ action: 'approve' }, 'a'.repeat(101)).valid).toBe(false);
+    });
+  });
+
+  describe('7. Open Redirect Sanitizer', () => {
+    it('allows safe relative redirect paths', () => {
+      expect(sanitizeRedirectPath('/admin')).toBe('/admin');
+      expect(sanitizeRedirectPath('/admin/projects/123')).toBe('/admin/projects/123');
+    });
+
+    it('falls back to default path for absolute or external redirect targets', () => {
+      expect(sanitizeRedirectPath('https://evil.example')).toBe('/admin');
+      expect(sanitizeRedirectPath('http://evil.example/admin')).toBe('/admin');
+      expect(sanitizeRedirectPath('//evil.example')).toBe('/admin');
+      expect(sanitizeRedirectPath('\\\\evil.example')).toBe('/admin');
+    });
+
+    it('handles encoded external URLs safely', () => {
+      expect(sanitizeRedirectPath(encodeURIComponent('https://evil.example'))).toBe('/admin');
+      expect(sanitizeRedirectPath('%2F%2Fevil.example')).toBe('/admin');
     });
   });
 });

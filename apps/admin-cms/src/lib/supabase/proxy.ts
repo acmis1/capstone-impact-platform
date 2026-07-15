@@ -41,8 +41,8 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     }
   );
 
-  // Validate token integrity and refresh session cookie
-  await supabase.auth.getUser();
+  // Validate session claims and refresh session cookie
+  await supabase.auth.getClaims();
 
   return response;
 }

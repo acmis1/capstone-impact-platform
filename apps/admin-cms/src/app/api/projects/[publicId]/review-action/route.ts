@@ -4,6 +4,8 @@ import { requireAdmin } from '../../../../../auth/requireAdmin';
 import { canPerformReviewAction } from '../../../../../auth/permissions';
 import { validateSameOrigin } from '../../../../../auth/csrf';
 import { AdminAuthError } from '../../../../../auth/authTypes';
+import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from '../../../../../auth/authHttp';
+import { validateReviewActionInput } from '../../../../../auth/reviewActionInput';
 
 /**
  * Route handler to execute review actions (approve, request_changes, archive) on staging projects.
@@ -22,12 +24,11 @@ export async function POST(
   try {
     // 1. Same-Origin CSRF Check
     const origin = request.headers.get('origin');
-    const host = request.headers.get('host');
-    if (!validateSameOrigin(origin, host)) {
-      return NextResponse.json(
-        { success: false, error: 'CSRF Blocked: cross-origin requests are not allowed.' },
-        { status: 403 }
-      );
+    const requestOrigin = request.nextUrl.origin;
+    if (!validateSameOrigin(origin, requestOrigin)) {
+      const status = getAuthErrorHttpStatus('PERMISSION_DENIED');
+      const error = getPublicAuthErrorMessage('PERMISSION_DENIED');
+      return NextResponse.json({ success: false, error }, { status });
     }
 
     // 2. Authenticate the User
@@ -37,50 +38,40 @@ export async function POST(
     const { publicId } = await params;
     const body = await request.json().catch(() => null);
 
-    if (!body || typeof body !== 'object') {
+    // 4. Input Validation (Before any database read/write)
+    const validation = validateReviewActionInput(body, publicId);
+    if (!validation.valid) {
       return NextResponse.json(
-        { success: false, error: 'Invalid input', message: 'Body must be a valid JSON object.' },
+        { success: false, error: 'Validation failed.' },
         { status: 400 }
       );
     }
 
-    const { action, comments } = body;
+    const { action, comments, publicId: validPublicId } = validation.data;
 
-    if (!action || !['request_changes', 'approve', 'archive'].includes(action)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Invalid action parameter',
-          message: 'Action must be "request_changes", "approve", or "archive".'
-        },
-        { status: 400 }
-      );
-    }
-
-    // 4. Authorize Action Permission
+    // 5. Authorize Action Permission
     if (!canPerformReviewAction(adminContext.permissions, action)) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized: lacking review permission for this action.' },
-        { status: 403 }
-      );
+      const status = getAuthErrorHttpStatus('PERMISSION_DENIED');
+      const error = getPublicAuthErrorMessage('PERMISSION_DENIED');
+      return NextResponse.json({ success: false, error }, { status });
     }
 
     const repository = new SupabaseProjectRepository();
 
-    // Verify project exists (Distinguishable check)
-    const project = await repository.getProjectByPublicId(publicId);
+    // Verify project exists
+    const project = await repository.getProjectByPublicId(validPublicId);
     if (!project) {
       return NextResponse.json(
-        { success: false, error: 'Project not found', message: `No project with ID ${publicId} exists.` },
+        { success: false, error: 'Project not found.' },
         { status: 404 }
       );
     }
 
-    // 5. Execute Action using authenticated admin user ID
+    // 6. Execute Action using authenticated admin user ID
     const updatedProject = await repository.performReviewAction({
-      publicId,
+      publicId: validPublicId,
       action,
-      comments: comments || undefined,
+      comments,
       adminId: adminContext.adminUserId
     });
 
@@ -93,35 +84,21 @@ export async function POST(
     });
   } catch (error: unknown) {
     if (error instanceof AdminAuthError) {
-      const status = error.type === 'UNAUTHENTICATED' ? 401 : 403;
+      const status = getAuthErrorHttpStatus(error.type);
+      const errMessage = getPublicAuthErrorMessage(error.type);
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: errMessage },
         { status }
       );
     }
 
-    const errMessage = error instanceof Error ? error.message : String(error);
-    console.error('[Workflow Action API Error]:', errMessage);
+    console.error('[Workflow Action API Error]:', error instanceof Error ? error.message : String(error));
 
-    const isAuditFailure = errMessage.includes('audit logging failed');
-    if (isAuditFailure) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Audit logging failed',
-          message: 'Project status update completed but audit logging failed; staging data may require manual reset.'
-        },
-        { status: 500 }
-      );
-    }
-
+    const status = getAuthErrorHttpStatus('UNKNOWN');
+    const errMessage = getPublicAuthErrorMessage('UNKNOWN');
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Staging Action Rejected',
-        message: 'Internal database processing failure.'
-      },
-      { status: 500 }
+      { success: false, error: errMessage },
+      { status }
     );
   }
 }

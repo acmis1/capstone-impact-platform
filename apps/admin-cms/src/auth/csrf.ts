@@ -1,34 +1,41 @@
 /**
- * Validates whether a state-changing request matches the same origin.
- * Prevents CSRF attacks from malicious third-party cross-origin page forms.
+ * Hardened Same-Origin CSRF validation helper.
  * 
  * Rules:
- * - If Origin is present, its parsed host must exactly match the Host header.
- * - Malformed origin values reject validation for safety.
- * - If Origin is missing, returns true to allow programmatic server-to-server 
- *   calls or non-browser tests, but logs or restricts where appropriate.
+ * - Checks incoming Origin header against the authoritative request origin (request.nextUrl.origin).
+ * - Scheme, hostname, and port must match exactly.
+ * - Missing, empty, or malformed origin headers are rejected (returns false).
+ * - Case-normalized comparisons prevent encoding bypasses.
  */
-export function validateSameOrigin(originHeader: string | null, hostHeader: string | null): boolean {
-  if (!originHeader) {
-    // Handle missing Origin conservatively.
-    // Programmatic test clients and server-to-server RPCs omit Origin.
-    return true;
+export function validateSameOrigin(originHeader: string | null, requestOrigin: string): boolean {
+  if (!originHeader || originHeader.trim() === '') {
+    return false;
   }
 
   try {
     const originUrl = new URL(originHeader);
-    const originHost = originUrl.host; // e.g. "localhost:3000" or "example.com"
+    const reqOriginUrl = new URL(requestOrigin);
 
-    if (!hostHeader) {
-      return false;
-    }
+    const originScheme = originUrl.protocol.toLowerCase();
+    const reqScheme = reqOriginUrl.protocol.toLowerCase();
 
-    // Standardize host header comparison (remove protocol prefix if present)
-    const cleanHost = hostHeader.replace(/^(https?:\/\/)/, '').trim();
+    const originHostname = originUrl.hostname.toLowerCase();
+    const reqHostname = reqOriginUrl.hostname.toLowerCase();
 
-    return originHost.toLowerCase() === cleanHost.toLowerCase();
+    const getPort = (url: URL) => {
+      if (url.port) return url.port;
+      return url.protocol === 'https:' ? '443' : '80';
+    };
+
+    const originPort = getPort(originUrl);
+    const reqPort = getPort(reqOriginUrl);
+
+    return (
+      originScheme === reqScheme &&
+      originHostname === reqHostname &&
+      originPort === reqPort
+    );
   } catch {
-    // Malformed origin format fails validation safely
     return false;
   }
 }

@@ -85,7 +85,7 @@ The staging foundation is structured as follows:
 
 The staging database schema and authentication guards are fully scaffolded:
 
-1. **Schema Migrations:** Apply `infra/supabase/migrations/0001_staging_schema.sql`, `0002_staging_rls_policies.sql`, and `0003_admin_auth_identity.sql` to your project using the Supabase SQL Editor. See [manual-apply-guide.md](file:///D:/IT%20RMIT/Capstone/infra/supabase/manual-apply-guide.md) for details.
+1. **Schema Migrations:** Apply `infra/supabase/migrations/0001_staging_schema.sql`, `0002_staging_rls_policies.sql`, and `0003_admin_auth_identity.sql` to your project using the Supabase SQL Editor. See [manual-apply-guide.md](../../infra/supabase/manual-apply-guide.md) for details.
 2. **Identity Linkage (Migration 0003):** Adds the `auth_user_id UUID` column to `admin_users` linked to `auth.users(id)` to bind Auth identities.
 3. **No Public Registration:** Self-registration is disabled. Staging admins must be manually provisioned in the Supabase Dashboard and linked via SQL.
 4. **Client Distinctions:**
@@ -99,7 +99,7 @@ The staging database schema and authentication guards are fully scaffolded:
 *   **`editor`**: Read and edit rights. Cannot review or archive.
 
 ### 🛡️ Protected Routes & APIs
-*   **Protected Pages (`/admin/**/*`)**: Inherit the root layout guard at [layout.tsx](file:///D:/IT%20RMIT/Capstone/apps/admin-cms/src/app/admin/layout.tsx), redirecting unauthorized users to `/login`.
+*   **Protected Pages (`/admin/**/*`)**: Inherit the root layout guard at [layout.tsx](src/app/admin/layout.tsx), redirecting unauthorized users to `/login`.
 *   **`GET /api/projects`**: Protected API route requiring `projects.read` permission.
 *   **`POST /api/projects/[publicId]/review-action`**: Protected API route verifying `Origin` CSRF headers, requiring `projects.review` or `projects.archive` based on action, and logging the reviewer's authenticated admin ID.
 *   **`GET /api/health`**: Public endpoint reporting configuration classifications (keys are never exposed).
