@@ -3,6 +3,7 @@ import { requireAdmin } from '../../auth/requireAdmin';
 import { logoutAction } from '../login/actions';
 import { redirect } from 'next/navigation';
 import { AdminAuthError } from '../../auth/authTypes';
+import { getPublicAuthErrorMessage } from '../../auth/authHttp';
 
 /**
  * Server Component layout serving as authorization guard for all administrative sub-pages.
@@ -11,6 +12,7 @@ import { AdminAuthError } from '../../auth/authTypes';
  * - Enforces session requirements and admin role provisioning before children render.
  * - Displays the current administrator's credentials and assigned roles.
  * - Provides a server action trigger to handle secure logouts.
+ * - Maps all authorization/connection errors to generic, production-safe messages.
  */
 export default async function AdminLayout({
   children,
@@ -26,7 +28,11 @@ export default async function AdminLayout({
         redirect('/login?redirectTo=/admin');
       }
 
-      // Safe Access Denied visual screen for unprovisioned/unauthorized authenticated identities
+      const publicMessage = getPublicAuthErrorMessage(error.type);
+      const isConfigFailure = error.type === 'CONFIGURATION_FAILURE';
+      const heading = isConfigFailure ? 'Service Outage' : 'Access Denied';
+
+      // Safe error screen for unprovisioned/unauthorized authenticated identities
       return (
         <div style={{
           minHeight: '100vh',
@@ -49,10 +55,10 @@ export default async function AdminLayout({
             boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
           }}>
             <h1 style={{ color: '#EF4444', fontSize: '1.5rem', fontWeight: 800, margin: '0 0 1rem 0' }}>
-              Access Denied
+              {heading}
             </h1>
             <p style={{ color: '#9CA3AF', fontSize: '0.9rem', lineHeight: '1.6', marginBottom: '1.5rem' }}>
-              {error.message}
+              {publicMessage}
             </p>
             <form action={logoutAction}>
               <button type="submit" style={{
@@ -73,8 +79,52 @@ export default async function AdminLayout({
       );
     }
 
-    // Default fallback
-    redirect('/login');
+    // Default safety fallback for unknown exceptions (redirect safely or show internal error message)
+    const publicMessage = getPublicAuthErrorMessage('UNKNOWN');
+    return (
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: '#0B0F19',
+        color: '#F3F4F6',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'Inter, system-ui, sans-serif',
+        padding: '2rem',
+      }}>
+        <div style={{
+          backgroundColor: '#111827',
+          border: '1px solid #1F2937',
+          borderRadius: '12px',
+          padding: '2.5rem',
+          maxWidth: '500px',
+          width: '100%',
+          textAlign: 'center',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+        }}>
+          <h1 style={{ color: '#EF4444', fontSize: '1.5rem', fontWeight: 800, margin: '0 0 1rem 0' }}>
+            System Error
+          </h1>
+          <p style={{ color: '#9CA3AF', fontSize: '0.9rem', lineHeight: '1.6', marginBottom: '1.5rem' }}>
+            {publicMessage}
+          </p>
+          <form action={logoutAction}>
+            <button type="submit" style={{
+              backgroundColor: '#374151',
+              color: '#F9FAFB',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '0.6rem 1.2rem',
+              fontSize: '0.9rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}>
+              Sign Out
+            </button>
+          </form>
+        </div>
+      </div>
+    );
   }
 
   return (

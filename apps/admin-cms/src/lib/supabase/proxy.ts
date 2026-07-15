@@ -3,12 +3,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getPublicEnv } from '../env';
 
 /**
- * Validates and refreshes the Supabase Auth session inside Next.js Middleware.
+ * Validates and refreshes the Supabase Auth session inside Next.js Proxy.
  * 
  * Rules:
  * - Updates request and response cookies to maintain an active session.
- * - Call supabase.auth.getUser() to trigger session refresh and token verification.
- * - Excludes static assets from processing (managed by matcher in middleware).
+ * - Call supabase.auth.getClaims() to trigger session refresh and token verification.
+ * - Excludes static assets from processing (managed by matcher in Next.js Proxy).
  * - Do not rely on this proxy as the sole authorization boundary.
  */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {

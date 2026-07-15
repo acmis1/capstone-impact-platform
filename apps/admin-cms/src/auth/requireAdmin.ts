@@ -4,32 +4,43 @@ import { createSupabaseServerClient } from '../lib/supabase/server';
 import { createSupabaseAdminClient } from '../lib/supabase/admin';
 import { AdminAuthError, AuthenticatedAdminContext, AdminRole } from './authTypes';
 import { getPermissionsForRoles } from './permissions';
-import { extractSubClaim } from './claims';
+import { parseClaimsResult } from './claimsResult';
 
 /**
  * Server-only helper that authenticates the user session and authorizes administrative privileges.
  * 
  * Flow:
- * 1. Resolves Supabase session via HTTP cookies and calls getClaims().
- * 2. Validates sub claim as authUserId.
- * 3. Uses administrative client to lookup user details and roles.
- * 4. Determines permissions from the loaded roles.
+ * A. Resolves Server session client (failures map to CONFIGURATION_FAILURE).
+ * B. Triggers getClaims() and validates claims envelope (failures map to UNAUTHENTICATED or CONFIGURATION_FAILURE).
+ * C. Queries database admin profile (failures map to CONFIGURATION_FAILURE).
+ * D. Checks admin provisioning (failures map to ADMIN_NOT_PROVISIONED).
+ * E. Verifies user roles and permissions (failures map to PERMISSION_DENIED).
  */
 export async function requireAdmin(): Promise<AuthenticatedAdminContext> {
-  let authUserId: string;
+  let supabaseSession;
+  
+  // A. Server session client creation boundary
   try {
-    const supabaseSession = await createSupabaseServerClient();
-    const claims = await supabaseSession.auth.getClaims();
-    authUserId = extractSubClaim(claims);
+    supabaseSession = await createSupabaseServerClient();
+  } catch {
+    throw new AdminAuthError('CONFIGURATION_FAILURE', 'Authentication service unavailable.');
+  }
+
+  let authUserId: string;
+
+  // B & C. getClaims result validation & execution boundary
+  try {
+    const result = await supabaseSession.auth.getClaims();
+    authUserId = parseClaimsResult(result);
   } catch (err: unknown) {
     if (err instanceof AdminAuthError) throw err;
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new AdminAuthError('UNAUTHENTICATED', msg || 'No active session.');
+    throw new AdminAuthError('CONFIGURATION_FAILURE', 'Authentication service unavailable.');
   }
 
   let adminUser;
   let rolesData;
 
+  // D. Administrator database lookup boundary
   try {
     const supabaseAdmin = createSupabaseAdminClient();
 
@@ -44,12 +55,18 @@ export async function requireAdmin(): Promise<AuthenticatedAdminContext> {
       throw new Error(adminError.message);
     }
     adminUser = data;
+  } catch {
+    throw new AdminAuthError('CONFIGURATION_FAILURE', 'Authentication service unavailable.');
+  }
 
-    if (!adminUser) {
-      throw new AdminAuthError('ADMIN_NOT_PROVISIONED', 'Access denied.');
-    }
+  // E. Verify linked administrator profile exists
+  if (!adminUser) {
+    throw new AdminAuthError('ADMIN_NOT_PROVISIONED', 'Access denied.');
+  }
 
-    // Load user roles from user_roles table
+  // F. Load user roles boundary
+  try {
+    const supabaseAdmin = createSupabaseAdminClient();
     const { data: rData, error: rolesError } = await supabaseAdmin
       .from('user_roles')
       .select('role')
@@ -59,8 +76,7 @@ export async function requireAdmin(): Promise<AuthenticatedAdminContext> {
       throw new Error(rolesError.message);
     }
     rolesData = rData;
-  } catch (err: unknown) {
-    if (err instanceof AdminAuthError) throw err;
+  } catch {
     throw new AdminAuthError('CONFIGURATION_FAILURE', 'Authentication service unavailable.');
   }
 
@@ -68,6 +84,7 @@ export async function requireAdmin(): Promise<AuthenticatedAdminContext> {
     .map((r) => r.role as AdminRole)
     .filter((role): role is AdminRole => ['admin', 'reviewer', 'editor'].includes(role));
 
+  // G. Check recognized roles
   if (roles.length === 0) {
     throw new AdminAuthError('PERMISSION_DENIED', 'Access denied.');
   }

@@ -3,6 +3,7 @@ import { getPermissionsForRoles, hasPermission, canPerformReviewAction } from '.
 import { validateSameOrigin } from './csrf';
 import { AdminAuthError, AdminRole } from './authTypes';
 import { extractSubClaim } from './claims';
+import { parseClaimsResult } from './claimsResult';
 import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from './authHttp';
 import { validateReviewActionInput } from './reviewActionInput';
 import { sanitizeRedirectPath } from './redirect';
@@ -89,34 +90,88 @@ describe('Authentication & Authorization Tests (Offline)', () => {
     });
   });
 
-  describe('3. Claims Extraction (A)', () => {
+  describe('3. Claims Extraction & Envelope Verification (A)', () => {
+    const validUuid = 'd7170068-bc23-4554-ba5e-f00de7a7872d';
+
     it('accepts valid subject UUID claim', () => {
-      const validSub = 'd7170068-bc23-4554-ba5e-f00de7a7872d';
-      expect(extractSubClaim({ sub: validSub })).toBe(validSub);
+      expect(extractSubClaim({ sub: validUuid })).toBe(validUuid);
     });
 
-    it('rejects missing claims object', () => {
+    it('rejects missing or malformed claims objects', () => {
       expect(() => extractSubClaim(null)).toThrow(AdminAuthError);
       expect(() => extractSubClaim(undefined)).toThrow(AdminAuthError);
-    });
-
-    it('rejects missing subject claim', () => {
       expect(() => extractSubClaim({})).toThrow(AdminAuthError);
-      expect(() => extractSubClaim({ email: 'test@test.com' })).toThrow(AdminAuthError);
-    });
-
-    it('rejects empty subject claim', () => {
       expect(() => extractSubClaim({ sub: '' })).toThrow(AdminAuthError);
-      expect(() => extractSubClaim({ sub: '   ' })).toThrow(AdminAuthError);
+      expect(() => extractSubClaim({ sub: 'invalid-uuid' })).toThrow(AdminAuthError);
     });
 
-    it('rejects malformed subject UUID format', () => {
-      expect(() => extractSubClaim({ sub: 'invalid-uuid-format' })).toThrow(AdminAuthError);
-      expect(() => extractSubClaim({ sub: 12345 })).toThrow(AdminAuthError);
+    it('parses valid getClaims response envelope correctly', () => {
+      const envelope = {
+        data: {
+          claims: {
+            sub: validUuid,
+          },
+        },
+        error: null,
+      };
+      expect(parseClaimsResult(envelope)).toBe(validUuid);
+    });
+
+    it('rejects envelope with returned Auth error', () => {
+      const envelope = {
+        data: null,
+        error: new Error('synthetic auth error'),
+      };
+      expect(() => parseClaimsResult(envelope)).toThrow(AdminAuthError);
+    });
+
+    it('rejects envelope with missing data field', () => {
+      const envelope = {
+        data: null,
+        error: null,
+      };
+      expect(() => parseClaimsResult(envelope)).toThrow(AdminAuthError);
+    });
+
+    it('rejects envelope with missing claims field', () => {
+      const envelope = {
+        data: {},
+        error: null,
+      };
+      expect(() => parseClaimsResult(envelope)).toThrow(AdminAuthError);
+    });
+
+    it('rejects envelope with claims missing sub', () => {
+      const envelope = {
+        data: { claims: { email: 'admin@test.local' } },
+        error: null,
+      };
+      expect(() => parseClaimsResult(envelope)).toThrow(AdminAuthError);
+    });
+
+    it('rejects envelope with empty sub', () => {
+      const envelope = {
+        data: { claims: { sub: '   ' } },
+        error: null,
+      };
+      expect(() => parseClaimsResult(envelope)).toThrow(AdminAuthError);
+    });
+
+    it('rejects envelope with malformed sub', () => {
+      const envelope = {
+        data: { claims: { sub: 'malformed-uuid' } },
+        error: null,
+      };
+      expect(() => parseClaimsResult(envelope)).toThrow(AdminAuthError);
+    });
+
+    it('rejects raw top-level object treated as complete response envelope', () => {
+      const rawPayload = { sub: validUuid };
+      expect(() => parseClaimsResult(rawPayload)).toThrow(AdminAuthError);
     });
   });
 
-  describe('4. Auth HTTP Mapper (B)', () => {
+  describe('4. Auth HTTP Mapper & Layout Messages (B)', () => {
     it('maps unauthenticated error correctly', () => {
       expect(getAuthErrorHttpStatus('UNAUTHENTICATED')).toBe(401);
       expect(getPublicAuthErrorMessage('UNAUTHENTICATED')).toBe('Authentication required.');
@@ -211,6 +266,11 @@ describe('Authentication & Authorization Tests (Offline)', () => {
       if (emptyComment.valid) {
         expect(emptyComment.data.comments).toBeUndefined();
       }
+    });
+
+    it('rejects null comments parameter explicitly', () => {
+      const result = validateReviewActionInput({ action: 'approve', comments: null }, 'id');
+      expect(result.valid).toBe(false);
     });
 
     it('rejects malformed comments (objects, numbers, arrays, booleans, or too long)', () => {

@@ -19,7 +19,7 @@ export type ValidationResult =
  * - Request body must be a plain non-null JSON object (no arrays or primitives).
  * - Action parameter must be exactly 'request_changes', 'approve', or 'archive'.
  * - Comments is optional; when provided, must be a string, trimmed, capped at 4000 chars,
- *   and empty trimmed comments are normalized to undefined.
+ *   and empty trimmed comments are normalized to undefined. Reject null, numbers, booleans, arrays, objects.
  * - publicId must be non-empty, max 100 chars, and restricted to safe alphanumeric/hyphen/underscore patterns.
  */
 export function validateReviewActionInput(body: unknown, publicIdParam: unknown): ValidationResult {
@@ -40,7 +40,10 @@ export function validateReviewActionInput(body: unknown, publicIdParam: unknown)
   let comments: string | undefined = undefined;
   if ('comments' in payload) {
     const rawComments = payload.comments;
-    if (rawComments !== undefined && rawComments !== null) {
+    if (rawComments === null) {
+      return { valid: false, error: 'Comments parameter must be a string when provided.' };
+    }
+    if (rawComments !== undefined) {
       if (typeof rawComments !== 'string') {
         return { valid: false, error: 'Comments parameter must be a string.' };
       }
