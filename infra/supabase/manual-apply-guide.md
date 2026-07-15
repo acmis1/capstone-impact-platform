@@ -89,3 +89,56 @@ DROP TABLE IF EXISTS disciplines CASCADE;
 DROP TABLE IF EXISTS programs CASCADE;
 ```
 After executing the teardown, repeat Steps 1 & 2 to apply the schema clean.
+
+---
+
+## 🔐 Step 3: Execute Admin Auth Identity Link (Migration 0003)
+
+1. Open the SQL Editor in your Supabase Dashboard.
+2. Open the file **`migrations/0003_admin_auth_identity.sql`** and copy its content.
+3. Paste it into the SQL Editor and click **Run**.
+4. This adds the `auth_user_id` column to the `admin_users` table to link identity credentials.
+
+---
+
+## 👥 Administrative User Provisioning in Staging
+
+Staging operates on manually provisioned admins using Supabase Auth. Since there is no public self-registration form, follow these steps to add a staging administrator:
+
+### 1. Create the Auth User in Supabase Dashboard
+1. In your Supabase Dashboard, navigate to **Authentication** > **Users** in the left sidebar.
+2. Click **Add User** > **Create User**.
+3. Fill in a fictional email address (e.g. `test.admin@example.local`) and a secure password.
+4. Set **Auto-confirm User?** to `true` (checked) so no email confirmation is sent.
+5. Click **Create User**.
+
+### 2. Retrieve the User UUID
+1. Locate the newly created user in the **Authentication** > **Users** list.
+2. Copy the UUID value displayed in the **User UID** / **ID** column (e.g. `d7170068-bc23-4554-ba5e-f00de7a7872d`).
+
+### 3. Provision the Admin CMS Role in SQL Editor
+Open the **SQL Editor** and execute the following query to link the Auth user to the administrative schema (replace the placeholder UUID and email with your generated staging values):
+
+```sql
+-- 1. Insert or update the admin_users profile linked to the Auth ID
+INSERT INTO admin_users (email, full_name, auth_user_id)
+VALUES ('test.admin@example.local', 'Staging Administrator', 'd7170068-bc23-4554-ba5e-f00de7a7872d')
+ON CONFLICT (email) 
+DO UPDATE SET auth_user_id = EXCLUDED.auth_user_id, full_name = EXCLUDED.full_name;
+
+-- 2. Assign the role in user_roles table
+-- Retrieve the local admin user ID we just created
+DO $$
+DECLARE
+    v_user_id UUID;
+BEGIN
+    SELECT id INTO v_user_id FROM admin_users WHERE email = 'test.admin@example.local';
+    
+    -- Insert user role ('admin', 'reviewer', or 'editor')
+    INSERT INTO user_roles (user_id, role)
+    VALUES (v_user_id, 'admin')
+    ON CONFLICT (user_id, role) DO NOTHING;
+END $$;
+```
+Now `test.admin@example.local` can sign in and access pages requiring `projects.read` and higher administrative permissions.
+
