@@ -3,20 +3,22 @@ import { validateMediaAsset } from './mediaValidation';
 
 describe('mediaValidation', () => {
   it('accepts valid PNG, JPEG, WEBP and PDF MIME types within limits', () => {
-    const validPng = validateMediaAsset({
-      fileName: 'poster.png',
-      fileSizeBytes: 1024 * 1024, // 1 MB
-      mimeType: 'image/png',
-    });
-    expect(validPng.valid).toBe(true);
-    expect(validPng.errors.length).toBe(0);
+    const testCases = [
+      { fileName: 'poster.png', mimeType: 'image/png', size: 1024 * 1024 },
+      { fileName: 'photo.jpeg', mimeType: 'image/jpeg', size: 2 * 1024 * 1024 },
+      { fileName: 'banner.webp', mimeType: 'image/webp', size: 4 * 1024 * 1024 },
+      { fileName: 'document.pdf', mimeType: 'application/pdf', size: 15 * 1024 * 1024 },
+    ];
 
-    const validPdf = validateMediaAsset({
-      fileName: 'poster.pdf',
-      fileSizeBytes: 15 * 1024 * 1024, // 15 MB
-      mimeType: 'application/pdf',
+    testCases.forEach(({ fileName, mimeType, size }) => {
+      const result = validateMediaAsset({
+        fileName,
+        fileSizeBytes: size,
+        mimeType,
+      });
+      expect(result.valid).toBe(true);
+      expect(result.errors.length).toBe(0);
     });
-    expect(validPdf.valid).toBe(true);
   });
 
   it('fails for unsupported MIME types', () => {

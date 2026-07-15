@@ -62,6 +62,26 @@ describe('projectWorkflow', () => {
       expect(result.toStatus).toBe('archived');
     });
 
+    it('successfully transitions for defined valid workflow paths (table-driven)', () => {
+      const transitions: Array<{ from: WorkflowStatus; action: ReviewAction; to: WorkflowStatus }> = [
+        { from: 'submitted', action: 'approve', to: 'approved' },
+        { from: 'submitted', action: 'request_changes', to: 'changes_requested' },
+        { from: 'submitted', action: 'archive', to: 'archived' },
+        { from: 'changes_requested', action: 'approve', to: 'approved' },
+        { from: 'approved', action: 'request_changes', to: 'changes_requested' },
+        { from: 'approved', action: 'archive', to: 'archived' },
+        { from: 'published', action: 'archive', to: 'archived' },
+      ];
+
+      transitions.forEach(({ from, action, to }) => {
+        const result = applyReviewActionTransition(from, action);
+        expect(result.allowed).toBe(true);
+        expect(result.fromStatus).toBe(from);
+        expect(result.toStatus).toBe(to);
+        expect(result.error).toBeUndefined();
+      });
+    });
+
     it('rejects invalid actions from draft state', () => {
       const result = applyReviewActionTransition('draft', 'approve');
       expect(result.allowed).toBe(false);

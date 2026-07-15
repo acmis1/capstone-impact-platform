@@ -99,7 +99,7 @@ describe('compilePublicFeed', () => {
     const project = createMockProject({
       status: 'approved',
     });
-    delete (project as Record<string, unknown>).layoutConfig;
+    delete (project as unknown as Record<string, unknown>).layoutConfig;
 
     const result = compilePublicFeed([project]);
     expect(result[0].layoutConfig.templateId).toBe('poster_showcase');

@@ -138,6 +138,23 @@ describe('validateImportPackage', () => {
     expect(result.errors.some(e => e.ruleCode === 'FILE_INVALID_POSTER_IMAGE')).toBe(true);
   });
 
+  it('propagates media validation errors for unsupported MIME type', () => {
+    const pkg = createMockParsedPackage({
+      posterImage: {
+        fileName: 'poster.png',
+        fileSizeBytes: 1024,
+        mimeType: 'application/octet-stream', // Unsupported mime type
+        content: Buffer.from([]),
+      },
+    });
+
+    const result = validateImportPackage(pkg);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.ruleCode === 'FILE_INVALID_POSTER_IMAGE')).toBe(true);
+    const mimeError = result.errors.find(e => e.ruleCode === 'FILE_INVALID_POSTER_IMAGE');
+    expect(mimeError?.message).toContain('MIME type [application/octet-stream] is not allowed');
+  });
+
   it('does not mutate the input package object', () => {
     const pkg = createMockParsedPackage();
     const originalJson = JSON.stringify(pkg);

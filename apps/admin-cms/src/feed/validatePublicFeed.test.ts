@@ -45,14 +45,21 @@ describe('validatePublicFeed', () => {
   });
 
   it('fails validation when required fields are missing', () => {
-    const validProject = createMockProject({ status: 'approved' });
-    const compiled = compilePublicFeed([validProject]);
-    delete (compiled[0] as unknown as Record<string, unknown>).title;
+    const requiredFields = [
+      'id', 'publicId', 'title', 'summary', 'year', 'program', 'studyProgram',
+      'discipline', 'groupName', 'teamMembers', 'poster', 'posterPdf', 'layoutConfig'
+    ];
 
-    const result = validatePublicFeed(compiled);
-    expect(result.valid).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors[0]).toContain('Missing required field: "title"');
+    requiredFields.forEach(field => {
+      const validProject = createMockProject({ status: 'approved' });
+      const compiled = compilePublicFeed([validProject]);
+      delete (compiled[0] as unknown as Record<string, unknown>)[field];
+
+      const result = validatePublicFeed(compiled);
+      expect(result.valid).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some(err => err.includes(`Missing required field: "${field}"`))).toBe(true);
+    });
   });
 
   it('fails validation when id is not an integer', () => {
