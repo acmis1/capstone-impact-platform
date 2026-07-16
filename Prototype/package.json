@@ -10,7 +10,10 @@
     "client": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "validate-feed": "node scripts/validate-feed.js"
+    "validate-feed": "node scripts/validate-feed.js",
+    "test": "node scripts/test-recovery.js",
+    "recovery:dry-run": "node scripts/recoverPrototypeSupabase.js",
+    "recovery:apply": "node scripts/recoverPrototypeSupabase.js --apply"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",
