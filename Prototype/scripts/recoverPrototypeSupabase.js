@@ -11,14 +11,15 @@ import {
   sanitizeRecoveryFailure,
   scanObsoleteReferences,
   planRecovery,
-  validateRecoveryConfig
+  validateRecoveryConfig,
+  canonicalJsonString
 } from '../utils/recoveryHelper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Injected recovery execution function to support comprehensive unit testing without hitting the network.
+ * Injected recovery execution function.
  */
 export async function runRecovery({
   isApply,
@@ -28,23 +29,42 @@ export async function runRecovery({
   localSeed,
   localFeed,
   createSupabaseClient,
-  fileAdapter,
   logger = console,
   recoveryConfig
 }) {
-  // Validate configuration targets first
-  let validatedConfig;
-  try {
-    validatedConfig = validateRecoveryConfig(recoveryConfig);
-  } catch (err) {
-    const code = sanitizeRecoveryFailure('CONFIGURATION_INVALID', err);
-    logger.error(`❌ Error: ${code}`);
-    return { success: false, error: code };
+  // Capture local feed source, validate it, and compile an immutable buffer immediately (before any await/network)
+  let feedData;
+  let immutableFeedBuffer;
+
+  if (typeof localFeed === 'string') {
+    try {
+      feedData = JSON.parse(localFeed);
+    } catch (e) {
+      logger.error('❌ Error: PUBLIC_FEED_JSON_INVALID');
+      return { success: false, error: 'PUBLIC_FEED_JSON_INVALID' };
+    }
+    if (!Array.isArray(feedData)) {
+      logger.error('❌ Error: PUBLIC_FEED_NOT_ARRAY');
+      return { success: false, error: 'PUBLIC_FEED_NOT_ARRAY' };
+    }
+    immutableFeedBuffer = Buffer.from(localFeed, 'utf8');
+  } else {
+    feedData = localFeed;
+    if (!Array.isArray(feedData)) {
+      logger.error('❌ Error: PUBLIC_FEED_NOT_ARRAY');
+      return { success: false, error: 'PUBLIC_FEED_NOT_ARRAY' };
+    }
+    try {
+      const serialized = canonicalJsonString(localFeed);
+      immutableFeedBuffer = Buffer.from(serialized, 'utf8');
+    } catch (e) {
+      logger.error('❌ Error: PUBLIC_FEED_JSON_INVALID');
+      return { success: false, error: 'PUBLIC_FEED_JSON_INVALID' };
+    }
   }
 
-  // 1. Dry Run / Local verification phase - parsing separated from array validation
+  // Parse seed JSON
   let dbData;
-  let feedData;
   try {
     dbData = typeof localSeed === 'string' ? JSON.parse(localSeed) : localSeed;
   } catch (e) {
@@ -56,18 +76,17 @@ export async function runRecovery({
     return { success: false, error: 'SEED_NOT_ARRAY' };
   }
 
+  // Validate configuration targets first (fails before client creation)
+  let validatedConfig;
   try {
-    feedData = typeof localFeed === 'string' ? JSON.parse(localFeed) : localFeed;
-  } catch (e) {
-    logger.error('❌ Error: PUBLIC_FEED_JSON_INVALID');
-    return { success: false, error: 'PUBLIC_FEED_JSON_INVALID' };
-  }
-  if (!Array.isArray(feedData)) {
-    logger.error('❌ Error: PUBLIC_FEED_NOT_ARRAY');
-    return { success: false, error: 'PUBLIC_FEED_NOT_ARRAY' };
+    validatedConfig = validateRecoveryConfig(recoveryConfig);
+  } catch (err) {
+    const code = sanitizeRecoveryFailure('CONFIGURATION_INVALID', err);
+    logger.error(`❌ Error: ${code}`);
+    return { success: false, error: code };
   }
 
-  // Validate schemas and unique IDs
+  // Verify schemas and unique IDs
   try {
     validateUniqueIds(dbData, 'SEED');
   } catch (err) {
@@ -84,7 +103,7 @@ export async function runRecovery({
     return { success: false, error: code };
   }
 
-  // Validate subset relation
+  // Verify subset relation
   try {
     validateFeedSubset(dbData, feedData);
   } catch (err) {
@@ -120,7 +139,18 @@ export async function runRecovery({
     return { success: true, exitCode: 0 };
   }
 
-  // 2. Target Match Guards (stop before client creation/network calls)
+  // Prove that parsing the immutable upload payload produces content canonically equal to feedData (before client creation)
+  try {
+    const parsedPayload = JSON.parse(immutableFeedBuffer.toString('utf8'));
+    if (canonicalJsonString(parsedPayload) !== canonicalJsonString(feedData)) {
+      throw new Error('VALIDATED_FEED_PAYLOAD_MISMATCH');
+    }
+  } catch (err) {
+    logger.error('❌ Error: VALIDATED_FEED_PAYLOAD_MISMATCH');
+    return { success: false, error: 'VALIDATED_FEED_PAYLOAD_MISMATCH' };
+  }
+
+  // Target Match Guards
   const verification = verifyProjectRef(supabaseUrl, expectedRef);
   if (verification !== 'TARGET_MATCH') {
     const errCode = verification === 'TARGET_CONFIGURATION_MISSING' ? 'TARGET_CONFIGURATION_MISSING' : 'TARGET_MISMATCH';
@@ -133,14 +163,14 @@ export async function runRecovery({
     return { success: false, error: 'SUPABASE_CLIENT_UNAVAILABLE' };
   }
 
-  // 3. Create client via factory
+  // Create client via factory
   const supabase = createSupabaseClient(supabaseUrl, supabaseKey);
   if (!supabase) {
     logger.error('❌ Error: SUPABASE_CLIENT_UNAVAILABLE');
     return { success: false, error: 'SUPABASE_CLIENT_UNAVAILABLE' };
   }
 
-  // 4. Storage preflight check before database writes
+  // Storage preflight checks
   const feedsBucketName = validatedConfig.feedBucket;
   const assetsBucketName = validatedConfig.assetBucket;
 
@@ -189,7 +219,7 @@ export async function runRecovery({
     return { success: false, error: 'STORAGE_PREFLIGHT_FAILED' };
   }
 
-  // 5. Remote Feed state planning before database writes
+  // Remote Feed state planning
   const feedFileName = validatedConfig.feedFile;
   logger.log(`Checking existing feed ${feedFileName} in bucket ${feedsBucketName}...`);
   let remoteFeedState = 'MISSING';
@@ -236,7 +266,7 @@ export async function runRecovery({
     return { success: false, error: code };
   }
 
-  // 6. Read and validate database state
+  // Read remote database rows
   logger.log('Reading projects from remote database...');
   let remoteData;
   try {
@@ -250,7 +280,7 @@ export async function runRecovery({
     return { success: false, error: 'REMOTE_PROJECTS_READ_FAILED' };
   }
 
-  // 7. Atomic Planning
+  // Atomic planning check
   const plan = planRecovery({
     localSeed: dbData,
     localFeed: feedData,
@@ -264,7 +294,7 @@ export async function runRecovery({
     return { success: false, error: plan.error };
   }
 
-  // 8. Execute Database Seeding (Insert only)
+  // Execute Database Seeding (Insert only)
   if (plan.shouldInsertDatabaseRecords) {
     const remoteIdSet = new Set(remoteData.map(r => Number(r.id)));
     const missingRecords = dbData.filter(d => !remoteIdSet.has(Number(d.id)));
@@ -312,15 +342,13 @@ export async function runRecovery({
     return { success: false, error: 'RECOVERY_VERIFICATION_FAILED' };
   }
 
-  // 9. Execute Feed Upload when missing
+  // Execute Feed Upload using the immutable buffer snapshot
   if (plan.shouldCreateFeed) {
     logger.log(`Uploading public feed ${feedFileName}...`);
-    const feedPath = path.resolve(__dirname, '../public/capstones-latest.json');
-    const fileBuffer = fileAdapter.readFileSync(feedPath);
     
     const { error: uploadError } = await supabase.storage
       .from(feedsBucketName)
-      .upload(feedFileName, fileBuffer, {
+      .upload(feedFileName, immutableFeedBuffer, {
         contentType: 'application/json',
         upsert: false // Creation upload only
       });
@@ -332,7 +360,7 @@ export async function runRecovery({
     logger.log('✅ Remote feed successfully uploaded.');
   }
 
-  // 10. Final Remote Feed Verification
+  // Final remote feed verification using download
   try {
     const { data: verifyBlob, error: verifyDownloadError } = await supabase.storage
       .from(feedsBucketName)
@@ -381,7 +409,6 @@ async function main() {
   const supabaseKey = getSupabaseKey();
   const expectedRef = process.env.SUPABASE_EXPECTED_PROJECT_REF;
 
-  // Construct config from environment variable values safely
   const recoveryConfig = {
     feedBucket: process.env.SUPABASE_FEED_BUCKET || 'feeds',
     assetBucket: process.env.SUPABASE_ASSET_BUCKET || 'project-assets',
@@ -396,7 +423,7 @@ async function main() {
     localSeed,
     localFeed,
     createSupabaseClient: createClient,
-    fileAdapter: fs,
+    logger: console,
     recoveryConfig
   });
 
