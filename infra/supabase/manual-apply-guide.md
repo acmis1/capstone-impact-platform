@@ -101,7 +101,7 @@ After executing the teardown, repeat Steps 1 & 2 to apply the schema clean.
 
 ---
 
-## 👥 Administrative User Provisioning in Staging
+## Administrative User Provisioning in Staging
 
 Staging operates on manually provisioned admins using Supabase Auth. Since there is no public self-registration form, follow these steps to add a staging administrator:
 
@@ -141,31 +141,31 @@ BEGIN
     -- 1. Verify that an Auth user exists in auth.users with the supplied UUID
     SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = v_auth_uuid) INTO v_auth_exists;
     IF NOT v_auth_exists THEN
-        RAISE EXCEPTION 'Safety check failed: Auth user UUID % does not exist in auth.users.', v_auth_uuid;
+        RAISE EXCEPTION 'AUTH_USER_NOT_FOUND';
     END IF;
 
     -- 2. Verify that the Auth user's email matches the canonical email
     SELECT email INTO v_auth_email FROM auth.users WHERE id = v_auth_uuid;
     IF v_auth_email IS DISTINCT FROM v_email THEN
-        RAISE EXCEPTION 'Safety check failed: Auth user email % does not match expected canonical email %.', v_auth_email, v_email;
+        RAISE EXCEPTION 'AUTH_EMAIL_MISMATCH';
     END IF;
 
     -- 3. Check if another admin_users row is already linked to the supplied UUID
     SELECT email INTO v_existing_linked_email FROM admin_users WHERE auth_user_id = v_auth_uuid AND email IS DISTINCT FROM v_email;
     IF v_existing_linked_email IS NOT NULL THEN
-        RAISE EXCEPTION 'Safety check failed: Staging Auth user UUID % is already linked to a different admin_users profile: %.', v_auth_uuid, v_existing_linked_email;
+        RAISE EXCEPTION 'AUTH_IDENTITY_ALREADY_LINKED';
     END IF;
 
     -- 4. Check if the canonical admin_users row is already linked to a different UUID
     SELECT auth_user_id INTO v_existing_admin_linked_uuid FROM admin_users WHERE email = v_email;
     IF v_existing_admin_linked_uuid IS NOT NULL AND v_existing_admin_linked_uuid IS DISTINCT FROM v_auth_uuid THEN
-        RAISE EXCEPTION 'Safety check failed: Canonical admin profile % is already linked to a different Auth UUID %.', v_email, v_existing_admin_linked_uuid;
+        RAISE EXCEPTION 'CANONICAL_PROFILE_LINK_CONFLICT';
     END IF;
 
     -- 5. Check if more than one matching administrator row is found for this email
     SELECT COUNT(*) INTO v_admin_count FROM admin_users WHERE email = v_email;
     IF v_admin_count > 1 THEN
-        RAISE EXCEPTION 'Safety check failed: Multiple admin_users profiles found with email %.', v_email;
+        RAISE EXCEPTION 'MULTIPLE_CANONICAL_ADMIN_ROWS';
     END IF;
 
     -- 6. Create or retrieve the canonical admin_users profile
@@ -188,7 +188,7 @@ BEGIN
     VALUES (v_admin_id, 'admin')
     ON CONFLICT (user_id, role) DO NOTHING;
 
-    RAISE NOTICE 'Success: Linked Auth user UUID % to admin profile %.', v_auth_uuid, v_email;
+    RAISE NOTICE 'STAGING_ADMIN_PROVISIONED';
 END $$;
 ```
 

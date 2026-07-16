@@ -85,7 +85,7 @@ Before linking the test Auth account to any database administrator profiles:
 
 *This step is a staging mutation and requires explicit operator approval.*
 
-To link your newly created Auth user UUID to the administrative schema, execute the guarded, idempotent provisioning SQL block documented in the [Staging User Provisioning Guide](../supabase/manual-apply-guide.md#👥-administrative-user-provisioning-in-staging).
+To link your newly created Auth user UUID to the administrative schema, execute the guarded, idempotent provisioning SQL block documented in the [Staging User Provisioning Guide](./manual-apply-guide.md#administrative-user-provisioning-in-staging).
 
 After executing the provisioning SQL block, perform the following verification checks:
 
