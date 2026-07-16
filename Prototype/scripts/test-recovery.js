@@ -15,7 +15,7 @@ import {
   sanitizeRecoveryFailure,
   planRecovery
 } from '../utils/recoveryHelper.js';
-import { runRecovery } from './recoverPrototypeSupabase.js';
+import { runRecovery, loadRecoveryEnv } from './recoverPrototypeSupabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -484,23 +484,191 @@ registerTest('23. Source-level checks: no readFileSync call inside runRecovery, 
   assert.ok(runnerContent.includes('upsert: false'));
 });
 
+// 24. Substantive Module Structure Verification
+registerTest('24. Substantive Module Structure Verification', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, 'recoverPrototypeSupabase.js'), 'utf8');
+
+  const idxLoadEnv = source.indexOf('export function loadRecoveryEnv');
+  const idxRunRec = source.indexOf('export async function runRecovery');
+  const idxMain = source.indexOf('async function main()');
+
+  assert.notStrictEqual(idxLoadEnv, -1);
+  assert.notStrictEqual(idxRunRec, -1);
+  assert.notStrictEqual(idxMain, -1);
+
+  assert.ok(idxLoadEnv < idxRunRec);
+  assert.ok(idxRunRec < idxMain);
+
+  // Check no standalone call to loadRecoveryEnv() before main
+  const sourceBeforeMain = source.slice(0, idxMain);
+  // Match loadRecoveryEnv() calls, excluding function declaration
+  const standaloneCalls = sourceBeforeMain.match(/(?<!function\s+)loadRecoveryEnv\s*\(/g) || [];
+  assert.strictEqual(standaloneCalls.length, 0);
+
+  // Check main contains loadRecoveryEnv() call before first process.env
+  const mainSource = source.slice(idxMain);
+  const mainLoaderCall = mainSource.indexOf('loadRecoveryEnv()');
+  const firstProcessEnv = mainSource.indexOf('process.env');
+
+  assert.notStrictEqual(mainLoaderCall, -1);
+  assert.notStrictEqual(firstProcessEnv, -1);
+  assert.ok(mainLoaderCall < firstProcessEnv);
+});
+
+// 25. Missing env file behavior
+registerTest('25. Missing env file behavior', () => {
+  let mockDotenvCalls = 0;
+  const mockDotenv = {
+    config: () => {
+      mockDotenvCalls++;
+      return {};
+    }
+  };
+
+  const result = loadRecoveryEnv({
+    envPath: '/non-existent-path-to-env',
+    dotenvModule: mockDotenv,
+    fsModule: { existsSync: () => false },
+    targetEnv: {}
+  });
+
+  assert.deepStrictEqual(result, { loaded: false });
+  assert.strictEqual(mockDotenvCalls, 0);
+});
+
+// 26. Existing artificial env file loads into targetEnv
+registerTest('26. Existing artificial env file loads into targetEnv', () => {
+  const tempPath = path.resolve(__dirname, 'temp_env_test');
+  fs.writeFileSync(tempPath, 'TEST_VAL_ARTIFICIAL=hello_world\n');
+
+  try {
+    const targetEnv = {};
+    const result = loadRecoveryEnv({
+      envPath: tempPath,
+      targetEnv
+    });
+
+    assert.deepStrictEqual(result, { loaded: true });
+    assert.strictEqual(targetEnv.TEST_VAL_ARTIFICIAL, 'hello_world');
+    assert.strictEqual(process.env.TEST_VAL_ARTIFICIAL, undefined);
+  } finally {
+    if (fs.existsSync(tempPath)) {
+      fs.unlinkSync(tempPath);
+    }
+  }
+});
+
+// 27. Existing-value precedence
+registerTest('27. Existing-value precedence', () => {
+  const tempPath = path.resolve(__dirname, 'temp_env_test_precedence');
+  fs.writeFileSync(tempPath, 'EXISTING_VALUE=new_value\nNEW_VALUE_SET=loaded\n');
+
+  try {
+    const targetEnv = { EXISTING_VALUE: 'original_value' };
+    const result = loadRecoveryEnv({
+      envPath: tempPath,
+      targetEnv
+    });
+
+    assert.deepStrictEqual(result, { loaded: true });
+    assert.strictEqual(targetEnv.EXISTING_VALUE, 'original_value');
+    assert.strictEqual(targetEnv.NEW_VALUE_SET, 'loaded');
+  } finally {
+    if (fs.existsSync(tempPath)) {
+      fs.unlinkSync(tempPath);
+    }
+  }
+});
+
+// 28. Captured dotenv options
+registerTest('28. Captured dotenv options', () => {
+  let capturedOpts = null;
+  const mockDotenv = {
+    config: (opts) => {
+      capturedOpts = opts;
+      return { parsed: {} };
+    }
+  };
+  const targetEnv = {};
+
+  const result = loadRecoveryEnv({
+    envPath: '/fake/.env',
+    dotenvModule: mockDotenv,
+    fsModule: { existsSync: () => true },
+    targetEnv
+  });
+
+  assert.deepStrictEqual(result, { loaded: true });
+  assert.notStrictEqual(capturedOpts, null);
+  assert.strictEqual(capturedOpts.path, '/fake/.env');
+  assert.strictEqual(capturedOpts.quiet, true);
+  assert.strictEqual(capturedOpts.override, false);
+  assert.strictEqual(capturedOpts.processEnv, targetEnv);
+});
+
+// 29. Loading failure sanitization
+registerTest('29. Loading failure sanitization', () => {
+  const mockDotenv = {
+    config: () => {
+      return { error: new Error('Some private system read path error') };
+    }
+  };
+
+  assert.throws(() => {
+    loadRecoveryEnv({
+      envPath: '/fake/.env',
+      dotenvModule: mockDotenv,
+      fsModule: { existsSync: () => true },
+      targetEnv: {}
+    });
+  }, (err) => {
+    assert.strictEqual(err.message, 'ENV_FILE_LOAD_FAILED');
+    assert.strictEqual(err.message.includes('private'), false);
+    return true;
+  });
+});
+
+// 30. Module import/top-level isolation
+registerTest('30. Module import/top-level isolation', () => {
+  // Verifies that loading process.env has not occurred simply by importing.
+  // The processEnv remains unaffected at imports.
+  assert.strictEqual(process.env.TEST_VAL_ARTIFICIAL, undefined);
+});
+
+// 31. Correct runRecovery source boundary
+registerTest('31. Correct runRecovery source boundary', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, 'recoverPrototypeSupabase.js'), 'utf8');
+  
+  const start = source.indexOf('export async function runRecovery');
+  const end = source.indexOf('async function main()');
+
+  assert.notStrictEqual(start, -1);
+  assert.notStrictEqual(end, -1);
+  assert.ok(start < end);
+
+  const extracted = source.slice(start, end);
+  assert.ok(extracted.trim().length > 0);
+
+  assert.strictEqual(extracted.includes('dotenv'), false);
+  assert.strictEqual(extracted.includes('process.env'), false);
+  assert.strictEqual(extracted.includes('loadRecoveryEnv('), false);
+});
+
 async function main() {
   for (const t of tests) {
     try {
       await t.fn();
       passedCount++;
     } catch (err) {
-      console.error(`❌ Test failed: ${t.name}`);
+      console.error(t.name);
       console.error('ASSERTION_FAILED');
       failedCount++;
     }
   }
 
-  console.log('====================================================');
   console.log(`Named tests: ${tests.length}`);
   console.log(`Passed: ${passedCount}`);
   console.log(`Failed: ${failedCount}`);
-  console.log('====================================================');
 
   if (failedCount > 0) {
     process.exit(1);
