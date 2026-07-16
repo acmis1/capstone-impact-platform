@@ -1,6 +1,6 @@
 # Prototype Supabase Backend Reconstruction & Recovery Runbook
 
-This runbook outlines the safe, step-by-step procedure to reconstruct and seed the deleted Prototype Supabase backend database, storage buckets, and external endpoints.
+This runbook outlines the safe, step-by-step procedure to reconstruct and seed the database and storage feed for the Prototype backend.
 
 ---
 
@@ -8,8 +8,8 @@ This runbook outlines the safe, step-by-step procedure to reconstruct and seed t
 
 This repository interacts with multiple environments. Ensure you do not confuse them:
 1.  **`capstone-impact-staging` (Isolated Admin Staging)**: **DO NOT MODIFY**. This is the operational staging database for the Next.js Admin/CMS. Do not apply migrations, run scripts, or alter users in this database.
-2.  **`capstone-prototype-recovery-2026` (Prototype Recovery Backend)**: **TARGET DATABASE**. This is the replacement project to be manually created in the Supabase Dashboard to host the reconstructed `/Prototype` backend.
-3.  **Deleted Project (Obsolete Backend)**: The original project used by `/Prototype` has been deleted and is completely unreachable.
+2.  **`capstone-prototype-recovery-2026` (Prototype Recovery Backend)**: **TARGET HUMAN-READABLE NAME**. This is the name of the replacement project to be manually created in the Supabase Dashboard. Note that this name is different from the generated project reference subdomain.
+3.  **Deleted Prototype Project**: The original backend project has been deleted and is completely unreachable. Do not attempt to query or restore it.
 
 ---
 
@@ -17,7 +17,7 @@ This repository interacts with multiple environments. Ensure you do not confuse 
 
 1.  Log in to the **Supabase Dashboard**.
 2.  Click **New Project** and select your organization.
-3.  Set the project name exactly to:
+3.  Set the project name to:
     ```text
     capstone-prototype-recovery-2026
     ```
@@ -30,24 +30,31 @@ This repository interacts with multiple environments. Ensure you do not confuse 
 
 1.  In your new project Dashboard, navigate to the **SQL Editor** from the left panel.
 2.  Click **New query**.
-3.  Paste the following schema definition script to create the required tables and public select policies:
+3.  Paste the following schema definition script to create the table and configure permissions:
     ```sql
-    -- Create the projects metadata table
-    CREATE TABLE public.projects (
-        id bigint PRIMARY KEY,
-        data jsonb NOT NULL,
-        updated_at timestamptz DEFAULT now()
+    BEGIN;
+
+    CREATE TABLE IF NOT EXISTS public.projects (
+        id BIGINT PRIMARY KEY,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
-    -- Enable Row Level Security (RLS)
     ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 
-    -- Enable select access for anonymous/public visitors
-    CREATE POLICY "Enable select access for all users" 
-    ON public.projects FOR SELECT 
-    USING (true);
+    -- Revoke all default public privileges on the projects table
+    REVOKE ALL ON TABLE public.projects FROM anon;
+    REVOKE ALL ON TABLE public.projects FROM authenticated;
+
+    -- Grant full database permissions only to the service_role key
+    GRANT ALL ON TABLE public.projects TO service_role;
+
+    COMMIT;
     ```
 4.  Click **Run** and verify success.
+
+> [!NOTE]
+> **Database Visibility Guard**: The Prototype server reads and writes data using the server-only privileged secret key. The Duda widget accesses the compiled JSON public file directly from Storage. Because Duda never queries the `projects` table directly, the database table remains completely inaccessible to anonymous/authenticated browser roles. Do not create any public SELECT policy.
 
 ---
 
@@ -67,22 +74,20 @@ This repository interacts with multiple environments. Ensure you do not confuse 
 
 Update `Prototype/.env` with the credentials of your newly created recovery project:
 ```env
-SUPABASE_URL=https://<NEW_PROJECT_REF>.supabase.co
-# Primary secret server-key
-SUPABASE_SECRET_KEY=<NEW_SECRET_ROLE_KEY>
-# Legacy service-role key fallback (optional)
-SUPABASE_SERVICE_ROLE_KEY=<NEW_SERVICE_ROLE_KEY>
+SUPABASE_URL=<NEW_PROJECT_URL>
+# Primary server secret key
+SUPABASE_SECRET_KEY=<NEW_SERVER_SECRET_KEY>
+SUPABASE_SERVICE_ROLE_KEY=
 
-# Safety Check - Enforces target protection check
-SUPABASE_EXPECTED_PROJECT_REF=capstone-prototype-recovery-2026
+# safety Check - Unique generated project reference subdomain
+# (NOT the human-readable project name. Extract it from your URL: https://<REF>.supabase.co)
+SUPABASE_EXPECTED_PROJECT_REF=<GENERATED_PROJECT_REFERENCE>
 
 SUPABASE_FEED_BUCKET=feeds
 SUPABASE_FEED_FILE=capstones-latest.json
 SUPABASE_ASSET_BUCKET=project-assets
+ADMIN_ACCESS_KEY=<NEW_RANDOM_ADMIN_ACCESS_KEY>
 ```
-
-> [!IMPORTANT]
-> **Secret Key Policy**: Never check in the `.env` file, print raw key contents in console logs, or expose keys to React/Vite client-side code.
 
 ---
 
@@ -96,7 +101,7 @@ npm run recovery:dry-run
 **Expected Verification Metrics**:
 *   Seed Database count: `10`
 *   Public Feed count: `6`
-*   Obsolescence domains matched.
+*   Obsolete domain references matched.
 *   Asset list aggregated.
 *   Readiness: `PASSED`
 
@@ -111,18 +116,12 @@ Execute the seeding and storage upload task:
 npm run recovery:apply
 ```
 
-### Safety Stop Conditions during execution:
-*   The script will abort immediately if the project reference subdomain in `SUPABASE_URL` does not match `SUPABASE_EXPECTED_PROJECT_REF`.
-*   The script will abort if the remote `projects` table contains unexpected IDs not matching local seed files.
-*   The script will abort if existing project records contain conflicting data.
-
----
-
-## Phase 7: External Integration Updates
-
-1.  **Duda Integration**:
-    *   Retrieve the new public URL of the feed file from the `feeds` bucket:
-        `https://<NEW_PROJECT_REF>.supabase.co/storage/v1/object/public/feeds/capstones-latest.json`
-    *   Update the Duda HTML widget script with this new feed address.
-2.  **Render Deployment**:
-    *   Update the Render service environment settings with the new `SUPABASE_URL` and `SUPABASE_SECRET_KEY` credentials.
+### Safety Stop Conditions (Abort immediately if any occur):
+1.  **Staging Target Protection**: Any request/URL pointing to or matching `capstone-impact-staging` is blocked.
+2.  **Generated Reference Mismatch**: If the reference derived from `SUPABASE_URL` does not match `SUPABASE_EXPECTED_PROJECT_REF` exactly.
+3.  **Mismatched Project Name**: If the human-readable project name is incorrectly supplied as the reference key.
+4.  **Database Non-empty with Conflicts**: If the remote `projects` table contains unexpected IDs or conflicting data.
+5.  **Existing Conflicting Feed**: If the `feeds/capstones-latest.json` file exists on storage but its canonical data differs from the local feed.
+6.  **Missing Buckets**: If the required buckets are missing.
+7.  **Secrets Exposure**: If any raw credentials or keys are outputted in logs.
+8.  **Asset Seeding Attempt**: The `recovery:apply` script does not upload assets to `project-assets`. Media restoration requires a separate reviewed manifest and controlled task. Do not force writes to `project-assets`.

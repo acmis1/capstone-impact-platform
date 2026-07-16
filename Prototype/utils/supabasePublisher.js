@@ -16,26 +16,22 @@ export const publishToCloud = async (localFilePath) => {
   const fileName = process.env.SUPABASE_FEED_FILE || 'capstones-latest.json';
   const expectedRef = process.env.SUPABASE_EXPECTED_PROJECT_REF;
 
-  // 1. Validation
-  if (!supabaseUrl || !supabaseKey) {
+  const verification = verifyProjectRef(supabaseUrl, expectedRef);
+  if (verification !== 'TARGET_MATCH') {
     return { 
       success: false, 
-      error: 'Supabase configuration missing. Please check SUPABASE_URL and SUPABASE_SECRET_KEY / SUPABASE_SERVICE_ROLE_KEY in your .env file.' 
+      error: verification === 'TARGET_CONFIGURATION_MISSING' ? 'TARGET_CONFIGURATION_MISSING' : 'TARGET_MISMATCH' 
     };
   }
 
-  // Target reference gate check for writes
-  const verification = verifyProjectRef(supabaseUrl, expectedRef);
-  if (expectedRef && verification !== 'TARGET_MATCH') {
-    return { success: false, error: 'TARGET_MISMATCH' };
+  if (!supabaseUrl || !supabaseKey) {
+    return { success: false, error: 'SUPABASE_CLIENT_UNAVAILABLE' };
   }
 
   try {
-    // 2. Initialize Supabase
     const supabase = createClient(supabaseUrl, supabaseKey);
     const fileBuffer = fs.readFileSync(localFilePath);
 
-    // 3. Upload/Overwrite
     const { error } = await supabase.storage
       .from(bucketName)
       .upload(fileName, fileBuffer, {
@@ -44,10 +40,9 @@ export const publishToCloud = async (localFilePath) => {
       });
 
     if (error) {
-      return { success: false, error: `Supabase Upload Error: ${error.message}` };
+      return { success: false, error: 'FEED_UPLOAD_FAILED' };
     }
 
-    // 4. Construct Public URL Safely using SDK
     const { data: { publicUrl } } = supabase.storage
       .from(bucketName)
       .getPublicUrl(fileName);
@@ -60,7 +55,7 @@ export const publishToCloud = async (localFilePath) => {
   } catch (err) {
     return { 
       success: false, 
-      error: `Unexpected Publisher Error: ${err.message}` 
+      error: 'FEED_UPLOAD_FAILED' 
     };
   }
 };
@@ -74,12 +69,18 @@ export const getPublishedFeedStatus = async () => {
   const supabaseKey = getSupabaseKey();
   const bucketName = process.env.SUPABASE_FEED_BUCKET || 'feeds';
   const fileName = process.env.SUPABASE_FEED_FILE || 'capstones-latest.json';
+  const expectedRef = process.env.SUPABASE_EXPECTED_PROJECT_REF;
 
-  if (!supabaseUrl || !supabaseKey) {
+  const verification = verifyProjectRef(supabaseUrl, expectedRef);
+  if (verification !== 'TARGET_MATCH') {
     return { 
       exists: false, 
-      error: 'Supabase configuration missing.' 
+      error: verification === 'TARGET_CONFIGURATION_MISSING' ? 'TARGET_CONFIGURATION_MISSING' : 'TARGET_MISMATCH' 
     };
+  }
+
+  if (!supabaseUrl || !supabaseKey) {
+    return { exists: false, error: 'SUPABASE_CLIENT_UNAVAILABLE' };
   }
 
   try {
@@ -90,7 +91,7 @@ export const getPublishedFeedStatus = async () => {
       .list();
 
     if (listError) {
-      return { exists: false, error: listError.message };
+      return { exists: false, error: 'FEED_STATUS_READ_FAILED' };
     }
 
     const fileMeta = files.find(f => f.name === fileName);
@@ -103,7 +104,7 @@ export const getPublishedFeedStatus = async () => {
       .download(fileName);
 
     if (downloadError) {
-      return { exists: false, error: downloadError.message };
+      return { exists: false, error: 'FEED_STATUS_READ_FAILED' };
     }
 
     const text = await blob.text();
@@ -122,7 +123,7 @@ export const getPublishedFeedStatus = async () => {
   } catch (err) {
     return { 
       exists: false, 
-      error: err.message 
+      error: 'FEED_STATUS_READ_FAILED' 
     };
   }
 };

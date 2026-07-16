@@ -34,8 +34,9 @@ export function runUrlAudit() {
     const lines = content.split('\n');
 
     lines.forEach((line, idx) => {
+      // Reset regex index before test
+      DELETED_PROJECT_REF_PATTERN.lastIndex = 0;
       if (DELETED_PROJECT_REF_PATTERN.test(line)) {
-        // Reset regex index for safety
         DELETED_PROJECT_REF_PATTERN.lastIndex = 0;
         const relativePath = path.relative(path.resolve(__dirname, '..'), resolvedPath);
         auditResults.push({

@@ -14,22 +14,22 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = getSupabaseKey();
 const expectedRef = process.env.SUPABASE_EXPECTED_PROJECT_REF;
 
-if (!supabaseUrl || !supabaseKey) {
-  console.warn('Supabase configuration missing (SUPABASE_URL or security keys). DB operations will fail.');
-}
-
 const verification = verifyProjectRef(supabaseUrl, expectedRef);
 
-const supabase = (supabaseUrl && supabaseKey) 
+// Only initialize Supabase client if verification succeeds
+const supabase = (verification === 'TARGET_MATCH' && supabaseUrl && supabaseKey) 
   ? createClient(supabaseUrl, supabaseKey) 
   : null;
 
 /**
  * Enforces the target safety checks before executing any database or storage writes.
  */
-function enforceWriteGuard() {
-  if (expectedRef && verification !== 'TARGET_MATCH') {
-    throw new Error('TARGET_MISMATCH');
+function enforceClient() {
+  if (verification !== 'TARGET_MATCH') {
+    throw new Error(verification === 'TARGET_CONFIGURATION_MISSING' ? 'TARGET_CONFIGURATION_MISSING' : 'TARGET_MISMATCH');
+  }
+  if (!supabase) {
+    throw new Error('SUPABASE_CLIENT_UNAVAILABLE');
   }
 }
 
@@ -38,14 +38,14 @@ function enforceWriteGuard() {
  * Returns the inner 'data' objects which contain the full project record.
  */
 export async function getProjects() {
-  if (!supabase) throw new Error('Supabase client not initialized');
+  enforceClient();
   
   const { data, error } = await supabase
     .from('projects')
     .select('*')
     .order('id', { ascending: true });
 
-  if (error) throw error;
+  if (error) throw new Error('DATABASE_READ_FAILED');
   
   return data.map(record => record.data);
 }
@@ -54,7 +54,7 @@ export async function getProjects() {
  * Returns a single project record by ID.
  */
 export async function getProjectById(id) {
-  if (!supabase) throw new Error('Supabase client not initialized');
+  enforceClient();
   
   const { data, error } = await supabase
     .from('projects')
@@ -64,7 +64,7 @@ export async function getProjectById(id) {
 
   if (error) {
     if (error.code === 'PGRST116') return null; // Not found
-    throw error;
+    throw new Error('DATABASE_READ_FAILED');
   }
   
   return data.data;
@@ -74,8 +74,7 @@ export async function getProjectById(id) {
  * Creates a new project record.
  */
 export async function createProject(project) {
-  if (!supabase) throw new Error('Supabase client not initialized');
-  enforceWriteGuard();
+  enforceClient();
   
   const record = {
     id: project.id,
@@ -89,7 +88,7 @@ export async function createProject(project) {
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) throw new Error('DATABASE_WRITE_FAILED');
   return data.data;
 }
 
@@ -97,11 +96,10 @@ export async function createProject(project) {
  * Updates a project record (partial patch).
  */
 export async function updateProject(id, patch) {
-  if (!supabase) throw new Error('Supabase client not initialized');
-  enforceWriteGuard();
+  enforceClient();
   
   const existing = await getProjectById(id);
-  if (!existing) throw new Error(`Project ${id} not found`);
+  if (!existing) throw new Error('PROJECT_NOT_FOUND');
 
   const updatedProject = {
     ...existing,
@@ -119,7 +117,7 @@ export async function updateProject(id, patch) {
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) throw new Error('DATABASE_WRITE_FAILED');
   return data.data;
 }
 
@@ -127,8 +125,7 @@ export async function updateProject(id, patch) {
  * Replaces a project record entirely.
  */
 export async function replaceProject(id, fullRecord) {
-  if (!supabase) throw new Error('Supabase client not initialized');
-  enforceWriteGuard();
+  enforceClient();
   
   const { data, error } = await supabase
     .from('projects')
@@ -140,7 +137,7 @@ export async function replaceProject(id, fullRecord) {
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) throw new Error('DATABASE_WRITE_FAILED');
   return data.data;
 }
 
@@ -148,8 +145,7 @@ export async function replaceProject(id, fullRecord) {
  * Creates or replaces a full project record without regenerating public feeds.
  */
 export async function upsertProject(project) {
-  if (!supabase) throw new Error('Supabase client not initialized');
-  enforceWriteGuard();
+  enforceClient();
 
   const record = {
     id: project.id,
@@ -163,7 +159,7 @@ export async function upsertProject(project) {
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) throw new Error('DATABASE_WRITE_FAILED');
   return data.data;
 }
 
@@ -171,8 +167,7 @@ export async function upsertProject(project) {
  * Uploads an import asset to the configured Supabase Storage bucket.
  */
 export async function uploadProjectAsset(storagePath, buffer, contentType) {
-  if (!supabase) throw new Error('Supabase client not initialized');
-  enforceWriteGuard();
+  enforceClient();
 
   const bucketName = process.env.SUPABASE_ASSET_BUCKET || 'project-assets';
   const { error } = await supabase.storage
@@ -182,7 +177,7 @@ export async function uploadProjectAsset(storagePath, buffer, contentType) {
       upsert: true
     });
 
-  if (error) throw error;
+  if (error) throw new Error('STORAGE_UPLOAD_FAILED');
 
   const { data: { publicUrl } } = supabase.storage
     .from(bucketName)
@@ -196,21 +191,18 @@ export async function uploadProjectAsset(storagePath, buffer, contentType) {
  * Returns true if seeding occurred, false otherwise.
  */
 export async function seedProjectsIfEmpty(seedProjects) {
-  if (!supabase) return false;
+  // If verification fails, block database check
+  enforceClient();
 
   const { count, error: countError } = await supabase
     .from('projects')
     .select('*', { count: 'exact', head: true });
 
   if (countError) {
-    console.error('Error checking project count for seeding:', countError);
-    return false;
+    throw new Error('DATABASE_READ_FAILED');
   }
 
   if (count === 0 && seedProjects && seedProjects.length > 0) {
-    enforceWriteGuard();
-    console.log(`Supabase 'projects' table is empty. Seeding ${seedProjects.length} records...`);
-    
     const records = seedProjects.map(p => ({
       id: p.id,
       data: p,
@@ -222,8 +214,7 @@ export async function seedProjectsIfEmpty(seedProjects) {
       .insert(records);
 
     if (insertError) {
-      console.error('Error seeding projects:', insertError);
-      return false;
+      throw new Error('DATABASE_WRITE_FAILED');
     }
     return true;
   }
@@ -273,8 +264,7 @@ export async function generatePublicProjects() {
  * Deletes a project record by ID. Safety checks are enforced by the caller.
  */
 export async function deleteProject(id) {
-  if (!supabase) throw new Error('Supabase client not initialized');
-  enforceWriteGuard();
+  enforceClient();
 
   const { data, error } = await supabase
     .from('projects')
@@ -283,6 +273,6 @@ export async function deleteProject(id) {
     .select('data')
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) throw new Error('DATABASE_WRITE_FAILED');
   return data ? { success: true, project: data.data } : { success: false, project: null };
 }
