@@ -3,6 +3,7 @@ import * as dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getSupabaseKey, verifyProjectRef } from './authHelper.js';
 
 dotenv.config();
 
@@ -10,15 +11,27 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseKey = getSupabaseKey();
+const expectedRef = process.env.SUPABASE_EXPECTED_PROJECT_REF;
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.warn('Supabase configuration missing (SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY). DB operations will fail.');
+if (!supabaseUrl || !supabaseKey) {
+  console.warn('Supabase configuration missing (SUPABASE_URL or security keys). DB operations will fail.');
 }
 
-const supabase = (supabaseUrl && supabaseServiceKey) 
-  ? createClient(supabaseUrl, supabaseServiceKey) 
+const verification = verifyProjectRef(supabaseUrl, expectedRef);
+
+const supabase = (supabaseUrl && supabaseKey) 
+  ? createClient(supabaseUrl, supabaseKey) 
   : null;
+
+/**
+ * Enforces the target safety checks before executing any database or storage writes.
+ */
+function enforceWriteGuard() {
+  if (expectedRef && verification !== 'TARGET_MATCH') {
+    throw new Error('TARGET_MISMATCH');
+  }
+}
 
 /**
  * Returns all project records from the Supabase database.
@@ -34,7 +47,6 @@ export async function getProjects() {
 
   if (error) throw error;
   
-  // Return the inner data objects which match the App.jsx expectation
   return data.map(record => record.data);
 }
 
@@ -63,6 +75,7 @@ export async function getProjectById(id) {
  */
 export async function createProject(project) {
   if (!supabase) throw new Error('Supabase client not initialized');
+  enforceWriteGuard();
   
   const record = {
     id: project.id,
@@ -85,8 +98,8 @@ export async function createProject(project) {
  */
 export async function updateProject(id, patch) {
   if (!supabase) throw new Error('Supabase client not initialized');
+  enforceWriteGuard();
   
-  // First get the existing record to merge
   const existing = await getProjectById(id);
   if (!existing) throw new Error(`Project ${id} not found`);
 
@@ -115,6 +128,7 @@ export async function updateProject(id, patch) {
  */
 export async function replaceProject(id, fullRecord) {
   if (!supabase) throw new Error('Supabase client not initialized');
+  enforceWriteGuard();
   
   const { data, error } = await supabase
     .from('projects')
@@ -135,6 +149,7 @@ export async function replaceProject(id, fullRecord) {
  */
 export async function upsertProject(project) {
   if (!supabase) throw new Error('Supabase client not initialized');
+  enforceWriteGuard();
 
   const record = {
     id: project.id,
@@ -157,6 +172,7 @@ export async function upsertProject(project) {
  */
 export async function uploadProjectAsset(storagePath, buffer, contentType) {
   if (!supabase) throw new Error('Supabase client not initialized');
+  enforceWriteGuard();
 
   const bucketName = process.env.SUPABASE_ASSET_BUCKET || 'project-assets';
   const { error } = await supabase.storage
@@ -192,6 +208,7 @@ export async function seedProjectsIfEmpty(seedProjects) {
   }
 
   if (count === 0 && seedProjects && seedProjects.length > 0) {
+    enforceWriteGuard();
     console.log(`Supabase 'projects' table is empty. Seeding ${seedProjects.length} records...`);
     
     const records = seedProjects.map(p => ({
@@ -216,12 +233,10 @@ export async function seedProjectsIfEmpty(seedProjects) {
 
 /**
  * Generates the public projects list (stripped of internal fields).
- * Similar to generatePublicFeed in server.js but using Supabase.
  */
 export async function generatePublicProjects() {
   const projects = await getProjects();
   
-  // Strip internal fields and filter by status
   return projects
     .filter(p => p.status === 'approved' || p.status === 'published')
     .map(({ 
@@ -259,6 +274,7 @@ export async function generatePublicProjects() {
  */
 export async function deleteProject(id) {
   if (!supabase) throw new Error('Supabase client not initialized');
+  enforceWriteGuard();
 
   const { data, error } = await supabase
     .from('projects')

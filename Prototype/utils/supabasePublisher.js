@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import * as dotenv from 'dotenv';
+import { getSupabaseKey, verifyProjectRef } from './authHelper.js';
 
 dotenv.config();
 
@@ -10,16 +11,23 @@ dotenv.config();
  */
 export const publishToCloud = async (localFilePath) => {
   const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseKey = getSupabaseKey();
   const bucketName = process.env.SUPABASE_FEED_BUCKET || 'feeds';
   const fileName = process.env.SUPABASE_FEED_FILE || 'capstones-latest.json';
+  const expectedRef = process.env.SUPABASE_EXPECTED_PROJECT_REF;
 
   // 1. Validation
   if (!supabaseUrl || !supabaseKey) {
     return { 
       success: false, 
-      error: 'Supabase configuration missing. Please check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your .env file.' 
+      error: 'Supabase configuration missing. Please check SUPABASE_URL and SUPABASE_SECRET_KEY / SUPABASE_SERVICE_ROLE_KEY in your .env file.' 
     };
+  }
+
+  // Target reference gate check for writes
+  const verification = verifyProjectRef(supabaseUrl, expectedRef);
+  if (expectedRef && verification !== 'TARGET_MATCH') {
+    return { success: false, error: 'TARGET_MISMATCH' };
   }
 
   try {
@@ -28,7 +36,7 @@ export const publishToCloud = async (localFilePath) => {
     const fileBuffer = fs.readFileSync(localFilePath);
 
     // 3. Upload/Overwrite
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from(bucketName)
       .upload(fileName, fileBuffer, {
         contentType: 'application/json',
@@ -63,7 +71,7 @@ export const publishToCloud = async (localFilePath) => {
  */
 export const getPublishedFeedStatus = async () => {
   const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseKey = getSupabaseKey();
   const bucketName = process.env.SUPABASE_FEED_BUCKET || 'feeds';
   const fileName = process.env.SUPABASE_FEED_FILE || 'capstones-latest.json';
 
@@ -118,4 +126,3 @@ export const getPublishedFeedStatus = async () => {
     };
   }
 };
-
