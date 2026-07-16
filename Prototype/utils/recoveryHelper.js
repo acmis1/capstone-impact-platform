@@ -30,7 +30,30 @@ export function canonicalJsonString(value) {
 }
 
 /**
- * Verifies that all records in an array have unique IDs.
+ * Validates recovery bucket and file names to enforce exact canonical configurations.
+ */
+export function validateRecoveryConfig(config) {
+  if (!config) {
+    throw new Error('INVALID_CONFIGURATION');
+  }
+  if (config.feedBucket && config.feedBucket !== 'feeds') {
+    throw new Error('FEED_BUCKET_CONFIGURATION_INVALID');
+  }
+  if (config.assetBucket && config.assetBucket !== 'project-assets') {
+    throw new Error('ASSET_BUCKET_CONFIGURATION_INVALID');
+  }
+  if (config.feedFile && config.feedFile !== 'capstones-latest.json') {
+    throw new Error('FEED_FILE_CONFIGURATION_INVALID');
+  }
+  return {
+    feedBucket: 'feeds',
+    assetBucket: 'project-assets',
+    feedFile: 'capstones-latest.json'
+  };
+}
+
+/**
+ * Verifies that all records in an array have unique positive safe integer IDs.
  * Returns true if unique, throws an Error with a safe message if duplicates are found.
  */
 export function validateUniqueIds(records, type = 'SEED') {
@@ -38,9 +61,9 @@ export function validateUniqueIds(records, type = 'SEED') {
     throw new Error('INVALID_DATA_TYPE');
   }
   
-  // Validate that every record has a valid integer project ID
+  // Validate that every record has a valid positive safe integer project ID
   for (const r of records) {
-    if (r === null || typeof r !== 'object' || !Number.isInteger(r.id)) {
+    if (r === null || typeof r !== 'object' || !Number.isInteger(r.id) || r.id <= 0 || !Number.isSafeInteger(r.id)) {
       throw new Error(type === 'SEED' ? 'SEED_SCHEMA_INVALID' : 'PUBLIC_FEED_SCHEMA_INVALID');
     }
   }
@@ -172,6 +195,61 @@ export function planRecovery({
     return {
       ready: false,
       error: 'INVALID_LOCAL_DATA',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+
+  if (!Array.isArray(remoteRows)) {
+    return {
+      ready: false,
+      error: 'INVALID_REMOTE_ROWS',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+
+  if (!bucketState || typeof bucketState !== 'object') {
+    return {
+      ready: false,
+      error: 'INVALID_BUCKET_STATE',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+
+  const requiredBucketFlags = ['feedsExists', 'feedsPublic', 'projectAssetsExists', 'projectAssetsPublic'];
+  const hasValidFlags = requiredBucketFlags.every(flag => typeof bucketState[flag] === 'boolean');
+  if (!hasValidFlags) {
+    return {
+      ready: false,
+      error: 'INVALID_BUCKET_STATE',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+
+  const validFeedStates = ['MISSING', 'EXISTS_IDENTICAL', 'EXISTS_CONFLICTING', 'READ_FAILURE', 'INVALID_JSON'];
+  if (!validFeedStates.includes(remoteFeedState)) {
+    return {
+      ready: false,
+      error: 'INVALID_REMOTE_FEED_STATE',
       missingDatabaseRecordCount: 0,
       shouldInsertDatabaseRecords: false,
       shouldCreateFeed: false,
@@ -341,6 +419,9 @@ export function sanitizeRecoveryFailure(stage, err) {
   if (message.includes('REMOTE_FEED_INVALID_JSON')) return 'REMOTE_FEED_INVALID_JSON';
   if (message.includes('SEED_SCHEMA_INVALID')) return 'SEED_SCHEMA_INVALID';
   if (message.includes('PUBLIC_FEED_SCHEMA_INVALID')) return 'PUBLIC_FEED_SCHEMA_INVALID';
+  if (message.includes('FEED_BUCKET_CONFIGURATION_INVALID')) return 'FEED_BUCKET_CONFIGURATION_INVALID';
+  if (message.includes('ASSET_BUCKET_CONFIGURATION_INVALID')) return 'ASSET_BUCKET_CONFIGURATION_INVALID';
+  if (message.includes('FEED_FILE_CONFIGURATION_INVALID')) return 'FEED_FILE_CONFIGURATION_INVALID';
   
   return stage;
 }

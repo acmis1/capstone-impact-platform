@@ -7,9 +7,15 @@ This runbook outlines the safe, step-by-step procedure to reconstruct and seed t
 ## ⚠️ Critical Project Identity Boundaries
 
 This repository interacts with multiple environments. Ensure you do not confuse them:
-1.  **`capstone-impact-staging` (Isolated Admin Staging)**: **DO NOT MODIFY**. This is the operational staging database for the Next.js Admin/CMS. Do not apply migrations, run scripts, or alter users in this database.
-2.  **`capstone-prototype-recovery-2026` (Prototype Recovery Backend)**: **TARGET HUMAN-READABLE NAME**. This is the name of the replacement project to be manually created in the Supabase Dashboard. Note that this name is different from the generated project reference subdomain.
-3.  **Deleted Prototype Project**: The original backend project has been deleted and is completely unreachable. Do not attempt to query or restore it.
+1.  **`capstone-impact-staging` (Surviving Old Demo Project)**: **DO NOT MODIFY**. This is the surviving old demo/staging project. It is NOT the recovery target. Its exact historical role is not relied upon by the recovery safeguards, but it must remain completely untouched.
+2.  **Deleted Prototype Backend**: The original backend project previously used by `/Prototype` no longer exists. Its generated reference (`xojnnhilqaldxoilmxli`) remains blocked internally as a denied constant.
+3.  **`capstone-prototype-recovery-2026` (Proposed Reconstruction Target)**: This is the proposed human-readable name of the future replacement project. It is not yet created, and is different from its generated project reference subdomain.
+
+### Safeguard Operations Wording
+*   **Allowlisting**: Code-level safeguards enforce protection based on exact generated-reference allowlisting of the expected reference.
+*   **Denylisting**: The deleted reference is separately denied by comparing the derived ref.
+*   **Manual Verification**: The code cannot determine or block a human-readable Dashboard project name from a URL directly. The operator must manually confirm the Dashboard project name is correct before configuring its generated reference in the environment settings.
+*   **Apply Blocks**: The `recovery:apply` script cannot run while obsolete domain references remain inside the local files (`db.json` or `capstones-latest.json`).
 
 ---
 
@@ -61,10 +67,10 @@ This repository interacts with multiple environments. Ensure you do not confuse 
 ## Phase 3: Storage Bucket Setup
 
 1.  Navigate to **Storage** from the left panel.
-2.  Click **New bucket** to create the public feed distribution bucket:
+2.  Create the public feed distribution bucket with the exact canonical name:
     *   Name: `feeds`
     *   Visibility: **Public** (check the "Public bucket" switch)
-3.  Click **New bucket** to create the media asset bucket:
+3.  Create the media asset bucket with the exact canonical name:
     *   Name: `project-assets`
     *   Visibility: **Public** (check the "Public bucket" switch)
 
@@ -79,10 +85,11 @@ SUPABASE_URL=<NEW_PROJECT_URL>
 SUPABASE_SECRET_KEY=<NEW_SERVER_SECRET_KEY>
 SUPABASE_SERVICE_ROLE_KEY=
 
-# safety Check - Unique generated project reference subdomain
+# Safety Check - Unique generated project reference subdomain
 # (NOT the human-readable project name. Extract it from your URL: https://<REF>.supabase.co)
 SUPABASE_EXPECTED_PROJECT_REF=<GENERATED_PROJECT_REFERENCE>
 
+# Canonical targets (alternative names are rejected by the recovery system)
 SUPABASE_FEED_BUCKET=feeds
 SUPABASE_FEED_FILE=capstones-latest.json
 SUPABASE_ASSET_BUCKET=project-assets
@@ -107,21 +114,21 @@ npm run recovery:dry-run
 
 ---
 
-## Phase 6: Guarded Seeding and Apply
+## Phase 6: Recovery Execution Sequence
 
-*This operation makes write calls and must only be run once local configurations are verified.*
-
-Execute the seeding and storage upload task:
-```bash
-npm run recovery:apply
-```
-
-### Safety Stop Conditions (Abort immediately if any occur):
-1.  **Staging Target Protection**: Any request/URL pointing to or matching `capstone-impact-staging` is blocked.
-2.  **Generated Reference Mismatch**: If the reference derived from `SUPABASE_URL` does not match `SUPABASE_EXPECTED_PROJECT_REF` exactly.
-3.  **Mismatched Project Name**: If the human-readable project name is incorrectly supplied as the reference key.
-4.  **Database Non-empty with Conflicts**: If the remote `projects` table contains unexpected IDs or conflicting data.
-5.  **Existing Conflicting Feed**: If the `feeds/capstones-latest.json` file exists on storage but its canonical data differs from the local feed.
-6.  **Missing Buckets**: If the required buckets are missing.
-7.  **Secrets Exposure**: If any raw credentials or keys are outputted in logs.
-8.  **Asset Seeding Attempt**: The `recovery:apply` script does not upload assets to `project-assets`. Media restoration requires a separate reviewed manifest and controlled task. Do not force writes to `project-assets`.
+The complete manual/automated recovery sequence is:
+1.  Merge reviewed recovery foundation files to the main branch.
+2.  Create the replacement Supabase project manually in the Dashboard.
+3.  Execute Phase 2 (SQL Schema and RLS).
+4.  Execute Phase 3 (Create buckets `feeds` and `project-assets` with Public visibility).
+5.  Prepare a separately reviewed URL/media rewrite manifest.
+6.  Generate sanitized recovery copies of `db.json` and `capstones-latest.json` (replacing obsolete domains).
+7.  Confirm that the obsolete-reference count reports exactly zero.
+8.  Run the offline `npm run recovery:dry-run` script to check readiness.
+9.  Run `npm run recovery:apply` to perform Storage and Database preflight check.
+10. Seeding database project records occurs automatically inside the apply task.
+11. Public feed restoration files (`capstones-latest.json`) are compiled and uploaded automatically.
+12. Restore static project media assets to `project-assets` bucket in a separate reviewed manifest and controlled task.
+13. Update Render environment variables with the new `SUPABASE_URL` and `SUPABASE_SECRET_KEY`.
+14. Update the Duda layout HTML widget code block with the new feed file URL.
+15. Perform automated and browser regression tests on the staging prototype.

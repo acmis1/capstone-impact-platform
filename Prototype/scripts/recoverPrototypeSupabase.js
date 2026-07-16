@@ -10,7 +10,8 @@ import {
   evaluateExistingFeed, 
   sanitizeRecoveryFailure,
   scanObsoleteReferences,
-  planRecovery
+  planRecovery,
+  validateRecoveryConfig
 } from '../utils/recoveryHelper.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -28,25 +29,42 @@ export async function runRecovery({
   localFeed,
   createSupabaseClient,
   fileAdapter,
-  logger = console
+  logger = console,
+  recoveryConfig
 }) {
-  // 1. Dry Run / Local verification phase
+  // Validate configuration targets first
+  let validatedConfig;
+  try {
+    validatedConfig = validateRecoveryConfig(recoveryConfig);
+  } catch (err) {
+    const code = sanitizeRecoveryFailure('CONFIGURATION_INVALID', err);
+    logger.error(`❌ Error: ${code}`);
+    return { success: false, error: code };
+  }
+
+  // 1. Dry Run / Local verification phase - parsing separated from array validation
   let dbData;
   let feedData;
   try {
     dbData = typeof localSeed === 'string' ? JSON.parse(localSeed) : localSeed;
-    if (!Array.isArray(dbData)) throw new Error('SEED_NOT_ARRAY');
   } catch (e) {
     logger.error('❌ Error: SEED_JSON_INVALID');
     return { success: false, error: 'SEED_JSON_INVALID' };
   }
+  if (!Array.isArray(dbData)) {
+    logger.error('❌ Error: SEED_NOT_ARRAY');
+    return { success: false, error: 'SEED_NOT_ARRAY' };
+  }
 
   try {
     feedData = typeof localFeed === 'string' ? JSON.parse(localFeed) : localFeed;
-    if (!Array.isArray(feedData)) throw new Error('PUBLIC_FEED_NOT_ARRAY');
   } catch (e) {
     logger.error('❌ Error: PUBLIC_FEED_JSON_INVALID');
     return { success: false, error: 'PUBLIC_FEED_JSON_INVALID' };
+  }
+  if (!Array.isArray(feedData)) {
+    logger.error('❌ Error: PUBLIC_FEED_NOT_ARRAY');
+    return { success: false, error: 'PUBLIC_FEED_NOT_ARRAY' };
   }
 
   // Validate schemas and unique IDs
@@ -123,8 +141,8 @@ export async function runRecovery({
   }
 
   // 4. Storage preflight check before database writes
-  const feedsBucketName = process.env.SUPABASE_FEED_BUCKET || 'feeds';
-  const assetsBucketName = process.env.SUPABASE_ASSET_BUCKET || 'project-assets';
+  const feedsBucketName = validatedConfig.feedBucket;
+  const assetsBucketName = validatedConfig.assetBucket;
 
   logger.log('Performing Storage preflight visibility check...');
   let bucketState = {
@@ -172,7 +190,7 @@ export async function runRecovery({
   }
 
   // 5. Remote Feed state planning before database writes
-  const feedFileName = process.env.SUPABASE_FEED_FILE || 'capstones-latest.json';
+  const feedFileName = validatedConfig.feedFile;
   logger.log(`Checking existing feed ${feedFileName} in bucket ${feedsBucketName}...`);
   let remoteFeedState = 'MISSING';
 
@@ -297,13 +315,14 @@ export async function runRecovery({
   // 9. Execute Feed Upload when missing
   if (plan.shouldCreateFeed) {
     logger.log(`Uploading public feed ${feedFileName}...`);
+    const feedPath = path.resolve(__dirname, '../public/capstones-latest.json');
     const fileBuffer = fileAdapter.readFileSync(feedPath);
     
     const { error: uploadError } = await supabase.storage
       .from(feedsBucketName)
       .upload(feedFileName, fileBuffer, {
         contentType: 'application/json',
-        upsert: false // Creation upload only, no unconditional overwrite
+        upsert: false // Creation upload only
       });
 
     if (uploadError) {
@@ -326,7 +345,6 @@ export async function runRecovery({
     const verifyText = await verifyBlob.text();
     const verifyJson = JSON.parse(verifyText);
 
-    // Verify properties of downloaded remote feed
     validateUniqueIds(verifyJson, 'FEED');
     evaluateExistingFeed(feedData, verifyJson);
     
@@ -363,6 +381,13 @@ async function main() {
   const supabaseKey = getSupabaseKey();
   const expectedRef = process.env.SUPABASE_EXPECTED_PROJECT_REF;
 
+  // Construct config from environment variable values safely
+  const recoveryConfig = {
+    feedBucket: process.env.SUPABASE_FEED_BUCKET || 'feeds',
+    assetBucket: process.env.SUPABASE_ASSET_BUCKET || 'project-assets',
+    feedFile: process.env.SUPABASE_FEED_FILE || 'capstones-latest.json'
+  };
+
   const result = await runRecovery({
     isApply,
     supabaseUrl,
@@ -371,7 +396,8 @@ async function main() {
     localSeed,
     localFeed,
     createSupabaseClient: createClient,
-    fileAdapter: fs
+    fileAdapter: fs,
+    recoveryConfig
   });
 
   if (!result.success) {
@@ -380,7 +406,6 @@ async function main() {
   process.exit(0);
 }
 
-// Only execute when run directly from Node.js
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main();
 }
