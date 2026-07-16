@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { getSupabaseKey, verifyProjectRef } from '../utils/authHelper.js';
 import { 
@@ -17,6 +18,30 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/**
+ * Loads the private recovery environment variables.
+ */
+export function loadRecoveryEnv({ envPath, dotenvModule, fsModule } = {}) {
+  const targetFs = fsModule || fs;
+  const targetDotenv = dotenvModule || dotenv;
+  const resolvedPath = envPath || path.resolve(__dirname, '../.env');
+
+  if (!targetFs.existsSync(resolvedPath)) {
+    return { loaded: false };
+  }
+
+  try {
+    const result = targetDotenv.config({ path: resolvedPath });
+    if (result.error) {
+      throw result.error;
+    }
+    return { loaded: true };
+  } catch (err) {
+    throw new Error('ENV_FILE_LOAD_FAILED');
+  }
+}
+
 
 /**
  * Injected recovery execution function.
@@ -398,6 +423,13 @@ export async function runRecovery({
 }
 
 async function main() {
+  try {
+    loadRecoveryEnv();
+  } catch (err) {
+    console.error('❌ Error: ENV_FILE_LOAD_FAILED');
+    process.exit(1);
+  }
+
   const isApply = process.argv.includes('--apply');
   const dbPath = path.resolve(__dirname, '../data/db.json');
   const feedPath = path.resolve(__dirname, '../public/capstones-latest.json');

@@ -37,6 +37,20 @@ To guarantee data integrity and guard against race conditions or mid-flight file
 
 ---
 
+## Environment Configuration Loader
+
+To manage configuration securely, the recovery CLI uses a dedicated environment configuration loader:
+
+*   **Explicit Loading**: `Prototype/.env` is loaded explicitly by the recovery CLI entrypoint (`main()`) before configurations are read.
+*   **OS Precedence**: Operating-system level environment variables take precedence over settings inside `Prototype/.env`.
+*   **Import Isolation**: Importing the recovery runner or utility modules (e.g. for testing purposes) does not load the environment file automatically.
+*   **Optional for Dry-Runs**: The `recovery:dry-run` task works completely offline even when `Prototype/.env` is absent or empty.
+*   **Required for Apply**: Executing `recovery:apply` requires the target Supabase URL, generated reference subdomain allowlist, and server key to be available through the loaded private environment.
+*   **Credential Masking**: No credential or secret value is ever printed, returned, or logged.
+*   **Git-Ignored Security**: The configuration file `Prototype/.env` remains Git-ignored.
+
+---
+
 ## Resumability and Partial Failure
 
 The recovery runner is built to support resumability and handles failures safely without requiring data rollbacks:
