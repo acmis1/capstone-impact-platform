@@ -14,7 +14,6 @@ export function canonicalizeJson(value) {
     return value.map(canonicalizeJson);
   }
   
-  // It is an object, sort keys recursively
   const sortedKeys = Object.keys(value).sort();
   const canonicalObj = {};
   for (const key of sortedKeys) {
@@ -38,6 +37,14 @@ export function validateUniqueIds(records, type = 'SEED') {
   if (!Array.isArray(records)) {
     throw new Error('INVALID_DATA_TYPE');
   }
+  
+  // Validate that every record has a valid integer project ID
+  for (const r of records) {
+    if (r === null || typeof r !== 'object' || !Number.isInteger(r.id)) {
+      throw new Error(type === 'SEED' ? 'SEED_SCHEMA_INVALID' : 'PUBLIC_FEED_SCHEMA_INVALID');
+    }
+  }
+
   const ids = records.map(r => r.id);
   const uniqueIds = new Set(ids);
   if (uniqueIds.size < ids.length) {
@@ -79,13 +86,11 @@ export function evaluateExistingRows(seed, remoteRows) {
   const seedMap = new Map(seed.map(p => [Number(p.id), p]));
   const remoteIds = remoteRows.map(r => Number(r.id));
   
-  // Verify no unexpected IDs exist in remote projects
   const unexpected = remoteIds.filter(id => !seedMap.has(id));
   if (unexpected.length > 0) {
     throw new Error('UNEXPECTED_REMOTE_PROJECTS');
   }
 
-  // Verify that any existing record's data matches seed data exactly
   for (const row of remoteRows) {
     const expected = seedMap.get(Number(row.id));
     if (expected) {
@@ -118,6 +123,209 @@ export function evaluateExistingFeed(localFeed, remoteFeed) {
 }
 
 /**
+ * Scans object hierarchy for references to the obsolete project subdomain.
+ */
+export function scanObsoleteReferences(data) {
+  const deniedRef = 'xojnnhilqaldxoilmxli';
+  const regex = new RegExp(deniedRef, 'g');
+  let matchCount = 0;
+  const affectedFields = new Set();
+
+  function scanValue(val, keyContext = null) {
+    if (val === null || val === undefined) return;
+    if (typeof val === 'string') {
+      regex.lastIndex = 0;
+      const matches = val.match(regex);
+      if (matches) {
+        matchCount += matches.length;
+        if (keyContext) {
+          affectedFields.add(keyContext);
+        }
+      }
+    } else if (Array.isArray(val)) {
+      val.forEach(item => scanValue(item, keyContext));
+    } else if (typeof val === 'object') {
+      Object.keys(val).forEach((k) => {
+        scanValue(val[k], keyContext || k);
+      });
+    }
+  }
+
+  scanValue(data);
+  return {
+    count: matchCount,
+    affectedFields: [...affectedFields]
+  };
+}
+
+/**
+ * Generates recovery execution plan declaratively.
+ */
+export function planRecovery({
+  localSeed,
+  localFeed,
+  remoteRows,
+  remoteFeedState,
+  bucketState
+}) {
+  if (!Array.isArray(localSeed) || !Array.isArray(localFeed)) {
+    return {
+      ready: false,
+      error: 'INVALID_LOCAL_DATA',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+
+  // 1. Bucket preflight check
+  if (!bucketState.feedsExists) {
+    return {
+      ready: false,
+      error: 'FEEDS_BUCKET_MISSING',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+  if (!bucketState.feedsPublic) {
+    return {
+      ready: false,
+      error: 'FEEDS_BUCKET_VISIBILITY_INVALID',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+  if (!bucketState.projectAssetsExists) {
+    return {
+      ready: false,
+      error: 'PROJECT_ASSETS_BUCKET_MISSING',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+  if (!bucketState.projectAssetsPublic) {
+    return {
+      ready: false,
+      error: 'PROJECT_ASSETS_BUCKET_VISIBILITY_INVALID',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+
+  // 2. Storage Feed status check before DB writes
+  if (remoteFeedState === 'READ_FAILURE') {
+    return {
+      ready: false,
+      error: 'REMOTE_FEED_READ_FAILED',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+  if (remoteFeedState === 'INVALID_JSON') {
+    return {
+      ready: false,
+      error: 'REMOTE_FEED_INVALID_JSON',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+  if (remoteFeedState === 'EXISTS_CONFLICTING') {
+    return {
+      ready: false,
+      error: 'REMOTE_FEED_CONFLICT',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+
+  // 3. Database validation
+  const seedIds = new Set(localSeed.map(p => Number(p.id)));
+  const remoteIds = remoteRows.map(r => Number(r.id));
+  const unexpectedRemoteIds = remoteIds.filter(id => !seedIds.has(id));
+  
+  if (unexpectedRemoteIds.length > 0) {
+    return {
+      ready: false,
+      error: 'UNEXPECTED_REMOTE_PROJECTS',
+      missingDatabaseRecordCount: 0,
+      shouldInsertDatabaseRecords: false,
+      shouldCreateFeed: false,
+      shouldSkipFeedWrite: false,
+      expectedFinalDatabaseCount: 0,
+      expectedFinalFeedCount: 0
+    };
+  }
+
+  const seedMap = new Map(localSeed.map(p => [Number(p.id), p]));
+  for (const row of remoteRows) {
+    const expected = seedMap.get(Number(row.id));
+    if (expected) {
+      if (!compareProjectData(expected, row.data)) {
+        return {
+          ready: false,
+          error: 'REMOTE_PROJECT_DATA_CONFLICT',
+          missingDatabaseRecordCount: 0,
+          shouldInsertDatabaseRecords: false,
+          shouldCreateFeed: false,
+          shouldSkipFeedWrite: false,
+          expectedFinalDatabaseCount: 0,
+          expectedFinalFeedCount: 0
+        };
+      }
+    }
+  }
+
+  const remoteIdSet = new Set(remoteIds);
+  const missingCount = localSeed.filter(d => !remoteIdSet.has(Number(d.id))).length;
+  
+  const shouldInsert = missingCount > 0;
+  const shouldCreateFeed = remoteFeedState === 'MISSING';
+  const shouldSkipFeedWrite = remoteFeedState === 'EXISTS_IDENTICAL';
+
+  return {
+    ready: true,
+    error: null,
+    missingDatabaseRecordCount: missingCount,
+    shouldInsertDatabaseRecords: shouldInsert,
+    shouldCreateFeed,
+    shouldSkipFeedWrite,
+    expectedFinalDatabaseCount: localSeed.length,
+    expectedFinalFeedCount: localFeed.length
+  };
+}
+
+/**
  * Sanitizes errors to report only standard safe error codes.
  */
 export function sanitizeRecoveryFailure(stage, err) {
@@ -131,6 +339,8 @@ export function sanitizeRecoveryFailure(stage, err) {
   if (message.includes('REMOTE_PROJECT_DATA_CONFLICT')) return 'REMOTE_PROJECT_DATA_CONFLICT';
   if (message.includes('REMOTE_FEED_CONFLICT')) return 'REMOTE_FEED_CONFLICT';
   if (message.includes('REMOTE_FEED_INVALID_JSON')) return 'REMOTE_FEED_INVALID_JSON';
+  if (message.includes('SEED_SCHEMA_INVALID')) return 'SEED_SCHEMA_INVALID';
+  if (message.includes('PUBLIC_FEED_SCHEMA_INVALID')) return 'PUBLIC_FEED_SCHEMA_INVALID';
   
   return stage;
 }

@@ -10,7 +10,7 @@ export function getSupabaseKey() {
 
 /**
  * Extracts the unique project reference subdomain from a Supabase URL using native URL parser.
- * Returns null if the URL is invalid, non-HTTPS, contains credentials, or does not conform to `<ref>.supabase.co`.
+ * Returns null if the URL is invalid, non-HTTPS, contains credentials, explicit ports, non-root path, queries, or fragments.
  */
 export function getProjectRef(urlStr) {
   if (!urlStr || typeof urlStr !== 'string') return null;
@@ -22,8 +22,28 @@ export function getProjectRef(urlStr) {
       return null;
     }
 
-    // Enforce no embedded credentials
+    // Enforce no username/password
     if (url.username || url.password) {
+      return null;
+    }
+
+    // Enforce no explicit port
+    if (url.port !== '') {
+      return null;
+    }
+
+    // Enforce no pathname other than '/'
+    if (url.pathname !== '/' && url.pathname !== '') {
+      return null;
+    }
+
+    // Enforce no query/search params
+    if (url.search !== '') {
+      return null;
+    }
+
+    // Enforce no hash/fragment
+    if (url.hash !== '') {
       return null;
     }
 
@@ -52,6 +72,39 @@ export function getProjectRef(urlStr) {
 }
 
 /**
+ * Validates that the expected project reference complies with strict format rules.
+ */
+export function validateExpectedRef(expectedRef) {
+  if (!expectedRef || typeof expectedRef !== 'string') {
+    return false;
+  }
+
+  // Reject surrounding whitespace (no silent trim)
+  if (expectedRef !== expectedRef.trim()) {
+    return false;
+  }
+
+  // Enforce lowercase ASCII letters and digits only
+  const isLowercaseAlphanumeric = /^[a-z0-9]+$/.test(expectedRef);
+  if (!isLowercaseAlphanumeric) {
+    return false;
+  }
+
+  // Reject human-readable project name
+  if (expectedRef === 'capstone-prototype-recovery-2026') {
+    return false;
+  }
+
+  // Reject known deleted Prototype project reference
+  const deniedRef = 'xojnnhilqaldxoilmxli';
+  if (expectedRef === deniedRef) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Compares the configured project reference against the expected reference, enforcing safety policies.
  * Returns:
  * - 'TARGET_MATCH' if references match and pass safety filters.
@@ -59,8 +112,13 @@ export function getProjectRef(urlStr) {
  * - 'TARGET_CONFIGURATION_MISSING' if configuration is incomplete or malformed.
  */
 export function verifyProjectRef(urlStr, expectedRef) {
-  if (!urlStr || !expectedRef || typeof urlStr !== 'string' || typeof expectedRef !== 'string') {
+  if (!urlStr || !expectedRef || typeof urlStr !== 'string' || typeof expectedRef !== 'string' || expectedRef.trim() === '') {
     return 'TARGET_CONFIGURATION_MISSING';
+  }
+
+  // Validate expected reference format rules
+  if (!validateExpectedRef(expectedRef)) {
+    return 'TARGET_MISMATCH';
   }
 
   // Validate if URL is malformed
@@ -72,22 +130,15 @@ export function verifyProjectRef(urlStr, expectedRef) {
 
   const ref = getProjectRef(urlStr);
   if (!ref) {
-    // If getProjectRef returned null, determine if it is mismatch or missing config
     try {
       const parsedUrl = new URL(urlStr);
-      if (parsedUrl.protocol !== 'https:' || parsedUrl.username || parsedUrl.password || !parsedUrl.hostname.endsWith('.supabase.co')) {
+      if (parsedUrl.protocol !== 'https:' || parsedUrl.username || parsedUrl.password || parsedUrl.port !== '' || (parsedUrl.pathname !== '/' && parsedUrl.pathname !== '') || parsedUrl.search !== '' || parsedUrl.hash !== '' || !parsedUrl.hostname.endsWith('.supabase.co')) {
         return 'TARGET_MISMATCH';
       }
       return 'TARGET_MISMATCH';
     } catch (err) {
       return 'TARGET_CONFIGURATION_MISSING';
     }
-  }
-
-  // Deny writing to the known old Prototype project reference
-  const deniedRef = 'xojnnhilqaldxoilmxli';
-  if (ref === deniedRef || expectedRef === deniedRef) {
-    return 'TARGET_MISMATCH';
   }
 
   if (ref === expectedRef) {

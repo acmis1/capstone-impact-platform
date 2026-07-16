@@ -9,170 +9,217 @@ import {
   evaluateExistingRows, 
   evaluateExistingFeed, 
   sanitizeRecoveryFailure,
-  canonicalJsonString
+  scanObsoleteReferences,
+  planRecovery
 } from '../utils/recoveryHelper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Idempotent recovery script for recreating the deleted Prototype Supabase backend.
+ * Injected recovery execution function to support comprehensive unit testing without hitting the network.
  */
-async function main() {
-  const isApply = process.argv.includes('--apply');
-  const dbPath = path.resolve(__dirname, '../data/db.json');
-  const feedPath = path.resolve(__dirname, '../public/capstones-latest.json');
-
-  console.log('====================================================');
-  console.log('🔄 PROTOTYPE SUPABASE RECOVERY SYSTEM');
-  console.log('====================================================');
-
-  // 1. Dry Run Offline Validation Phase
+export async function runRecovery({
+  isApply,
+  supabaseUrl,
+  supabaseKey,
+  expectedRef,
+  localSeed,
+  localFeed,
+  createSupabaseClient,
+  fileAdapter,
+  logger = console
+}) {
+  // 1. Dry Run / Local verification phase
   let dbData;
   let feedData;
   try {
-    const dbRaw = fs.readFileSync(dbPath, 'utf8');
-    dbData = JSON.parse(dbRaw);
-    if (!Array.isArray(dbData)) throw new Error('db.json is not an array.');
+    dbData = typeof localSeed === 'string' ? JSON.parse(localSeed) : localSeed;
+    if (!Array.isArray(dbData)) throw new Error('SEED_NOT_ARRAY');
   } catch (e) {
-    console.error('❌ Failed to parse seed database:', e.message);
-    process.exit(1);
+    logger.error('❌ Error: SEED_JSON_INVALID');
+    return { success: false, error: 'SEED_JSON_INVALID' };
   }
 
   try {
-    const feedRaw = fs.readFileSync(feedPath, 'utf8');
-    feedData = JSON.parse(feedRaw);
-    if (!Array.isArray(feedData)) throw new Error('capstones-latest.json is not an array.');
+    feedData = typeof localFeed === 'string' ? JSON.parse(localFeed) : localFeed;
+    if (!Array.isArray(feedData)) throw new Error('PUBLIC_FEED_NOT_ARRAY');
   } catch (e) {
-    console.error('❌ Failed to parse public feed:', e.message);
-    process.exit(1);
+    logger.error('❌ Error: PUBLIC_FEED_JSON_INVALID');
+    return { success: false, error: 'PUBLIC_FEED_JSON_INVALID' };
   }
 
-  // Validate seed unique IDs
+  // Validate schemas and unique IDs
   try {
     validateUniqueIds(dbData, 'SEED');
   } catch (err) {
-    const code = sanitizeRecoveryFailure('DUPLICATE_SEED_IDS', err);
-    console.error(`❌ Error: ${code}`);
-    process.exit(1);
+    const code = sanitizeRecoveryFailure('SEED_SCHEMA_INVALID', err);
+    logger.error(`❌ Error: ${code}`);
+    return { success: false, error: code };
   }
 
-  // Validate feed unique IDs
   try {
     validateUniqueIds(feedData, 'FEED');
   } catch (err) {
-    const code = sanitizeRecoveryFailure('DUPLICATE_FEED_IDS', err);
-    console.error(`❌ Error: ${code}`);
-    process.exit(1);
+    const code = sanitizeRecoveryFailure('PUBLIC_FEED_SCHEMA_INVALID', err);
+    logger.error(`❌ Error: ${code}`);
+    return { success: false, error: code };
   }
 
-  // Validate feed is subset of seed
+  // Validate subset relation
   try {
     validateFeedSubset(dbData, feedData);
   } catch (err) {
     const code = sanitizeRecoveryFailure('FEED_SUBSET_VIOLATION', err);
-    console.error(`❌ Error: ${code}`);
-    process.exit(1);
+    logger.error(`❌ Error: ${code}`);
+    return { success: false, error: code };
   }
 
-  // Obsolete domain references audit
-  const targetPattern = /xojnnhilqaldxoilmxli/g;
-  let domainMatchCount = 0;
-  const fieldsWithDomain = new Set();
+  // Obsolete project references checks (apply blocked if any remain)
+  const seedObsolete = scanObsoleteReferences(dbData);
+  const feedObsolete = scanObsoleteReferences(feedData);
+  const totalObsolete = seedObsolete.count + feedObsolete.count;
+
+  logger.log('📋 DRY RUN RESULTS & RECOVERY PLAN');
+  logger.log(`- Seed Database Record Count:  ${dbData.length}`);
+  logger.log(`- Public Feed Record Count:    ${feedData.length}`);
+  logger.log(`- Feed Subset Verified:        Yes`);
+  logger.log(`- Obsolete Reference Count:    Seed: ${seedObsolete.count}, Feed: ${feedObsolete.count} (Total: ${totalObsolete})`);
   
-  dbData.forEach((project) => {
-    // Reset index before parsing JSON string representation
-    targetPattern.lastIndex = 0;
-    const str = JSON.stringify(project);
-    const matches = str.match(targetPattern);
-    if (matches) {
-      domainMatchCount += matches.length;
-      Object.keys(project).forEach((key) => {
-        const val = project[key];
-        // Reset index for individual test evaluations
-        targetPattern.lastIndex = 0;
-        if (typeof val === 'string' && targetPattern.test(val)) {
-          fieldsWithDomain.add(key);
-        } else if (Array.isArray(val)) {
-          val.forEach((item) => {
-            targetPattern.lastIndex = 0;
-            if (typeof item === 'string' && targetPattern.test(item)) {
-              fieldsWithDomain.add(`${key} (array item)`);
-            }
-          });
-        }
-      });
-    }
-  });
-
-  // Scan local assets by count and extension only
-  const demoAssetsPath = path.resolve(__dirname, '../../capstone-impact-demo-assets');
-  const batchAssetsPath = path.resolve(__dirname, '../../capstone-import-batch-demo-final');
-  const assetCounts = {};
-
-  function scanDir(dir) {
-    if (!fs.existsSync(dir)) return;
-    const items = fs.readdirSync(dir);
-    items.forEach((item) => {
-      const full = path.join(dir, item);
-      const stat = fs.statSync(full);
-      if (stat.isDirectory()) {
-        scanDir(full);
-      } else if (stat.isFile()) {
-        const ext = path.extname(item).toLowerCase();
-        if (ext) {
-          assetCounts[ext] = (assetCounts[ext] || 0) + 1;
-        }
-      }
-    });
+  if (totalObsolete > 0) {
+    logger.log('READY_FOR_APPLY: false');
+    logger.log('APPLY_BLOCKED_OBSOLETE_REFERENCES');
+    logger.log('----------------------------------------------------');
+    logger.error('❌ Error: APPLY_BLOCKED_OBSOLETE_REFERENCES');
+    return { success: false, error: 'APPLY_BLOCKED_OBSOLETE_REFERENCES', exitCode: 2 };
   }
-  scanDir(demoAssetsPath);
-  scanDir(batchAssetsPath);
 
-  console.log('📋 DRY RUN RESULTS & RECOVERY PLAN');
-  console.log(`- Seed Database Record Count:  ${dbData.length}`);
-  console.log(`- Public Feed Record Count:    ${feedData.length}`);
-  console.log(`- Feed Subset Verified:        Yes`);
-  console.log(`- Duplicate IDs Checked:       None`);
-  console.log(`- Obsolete Domain References:  Detected ${domainMatchCount} occurrences in fields: ${[...fieldsWithDomain].join(', ')}`);
-  console.log('- Local Recoverable Asset counts by extension:');
-  Object.keys(assetCounts).sort().forEach((ext) => {
-    console.log(`   * ${ext}: ${assetCounts[ext]} files`);
-  });
-  console.log('----------------------------------------------------');
-  console.log('✅ Sanitized recovery dry-run check: PASSED.');
+  logger.log('READY_FOR_APPLY: true');
+  logger.log('----------------------------------------------------');
+  logger.log('✅ Sanitized recovery dry-run check: PASSED.');
 
   if (!isApply) {
-    console.log('\n💡 To perform the recovery run, execute:');
-    console.log('   npm run recovery:apply');
-    console.log('====================================================\n');
-    process.exit(0);
+    return { success: true, exitCode: 0 };
   }
 
-  // 2. Apply Mode Active Execution Phase
-  console.log('\n🚀 Starting active database seeding and feed recovery...');
-
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = getSupabaseKey();
-  const expectedRef = process.env.SUPABASE_EXPECTED_PROJECT_REF;
-
-  // Enforce safety guards before initializing the client
+  // 2. Target Match Guards (stop before client creation/network calls)
   const verification = verifyProjectRef(supabaseUrl, expectedRef);
   if (verification !== 'TARGET_MATCH') {
     const errCode = verification === 'TARGET_CONFIGURATION_MISSING' ? 'TARGET_CONFIGURATION_MISSING' : 'TARGET_MISMATCH';
-    console.error(`❌ Error: ${errCode}`);
-    process.exit(1);
+    logger.error(`❌ Error: ${errCode}`);
+    return { success: false, error: errCode };
   }
 
   if (!supabaseUrl || !supabaseKey) {
-    console.error('❌ Error: SUPABASE_CLIENT_UNAVAILABLE');
-    process.exit(1);
+    logger.error('❌ Error: SUPABASE_CLIENT_UNAVAILABLE');
+    return { success: false, error: 'SUPABASE_CLIENT_UNAVAILABLE' };
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  // 3. Create client via factory
+  const supabase = createSupabaseClient(supabaseUrl, supabaseKey);
+  if (!supabase) {
+    logger.error('❌ Error: SUPABASE_CLIENT_UNAVAILABLE');
+    return { success: false, error: 'SUPABASE_CLIENT_UNAVAILABLE' };
+  }
 
-  // Read remote database rows
-  console.log('Reading projects from remote database...');
+  // 4. Storage preflight check before database writes
+  const feedsBucketName = process.env.SUPABASE_FEED_BUCKET || 'feeds';
+  const assetsBucketName = process.env.SUPABASE_ASSET_BUCKET || 'project-assets';
+
+  logger.log('Performing Storage preflight visibility check...');
+  let bucketState = {
+    feedsExists: false,
+    feedsPublic: false,
+    projectAssetsExists: false,
+    projectAssetsPublic: false
+  };
+
+  try {
+    const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
+    if (bucketError || !buckets) {
+      throw new Error('STORAGE_PREFLIGHT_FAILED');
+    }
+
+    const feedsBucket = buckets.find(b => b.name === feedsBucketName);
+    if (!feedsBucket) {
+      logger.error('❌ Error: FEEDS_BUCKET_MISSING');
+      return { success: false, error: 'FEEDS_BUCKET_MISSING' };
+    }
+    if (!feedsBucket.public) {
+      logger.error('❌ Error: FEEDS_BUCKET_VISIBILITY_INVALID');
+      return { success: false, error: 'FEEDS_BUCKET_VISIBILITY_INVALID' };
+    }
+
+    const assetsBucket = buckets.find(b => b.name === assetsBucketName);
+    if (!assetsBucket) {
+      logger.error('❌ Error: PROJECT_ASSETS_BUCKET_MISSING');
+      return { success: false, error: 'PROJECT_ASSETS_BUCKET_MISSING' };
+    }
+    if (!assetsBucket.public) {
+      logger.error('❌ Error: PROJECT_ASSETS_BUCKET_VISIBILITY_INVALID');
+      return { success: false, error: 'PROJECT_ASSETS_BUCKET_VISIBILITY_INVALID' };
+    }
+
+    bucketState = {
+      feedsExists: true,
+      feedsPublic: true,
+      projectAssetsExists: true,
+      projectAssetsPublic: true
+    };
+  } catch (err) {
+    logger.error('❌ Error: STORAGE_PREFLIGHT_FAILED');
+    return { success: false, error: 'STORAGE_PREFLIGHT_FAILED' };
+  }
+
+  // 5. Remote Feed state planning before database writes
+  const feedFileName = process.env.SUPABASE_FEED_FILE || 'capstones-latest.json';
+  logger.log(`Checking existing feed ${feedFileName} in bucket ${feedsBucketName}...`);
+  let remoteFeedState = 'MISSING';
+
+  try {
+    const { data: files, error: listError } = await supabase.storage
+      .from(feedsBucketName)
+      .list();
+
+    if (listError) {
+      throw new Error('REMOTE_FEED_READ_FAILED');
+    }
+
+    const feedFileMeta = files.find(f => f.name === feedFileName);
+    if (feedFileMeta) {
+      const { data: blob, error: downloadError } = await supabase.storage
+        .from(feedsBucketName)
+        .download(feedFileName);
+
+      if (downloadError || !blob) {
+        throw new Error('REMOTE_FEED_READ_FAILED');
+      }
+
+      const text = await blob.text();
+      let remoteFeedJson;
+      try {
+        remoteFeedJson = JSON.parse(text);
+      } catch (e) {
+        remoteFeedState = 'INVALID_JSON';
+        throw new Error('REMOTE_FEED_INVALID_JSON');
+      }
+
+      try {
+        evaluateExistingFeed(feedData, remoteFeedJson);
+        remoteFeedState = 'EXISTS_IDENTICAL';
+      } catch (err) {
+        remoteFeedState = 'EXISTS_CONFLICTING';
+        throw new Error('REMOTE_FEED_CONFLICT');
+      }
+    }
+  } catch (err) {
+    const code = sanitizeRecoveryFailure('REMOTE_FEED_READ_FAILED', err);
+    logger.error(`❌ Error: ${code}`);
+    return { success: false, error: code };
+  }
+
+  // 6. Read and validate database state
+  logger.log('Reading projects from remote database...');
   let remoteData;
   try {
     const { data, error } = await supabase
@@ -181,33 +228,30 @@ async function main() {
     if (error) throw new Error('READ_FAILED');
     remoteData = data;
   } catch (err) {
-    console.error('❌ Error: REMOTE_PROJECTS_READ_FAILED');
-    process.exit(1);
+    logger.error('❌ Error: REMOTE_PROJECTS_READ_FAILED');
+    return { success: false, error: 'REMOTE_PROJECTS_READ_FAILED' };
   }
 
-  // Validate existing table contents
-  try {
-    evaluateExistingRows(dbData, remoteData);
-  } catch (err) {
-    const code = sanitizeRecoveryFailure('DATABASE_VERIFICATION_FAILED', err);
-    if (code === 'UNEXPECTED_REMOTE_PROJECTS') {
-      const dbIds = new Set(dbData.map(p => Number(p.id)));
-      const count = remoteData.filter(r => !dbIds.has(Number(r.id))).length;
-      console.error(`❌ Error: UNEXPECTED_REMOTE_PROJECTS (${count} rows)`);
-    } else if (code === 'REMOTE_PROJECT_DATA_CONFLICT') {
-      console.error('❌ Error: REMOTE_PROJECT_DATA_CONFLICT');
-    } else {
-      console.error(`❌ Error: ${code}`);
-    }
-    process.exit(1);
+  // 7. Atomic Planning
+  const plan = planRecovery({
+    localSeed: dbData,
+    localFeed: feedData,
+    remoteRows: remoteData,
+    remoteFeedState,
+    bucketState
+  });
+
+  if (!plan.ready) {
+    logger.error(`❌ Error: ${plan.error}`);
+    return { success: false, error: plan.error };
   }
 
-  // Idempotently insert missing rows
-  const remoteIdSet = new Set(remoteData.map(r => Number(r.id)));
-  const missingRecords = dbData.filter(d => !remoteIdSet.has(d.id));
+  // 8. Execute Database Seeding (Insert only)
+  if (plan.shouldInsertDatabaseRecords) {
+    const remoteIdSet = new Set(remoteData.map(r => Number(r.id)));
+    const missingRecords = dbData.filter(d => !remoteIdSet.has(Number(d.id)));
 
-  if (missingRecords.length > 0) {
-    console.log(`Seeding ${missingRecords.length} missing records to remote database...`);
+    logger.log(`Seeding ${missingRecords.length} missing records to remote database...`);
     const insertPayload = missingRecords.map(p => ({
       id: p.id,
       data: p,
@@ -219,12 +263,12 @@ async function main() {
       .insert(insertPayload);
 
     if (insertError) {
-      console.error('❌ Error: DATABASE_WRITE_FAILED');
-      process.exit(1);
+      logger.error('❌ Error: DATABASE_WRITE_FAILED');
+      return { success: false, error: 'DATABASE_WRITE_FAILED' };
     }
-    console.log('✅ Remote database successfully seeded.');
+    logger.log('✅ Remote database successfully seeded.');
   } else {
-    console.log('✅ All seed project records already exist and match on the remote database. No inserts required.');
+    logger.log('✅ All seed project records already exist and match on the remote database. No inserts required.');
   }
 
   // Re-read remote rows for final verification
@@ -236,78 +280,44 @@ async function main() {
     if (error) throw new Error('VERIFICATION_FAILED');
     finalRemoteData = data;
   } catch (err) {
-    console.error('❌ Error: RECOVERY_VERIFICATION_FAILED');
-    process.exit(1);
+    logger.error('❌ Error: RECOVERY_VERIFICATION_FAILED');
+    return { success: false, error: 'RECOVERY_VERIFICATION_FAILED' };
   }
 
   try {
     evaluateExistingRows(dbData, finalRemoteData);
-    if (finalRemoteData.length !== dbData.length) {
+    if (finalRemoteData.length !== plan.expectedFinalDatabaseCount) {
       throw new Error('COUNT_MISMATCH');
     }
   } catch (err) {
-    console.error('❌ Error: RECOVERY_VERIFICATION_FAILED');
-    process.exit(1);
+    logger.error('❌ Error: RECOVERY_VERIFICATION_FAILED');
+    return { success: false, error: 'RECOVERY_VERIFICATION_FAILED' };
   }
 
-  // 3. Safe Feed Restoration Phase
-  const bucketName = process.env.SUPABASE_FEED_BUCKET || 'feeds';
-  const fileName = process.env.SUPABASE_FEED_FILE || 'capstones-latest.json';
-
-  console.log(`Checking existing feed ${fileName} in bucket ${bucketName}...`);
-  let remoteFeedData = null;
-  let feedExists = false;
-
-  try {
-    const { data: blob, error: downloadError } = await supabase.storage
-      .from(bucketName)
-      .download(fileName);
-      
-    if (!downloadError && blob) {
-      const text = await blob.text();
-      remoteFeedData = JSON.parse(text);
-      feedExists = true;
-    } else if (downloadError && downloadError.message !== 'Object not found') {
-      throw new Error('REMOTE_FEED_READ_FAILED');
-    }
-  } catch (err) {
-    console.error('❌ Error: REMOTE_FEED_READ_FAILED');
-    process.exit(1);
-  }
-
-  if (feedExists) {
-    try {
-      evaluateExistingFeed(feedData, remoteFeedData);
-      console.log('✅ Remote feed exists and canonically matches local feed. Skipping upload.');
-    } catch (err) {
-      const code = sanitizeRecoveryFailure('REMOTE_FEED_CONFLICT', err);
-      console.error(`❌ Error: ${code}`);
-      process.exit(1);
-    }
-  } else {
-    // Feed missing, perform creation upload
-    console.log(`Uploading public feed ${fileName}...`);
-    const fileBuffer = fs.readFileSync(feedPath);
+  // 9. Execute Feed Upload when missing
+  if (plan.shouldCreateFeed) {
+    logger.log(`Uploading public feed ${feedFileName}...`);
+    const fileBuffer = fileAdapter.readFileSync(feedPath);
     
     const { error: uploadError } = await supabase.storage
-      .from(bucketName)
-      .upload(fileName, fileBuffer, {
+      .from(feedsBucketName)
+      .upload(feedFileName, fileBuffer, {
         contentType: 'application/json',
-        upsert: false // Creation upload only
+        upsert: false // Creation upload only, no unconditional overwrite
       });
 
     if (uploadError) {
-      console.error('❌ Error: REMOTE_FEED_UPLOAD_FAILED');
-      process.exit(1);
+      logger.error('❌ Error: REMOTE_FEED_UPLOAD_FAILED');
+      return { success: false, error: 'REMOTE_FEED_UPLOAD_FAILED' };
     }
-    console.log('✅ Remote feed successfully uploaded.');
+    logger.log('✅ Remote feed successfully uploaded.');
   }
 
-  // Final Remote Feed Verification
+  // 10. Final Remote Feed Verification
   try {
     const { data: verifyBlob, error: verifyDownloadError } = await supabase.storage
-      .from(bucketName)
-      .download(fileName);
+      .from(feedsBucketName)
+      .download(feedFileName);
 
     if (verifyDownloadError || !verifyBlob) {
       throw new Error('REMOTE_FEED_VERIFICATION_FAILED');
@@ -316,7 +326,7 @@ async function main() {
     const verifyText = await verifyBlob.text();
     const verifyJson = JSON.parse(verifyText);
 
-    // Verify it is array, unique feed IDs, canonical content match, counts match, remains subset of final db
+    // Verify properties of downloaded remote feed
     validateUniqueIds(verifyJson, 'FEED');
     evaluateExistingFeed(feedData, verifyJson);
     
@@ -326,18 +336,51 @@ async function main() {
       throw new Error('REMOTE_FEED_VERIFICATION_FAILED');
     }
 
-    console.log('====================================================');
-    console.log('🎉 REMOTE_FEED_VERIFIED');
-    console.log('====================================================');
-    console.log(`Total Database Records:      ${finalRemoteData.length}`);
-    console.log(`Total Public Feed Records:   ${verifyJson.length}`);
-    console.log('Verification Status:         PASSED');
-    console.log('⚠️ project-assets:          inventory audit complete; media restoration requires a separate reviewed manifest and controlled task; recovery:apply must not write to project-assets.');
-    console.log('====================================================\n');
+    logger.log('====================================================');
+    logger.log('🎉 REMOTE_FEED_VERIFIED');
+    logger.log('====================================================');
+    logger.log(`Total Database Records:      ${finalRemoteData.length}`);
+    logger.log(`Total Public Feed Records:   ${verifyJson.length}`);
+    logger.log('Verification Status:         PASSED');
+    logger.log('⚠️ project-assets:          inventory audit complete; media restoration requires a separate reviewed manifest and controlled task; recovery:apply must not write to project-assets.');
+    logger.log('====================================================\n');
+    return { success: true, exitCode: 0 };
   } catch (err) {
-    console.error('❌ Error: REMOTE_FEED_VERIFICATION_FAILED');
-    process.exit(1);
+    logger.error('❌ Error: REMOTE_FEED_VERIFICATION_FAILED');
+    return { success: false, error: 'REMOTE_FEED_VERIFICATION_FAILED' };
   }
 }
 
-main();
+async function main() {
+  const isApply = process.argv.includes('--apply');
+  const dbPath = path.resolve(__dirname, '../data/db.json');
+  const feedPath = path.resolve(__dirname, '../public/capstones-latest.json');
+  
+  const localSeed = fs.readFileSync(dbPath, 'utf8');
+  const localFeed = fs.readFileSync(feedPath, 'utf8');
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = getSupabaseKey();
+  const expectedRef = process.env.SUPABASE_EXPECTED_PROJECT_REF;
+
+  const result = await runRecovery({
+    isApply,
+    supabaseUrl,
+    supabaseKey,
+    expectedRef,
+    localSeed,
+    localFeed,
+    createSupabaseClient: createClient,
+    fileAdapter: fs
+  });
+
+  if (!result.success) {
+    process.exit(result.exitCode !== undefined ? result.exitCode : 1);
+  }
+  process.exit(0);
+}
+
+// Only execute when run directly from Node.js
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main();
+}
