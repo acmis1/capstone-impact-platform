@@ -308,3 +308,19 @@ These unit tests are strictly offline. The following layers are excluded from th
 * Row-Level Security (RLS) policies.
 * Media Storage uploads and bucket promotions.
 * External service calls (Gemini API, Duda API, Render deployments).
+
+---
+
+## 🛡️ Staging Auth Verification
+
+To audit and verify staging database configuration and authentication readiness, a read-only check script is available:
+
+```bash
+npm run check:admin-auth
+```
+
+* **Read-only execution**: This script is SELECT-only. It does not create users, apply database migrations, or modify user roles.
+* **Fictional data only**: It never prints credentials or personal database data.
+* **Controlled Manual Audit**: Live authentication flow validation requires performing the manual checklist described in the [staging auth verification runbook](../../infra/supabase/staging-auth-verification.md).
+
+For setting up staging Auth identities, refer to the [manual apply guide](../../infra/supabase/manual-apply-guide.md).

@@ -101,44 +101,94 @@ After executing the teardown, repeat Steps 1 & 2 to apply the schema clean.
 
 ---
 
-## 👥 Administrative User Provisioning in Staging
+## Administrative User Provisioning in Staging
 
 Staging operates on manually provisioned admins using Supabase Auth. Since there is no public self-registration form, follow these steps to add a staging administrator:
 
 ### 1. Create the Auth User in Supabase Dashboard
 1. In your Supabase Dashboard, navigate to **Authentication** > **Users** in the left sidebar.
 2. Click **Add User** > **Create User**.
-3. Fill in a fictional email address (e.g. `test.admin@example.local`) and a secure password.
+3. Fill in the canonical fictional email address `auth-test-admin@example.com` and a secure password.
 4. Set **Auto-confirm User?** to `true` (checked) so no email confirmation is sent.
 5. Click **Create User**.
 
 ### 2. Retrieve the User UUID
 1. Locate the newly created user in the **Authentication** > **Users** list.
-2. Copy the UUID value displayed in the **User UID** / **ID** column (e.g. `d7170068-bc23-4554-ba5e-f00de7a7872d`).
+2. Copy the UUID value displayed in the **User UID** / **ID** column (represented as `<AUTH_USER_UUID>` in script templates).
 
 ### 3. Provision the Admin CMS Role in SQL Editor
-Open the **SQL Editor** and execute the following query to link the Auth user to the administrative schema (replace the placeholder UUID and email with your generated staging values):
+> [!WARNING]
+> This script is staging-only and must never be executed on production.
+> Before running, confirm that the active database connection is exactly the isolated staging database.
+> If any safety exception is raised, stop execution immediately and verify the current database state.
+
+Open the **SQL Editor** and execute the following query to link the Auth user to the administrative schema (replace the placeholder `<AUTH_USER_UUID>` with your generated staging UID):
 
 ```sql
--- 1. Insert or update the admin_users profile linked to the Auth ID
-INSERT INTO admin_users (email, full_name, auth_user_id)
-VALUES ('test.admin@example.local', 'Staging Administrator', 'd7170068-bc23-4554-ba5e-f00de7a7872d')
-ON CONFLICT (email) 
-DO UPDATE SET auth_user_id = EXCLUDED.auth_user_id, full_name = EXCLUDED.full_name;
-
--- 2. Assign the role in user_roles table
--- Retrieve the local admin user ID we just created
 DO $$
 DECLARE
-    v_user_id UUID;
-BEGIN
-    SELECT id INTO v_user_id FROM admin_users WHERE email = 'test.admin@example.local';
+    v_auth_uuid UUID := '<AUTH_USER_UUID>'::UUID;
+    v_email VARCHAR := 'auth-test-admin@example.com';
+    v_full_name VARCHAR := 'Staging Auth Test Administrator';
     
-    -- Insert user role ('admin', 'reviewer', or 'editor')
+    v_auth_exists BOOLEAN;
+    v_auth_email VARCHAR;
+    v_admin_id UUID;
+    v_existing_linked_email VARCHAR;
+    v_existing_admin_linked_uuid UUID;
+    v_admin_count INT;
+BEGIN
+    -- 1. Verify that an Auth user exists in auth.users with the supplied UUID
+    SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = v_auth_uuid) INTO v_auth_exists;
+    IF NOT v_auth_exists THEN
+        RAISE EXCEPTION 'AUTH_USER_NOT_FOUND';
+    END IF;
+
+    -- 2. Verify that the Auth user's email matches the canonical email
+    SELECT email INTO v_auth_email FROM auth.users WHERE id = v_auth_uuid;
+    IF v_auth_email IS DISTINCT FROM v_email THEN
+        RAISE EXCEPTION 'AUTH_EMAIL_MISMATCH';
+    END IF;
+
+    -- 3. Check if another admin_users row is already linked to the supplied UUID
+    SELECT email INTO v_existing_linked_email FROM admin_users WHERE auth_user_id = v_auth_uuid AND email IS DISTINCT FROM v_email;
+    IF v_existing_linked_email IS NOT NULL THEN
+        RAISE EXCEPTION 'AUTH_IDENTITY_ALREADY_LINKED';
+    END IF;
+
+    -- 4. Check if the canonical admin_users row is already linked to a different UUID
+    SELECT auth_user_id INTO v_existing_admin_linked_uuid FROM admin_users WHERE email = v_email;
+    IF v_existing_admin_linked_uuid IS NOT NULL AND v_existing_admin_linked_uuid IS DISTINCT FROM v_auth_uuid THEN
+        RAISE EXCEPTION 'CANONICAL_PROFILE_LINK_CONFLICT';
+    END IF;
+
+    -- 5. Check if more than one matching administrator row is found for this email
+    SELECT COUNT(*) INTO v_admin_count FROM admin_users WHERE email = v_email;
+    IF v_admin_count > 1 THEN
+        RAISE EXCEPTION 'MULTIPLE_CANONICAL_ADMIN_ROWS';
+    END IF;
+
+    -- 6. Create or retrieve the canonical admin_users profile
+    IF v_admin_count = 0 THEN
+        INSERT INTO admin_users (email, full_name, auth_user_id)
+        VALUES (v_email, v_full_name, v_auth_uuid)
+        RETURNING id INTO v_admin_id;
+    ELSE
+        SELECT id INTO v_admin_id FROM admin_users WHERE email = v_email;
+        
+        -- Update the profile linkage and full name safely
+        UPDATE admin_users
+        SET auth_user_id = v_auth_uuid,
+            full_name = v_full_name
+        WHERE id = v_admin_id;
+    END IF;
+
+    -- 7. Assign the admin role idempotently
     INSERT INTO user_roles (user_id, role)
-    VALUES (v_user_id, 'admin')
+    VALUES (v_admin_id, 'admin')
     ON CONFLICT (user_id, role) DO NOTHING;
+
+    RAISE NOTICE 'STAGING_ADMIN_PROVISIONED';
 END $$;
 ```
-Now `test.admin@example.local` can sign in and access pages requiring `projects.read` and higher administrative permissions.
 
