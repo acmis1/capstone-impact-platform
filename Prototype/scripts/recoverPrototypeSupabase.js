@@ -19,20 +19,23 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/**
- * Loads the private recovery environment variables.
- */
-export function loadRecoveryEnv({ envPath, dotenvModule, fsModule } = {}) {
+export function loadRecoveryEnv({ envPath, dotenvModule, fsModule, targetEnv } = {}) {
   const targetFs = fsModule || fs;
   const targetDotenv = dotenvModule || dotenv;
   const resolvedPath = envPath || path.resolve(__dirname, '../.env');
+  const activeEnv = targetEnv || process.env;
 
   if (!targetFs.existsSync(resolvedPath)) {
     return { loaded: false };
   }
 
   try {
-    const result = targetDotenv.config({ path: resolvedPath });
+    const result = targetDotenv.config({
+      path: resolvedPath,
+      quiet: true,
+      override: false,
+      processEnv: activeEnv
+    });
     if (result.error) {
       throw result.error;
     }

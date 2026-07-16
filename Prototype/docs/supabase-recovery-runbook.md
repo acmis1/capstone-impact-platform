@@ -42,11 +42,13 @@ To guarantee data integrity and guard against race conditions or mid-flight file
 To manage configuration securely, the recovery CLI uses a dedicated environment configuration loader:
 
 *   **Explicit Loading**: `Prototype/.env` is loaded explicitly by the recovery CLI entrypoint (`main()`) before configurations are read.
-*   **OS Precedence**: Operating-system level environment variables take precedence over settings inside `Prototype/.env`.
+*   **Quiet Mode**: Dotenv runs with quiet mode enabled, preventing it from printing injection or diagnostic messages to console output.
+*   **No Override**: Override is disabled (`override: false`), ensuring that operating-system level environment variables always take precedence.
 *   **Import Isolation**: Importing the recovery runner or utility modules (e.g. for testing purposes) does not load the environment file automatically.
+*   **Test Isolation**: Unit tests utilize an isolated target environment (`targetEnv`) and never read the real `Prototype/.env` file.
 *   **Optional for Dry-Runs**: The `recovery:dry-run` task works completely offline even when `Prototype/.env` is absent or empty.
 *   **Required for Apply**: Executing `recovery:apply` requires the target Supabase URL, generated reference subdomain allowlist, and server key to be available through the loaded private environment.
-*   **Credential Masking**: No credential or secret value is ever printed, returned, or logged.
+*   **Credential Masking**: No credential or secret configuration value is ever printed, returned, or logged.
 *   **Git-Ignored Security**: The configuration file `Prototype/.env` remains Git-ignored.
 
 ---

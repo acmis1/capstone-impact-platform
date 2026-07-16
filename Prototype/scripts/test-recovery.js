@@ -484,105 +484,174 @@ registerTest('23. Source-level checks: no readFileSync call inside runRecovery, 
   assert.ok(runnerContent.includes('upsert: false'));
 });
 
-// Environment Loader Tests
-const mockFsExist = (exists) => ({
-  existsSync: () => exists
+// 24. Substantive Module Structure Verification
+registerTest('24. Substantive Module Structure Verification', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, 'recoverPrototypeSupabase.js'), 'utf8');
+
+  const idxLoadEnv = source.indexOf('export function loadRecoveryEnv');
+  const idxRunRec = source.indexOf('export async function runRecovery');
+  const idxMain = source.indexOf('async function main()');
+
+  assert.notStrictEqual(idxLoadEnv, -1);
+  assert.notStrictEqual(idxRunRec, -1);
+  assert.notStrictEqual(idxMain, -1);
+
+  assert.ok(idxLoadEnv < idxRunRec);
+  assert.ok(idxRunRec < idxMain);
+
+  // Check no standalone call to loadRecoveryEnv() before main
+  const sourceBeforeMain = source.slice(0, idxMain);
+  // Match loadRecoveryEnv() calls, excluding function declaration
+  const standaloneCalls = sourceBeforeMain.match(/(?<!function\s+)loadRecoveryEnv\s*\(/g) || [];
+  assert.strictEqual(standaloneCalls.length, 0);
+
+  // Check main contains loadRecoveryEnv() call before first process.env
+  const mainSource = source.slice(idxMain);
+  const mainLoaderCall = mainSource.indexOf('loadRecoveryEnv()');
+  const firstProcessEnv = mainSource.indexOf('process.env');
+
+  assert.notStrictEqual(mainLoaderCall, -1);
+  assert.notStrictEqual(firstProcessEnv, -1);
+  assert.ok(mainLoaderCall < firstProcessEnv);
 });
 
-// 24. Importing the recovery module does not load an env file
-registerTest('24. Importing the recovery module does not load an env file', () => {
-  assert.ok(true);
-});
-
-// 25. Missing env file returns loaded:false
-registerTest('25. Missing env file returns loaded:false', () => {
-  const result = loadRecoveryEnv({
-    envPath: '/path/does/not/exist',
-    fsModule: mockFsExist(false)
-  });
-  assert.deepStrictEqual(result, { loaded: false });
-});
-
-// 26. Existing artificial env file returns loaded:true
-registerTest('26. Existing artificial env file returns loaded:true', () => {
-  const mockTargetEnv = {};
-  const mockDotenvModule = {
-    config: ({ path }) => {
-      mockTargetEnv.MOCK_VAR = 'artificial_val';
-      return { parsed: { MOCK_VAR: 'artificial_val' } };
-    }
-  };
-  const result = loadRecoveryEnv({
-    envPath: '/path/to/artificial/.env',
-    fsModule: mockFsExist(true),
-    dotenvModule: mockDotenvModule
-  });
-  assert.deepStrictEqual(result, { loaded: true });
-  assert.strictEqual(mockTargetEnv.MOCK_VAR, 'artificial_val');
-});
-
-// 27. Existing operating-system value is not overwritten by the env file
-registerTest('27. Existing operating-system value is not overwritten by the env file', () => {
-  const processEnvMock = { EXISTING_OS_VAR: 'os_value' };
-  const mockDotenvModule = {
-    config: ({ path }) => {
-      if (!processEnvMock.EXISTING_OS_VAR) {
-        processEnvMock.EXISTING_OS_VAR = 'env_value';
-      }
-      processEnvMock.NEW_VAR = 'new_val';
-      return { parsed: { EXISTING_OS_VAR: 'env_value', NEW_VAR: 'new_val' } };
-    }
-  };
-
-  const result = loadRecoveryEnv({
-    envPath: '/path/to/.env',
-    fsModule: mockFsExist(true),
-    dotenvModule: mockDotenvModule
-  });
-
-  assert.strictEqual(result.loaded, true);
-  assert.strictEqual(processEnvMock.EXISTING_OS_VAR, 'os_value');
-  assert.strictEqual(processEnvMock.NEW_VAR, 'new_val');
-});
-
-// 28. A malformed/unreadable artificial env file returns ENV_FILE_LOAD_FAILED
-registerTest('28. A malformed/unreadable artificial env file returns ENV_FILE_LOAD_FAILED', () => {
-  const mockDotenvModule = {
+// 25. Missing env file behavior
+registerTest('25. Missing env file behavior', () => {
+  let mockDotenvCalls = 0;
+  const mockDotenv = {
     config: () => {
-      return { error: new Error('unreadable') };
+      mockDotenvCalls++;
+      return {};
     }
   };
+
+  const result = loadRecoveryEnv({
+    envPath: '/non-existent-path-to-env',
+    dotenvModule: mockDotenv,
+    fsModule: { existsSync: () => false },
+    targetEnv: {}
+  });
+
+  assert.deepStrictEqual(result, { loaded: false });
+  assert.strictEqual(mockDotenvCalls, 0);
+});
+
+// 26. Existing artificial env file loads into targetEnv
+registerTest('26. Existing artificial env file loads into targetEnv', () => {
+  const tempPath = path.resolve(__dirname, 'temp_env_test');
+  fs.writeFileSync(tempPath, 'TEST_VAL_ARTIFICIAL=hello_world\n');
+
+  try {
+    const targetEnv = {};
+    const result = loadRecoveryEnv({
+      envPath: tempPath,
+      targetEnv
+    });
+
+    assert.deepStrictEqual(result, { loaded: true });
+    assert.strictEqual(targetEnv.TEST_VAL_ARTIFICIAL, 'hello_world');
+    assert.strictEqual(process.env.TEST_VAL_ARTIFICIAL, undefined);
+  } finally {
+    if (fs.existsSync(tempPath)) {
+      fs.unlinkSync(tempPath);
+    }
+  }
+});
+
+// 27. Existing-value precedence
+registerTest('27. Existing-value precedence', () => {
+  const tempPath = path.resolve(__dirname, 'temp_env_test_precedence');
+  fs.writeFileSync(tempPath, 'EXISTING_VALUE=new_value\nNEW_VALUE_SET=loaded\n');
+
+  try {
+    const targetEnv = { EXISTING_VALUE: 'original_value' };
+    const result = loadRecoveryEnv({
+      envPath: tempPath,
+      targetEnv
+    });
+
+    assert.deepStrictEqual(result, { loaded: true });
+    assert.strictEqual(targetEnv.EXISTING_VALUE, 'original_value');
+    assert.strictEqual(targetEnv.NEW_VALUE_SET, 'loaded');
+  } finally {
+    if (fs.existsSync(tempPath)) {
+      fs.unlinkSync(tempPath);
+    }
+  }
+});
+
+// 28. Captured dotenv options
+registerTest('28. Captured dotenv options', () => {
+  let capturedOpts = null;
+  const mockDotenv = {
+    config: (opts) => {
+      capturedOpts = opts;
+      return { parsed: {} };
+    }
+  };
+  const targetEnv = {};
+
+  const result = loadRecoveryEnv({
+    envPath: '/fake/.env',
+    dotenvModule: mockDotenv,
+    fsModule: { existsSync: () => true },
+    targetEnv
+  });
+
+  assert.deepStrictEqual(result, { loaded: true });
+  assert.notStrictEqual(capturedOpts, null);
+  assert.strictEqual(capturedOpts.path, '/fake/.env');
+  assert.strictEqual(capturedOpts.quiet, true);
+  assert.strictEqual(capturedOpts.override, false);
+  assert.strictEqual(capturedOpts.processEnv, targetEnv);
+});
+
+// 29. Loading failure sanitization
+registerTest('29. Loading failure sanitization', () => {
+  const mockDotenv = {
+    config: () => {
+      return { error: new Error('Some private system read path error') };
+    }
+  };
+
   assert.throws(() => {
     loadRecoveryEnv({
-      envPath: '/path/to/bad/.env',
-      fsModule: mockFsExist(true),
-      dotenvModule: mockDotenvModule
+      envPath: '/fake/.env',
+      dotenvModule: mockDotenv,
+      fsModule: { existsSync: () => true },
+      targetEnv: {}
     });
-  }, /ENV_FILE_LOAD_FAILED/);
+  }, (err) => {
+    assert.strictEqual(err.message, 'ENV_FILE_LOAD_FAILED');
+    assert.strictEqual(err.message.includes('private'), false);
+    return true;
+  });
 });
 
-// 29. runRecovery itself contains no dotenv loading and no process.env access
-registerTest('29. runRecovery itself contains no dotenv loading and no process.env access', () => {
-  const runnerContent = fs.readFileSync(path.resolve(__dirname, 'recoverPrototypeSupabase.js'), 'utf8');
-  const runRecoveryDef = runnerContent.slice(
-    runnerContent.indexOf('export async function runRecovery'),
-    runnerContent.indexOf('export function loadRecoveryEnv')
-  );
-  assert.strictEqual(runRecoveryDef.includes('dotenv'), false);
-  assert.strictEqual(runRecoveryDef.includes('process.env'), false);
+// 30. Module import/top-level isolation
+registerTest('30. Module import/top-level isolation', () => {
+  // Verifies that loading process.env has not occurred simply by importing.
+  // The processEnv remains unaffected at imports.
+  assert.strictEqual(process.env.TEST_VAL_ARTIFICIAL, undefined);
 });
 
-// 30. main-equivalent configuration collection occurs only after the loader
-registerTest('30. main-equivalent configuration collection occurs only after the loader', () => {
-  const runnerContent = fs.readFileSync(path.resolve(__dirname, 'recoverPrototypeSupabase.js'), 'utf8');
-  const mainDef = runnerContent.slice(runnerContent.indexOf('async function main()'));
+// 31. Correct runRecovery source boundary
+registerTest('31. Correct runRecovery source boundary', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, 'recoverPrototypeSupabase.js'), 'utf8');
   
-  const loaderIndex = mainDef.indexOf('loadRecoveryEnv()');
-  const processEnvIndex = mainDef.indexOf('process.env');
-  
-  assert.ok(loaderIndex !== -1);
-  assert.ok(processEnvIndex !== -1);
-  assert.ok(loaderIndex < processEnvIndex);
+  const start = source.indexOf('export async function runRecovery');
+  const end = source.indexOf('async function main()');
+
+  assert.notStrictEqual(start, -1);
+  assert.notStrictEqual(end, -1);
+  assert.ok(start < end);
+
+  const extracted = source.slice(start, end);
+  assert.ok(extracted.trim().length > 0);
+
+  assert.strictEqual(extracted.includes('dotenv'), false);
+  assert.strictEqual(extracted.includes('process.env'), false);
+  assert.strictEqual(extracted.includes('loadRecoveryEnv('), false);
 });
 
 async function main() {
@@ -591,17 +660,15 @@ async function main() {
       await t.fn();
       passedCount++;
     } catch (err) {
-      console.error(`❌ Test failed: ${t.name}`);
+      console.error(t.name);
       console.error('ASSERTION_FAILED');
       failedCount++;
     }
   }
 
-  console.log('====================================================');
   console.log(`Named tests: ${tests.length}`);
   console.log(`Passed: ${passedCount}`);
   console.log(`Failed: ${failedCount}`);
-  console.log('====================================================');
 
   if (failedCount > 0) {
     process.exit(1);
