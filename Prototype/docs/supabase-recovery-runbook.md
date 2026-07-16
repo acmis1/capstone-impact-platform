@@ -19,116 +19,93 @@ This repository interacts with multiple environments. Ensure you do not confuse 
 
 ---
 
-## Phase 1: Manual Supabase Project Re-creation
+## Validated Feed Snapshot
 
-1.  Log in to the **Supabase Dashboard**.
-2.  Click **New Project** and select your organization.
-3.  Set the project name to:
-    ```text
-    capstone-prototype-recovery-2026
-    ```
-4.  Configure a secure database password. Store it privately in a password manager.
-5.  Wait for project provisioning to complete.
+To guarantee data integrity and guard against race conditions or mid-flight filesystem changes, the recovery runner utilizes a single-pass validated snapshot pattern:
+
+1.  The `main()` entrypoint reads the local public-feed file once.
+2.  `runRecovery` captures the supplied feed content immediately on invocation.
+3.  The runner parses and validates the captured feed structure.
+4.  An immutable `Buffer` snapshot is constructed directly from the same validated source string.
+5.  A canonical equality check compares the `Buffer` contents against the validated feed array to verify zero payload alteration before any client creation occurs.
+6.  The same immutable `Buffer` is used for the Storage upload phase.
+7.  The feed file is not read again after recovery operations begin.
+8.  The Storage upload uses:
+    *   `contentType: 'application/json'`
+    *   `upsert: false` (to prevent overwriting existing feeds).
+9.  The remote object is downloaded and verified canonically after creation.
 
 ---
 
-## Phase 2: Schema Reconstruction
+## Resumability and Partial Failure
 
-1.  In your new project Dashboard, navigate to the **SQL Editor** from the left panel.
-2.  Click **New query**.
-3.  Paste the following schema definition script to create the table and configure permissions:
+The recovery runner is built to support resumability and handles failures safely without requiring data rollbacks:
+
+*   **Idempotence**: The recovery process is idempotent. If rerun, it skips existing database rows that match the local seed canonically.
+*   **Zero Overwrite**: Existing identical public feeds are accepted without another upload, while unexpected or conflicting rows and feeds halt the runner.
+*   **Execution Ordering**: Database project records are inserted before a missing public feed is created.
+*   **Non-Transactional Boundaries**: Database mutations and Storage uploads are separate operations and do not form a single cross-service transaction.
+*   **Partial Failure Procedure**:
+    1.  If database insertion succeeds but the feed upload fails (e.g., due to a temporary network drop or permissions issue), **stop**.
+    2.  Preserve the fixed failure code reported by the runner.
+    3.  Inspect and correct the cause of the Storage error.
+    4.  Rerun the guarded recovery command.
+    5.  Matching database rows are detected and skipped automatically.
+    6.  The still-missing public feed is created.
+*   **Operator Safety Rules**:
+    *   Never manually delete matching database rows merely to restart recovery.
+    *   Never change the bucket upload configuration from `upsert: false` to `true`.
+
+---
+
+## Recovery Execution Sequence
+
+The complete manual and automated recovery sequence is:
+
+1.  **Review PR #6**: The recovery foundation PR targets `break/admin-cms-staging-foundation` (not `main`). The recovery foundation must first be reviewed and merged into that staging foundation branch. Promotion from the staging foundation to `main` is a separate future decision.
+2.  **Merge PR #6**: Merge PR #6 into `break/admin-cms-staging-foundation` only after explicit approval.
+3.  **Create Project**: Create the replacement Supabase project manually in the Dashboard.
+4.  **Database Setup**: Navigate to the SQL Editor and create the projects table and RLS constraints:
     ```sql
     BEGIN;
-
     CREATE TABLE IF NOT EXISTS public.projects (
         id BIGINT PRIMARY KEY,
         data JSONB NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
-
     ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
-
-    -- Revoke all default public privileges on the projects table
     REVOKE ALL ON TABLE public.projects FROM anon;
     REVOKE ALL ON TABLE public.projects FROM authenticated;
-
-    -- Grant full database permissions only to the service_role key
     GRANT ALL ON TABLE public.projects TO service_role;
-
     COMMIT;
     ```
-4.  Click **Run** and verify success.
-
-> [!NOTE]
-> **Database Visibility Guard**: The Prototype server reads and writes data using the server-only privileged secret key. The Duda widget accesses the compiled JSON public file directly from Storage. Because Duda never queries the `projects` table directly, the database table remains completely inaccessible to anonymous/authenticated browser roles. Do not create any public SELECT policy.
-
----
-
-## Phase 3: Storage Bucket Setup
-
-1.  Navigate to **Storage** from the left panel.
-2.  Create the public feed distribution bucket with the exact canonical name:
-    *   Name: `feeds`
-    *   Visibility: **Public** (check the "Public bucket" switch)
-3.  Create the media asset bucket with the exact canonical name:
-    *   Name: `project-assets`
-    *   Visibility: **Public** (check the "Public bucket" switch)
-
----
-
-## Phase 4: Local Configuration Update
-
-Update `Prototype/.env` with the credentials of your newly created recovery project:
-```env
-SUPABASE_URL=<NEW_PROJECT_URL>
-# Primary server secret key
-SUPABASE_SECRET_KEY=<NEW_SERVER_SECRET_KEY>
-SUPABASE_SERVICE_ROLE_KEY=
-
-# Safety Check - Unique generated project reference subdomain
-# (NOT the human-readable project name. Extract it from your URL: https://<REF>.supabase.co)
-SUPABASE_EXPECTED_PROJECT_REF=<GENERATED_PROJECT_REFERENCE>
-
-# Canonical targets (alternative names are rejected by the recovery system)
-SUPABASE_FEED_BUCKET=feeds
-SUPABASE_FEED_FILE=capstones-latest.json
-SUPABASE_ASSET_BUCKET=project-assets
-ADMIN_ACCESS_KEY=<NEW_RANDOM_ADMIN_ACCESS_KEY>
-```
-
----
-
-## Phase 5: Recovery Dry-Run Execution
-
-Before performing any database writes, run the offline verification checker from the `/Prototype` directory:
-```bash
-cd Prototype
-npm run recovery:dry-run
-```
-**Expected Verification Metrics**:
-*   Seed Database count: `10`
-*   Public Feed count: `6`
-*   Obsolete domain references matched.
-*   Asset list aggregated.
-*   Readiness: `PASSED`
-
----
-
-## Phase 6: Recovery Execution Sequence
-
-The complete manual/automated recovery sequence is:
-1.  Merge reviewed recovery foundation files to the main branch.
-2.  Create the replacement Supabase project manually in the Dashboard.
-3.  Execute Phase 2 (SQL Schema and RLS).
-4.  Execute Phase 3 (Create buckets `feeds` and `project-assets` with Public visibility).
-5.  Prepare a separately reviewed URL/media rewrite manifest.
-6.  Generate sanitized recovery copies of `db.json` and `capstones-latest.json` (replacing obsolete domains).
-7.  Confirm that the obsolete-reference count reports exactly zero.
-8.  Run the offline `npm run recovery:dry-run` script to check readiness.
-9.  Run `npm run recovery:apply` to perform Storage and Database preflight check.
-10. Seeding database project records occurs automatically inside the apply task.
-11. Public feed restoration files (`capstones-latest.json`) are compiled and uploaded automatically.
-12. Restore static project media assets to `project-assets` bucket in a separate reviewed manifest and controlled task.
-13. Update Render environment variables with the new `SUPABASE_URL` and `SUPABASE_SECRET_KEY`.
-14. Update the Duda layout HTML widget code block with the new feed file URL.
-15. Perform automated and browser regression tests on the staging prototype.
+    *(Note: The table is server-only. Do not configure any anonymous database SELECT policy).*
+5.  **Create Buckets**: Create the exact public storage buckets in the Dashboard:
+    *   `feeds` (Public visibility)
+    *   `project-assets` (Public visibility)
+6.  **Configure Environment**: Configure private environment variables in `Prototype/.env` (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `SUPABASE_EXPECTED_PROJECT_REF`).
+7.  **Run Offline Dry-Run**: Run the dry-run command from `/Prototype`:
+    ```bash
+    npm run recovery:dry-run
+    ```
+    *Expected Local Results*:
+    *   Seed record count: `10`
+    *   Public feed record count: `6`
+    *   Feed subset validation: `passed`
+    *   Duplicate-ID validation: `passed`
+    *   Obsolete deleted-reference count: `0`
+    *   `READY_FOR_APPLY`: `true`
+    *   No Supabase client creation
+    *   No network request
+    *   Exit code: `0`
+8.  **Confirm Identity**: Confirm the Dashboard project name and generated reference match the target manually.
+9.  **Run Recovery Apply**: Execute the controlled apply task:
+    ```bash
+    npm run recovery:apply
+    ```
+10. **Verify Seeding**: Verify that 10 database records and 6 public feed records are successfully set.
+11. **Restore Assets**: Restore static project media assets to `project-assets` in a separate reviewed task (this is not performed or inventoried by the recovery runner).
+12. **Update Render**: Update Render web environment variables in a separate controlled task.
+13. **Update Duda**: Update the Duda layout HTML widget code block in a separate controlled task.
+14. **Regression Testing**: Perform regression testing on the staging prototype.
+15. **Consider Promotion**: Consider later promotion of the staging foundation branch to `main` as a separate decision.
