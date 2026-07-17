@@ -12,28 +12,32 @@ This guide explains how to deploy the Admin/CMS prototype to a temporary staging
 ## Deployment Steps
 
 ### 1. Supabase Database Setup
-Before deploying, you must create the required table in your Supabase project.
+In the recovered project, the database already contains the required table structure, RLS policies, and seeded records. You do not need to rerun SQL scripts on a recovered project. 
 
-1. Go to your **Supabase Dashboard** -> **SQL Editor**.
-2. Run the following SQL to create the `projects` table:
+For a clean rebuild only, the table is created using the following SQL:
 
 ```sql
--- Create the projects table
-create table public.projects (
-  id bigint primary key,
-  data jsonb not null,
-  updated_at timestamptz default now()
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.projects (
+    id BIGINT PRIMARY KEY,
+    data JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Enable Row Level Security (RLS)
-alter table public.projects enable row level security;
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 
--- For this prototype, we rely on the Service Role Key for backend access.
--- Ensure the service_role has permissions on the table:
-GRANT ALL ON public.projects TO service_role;
-GRANT ALL ON public.projects TO postgres;
-GRANT ALL ON public.projects TO anon; -- Optional: only if you want public read via anon key
+REVOKE ALL ON TABLE public.projects FROM anon;
+REVOKE ALL ON TABLE public.projects FROM authenticated;
+
+GRANT ALL ON TABLE public.projects TO service_role;
+
+COMMIT;
 ```
+
+Duda reads the public Storage JSON feed;
+Duda does not query public.projects;
+SUPABASE_SECRET_KEY remains backend-only.
 
 ### 2. Configure Environment Variables
 Set the following variables in your hosting provider's dashboard:
@@ -41,10 +45,12 @@ Set the following variables in your hosting provider's dashboard:
 | Variable | Description |
 | :--- | :--- |
 | `PORT` | The port the server runs on (defaults to 5000). |
-| `SUPABASE_URL` | Your Supabase project URL (https://...). |
-| `SUPABASE_SERVICE_ROLE_KEY` | **SECRET** Service Role Key (Backend only). |
-| `SUPABASE_FEED_BUCKET` | Usually `feeds`. |
-| `SUPABASE_FEED_FILE` | Usually `capstones-latest.json`. |
+| `SUPABASE_URL` | Your Supabase project URL (`https://<ref>.supabase.co`). |
+| `SUPABASE_SECRET_KEY` | **SECRET** service role/secret key (Backend only, never expose in Duda or browser). *Note: `SUPABASE_SERVICE_ROLE_KEY` is supported as a legacy fallback only.* |
+| `SUPABASE_EXPECTED_PROJECT_REF` | The exact generated project reference subdomain (e.g. `xyzabc`). Do not use the human-readable project name. |
+| `SUPABASE_FEED_BUCKET` | The public Storage bucket for the public feed (must be `feeds`). |
+| `SUPABASE_FEED_FILE` | The filename of the published feed (must be `capstones-latest.json`). |
+| `SUPABASE_ASSET_BUCKET` | The public Storage bucket for project images (must be `project-assets`). |
 | `ADMIN_ACCESS_KEY` | (Optional) A secret string required to Save/Publish changes. |
 
 ### 3. Build and Start
@@ -74,7 +80,7 @@ If `ADMIN_ACCESS_KEY` is configured:
 3. **Write Test**: Edit a project and click "Save & Update Record".
 4. **Persistence Test**: Restart the server (or trigger a redeploy). Verify the edited project still has your changes.
 5. **Publish Test**: Click "Publish to Duda" on the Dashboard.
-6. **Verify Cloud**: Check the [Official Supabase Feed](https://xojnnhilqaldxoilmxli.supabase.co/storage/v1/object/public/feeds/capstones-latest.json) to see if it updated.
+6. **Verify Cloud**: Check the public Supabase Storage URL (`https://<GENERATED_PROJECT_REFERENCE>.supabase.co/storage/v1/object/public/feeds/capstones-latest.json`) to verify the file was updated.
 
 ## Demo Readiness
 For the full stakeholder demo script and final validation checklist, see **[Demo Readiness](./demo-readiness.md)**.

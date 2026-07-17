@@ -2,6 +2,7 @@ import assert from 'assert';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import vm from 'vm';
 import { getSupabaseKey, verifyProjectRef, getProjectRef } from '../utils/authHelper.js';
 import { runUrlAudit } from './auditDeletedUrls.js';
 import { 
@@ -453,7 +454,7 @@ registerTest('22. Injected validated-payload mismatch stops before client creati
     supabaseKey: 'somekey',
     expectedRef: 'testref12345',
     localSeed: '[{"id": 1}]',
-    localFeed: '[{"id": 1}]', // The validated localFeed
+    localFeed: '[{"id": 2}]', // The mismatched localFeed
     createSupabaseClient: mockFactory,
     logger: { log: () => {}, error: () => {} },
     recoveryConfig: canonicalConfig
@@ -463,7 +464,7 @@ registerTest('22. Injected validated-payload mismatch stops before client creati
   // or testing the verify logic directly. If the string is parsed and matches localFeed array, it succeeds.
   // To simulate mismatch, we pass localFeed array and seed values. If we pass malformed or mismatched configurations,
   // it is caught before client creation. We already checked configuration and reference errors block client creation.
-  assert.ok(true);
+  assert.strictEqual(factoryCalled, false);
 });
 
 // 23. Source-level checks: no readFileSync call inside runRecovery, no updates/upserts/deletes, inserts used
@@ -652,6 +653,219 @@ registerTest('31. Correct runRecovery source boundary', () => {
   assert.strictEqual(extracted.includes('dotenv'), false);
   assert.strictEqual(extracted.includes('process.env'), false);
   assert.strictEqual(extracted.includes('loadRecoveryEnv('), false);
+});
+
+// 32. Substantive Duda body-end runtime integration test
+registerTest('32. Substantive Duda body-end runtime integration test', async () => {
+  const html = fs.readFileSync(path.resolve(__dirname, '../duda/bodyend.html'), 'utf8');
+  const code = html.replace('<script>', '').replace('</script>', '');
+
+  const invalidCases = [
+    { url: undefined, name: '1. undefined configuration' },
+    { url: '', name: '2. empty string' },
+    { url: 'http://abc.supabase.co/storage/v1/object/public/feeds/capstones-latest.json', name: '3. HTTP rather than HTTPS' },
+    { url: 'https://user:pass@abc.supabase.co/storage/v1/object/public/feeds/capstones-latest.json', name: '4. username or password' },
+    { url: 'https://abc.supabase.co:8080/storage/v1/object/public/feeds/capstones-latest.json', name: '5. explicit port' },
+    { url: 'https://localhost/storage/v1/object/public/feeds/capstones-latest.json', name: '6. localhost' },
+    { url: 'https://abc.supabase.com/storage/v1/object/public/feeds/capstones-latest.json', name: '7. non-Supabase hostname' },
+    { url: 'https://abc.def.supabase.co/storage/v1/object/public/feeds/capstones-latest.json', name: '8. too many hostname segments' },
+    { url: 'https://ABC123ref.supabase.co/storage/v1/object/public/feeds/capstones-latest.json', name: '9. uppercase reference characters' },
+    { url: 'https://xojnnhilqaldxoilmxli.supabase.co/storage/v1/object/public/feeds/capstones-latest.json', name: '10. deleted project reference' },
+    { url: 'https://abc123ref.supabase.co/storage/v1/object/public/alternate/capstones-latest.json', name: '11. alternate Storage bucket' },
+    { url: 'https://abc123ref.supabase.co/storage/v1/object/public/feeds/alternate.json', name: '12. alternate feed filename' },
+    { url: 'https://abc123ref.supabase.co/storage/v1/object/public/feeds/capstones-latest.json?v=1', name: '13. query string' },
+    { url: 'https://abc123ref.supabase.co/storage/v1/object/public/feeds/capstones-latest.json#frag', name: '14. fragment' }
+  ];
+
+  for (const tc of invalidCases) {
+    let capturedDomCallback = null;
+    let fetchCount = 0;
+    const consoleLogs = [];
+    const consoleErrors = [];
+
+    const listingRoot = { id: 'capstone-showcase-root', appendChild: () => {}, insertBefore: () => {}, parentNode: {} };
+    const projectGrid = { id: 'capstone-project-grid', parentNode: listingRoot };
+    listingRoot.parentNode = listingRoot;
+    
+    const mockElements = {
+      'capstone-showcase-root': listingRoot,
+      'capstone-project-grid': projectGrid,
+      'project-detail': { id: 'project-detail', innerHTML: '' },
+      'capstone-filters-container': { id: 'capstone-filters-container', innerHTML: '' }
+    };
+
+    const sandbox = {
+      window: {
+        CAPSTONE_FEED_URL: tc.url,
+        location: { search: '', href: '' },
+        addEventListener: (event, cb) => {
+          if (event === 'load') cb();
+        }
+      },
+      document: {
+        getElementById: (id) => mockElements[id] || null,
+        addEventListener: (event, cb) => {
+          if (event === 'DOMContentLoaded') capturedDomCallback = cb;
+        },
+        createElement: (tag) => {
+          return { id: '', style: {}, innerHTML: '', parentNode: {} };
+        }
+      },
+      localStorage: {
+        getItem: () => null,
+        setItem: () => {}
+      },
+      URL: global.URL,
+      URLSearchParams: global.URLSearchParams,
+      console: {
+        log: (...args) => { consoleLogs.push(args.join(' ')); },
+        error: (...args) => { consoleErrors.push(args.join(' ')); },
+        warn: () => {}
+      },
+      fetch: async () => {
+        fetchCount++;
+        return { ok: true, json: async () => [] };
+      },
+      setTimeout: (fn) => fn()
+    };
+
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+
+    assert.ok(capturedDomCallback, `DOMContentLoaded callback not captured for ${tc.name}`);
+    await capturedDomCallback();
+
+    assert.strictEqual(fetchCount, 0, `Fetch called for invalid configuration: ${tc.name}`);
+    assert.ok(consoleErrors.includes('CAPSTONE_FEED_CONFIGURATION_INVALID'), `Error code missing for ${tc.name}`);
+    
+    const onlyConfigError = consoleErrors.every(e => e === 'CAPSTONE_FEED_CONFIGURATION_INVALID');
+    assert.ok(onlyConfigError, `Expected only CAPSTONE_FEED_CONFIGURATION_INVALID error for ${tc.name}`);
+
+    if (tc.url) {
+      const logsStr = consoleLogs.join(' ') + ' ' + consoleErrors.join(' ');
+      assert.strictEqual(logsStr.includes(tc.url), false, `Rejected URL leaked in logs for ${tc.name}`);
+    }
+
+    const detailContainer = mockElements['project-detail'];
+    const hasErrorUi = (detailContainer.innerHTML.includes('capstone-inline-error') && detailContainer.innerHTML.includes('CAPSTONE_FEED_CONFIGURATION_INVALID')) ||
+                       (projectGrid.innerHTML.includes('capstone-inline-error') && projectGrid.innerHTML.includes('CAPSTONE_FEED_CONFIGURATION_INVALID'));
+    assert.ok(hasErrorUi, `Safe unavailable UI not rendered for ${tc.name}`);
+  }
+
+  // Test Case for valid URL
+  let capturedDomCallback = null;
+  let fetchCount = 0;
+  let requestUrlPassed = null;
+  let fetchOptionsPassed = null;
+  const consoleLogs = [];
+  const consoleErrors = [];
+
+  const listingRoot = { id: 'capstone-showcase-root', appendChild: () => {}, insertBefore: () => {}, parentNode: {} };
+  const projectGrid = { id: 'capstone-project-grid', parentNode: listingRoot };
+  listingRoot.parentNode = listingRoot;
+  
+  const mockElements = {
+    'capstone-showcase-root': listingRoot,
+    'capstone-project-grid': projectGrid,
+    'project-detail': { id: 'project-detail', innerHTML: '' }
+  };
+
+  const validUrl = 'https://abc123ref.supabase.co/storage/v1/object/public/feeds/capstones-latest.json';
+
+  const sandbox = {
+    window: {
+      CAPSTONE_FEED_URL: validUrl,
+      location: { search: '', href: '' },
+      addEventListener: () => {}
+    },
+    document: {
+      getElementById: (id) => mockElements[id] || null,
+      addEventListener: (event, cb) => {
+        if (event === 'DOMContentLoaded') capturedDomCallback = cb;
+      },
+      createElement: (tag) => {
+        return { id: '', style: {}, innerHTML: '', parentNode: {} };
+      }
+    },
+    localStorage: {
+      getItem: () => null,
+      setItem: () => {}
+    },
+    URL: global.URL,
+    URLSearchParams: global.URLSearchParams,
+    console: {
+      log: (...args) => { consoleLogs.push(args.join(' ')); },
+      error: (...args) => { consoleErrors.push(args.join(' ')); },
+      warn: () => {}
+    },
+    fetch: async (url, options) => {
+      fetchCount++;
+      requestUrlPassed = url;
+      fetchOptionsPassed = options;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => []
+      };
+    },
+    setTimeout: (fn) => fn()
+  };
+
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+
+  assert.ok(capturedDomCallback);
+  await capturedDomCallback();
+
+  assert.strictEqual(fetchCount, 1);
+  assert.ok(requestUrlPassed.startsWith(validUrl));
+  
+  const urlObj = new URL(requestUrlPassed);
+  assert.strictEqual(urlObj.origin + urlObj.pathname, validUrl);
+  const vParam = urlObj.searchParams.get('v');
+  assert.ok(/^\d+$/.test(vParam), 'Cache-busting suffix must be digits only');
+
+  assert.strictEqual(fetchOptionsPassed.cache, 'no-store');
+  assert.ok(!consoleErrors.includes('CAPSTONE_FEED_CONFIGURATION_INVALID'));
+});
+
+// 33. Strengthened documentation security guidelines verification
+registerTest('33. Strengthened documentation security guidelines verification', () => {
+  const docPath = path.resolve(__dirname, '../docs/deployment-staging.md');
+  const content = fs.readFileSync(docPath, 'utf8');
+
+  assert.ok(content.includes('ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;'));
+  assert.ok(content.includes('REVOKE ALL ON TABLE public.projects FROM anon;'));
+  assert.ok(content.includes('REVOKE ALL ON TABLE public.projects FROM authenticated;'));
+  assert.ok(content.includes('GRANT ALL ON TABLE public.projects TO service_role;'));
+  assert.ok(content.includes('SUPABASE_SECRET_KEY'));
+  assert.ok(content.includes('SUPABASE_EXPECTED_PROJECT_REF'));
+
+  assert.ok(!content.includes('GRANT ALL ON public.projects TO anon;'));
+  assert.ok(!content.includes('GRANT ALL ON public.projects TO authenticated;'));
+  assert.ok(!content.includes('public SELECT policy'));
+  assert.ok(!content.includes('xojnnhilqaldxoilmxli.supabase.co'));
+});
+
+// 34. Security denylist and audit locations check
+registerTest('34. Security denylist and audit locations check', () => {
+  const authHelper = fs.readFileSync(path.resolve(__dirname, '../utils/authHelper.js'), 'utf8');
+  const recoveryHelper = fs.readFileSync(path.resolve(__dirname, '../utils/recoveryHelper.js'), 'utf8');
+  const auditDeletedUrls = fs.readFileSync(path.resolve(__dirname, 'auditDeletedUrls.js'), 'utf8');
+  const bodyend = fs.readFileSync(path.resolve(__dirname, '../duda/bodyend.html'), 'utf8');
+
+  assert.ok(authHelper.includes('xojnnhilqaldxoilmxli'));
+  assert.ok(recoveryHelper.includes('xojnnhilqaldxoilmxli'));
+  assert.ok(auditDeletedUrls.includes('xojnnhilqaldxoilmxli'));
+  assert.ok(bodyend.includes('xojnnhilqaldxoilmxli'));
+});
+
+// 35. Test runner sanitization checks
+registerTest('35. Test runner sanitization checks', () => {
+  const runnerSource = fs.readFileSync(path.resolve(__dirname, 'test-recovery.js'), 'utf8');
+  assert.strictEqual(runnerSource.includes("console.error('ASSERTION_FAILED:', " + "err)"), false);
+  assert.strictEqual(runnerSource.includes('console.error(`ASSERTION_FAILED: ' + '${'), false);
+  assert.ok(runnerSource.includes("console.error('ASSERTION_FAILED" + "')"));
 });
 
 async function main() {
