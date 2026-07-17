@@ -2,6 +2,7 @@ import assert from 'assert';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import vm from 'vm';
 import { getSupabaseKey, verifyProjectRef, getProjectRef } from '../utils/authHelper.js';
 import { runUrlAudit } from './auditDeletedUrls.js';
 import { 
@@ -453,7 +454,7 @@ registerTest('22. Injected validated-payload mismatch stops before client creati
     supabaseKey: 'somekey',
     expectedRef: 'testref12345',
     localSeed: '[{"id": 1}]',
-    localFeed: '[{"id": 1}]', // The validated localFeed
+    localFeed: '[{"id": 2}]', // The mismatched localFeed
     createSupabaseClient: mockFactory,
     logger: { log: () => {}, error: () => {} },
     recoveryConfig: canonicalConfig
@@ -463,7 +464,7 @@ registerTest('22. Injected validated-payload mismatch stops before client creati
   // or testing the verify logic directly. If the string is parsed and matches localFeed array, it succeeds.
   // To simulate mismatch, we pass localFeed array and seed values. If we pass malformed or mismatched configurations,
   // it is caught before client creation. We already checked configuration and reference errors block client creation.
-  assert.ok(true);
+  assert.strictEqual(factoryCalled, false);
 });
 
 // 23. Source-level checks: no readFileSync call inside runRecovery, no updates/upserts/deletes, inserts used
@@ -654,6 +655,87 @@ registerTest('31. Correct runRecovery source boundary', () => {
   assert.strictEqual(extracted.includes('loadRecoveryEnv('), false);
 });
 
+// 32. Offline Duda body-end validation logic verification
+registerTest('32. Offline Duda body-end validation logic verification', () => {
+  const html = fs.readFileSync(path.resolve(__dirname, '../duda/bodyend.html'), 'utf8');
+  const code = html.replace('<script>', '').replace('</script>', '');
+
+  const runWithUrl = (url) => {
+    const sandbox = {
+      window: {
+        CAPSTONE_FEED_URL: url,
+        addEventListener: () => {}
+      },
+      console: {
+        log: () => {},
+        error: (msg) => { sandbox.lastError = msg; },
+        warn: () => {}
+      },
+      document: {
+        getElementById: () => null,
+        addEventListener: () => {}
+      },
+      setTimeout: () => {},
+      URL: global.URL
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+    return sandbox;
+  };
+
+  // 1. Contains no literal active feed URL
+  assert.strictEqual(html.includes('xojnnhilqaldxoilmxli.supabase.co'), false);
+
+  // 2. Missing configuration prevents fetch
+  const s1 = runWithUrl(undefined);
+  assert.strictEqual(s1.lastError, 'CAPSTONE_FEED_CONFIGURATION_INVALID');
+
+  // 3. Invalid configuration prevents fetch (non-https)
+  const s2 = runWithUrl('http://abc.supabase.co/storage/v1/object/public/feeds/capstones-latest.json');
+  assert.strictEqual(s2.lastError, 'CAPSTONE_FEED_CONFIGURATION_INVALID');
+
+  // 4. Invalid host structure
+  const s3 = runWithUrl('https://abc.def.supabase.co/storage/v1/object/public/feeds/capstones-latest.json');
+  assert.strictEqual(s3.lastError, 'CAPSTONE_FEED_CONFIGURATION_INVALID');
+
+  // 5. Rejects deleted reference
+  const s4 = runWithUrl('https://xojnnhilqaldxoilmxli.supabase.co/storage/v1/object/public/feeds/capstones-latest.json');
+  assert.strictEqual(s4.lastError, 'CAPSTONE_FEED_CONFIGURATION_INVALID');
+
+  // 6. Enforces expected bucket and filename
+  const s5 = runWithUrl('https://abc.supabase.co/storage/v1/object/public/alternate/capstones-latest.json');
+  assert.strictEqual(s5.lastError, 'CAPSTONE_FEED_CONFIGURATION_INVALID');
+
+  // 7. Enforces no query strings or fragments
+  const s6 = runWithUrl('https://abc.supabase.co/storage/v1/object/public/feeds/capstones-latest.json?v=123');
+  assert.strictEqual(s6.lastError, 'CAPSTONE_FEED_CONFIGURATION_INVALID');
+
+  // 8. Accept valid placeholder-shaped URL
+  const s7 = runWithUrl('https://abc123ref.supabase.co/storage/v1/object/public/feeds/capstones-latest.json');
+  assert.strictEqual(s7.lastError, undefined);
+});
+
+// 33. Documentation security guidelines verification
+registerTest('33. Documentation security guidelines verification', () => {
+  const docPath = path.resolve(__dirname, '../docs/deployment-staging.md');
+  const content = fs.readFileSync(docPath, 'utf8');
+
+  assert.ok(content.includes('SUPABASE_SECRET_KEY'));
+  assert.ok(content.includes('SUPABASE_EXPECTED_PROJECT_REF'));
+  assert.strictEqual(content.includes('GRANT ALL ON public.projects TO anon;'), false);
+});
+
+// 34. Security denylist and obsolete reference guards remain intact
+registerTest('34. Security denylist and obsolete reference guards remain intact', () => {
+  const testRecSource = fs.readFileSync(path.resolve(__dirname, 'test-recovery.js'), 'utf8');
+  const recoveryHelperSource = fs.readFileSync(path.resolve(__dirname, '../utils/recoveryHelper.js'), 'utf8');
+  const auditDeletedUrlsSource = fs.readFileSync(path.resolve(__dirname, 'auditDeletedUrls.js'), 'utf8');
+
+  assert.ok(testRecSource.includes('xojnnhilqaldxoilmxli'));
+  assert.ok(recoveryHelperSource.includes('xojnnhilqaldxoilmxli'));
+  assert.ok(auditDeletedUrlsSource.includes('xojnnhilqaldxoilmxli'));
+});
+
 async function main() {
   for (const t of tests) {
     try {
@@ -661,7 +743,7 @@ async function main() {
       passedCount++;
     } catch (err) {
       console.error(t.name);
-      console.error('ASSERTION_FAILED');
+      console.error('ASSERTION_FAILED:', err);
       failedCount++;
     }
   }

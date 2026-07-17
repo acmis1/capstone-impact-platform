@@ -35,13 +35,21 @@ Create a `.env` file in the `Prototype/` directory (based on `.env.example`) wit
 
 ### Step 3: Stable Feed URL Format
 Once published, your stable feed URL will follow this pattern:
-`https://xojnnhilqaldxoilmxli.supabase.co/storage/v1/object/public/feeds/capstones-latest.json`
+`https://<GENERATED_PROJECT_REFERENCE>.supabase.co/storage/v1/object/public/feeds/capstones-latest.json`
 
 ### Step 4: One-Time Duda Setup
-1. Copy the public URL from Step 3.
-2. In the Duda **Body End** script (`bodyend.html`), update the `CAPSTONE_FEED_URL` constant.
-3. Publish the Duda site.
-4. **Do not change this URL again.** The Admin/CMS will overwrite the file at this exact path.
+1. Copy the public URL pattern from Step 3 (inserting your real project reference).
+2. Insert this configuration script block into Duda's **Head HTML** or at the top of **Body End** (before the main script):
+   ```html
+   <script>
+   window.CAPSTONE_FEED_URL = "<PUBLIC_FEED_URL>";
+   </script>
+   ```
+3. Paste the contents of `duda/bodyend.html` into the Duda **Body End** section.
+4. Publish the Duda site.
+5. **Do not change this setup again.** The Admin/CMS will overwrite the file at this exact path.
+
+*   **Security Notice**: The feed URL is public; the secret API key is never placed in Duda. Duda does not query `public.projects` directly. It only reads the public JSON Storage object.
 
 ## 5. Design Guidelines
 - **Listing Page**: Mimics the original poster grid on a gradient background. Posters are transparent with white pill buttons.
