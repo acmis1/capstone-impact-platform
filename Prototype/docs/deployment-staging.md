@@ -17,19 +17,27 @@ In the recovered project, the database already contains the required table struc
 For a clean rebuild only, the table is created using the following SQL:
 
 ```sql
--- Create the projects table
-create table public.projects (
-  id bigint primary key,
-  data jsonb not null,
-  updated_at timestamptz default now()
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.projects (
+    id BIGINT PRIMARY KEY,
+    data JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Enable Row Level Security (RLS)
-alter table public.projects enable row level security;
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 
--- Enforce zero public access (anon/authenticated have no permissions on this table)
--- The backend uses private service-role/secret key access exclusively.
+REVOKE ALL ON TABLE public.projects FROM anon;
+REVOKE ALL ON TABLE public.projects FROM authenticated;
+
+GRANT ALL ON TABLE public.projects TO service_role;
+
+COMMIT;
 ```
+
+Duda reads the public Storage JSON feed;
+Duda does not query public.projects;
+SUPABASE_SECRET_KEY remains backend-only.
 
 ### 2. Configure Environment Variables
 Set the following variables in your hosting provider's dashboard:

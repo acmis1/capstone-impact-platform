@@ -11,6 +11,11 @@
     const validateFeedUrl = (rawUrl) => {
         if (!rawUrl || typeof rawUrl !== 'string') return null;
         try {
+            const match = rawUrl.match(/^https:\/\/([^\/]+)/);
+            if (!match) return null;
+            const originalHost = match[1];
+            if (originalHost !== originalHost.toLowerCase()) return null;
+
             const parsed = new URL(rawUrl);
             if (parsed.protocol !== 'https:') return null;
             if (parsed.username || parsed.password) return null;
