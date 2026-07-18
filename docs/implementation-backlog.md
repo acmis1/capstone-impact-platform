@@ -48,7 +48,8 @@ This document maps out the completed project baseline, foundations present, and 
 *   **Spelling and Grammar**: Spelling and grammar assistance on extracted or manual text.
 *   **Title and Formatting Consistency**: Highlight mismatches between the spreadsheet metadata title and poster title.
 *   **Image/Text Consistency Assistance**: Flag mismatched media files or missing elements.
-*   **Formatting Checks**: Automated validation checks on image dimensions, file size limits, and formatting rules.
+*   **Formatting Checks**: Automated text formatting validation (e.g., string lengths and character constraints).
+*   **Asset Constraints Validation**: Automated validation checks on asset constraints such as image dimensions, file size limits, MIME types, and folder/package structures.
 *   **Duplicate Detection**: Check project IDs and directories to block duplicate imports.
 *   **Deterministic Fallback**: Ensure the system remains fully functional via manual entry if OCR/AI endpoints fail.
 *   **Privacy & Cost Controls**: Limit OCR/AI token counts and process files locally where possible.
@@ -58,10 +59,10 @@ This document maps out the completed project baseline, foundations present, and 
 
 ## 6. Priority 3 — Approval, Publication, Archive, History, and Rollback
 *   **Approval Gate**: Controlled editing of approved/published database records. Changes require revalidation and, where appropriate, reapproval before republishing.
-*   **Staged Publication**: Compiling the approved projects into `capstones-latest.json` and uploading it to public Supabase Storage, with safe publication failure handling.
+*   **Staged Publication**: Compiling eligible approved and published records into `capstones-latest.json` and uploading it to public Supabase Storage, with safe publication failure handling.
 *   **Archive and Unpublish**: Mark projects as archived, removing them from the public feed compilation while preserving history in PostgreSQL.
-*   **Public-Removal Verification**: Ensure the public feed updates immediately, recording public-removal completion.
-*   **Feed History & Rollback**: Save timestamped backup copies of the feed and implement a dashboard button to restore any historical feed instantly, verifying rollback.
+*   **Public-Removal Verification**: Ensure public-removal verification: publishing completion, fresh-feed retrieval, cache-busting or refresh verification, confirmation that the archived item is absent from Duda listing/detail rendering, and public-removal completion timestamp/audit record.
+*   **Feed History & Rollback**: Save timestamped backup copies of the feed and implement controlled, authorized rollback (checksum verification, selected snapshot restoration, post-rollback feed and Duda verification, audit attribution, failure handling). A dashboard control may be a future interface, but instant restoration must not be promised.
 *   **Audit and Retry**: Audit attribution for all publication status transitions, with idempotent retry behavior.
 
 ---
@@ -100,14 +101,22 @@ This document maps out the completed project baseline, foundations present, and 
 ---
 
 ## 10. Definition of Done
-A backlog item is defined as done when, where applicable:
-1.  Code is written in Next.js/TypeScript and fully typed.
-2.  SQL migrations are applied to `capstone-impact-staging`.
-3.  Unit/integration tests pass (Vitest).
-4.  Documentation is updated.
-5.  Verified in a running staging environment.
-6.  Accessibility verification completed.
-7.  Security/privacy verification completed.
-8.  Staff UAT and staging acceptance signed off.
-9.  Recovery/rollback verification completed.
-10. Institutional ownership verified with no unresolved blocking defects.
+A backlog item is defined as done when it meets the following criteria.
+
+### Universal Completion Requirements
+1.  Acceptance criteria met.
+2.  Documentation is updated.
+3.  No unresolved blocking defects.
+4.  Relevant security and privacy reviews completed.
+5.  Verified in the appropriate environment.
+6.  Evidence of completion recorded.
+
+### Additional Requirements (Where Applicable)
+*(Note: "Where applicable" applies only to requirements genuinely relevant to the specific backlog item, not to the universal definition of done).*
+1.  Typed Next.js/TypeScript implementation.
+2.  PostgreSQL database migrations applied to `capstone-impact-staging`.
+3.  Unit and integration tests pass (Vitest).
+4.  Accessibility compliance testing.
+5.  Administrative staff UAT and staging acceptance signed off.
+6.  Rollback and recovery verification completed.
+7.  Institutional ownership and handover complete.

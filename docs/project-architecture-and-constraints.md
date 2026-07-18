@@ -6,7 +6,7 @@ This document defines the core architecture, data flows, and immutable technical
 
 ## 1. Purpose and Status
 *   **Status**: `CONFIRMED` / `IMPLEMENTED FOUNDATION`
-*   **Purpose**: Establish the architectural framework to bridge school-managed project data with the public Duda showcase. The foundation for the standalone admin system has been implemented, and the feasibility prototype has been successfully verified.
+*   **Purpose**: Establish the architectural framework to bridge school-managed project data with the public Duda showcase. Schema, repository, storage, validation, and publishing foundations exist for the standalone admin system, and the feasibility prototype has been successfully verified. Operational staging activation and verification remain pending; no real production readiness is claimed.
 
 ---
 
@@ -51,8 +51,7 @@ Standard Project Package / Excel
 ---
 
 ## 6. Duda Constraints
-*   **No Duda Upgrade**: Upgrading the Duda account subscription or site plan is permanently out of scope.
-*   **Dynamic Rendering**: Since Duda dynamic pages/collections are unsupported under the active plan, all dynamic grids are rendered inside the listing root `#capstone-showcase-root` (generating the grid structure at `#capstone-project-grid`), and detail sections are rendered at `#project-detail` via JavaScript (`bodyend.html`) in Duda's footer. These integration-specific IDs are current Prototype Duda integration details, not permanent public API promises.
+*   **Duda Configuration and Arrangements**: No Duda upgrade has been approved. Duda native collections cannot be relied upon for the required scale of 100+ projects per year under the available arrangement. The current solution therefore uses an external approved-only JSON feed and client-side listing/detail rendering. All dynamic grids are rendered inside the listing root `#capstone-showcase-root` (generating the grid structure at `#capstone-project-grid`), and detail sections are rendered at `#project-detail` via JavaScript (`bodyend.html`) in Duda's footer. These integration-specific IDs are current Prototype Duda integration details, not permanent public API promises.
 *   **Verification Boundary**: The team currently has access only to an authenticated Duda test site. The official RMIT production website was not provided or verified.
 
 ---
@@ -79,7 +78,7 @@ Standard Project Package / Excel
 ---
 
 ## 10. Current Verified State
-*   The `main` branch is the repository source of truth (HEAD: `4a3b0d0aa7f7a4cabe70808db8306ec98b2a685f`).
+*   The `main` branch is the repository source of truth. Verified deployment commits and historical promotion SHAs are recorded in the Prototype recovery/deployment runbooks and Git history.
 *   The Render Prototype service is verified Live with HTTP 200, serving 10 internal projects and 6 public-feed projects.
 *   The Duda authenticated test-site listing and detail pages have been manually verified by the user as functional.
 

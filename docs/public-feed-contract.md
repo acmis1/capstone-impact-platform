@@ -14,7 +14,7 @@ The schema constraints, field mappings, and filters defined here are implemented
 ---
 
 ## 2. Purpose
-Ensure structural compatibility between the compiled JSON feed and Duda's client-side rendering script. Any mismatch will cause rendering failures on Duda.
+Ensure structural compatibility between the compiled JSON feed and Duda's client-side rendering script. Contract mismatches may cause rejected publication, missing content, partial rendering, or public-layer failures.
 
 ---
 
@@ -37,7 +37,7 @@ The following statuses are strictly **excluded** from compilation:
 
 ## 4. Required Validator Fields
 Every compiled project object must contain the following required fields to pass validation:
-*   `id` — Deterministic integer ID
+*   `id` — Required integer identifier (deterministic generation is a current domain convention, not independently verified by the feed validator)
 *   `publicId` — A required stable public string identifier
 *   `title` — Public title string
 *   `summary` — Display description for listing cards
@@ -58,7 +58,7 @@ The runtime validator behaves as follows:
 *   Checks `teamMembers` is an array (does not currently check if every element inside the array is a string).
 *   Checks `layoutConfig` is an object.
 *   Checks `layoutConfig.templateId` is one of: `poster_showcase`, `technical_detail`, `media_rich`.
-*   Does not require or type-check `featuredMedia` or `sectionOrder` at runtime (these are TypeScript domain-level properties only).
+*   Does not require or type-check `featuredMedia` or `sectionOrder` at runtime. They are defined in the TypeScript domain, and `compilePublicFeed` supplies/defaults and emits them inside `layoutConfig`, but `validatePublicFeed` does not independently require or type-check them.
 
 ---
 
@@ -114,7 +114,7 @@ If any of these fields are present in the payload sent to the validator (`valida
     *   Public Feeds: `public-feeds`
     *   Public Assets: `project-public-assets`
     *   Private Drafts: `project-drafts-private`
-*   **Prototype Environment Note**: The Prototype recovery environment uses separate hardcoded bucket names (`feeds`, `project-assets`, `project-drafts`) and must not be treated as the Admin/CMS staging environment.
+*   **Prototype Environment Note**: The recovered Prototype uses exactly the bucket names `feeds` and `project-assets`. These are separate from the configurable Admin/CMS defaults (`public-feeds`, `project-public-assets`, `project-drafts-private`).
 *   **Caching**: `bodyend.html` appends a timestamp query parameter and uses `cache: no-store` to bypass client browser cache.
 
 ---
@@ -135,5 +135,4 @@ The following validations are planned as future improvements:
 *   **Non-empty Constraint**: Enforcing length rules on required string parameters.
 *   **URL Protocol Checking**: Enforcing secure `https://` schemas and file type checks on poster images.
 *   **Unique Public ID Validation**: Enforcing that `publicId` contains no duplicates in the compiled feed.
-*   **Transaction Lock**: Wrapping compile-and-publish commands in atomic SQL transactions.
-*   **Feed Rollback Registry**: Creating a database table to catalog historical feed snapshots and support one-click rollbacks.
+*   **Transaction and Retry Hardening**: Wrapping database mutations in SQL transactions where applicable, verifying storage uploads, designing compensating cleanup/rollback if snapshot logging fails, implementing feed checksums, keeping immutable publication records, providing safe retry behavior, and testing restoration of previous feed snapshots.

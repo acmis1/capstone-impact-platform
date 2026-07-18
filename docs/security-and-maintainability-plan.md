@@ -14,9 +14,9 @@ Ensure that administrative workflows, student project data, and public showcase 
 ```
 [Student Packages] ─► [HTTPS Upload (Target)] ─► [CMS Admin UI] ── (Admin Auth Middleware) ──► [PostgreSQL & Storage]
                                                                                            │
-[Duda Shell (Public UI)] ◄── (HTTPS GET) ◄── [Stable Public JSON Feed] ◄── [Staging Buckets (Public)]
+[Duda Shell (Public UI)] ◄── (HTTPS GET) ◄── [Stable Public JSON Feed] ◄── [Approved Public Feed Storage]
 ```
-*(Note: The complete HTTPS student-upload workflow is a target design and is not currently operational).*
+*(Note: The complete HTTPS student-upload workflow is a target design and is not currently operational. Current Duda test-site verification used the recovered Prototype public feed. Future Admin/CMS-to-Duda connection requires a separately approved and verified cutover; the Admin/CMS staging feed must not be connected accidentally during auth activation).*
 
 ---
 
@@ -24,13 +24,15 @@ Ensure that administrative workflows, student project data, and public showcase 
 
 | Security Control | Scope / Description | Status |
 | :--- | :--- | :--- |
-| **Admin Auth Migrations** | Supabase authentication schema and admin users role tables | `IMPLEMENTED` |
-| **JWT Claims Check** | Verification of admin roles in middleware and routes | `SCAFFOLDED` |
-| **Admin Route Lock** | Restricting Next.js admin routes behind session validation | `PENDING ACTIVATION` |
-| **Row-Level Security** | Supabase database policies blocking unauthorized reads/writes | `IMPLEMENTED` |
-| **Public Feed Compilation** | Automated stripping of administrative and private fields | `IMPLEMENTED` |
-| **Private/Public Media Separation** | Storing drafts in private buckets and approved posters in public buckets | `REQUIRED` |
-| **Institutional Key Handover** | Account ownership mapped to school-controlled email aliases | `REQUIRED` |
+| **Auth Identity Migrations** | Supabase authentication schema and admin users role migrations in code | `SCAFFOLDED` |
+| **Claims/Session Authorization Helper** | Verification of admin roles and permission checks via requireAdmin helper | `SCAFFOLDED` |
+| **Protected Layout & Route guards** | Protected admin layout and API route session validation guards | `SCAFFOLDED` |
+| **Live Session Verification** | Live identity provisioning and session verification check | `PENDING ACTIVATION` |
+| **RLS Policy Definitions** | Supabase RLS policies defined in migrations | `SCAFFOLDED` |
+| **RLS Staging Verification** | Effective RLS verification in capstone-impact-staging environment | `PENDING ACTIVATION` |
+| **Public Feed Compiler & Validator** | Stripping admin metadata, compiling and validating approved/published JSON | `IMPLEMENTED` |
+| **Configurable private/public media workflow** | Storing drafts in project-drafts-private and approved posters in public bucket | `SCAFFOLDED` |
+| **Institutional account handover** | Cloud resource ownership transfer to school-controlled aliases | `REQUIRED` |
 
 ---
 
@@ -95,4 +97,4 @@ Ensure that administrative workflows, student project data, and public showcase 
 ## 12. Security Acceptance Criteria
 *   Only authenticated school administrators can perform write requests on the Admin/CMS.
 *   The public JSON feed strictly contains approved project data and has zero references to deleted projects or internal notes.
-*   All public-facing media URLs use HTTPS and are served from approved storage buckets.
+*   All public-facing media URLs use HTTPS and are served from approved storage buckets or approved external media hosts for supported external video links.
