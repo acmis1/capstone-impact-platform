@@ -1,6 +1,25 @@
 # Prototype Supabase Backend Reconstruction & Recovery Runbook
 
-This runbook outlines the safe, step-by-step procedure to reconstruct and seed the database and storage feed for the Prototype backend.
+This runbook outlines the step-by-step procedure to reconstruct and seed the database and storage feed for the Prototype backend, and documents the completed recovery state.
+
+---
+
+## Current Recovery Status
+
+The recovery of the Prototype Supabase backend is complete.
+*   **Project Identity**: The project `capstone-prototype-recovery-2026` is the active replacement Prototype recovery project.
+*   **Database Schema**: The `public.projects` table and server-only RLS restrictions were successfully configured (no anonymous SELECT policies exist).
+*   **Storage Buckets**: The `feeds` and `project-assets` buckets were created.
+*   **Recovery Execution**: The controlled recovery apply completed successfully once.
+*   **Database Seeding**: `public.projects` contains exactly 10 project records.
+*   **Showcase Feed**: `feeds/capstones-latest.json` contains exactly 6 public project records.
+*   **Sanitization**: Obsolete deleted-project references (such as `xojnnhilqaldxoilmxli`) in the local seed and feed are `0`.
+*   **Feed Integrity**: The public feed was created without overwriting existing files (`upsert: false`).
+*   **Asset & Poster Status**: All 10 current project poster URLs were separately verified as healthy. Current poster files are served through the separate `capstone-impact-demo-assets` repository.
+*   **Storage Integrity**: The Supabase `project-assets` bucket remained untouched during poster repair. No poster files were uploaded to the Supabase storage bucket.
+
+> [!WARNING]
+> The recovery is complete. Do not run `npm run recovery:apply` again against the current recovery project. It may only be considered during a separately approved recovery or clean-rebuild incident after remote-state auditing.
 
 ---
 
@@ -9,7 +28,7 @@ This runbook outlines the safe, step-by-step procedure to reconstruct and seed t
 This repository interacts with multiple environments. Ensure you do not confuse them:
 1.  **`capstone-impact-staging` (Surviving Old Demo Project)**: **DO NOT MODIFY**. This is the surviving old demo/staging project. It is NOT the recovery target. Its exact historical role is not relied upon by the recovery safeguards, but it must remain completely untouched.
 2.  **Deleted Prototype Backend**: The original backend project previously used by `/Prototype` no longer exists. Its generated reference (`xojnnhilqaldxoilmxli`) remains blocked internally as a denied constant.
-3.  **`capstone-prototype-recovery-2026` (Proposed Reconstruction Target)**: This is the proposed human-readable name of the future replacement project. It is not yet created, and is different from its generated project reference subdomain.
+3.  **Active Replacement**: The `capstone-prototype-recovery-2026` project is the active replacement Prototype recovery project.
 
 ### Safeguard Operations Wording
 *   **Allowlisting**: Code-level safeguards enforce protection based on exact generated-reference allowlisting of the expected reference.
@@ -74,14 +93,14 @@ The recovery runner is built to support resumability and handles failures safely
 
 ---
 
-## Recovery Execution Sequence
+## Historical One-Time Recovery Sequence — Completed
 
-The complete manual and automated recovery sequence is:
+The following sequence records the completed historical recovery steps:
 
-1.  **Review PR #6**: The recovery foundation PR targets `break/admin-cms-staging-foundation` (not `main`). The recovery foundation must first be reviewed and merged into that staging foundation branch. Promotion from the staging foundation to `main` is a separate future decision.
-2.  **Merge PR #6**: Merge PR #6 into `break/admin-cms-staging-foundation` only after explicit approval.
-3.  **Create Project**: Create the replacement Supabase project manually in the Dashboard.
-4.  **Database Setup**: Navigate to the SQL Editor and create the projects table and RLS constraints:
+1.  **Review PR #6**: The recovery foundation PR targets `break/admin-cms-staging-foundation` (not `main`). The recovery foundation was successfully merged into that staging foundation branch.
+2.  **Merge PR #6**: Merged PR #6 into `break/admin-cms-staging-foundation` after approval.
+3.  **Create Project**: Created the replacement Supabase project `capstone-prototype-recovery-2026` manually in the Dashboard.
+4.  **Database Setup**: Configured the projects table and RLS constraints via the SQL Editor:
     ```sql
     BEGIN;
     CREATE TABLE IF NOT EXISTS public.projects (
@@ -95,33 +114,33 @@ The complete manual and automated recovery sequence is:
     GRANT ALL ON TABLE public.projects TO service_role;
     COMMIT;
     ```
-    *(Note: The table is server-only. Do not configure any anonymous database SELECT policy).*
-5.  **Create Buckets**: Create the exact public storage buckets in the Dashboard:
-    *   `feeds` (Public visibility)
-    *   `project-assets` (Public visibility)
-6.  **Configure Environment**: Configure private environment variables in `Prototype/.env` (`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `SUPABASE_EXPECTED_PROJECT_REF`).
-7.  **Run Offline Dry-Run**: Run the dry-run command from `/Prototype`:
+5.  **Create Buckets**: Created public storage buckets `feeds` and `project-assets` manually in the Dashboard.
+6.  **Configure Environment**: Configured private environment variables in `Prototype/.env`.
+7.  **Run Offline Dry-Run**: Ran the dry-run command from `/Prototype`:
     ```bash
     npm run recovery:dry-run
     ```
-    *Expected Local Results*:
-    *   Seed record count: `10`
-    *   Public feed record count: `6`
-    *   Feed subset validation: `passed`
-    *   Duplicate-ID validation: `passed`
-    *   Obsolete deleted-reference count: `0`
-    *   `READY_FOR_APPLY`: `true`
-    *   No Supabase client creation
-    *   No network request
-    *   Exit code: `0`
-8.  **Confirm Identity**: Confirm the Dashboard project name and generated reference match the target manually.
-9.  **Run Recovery Apply**: Execute the controlled apply task:
+8.  **Confirm Identity**: Confirmed the Dashboard project name and generated reference match the target manually.
+9.  **Run Recovery Apply**: Executed the one controlled recovery apply command:
     ```bash
     npm run recovery:apply
     ```
-10. **Verify Seeding**: Verify that 10 database records and 6 public feed records are successfully set.
-11. **Restore Assets**: Restore static project media assets to `project-assets` in a separate reviewed task (this is not performed or inventoried by the recovery runner).
-12. **Update Render**: Update Render web environment variables in a separate controlled task.
-13. **Update Duda**: Update the Duda layout HTML widget code block in a separate controlled task.
-14. **Regression Testing**: Perform regression testing on the staging prototype.
-15. **Consider Promotion**: Consider later promotion of the staging foundation branch to `main` as a separate decision.
+10. **Verify Seeding**: Verified that 10 database records and 6 public-feed records were successfully created.
+11. **Poster Repair**: Verified that two missing poster files were repaired in the separate `demo-assets` repository and all 10 poster URLs are healthy, with zero uploads to the Supabase `project-assets` bucket.
+
+*(Note: Rerunning `npm run recovery:apply` against the current recovery project is prohibited. Future emergency clean-rebuild procedures require separate approval).*
+
+---
+
+## Post-Recovery & Promotion Status
+
+*   **Render Deployment**: Render branch configurations and deployment verification are separate post-recovery activities.
+*   **Duda Integration**: Duda runtime configuration and public page rendering verification are separate post-recovery activities.
+*   **Promotion Status**: Draft PR #9 currently proposes promotion from `break/admin-cms-staging-foundation` into `main`.
+*   **Current File Categories in PR #9**:
+    *   Prototype recovery and Duda wiring
+    *   Separate production-oriented admin CMS foundation
+    *   Supabase staging schema, RLS, and admin identity migrations
+    *   Automated tests and fixtures
+    *   Root workspace tooling and configurations
+    *(Note: This documentation correction only updates this runbook and does not modify the migrations, tests, fixtures, or workspace files).*
