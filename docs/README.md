@@ -10,7 +10,7 @@ When verifying system behavior or planning extensions, information must be refer
 2. **Root Documentation**: General cross-system architecture, operational constraints, security guidelines, and delivery backlog records reside in this `/docs` directory.
 3. **Admin CMS Foundation**: Application-specific staging configurations, environment variables, local testing scripts, and directory structures reside in [apps/admin-cms/README.md](../apps/admin-cms/README.md).
 4. **Feasibility Prototype**: Legacy prototype operations, recovery scripts, local dry-run configurations, and recovery execution steps reside in [Prototype/docs/supabase-recovery-runbook.md](../Prototype/docs/supabase-recovery-runbook.md) and [Prototype/docs/deployment-staging.md](../Prototype/docs/deployment-staging.md).
-5. **Historical Reference**: The `break/docs-foundation` branch serves purely as a historical input from early planning phases and must not be referenced as the current operational source of truth.
+5. **Historical Reference**: The pre-consolidation planning snapshot is permanently preserved under the annotated tag `archive-docs-foundation-2026-07-18`. This tag points to the historical documentation foundation that preceded the PR #12 consolidated rewrite, serves purely as historical evidence, and must not be referenced or treated as current operational guidance.
 
 ---
 
