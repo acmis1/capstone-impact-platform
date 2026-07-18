@@ -12,11 +12,11 @@ Ensure that administrative workflows, student project data, and public showcase 
 ## 2. Target Production Trust Boundaries
 
 ```
-[Student Packages] ─► [HTTPS Upload (Target)] ─► [CMS Admin UI] ── (Admin Auth Middleware) ──► [PostgreSQL & Storage]
+[Student Packages] ─► [HTTPS Upload (Target)] ─► [CMS Admin UI] ── (Server-side auth and permission guards) ──► [PostgreSQL & Storage]
                                                                                            │
 [Duda Shell (Public UI)] ◄── (HTTPS GET) ◄── [Stable Public JSON Feed] ◄── [Approved Public Feed Storage]
 ```
-*(Note: The complete HTTPS student-upload workflow is a target design and is not currently operational. Current Duda test-site verification used the recovered Prototype public feed. Future Admin/CMS-to-Duda connection requires a separately approved and verified cutover; the Admin/CMS staging feed must not be connected accidentally during auth activation).*
+*(Note: The complete HTTPS student-upload workflow is a target design and is not currently operational. Current Duda test-site verification used the recovered Prototype public feed. Future Admin/CMS-to-Duda connection requires a separately approved and verified cutover; the Admin/CMS staging feed must not be connected accidentally during auth activation. The current authorization implementation uses the server-only requireAdmin helper, the protected admin layout, protected API routes, and permission checks).*
 
 ---
 

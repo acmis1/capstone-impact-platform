@@ -89,7 +89,7 @@ The compiler (`compilePublicFeed.ts`) automatically strips these fields:
 *   `status`, `importBatchId`, `sourceFolder`, `internalStaffNotes`, `privateReviewComments`, `validationFlags`, `validationErrors`, `validationWarnings`, `pendingRemovalFromPublic`, `publicRemovalCompletedAt`, `archivedAt`, `archivedFromStatus`, `archiveReason`, `created_at`, `updated_at`
 
 ### B. Explicit Validator Forbidden Set
-If any of these fields are present in the payload sent to the validator (`validatePublicFeed.ts`), it triggers an validation error:
+If any of these fields are present in the payload sent to the validator (`validatePublicFeed.ts`), it triggers a validation error:
 *   `status`, `importBatchId`, `sourceFolder`, `internalStaffNotes`, `privateReviewComments`, `validationFlags`, `packageValidation`, `pendingRemovalFromPublic`, `publicRemovalCompletedAt`, `archivedAt`, `archivedFromStatus`, `archiveReason`, `created_at`, `updated_at`
 
 ### C. Validation Error and Warning Handling
