@@ -11,7 +11,7 @@
 | Component | URL |
 | :--- | :--- |
 | **Render Admin/CMS** | `https://capstone-impact-platform.onrender.com` |
-| **Supabase Stable Feed** | `https://xojnnhilqaldxoilmxli.supabase.co/storage/v1/object/public/feeds/capstones-latest.json` |
+| **Supabase Stable Feed** | `https://<GENERATED_PROJECT_REFERENCE>.supabase.co/storage/v1/object/public/feeds/capstones-latest.json` |
 | **Duda Public Listing** | `[insert Duda listing URL]` |
 | **Duda Project Detail** | `[insert Duda detail URL]` (path: `/project-detail?id=…`) |
 | **GitHub Repository** | `https://github.com/acmis1/capstone-impact-platform` |

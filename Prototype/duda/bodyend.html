@@ -8,9 +8,42 @@
     window.__capstoneShowcaseInitialized = true;
 
     // --- CONFIGURATION ---
-    // IMPORTANT: This is the verified stable public feed URL.
-    // Do not use the older similar-looking URL.
-    const CAPSTONE_FEED_URL = "https://xojnnhilqaldxoilmxli.supabase.co/storage/v1/object/public/feeds/capstones-latest.json";
+    const validateFeedUrl = (rawUrl) => {
+        if (!rawUrl || typeof rawUrl !== 'string') return null;
+        try {
+            const match = rawUrl.match(/^https:\/\/([^\/]+)/);
+            if (!match) return null;
+            const originalHost = match[1];
+            if (originalHost !== originalHost.toLowerCase()) return null;
+
+            const parsed = new URL(rawUrl);
+            if (parsed.protocol !== 'https:') return null;
+            if (parsed.username || parsed.password) return null;
+            if (parsed.port) return null;
+            if (parsed.search || parsed.hash) return null;
+
+            const hostname = parsed.hostname;
+            const hostParts = hostname.split('.');
+            if (hostParts.length !== 3 || hostParts[1] !== 'supabase' || hostParts[2] !== 'co') {
+                return null;
+            }
+            const ref = hostParts[0];
+            if (!/^[a-z0-9]+$/.test(ref)) return null;
+
+            if (ref === 'xojnnhilqaldxoilmxli') return null;
+
+            if (parsed.pathname !== '/storage/v1/object/public/feeds/capstones-latest.json') return null;
+
+            return rawUrl;
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const CAPSTONE_FEED_URL = validateFeedUrl(window.CAPSTONE_FEED_URL);
+    if (!CAPSTONE_FEED_URL) {
+        console.error('CAPSTONE_FEED_CONFIGURATION_INVALID');
+    }
 
     // --- STATE ---
     let allProjects = [];
@@ -166,6 +199,23 @@
         }
 
         console.log(`[Showcase] Capstone script initializing... (Page: ${isDetailPage ? 'Detail' : 'Listing'}, Retry: ${retryCount})`);
+
+        if (!CAPSTONE_FEED_URL) {
+            const errorHtml = `
+                <div class="capstone-inline-error" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 25px; border-radius: 12px; border: 1px solid #ef4444; text-align: center; margin: 30px auto; max-width: 600px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6;">
+                    <strong style="font-size: 1.15rem; display: block; margin-bottom: 5px; color: #f87171;">Projects could not be loaded.</strong>
+                    Please check the public feed connection.<br>
+                    <small style="opacity: 0.75; font-size: 0.8em; display: block; margin-top: 10px; color: #fca5a5;">Reason: CAPSTONE_FEED_CONFIGURATION_INVALID</small>
+                </div>
+            `;
+            if (isDetailPage && detailContainer) {
+                detailContainer.innerHTML = errorHtml;
+            } else if (isListingPage) {
+                const grid = ensureListingContainers() || root;
+                grid.innerHTML = errorHtml;
+            }
+            return;
+        }
 
         try {
             const feedRequestUrl = `${CAPSTONE_FEED_URL}?v=${Date.now()}`;

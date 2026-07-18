@@ -1,0 +1,326 @@
+# Capstone Impact Platform: Admin CMS (Staging Foundation)
+
+This is the **staging foundation for the future production Admin/CMS** developed in Next.js, TypeScript, and Supabase. It implements the core ingestion, schema-validation, and feed compilation staging baseline for Part 2 of the Capstone project.
+
+---
+
+## 🛡️ Staging Isolation & Safety Rules
+
+1.  **Strict Isolation from Prototype**: This workspace is located inside `apps/admin-cms/` and is completely separate from the original `/Prototype` directory, preserving all initial demo logs and mock parameters.
+2.  **Staging-Only Database & Storage**: This foundation uses a newly created, isolated Supabase free-tier staging project (`capstone-impact-staging`) instead of the previous demo project.
+3.  **Duda Isolation**: The live showcase layer is *not* connected to the new staging buckets during this validation phase to prevent any visual disruptions on stakeholder-facing pages.
+4.  **No Secrets in Git**: Secret values, database passwords, and administrative keys must never be committed. `.env` and `.env.local` files are strictly git-ignored.
+5.  **Staging Data Restriction**: In accordance with university privacy rules, no active student records or coordinator email listings may be uploaded. Staging testing operates exclusively on fake generated mock fixtures.
+6.  **Staging Status**: This is a production-oriented staging foundation for development verification, not the final production implementation. The final workflow, relational schema definitions, and RLS policies are subject to stakeholder and academic advisor confirmation in July.
+
+---
+
+## ⚙️ Configuration & Setup Steps
+
+### Step 1: Environment Configuration
+Copy the staging environment template to a local ignored configuration file:
+```bash
+cp .env.example .env.local
+```
+
+Open `.env.local` and populate the keys for your isolated Supabase staging project:
+*   `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL (e.g. `https://xyz.supabase.co`)
+*   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: Client-safe publishable key (`sb_publishable_...`). Preferred public key.
+*   `SUPABASE_SERVICE_ROLE_KEY`: Server-only administrative key (JWT format, beginning with `eyJhbGc...`). **Preferred staging database admin key** to reliably bypass RLS on PostgREST request paths.
+*   `SUPABASE_SECRET_KEY`: Server-only administrative key (`sb_secret_...`). Supported server-only fallback key. **NEVER expose to browser code.**
+
+> [!WARNING]
+> **NEVER COMMIT `.env.local` to git or expose private keys to standard frontend client-side scripts.**
+
+> [!IMPORTANT]
+> **🔑 Staging Database Admin Operations & Key Preference:**
+> * Staging database admin operations **prefer `SUPABASE_SERVICE_ROLE_KEY` first** because standard Supabase JS/PostgREST database requests require the JWT `service_role` signature to bypass Row-Level Security (RLS).
+> * The latest `SUPABASE_SECRET_KEY` (`sb_secret_...`) format is fully supported as a fallback, but in this PostgREST path it may trigger `permission denied` (42501/403) errors if RLS bypass claims cannot be parsed from non-JWT Bearer authentication headers.
+
+---
+
+## 🏃 Available Scripts
+
+You can run these scripts in either of two ways:
+
+### Option A: From the Repository Root (Convenience Scripts)
+*   **TypeScript Checks**: `npm run typecheck:admin`
+*   **Audit Public Feed**: `npm run check:feed`
+*   **Build Workspace**: `npm run build:admin`
+*   **Start Local CMS**: `npm run dev:admin`
+
+### Option B: From the App Workspace Directory
+First navigate into the app folder:
+```bash
+cd apps/admin-cms
+```
+Then execute standard scripts:
+*   **Perform TypeScript Compile Checks**: `npm run typecheck`
+*   **Verify Approved-Only Public Feed Compiler**: `npm run check:sample-feed`
+*   **Build Staging Assets**: `npm run build`
+*   **Start Staging CMS locally**: `npm run dev`
+
+---
+
+## 📂 Codebase Architecture
+
+The staging foundation is structured as follows:
+*   `infra/supabase/` — Database migrations (`0001_staging_schema.sql`, `0002_staging_rls_policies.sql`) and manual apply guidelines.
+*   `src/app/` — App Router landing pages, status dashboards, and API endpoints (`/api/health`, `/api/projects`).
+*   `src/domain/` — Relational domain models mapping Projects, MediaAssets, and WorkflowStates cleanly to eradicate unstructured JSON blobs.
+*   `src/repositories/` — Decoupled repository patterns (`ProjectRepository`, `SupabaseProjectRepository`) for DB operations.
+*   `src/lib/env.ts` — Runtime environment validation powered by `zod`.
+*   `src/lib/supabase/` — Safe client and secure administrative server-side connection wrappers.
+*   `src/import/` — Local metadata package ingestion types, folder parsers, and custom safety rules.
+*   `src/lib/gemini/` — Assistive metadata extraction adapter (disabled by default).
+*   `src/feed/` — Approved-only public JSON feed compilers and schema contract validators.
+*   `src/validation/` — Rules-first metadata review and approval validation engines.
+*   `src/storage/` — Documented operational storage guidelines and access policies.
+*   `src/fixtures/` — Fictional mock dataset records representing diverse publication states.
+*   `src/scripts/` — Offline validation script executing compilation checks on startup.
+
+---
+
+## 💾 Database Schema & Administrative Authentication
+
+The staging database schema and authentication guards are fully scaffolded:
+
+1. **Schema Migrations:** Apply `infra/supabase/migrations/0001_staging_schema.sql`, `0002_staging_rls_policies.sql`, and `0003_admin_auth_identity.sql` to your project using the Supabase SQL Editor. See [manual-apply-guide.md](../../infra/supabase/manual-apply-guide.md) for details.
+2. **Identity Linkage (Migration 0003):** Adds the `auth_user_id UUID` column to `admin_users` linked to `auth.users(id)` to bind Auth identities.
+3. **No Public Registration:** Self-registration is disabled. Staging admins must be manually provisioned in the Supabase Dashboard and linked via SQL.
+4. **Client Distinctions:**
+   * **Administrative Database Client (`admin.ts`):** Safe, server-only client using `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS. Only invoked *after* session authorization succeeds.
+   * **Session Server Client (`server.ts`):** Bound to Next.js cookie headers via `@supabase/ssr` `createServerClient`. Used for cookie authentication checks.
+   * **Session Browser Client (`client.ts`):** Standard web client using public keys for client-side Auth helper triggers.
+
+### 👥 Role-Based Access Control (RBAC)
+*   **`admin`**: Full access to view, edit, review, and archive showcases.
+*   **`reviewer`**: Read and review (approve/request changes) rights. Cannot archive or edit.
+*   **`editor`**: Read and edit rights. Cannot review or archive.
+
+### 🛡️ Protected Routes & APIs
+*   **Protected Pages (`/admin/**/*`)**: Inherit the root layout guard at [layout.tsx](src/app/admin/layout.tsx), redirecting unauthorized users to `/login`.
+*   **`GET /api/projects`**: Protected API route requiring `projects.read` permission.
+*   **`POST /api/projects/[publicId]/review-action`**: Protected API route verifying `Origin` CSRF headers, requiring `projects.review` or `projects.archive` based on action, and logging the reviewer's authenticated admin ID.
+*   **`GET /api/health`**: Public endpoint reporting configuration classifications (keys are never exposed).
+
+---
+
+## 🚀 Staging Seed & Public Feed Publishing
+
+Staging scripts are provided to populate the database with fake cases, audit the workflow records, and publish them to the Supabase storage feed bucket.
+
+### ⚠️ Security & Staging Guidelines
+* **Fake Data Only:** These scripts operate exclusively on synthetic staging parameters. Real RMIT stakeholder personal records or student email indexes are strictly prohibited.
+* **Credentials Required:** These scripts require `apps/admin-cms/.env.local` to be correctly populated with staging URL and database admin JWT credentials.
+* **Duda Showcase Layer Safety:** The public showcase site is **not** connected to this staging feed to guarantee zero disruption to stakeholders during testing.
+
+### 🏃 Command Execution Sequence
+
+#### Option A: Running from the App Workspace Directory
+First navigate into the app workspace:
+```bash
+cd apps/admin-cms
+```
+Then execute the scripts in the following order:
+1. **Seed Fake Staging Projects:** Populates the `projects` table with 4 fake cases (`approved`, `published`, `in_review`, `archived`) and sets up showcase layouts:
+   ```bash
+   npm run seed:staging
+   ```
+2. **Check Database Project Statuses:** Queries the database and reports statuses and public showcase eligibility totals:
+   ```bash
+   npm run check:staging-projects
+   ```
+3. **Publish Showcase Feed:** Compiles approved/published mock records, runs schema validators, uploads the JSON payload to the `public-feeds` bucket, and logs a database snapshot:
+   ```bash
+   npm run publish:staging-feed
+   ```
+
+#### Option B: Running from the Repository Root (Workspaces)
+You can run the identical commands from the repository root:
+1. **Seed Projects:** `npm run seed:admin-staging`
+2. **Check Statuses:** `npm run check:admin-staging`
+3. **Publish Feed:** `npm run publish:admin-feed`
+
+---
+
+## 🖼️ Staging Media Asset Workflow
+
+A secure administrative staging media pipeline is fully integrated to validate, ingest, and promote project showcases:
+
+### ⚙️ How It Works:
+1. **Validation Gates:** Media files are validated locally using strict size caps (images max 5MB, PDFs max 20MB) and allowed MIME structures (PNG, JPEG, WEBP, PDF). Path traversals are explicitly blocked.
+2. **Private Ingestion:** Unapproved draft assets are written to the private `project-drafts-private` storage bucket. These files are restricted and do not generate public showcase URLs.
+3. **Showcase Promotion:** Upon official workflow approval, the backend automatically promotions the media assets from the private bucket to the public `project-public-assets` bucket.
+4. **Public Feed URLs:** Public feeds read only the officially approved and promoted showcase media URLs from the public bucket.
+5. **Video & Duda Constraints:** Videos are stored purely as external showcase metadata links (no heavy video binaries uploaded to staging). Duda remains disconnected during July/August semester breaks to ensure zero production disruptions.
+
+### 🏃 Running Media Workflows:
+
+#### Option A: Running from the App Workspace Directory
+1. **Seed Staging Projects:** `npm run seed:staging`
+2. **Seed Staging Media Assets:** Generates mock images/PDF buffers, uploads drafts, promotes them to public, and links URLs back to database:
+   ```bash
+   npm run seed:staging-media
+   ```
+3. **Verify Staging Media Database State:** Summarizes media uploads, types, and active bucket targets:
+   ```bash
+   npm run check:staging-media
+   ```
+4. **Publish Updated Showcase Feed:** Compiles and publishes the JSON payload with verified media URLs:
+   ```bash
+   npm run publish:staging-feed
+   ```
+
+#### Option B: Running from the Repository Root (Workspaces)
+1. **Seed Media:** `npm run seed:admin-media`
+2. **Verify Media:** `npm run check:admin-media`
+
+---
+
+## 🔍 Staging Read-Only Project Detail & Review
+
+A detailed, read-only administrative inspection panel is available to review ingested capstone projects, their public media URLs, layout configurations, and staging compliance matrices:
+
+### ⚙️ Features:
+* **Interactive List Navigation**: Clicking a project title in the `/admin` dashboard routes directly to the detailed inspect path: `/admin/projects/{publicId}`.
+* **Metadata Profile Audit**: Summarizes staging study programs, industry sponsors, academic supervisors, group rosters, and public showcasing states.
+* **Storage Media Checks**: Reviews active poster images, PDFs, snapshots, and video links (verifying whether URLs are promoted and healthy).
+* **Grid Layout Configurations**: Prints CSS showcase grid template IDs, featured media focal alignments, and active section structures.
+* **Diagnostics & Compliance**: Calculates error/warning arrays in real-time, validating missing public descriptors, required assets, and checking template structures against official schemas.
+* **No Database State Alteration**: Review activities operate entirely in read-only mode, guaranteeing zero write operations occur during review audits.
+
+---
+
+## ⚡ Controlled Staging Review Actions
+
+Staging dashboard inspection routes fully integrate controlled administrative action triggers. These permit school staff to request changes, approve, or archive ingested capstone showcases:
+
+### ⚙️ How It Works:
+1. **Status Transition Logic**: Actions validate state transitions locally:
+   * `APPROVE`: Moves `submitted`, `in_review`, or `changes_requested` to `approved`.
+   * `REQUEST_CHANGES`: Moves `submitted`, `in_review`, or `approved` back to `changes_requested` for corrections.
+   * `ARCHIVE`: Transitions `approved`, `published`, `in_review`, or `changes_requested` projects to `archived`, configuring archival timestamps and setting `pending_removal_from_public = true` to clean public feed indexes.
+2. **Dynamic Button Rendering**: The review trigger component renders buttons on-the-fly, displaying transitions matching standard rules.
+3. **Database Audit Logging & Integrity**:
+   * The current implementation **explicitly blocks success** (returning status 500 / "Audit logging failed") if the audit logging insert to `approval_records` fails, preventing false success reports.
+   * **⚠️ Production Requirements**: Before real administrative use, this two-step operation should be replaced by a database-side Postgres RPC function or a transaction-backed server operation to make both the status change and the audit insert completely atomic.
+   * **No Real Administrative Use**: No real administrative use or data management should take place until proper authentication, authorization, and atomic audit logging are fully implemented and verified.
+4. **Staging Security**: These endpoints operate under mock safety rules. Authentication is simulated, Duda remains isolated, and public feeds are not rebuilt automatically.
+
+---
+
+## 📦 Staging Ingestion Import Package Workflow
+
+A decoupled offline package ingestion pipeline is integrated to parse local packages, validate metadata/assets against schema bounds, track runs inside import batches, and record detailed validation flags:
+
+### ⚙️ How It Works:
+1. **Fake Fixture Packages**: Local ingestion reads exclusively from fake staging package structures (e.g. `fixtures/import-packages/runtime-import-demo/`) containing:
+   * `project.json` (metadata manifest parameters)
+   * `poster.png` (required high-res poster image)
+   * `poster.pdf` (required academic poster publication PDF)
+   * `snapshot-1.png` (optional recommended snapshot asset)
+2. **Metadata & File Parsers**: Resolves and parses manifest JSON parameters and files securely while enforcing strict bounds checks to prevent path traversal attempts.
+3. **Staging Validation Gate**:
+   * Inspects critical metadata keys (`publicId`, `title`, `summary`, `year`, `program`, `discipline`, `groupName`, `teamMembers`, `layoutConfig`).
+   * Validates poster assets and snapshot files against size caps (images max 5MB, PDFs max 20MB) and allowed MIME structures.
+   * Generates warning structures on missing recommended values (`accessibilityText`, `posterText`, snapshots).
+4. **Ingestion & Tracking**:
+   * Registers a single processing row inside `import_batches` to log folder source tracks, error counts, and warnings.
+   * Upserts the project into the `projects` table mapping statuses directly to `in_review`.
+   * Uploads provided files as **draft private media** using `uploadDraftMediaAsset` (saving objects in private storage buckets).
+   * **No Public Promotion**: Assets are *not* promoted to public buckets, keeping them isolated.
+   * Writes detailed warnings and errors to the `validation_flags` table mapping properties back to the project ID.
+   * Marks the import batch status as `completed`.
+
+### 🏃 Running Package Imports:
+
+#### Option A: Running from the App Workspace Directory
+1. **Import Staging Package**:
+   ```bash
+   npm run import:staging-package
+   ```
+2. **Check Import Batches**: Logs total and recent ingestion run audits:
+   ```bash
+   npm run check:import-batches
+   ```
+
+#### Option B: Running from the Repository Root (Workspaces)
+1. **Import Package**: `npm run import:admin-package`
+2. **Check Import Batches**: `npm run check:admin-imports`
+
+---
+
+## 🔍 Staging Import Review UI
+
+A comprehensive read-only administrative interface is integrated to track and audit import runs:
+
+### ⚙️ How It Works:
+1. **Dashboard Link**: In the header of the primary `/admin` console, a new **"View Import Batches"** action navigates directly to the imports home path: `/admin/imports`.
+2. **Imports List (`/admin/imports`)**:
+   * Lists recent local package ingestion runs (completed/failed status badges, modes, directories, warnings, and errors).
+   * Summarizes run aggregates (total batches shown, warning/error indexes) to assist database operators in analyzing package formats.
+3. **Import Batch Detail (`/admin/imports/{batchId}`)**:
+   * Displays single batch metadata (status, folders, ingestion dates).
+   * Details corresponding imported project links (`/admin/projects/{publicId}`) and status values.
+   * Renders the complete, rules-first lists of **Validation Flags** (severity levels, affected manifest fields, and rule descriptions).
+   * Summarizes all **Staged Private Media Files** uploaded during ingestion (bucket names, storage paths, file names, and draft states).
+4. **Safety Isolation**:
+   * Staged files remain strictly private draft media assets; no public promotion occurs.
+   * Public compile feed index counts remain unchanged.
+   * live showcase presentation paths (Duda integration layers) remain completely isolated.
+
+---
+
+## 🧪 Automated Testing
+
+This workspace includes a reliable, offline automated test suite powered by [Vitest](https://vitest.dev/) to verify core domain, validation, and workflow logic without requiring any external services or database connections.
+
+### Running Tests
+
+#### Option A: Running from the Repository Root (Convenience Script)
+Run a one-time deterministic test check:
+```bash
+npm run test:admin
+```
+
+#### Option B: Running from the App Workspace Directory
+First navigate into the app folder:
+```bash
+cd apps/admin-cms
+```
+Then execute tests:
+* **Interactive watch mode**: `npm run test`
+* **One-time run mode**: `npm run test:run`
+
+### Covered Features
+* **Public Feed Compiler**: Verifies correct status filtering (approved/published), internal field exclusion, layout default assignment, and mutation safety.
+* **Public Feed Validator**: Tests schema compliance checks, required field rules, layout template checks, and recommended field warning output.
+* **Project Workflow**: Asserts correct state transitions and review action lists for all lifecycle states.
+* **Project Approval & Review Validation**: Validates completeness check gates for both ingestion and publishing approval.
+* **Media Validation**: Verifies file size limits, MIME types, and path safety validation.
+* **Import Package Validation**: Tests manifest verification rules, required files checks, and error/warning outputs.
+
+### Out of Scope (Staging Isolation)
+These unit tests are strictly offline. The following layers are excluded from this baseline and will be tested in separate integration runs:
+* Supabase Database repositories and database operations.
+* Next.js Route Handlers and endpoints.
+* Row-Level Security (RLS) policies.
+* Media Storage uploads and bucket promotions.
+* External service calls (Gemini API, Duda API, Render deployments).
+
+---
+
+## 🛡️ Staging Auth Verification
+
+To audit and verify staging database configuration and authentication readiness, a read-only check script is available:
+
+```bash
+npm run check:admin-auth
+```
+
+* **Read-only execution**: This script is SELECT-only. It does not create users, apply database migrations, or modify user roles.
+* **Fictional data only**: It never prints credentials or personal database data.
+* **Controlled Manual Audit**: Live authentication flow validation requires performing the manual checklist described in the [staging auth verification runbook](../../infra/supabase/staging-auth-verification.md).
+
+For setting up staging Auth identities, refer to the [manual apply guide](../../infra/supabase/manual-apply-guide.md).

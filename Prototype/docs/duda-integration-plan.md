@@ -19,8 +19,22 @@ The dedicated project detail page (path: `/project-detail`) must contain:
 <div id="project-detail"></div>
 ```
 
-## 2. Script Placement
-The contents of `duda/bodyend.html` must be pasted into the **Body End** section of the Duda Site HTML/CSS editor.
+## 2. Script Placement & Runtime Configuration
+
+To support configurable deployment environments, the integration script separates code from config:
+
+1.  **Configuration Script**: Insert this small configuration script block into Duda's **Head HTML** or at the top of **Body End** (before the main script):
+    ```html
+    <script>
+    window.CAPSTONE_FEED_URL = "<PUBLIC_FEED_URL>";
+    </script>
+    ```
+    Replace `<PUBLIC_FEED_URL>` with your public Supabase Storage feed URL format:
+    `https://<GENERATED_PROJECT_REFERENCE>.supabase.co/storage/v1/object/public/feeds/capstones-latest.json`
+    
+    *   **Security Notice**: The feed URL is public; the secret API key is never placed in Duda. Duda does not query `public.projects` directly. It only reads the public JSON Storage object.
+    
+2.  **Main Showcase Script**: Paste the contents of `duda/bodyend.html` into the **Body End** section of the Duda Site HTML/CSS editor.
 
 ## 3. Styling
 The contents of `duda/listing-page.css` and `duda/detail-page.css` should be added to the site-wide CSS or page-specific CSS in Duda.
@@ -110,5 +124,6 @@ To prevent confusing simple CMS record saves with live public site distribution,
 ---
 
 ## 9. Feed Source
-Official Stable Feed URL:
-`https://xojnnhilqaldxoilmxli.supabase.co/storage/v1/object/public/feeds/capstones-latest.json`
+
+Official Stable Feed URL (configured at runtime via script injection):
+`https://<GENERATED_PROJECT_REFERENCE>.supabase.co/storage/v1/object/public/feeds/capstones-latest.json`

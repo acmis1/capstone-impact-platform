@@ -1,0 +1,23 @@
+{
+  "publicId": "2026-runtime-import-demo",
+  "title": "Staging Imported Project",
+  "summary": "This is a project imported using the staging import package workflow foundation.",
+  "background": "The project represents a baseline to verify metadata compilation, schema rules, and batch tracking safety.",
+  "solution": "We implemented a decoupled single-package importer executing locally on fake fixtures.",
+  "year": "2026",
+  "program": "Bachelor of Information Technology",
+  "studyProgram": "BP162",
+  "discipline": "Information Technology",
+  "industry": "Business",
+  "industryPartner": "RMIT School of Science",
+  "academicSupervisor": "Dr. Staging Import Validator",
+  "groupName": "Team Staging Import",
+  "teamMembers": ["Student Import One", "Student Import Two"],
+  "posterText": "This is OCR poster text captured for searchindexing.",
+  "accessibilityText": "A diagram demonstrating local folder parsing and file buffer stream uploads.",
+  "layoutConfig": {
+    "templateId": "media_rich",
+    "featuredMediaFocus": "poster",
+    "sectionOrdering": ["background", "solution"]
+  }
+}
