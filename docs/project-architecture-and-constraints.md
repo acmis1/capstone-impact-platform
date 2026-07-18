@@ -33,7 +33,7 @@ Standard Project Package / Excel
    └── Assistive OCR and AI Metadata Extraction
    └── Admin Excel Cross-Check & Review (CMS Dashboard)
    └── Generate Student Preview & Send Preview Email
-   └── Email Reminder Scheduling (Optional)
+   └── Email Reminder Scheduling
    └── Student Confirmation / Correction Request (Student Preview)
    └── Human Administrative Review & Approval (Staging status update)
    └── Compilation (Administrative data stripped)
@@ -52,7 +52,7 @@ Standard Project Package / Excel
 
 ## 6. Duda Constraints
 *   **No Duda Upgrade**: Upgrading the Duda account subscription or site plan is permanently out of scope.
-*   **Dynamic Rendering**: Since Duda dynamic pages/collections are unsupported under the active plan, all dynamic grids (`#capstone-listing`) and detail sections (`#project-detail`) are dynamically rendered client-side via JavaScript (`bodyend.html`) in Duda's footer.
+*   **Dynamic Rendering**: Since Duda dynamic pages/collections are unsupported under the active plan, all dynamic grids are rendered inside the listing root `#capstone-showcase-root` (generating the grid structure at `#capstone-project-grid`), and detail sections are rendered at `#project-detail` via JavaScript (`bodyend.html`) in Duda's footer. These integration-specific IDs are current Prototype Duda integration details, not permanent public API promises.
 *   **Verification Boundary**: The team currently has access only to an authenticated Duda test site. The official RMIT production website was not provided or verified.
 
 ---
@@ -66,6 +66,7 @@ Standard Project Package / Excel
 
 ## 8. AI/OCR Operating Principles
 *   **Assistive Only**: AI-assisted validation and OCR poster-text extraction are mandatory capabilities. However, their output is strictly assistive and **must never** bypass human administrative review.
+*   **Mandatory AI-Assisted Validation Capabilities**: The platform must explicitly support AI-assisted validation and OCR poster-text extraction, including: duplicate detection, spelling and grammar assistance, formatting validation, title consistency, image/text consistency assistance, OCR poster-text extraction, reviewed full-text accessibility alternatives, deterministic/manual fallback, and mandatory human review.
 *   **Deterministic Fallback**: If the AI/OCR engine is slow, offline, or returns errors, the CMS must remain fully functional via deterministic rules and manual staff entry.
 *   **Institutional Governance**: The use of AI APIs must respect institutional data residency, budget limits, and privacy policies.
 
@@ -87,7 +88,7 @@ Standard Project Package / Excel
 ## 11. Mandatory versus Optional Capabilities
 
 ### A. Mandatory Capabilities
-*   **Bulk Folder/Excel Ingestion**: Importing zip packages or directories containing student work.
+*   **Bulk Folder/Excel Ingestion**: Importing a standard project folder/package structure with `project-details.xlsx` via a bulk import workflow.
 *   **Rules-First Validation**: Automated validation checks on image dimensions, file size limits, and required fields.
 *   **Admin Excel Cross-Check**: Matching Excel metadata columns against structured PostgreSQL tables.
 *   **OCR-Assisted Extraction**: Extracting poster text automatically to create reviewed text alternatives.

@@ -9,13 +9,14 @@ Ensure that administrative workflows, student project data, and public showcase 
 
 ---
 
-## 2. Trust Boundaries
+## 2. Target Production Trust Boundaries
 
 ```
-[Student Packages] ─► [HTTPS Upload] ─► [CMS Admin UI] ── (Admin Auth Middleware) ──► [PostgreSQL & Storage]
+[Student Packages] ─► [HTTPS Upload (Target)] ─► [CMS Admin UI] ── (Admin Auth Middleware) ──► [PostgreSQL & Storage]
                                                                                            │
 [Duda Shell (Public UI)] ◄── (HTTPS GET) ◄── [Stable Public JSON Feed] ◄── [Staging Buckets (Public)]
 ```
+*(Note: The complete HTTPS student-upload workflow is a target design and is not currently operational).*
 
 ---
 
@@ -40,22 +41,30 @@ Ensure that administrative workflows, student project data, and public showcase 
 ---
 
 ## 5. Authentication and Authorization Status
-*   **CMS Authentication**: Administrative authentication and Role-Based Access Control (RBAC) schemas have been created in Supabase PostgreSQL migrations. However, active route validation and staging auth checks are `PENDING ACTIVATION`.
+*   **CMS Authentication**: Administrative authentication, permission checks, server-side route guards, and Role-Based Access Control (RBAC) schemas exist in repository code. However, live activation and real staging-session verification remain `PENDING ACTIVATION`.
 *   **Environment Lock**: Staging auth verification and session checks must be executed against the separate `capstone-impact-staging` environment. The Prototype recovery project **must never** be used for admin authentication.
-*   **Least Privilege Credentials**: Supabase `service_role` keys are backend-only. Under no circumstances may they be exposed in client bundles or public repositories.
+*   **Least Privilege Credentials**: Supabase `service_role` keys are backend-only and their usage must be minimized. Under no circumstances may they be exposed in client bundles or public repositories.
 
 ---
 
 ## 6. Data and Media Protection
-*   **Media Folder Isolation**: Student folder uploads containing draft Excel sheets, personal documents, and raw source materials must reside in private buckets.
-*   **Public Assets**: Only approved project media (posters, snapshot images, and videos) may be copied to the public `feeds` and `project-assets` buckets.
+*   **Media Folder Isolation**: Student folder uploads containing draft Excel sheets, personal documents, and raw source materials must reside in private buckets. The default configurable bucket names are:
+    *   Private drafts: `project-drafts-private`
+    *   Public assets: `project-public-assets`
+    *   Public feeds: `public-feeds`
+*   **Public Assets**: Only approved project media (posters, snapshot images, and PDFs) may be copied to the public approved asset storage. Current video handling is strictly metadata-driven (external video link URL); video binary files are not copied to public storage.
 *   **No Real Data Seeding**: No real student or stakeholder data may be checked into Git or loaded into staging without authorization. All test configurations must use fictional mock data.
+*   **Row-Level Security**: Policies are defined in migrations, but effective staging-environment verification is required before operational acceptance.
 
 ---
 
 ## 7. Feed and Duda Public-Layer Protection
 *   **Feed Validation Gate**: The feed validation script (`validatePublicFeed.ts`) operates as a security boundary, rejecting any payload containing administrative metadata or unexpected properties.
-*   **Output Sanitization**: The Duda dynamic script (`bodyend.html`) must sanitize and escape all project strings (especially HTML and markdown text fields) before inserting them into the DOM to prevent Cross-Site Scripting (XSS).
+*   **Output Sanitization**: The Duda dynamic script (`bodyend.html`) escapes many text values before inserting them. However, it does not sanitize every URL or value; some snapshot URLs currently enter image src attributes directly. Strict URL validation, approved-host checks, and safe DOM construction remain required hardening work.
+*   **Workflow Integrity**:
+    *   Student preview rendering should be isolated from the administrative UI where practical.
+    *   Feed publication needs snapshot history and tested rollback.
+    *   Administrative state changes plus audit attribution should become atomic.
 
 ---
 
@@ -72,14 +81,14 @@ Ensure that administrative workflows, student project data, and public showcase 
 ---
 
 ## 10. Backup, Recovery, and Ownership
-*   **Institutional Handover**: RMIT/School staff must have full ownership of Render hosting billing, Supabase cloud billing, and GitHub repository admin rights. Student groups must not own active production keys.
-*   **Backup Schedule**: Automated daily database backups must be configured in the Supabase production dashboard.
+*   **Institutional Handover**: RMIT/School staff must have full ownership of Render hosting billing, Supabase cloud billing, and GitHub repository admin rights. Student groups must not own active production keys. Institutional incident-response and recovery ownership is mandatory.
+*   **Backups**: An institutionally approved backup cadence, documented retention policy, and periodic restore testing must be aligned with the selected Supabase/service plan.
 
 ---
 
 ## 11. Prioritized Unresolved Risks
 *   **Lack of Staging Key Rotation**: Staging credentials must be rotated immediately if exposed in command logs.
-*   **Cold Start Latency**: Free-tier hosting on Render can introduce a 50+ second delay. A production deployment strategy must resolve server wake-up thresholds.
+*   **Hosting Performance Latency**: Server availability and cold-start performance must be measured under the selected hosting plan. Unacceptable latency must be addressed before production acceptance.
 
 ---
 

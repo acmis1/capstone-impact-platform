@@ -19,23 +19,26 @@ Ensure structural compatibility between the compiled JSON feed and Duda's client
 ---
 
 ## 3. Publication Eligibility
-Only project records with the following status configuration are eligible to be compiled into the public feed:
-*   **Workflow Status**: `PUBLISHED` (meaning they have passed admin review and been approved).
+Only project records with the following exact lowercase workflow status values are eligible to be compiled into the public feed:
+
+*   **Eligible**:
+    *   `approved`
+    *   `published`
 
 The following statuses are strictly **excluded** from compilation:
-*   `DRAFT`
-*   `SUBMITTED`
-*   `IN_REVIEW`
-*   `CHANGES_REQUESTED`
-*   `ARCHIVED`
-*   `DELETED`
+*   `draft`
+*   `submitted`
+*   `in_review`
+*   `changes_requested`
+*   `archived`
+*   `deleted`
 
 ---
 
 ## 4. Required Validator Fields
 Every compiled project object must contain the following required fields to pass validation:
 *   `id` — Deterministic integer ID
-*   `publicId` — Unique public string identifier (UUID or stable hash)
+*   `publicId` — A required stable public string identifier
 *   `title` — Public title string
 *   `summary` — Display description for listing cards
 *   `year` — Project calendar year (string)
@@ -43,29 +46,34 @@ Every compiled project object must contain the following required fields to pass
 *   `studyProgram` — Fallback program string matching XLSX structure
 *   `discipline` — Primary technical discipline
 *   `groupName` — Student group code or identifier
-*   `teamMembers` — Roster of student names (array of strings)
-*   `poster` — HTTPS URL to public poster image preview
-*   `posterPdf` — HTTPS URL to public poster PDF file
-*   `layoutConfig` — Visual preset settings object containing:
-    *   `templateId` (Must match a verified layout)
-    *   `featuredMedia`
-    *   `sectionOrder`
+*   `teamMembers` — Roster of student names (array)
+*   `poster` — Public poster image preview URL
+*   `posterPdf` — Public poster PDF file URL
+*   `layoutConfig` — Visual preset settings object containing `templateId`.
+
+### Runtime Validator Field Rules
+The runtime validator behaves as follows:
+*   Requires the above 13 fields to be present and non-null.
+*   Checks `id` is an integer.
+*   Checks `teamMembers` is an array (does not currently check if every element inside the array is a string).
+*   Checks `layoutConfig` is an object.
+*   Checks `layoutConfig.templateId` is one of: `poster_showcase`, `technical_detail`, `media_rich`.
+*   Does not require or type-check `featuredMedia` or `sectionOrder` at runtime (these are TypeScript domain-level properties only).
 
 ---
 
 ## 5. Compiler-Emitted Public Fields
-The compiler matches and maps the database projects table schema directly to public fields defined in [publicFeed.ts](../apps/admin-cms/src/domain/publicFeed.ts). These include:
-*   `id`, `publicId`, `title`, `summary`, `background`, `solution`, `year`, `program`, `studyProgram`, `discipline`, `disciplines`, `industry`, `industryPartner`, `academicSupervisor`, `groupName`, `teamMembers`, `poster`, `posterPdf`, `posterText`, `accessibilityText`, `snapshots`, `videoUrl`, `demoUrl`, `repositoryUrl`, `externalLinks`, `citations`, `layoutConfig`.
+The compiler matches and maps database projects directly to public fields.
+
+### A. Always Emitted (using empty strings, empty arrays, or defaults when missing)
+*   `id`, `publicId`, `title`, `summary`, `background`, `solution`, `year`, `program`, `studyProgram`, `discipline`, `disciplines`, `industry`, `industryPartner`, `academicSupervisor`, `groupName`, `teamMembers`, `poster`, `posterPdf`, `posterText`, `accessibilityText`, `snapshots`, `layoutConfig`
+
+### B. Conditionally Emitted (only when populated with non-empty values)
+*   `videoUrl`, `demoUrl`, `repositoryUrl`, `externalLinks`, `citations`
 
 ---
 
-## 6. Optional Conditionally Emitted Fields
-The following fields are optional and are only emitted in the JSON element when they have non-empty values:
-*   `background`, `solution`, `disciplines` (array), `industry`, `industryPartner`, `academicSupervisor`, `posterText`, `accessibilityText`, `snapshots` (array of snapshot image URLs), `videoUrl` (H.264 video file or streaming url), `demoUrl`, `repositoryUrl` (GitHub/GitLab url), `externalLinks` (label-URL object array), `citations` (string array).
-
----
-
-## 7. Layout Configuration
+## 6. Layout Configuration
 The `layoutConfig.templateId` property must map to one of the three verified layout presets:
 1.  **`poster_showcase`**: High-focus poster layout.
 2.  **`technical_detail`**: Structured content-first layout.
@@ -73,51 +81,56 @@ The `layoutConfig.templateId` property must map to one of the three verified lay
 
 ---
 
-## 8. Forbidden Internal Fields
-To protect student privacy and staff workflows, the following administrative fields are strictly stripped by `compilePublicFeed.ts` and will fail validation if present:
-*   `status` (internal workflow enum)
-*   `internalNotes` / `internal_staff_notes`
-*   `reviewNotes` / `private_review_comments`
-*   `validationFlags` / `validationErrors` / `validationWarnings`
-*   `adminId` / `admin_id`
-*   `importBatchId` / `import_batch_id`
-*   `sourceFolder`
-*   `pendingRemovalFromPublic`
-*   `publicRemovalCompletedAt`
-*   `archivedAt` / `archiveReason`
-*   Raw administrative file paths or internal Supabase tokens
-*   Any unknown fields not explicitly allow-listed in the domain schema (e.g. metadata warnings are rejected).
+## 7. Internal-Field Handling
+To protect student privacy and staff workflows, the following administrative fields are strictly handled:
+
+### A. Compiler-Stripped Fields
+The compiler (`compilePublicFeed.ts`) automatically strips these fields:
+*   `status`, `importBatchId`, `sourceFolder`, `internalStaffNotes`, `privateReviewComments`, `validationFlags`, `validationErrors`, `validationWarnings`, `pendingRemovalFromPublic`, `publicRemovalCompletedAt`, `archivedAt`, `archivedFromStatus`, `archiveReason`, `created_at`, `updated_at`
+
+### B. Explicit Validator Forbidden Set
+If any of these fields are present in the payload sent to the validator (`validatePublicFeed.ts`), it triggers an validation error:
+*   `status`, `importBatchId`, `sourceFolder`, `internalStaffNotes`, `privateReviewComments`, `validationFlags`, `packageValidation`, `pendingRemovalFromPublic`, `publicRemovalCompletedAt`, `archivedAt`, `archivedFromStatus`, `archiveReason`, `created_at`, `updated_at`
+
+### C. Validation Error and Warning Handling
+*   `validationErrors` and `validationWarnings` are stripped by the compiler. If manually supplied to the runtime validator, they are rejected as unknown fields since they are not allow-listed.
+*   Aliases such as `internal_notes` or `admin_id` are not current domain fields; they are rejected as unknown rather than explicitly forbidden.
 
 ---
 
-## 9. Validation Behavior
-
-### A. Currently Enforced (Code-Backed)
-*   Check that all 13 required fields exist.
-*   Enforce correct types (e.g., `id` is an integer, `teamMembers` is an array of strings).
-*   Enforce visual layout preset IDs match allowed templates.
-*   Reject forbidden internal fields.
-
-### B. Nonblocking Warnings
-*   Missing recommended metadata (e.g., `accessibilityText` or `posterText`) triggers validation warnings during ingestion but does not block public feed compilation once marked approved by an admin.
+## 8. Validation Behavior
+*   **Empty Feed**: An empty feed array is technically valid but returns a validation warning.
+*   **Unknown or Forbidden Keys**: Triggers validation errors.
+*   **Missing/Null Required Fields**: Triggers validation errors.
+*   **Type Constraints**: `id` must be an integer, `teamMembers` must be an array, `templateId` must match one of the allowed template strings. Array elements are not checked.
+*   **Feed Validation Warnings**: Recommended fields (e.g., `accessibilityText` or `posterText`) generate non-blocking feed-validation warnings if missing, which do not make `validation.valid` false.
+*   **No Active URL Audits**: The validator does not check URL structures, protocols, or network reachability.
 
 ---
 
-## 10. Stable Path and Duda Compatibility
+## 9. Stable Path and Duda Compatibility
 *   **Filename**: `capstones-latest.json`
-*   **Location**: Written directly to the root of the public Supabase Storage bucket `feeds`.
-*   **Caching**: Query variables (`capstones-latest.json?v=<timestamp>`) are used inside Duda's `bodyend.html` to invalidate client browser caches and ensure immediate updates.
+*   **Bucket Names**: The Admin/CMS storage bucket names are configuration-driven. Defaults:
+    *   Public Feeds: `public-feeds`
+    *   Public Assets: `project-public-assets`
+    *   Private Drafts: `project-drafts-private`
+*   **Prototype Environment Note**: The Prototype recovery environment uses separate hardcoded bucket names (`feeds`, `project-assets`, `project-drafts`) and must not be treated as the Admin/CMS staging environment.
+*   **Caching**: `bodyend.html` appends a timestamp query parameter and uses `cache: no-store` to bypass client browser cache.
 
 ---
 
-## 11. Known Current Limitations
-*   **String Formatting**: The validator currently accepts empty strings (`""`) for required text fields if they are technically present.
-*   **URL Verification**: The system verifies string structure but does not hit media URLs to verify hosting reachability in real-time.
-*   **No Multi-Tenant Isolation**: The feed compiler processes all published records into a single global array.
+## 10. Known Current Limitations
+*   **Empty Strings**: Empty strings (`""`) can pass required-field presence checks.
+*   **Lack of Deep Type Checking**: Array elements (like `teamMembers` elements) are not type-checked at runtime.
+*   **No Media Verification**: URL protocols, media types, and reachability are not validated.
+*   **No Layout Verification**: `featuredMedia` and `sectionOrder` are emitted by the compiler but not independently validated at runtime.
+*   **No Duplicate Check**: Duplicate `publicId` values are not checked.
+*   **Non-Atomic Publication**: Writing the feed JSON and recording the publication snapshot in the database are not executed as a single atomic database transaction.
+*   **Warning-Only Empty Feed**: An empty array feed does not block publishing.
 
 ---
 
-## 12. Future Hardening Requirements
+## 11. Future Hardening Requirements
 The following validations are planned as future improvements:
 *   **Non-empty Constraint**: Enforcing length rules on required string parameters.
 *   **URL Protocol Checking**: Enforcing secure `https://` schemas and file type checks on poster images.

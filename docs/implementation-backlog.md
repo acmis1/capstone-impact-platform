@@ -13,27 +13,31 @@ This document maps out the completed project baseline, foundations present, and 
 ---
 
 ## 2. Foundations Present but Not Operationally Activated
-*   **Admin Authentication Schemas**: PostgreSQL schemas and role models exist in Supabase migrations, but active Route validation, Next.js middleware hooks, and live staging session checks are not operationally activated.
+*   **Admin Authentication**: Server-side admin route guards, session validation, permission checks, and auth migrations exist in repository code, but real staging identities, environment activation, and successful manual login verification remain pending.
 
 ---
 
 ## 3. Priority 0 — Admin Identity and Environment Activation
 *   **Staging Activation**: Activate the Admin/CMS against the separate `capstone-impact-staging` environment (never use the Prototype recovery Supabase project).
-*   **Identity Provisioning**: Seed authorized admin email accounts and roles (no public self-registration).
-*   **Role-Based Route Locking**: Verify Next.js routes and backend APIs reject requests if session token is absent or lacks administrative credentials.
-*   **Security Check**: Confirm RLS policies are enabled on all PostgreSQL tables and secrets are excluded from repository code.
+*   **Identity Provisioning**:
+    *   Provision school-approved identities in Supabase Auth, link them to `admin_users`, and assign recognized roles.
+    *   Prohibit public self-registration.
+    *   Verify real staging sessions without printing credentials.
+*   **Staging Verification**: Confirm staging auth readiness checks, perform manual login tests, check protected pages and APIs, verify PostgreSQL Row-Level Security (RLS) tables, and verify server-only credentials.
 
 ---
 
 ## 4. Priority 1 — Submission, Cross-Check, Preview, and Student Confirmation
 *   **Folder Ingestion**: Bulk folder uploads reading project structure and asset packages.
 *   **Excel Cross-Check**: Build the administrative parser matching column headers in `project-details.xlsx` against database fields.
-*   **Student Preview Link**: Generate token-based, private, secure preview URLs for student groups.
+*   **Student Preview Link**: Generate token-based, private, secure preview URLs for student groups, with preview-token expiry and revocation rules.
 *   **Email Notification**: Send automated preview emails containing preview links to student group contact addresses.
-*   **Reminder Scheduling**: Schedule automated email reminders to groups if confirmation is pending.
+*   **Reminder Scheduling**: Schedule automated email reminders to groups if confirmation is pending, tracking reminder history.
+*   **Review Workflows**: Bulk review and cross-check metadata manually before preview generation.
 *   **Student Response Handling**:
-    *   *Student Confirmation*: Roster a positive confirmation sign-off in the database.
-    *   *Correction Requests*: Roster student comments flagging typos or incorrect assets.
+    *   *Student Confirmation*: Record an explicit student confirmation and timestamp (auditable final sign-off).
+    *   *Correction Requests*: Record correction-request comments, status, and timestamps.
+    *   *Admin Resolution*: Admin resolution of student corrections, triggering regenerated/reissued previews and student re-notification.
 *   **Admin Audit Trail**: Record administrative changes and student confirmations in logs.
 
 ---
@@ -41,8 +45,10 @@ This document maps out the completed project baseline, foundations present, and 
 ## 5. Priority 2 — AI/OCR and Accessibility Workflow
 *   **OCR Poster-Text Extraction**: Extract text from poster PDF files to pre-fill metadata fields.
 *   **Full-Text Accessibility Alternatives**: Generate complete reviewed text descriptions for images and posters.
+*   **Spelling and Grammar**: Spelling and grammar assistance on extracted or manual text.
 *   **Title and Formatting Consistency**: Highlight mismatches between the spreadsheet metadata title and poster title.
 *   **Image/Text Consistency Assistance**: Flag mismatched media files or missing elements.
+*   **Formatting Checks**: Automated validation checks on image dimensions, file size limits, and formatting rules.
 *   **Duplicate Detection**: Check project IDs and directories to block duplicate imports.
 *   **Deterministic Fallback**: Ensure the system remains fully functional via manual entry if OCR/AI endpoints fail.
 *   **Privacy & Cost Controls**: Limit OCR/AI token counts and process files locally where possible.
@@ -51,11 +57,12 @@ This document maps out the completed project baseline, foundations present, and 
 ---
 
 ## 6. Priority 3 — Approval, Publication, Archive, History, and Rollback
-*   **Approval Gate**: Locking approved database records from accidental administrative modification.
-*   **Staged Publication**: Compiling the approved projects into `capstones-latest.json` and uploading it to public Supabase Storage.
+*   **Approval Gate**: Controlled editing of approved/published database records. Changes require revalidation and, where appropriate, reapproval before republishing.
+*   **Staged Publication**: Compiling the approved projects into `capstones-latest.json` and uploading it to public Supabase Storage, with safe publication failure handling.
 *   **Archive and Unpublish**: Mark projects as archived, removing them from the public feed compilation while preserving history in PostgreSQL.
-*   **Public-Removal Verification**: Ensure the public feed updates immediately and Duda no longer displays archived items.
-*   **Feed History & Rollback**: Save timestamped backup copies of the feed and implement a dashboard button to restore any historical feed instantly.
+*   **Public-Removal Verification**: Ensure the public feed updates immediately, recording public-removal completion.
+*   **Feed History & Rollback**: Save timestamped backup copies of the feed and implement a dashboard button to restore any historical feed instantly, verifying rollback.
+*   **Audit and Retry**: Audit attribution for all publication status transitions, with idempotent retry behavior.
 
 ---
 
@@ -64,7 +71,15 @@ This document maps out the completed project baseline, foundations present, and 
 *   **Performance & Scaling Verification**: Load-test database queries and file storage bandwidth under a target of at least **100 projects per year**.
 *   **Non-technical Staff UAT**: Conduct usability testing with school administrative staff.
 *   **Documentation & Training**: Deliver a complete administrator user guide.
-*   **Institutional Handover**: Execute the transfer of repository admin rights, Supabase database, and Render hosting control to school-controlled accounts.
+*   **Institutional Handover**: Execute the transfer of school-controlled accounts:
+    *   GitHub repository admin rights
+    *   Supabase database and storage project ownership
+    *   Render hosting account and billing
+    *   Duda editor access and publishing authority
+    *   Email / SMTP server account
+    *   AI/OCR provider account and billing
+    *   Domain / subdomain ownership
+    *   Backup and incident-response ownership
 *   **Success Measurement**: Verify that the publishing workflow demonstrates at least a **50% time or manpower reduction** compared to manual Duda page creation.
 
 ---
@@ -75,17 +90,24 @@ This document maps out the completed project baseline, foundations present, and 
 ---
 
 ## 9. Open Institutional Decisions
-*   **Long-Term System Owner**: Handover target alias.
-*   **Data Retention Policy**: Duration of public asset retention.
-*   **SMTP Services**: Approved university mail server endpoint.
-*   **Approved AI/OCR Endpoint**: Privacy-compliant cloud extraction API.
+*   **Long-Term Operational Owner**: Handover target alias.
+*   **Data and Public-Asset Retention**: Policy regarding how many semesters of data are kept in storage before archiving.
+*   **Approved Email Delivery Arrangement**: Approved university mail server / SMTP endpoint.
+*   **Approved AI/OCR Provider & Privacy Terms**: Privacy-compliant cloud extraction API and terms approval.
+*   **Official Production Duda Access**: Production publishing authority and site access.
+*   **Recovery and Incident-Response Owner**: Designated support contact.
 
 ---
 
 ## 10. Definition of Done
-A backlog item is defined as done when:
+A backlog item is defined as done when, where applicable:
 1.  Code is written in Next.js/TypeScript and fully typed.
 2.  SQL migrations are applied to `capstone-impact-staging`.
-3.  Unit tests pass (Vitest).
+3.  Unit/integration tests pass (Vitest).
 4.  Documentation is updated.
 5.  Verified in a running staging environment.
+6.  Accessibility verification completed.
+7.  Security/privacy verification completed.
+8.  Staff UAT and staging acceptance signed off.
+9.  Recovery/rollback verification completed.
+10. Institutional ownership verified with no unresolved blocking defects.
