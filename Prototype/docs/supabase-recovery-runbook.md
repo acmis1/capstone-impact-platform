@@ -134,9 +134,9 @@ The following sequence records the completed historical recovery steps:
 
 ## Post-Recovery & Promotion Status
 
-*   **Render Deployment**: Render branch configurations and deployment verification are separate post-recovery activities.
-*   **Duda Integration**: Duda runtime configuration and public page rendering verification are separate post-recovery activities.
-*   **Promotion Status**: PR #9 was merged into `main` on 2026-07-18 using merge commit `792c0db1db27da04bcd5dd96109180888bca8ac6`. The `main` branch is now the repository source of truth for the recovered Prototype and the separate production-oriented admin CMS foundation. The `break/admin-cms-staging-foundation` branch remains temporarily preserved pending deployment verification.
+*   **Render Deployment**: The existing Render Prototype service now deploys from `main` (root directory `Prototype`). Build command is `npm install && npm run build` and start command is `npm run server`. The main commit `b82dbf8648f53e2d8e06898d9f1d2836b76b426b` was deployed successfully, with the service confirmed Live (returning HTTP 200). Read-only automated browser verification confirmed 10 internal records and 6 public-feed records were served without application errors or broken posters.
+*   **Duda Integration**: The team was not provided access to the official RMIT production website. The available environment is an authenticated Duda test site. Automated-agent login was unavailable due to browser rejection, but the user manually verified in their authenticated personal browser that the test-site projects listing and reusable detail page navigation and content rendering were functioning.
+*   **Promotion Status**: PR #9 was merged into `main` on 2026-07-18 using merge commit `792c0db1db27da04bcd5dd96109180888bca8ac6`. The `main` branch is the repository source of truth. The staging branch `break/admin-cms-staging-foundation` is fully merged, contains zero unique commits, and is ready for removal once this documentation update is merged. The `break/docs-foundation` branch remains separately preserved pending selective documentation consolidation.
 *   **Current File Categories in PR #9**:
     *   Prototype recovery and Duda wiring
     *   Separate production-oriented admin CMS foundation
