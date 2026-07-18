@@ -136,7 +136,7 @@ The following sequence records the completed historical recovery steps:
 
 *   **Render Deployment**: Render branch configurations and deployment verification are separate post-recovery activities.
 *   **Duda Integration**: Duda runtime configuration and public page rendering verification are separate post-recovery activities.
-*   **Promotion Status**: Draft PR #9 currently proposes promotion from `break/admin-cms-staging-foundation` into `main`.
+*   **Promotion Status**: PR #9 was merged into `main` on 2026-07-18 using merge commit `792c0db1db27da04bcd5dd96109180888bca8ac6`. The `main` branch is now the repository source of truth for the recovered Prototype and the separate production-oriented admin CMS foundation. The `break/admin-cms-staging-foundation` branch remains temporarily preserved pending deployment verification.
 *   **Current File Categories in PR #9**:
     *   Prototype recovery and Duda wiring
     *   Separate production-oriented admin CMS foundation
