@@ -18,7 +18,8 @@
     "import:admin-package": "npm run import:staging-package --workspace=apps/admin-cms",
     "check:admin-imports": "npm run check:import-batches --workspace=apps/admin-cms",
     "test:admin": "npm run test:run --workspace=apps/admin-cms",
-    "check:admin-auth": "npm run check:staging-auth --workspace=apps/admin-cms"
+    "check:admin-auth": "npm run check:staging-auth --workspace=apps/admin-cms",
+    "link:admin-staging": "npm run link:staging-admin --workspace=apps/admin-cms"
   },
   "devDependencies": {
     "server-only": "^0.0.1"
