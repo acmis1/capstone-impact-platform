@@ -12,10 +12,17 @@ Follow these step-by-step instructions to set up the staging database schema on 
 > * **DO NOT run these scripts against the old demo project.**
 > * **DO NOT run these scripts against the Prototype recovery project.** No migration or database commands should ever target the Prototype recovery project.
 > * **DO NOT connect Duda to this database yet.**
-> * **Verify Buckets:** Confirm that the following storage buckets have been created in your staging project:
->   * `project-drafts-private` (Private bucket)
->   * `project-public-assets` (Public bucket)
->   * `public-feeds` (Public bucket)
+> * **Storage Provisioning Is a Separate Task:** Do not create or configure
+>   Storage buckets during this migration application task. After migrations
+>   0001 through 0004 have been applied and verified read-only, provision and
+>   verify the following buckets through a separately approved Storage task:
+>
+>   - `project-drafts-private` — private draft uploads
+>   - `project-public-assets` — approved public images and downloadable PDFs
+>   - `public-feeds` — approved public JSON feed files
+>
+>   No media upload, seed, or feed publication may occur before that separate
+>   Storage setup and policy verification is complete.
 
 > [!CAUTION]
 > * **Destructive Operations Warning:** Reset, teardown, and destructive SQL (Option A and Option B below) require separate, explicit approval and are not part of the normal staging migration flow.
@@ -72,8 +79,11 @@ The migrations must be applied in the exact order below:
    * **service_role:** Receives full administrative CRUD (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) privileges on all 13 tables. The service-role / secret key must remain strictly server-side.
    * **Future Defaults:** Automatic table exposure on future public-schema objects is disabled. Every future table requires an explicit reviewed grant migration.
 
-### Step 5: Read-Only Verification
-* Perform a read-only audit of the database tables and schema privileges before performing any seed or staging identity provisioning.
+### Step 5: Sequence Verification
+1. **Schema & Permission Verification:** Perform a read-only audit of the database tables and schema privileges to ensure everything is correct.
+2. **Stop:** Do not proceed with any seeds, media uploads, or user creation yet.
+3. **Storage Provisioning:** Complete the required Storage provisioning and policy verification through a separate approved Storage task.
+4. **seeds & identity Provisioning:** Only after Storage provisioning is complete and verified may you consider running fictional seeds or provisioning staging administrative users.
 
 ---
 
