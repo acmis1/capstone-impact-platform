@@ -1,4 +1,4 @@
--- Staging database schema foundation for capstone-impact-staging Supabase project
+-- Staging database schema foundation for capstone-admin-cms-staging-2026 Supabase project
 -- 0001_staging_schema.sql (Idempotent)
 
 -- Enable pgcrypto for gen_random_uuid() and uuid-ossp
