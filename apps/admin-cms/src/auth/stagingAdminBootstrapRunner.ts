@@ -139,7 +139,7 @@ export async function executeStagingAdminBootstrap(params: {
       };
     }
 
-    const classification = mapRpcResponse(rpcResult);
+    const classification = mapRpcResponse(rpcResult as string | null | undefined);
     const provisioned = (classification === "CREATED" || classification === "ALREADY_PROVISIONED" || classification === "ROLE_REPAIRED") ? 1 : 0;
 
     return {
