@@ -1,25 +1,26 @@
-import "server-only";
 import { loadEnvConfig } from "@next/env";
 loadEnvConfig(process.cwd());
 
-import { User } from "@supabase/supabase-js";
 import { createSupabaseAdminClientCore } from "../lib/supabase/adminCore";
-import { validateBootstrapInput, mapRpcResponse, mapDatabaseError } from "../auth/stagingAdminBootstrap";
+import { executeStagingAdminBootstrap, InjectedSupabaseClient } from "../auth/stagingAdminBootstrapRunner";
+import { validateBootstrapInput } from "../auth/stagingAdminBootstrap";
 
 async function runBootstrap() {
   const email = process.env.CAPSTONE_BOOTSTRAP_ADMIN_EMAIL;
   const fullName = process.env.CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME;
   const confirmation = process.env.CAPSTONE_BOOTSTRAP_CONFIRM;
 
+  // Perform validation first before initializing database clients
   const validation = validateBootstrapInput({ email, fullName, confirmation });
-
   if (!validation.isValid) {
-    console.log(`classification=${validation.error}`);
+    console.log(`classification=${validation.error || "SAFE_PRECONDITION_FAILURE"}`);
     console.log("provisioned=0");
-    process.exit(1);
+    console.log("auth_match_count=0");
+    console.log("pages_read=0");
+    console.log("rpc_called=NO");
+    process.exitCode = 1;
+    return;
   }
-
-  const { normalizedEmail, normalizedFullName } = validation;
 
   let supabase;
   try {
@@ -27,86 +28,39 @@ async function runBootstrap() {
   } catch {
     console.log("classification=SAFE_PRECONDITION_FAILURE");
     console.log("provisioned=0");
-    process.exit(1);
+    console.log("auth_match_count=0");
+    console.log("pages_read=0");
+    console.log("rpc_called=NO");
+    process.exitCode = 1;
+    return;
   }
 
   try {
-    let page = 1;
-    const perPage = 100;
-    const matchingUsers: User[] = [];
-    let hasMore = true;
+    const result = await executeStagingAdminBootstrap({
+      client: supabase as unknown as InjectedSupabaseClient,
+      email,
+      fullName,
+      confirmation
+    });
 
-    while (hasMore) {
-      const { data, error } = await supabase.auth.admin.listUsers({
-        page,
-        perPage
-      });
+    console.log(`classification=${result.classification}`);
+    console.log(`provisioned=${result.provisioned}`);
+    console.log(`auth_match_count=${result.authMatchCount}`);
+    console.log(`pages_read=${result.pagesRead}`);
+    console.log(`rpc_called=${result.rpcCalled}`);
 
-      if (error) {
-        throw error;
-      }
-
-      const users = data?.users || [];
-      if (users.length === 0) {
-        hasMore = false;
-      } else {
-        for (const user of users) {
-          if (user.email && user.email.toLowerCase() === normalizedEmail) {
-            matchingUsers.push(user);
-          }
-        }
-        page += 1;
-      }
-    }
-
-    if (matchingUsers.length === 0) {
-      console.log("classification=AUTH_USER_NOT_FOUND");
-      console.log("provisioned=0");
-      process.exit(1);
-    }
-
-    if (matchingUsers.length > 1) {
-      console.log("classification=MULTIPLE_AUTH_MATCHES");
-      console.log("provisioned=0");
-      process.exit(1);
-    }
-
-    const matchedUser = matchingUsers[0];
-
-    const { data: rpcResult, error: rpcError } = await supabase.rpc(
-      "bootstrap_initial_admin",
-      {
-        p_auth_user_id: matchedUser.id,
-        p_email: normalizedEmail,
-        p_full_name: normalizedFullName
-      }
-    );
-
-    if (rpcError) {
-      const classification = mapDatabaseError(rpcError);
-      console.log(`classification=${classification}`);
-      console.log("provisioned=0");
-      process.exit(1);
-    }
-
-    const classification = mapRpcResponse(rpcResult);
-    console.log(`classification=${classification}`);
-
-    if (
-      classification === "CREATED" ||
-      classification === "ALREADY_PROVISIONED" ||
-      classification === "ROLE_REPAIRED"
-    ) {
-      console.log("provisioned=1");
-      process.exit(0);
+    if (result.provisioned === 1) {
+      process.exitCode = 0;
     } else {
-      console.log("provisioned=0");
-      process.exit(1);
+      process.exitCode = 1;
     }
   } catch {
     console.log("classification=DATABASE_BOOTSTRAP_FAILURE");
     console.log("provisioned=0");
-    process.exit(1);
+    console.log("auth_match_count=0");
+    console.log("pages_read=0");
+    console.log("rpc_called=NO");
+    process.exitCode = 1;
   }
 }
 

@@ -11,10 +11,11 @@ CREATE OR REPLACE FUNCTION public.bootstrap_initial_admin(
 RETURNS text
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog, pg_temp
+SET search_path = ''
 AS $$
 DECLARE
     v_normalized_email text;
+    v_trimmed_full_name text;
     v_auth_exists boolean;
     v_auth_email text;
     v_admin_users_count integer;
@@ -24,19 +25,28 @@ DECLARE
     v_existing_profile_auth_id uuid;
     v_has_admin_role boolean;
 BEGIN
+    -- Acquire transaction-scoped advisory lock before checking counts or inserting
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        'capstone.bootstrap_initial_admin',
+        0
+      )
+    );
+
     -- Reject null or empty inputs
     IF p_auth_user_id IS NULL THEN
         RAISE EXCEPTION 'AUTH_USER_ID_REQUIRED';
     END IF;
-    IF p_email IS NULL OR trim(p_email) = '' THEN
+    IF p_email IS NULL OR pg_catalog.trim(p_email) = '' THEN
         RAISE EXCEPTION 'EMAIL_REQUIRED';
     END IF;
-    IF p_full_name IS NULL OR trim(p_full_name) = '' THEN
+    IF p_full_name IS NULL OR pg_catalog.trim(p_full_name) = '' THEN
         RAISE EXCEPTION 'FULL_NAME_REQUIRED';
     END IF;
 
-    -- Normalize email
-    v_normalized_email := lower(trim(p_email));
+    -- Normalize email and full name
+    v_normalized_email := pg_catalog.lower(pg_catalog.trim(p_email));
+    v_trimmed_full_name := pg_catalog.trim(p_full_name);
 
     -- Verify the supplied auth user ID exists in auth.users
     SELECT EXISTS (
@@ -47,21 +57,25 @@ BEGIN
         RAISE EXCEPTION 'AUTH_USER_NOT_FOUND';
     END IF;
 
-    -- Verify the supplied email matches that Auth user
-    SELECT email INTO v_auth_email FROM auth.users WHERE id = p_auth_user_id;
+    -- Verify the supplied email matches that Auth user (both normalized)
+    SELECT pg_catalog.lower(pg_catalog.trim(email))
+    INTO v_auth_email
+    FROM auth.users
+    WHERE id = p_auth_user_id;
+
     IF v_auth_email IS DISTINCT FROM v_normalized_email THEN
         RAISE EXCEPTION 'AUTH_EMAIL_MISMATCH';
     END IF;
 
     -- Count existing admin profiles and roles
-    SELECT count(*) INTO v_admin_users_count FROM public.admin_users;
-    SELECT count(*) INTO v_user_roles_count FROM public.user_roles;
+    SELECT pg_catalog.count(*) INTO v_admin_users_count FROM public.admin_users;
+    SELECT pg_catalog.count(*) INTO v_user_roles_count FROM public.user_roles;
 
     -- Check if we are in Fresh State
     IF v_admin_users_count = 0 AND v_user_roles_count = 0 THEN
         -- Create one linked admin_users row
         INSERT INTO public.admin_users (email, full_name, auth_user_id)
-        VALUES (v_normalized_email, p_full_name, p_auth_user_id)
+        VALUES (v_normalized_email, v_trimmed_full_name, p_auth_user_id)
         RETURNING id INTO v_existing_profile_id;
 
         -- Create one admin role row
