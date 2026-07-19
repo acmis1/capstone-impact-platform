@@ -2,9 +2,19 @@
 
 This guide documents the secure, manual sequence to link the initial Supabase Auth user to the first Admin/CMS administrator profile.
 
+> [!WARNING]
+> * **PR Phase vs Execution:** Note that migration `0005_initial_admin_bootstrap.sql` has not yet been applied to the staging database merely because this PR exists.
+> * **Confirm Project Scope:** The script must be executed only after the human confirms they are targeting the correct, isolated Admin/CMS staging project.
+> * **No Password Input:** No password is ever accepted or passed to this linking script.
+
+## Concurrency and Lookup Safety
+* **Serialization:** Migration 0005 implements a transaction-scoped advisory lock that serializes concurrent bootstrap attempts, ensuring two processes cannot execute the check-then-insert flow simultaneously.
+* **No RPC Writes on Ambiguity:** If the script detects `AUTH_USER_NOT_FOUND` (0 matches) or `MULTIPLE_AUTH_MATCHES` (>1 match), it stops execution immediately and does NOT call the RPC database write function.
+* **Rerun Safety:** The linking script is safe to rerun only after migration 0005 has been successfully verified on the database.
+
 ## Manual Sequencing
 
-Follow these steps once migration `0005_initial_admin_bootstrap.sql` has been successfully applied to the staging database:
+Follow these steps once migration `0005_initial_admin_bootstrap.sql` has been manually applied to the staging database:
 
 1. **Create or Invite User**:
    Create or invite exactly one initial user through Supabase Authentication dashboard or API.
