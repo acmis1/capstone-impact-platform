@@ -83,7 +83,7 @@ The migrations must be applied in the exact order below:
 1. **Schema & Permission Verification:** Perform a read-only audit of the database tables and schema privileges to ensure everything is correct.
 2. **Stop:** Do not proceed with any seeds, media uploads, or user creation yet.
 3. **Storage Provisioning:** Complete the required Storage provisioning and policy verification through a separate approved Storage task.
-4. **seeds & identity Provisioning:** Only after Storage provisioning is complete and verified may you consider running fictional seeds or provisioning staging administrative users.
+4. **Seeds and Identity Provisioning:** Only after Storage provisioning is complete and verified may you consider running fictional seeds or provisioning staging administrative users.
 
 ---
 
