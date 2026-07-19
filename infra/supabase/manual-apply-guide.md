@@ -43,7 +43,8 @@ The migrations must be applied in the exact order below:
 2. `0002_staging_rls_policies.sql`
 3. `0003_admin_auth_identity.sql`
 4. `0004_explicit_data_api_grants.sql`
-5. Read-only verification before any seed or identity provisioning
+5. `0005_initial_admin_bootstrap.sql`
+6. Read-only verification before any seed or identity provisioning
 
 ---
 
@@ -79,11 +80,19 @@ The migrations must be applied in the exact order below:
    * **service_role:** Receives full administrative CRUD (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) privileges on all 13 tables. The service-role / secret key must remain strictly server-side.
    * **Future Defaults:** Automatic table exposure on future public-schema objects is disabled. Every future table requires an explicit reviewed grant migration.
 
-### Step 5: Sequence Verification
-1. **Schema & Permission Verification:** Perform a read-only audit of the database tables and schema privileges to ensure everything is correct.
-2. **Stop:** Do not proceed with any seeds, media uploads, or user creation yet.
-3. **Storage Provisioning:** Complete the required Storage provisioning and policy verification through a separate approved Storage task.
-4. **Seeds and Identity Provisioning:** Only after Storage provisioning is complete and verified may you consider running fictional seeds or provisioning staging administrative users.
+### Step 5: Execute Initial Admin Bootstrap (0005)
+1. Click **New query** to open a clean editor workspace.
+2. Open the file **`migrations/0005_initial_admin_bootstrap.sql`** and copy its content.
+3. Paste it into the SQL Editor and click **Run**.
+4. This registers the secure, transactional PL/pgSQL function `public.bootstrap_initial_admin(uuid, text, text)` with executable permissions granted strictly to `service_role`.
+
+### Step 6: Sequence Verification
+1. **Schema & Permission Verification:** Perform a read-only audit of the database tables, schema privileges, and functions to ensure everything is correct.
+2. **Empty Anonymous Storage Responses:** Note that an empty anonymous Storage `.list()` response is inconclusive because RLS may return an empty set rather than a direct authorization error. Do not create or add anonymous Storage list policies.
+3. **Storage Architecture Confirmation:** The staging Storage architecture utilizes server-only administrative writes for private drafts, and public approved assets/JSON feeds for retrieval.
+4. **Stop:** Do not proceed with any seeds, media uploads, or user creation yet.
+5. **Storage Provisioning:** Complete the required Storage provisioning and policy verification through a separate approved Storage task.
+6. **Seeds and Identity Provisioning:** Only after Storage provisioning is complete and verified may you run the secure linking script or insert fictional seeds.
 
 ---
 
