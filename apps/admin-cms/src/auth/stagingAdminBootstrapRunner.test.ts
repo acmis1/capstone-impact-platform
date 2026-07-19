@@ -81,11 +81,11 @@ describe("Staging Admin Bootstrap Runner", () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it("should succeed and call RPC once when exactly one Auth match is found", async () => {
+  it("should succeed and call RPC once when exactly one Auth match is found (trim and case-insensitive verified)", async () => {
     const mockListUsers = vi.fn().mockResolvedValue({
       data: {
         users: [
-          { id: "uuid-1234", email: "admin@example.com" }
+          { id: "uuid-1234", email: "  Admin@EXAMPLE.com  " }
         ]
       },
       error: null
@@ -101,7 +101,7 @@ describe("Staging Admin Bootstrap Runner", () => {
 
     const result = await executeStagingAdminBootstrap({
       client,
-      email: "  admin@example.com  ",
+      email: "  ADMIN@Example.com  ",
       fullName: "Admin User",
       confirmation: "LINK_EXISTING_STAGING_ADMIN"
     });
@@ -115,6 +115,11 @@ describe("Staging Admin Bootstrap Runner", () => {
       p_email: "admin@example.com",
       p_full_name: "Admin User"
     });
+
+    // Verify safe result contains no UUID or email
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("uuid-1234");
+    expect(serialized).not.toContain("admin@example.com");
   });
 
   it("should return MULTIPLE_AUTH_MATCHES and NOT call RPC when multiple matches are found", async () => {

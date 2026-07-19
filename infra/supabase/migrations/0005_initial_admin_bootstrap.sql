@@ -87,8 +87,14 @@ BEGIN
 
     -- If not fresh, we require exactly one administrator row to exist.
     IF v_admin_users_count = 1 THEN
-        SELECT id, email, auth_user_id 
-        INTO v_existing_profile_id, v_existing_profile_email, v_existing_profile_auth_id
+        SELECT
+          id,
+          pg_catalog.lower(pg_catalog.trim(email)),
+          auth_user_id 
+        INTO
+          v_existing_profile_id,
+          v_existing_profile_email,
+          v_existing_profile_auth_id
         FROM public.admin_users;
 
         -- Check if it matches the supplied auth user

@@ -77,7 +77,7 @@ export async function executeStagingAdminBootstrap(params: {
         hasMore = false;
       } else {
         for (const user of users) {
-          if (user.email && user.email.toLowerCase() === normalizedEmail) {
+          if (user.email && user.email.trim().toLowerCase() === normalizedEmail) {
             matchingUsers.push(user);
           }
         }

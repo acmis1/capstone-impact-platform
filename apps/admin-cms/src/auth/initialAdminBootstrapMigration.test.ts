@@ -50,6 +50,9 @@ describe("Initial Admin Bootstrap Migration Static Contract Test", () => {
     expect(norm).toContain("pg_catalog.lower");
     expect(norm).toContain("pg_catalog.trim");
     expect(norm).toContain("v_trimmed_full_name := pg_catalog.trim(p_full_name);");
+    
+    // Assert that the email read from public.admin_users is normalized
+    expect(norm).toContain("pg_catalog.lower(pg_catalog.trim(email))");
 
     // 7. No role parameter exists
     expect(norm).toContain("public.bootstrap_initial_admin( p_auth_user_id uuid, p_email text, p_full_name text )");
