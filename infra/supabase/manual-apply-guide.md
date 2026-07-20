@@ -132,8 +132,8 @@ After executing the teardown, repeat Steps 1 through 4 to apply the schema clean
 Staging operates on administrators invited through Supabase Auth. Since self-registration is disabled, you must configure the invitation flow, accept the invitation, set the password, and then link the user.
 
 ### 1. Configure and Complete the Invitation Flow
-Follow the detailed instructions in [auth-invitation-setup.md](file:///D:/IT/RMIT/Capstone/infra/supabase/auth-invitation-setup.md) to:
-1. Configure Site URL and Allowed Redirect Redirect URLs.
+Follow the detailed instructions in [auth-invitation-setup.md](./auth-invitation-setup.md) to:
+1. Configure Site URL and Allowed Redirect URLs.
 2. Update the Invite User email template.
 3. Send exactly one new invitation from the Supabase Authentication dashboard.
 4. Complete the invitation acceptance, OTP verification, and private password setup.
