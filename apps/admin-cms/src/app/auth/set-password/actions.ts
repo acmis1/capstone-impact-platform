@@ -19,8 +19,11 @@ import { redirect } from 'next/navigation';
  * - Never logs or exposes raw password values or user identity.
  */
 export async function setPasswordAction(prevState: unknown, formData: FormData) {
-  const password = formData.get('password') as string;
-  const confirmation = formData.get('confirmation') as string;
+  const rawPassword = formData.get('password');
+  const rawConfirmation = formData.get('confirmation');
+
+  const password = typeof rawPassword === 'string' ? rawPassword : '';
+  const confirmation = typeof rawConfirmation === 'string' ? rawConfirmation : '';
 
   // 1. Validate before constructing the Supabase client
   const validation = validatePasswordUpdate({ password, confirmation });
