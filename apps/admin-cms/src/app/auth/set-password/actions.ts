@@ -4,52 +4,66 @@ import 'server-only';
 
 import { createSupabaseServerClient } from '../../../lib/supabase/server';
 import { validatePasswordUpdate } from '../../../auth/invitationValidation';
+import { redirect } from 'next/navigation';
 
 /**
  * Server Action to set/update a user's password during the invitation flow.
  * 
  * Rules:
- * - Requires a valid authenticated session.
- * - Validates input using the pure validation module.
+ * - Validates input using the pure validation module before constructing client.
+ * - Requires a valid authenticated session via getUser.
  * - Updates the password using supabase.auth.updateUser.
- * - Signs the user out immediately on success to prevent session reuse.
- * - Never logs or exposes raw password values.
- * - Never writes to database tables (admin_users/user_roles).
+ * - Signs the user out immediately via local scope on success.
+ * - Inspects sign-out error and fails on error.
+ * - Invokes redirect strictly outside the try/catch block.
+ * - Never logs or exposes raw password values or user identity.
  */
 export async function setPasswordAction(prevState: unknown, formData: FormData) {
   const password = formData.get('password') as string;
   const confirmation = formData.get('confirmation') as string;
 
+  // 1. Validate before constructing the Supabase client
   const validation = validatePasswordUpdate({ password, confirmation });
-  if (!validation.isValid || !validation.data) {
+  if (!validation.isValid) {
     return { error: validation.error || 'PASSWORD_VALIDATION_FAILED' };
   }
 
-  const validatedPassword = validation.data;
+  let updateSuccess = false;
+  let actionError: string | null = null;
 
   try {
     const supabase = await createSupabaseServerClient();
 
-    // Verify current user session exists
+    // 2. Require an authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
-      return { error: 'UNAUTHENTICATED' };
+      actionError = 'UNAUTHENTICATED';
+    } else {
+      // 3. Call updateUser exactly once
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: password
+      });
+
+      if (updateError) {
+        actionError = 'PASSWORD_UPDATE_FAILED';
+      } else {
+        // 4. Call signOut with local scope
+        const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+        if (signOutError) {
+          actionError = 'SESSION_TERMINATION_FAILED';
+        } else {
+          updateSuccess = true;
+        }
+      }
     }
-
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: validatedPassword
-    });
-
-    if (updateError) {
-      return { error: 'PASSWORD_UPDATE_FAILED' };
-    }
-
-    // Force sign out immediately after successful update
-    await supabase.auth.signOut();
   } catch {
-    return { error: 'PASSWORD_UPDATE_FAILED' };
+    actionError = 'PASSWORD_UPDATE_FAILED';
   }
 
-  // Redirect to login page on success with a safe status indicator
-  return { success: true };
+  // 5. Invoke redirect strictly outside the try/catch block
+  if (updateSuccess) {
+    redirect('/login?status=PASSWORD_SET');
+  }
+
+  return { error: actionError || 'PASSWORD_UPDATE_FAILED' };
 }

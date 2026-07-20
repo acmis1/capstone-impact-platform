@@ -10,40 +10,57 @@ export const dynamic = 'force-dynamic';
  * 
  * Rules:
  * - Accepts only token_hash, type, next.
+ * - Rejects unexpected query-parameter names.
  * - Requires type=invite.
- * - Validates next path against allow-list to prevent open redirect.
- * - Invokes verifyOtp server-side.
- * - Relies on SSR cookies storage.
+ * - Enforces that next is absent or exactly /auth/set-password.
+ * - Never uses caller input as the final redirect destination.
+ * - Invokes redirect only outside try/catch blocks.
  * - Never logs or redirects raw secrets, tokens, or PII.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
+
+  // Reject unexpected query-parameter names
+  const allowedParams = ['token_hash', 'type', 'next'];
+  for (const key of Array.from(searchParams.keys())) {
+    if (!allowedParams.includes(key)) {
+      redirect('/login?error=INVALID_PARAMETERS');
+    }
+  }
+
   const token_hash = searchParams.get('token_hash');
   const type = searchParams.get('type');
   const next = searchParams.get('next');
 
+  // Perform parameter validation
   const validation = validateConfirmationParams({ tokenHash: token_hash, type, next });
 
-  if (!validation.isValid || !validation.data) {
+  if (!validation.isValid) {
     const errorClassification = validation.error || 'INVALID_PARAMETERS';
     redirect(`/login?error=${encodeURIComponent(errorClassification)}`);
   }
 
-  const { tokenHash, type: validatedType, next: safeNext } = validation.data;
+  let verificationSuccess = false;
 
+  // Execute OTP verification inside try/catch without calling redirect
   try {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.verifyOtp({
-      type: validatedType,
-      token_hash: tokenHash,
+      type: 'invite',
+      token_hash: (token_hash as string).trim(),
     });
 
-    if (error) {
-      redirect('/login?error=VERIFICATION_FAILED');
+    if (!error) {
+      verificationSuccess = true;
     }
   } catch {
-    redirect('/login?error=VERIFICATION_FAILED');
+    verificationSuccess = false;
   }
 
-  redirect(safeNext);
+  // Redirect based on verification outcome outside the try/catch block
+  if (verificationSuccess) {
+    redirect('/auth/set-password');
+  } else {
+    redirect('/login?error=VERIFICATION_FAILED');
+  }
 }

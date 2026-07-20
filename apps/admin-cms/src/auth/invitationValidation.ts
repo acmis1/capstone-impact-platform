@@ -7,7 +7,7 @@
  * - Accesses no network
  * - Logs nothing
  * - Contains no Supabase client
- * - Returns no token or password value
+ * - Returns no token, password, or caller-supplied URL values.
  */
 
 export interface ConfirmationParams {
@@ -16,73 +16,36 @@ export interface ConfirmationParams {
   next: string | null | undefined;
 }
 
-export interface ValidationResult<T> {
+export interface ValidationResult {
   isValid: boolean;
-  data?: T;
   error?: string;
+  type?: 'invite';
+  next?: '/auth/set-password';
 }
 
-const ALLOWED_REDIRECT_PATHS = [
-  '/auth/set-password',
-  '/admin',
-  '/login'
-];
-
 /**
- * Sanitizes and validates next redirect target path.
- * Rejects external URLs, protocol-relative URLs (//), backslash paths (\\),
- * and encoded redirect variants. Must be in the ALLOWED_REDIRECT_PATHS allow-list.
+ * Validates next redirect target path.
+ * Must be either absent/empty or exactly '/auth/set-password'.
  */
-export function validateNextPath(path: string | null | undefined): string {
-  if (!path) {
-    return '/auth/set-password';
-  }
-
-  let decoded = path.trim();
-  try {
-    decoded = decodeURIComponent(decoded);
-  } catch {
-    return '/auth/set-password';
-  }
-
-  // Reject paths containing protocol schemes or absolute prefixes
-  if (/^(https?:)?\/\//i.test(decoded)) {
-    return '/auth/set-password';
-  }
-
-  // Reject backslashes
-  if (decoded.includes('\\')) {
-    return '/auth/set-password';
-  }
-
-  // Ensure it starts with exactly one '/' and is not protocol-relative
-  if (!decoded.startsWith('/') || decoded.startsWith('//')) {
-    return '/auth/set-password';
-  }
-
-  // Check against our strict internal allow-list
-  // Check either exact match or matches prefix of allowlisted paths if routing parameters are ignored.
-  // For safety, let's enforce exact match or clean match against the path part.
-  const pathPart = decoded.split('?')[0];
-  if (ALLOWED_REDIRECT_PATHS.includes(pathPart)) {
-    return decoded;
-  }
-
-  return '/auth/set-password';
+export function validateNextPath(path: string | null | undefined): boolean {
+  if (!path) return true;
+  return path.trim() === '/auth/set-password';
 }
 
 /**
  * Validates invitation confirmation parameters.
+ * Checks token length (max 2048) and enforces that next resolves only to /auth/set-password.
+ * Returns only safe result classifications and does NOT return the token hash or dynamic redirect URLs.
  */
-export function validateConfirmationParams(params: ConfirmationParams): ValidationResult<{
-  tokenHash: string;
-  type: 'invite';
-  next: string;
-}> {
+export function validateConfirmationParams(params: ConfirmationParams): ValidationResult {
   const { tokenHash, type, next } = params;
 
   if (!tokenHash || typeof tokenHash !== 'string' || tokenHash.trim() === '') {
     return { isValid: false, error: 'MISSING_TOKEN_HASH' };
+  }
+
+  if (tokenHash.length > 2048) {
+    return { isValid: false, error: 'TOKEN_TOO_LONG' };
   }
 
   if (!type || typeof type !== 'string' || type.trim() === '') {
@@ -93,25 +56,25 @@ export function validateConfirmationParams(params: ConfirmationParams): Validati
     return { isValid: false, error: 'INVALID_TYPE' };
   }
 
-  const safeNext = validateNextPath(next);
+  if (!validateNextPath(next)) {
+    return { isValid: false, error: 'INVALID_NEXT_PATH' };
+  }
 
   return {
     isValid: true,
-    data: {
-      tokenHash: tokenHash.trim(),
-      type: 'invite',
-      next: safeNext
-    }
+    type: 'invite',
+    next: '/auth/set-password'
   };
 }
 
 /**
  * Validates password updates.
+ * Returns only safe validation status classifications and does NOT return the password.
  */
 export function validatePasswordUpdate(params: {
   password: string | null | undefined;
   confirmation: string | null | undefined;
-}): ValidationResult<string> {
+}): ValidationResult {
   const { password, confirmation } = params;
 
   if (!password || typeof password !== 'string' || password === '') {
@@ -131,7 +94,6 @@ export function validatePasswordUpdate(params: {
   }
 
   return {
-    isValid: true,
-    data: password
+    isValid: true
   };
 }

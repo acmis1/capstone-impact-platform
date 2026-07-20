@@ -12,6 +12,7 @@ export const dynamic = 'force-dynamic';
  * - Requires a valid authenticated Supabase session.
  * - Redirects unauthenticated requests to /login immediately.
  * - Restricts access server-side before rendering the credential form.
+ * - Never renders user.email, user.id, or other PII in HTML.
  */
 export default async function SetPasswordPage() {
   const supabase = await createSupabaseServerClient();
@@ -46,7 +47,7 @@ export default async function SetPasswordPage() {
             Setup Password
           </h2>
           <p style={{ color: '#9CA3AF', fontSize: '0.85rem', margin: 0 }}>
-            Establish credentials for: {user.email}
+            Set a password for your invited administrator account.
           </p>
         </div>
 
