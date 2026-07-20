@@ -129,20 +129,20 @@ After executing the teardown, repeat Steps 1 through 4 to apply the schema clean
 
 ## Administrative User Provisioning in Staging
 
-Staging operates on manually provisioned admins using Supabase Auth. Since there is no public self-registration form, follow these steps to add a staging administrator:
+Staging operates on administrators invited through Supabase Auth. Since self-registration is disabled, you must configure the invitation flow, accept the invitation, set the password, and then link the user.
 
-### 1. Create the Auth User in Supabase Dashboard
-1. In your Supabase Dashboard, navigate to **Authentication** > **Users** in the left sidebar.
-2. Click **Add User** > **Create User**.
-3. Fill in the canonical fictional email address `auth-test-admin@example.com` and a secure password.
-4. Set **Auto-confirm User?** to `true` (checked) so no email confirmation is sent.
-5. Click **Create User**.
+### 1. Configure and Complete the Invitation Flow
+Follow the detailed instructions in [auth-invitation-setup.md](file:///D:/IT/RMIT/Capstone/infra/supabase/auth-invitation-setup.md) to:
+1. Configure Site URL and Allowed Redirect Redirect URLs.
+2. Update the Invite User email template.
+3. Send exactly one new invitation from the Supabase Authentication dashboard.
+4. Complete the invitation acceptance, OTP verification, and private password setup.
+5. Confirm the user exists in `auth.users` with status verified.
 
-### 2. Retrieve the User UUID
-1. Locate the newly created user in the **Authentication** > **Users** list.
-2. Copy the UUID value displayed in the **User UID** / **ID** column (represented as `<AUTH_USER_UUID>` in script templates).
+### 2. Retrieve the User Details
+Locate the user's email address and full name to prepare for the safe administrator linking script. Invitation acceptance must be completed before administrator linking.
 
-### 3. Provision the Admin CMS Role in SQL Editor
+### 3. Provision the Admin CMS Role via the Bootstrap Script
 > [!WARNING]
 > This script is staging-only and must never be executed on production.
 > Before running, confirm that the active database connection is exactly the isolated staging database.
