@@ -30,16 +30,34 @@ In **Authentication** → **Email Templates** → **Invite User**, update the te
 {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite&next=/auth/set-password
 ```
 
-This ensures the invitation token is validated server-side and an HttpOnly cookie is set before redirecting the user to the explicit acceptance page to protect against email-link prefetching.
+The incoming email-link URL contains the `token_hash` query parameter.
 
-### Invitation Security Rules
+## Prefetch-Protection Two-Step Acceptance Flow
 
-* **Two-Step Acceptance Flow:**
-  1. The email link lands on `/auth/confirm` with the `token_hash`.
-  2. The GET handler validates parameters, sets the token temporarily in a secure HttpOnly cookie (`capstone_invitation_token_hash`), and performs a 303 redirect to the clean URL `/auth/confirm/accept` (which contains no parameters).
-  3. Security scanners or mail prefetchers loading the link via GET requests will trigger the redirect but **will not** trigger OTP verification or consume the token.
-  4. The user explicitly clicks **Accept invitation** to execute a POST submission via a Server Action.
-  5. The Server Action reads the token, deletes the HttpOnly cookie immediately, verifies the OTP with Supabase, and redirects to `/auth/set-password`.
+GET requests from automated link scanners, prefetchers, or email servers do not consume the invitation token. The application implements this security property using a two-step capture-then-accept architecture:
+
+1. **capture-route GET (/auth/confirm):**
+   - The user (or scanner) GETs `/auth/confirm?token_hash=...&type=invite`.
+   - The Route Handler validates parameters. If validation fails, it immediately clears any stale temporary invitation cookie and redirects to `/login` with an error code.
+   - If valid, the GET route places the trimmed `token_hash` into a short-lived `Set-Cookie` header (`capstone_invitation_token_hash`).
+   - The capturing route handler **does not** construct a Supabase client or call the Auth `verifyOtp` API.
+   - It responds with a `303 See Other` redirect to the clean URL `/auth/confirm/accept` (which contains no parameters).
+   - The token hash is not placed in the redirect `Location` header, HTML response body, form fields, or client storage.
+   - All responses (both success redirects and parameter-validation failures) are decorated with security headers to prevent caching (`Cache-Control: no-store, max-age=0`, `Pragma: no-cache`), referrer forwarding (`Referrer-Policy: no-referrer`), and indexing (`X-Robots-Tag: noindex, nofollow, noarchive`).
+
+2. **explicit acceptance page (/auth/confirm/accept):**
+   - Renders a generic "Confirm Invitation" page with an explicit **Accept invitation** form button.
+   - Rendering does not initialize a Supabase client or verify the token.
+   - The user must explicitly press **Accept invitation** to submit a POST request back to a Server Action.
+
+3. **acceptance server action:**
+   - Reads the `capstone_invitation_token_hash` from the secure HttpOnly cookie.
+   - Deletes the cookie immediately from the browser to prevent token reuse, replays, or leakages.
+   - Re-validates the token format and calls the Supabase Auth `verifyOtp` API exactly once.
+   - Redirects to `/auth/set-password` on success, or to a sanitized login error page on failure.
+
+### Staging Invitation Security Rules
+
 * **Single Target Destination:** Invitation success always routes exclusively to `/auth/set-password`.
 * **No Alternate Destinations:** Route paths such as `/admin` or `/login` are strictly blocked and rejected as invitation confirmation success targets.
 * **No Bearer Token Reuse:** The prior invitation whose URL exposed a bearer token (access_token/refresh_token in the hash fragment) is compromised and must never be reused.
