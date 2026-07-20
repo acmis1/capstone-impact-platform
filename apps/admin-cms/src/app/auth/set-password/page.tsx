@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
  * - Requires a valid authenticated Supabase session.
  * - Redirects unauthenticated requests to /login immediately.
  * - Restricts access server-side before rendering the credential form.
- * - Never renders user.email, user.id, or other PII in HTML.
+ * - Never renders user identity details or other PII in HTML.
  */
 export default async function SetPasswordPage() {
   const supabase = await createSupabaseServerClient();

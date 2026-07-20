@@ -351,7 +351,7 @@ describe('Static Safety Assertions', () => {
   });
 
   it('should assert no machine-specific file:/// links exist in the manual apply guide or instructions', () => {
-    const guideCode = fs.readFileSync(path.resolve(__dirname, '../../../infra/supabase/manual-apply-guide.md'), 'utf8');
+    const guideCode = fs.readFileSync(path.resolve(__dirname, '../../../../infra/supabase/manual-apply-guide.md'), 'utf8');
     expect(guideCode).not.toContain('file:///D:');
     expect(guideCode).not.toContain('file:///C:');
   });
