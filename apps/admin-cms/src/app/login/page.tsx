@@ -7,8 +7,40 @@ import { loginAction } from './actions';
 function LoginForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams ? (searchParams.get('next') || searchParams.get('redirectTo') || '/admin') : '/admin';
+  const urlError = searchParams ? searchParams.get('error') : null;
+  const urlStatus = searchParams ? searchParams.get('status') : null;
 
   const [state, formAction, isPending] = useActionState(loginAction, null);
+
+  const getUrlErrorMessage = (code: string | null) => {
+    if (!code) return null;
+    switch (code) {
+      case 'SESSION_EXPIRED':
+        return 'Session expired. Please click the invitation link again.';
+      case 'VERIFICATION_FAILED':
+        return 'The invitation link is invalid or has expired.';
+      case 'INVALID_PARAMETERS':
+      case 'MISSING_TOKEN_HASH':
+      case 'MISSING_TYPE':
+      case 'INVALID_TYPE':
+        return 'The invitation link is misconfigured or incomplete.';
+      default:
+        return 'An authentication error occurred.';
+    }
+  };
+
+  const getUrlStatusMessage = (code: string | null) => {
+    if (!code) return null;
+    switch (code) {
+      case 'PASSWORD_SET':
+        return 'Security credentials established successfully. Please sign in below.';
+      default:
+        return null;
+    }
+  };
+
+  const displayError = state?.error || getUrlErrorMessage(urlError);
+  const displayStatus = getUrlStatusMessage(urlStatus);
 
   return (
     <form action={formAction} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -62,7 +94,7 @@ function LoginForm() {
         />
       </div>
 
-      {state?.error && (
+      {displayError && (
         <div style={{
           backgroundColor: 'rgba(239, 68, 68, 0.1)',
           border: '1px solid rgba(239, 68, 68, 0.2)',
@@ -72,7 +104,21 @@ function LoginForm() {
           fontSize: '0.85rem',
           textAlign: 'center',
         }}>
-          {state.error}
+          {displayError}
+        </div>
+      )}
+
+      {displayStatus && (
+        <div style={{
+          backgroundColor: 'rgba(16, 185, 129, 0.1)',
+          border: '1px solid rgba(16, 185, 129, 0.2)',
+          color: '#34D399',
+          padding: '0.75rem',
+          borderRadius: '6px',
+          fontSize: '0.85rem',
+          textAlign: 'center',
+        }}>
+          {displayStatus}
         </div>
       )}
 
