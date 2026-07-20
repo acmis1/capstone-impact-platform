@@ -26,18 +26,28 @@ In the present staging environment (`capstone-admin-cms-staging-2026` located in
 Follow these steps once the replacement invitation flow has been completed and verified:
 
 1. **Invite User and Complete Invitation Flow**:
-   Complete the secure two-step invitation flow as documented in [auth-invitation-setup.md](./auth-invitation-setup.md). The invited user must click the invitation link, verify their token hash server-side via `/auth/confirm`, accept the invitation at `/auth/confirm/accept`, and privately set their password at `/auth/set-password` to establish their authenticated session before running the linking script.
+   Complete the secure two-step invitation flow as documented in [auth-invitation-setup.md](./auth-invitation-setup.md):
+   - The invitation email link directs the browser to `/auth/confirm?token_hash=...&type=invite`.
+   - GET `/auth/confirm` validates the query parameters and stores the token hash in a temporary HttpOnly cookie, performing no OTP verification.
+   - It redirects the browser via a 303 status to the clean URL `/auth/confirm/accept`.
+   - The user must explicitly click the **Accept invitation** button to submit the POST form.
+   - The acceptance Server Action reads the cookie, deletes it immediately, and calls the Supabase Auth `verifyOtp` API.
+   - On success, the user is redirected to `/auth/set-password` where they privately set their password.
+   - Setting the password successfully completes the Auth account setup and intentionally signs out the temporary invitation session.
+   - The user does not need to remain logged in before running the separate administrator-linking operation.
+
    > [!IMPORTANT]
    > * Do not store, write, commit, or disclose the password to the repository, coding agents, or assistant.
-   > * **The replacement invitation flow must be fully completed before the linking command runs.**
+   > * **The replacement invitation flow must be fully completed and the invitation session signed out before the linking command runs.**
 
 2. **Set Temporary Process Variables**:
-   In your local terminal session, configure the temporary process variables containing the email and full name of the existing Auth user, along with the confirmation token:
+   In your local terminal session, configure the temporary process variables containing the email and full name of the existing Auth user, along with the fixed safety-confirmation phrase:
    ```powershell
    $env:CAPSTONE_BOOTSTRAP_ADMIN_EMAIL = "admin@example.com"
    $env:CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME = "Initial Admin"
    $env:CAPSTONE_BOOTSTRAP_CONFIRM = "LINK_EXISTING_STAGING_ADMIN"
    ```
+   *Note: `CAPSTONE_BOOTSTRAP_CONFIRM` must equal the documented fixed phrase required by the guarded script. It is a safety-confirmation phrase, NOT an invitation token, access token, refresh token, password, or Supabase credential.*
 
 3. **Run linking script**:
    From the repository root directory, execute the link script:
