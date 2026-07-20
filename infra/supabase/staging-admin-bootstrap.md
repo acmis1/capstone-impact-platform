@@ -3,31 +3,51 @@
 This guide documents the secure, manual sequence to link the initial Supabase Auth user to the first Admin/CMS administrator profile.
 
 > [!WARNING]
-> * **PR Phase vs Execution:** Note that migration `0005_initial_admin_bootstrap.sql` has not yet been applied to the staging database merely because this PR exists.
-> * **Confirm Project Scope:** The script must be executed only after the human confirms they are targeting the correct, isolated Admin/CMS staging project.
+> * **Confirm Project Scope:** The script must be executed only after the human confirms they are targeting the correct, isolated Admin/CMS staging project (`capstone-admin-cms-staging-2026`).
 > * **No Password Input:** No password is ever accepted or passed to this linking script.
+> * **No Bearer Token Reuse:** The prior invitation whose URL exposed a bearer token is compromised and must never be reused.
+
+## Current Staging Status
+
+In the present staging environment (`capstone-admin-cms-staging-2026` located in Singapore):
+- migrations 0001 through 0005 have already been manually applied and read-only verified;
+- `bootstrap_initial_admin` exists with `service_role`-only execution;
+- `admin_users` and `user_roles` remain empty before the initial administrator onboarding;
+- the `bootstrap_initial_admin` function has not yet been invoked for the replacement administrator;
+- this status applies only to the isolated Admin/CMS staging project.
 
 ## Concurrency and Lookup Safety
-* **Serialization:** Migration 0005 implements a transaction-scoped advisory lock that serializes concurrent bootstrap attempts, ensuring two processes cannot execute the check-then-insert flow simultaneously.
-* **No RPC Writes on Ambiguity:** If the script detects `AUTH_USER_NOT_FOUND` (0 matches) or `MULTIPLE_AUTH_MATCHES` (>1 match), it stops execution immediately and does NOT call the RPC database write function.
-* **Rerun Safety:** The linking script is safe to rerun only after migration 0005 has been successfully verified on the database.
+- **Serialization:** Migration 0005 implements a transaction-scoped advisory lock that serializes concurrent bootstrap attempts, ensuring two processes cannot execute the check-then-insert flow simultaneously.
+- **No RPC Writes on Ambiguity:** If the script detects `AUTH_USER_NOT_FOUND` (0 matches) or `MULTIPLE_AUTH_MATCHES` (>1 match), it stops execution immediately and does NOT call the RPC database write function.
+- **Rerun Safety:** The linking script is safe to rerun only after migration 0005 has been successfully verified on the database.
 
 ## Manual Sequencing
 
-Follow these steps once migration `0005_initial_admin_bootstrap.sql` has been manually applied to the staging database:
+Follow these steps once the replacement invitation flow has been completed and verified:
 
 1. **Invite User and Complete Invitation Flow**:
-   Invite the initial user through the Supabase Authentication dashboard. The invited user must click the invitation link, verify their token hash server-side via `/auth/confirm`, and privately set their password at `/auth/set-password` to establish their authenticated session before running the linking script.
+   Complete the secure two-step invitation flow as documented in [auth-invitation-setup.md](./auth-invitation-setup.md):
+   - The invitation email link directs the browser to `/auth/confirm?token_hash=...&type=invite`.
+   - GET `/auth/confirm` validates the query parameters and stores the token hash in a temporary HttpOnly cookie, performing no OTP verification.
+   - It redirects the browser via a 303 status to the clean URL `/auth/confirm/accept`.
+   - The user must explicitly click the **Accept invitation** button to submit the POST form.
+   - The acceptance Server Action reads the cookie, deletes it immediately, and calls the Supabase Auth `verifyOtp` API.
+   - On success, the user is redirected to `/auth/set-password` where they privately set their password.
+   - Setting the password successfully completes the Auth account setup and intentionally signs out the temporary invitation session.
+   - The user does not need to remain logged in before running the separate administrator-linking operation.
+
    > [!IMPORTANT]
-   > Do not store, write, commit, or disclose the password to the repository, coding agents, or assistant. Invitation acceptance must be completed before administrator linking.
+   > * Do not store, write, commit, or disclose the password to the repository, coding agents, or assistant.
+   > * **The replacement invitation flow must be fully completed and the invitation session signed out before the linking command runs.**
 
 2. **Set Temporary Process Variables**:
-   In your local terminal session, configure the temporary process variables containing the email and full name of the existing Auth user, along with the confirmation token:
+   In your local terminal session, configure the temporary process variables containing the email and full name of the existing Auth user, along with the fixed safety-confirmation phrase:
    ```powershell
    $env:CAPSTONE_BOOTSTRAP_ADMIN_EMAIL = "admin@example.com"
    $env:CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME = "Initial Admin"
    $env:CAPSTONE_BOOTSTRAP_CONFIRM = "LINK_EXISTING_STAGING_ADMIN"
    ```
+   *Note: `CAPSTONE_BOOTSTRAP_CONFIRM` must equal the documented fixed phrase required by the guarded script. It is a safety-confirmation phrase, NOT an invitation token, access token, refresh token, password, or Supabase credential.*
 
 3. **Run linking script**:
    From the repository root directory, execute the link script:

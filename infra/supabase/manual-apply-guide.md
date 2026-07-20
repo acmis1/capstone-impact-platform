@@ -28,10 +28,12 @@ Follow these step-by-step instructions to set up the staging database schema on 
 > * **Destructive Operations Warning:** Reset, teardown, and destructive SQL (Option A and Option B below) require separate, explicit approval and are not part of the normal staging migration flow.
 
 > [!NOTE]
-> **Staging Environment Expectations & Idempotency:**
-> * These migration scripts are designed primarily for a **clean staging project**.
-> * We have added re-run safety clauses (`DROP TRIGGER IF EXISTS` and `DROP POLICY IF EXISTS`) to allow re-running these scripts.
-> * However, if a partial migration fails midway due to a schema conflict or manual database change, the safest option during this break/staging phase is to **reset the staging database** via the Supabase Dashboard, or execute the manual SQL table teardown script. Note that any reset or teardown requires separate explicit approval.
+> **Current Environment & Staging Status:**
+> In the present staging environment (`capstone-admin-cms-staging-2026` located in Singapore):
+> - migrations 0001 through 0005 have already been manually applied and verified;
+> - the three Storage buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) have already been provisioned and verified;
+> - do not rerun migrations or provisioning merely because this guide exists;
+> - reset, teardown, and destructive SQL require separate explicit approval.
 
 ---
 
@@ -131,90 +133,26 @@ After executing the teardown, repeat Steps 1 through 4 to apply the schema clean
 
 Staging operates on administrators invited through Supabase Auth. Since self-registration is disabled, you must configure the invitation flow, accept the invitation, set the password, and then link the user.
 
-### 1. Configure and Complete the Invitation Flow
-Follow the detailed instructions in [auth-invitation-setup.md](./auth-invitation-setup.md) to:
-1. Configure Site URL and Allowed Redirect URLs.
-2. Update the Invite User email template.
-3. Send exactly one new invitation from the Supabase Authentication dashboard.
-4. Complete the invitation acceptance, OTP verification, and private password setup.
-5. Confirm the user exists in `auth.users` with status verified.
+### Safe Initial Onboarding Flow
 
-### 2. Retrieve the User Details
-Locate the user's email address and full name to prepare for the safe administrator linking script. Invitation acceptance must be completed before administrator linking.
+All administrative user provisioning in the staging environment must go through the guarded bootstrap linking script as documented in:
 
-### 3. Provision the Admin CMS Role via the Bootstrap Script
+[./staging-admin-bootstrap.md](./staging-admin-bootstrap.md)
+
 > [!WARNING]
-> This script is staging-only and must never be executed on production.
-> Before running, confirm that the active database connection is exactly the isolated staging database.
-> If any safety exception is raised, stop execution immediately and verify the current database state.
+> * **DO NOT** paste the Auth UUID directly into manual SQL editor queries.
+> * **DO NOT** manually insert `admin_users` or `user_roles` records.
+> * **DO NOT** send passwords, emails, UUIDs, or tokens to coding agents or chat.
+> * **DO NOT** run the linking operation when zero or multiple Auth matches exist.
+> * **No automatic Auth-user deletion is allowed.**
 
-Open the **SQL Editor** and execute the following query to link the Auth user to the administrative schema (replace the placeholder `<AUTH_USER_UUID>` with your generated staging UID):
+Follow this exact safe sequence to provision the initial administrator:
 
-```sql
-DO $$
-DECLARE
-    v_auth_uuid UUID := '<AUTH_USER_UUID>'::UUID;
-    v_email VARCHAR := 'auth-test-admin@example.com';
-    v_full_name VARCHAR := 'Staging Auth Test Administrator';
-    
-    v_auth_exists BOOLEAN;
-    v_auth_email VARCHAR;
-    v_admin_id UUID;
-    v_existing_linked_email VARCHAR;
-    v_existing_admin_linked_uuid UUID;
-    v_admin_count INT;
-BEGIN
-    -- 1. Verify that an Auth user exists in auth.users with the supplied UUID
-    SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = v_auth_uuid) INTO v_auth_exists;
-    IF NOT v_auth_exists THEN
-        RAISE EXCEPTION 'AUTH_USER_NOT_FOUND';
-    END IF;
-
-    -- 2. Verify that the Auth user's email matches the canonical email
-    SELECT email INTO v_auth_email FROM auth.users WHERE id = v_auth_uuid;
-    IF v_auth_email IS DISTINCT FROM v_email THEN
-        RAISE EXCEPTION 'AUTH_EMAIL_MISMATCH';
-    END IF;
-
-    -- 3. Check if another admin_users row is already linked to the supplied UUID
-    SELECT email INTO v_existing_linked_email FROM admin_users WHERE auth_user_id = v_auth_uuid AND email IS DISTINCT FROM v_email;
-    IF v_existing_linked_email IS NOT NULL THEN
-        RAISE EXCEPTION 'AUTH_IDENTITY_ALREADY_LINKED';
-    END IF;
-
-    -- 4. Check if the canonical admin_users row is already linked to a different UUID
-    SELECT auth_user_id INTO v_existing_admin_linked_uuid FROM admin_users WHERE email = v_email;
-    IF v_existing_admin_linked_uuid IS NOT NULL AND v_existing_admin_linked_uuid IS DISTINCT FROM v_auth_uuid THEN
-        RAISE EXCEPTION 'CANONICAL_PROFILE_LINK_CONFLICT';
-    END IF;
-
-    -- 5. Check if more than one matching administrator row is found for this email
-    SELECT COUNT(*) INTO v_admin_count FROM admin_users WHERE email = v_email;
-    IF v_admin_count > 1 THEN
-        RAISE EXCEPTION 'MULTIPLE_CANONICAL_ADMIN_ROWS';
-    END IF;
-
-    -- 6. Create or retrieve the canonical admin_users profile
-    IF v_admin_count = 0 THEN
-        INSERT INTO admin_users (email, full_name, auth_user_id)
-        VALUES (v_email, v_full_name, v_auth_uuid)
-        RETURNING id INTO v_admin_id;
-    ELSE
-        SELECT id INTO v_admin_id FROM admin_users WHERE email = v_email;
-        
-        -- Update the profile linkage and full name safely
-        UPDATE admin_users
-        SET auth_user_id = v_auth_uuid,
-            full_name = v_full_name
-        WHERE id = v_admin_id;
-    END IF;
-
-    -- 7. Assign the admin role idempotently
-    INSERT INTO user_roles (user_id, role)
-    VALUES (v_admin_id, 'admin')
-    ON CONFLICT (user_id, role) DO NOTHING;
-
-    RAISE NOTICE 'STAGING_ADMIN_PROVISIONED';
-END $$;
-```
-
+1. **Complete the secure invitation and password setup:** Follow the two-step flow from the email link to private password setup, routing to `/auth/confirm/accept` and then `/auth/set-password`.
+2. **Confirm exactly one Auth user exists:** Verify the user is registered in `auth.users` in Supabase with status verified.
+3. **Set temporary local bootstrap variables privately:** Configure your local process environment variables privately (e.g. `CAPSTONE_BOOTSTRAP_ADMIN_EMAIL`, `CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME`, `CAPSTONE_BOOTSTRAP_CONFIRM`).
+4. **Run the linking script once:** Run `npm run link:admin-staging` (or `npm run link:staging-admin` in `apps/admin-cms`).
+5. **Clear all temporary variables:** Immediately clear the temporary bootstrap variables from your shell process.
+6. **Run the check command:** Run `npm run check:admin-auth`.
+7. **Verify readiness status:** Continue only when the checker reports `READY_FOR_MANUAL_LOGIN_TEST`.
+8. **Perform the manual login test:** Log in to the Console dashboard at `/login` to confirm the flow is working.
