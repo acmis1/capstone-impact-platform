@@ -10,6 +10,12 @@
  * - Returns no token, password, or caller-supplied URL values.
  */
 
+export const INVITATION_COOKIE_NAME = 'capstone_invitation_token_hash';
+export const INVITATION_COOKIE_PATH = '/auth/confirm';
+export const INVITATION_COOKIE_MAX_AGE_SECONDS = 600;
+export const INVITATION_ACCEPT_PATH = '/auth/confirm/accept';
+export const INVITATION_PASSWORD_PATH = '/auth/set-password';
+
 export interface ConfirmationParams {
   tokenHash: string | null | undefined;
   type: string | null | undefined;
@@ -28,8 +34,8 @@ export interface ValidationResult {
  * Must be either absent/empty or exactly '/auth/set-password'.
  */
 export function validateNextPath(path: string | null | undefined): boolean {
-  if (!path) return true;
-  return path.trim() === '/auth/set-password';
+  if (!path || path.trim() === '') return true;
+  return path.trim() === INVITATION_PASSWORD_PATH;
 }
 
 /**
@@ -63,7 +69,7 @@ export function validateConfirmationParams(params: ConfirmationParams): Validati
   return {
     isValid: true,
     type: 'invite',
-    next: '/auth/set-password'
+    next: INVITATION_PASSWORD_PATH
   };
 }
 

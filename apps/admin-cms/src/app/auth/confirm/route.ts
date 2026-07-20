@@ -1,5 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { validateConfirmationParams } from '../../../auth/invitationValidation';
+import {
+  validateConfirmationParams,
+  INVITATION_COOKIE_NAME,
+  INVITATION_COOKIE_PATH,
+  INVITATION_COOKIE_MAX_AGE_SECONDS,
+  INVITATION_ACCEPT_PATH
+} from '../../../auth/invitationValidation';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,14 +18,33 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const { searchParams } = url;
 
-  // Reject unexpected query-parameter names or duplicate keys
+  // Local helper to decorate response with required security headers
+  function secureResponse(res: NextResponse): NextResponse {
+    res.headers.set('Cache-Control', 'no-store, max-age=0');
+    res.headers.set('Pragma', 'no-cache');
+    res.headers.set('Referrer-Policy', 'no-referrer');
+    res.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    return res;
+  }
+
+  // Local helper to expire the stale cookie
+  function expireCookie(res: NextResponse): void {
+    res.cookies.set(INVITATION_COOKIE_NAME, '', {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: INVITATION_COOKIE_PATH,
+      maxAge: 0,
+      secure: process.env.NODE_ENV === 'production',
+    });
+  }
+
+  // Parameter keys and duplicates verification
   const allowedParams = ['token_hash', 'type', 'next'];
   for (const key of Array.from(searchParams.keys())) {
-    if (!allowedParams.includes(key)) {
-      return NextResponse.redirect(new URL('/login?error=INVALID_PARAMETERS', request.url), 303);
-    }
-    if (searchParams.getAll(key).length > 1) {
-      return NextResponse.redirect(new URL('/login?error=INVALID_PARAMETERS', request.url), 303);
+    if (!allowedParams.includes(key) || searchParams.getAll(key).length > 1) {
+      const failRes = NextResponse.redirect(new URL('/login?error=INVALID_PARAMETERS', request.url), 303);
+      expireCookie(failRes);
+      return secureResponse(failRes);
     }
   }
 
@@ -32,29 +57,26 @@ export async function GET(request: NextRequest) {
 
   if (!validation.isValid) {
     const errorClassification = validation.error || 'INVALID_PARAMETERS';
-    return NextResponse.redirect(
+    const failRes = NextResponse.redirect(
       new URL(`/login?error=${encodeURIComponent(errorClassification)}`, request.url),
       303
     );
+    expireCookie(failRes);
+    return secureResponse(failRes);
   }
 
   // Construct redirect to clean acceptance page
-  const response = NextResponse.redirect(new URL('/auth/confirm/accept', request.url), 303);
-
-  // Set prefetch-prevention headers
-  response.headers.set('Cache-Control', 'no-store, max-age=0');
-  response.headers.set('Pragma', 'no-cache');
-  response.headers.set('Referrer-Policy', 'no-referrer');
-  response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  const successRes = NextResponse.redirect(new URL(INVITATION_ACCEPT_PATH, request.url), 303);
+  secureResponse(successRes);
 
   // Store trimmed token hash in secure HttpOnly cookie
-  response.cookies.set('capstone_invitation_token_hash', (token_hash as string).trim(), {
+  successRes.cookies.set(INVITATION_COOKIE_NAME, (token_hash as string).trim(), {
     httpOnly: true,
     sameSite: 'lax',
-    path: '/auth/confirm',
-    maxAge: 600, // 10 minutes maximum
+    path: INVITATION_COOKIE_PATH,
+    maxAge: INVITATION_COOKIE_MAX_AGE_SECONDS,
     secure: process.env.NODE_ENV === 'production',
   });
 
-  return response;
+  return successRes;
 }

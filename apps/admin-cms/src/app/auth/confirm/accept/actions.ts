@@ -5,6 +5,11 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '../../../../lib/supabase/server';
+import {
+  INVITATION_COOKIE_NAME,
+  INVITATION_COOKIE_PATH,
+  INVITATION_PASSWORD_PATH
+} from '../../../../auth/invitationValidation';
 
 /**
  * Server Action that verifies the invitation token hash stored in the HttpOnly cookie.
@@ -20,14 +25,14 @@ import { createSupabaseServerClient } from '../../../../lib/supabase/server';
  */
 export async function acceptInvitationAction() {
   const cookieStore = await cookies();
-  const tokenCookie = cookieStore.get('capstone_invitation_token_hash');
+  const tokenCookie = cookieStore.get(INVITATION_COOKIE_NAME);
   const token = tokenCookie?.value;
 
   // Delete the cookie immediately on read attempt to ensure single-use
   if (tokenCookie) {
     cookieStore.delete({
-      name: 'capstone_invitation_token_hash',
-      path: '/auth/confirm',
+      name: INVITATION_COOKIE_NAME,
+      path: INVITATION_COOKIE_PATH,
     });
   }
 
@@ -58,7 +63,7 @@ export async function acceptInvitationAction() {
 
   // Redirect outcome based on OTP verification result
   if (verificationSuccess) {
-    redirect('/auth/set-password');
+    redirect(INVITATION_PASSWORD_PATH);
   } else {
     redirect('/login?error=VERIFICATION_FAILED');
   }

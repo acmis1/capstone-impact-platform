@@ -2,6 +2,7 @@ import React from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { acceptInvitationAction } from './actions';
+import { INVITATION_COOKIE_NAME } from '../../../../auth/invitationValidation';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function AcceptInvitationPage() {
   const cookieStore = await cookies();
-  const hasTokenCookie = cookieStore.has('capstone_invitation_token_hash');
+  const hasTokenCookie = cookieStore.has(INVITATION_COOKIE_NAME);
 
   if (!hasTokenCookie) {
     redirect('/login?error=INVITATION_SESSION_MISSING');
