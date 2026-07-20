@@ -5,22 +5,30 @@ import { setPasswordAction } from './actions';
 
 export function SetPasswordForm() {
   const [state, formAction, isPending] = useActionState(setPasswordAction, null);
+  const [password, setPassword] = React.useState('');
+  const [confirmation, setConfirmation] = React.useState('');
 
   return (
     <form action={formAction} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* Hidden canonical inputs for robust React 19 Server Action serialization */}
+      <input type="hidden" name="password" value={password} />
+      <input type="hidden" name="confirmation" value={confirmation} />
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         <label htmlFor="password" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#9CA3AF' }}>
           New Password
         </label>
         <input
           id="password"
-          name="password"
           type="password"
           required
           autoComplete="new-password"
-          placeholder="••••••••••••"
+          placeholder="At least 12 characters"
           minLength={12}
           maxLength={128}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          aria-invalid={state?.error === 'PASSWORD_TOO_SHORT' || state?.error === 'PASSWORD_TOO_LONG' || state?.error === 'PASSWORD_EMPTY' ? 'true' : 'false'}
           style={{
             backgroundColor: '#1F2937',
             border: '1px solid #374151',
@@ -40,13 +48,15 @@ export function SetPasswordForm() {
         </label>
         <input
           id="confirmation"
-          name="confirmation"
           type="password"
           required
           autoComplete="new-password"
-          placeholder="••••••••••••"
+          placeholder="At least 12 characters"
           minLength={12}
           maxLength={128}
+          value={confirmation}
+          onChange={(e) => setConfirmation(e.target.value)}
+          aria-invalid={state?.error === 'CONFIRMATION_MISMATCH' ? 'true' : 'false'}
           style={{
             backgroundColor: '#1F2937',
             border: '1px solid #374151',
@@ -61,15 +71,18 @@ export function SetPasswordForm() {
       </div>
 
       {state?.error && (
-        <div style={{
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
-          color: '#F87171',
-          padding: '0.75rem',
-          borderRadius: '6px',
-          fontSize: '0.85rem',
-          textAlign: 'center',
-        }}>
+        <div
+          aria-live="polite"
+          style={{
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            color: '#F87171',
+            padding: '0.75rem',
+            borderRadius: '6px',
+            fontSize: '0.85rem',
+            textAlign: 'center',
+          }}
+        >
           {state.error === 'CONFIRMATION_MISMATCH' && 'Passwords do not match.'}
           {state.error === 'PASSWORD_TOO_SHORT' && 'Password must be at least 12 characters.'}
           {state.error === 'PASSWORD_TOO_LONG' && 'Password is too long.'}
