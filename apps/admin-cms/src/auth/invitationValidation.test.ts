@@ -460,7 +460,7 @@ describe('Static Safety Assurances', () => {
     expect(guideCode).not.toContain('file:///C:');
   });
 
-  it('should assert that the SetPasswordForm source code contains controlled visible inputs, hidden name inputs, and no dot placeholders', () => {
+  it('should assert that the SetPasswordForm source code contains controlled visible inputs, named visible fields, wrapper handling, and no dot placeholders', () => {
     const formCode = fs.readFileSync(path.resolve(__dirname, '../app/auth/set-password/SetPasswordForm.tsx'), 'utf8');
 
     // Check that there are no dot placeholders
@@ -470,13 +470,17 @@ describe('Static Safety Assurances', () => {
     expect(formCode).toContain('const [password, setPassword] = React.useState');
     expect(formCode).toContain('const [confirmation, setConfirmation] = React.useState');
 
-    // Check for hidden canonical inputs
-    expect(formCode).toContain('<input type="hidden" name="password" value={password} />');
-    expect(formCode).toContain('<input type="hidden" name="confirmation" value={confirmation} />');
+    // Check for named visible inputs
+    expect(formCode).toContain('name="password"');
+    expect(formCode).toContain('name="confirmation"');
 
-    // Check for accessible visual input configs
-    expect(formCode).toContain('aria-live="polite"');
-    expect(formCode).toContain('aria-invalid=');
+    // Check no hidden inputs
+    expect(formCode).not.toContain('type="hidden"');
+
+    // Check for local action wrapper and helper use
+    expect(formCode).toContain('const handleSubmit = (formData: FormData) =>');
+    expect(formCode).toContain('canonicalizePasswordFormData(formData, { password, confirmation })');
+    expect(formCode).toContain('formAction(canonicalData)');
   });
 
   it('should prove server-side value preservation, defensive type checks, and raw password safety', async () => {

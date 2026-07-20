@@ -2,24 +2,27 @@
 
 import React, { useActionState } from 'react';
 import { setPasswordAction } from './actions';
+import { canonicalizePasswordFormData } from './passwordFormData';
 
 export function SetPasswordForm() {
   const [state, formAction, isPending] = useActionState(setPasswordAction, null);
   const [password, setPassword] = React.useState('');
   const [confirmation, setConfirmation] = React.useState('');
 
-  return (
-    <form action={formAction} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Hidden canonical inputs for robust React 19 Server Action serialization */}
-      <input type="hidden" name="password" value={password} />
-      <input type="hidden" name="confirmation" value={confirmation} />
+  const handleSubmit = (formData: FormData) => {
+    const canonicalData = canonicalizePasswordFormData(formData, { password, confirmation });
+    formAction(canonicalData);
+  };
 
+  return (
+    <form action={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         <label htmlFor="password" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#9CA3AF' }}>
           New Password
         </label>
         <input
           id="password"
+          name="password"
           type="password"
           required
           autoComplete="new-password"
@@ -48,6 +51,7 @@ export function SetPasswordForm() {
         </label>
         <input
           id="confirmation"
+          name="confirmation"
           type="password"
           required
           autoComplete="new-password"
