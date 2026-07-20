@@ -16,10 +16,10 @@ This guide documents the secure, manual sequence to link the initial Supabase Au
 
 Follow these steps once migration `0005_initial_admin_bootstrap.sql` has been manually applied to the staging database:
 
-1. **Create or Invite User**:
-   Create or invite exactly one initial user through Supabase Authentication dashboard or API.
+1. **Invite User and Complete Invitation Flow**:
+   Invite the initial user through the Supabase Authentication dashboard. The invited user must click the invitation link, verify their token hash server-side via `/auth/confirm`, and privately set their password at `/auth/set-password` to establish their authenticated session before running the linking script.
    > [!IMPORTANT]
-   > Do not store, write, commit, or disclose the password to the repository, coding agents, or assistant.
+   > Do not store, write, commit, or disclose the password to the repository, coding agents, or assistant. Invitation acceptance must be completed before administrator linking.
 
 2. **Set Temporary Process Variables**:
    In your local terminal session, configure the temporary process variables containing the email and full name of the existing Auth user, along with the confirmation token:
