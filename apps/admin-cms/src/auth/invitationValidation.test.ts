@@ -359,7 +359,7 @@ describe('Prefetch Flow Simulation', () => {
 
     const cookie = response.cookies.get(INVITATION_COOKIE_NAME);
     expect(cookie).toBeDefined();
-    mockCookieMap.set(cookie!.name, cookie!);
+    mockCookieMap.set(cookie!.name, cookie! as unknown as Record<string, unknown>);
 
     // 2. Browser render Acceptance page
     const page = await AcceptInvitationPage();
