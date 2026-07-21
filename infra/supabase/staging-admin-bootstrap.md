@@ -27,6 +27,9 @@ In the present staging environment (`capstone-admin-cms-staging-2026` located in
 
 ## Manual Sequencing
 
+> [!NOTE]
+> **Initial Bootstrap Scope:** The initial administrator bootstrap on current staging (`capstone-admin-cms-staging-2026`) is complete (`CREATED`). The manual sequence below is documented for setting up a genuinely new isolated environment or an explicitly approved same-identity recovery. It is restricted to the first administrator and is not an additional-user onboarding procedure.
+
 Follow these steps once the replacement invitation flow has been completed and verified:
 
 1. **Invite User and Complete Invitation Flow**:

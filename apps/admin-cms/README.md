@@ -101,9 +101,10 @@ The staging database schema and initial authentication guards are scaffolded and
    * **Session Browser Client (`client.ts`):** Standard web client using public keys for client-side Auth helper triggers.
 
 ### 👥 Role-Based Access Control (RBAC)
-*   **`admin`**: Full access to view, edit, review, and archive showcases.
-*   **`reviewer`**: Read and review (approve/request changes) rights. Cannot archive or edit.
-*   **`editor`**: Read and edit rights. Cannot review or archive.
+Role definitions exist in code (`admin`, `reviewer`, `editor`). Currently, only the initial `admin` role has been operationally verified in staging. Live provisioning and permission-matrix acceptance for `reviewer` and `editor` roles remain pending.
+*   **`admin`**: Full access to view, edit, review, and archive showcases. (Verified)
+*   **`reviewer`**: Read and review (approve/request changes) rights. Cannot archive or edit. (Pending UAT)
+*   **`editor`**: Read and metadata edit rights. Cannot approve or archive. (Pending UAT)
 
 ### 🛡️ Protected Routes & APIs
 *   **Protected Pages (`/admin/**/*`)**: Inherit the root layout guard at [layout.tsx](src/app/admin/layout.tsx), redirecting unauthorized users to `/login`.

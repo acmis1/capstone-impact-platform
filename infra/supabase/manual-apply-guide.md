@@ -109,7 +109,7 @@ The migrations must be applied in the exact order below:
 
 ## Staging Rollback / Reset Instructions
 
-If you need to clean up or re-apply a fresh staging database schema (note that reset, teardown, and destructive SQL require separate explicit approval and are not part of the normal staging migration flow):
+If you need to clean up or re-apply a fresh staging database schema (note that reset, teardown, and destructive SQL require separate explicit approval and are not part of the normal staging migration flow; teardown/reset is not approved by this PR, current staging must not be reset, and migration history must not be destructively replayed without explicit approval):
 
 ### Option A: Complete Project Reset
 If there is no critical test data:
@@ -134,19 +134,17 @@ DROP TABLE IF EXISTS industry_categories CASCADE;
 DROP TABLE IF EXISTS disciplines CASCADE;
 DROP TABLE IF EXISTS programs CASCADE;
 ```
-After executing the teardown, repeat Steps 1 through 4 to apply the schema clean.
+After a separately approved teardown, apply the complete sequence in order: 0001, 0002, 0003, 0004, 0005, 0006, followed by read-only verification.
 
 ---
 
-## Administrative User Provisioning in Staging
+## Safe Initial Administrator Onboarding Flow
 
-Staging operates on administrators invited through Supabase Auth. Since self-registration is disabled, you must configure the invitation flow, accept the invitation, set the password, and then link the user.
-
-### Safe Initial Onboarding Flow
-
-All administrative user provisioning in the staging environment must go through the guarded bootstrap linking script as documented in:
+Initial administrator provisioning in a fresh isolated environment must use the guarded initial-bootstrap workflow as documented in:
 
 [./staging-admin-bootstrap.md](./staging-admin-bootstrap.md)
+
+*Note for Current Staging:* Current staging (`capstone-admin-cms-staging-2026`) has already completed its initial administrator bootstrap (`CREATED`). Do not rerun the initial bootstrap to add another person. Provisioning additional university staff remains a separate future workflow.
 
 > [!WARNING]
 > * **DO NOT** paste the Auth UUID directly into manual SQL editor queries.
@@ -155,7 +153,7 @@ All administrative user provisioning in the staging environment must go through 
 > * **DO NOT** run the linking operation when zero or multiple Auth matches exist.
 > * **No automatic Auth-user deletion is allowed.**
 
-Follow this exact safe sequence to provision the initial administrator:
+Follow this exact safe sequence to provision the initial administrator in a fresh isolated setup:
 
 1. **Complete the secure invitation and password setup:** Follow the two-step flow from the email link to private password setup, routing to `/auth/confirm/accept` and then `/auth/set-password`.
 2. **Confirm exactly one Auth user exists:** Verify the user is registered in `auth.users` in Supabase with status verified.

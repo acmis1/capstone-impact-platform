@@ -30,7 +30,7 @@ This document records the sanitized operational verification evidence for the in
     *   Execution revoked from `PUBLIC` (migration contract): `true`
     *   Execution denied to `anon` (live SQL check): `true`
     *   Execution denied to `authenticated` (live SQL check): `true`
-    *   Execution granted exclusively to `service_role` (live SQL check): `true`
+    *   Execution allowed for `service_role` (live SQL check): `true` (Application-role execution is restricted to service_role by the migration contract)
     *   Pre-bootstrap `admin_users` row count: `0`
     *   Pre-bootstrap `user_roles` row count: `0`
 

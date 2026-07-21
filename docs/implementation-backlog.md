@@ -14,7 +14,7 @@ This document maps out the completed project baseline, foundations present, and 
 ---
 
 ## 2. Priority 0 — Remaining Auth, Roles, and Governance Work
-*   **School-Approved Identity Provisioning**: Onboard remaining university staff identities into Supabase Auth and link them via guarded bootstrap.
+*   **School-Approved Identity Provisioning**: Design, implement and verify a separately approved multi-user administrator provisioning workflow for additional school staff. The existing `bootstrap_initial_admin` operation is restricted to the first administrator and same-identity idempotent recovery.
 *   **Role Acceptance Testing**: Verify reviewer and editor role matrices, RLS policies, and mutation permissions.
 *   **Session Governance**: Test session-expiry timing, CSRF protection, and audit record attribution during project mutations.
 *   **Staff UAT & Handover**: Conduct non-technical staff usability testing and transfer project ownership.
