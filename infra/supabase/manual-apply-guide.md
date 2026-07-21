@@ -92,7 +92,7 @@ The migrations must be applied in the exact order below:
 1. Click **New query** to open a clean editor workspace.
 2. Open the file **`migrations/0006_fix_initial_admin_bootstrap_runtime.sql`** and copy its content.
 3. Paste it into the SQL Editor and click **Run**.
-4. This replaces `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim` to resolve the PL/pgSQL runtime `undefined_function` exception (`42883`).
+4. This replaces `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim` as the strongest supported code-level fix for the PL/pgSQL RPC failure.
 
 ### Step 7: Sequence Verification
 1. **Schema & Permission Verification:** Perform a read-only audit of the database tables, schema privileges, and functions to ensure everything is correct.

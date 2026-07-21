@@ -7,6 +7,7 @@ export type BootstrapResult =
   | "MULTIPLE_AUTH_MATCHES"
   | "DATABASE_FUNCTION_UNDEFINED"
   | "DATABASE_FUNCTION_NOT_FOUND"
+  | "DATABASE_FUNCTION_AMBIGUOUS"
   | "DATABASE_PERMISSION_FAILURE"
   | "DATABASE_CONSTRAINT_FAILURE"
   | "DATABASE_BOOTSTRAP_FAILURE";
@@ -77,8 +78,11 @@ export function mapDatabaseError(error: unknown): BootstrapResult {
   if (code === "42883" || (message.includes("function") && message.includes("does not exist"))) {
     return "DATABASE_FUNCTION_UNDEFINED";
   }
-  if (code === "PGRST202" || code === "PGRST203") {
+  if (code === "PGRST202") {
     return "DATABASE_FUNCTION_NOT_FOUND";
+  }
+  if (code === "PGRST203") {
+    return "DATABASE_FUNCTION_AMBIGUOUS";
   }
   if (code === "42501" || message.includes("permission denied") || message.includes("insufficient privilege")) {
     return "DATABASE_PERMISSION_FAILURE";

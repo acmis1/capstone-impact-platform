@@ -353,6 +353,32 @@ describe("Staging Admin Bootstrap Runner", () => {
     expect(result.rpcCalled).toBe("YES");
   });
 
+  it("should map PostgREST PGRST203 ambiguous function to DATABASE_FUNCTION_AMBIGUOUS", async () => {
+    const mockListUsers = vi.fn().mockResolvedValue({
+      data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
+      error: null
+    });
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "PGRST203", message: "More than one function matches given parameters" }
+    });
+    const client = {
+      auth: { admin: { listUsers: mockListUsers } },
+      rpc: mockRpc
+    } as unknown as InjectedSupabaseClient;
+
+    const result = await executeStagingAdminBootstrap({
+      client,
+      email: "admin@example.com",
+      fullName: "Admin User",
+      confirmation: "LINK_EXISTING_STAGING_ADMIN"
+    });
+
+    expect(result.classification).toBe("DATABASE_FUNCTION_AMBIGUOUS");
+    expect(result.provisioned).toBe(0);
+    expect(result.rpcCalled).toBe("YES");
+  });
+
   it("should map PostgreSQL 42501 permission error to DATABASE_PERMISSION_FAILURE", async () => {
     const mockListUsers = vi.fn().mockResolvedValue({
       data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
