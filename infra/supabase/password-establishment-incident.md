@@ -58,3 +58,13 @@ FORMDATA_SECURITY_POLICY_CLAIM_REMOVED=true
 3. The recipient opens `/auth/set-password` or accepts an invitation.
 4. Enters or autofills matching credentials and submits the form.
 5. Successful update signs out the invitation session and redirects to `/login?status=PASSWORD_SET`.
+
+## 7. Incident Resolution & Operational Closure
+
+- **Operational Status:** Operationally Resolved.
+- **Verification Summary:**
+  - The replacement invitation acceptance and password establishment flow on `/auth/set-password` succeeded without returning `PASSWORD_EMPTY`.
+  - The temporary invitation session was signed out cleanly and the browser reached `/login?status=PASSWORD_SET`.
+  - Staging administrator bootstrap linkage (`bootstrap_initial_admin`) subsequently succeeded after applying corrective migration 0006 (`CREATED`, `provisioned=1`).
+  - Manual browser authentication testing succeeded in Edge, verifying successful dashboard access to `/admin` and `/admin/imports`, header rendering with the ADMIN role, and clean logout redirection.
+  - Zero passwords, tokens, keys, or credentials were logged or recorded.

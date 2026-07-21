@@ -6,7 +6,7 @@ This document defines the core architecture, data flows, and immutable technical
 
 ## 1. Purpose and Status
 *   **Status**: `CONFIRMED` / `IMPLEMENTED FOUNDATION`
-*   **Purpose**: Establish the architectural framework to bridge school-managed project data with the public Duda showcase. Schema, repository, storage, validation, and publishing foundations exist for the standalone admin system, and the feasibility prototype has been successfully verified. Operational staging activation and verification remain pending; no real production readiness is claimed.
+*   **Purpose**: Establish the architectural framework to bridge school-managed project data with the public Duda showcase. Schema, repository, storage, validation, and publishing foundations exist for the standalone admin system, and the feasibility prototype has been successfully verified. Initial administrator authentication has been operationally verified in the isolated Admin/CMS staging environment. Broader project ingestion, review, multi-role authorization, RLS acceptance, publication, Duda cutover and staff UAT remain pending.
 
 ---
 
@@ -46,7 +46,7 @@ Standard Project Package / Excel
 
 ## 5. Environment and Repository Isolation
 *   **Prototype Isolation**: The Prototype is isolated historical/feasibility evidence. It resides under `/Prototype` and must never share code or helper modules with `/apps/admin-cms`.
-*   **Supabase Project Isolation**: The Prototype recovery project uses its own Supabase instance. The production-oriented Admin/CMS must use the separate `capstone-impact-staging` environment and must **never** connect to or use the Prototype recovery Supabase project.
+*   **Supabase Project Isolation**: The Prototype recovery project uses its own Supabase instance. The production-oriented Admin/CMS must use the separate `capstone-admin-cms-staging-2026` environment and must **never** connect to or use the Prototype recovery Supabase project.
 
 ---
 
@@ -81,6 +81,7 @@ Standard Project Package / Excel
 *   The `main` branch is the repository source of truth. Verified deployment commits and historical promotion SHAs are recorded in the Prototype recovery/deployment runbooks and Git history.
 *   The Render Prototype service is verified Live with HTTP 200, serving 10 internal projects and 6 public-feed projects.
 *   The Duda authenticated test-site listing and detail pages have been manually verified by the user as functional.
+*   Initial administrator authentication (`auth.users` -> `admin_users`), `bootstrap_initial_admin` execution (`CREATED`), `npm run check:admin-auth` (`READY_FOR_MANUAL_LOGIN_TEST`), and dashboard login/logout have been operationally verified in isolated staging (`capstone-admin-cms-staging-2026`).
 
 ---
 

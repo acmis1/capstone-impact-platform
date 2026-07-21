@@ -24,12 +24,13 @@ Ensure that administrative workflows, student project data, and public showcase 
 
 | Security Control | Scope / Description | Status |
 | :--- | :--- | :--- |
-| **Auth Identity Migrations** | Supabase authentication schema and admin users role migrations in code | `SCAFFOLDED` |
-| **Claims/Session Authorization Helper** | Verification of admin roles and permission checks via requireAdmin helper | `SCAFFOLDED` |
-| **Protected Layout & Route guards** | Protected admin layout and API route session validation guards | `SCAFFOLDED` |
-| **Live Session Verification** | Live identity provisioning and session verification check | `PENDING ACTIVATION` |
+| **Auth Identity Migrations** | Supabase authentication schema and admin users role migrations in code (`0001` - `0006`) | `VERIFIED (STAGING)` |
+| **Claims/Session Authorization Helper** | Verification of admin roles and permission checks via requireAdmin helper | `VERIFIED (STAGING)` |
+| **Protected Layout & Route guards** | Protected admin layout and API route session validation guards | `VERIFIED (STAGING)` |
+| **Live Session Verification** | Live initial identity provisioning and session verification check (`capstone-admin-cms-staging-2026`) | `VERIFIED (STAGING)` |
+| **Service-Role Client Isolation** | Server-only administrative client wrapper (`admin.ts`) with `server-only` guards | `VERIFIED (STAGING)` |
 | **RLS Policy Definitions** | Supabase RLS policies defined in migrations | `SCAFFOLDED` |
-| **RLS Staging Verification** | Effective RLS verification in capstone-impact-staging environment | `PENDING ACTIVATION` |
+| **RLS Staging Verification** | Effective full RLS verification across reviewer/editor role matrix | `PENDING MULTI-ROLE UAT` |
 | **Public Feed Compiler & Validator** | Stripping admin metadata, compiling and validating approved/published JSON | `IMPLEMENTED` |
 | **Configurable private/public media workflow** | Storing drafts in project-drafts-private and approved posters in public bucket | `SCAFFOLDED` |
 | **Institutional account handover** | Cloud resource ownership transfer to school-controlled aliases | `REQUIRED` |
@@ -43,9 +44,10 @@ Ensure that administrative workflows, student project data, and public showcase 
 ---
 
 ## 5. Authentication and Authorization Status
-*   **CMS Authentication**: Administrative authentication, permission checks, server-side route guards, and Role-Based Access Control (RBAC) schemas exist in repository code. However, live activation and real staging-session verification remain `PENDING ACTIVATION`.
-*   **Environment Lock**: Staging auth verification and session checks must be executed against the separate `capstone-impact-staging` environment. The Prototype recovery project **must never** be used for admin authentication.
-*   **Least Privilege Credentials**: Supabase `service_role` keys are backend-only and their usage must be minimized. Under no circumstances may they be exposed in client bundles or public repositories.
+*   **CMS Authentication**: Initial administrator authentication operationally verified in isolated staging (`capstone-admin-cms-staging-2026`). Full reviewer/editor RBAC matrices and multi-role RLS policy checks remain scheduled for future UAT.
+*   **Environment Lock**: Staging auth verification and session checks executed against the separate `capstone-admin-cms-staging-2026` environment in Singapore. The Prototype recovery project **was not used during this activation and must not be used** for Admin/CMS authentication.
+*   **Least Privilege Credentials**: Supabase `service_role` keys are backend-only and their usage is isolated in server-only modules (`import 'server-only'`). Static client bundle scanning confirmed zero service-role keys or secret names exist in frontend assets.
+*   **Migration Technical Debt**: This staging database currently follows the established manually applied version-controlled migration process (`0001` through `0006`). Future delivery should adopt a standard Supabase CLI/CI migration workflow through a separately planned task. Migration-history reconciliation is intentionally not part of this closure PR.
 
 ---
 

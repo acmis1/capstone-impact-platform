@@ -8,26 +8,20 @@ This document maps out the completed project baseline, foundations present, and 
 *   **Prototype Recovery**: Successful database recovery (10 project records, 6 public-feed records) and poster repairs completed.
 *   **Render Deployment**: Prototype web service successfully deployed from `main` branch to Render and confirmed Live.
 *   **Duda Test-Site Verification**: Client-side listing and detail rendering manually verified on the Duda test-site.
-*   **Admin CMS Foundation**: Modular Next.js app structure, TypeScript domain models, database migrations (`0001` - `0003`), feed compiler, public schema validator, mock fixtures, and unit tests have been successfully built and verified in `main`.
+*   **Admin CMS Foundation**: Modular Next.js app structure, TypeScript domain models, database migrations (`0001` - `0006`), feed compiler, public schema validator, mock fixtures, and unit tests have been successfully built and verified in `main`.
+*   **Initial Admin Authentication Activation (Staging)**: Initial administrator authentication operationally verified in isolated staging (`capstone-admin-cms-staging-2026`).
 
 ---
 
-## 2. Foundations Present but Not Operationally Activated
-*   **Admin Authentication**: Server-side admin route guards, session validation, permission checks, and auth migrations exist in repository code, but real staging identities, environment activation, and successful manual login verification remain pending.
+## 2. Priority 0 — Remaining Auth, Roles, and Governance Work
+*   **School-Approved Identity Provisioning**: Design, implement and verify a separately approved multi-user administrator provisioning workflow for additional school staff. The existing `bootstrap_initial_admin` operation is restricted to the first administrator and same-identity idempotent recovery.
+*   **Role Acceptance Testing**: Verify reviewer and editor role matrices, RLS policies, and mutation permissions.
+*   **Session Governance**: Test session-expiry timing, CSRF protection, and audit record attribution during project mutations.
+*   **Staff UAT & Handover**: Conduct non-technical staff usability testing and transfer project ownership.
 
 ---
 
-## 3. Priority 0 — Admin Identity and Environment Activation
-*   **Staging Activation**: Activate the Admin/CMS against the separate `capstone-impact-staging` environment (never use the Prototype recovery Supabase project).
-*   **Identity Provisioning**:
-    *   Provision school-approved identities in Supabase Auth, link them to `admin_users`, and assign recognized roles.
-    *   Prohibit public self-registration.
-    *   Verify real staging sessions without printing credentials.
-*   **Staging Verification**: Confirm staging auth readiness checks, perform manual login tests, check protected pages and APIs, verify PostgreSQL Row-Level Security (RLS) tables, and verify server-only credentials.
-
----
-
-## 4. Priority 1 — Submission, Cross-Check, Preview, and Student Confirmation
+## 3. Priority 1 — Submission, Cross-Check, Preview, and Student Confirmation
 *   **Folder Ingestion**: Bulk folder uploads reading project structure and asset packages.
 *   **Excel Cross-Check**: Build the administrative parser matching column headers in `project-details.xlsx` against database fields.
 *   **Student Preview Link**: Generate token-based, private, secure preview URLs for student groups, with preview-token expiry and revocation rules.
@@ -42,7 +36,7 @@ This document maps out the completed project baseline, foundations present, and 
 
 ---
 
-## 5. Priority 2 — AI/OCR and Accessibility Workflow
+## 4. Priority 2 — AI/OCR and Accessibility Workflow
 *   **OCR Poster-Text Extraction**: Extract text from poster PDF files to pre-fill metadata fields.
 *   **Full-Text Accessibility Alternatives**: Generate complete reviewed text descriptions for images and posters.
 *   **Spelling and Grammar**: Spelling and grammar assistance on extracted or manual text.
@@ -57,7 +51,7 @@ This document maps out the completed project baseline, foundations present, and 
 
 ---
 
-## 6. Priority 3 — Approval, Publication, Archive, History, and Rollback
+## 5. Priority 3 — Approval, Publication, Archive, History, and Rollback
 *   **Approval Gate**: Controlled editing of approved/published database records. Changes require revalidation and, where appropriate, reapproval before republishing.
 *   **Staged Publication**: Compiling eligible approved and published records into `capstones-latest.json` and uploading it to public Supabase Storage, with safe publication failure handling.
 *   **Archive and Unpublish**: Mark projects as archived, removing them from the public feed compilation while preserving history in PostgreSQL.
@@ -67,7 +61,7 @@ This document maps out the completed project baseline, foundations present, and 
 
 ---
 
-## 7. Priority 4 — UAT, Performance, Staff Handover, and Success Measurement
+## 6. Priority 4 — UAT, Performance, Staff Handover, and Success Measurement
 *   **Accessibility Compliance Check**: Perform accessibility keyboard and screen-reader tests on Duda and Admin UI.
 *   **Performance & Scaling Verification**: Load-test database queries and file storage bandwidth under a target of at least **100 projects per year**.
 *   **Non-technical Staff UAT**: Conduct usability testing with school administrative staff.
@@ -85,12 +79,12 @@ This document maps out the completed project baseline, foundations present, and 
 
 ---
 
-## 8. Optional Enhancements
+## 7. Optional Enhancements
 *   **Community Voting**: Embed optional student and visitor voting widgets on Duda pages (must not block the core publishing path).
 
 ---
 
-## 9. Open Institutional Decisions
+## 8. Open Institutional Decisions
 *   **Long-Term Operational Owner**: Handover target alias.
 *   **Data and Public-Asset Retention**: Policy regarding how many semesters of data are kept in storage before archiving.
 *   **Approved Email Delivery Arrangement**: Approved university mail server / SMTP endpoint.
@@ -100,7 +94,7 @@ This document maps out the completed project baseline, foundations present, and 
 
 ---
 
-## 10. Definition of Done
+## 9. Definition of Done
 A backlog item is defined as done when it meets the following criteria.
 
 ### Universal Completion Requirements
@@ -114,7 +108,7 @@ A backlog item is defined as done when it meets the following criteria.
 ### Additional Requirements (Where Applicable)
 *(Note: "Where applicable" applies only to requirements genuinely relevant to the specific backlog item, not to the universal definition of done).*
 1.  Typed Next.js/TypeScript implementation.
-2.  PostgreSQL database migrations applied to `capstone-impact-staging`.
+2.  PostgreSQL database migrations applied to `capstone-admin-cms-staging-2026`.
 3.  Unit and integration tests pass (Vitest).
 4.  Accessibility compliance testing.
 5.  Administrative staff UAT and staging acceptance signed off.

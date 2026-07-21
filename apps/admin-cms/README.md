@@ -65,7 +65,7 @@ Then execute standard scripts:
 ## 📂 Codebase Architecture
 
 The staging foundation is structured as follows:
-*   `infra/supabase/` — Database migrations (`0001_staging_schema.sql`, `0002_staging_rls_policies.sql`) and manual apply guidelines.
+*   `infra/supabase/` — Database migrations (`0001` through `0006`) and manual apply guidelines.
 *   `src/app/` — App Router landing pages, status dashboards, and API endpoints (`/api/health`, `/api/projects`).
 *   `src/domain/` — Relational domain models mapping Projects, MediaAssets, and WorkflowStates cleanly to eradicate unstructured JSON blobs.
 *   `src/repositories/` — Decoupled repository patterns (`ProjectRepository`, `SupabaseProjectRepository`) for DB operations.
@@ -83,9 +83,9 @@ The staging foundation is structured as follows:
 
 ## 💾 Database Schema & Administrative Authentication
 
-The staging database schema and authentication guards are fully scaffolded:
+The staging database schema and initial authentication guards are scaffolded and verified:
 
-1. **Schema Migrations:** Apply `infra/supabase/migrations/0001_staging_schema.sql`, `0002_staging_rls_policies.sql`, `0003_admin_auth_identity.sql`, and `0004_explicit_data_api_grants.sql` to your project in order using the Supabase SQL Editor. See [manual-apply-guide.md](../../infra/supabase/manual-apply-guide.md) for details.
+1. **Schema Migrations:** Apply `infra/supabase/migrations/0001_staging_schema.sql` through `0006_fix_initial_admin_bootstrap_runtime.sql` to your project in order using the Supabase SQL Editor. See [manual-apply-guide.md](../../infra/supabase/manual-apply-guide.md) for details.
    * **0004_explicit_data_api_grants.sql:** Establishes explicit Data API grants. Postgres grants control whether a schema role can reach a table/object, whereas RLS controls row-level access once authorized.
    * **Access Model:**
      * `anon`: No privileges or access on any Admin/CMS table. Automatic table exposure is disabled.
@@ -93,17 +93,18 @@ The staging database schema and authentication guards are fully scaffolded:
      * `service_role`: Full administrative CRUD (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) on all 13 tables. The `SUPABASE_SERVICE_ROLE_KEY` / secret key must remain strictly server-side and never be exposed to browser code.
      * **Defaults:** Automatic privileges on future public schema objects are disabled. All future objects require explicit reviewed migrations.
    * **Safety WARNING:** No migration or database commands should ever target the Prototype recovery project.
-2. **Identity Linkage (Migration 0003):** Adds the `auth_user_id UUID` column to `admin_users` linked to `auth.users(id)` to bind Auth identities.
-3. **No Public Registration:** Self-registration is disabled. Staging admins must be manually provisioned in the Supabase Dashboard and linked via SQL. (Staging database configurations and login flows are not operationally verified until these migrations are applied).
+2. **Identity Linkage & Guarded Bootstrap:** Migration 0003 adds `auth_user_id UUID` to `admin_users` linked to `auth.users(id)`. Migrations 0005 and 0006 register `public.bootstrap_initial_admin` to transactionalize initial identity linkage securely under `service_role`.
+3. **Operational Activation:** Initial administrator authentication operationally verified in isolated staging (`capstone-admin-cms-staging-2026`). One initial administrator profile and `admin` role have been linked via `npm run link:admin-staging`. Manual browser login/logout and protected route checks (`/admin`, `/admin/imports`, `/api/projects`) passed cleanly in Edge. Self-registration remains disabled. Staging database currently contains zero project rows, and production Duda remains disconnected.
 4. **Client Distinctions:**
    * **Administrative Database Client (`admin.ts`):** Safe, server-only client using `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS. Only invoked *after* session authorization succeeds.
    * **Session Server Client (`server.ts`):** Bound to Next.js cookie headers via `@supabase/ssr` `createServerClient`. Used for cookie authentication checks.
    * **Session Browser Client (`client.ts`):** Standard web client using public keys for client-side Auth helper triggers.
 
 ### 👥 Role-Based Access Control (RBAC)
-*   **`admin`**: Full access to view, edit, review, and archive showcases.
-*   **`reviewer`**: Read and review (approve/request changes) rights. Cannot archive or edit.
-*   **`editor`**: Read and edit rights. Cannot review or archive.
+Role definitions exist in code (`admin`, `reviewer`, `editor`). Currently, only the initial `admin` role has been operationally verified in staging. Live provisioning and permission-matrix acceptance for `reviewer` and `editor` roles remain pending.
+*   **`admin`**: Full access to view, edit, review, and archive showcases. (Verified)
+*   **`reviewer`**: Read and review (approve/request changes) rights. Cannot archive or edit. (Pending UAT)
+*   **`editor`**: Read and metadata edit rights. Cannot approve or archive. (Pending UAT)
 
 ### 🛡️ Protected Routes & APIs
 *   **Protected Pages (`/admin/**/*`)**: Inherit the root layout guard at [layout.tsx](src/app/admin/layout.tsx), redirecting unauthorized users to `/login`.
