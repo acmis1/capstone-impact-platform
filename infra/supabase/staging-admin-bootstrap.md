@@ -78,6 +78,15 @@ Follow these steps once the replacement invitation flow has been completed and v
 
 ## Rollback & Recovery Guidance
 
+- **First Live Incident & Recovery**:
+  - The first live bootstrap attempt matched exactly one invited Supabase Auth user, but returned a database failure (`DATABASE_BOOTSTRAP_FAILURE` / `DATABASE_FUNCTION_UNDEFINED` caused by `pg_catalog.trim` in migration 0005).
+  - No automatic retry was performed.
+  - The read-only checker (`npm run check:admin-auth`) confirmed 0 administrator rows and 0 role assignments (`INCOMPLETE` / `NO_LINKED_ADMIN`), proving atomic rollback.
+  - Corrective migration `0006_fix_initial_admin_bootstrap_runtime.sql` replaces `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim`.
+  - Migration 0006 must be reviewed, merged, and manually applied to live Supabase before any subsequent bootstrap attempt.
+  - A new explicit operator approval is required before running `npm run link:admin-staging` again.
+  - No manual direct database insertion into `admin_users` or `user_roles` is permitted.
+
 - **Auth User Deletion**: Never delete the Supabase Auth user automatically.
 - **Migration History**: Never rerun migration history destructively.
 - **Idempotency**: Running the bootstrap operation on an already completed setup returns `ALREADY_PROVISIONED` safely without modifications.
