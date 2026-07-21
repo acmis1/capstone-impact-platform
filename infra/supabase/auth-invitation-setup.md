@@ -78,3 +78,6 @@ Always follow this sequence when onboarding the initial administrator:
 8. **Link administrator profile:** Execute the separately approved `link:staging-admin` bootstrap script.
 9. **Verify credentials status:** Run the `check:staging-auth` script.
 10. **Perform manual login test:** Attempt to sign in to the Console dashboard at `/login`.
+
+> [!NOTE]
+> **Staging Verification Status:** The two-step invitation acceptance (`/auth/confirm` -> `/auth/confirm/accept`), password establishment (`/auth/set-password`), and administrator bootstrap linkage (`bootstrap_initial_admin`) have been manually verified once in the isolated staging environment (`capstone-admin-cms-staging-2026`). General production certification across all browser configurations remains to be completed.

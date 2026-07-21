@@ -185,19 +185,19 @@ Expected permission matrix:
 
 ---
 
-## Phase J: Verification Evidence Log Template
+## Phase J: Verification Evidence Log
 
-Use the template below to document the test outcomes. Do not embed credentials or personal identifiers in the logs.
+The initial administrator authentication verification was executed in isolated staging (`capstone-admin-cms-staging-2026`) on **2026-07-21**:
 
 | Test ID | Test Date | Environment | Expected Outcome | Actual Outcome | Pass/Fail | Evidence Reference | Notes / Operator |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **VAL-001** | | Staging | Preflight exits 2 (missing column) | | | | |
-| **VAL-002** | | Staging | Preflight exits 2 (missing user) | | | | |
-| **VAL-003** | | Staging | Preflight exits 0 (admin linked) | | | | |
-| **VAL-004** | | Staging | Unprovisioned Auth user is denied, signed out and shown a generic message | | | | |
-| **VAL-005** | | Staging | Authenticated session loads /admin | | | | |
-| **VAL-006** | | Staging | Unauthenticated GET /api/projects: 401 | | | | |
-| **VAL-007** | | Staging | Missing/Cross-Origin POST mutation: 403 | | | | |
-| **VAL-008** | | Staging | Malformed comments/body payload: 400 | | | | |
-| **VAL-009** | | Staging | Audit record tracks admin_users.id | | | | |
-| **VAL-010** | | Staging | RBAC permission restrictions enforced | | | | |
+| **VAL-001** | 2026-07-21 | Staging | Preflight exits 2 (missing column) | Exit code 2 returned when migration pending | **PASS** | `checkStagingAuth.ts` | Historical baseline |
+| **VAL-002** | 2026-07-21 | Staging | Preflight exits 2 (missing user) | Exit code 2 (`NO_LINKED_ADMIN`) returned before bootstrap | **PASS** | `checkStagingAuth.ts` | Verified before linking |
+| **VAL-003** | 2026-07-21 | Staging | Preflight exits 0 (`READY_FOR_MANUAL_LOGIN_TEST`) | Exit code 0, 1 linked admin, 1 recognized role | **PASS** | `staging-auth-activation-evidence.md` | Verified post-bootstrap |
+| **VAL-004** | 2026-07-21 | Staging | Unprovisioned Auth user is denied, signed out | Denied access, temporary invitation session signed out | **PASS** | Edge browser verification | Two-step invite flow |
+| **VAL-005** | 2026-07-21 | Staging | Authenticated session loads `/admin` | `/admin`, header with ADMIN role, and `/admin/imports` loaded | **PASS** | Edge browser verification | Manual operator test |
+| **VAL-006** | 2026-07-21 | Staging | Unauthenticated `GET /api/projects`: 401 | Status HTTP 401 `Authentication required.` returned | **PASS** | Automated HTTP checks | Sanitized error response |
+| **VAL-007** | *Pending* | Staging | Missing/Cross-Origin POST mutation: 403 | *Pending multi-role mutation UAT* | *Pending* | | Requires project row |
+| **VAL-008** | *Pending* | Staging | Malformed comments/body payload: 400 | *Pending multi-role mutation UAT* | *Pending* | | Requires project row |
+| **VAL-009** | *Pending* | Staging | Audit record tracks `admin_users.id` | *Pending multi-role mutation UAT* | *Pending* | | Requires project row |
+| **VAL-010** | *Pending* | Staging | RBAC permission restrictions enforced | *Pending multi-role mutation UAT* | *Pending* | | Requires reviewer/editor roles |

@@ -30,9 +30,10 @@ Follow these step-by-step instructions to set up the staging database schema on 
 > [!NOTE]
 > **Current Environment & Staging Status:**
 > In the present staging environment (`capstone-admin-cms-staging-2026` located in Singapore):
-> - migrations 0001 through 0005 have already been manually applied and verified;
+> - migrations 0001 through 0006 have already been manually applied and read-only verified;
 > - the three Storage buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) have already been provisioned and verified;
-> - do not rerun migrations or provisioning merely because this guide exists;
+> - initial administrator bootstrap linkage has been completed (`CREATED`) and manually verified in Edge;
+> - do not rerun migrations or identity provisioning merely because this guide exists;
 > - reset, teardown, and destructive SQL require separate explicit approval.
 
 ---
@@ -46,7 +47,8 @@ The migrations must be applied in the exact order below:
 3. `0003_admin_auth_identity.sql`
 4. `0004_explicit_data_api_grants.sql`
 5. `0005_initial_admin_bootstrap.sql`
-6. Read-only verification before any seed or identity provisioning
+6. `0006_fix_initial_admin_bootstrap_runtime.sql`
+7. Read-only verification before any seed or identity provisioning
 
 ---
 

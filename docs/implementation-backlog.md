@@ -8,22 +8,20 @@ This document maps out the completed project baseline, foundations present, and 
 *   **Prototype Recovery**: Successful database recovery (10 project records, 6 public-feed records) and poster repairs completed.
 *   **Render Deployment**: Prototype web service successfully deployed from `main` branch to Render and confirmed Live.
 *   **Duda Test-Site Verification**: Client-side listing and detail rendering manually verified on the Duda test-site.
-*   **Admin CMS Foundation**: Modular Next.js app structure, TypeScript domain models, database migrations (`0001` - `0003`), feed compiler, public schema validator, mock fixtures, and unit tests have been successfully built and verified in `main`.
+*   **Admin CMS Foundation**: Modular Next.js app structure, TypeScript domain models, database migrations (`0001` - `0006`), feed compiler, public schema validator, mock fixtures, and unit tests have been successfully built and verified in `main`.
+*   **Initial Admin Authentication Activation (Staging)**: Initial administrator identity provisioning (`auth.users` -> `admin_users`), transactional bootstrap linkage (`bootstrap_initial_admin`), read-only readiness checks (`npm run check:admin-auth`), automated test suite, and manual browser login/logout checks in Edge have been operationally verified against isolated staging (`capstone-admin-cms-staging-2026`).
 
 ---
 
-## 2. Foundations Present but Not Operationally Activated
-*   **Admin Authentication**: Server-side admin route guards, session validation, permission checks, and auth migrations exist in repository code, but real staging identities, environment activation, and successful manual login verification remain pending.
+## 2. Priority 0 — Remaining Auth, Roles, and Governance Work
+*   **School-Approved Identity Provisioning**: Onboard remaining university staff identities into Supabase Auth and link them via guarded bootstrap.
+*   **Role Acceptance Testing**: Verify reviewer and editor role matrices, RLS policies, and mutation permissions.
+*   **Session Governance**: Test session-expiry timing, CSRF protection, and audit record attribution during project mutations.
+*   **Staff UAT & Handover**: Conduct non-technical staff usability testing and transfer project ownership.
 
 ---
 
-## 3. Priority 0 — Admin Identity and Environment Activation
-*   **Staging Activation**: Activate the Admin/CMS against the separate `capstone-impact-staging` environment (never use the Prototype recovery Supabase project).
-*   **Identity Provisioning**:
-    *   Provision school-approved identities in Supabase Auth, link them to `admin_users`, and assign recognized roles.
-    *   Prohibit public self-registration.
-    *   Verify real staging sessions without printing credentials.
-*   **Staging Verification**: Confirm staging auth readiness checks, perform manual login tests, check protected pages and APIs, verify PostgreSQL Row-Level Security (RLS) tables, and verify server-only credentials.
+## 3. Priority 1 — Submission, Cross-Check, Preview, and Student Confirmation
 
 ---
 
