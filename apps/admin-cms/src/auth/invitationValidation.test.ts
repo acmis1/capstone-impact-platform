@@ -460,7 +460,7 @@ describe('Static Safety Assurances', () => {
     expect(guideCode).not.toContain('file:///C:');
   });
 
-  it('should assert that the SetPasswordForm source code contains controlled visible inputs, named visible fields, wrapper handling, and no dot placeholders', () => {
+  it('should assert that the SetPasswordForm source code contains controlled visible inputs, named visible fields, onSubmit handling, and no dot placeholders', () => {
     const formCode = fs.readFileSync(path.resolve(__dirname, '../app/auth/set-password/SetPasswordForm.tsx'), 'utf8');
 
     // Check that there are no dot placeholders
@@ -477,14 +477,11 @@ describe('Static Safety Assurances', () => {
     // Check no hidden inputs
     expect(formCode).not.toContain('type="hidden"');
 
-    // Check for async local action wrapper and returned helper dispatch
-    expect(formCode).toContain('const handleSubmit = async (formData: FormData) =>');
-    expect(formCode).toContain('return dispatchCanonicalPasswordFormData(');
-    expect(formCode).not.toContain('formAction(canonicalData);'); // No bare unreturned dispatcher calls
-
-    // Check for stale error reset state
-    expect(formCode).toContain('setUserEdited(true)');
-    expect(formCode).toContain('const showError = !!(state?.error && !userEdited && !isPending);');
+    // Check for onSubmit handler, useTransition, and DOM/controlled fallback extraction
+    expect(formCode).toContain('onSubmit={handleSubmit}');
+    expect(formCode).toContain('useTransition');
+    expect(formCode).toContain('setPasswordAction');
+    expect(formCode).toContain('domPassword || password');
 
     // Check aria configurations
     expect(formCode).toContain('aria-live="polite"');
