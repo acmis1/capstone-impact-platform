@@ -1,40 +1,52 @@
 'use client';
 
-import React, { useActionState } from 'react';
+import React, { useTransition } from 'react';
 import { setPasswordAction } from './actions';
-import { dispatchCanonicalPasswordFormData } from './passwordFormData';
 
 export function SetPasswordForm() {
-  const [state, formAction, isPending] = useActionState(setPasswordAction, null);
   const [password, setPassword] = React.useState('');
   const [confirmation, setConfirmation] = React.useState('');
-  const [userEdited, setUserEdited] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
-  const handleSubmit = async (formData: FormData) => {
-    setUserEdited(false);
-    return dispatchCanonicalPasswordFormData(
-      formData,
-      { password, confirmation },
-      formAction
-    );
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+
+    const form = e.currentTarget;
+    const domPassword = (form.elements.namedItem('password') as HTMLInputElement)?.value || '';
+    const domConfirmation = (form.elements.namedItem('confirmation') as HTMLInputElement)?.value || '';
+
+    const finalPassword = domPassword || password;
+    const finalConfirmation = domConfirmation || confirmation;
+
+    startTransition(async () => {
+      const res = await setPasswordAction({
+        password: finalPassword,
+        confirmation: finalConfirmation,
+      });
+
+      if (res?.error) {
+        setError(res.error);
+      }
+    });
   };
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPassword(e.target.value);
-    setUserEdited(true);
+    if (error) setError(null);
   };
 
   const handleConfirmationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setConfirmation(e.target.value);
-    setUserEdited(true);
+    if (error) setError(null);
   };
 
-  const showError = !!(state?.error && !userEdited && !isPending);
-  const hasPasswordError = showError && (state?.error === 'PASSWORD_TOO_SHORT' || state?.error === 'PASSWORD_TOO_LONG' || state?.error === 'PASSWORD_EMPTY');
-  const hasConfirmationError = showError && (state?.error === 'CONFIRMATION_MISMATCH');
+  const hasPasswordError = !!error && (error === 'PASSWORD_TOO_SHORT' || error === 'PASSWORD_TOO_LONG' || error === 'PASSWORD_EMPTY');
+  const hasConfirmationError = !!error && (error === 'CONFIRMATION_MISMATCH');
 
   return (
-    <form action={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         <label htmlFor="password" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#9CA3AF' }}>
           New Password
@@ -93,7 +105,7 @@ export function SetPasswordForm() {
         />
       </div>
 
-      {showError && (
+      {error && (
         <div
           aria-live="polite"
           style={{
@@ -106,20 +118,20 @@ export function SetPasswordForm() {
             textAlign: 'center',
           }}
         >
-          {state.error === 'CONFIRMATION_MISMATCH' && 'Passwords do not match.'}
-          {state.error === 'PASSWORD_TOO_SHORT' && 'Password must be at least 12 characters.'}
-          {state.error === 'PASSWORD_TOO_LONG' && 'Password is too long.'}
-          {state.error === 'PASSWORD_EMPTY' && 'Password cannot be empty.'}
-          {state.error === 'UNAUTHENTICATED' && 'Session expired. Please request a new invitation.'}
-          {state.error === 'SESSION_TERMINATION_FAILED' && 'Failed to terminate the invitation session.'}
-          {state.error === 'PASSWORD_UPDATE_FAILED' && 'Failed to update password.'}
-          {state.error !== 'CONFIRMATION_MISMATCH' && 
-           state.error !== 'PASSWORD_TOO_SHORT' && 
-           state.error !== 'PASSWORD_TOO_LONG' && 
-           state.error !== 'PASSWORD_EMPTY' && 
-           state.error !== 'UNAUTHENTICATED' && 
-           state.error !== 'SESSION_TERMINATION_FAILED' &&
-           state.error !== 'PASSWORD_UPDATE_FAILED' && 
+          {error === 'CONFIRMATION_MISMATCH' && 'Passwords do not match.'}
+          {error === 'PASSWORD_TOO_SHORT' && 'Password must be at least 12 characters.'}
+          {error === 'PASSWORD_TOO_LONG' && 'Password is too long.'}
+          {error === 'PASSWORD_EMPTY' && 'Password cannot be empty.'}
+          {error === 'UNAUTHENTICATED' && 'Session expired. Please request a new invitation.'}
+          {error === 'SESSION_TERMINATION_FAILED' && 'Failed to terminate the invitation session.'}
+          {error === 'PASSWORD_UPDATE_FAILED' && 'Failed to update password.'}
+          {error !== 'CONFIRMATION_MISMATCH' &&
+           error !== 'PASSWORD_TOO_SHORT' &&
+           error !== 'PASSWORD_TOO_LONG' &&
+           error !== 'PASSWORD_EMPTY' &&
+           error !== 'UNAUTHENTICATED' &&
+           error !== 'SESSION_TERMINATION_FAILED' &&
+           error !== 'PASSWORD_UPDATE_FAILED' &&
            'An unexpected error occurred.'}
         </div>
       )}

@@ -18,12 +18,38 @@ import { redirect } from 'next/navigation';
  * - Invokes redirect strictly outside the try/catch block.
  * - Never logs or exposes raw password values or user identity.
  */
-export async function setPasswordAction(prevState: unknown, formData: FormData) {
-  const rawPassword = formData.get('password');
-  const rawConfirmation = formData.get('confirmation');
+export interface PasswordUpdateInput {
+  password?: string;
+  confirmation?: string;
+}
 
-  const password = typeof rawPassword === 'string' ? rawPassword : '';
-  const confirmation = typeof rawConfirmation === 'string' ? rawConfirmation : '';
+export async function setPasswordAction(
+  inputOrPrevState: PasswordUpdateInput | FormData | unknown,
+  formDataArg?: FormData
+) {
+  let password = '';
+  let confirmation = '';
+
+  let formData: FormData | null = null;
+  let payload: PasswordUpdateInput | null = null;
+
+  if (formDataArg instanceof FormData) {
+    formData = formDataArg;
+  } else if (inputOrPrevState instanceof FormData) {
+    formData = inputOrPrevState;
+  } else if (inputOrPrevState && typeof inputOrPrevState === 'object') {
+    payload = inputOrPrevState as PasswordUpdateInput;
+  }
+
+  if (formData) {
+    const rawPassword = formData.get('password');
+    const rawConfirmation = formData.get('confirmation');
+    password = typeof rawPassword === 'string' ? rawPassword : '';
+    confirmation = typeof rawConfirmation === 'string' ? rawConfirmation : '';
+  } else if (payload) {
+    password = typeof payload.password === 'string' ? payload.password : '';
+    confirmation = typeof payload.confirmation === 'string' ? payload.confirmation : '';
+  }
 
   // 1. Validate before constructing the Supabase client
   const validation = validatePasswordUpdate({ password, confirmation });
