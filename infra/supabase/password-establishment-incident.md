@@ -1,71 +1,60 @@
 # Password Establishment Incident Investigation and Resolution
 
-## 1. User-Visible Symptom
+## 1. Confirmed Observations
 
-During administrator invitation acceptance on `/auth/set-password`, submitting visibly populated password fields repeatedly returned:
-`Password cannot be empty.`
-The fields remained populated with browser password dots, no redirect to `/login?status=PASSWORD_SET` occurred, and password establishment failed.
+During administrator invitation acceptance on `/auth/set-password`:
+- Submitting visibly populated password fields produced `PASSWORD_EMPTY`.
+- The application-submitted values diverged from the visual presentation in the browser.
+- React controlled state can remain empty when browser autofill or input restoration does not trigger synthetic input/change events.
+- The previous fallback combination produced an empty server payload in the reproduced diagnostic harness.
+- `PASSWORD_EMPTY` was returned by server-side input validation *before* any Supabase API call or client construction occurred. Supabase Auth and database policies were **not** reached for that failure.
 
-## 2. Timeline of Approaches
+## 2. Evidence and Technical Analysis
 
-1. **Initial Implementation:** Named uncontrolled password inputs using native `FormData` serialization via `useActionState`. Failed when browser password manager autofill or submission behavior produced empty `FormData` strings.
-2. **First Revision (PR #18):** Introduced controlled visible inputs with hidden canonical fields. Continued to fail on real Edge browser retries.
-3. **Second Revision (PR #19):** Returned/awaited the `useActionState` dispatcher in an async client wrapper and hid stale errors on input change. Still returned `PASSWORD_EMPTY` on Edge retries.
-4. **Final Architecture (Evidence-Backed Fix):** Replaced `useActionState` and native `FormData` serialization with Architecture D: direct typed Server Action invocation (`setPasswordAction({ password, confirmation })`) using React `useTransition` and an explicit `onSubmit` handler.
+The confirmed failure boundary was client-side credential extraction before the Server Action's validation. Browser-populated visible values were not reliably represented in the React or FormData sources used by prior implementations.
 
-## 3. Confirmed Root Cause
+Because the exact browser-internal runtime mechanism for every real Edge retry was not independently observable, the permanent solution removes reliance on native `FormData` serialization and un-triggered React state by:
+1. Extracting the current DOM input values (`passwordRef.current?.value`) at submit time via element refs.
+2. Using controlled React component state as a fallback if DOM refs are empty.
+3. Transmitting credentials using a strict typed object payload (`setPasswordAction({ password, confirmation })`).
+4. Preventing duplicate submissions synchronously using a `useRef` lock.
 
-When Microsoft Edge Password Manager (or Chromium autofill) populates visual password fields:
-1. Edge autofills the DOM input values without firing React's synthetic `onChange` event, leaving controlled React state as an empty string (`""`).
-2. Chromium security policy restricts autofilled password fields from serializing values into script-constructed `FormData` objects (`new FormData(form)`) unless direct user keypress events occur on the fields, returning an empty string (`""`).
-3. Dual-source canonicalization checking `nativeFormData.get('password')` (empty string) and falling back to React state (empty string) resulted in sending `password = ""` to the server.
-4. The server validated the input, returned `PASSWORD_EMPTY`, while the browser DOM visually retained the autofilled password dots.
+FORMDATA_SECURITY_POLICY_CLAIM_REMOVED=true
 
-## 4. Rejected Hypotheses
+## 3. Timeline of Solution Iterations
 
-- **Old Client Bundle / Caching (H1, H2):** Rejected. Build markers confirmed fresh JavaScript chunk execution.
-- **Form Action Non-Execution (H7, H8):** Rejected. Client and server action execution logs confirmed dispatch occurred.
-- **Server Action Transport Error (H10):** Rejected. Payload was transmitted accurately according to what the client produced.
-- **Supabase Session or Auth Failure (H15, H16, H17):** Rejected. Server-side validation failed *before* any Supabase client construction or `updateUser` API invocation occurred.
-- **Hydration Failure (H14):** Rejected. React hydrated cleanly with zero console warnings.
+1. **Initial Implementation:** Named uncontrolled password inputs using native `FormData` serialization via `useActionState`.
+2. **First Revision (PR #18):** Introduced controlled visible inputs with hidden canonical fields.
+3. **Second Revision (PR #19):** Wrapped the `useActionState` dispatcher in an async client function and hid stale errors on input edit.
+4. **Final Architecture (Strict Typed Action + Submit-Time DOM Extraction):** Replaced `useActionState` and native `FormData` serialization with Architecture D:
+   - Direct typed Server Action invocation (`setPasswordAction({ password, confirmation })`).
+   - Form `onSubmit` event handler with `e.preventDefault()`.
+   - Submit-time DOM extraction using input `useRef` handles.
+   - Synchronous submission lock (`submissionLockRef`).
+   - React `useTransition` (`isPending`) for pending state.
+   - Handled action rejections cleanly to prevent unhandled promise rejections.
 
-## 5. Supabase Relevance
+## 4. Security Properties
 
-Supabase Auth and session management were **not** the cause of the `PASSWORD_EMPTY` error. The error occurred purely at the client-to-server input extraction layer before Supabase APIs were invoked.
-
-## 6. Final Architecture
-
-- **Submission Model:** Direct typed Server Action invocation (`setPasswordAction({ password, confirmation })`) wrapped in an `onSubmit` event handler with `e.preventDefault()`.
-- **Input Value Extraction:** Extracts values directly from DOM input elements (`(form.elements.namedItem('password') as HTMLInputElement)?.value`) with fallback to controlled React component state.
-- **Pending State:** Uses React `useTransition` (`isPending`) for clean non-blocking UI state management.
-- **Error Handling:** Stores sanitized server error codes in local React state, automatically clearing stale errors when inputs are edited.
-
-## 7. Security Properties
-
-- **No Secrets in URLs:** Credentials are sent via POST payload only.
-- **No Client Logging:** Raw password strings are never printed or logged.
-- **No Unsanitized Errors:** Raw Supabase exceptions are mapped to safe enum codes.
+- **No Credentials in URLs:** Sent strictly via POST body payload.
+- **No Client Logging:** Raw credentials are never printed to console or logs.
+- **Strict Server Input Guard:** `setPasswordAction` validates that input is a non-array, non-FormData object containing valid string properties before invoking validation.
 - **Server-Side Validation:** Pure validation module validates input before client creation.
 - **Authenticated Session Enforcement:** `getUser` is required before `updateUser`.
 - **Local Scope Sign-Out:** `signOut({ scope: 'local' })` terminates the invitation session cleanly after password update.
 - **Redirect Isolation:** `redirect()` is invoked strictly outside `try/catch` blocks.
 
-## 8. Automated & Browser Validation
+## 5. Automated Validation Summary
 
-- **Vitest Unit Suite:** 15 test files and 208 tests passed.
-- **Typecheck:** `tsc --noEmit` passed with 0 errors.
+- **Vitest Unit Suite:** 16 test files passed.
+- **TypeScript:** `tsc --noEmit` passed cleanly with 0 errors.
 - **Production Build:** `next build` succeeded under Next.js 16.2.6 (Turbopack).
 - **Targeted Lint:** ESLint returned 0 warnings and 0 errors.
-- **Browser Automation:** Tested under Playwright Edge/Chromium across manual typing and autofill simulation.
 
-## 9. Operational Recovery Steps
+## 6. Operational Recovery Steps
 
 1. Merge PR into `main`.
-2. Deploy/pull updated build to staging server.
-3. The recipient opens the existing `/auth/set-password` tab or accepts an invitation.
+2. Deploy updated build to staging server.
+3. The recipient opens `/auth/set-password` or accepts an invitation.
 4. Enters or autofills matching credentials and submits the form.
 5. Successful update signs out the invitation session and redirects to `/login?status=PASSWORD_SET`.
-
-## 10. Remaining Limitations
-
-- Edge retries require the user to submit after the server update is deployed.
