@@ -19,37 +19,30 @@ import { redirect } from 'next/navigation';
  * - Never logs or exposes raw password values or user identity.
  */
 export interface PasswordUpdateInput {
-  password?: string;
-  confirmation?: string;
+  password?: unknown;
+  confirmation?: unknown;
 }
 
-export async function setPasswordAction(
-  inputOrPrevState: PasswordUpdateInput | FormData | unknown,
-  formDataArg?: FormData
-) {
-  let password = '';
-  let confirmation = '';
-
-  let formData: FormData | null = null;
-  let payload: PasswordUpdateInput | null = null;
-
-  if (formDataArg instanceof FormData) {
-    formData = formDataArg;
-  } else if (inputOrPrevState instanceof FormData) {
-    formData = inputOrPrevState;
-  } else if (inputOrPrevState && typeof inputOrPrevState === 'object') {
-    payload = inputOrPrevState as PasswordUpdateInput;
+export async function setPasswordAction(input: PasswordUpdateInput) {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    input instanceof FormData ||
+    typeof (input as { get?: unknown }).get === 'function'
+  ) {
+    return { error: 'PASSWORD_EMPTY' };
   }
 
-  if (formData) {
-    const rawPassword = formData.get('password');
-    const rawConfirmation = formData.get('confirmation');
-    password = typeof rawPassword === 'string' ? rawPassword : '';
-    confirmation = typeof rawConfirmation === 'string' ? rawConfirmation : '';
-  } else if (payload) {
-    password = typeof payload.password === 'string' ? payload.password : '';
-    confirmation = typeof payload.confirmation === 'string' ? payload.confirmation : '';
+  const rawPassword = input.password;
+  const rawConfirmation = input.confirmation;
+
+  if (typeof rawPassword !== 'string' || typeof rawConfirmation !== 'string') {
+    return { error: 'PASSWORD_EMPTY' };
   }
+
+  const password = rawPassword;
+  const confirmation = rawConfirmation;
 
   // 1. Validate before constructing the Supabase client
   const validation = validatePasswordUpdate({ password, confirmation });

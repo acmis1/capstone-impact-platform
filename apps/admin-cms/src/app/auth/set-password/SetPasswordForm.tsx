@@ -1,33 +1,56 @@
 'use client';
 
-import React, { useTransition } from 'react';
+import React, { useRef, useState, useTransition } from 'react';
 import { setPasswordAction } from './actions';
+import { resolvePasswordInputs, isRedirectError } from './passwordSubmission';
 
 export function SetPasswordForm() {
-  const [password, setPassword] = React.useState('');
-  const [confirmation, setConfirmation] = React.useState('');
-  const [error, setError] = React.useState<string | null>(null);
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmationRef = useRef<HTMLInputElement>(null);
+  const submissionLockRef = useRef(false);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (submissionLockRef.current) {
+      return;
+    }
+
+    submissionLockRef.current = true;
     setError(null);
 
-    const form = e.currentTarget;
-    const domPassword = (form.elements.namedItem('password') as HTMLInputElement)?.value || '';
-    const domConfirmation = (form.elements.namedItem('confirmation') as HTMLInputElement)?.value || '';
+    const domPassword = passwordRef.current?.value || '';
+    const domConfirmation = confirmationRef.current?.value || '';
 
-    const finalPassword = domPassword || password;
-    const finalConfirmation = domConfirmation || confirmation;
+    const resolved = resolvePasswordInputs({
+      domPassword,
+      domConfirmation,
+      statePassword: password,
+      stateConfirmation: confirmation,
+    });
 
     startTransition(async () => {
-      const res = await setPasswordAction({
-        password: finalPassword,
-        confirmation: finalConfirmation,
-      });
+      try {
+        const res = await setPasswordAction({
+          password: resolved.password,
+          confirmation: resolved.confirmation,
+        });
 
-      if (res?.error) {
-        setError(res.error);
+        if (res?.error) {
+          setError(res.error);
+          submissionLockRef.current = false;
+        }
+      } catch (err: unknown) {
+        if (isRedirectError(err)) {
+          throw err;
+        }
+        setError('PASSWORD_UPDATE_FAILED');
+        submissionLockRef.current = false;
       }
     });
   };
@@ -52,6 +75,7 @@ export function SetPasswordForm() {
           New Password
         </label>
         <input
+          ref={passwordRef}
           id="password"
           name="password"
           type="password"
@@ -81,6 +105,7 @@ export function SetPasswordForm() {
           Confirm New Password
         </label>
         <input
+          ref={confirmationRef}
           id="confirmation"
           name="confirmation"
           type="password"
