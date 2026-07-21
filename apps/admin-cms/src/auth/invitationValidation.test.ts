@@ -384,11 +384,7 @@ describe('Password Setup Regression Safety', () => {
     mockUpdateUser.mockResolvedValue({ error: null });
     mockSignOut.mockResolvedValue({ error: null });
 
-    const formData = new FormData();
-    formData.append('password', 'validpassword123');
-    formData.append('confirmation', 'validpassword123');
-
-    await expect(setPasswordAction(null, formData)).rejects.toThrow(RedirectError);
+    await expect(setPasswordAction({ password: 'validpassword123', confirmation: 'validpassword123' })).rejects.toThrow(RedirectError);
     expect(mockUpdateUser).toHaveBeenCalledTimes(1);
     expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(mockRedirect).toHaveBeenCalledWith('/login?status=PASSWORD_SET');
@@ -398,11 +394,7 @@ describe('Password Setup Regression Safety', () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } }, error: null });
     mockUpdateUser.mockResolvedValue({ error: new Error('DB write failed') });
 
-    const formData = new FormData();
-    formData.append('password', 'validpassword123');
-    formData.append('confirmation', 'validpassword123');
-
-    const res = await setPasswordAction(null, formData);
+    const res = await setPasswordAction({ password: 'validpassword123', confirmation: 'validpassword123' });
     expect(res.error).toBe('PASSWORD_UPDATE_FAILED');
     expect(mockSignOut).not.toHaveBeenCalled();
   });
@@ -412,11 +404,7 @@ describe('Password Setup Regression Safety', () => {
     mockUpdateUser.mockResolvedValue({ error: null });
     mockSignOut.mockResolvedValue({ error: new Error('SignOut lock') });
 
-    const formData = new FormData();
-    formData.append('password', 'validpassword123');
-    formData.append('confirmation', 'validpassword123');
-
-    const res = await setPasswordAction(null, formData);
+    const res = await setPasswordAction({ password: 'validpassword123', confirmation: 'validpassword123' });
     expect(res.error).toBe('SESSION_TERMINATION_FAILED');
     expect(mockRedirect).not.toHaveBeenCalled();
   });
@@ -460,15 +448,18 @@ describe('Static Safety Assurances', () => {
     expect(guideCode).not.toContain('file:///C:');
   });
 
-  it('should assert that the SetPasswordForm source code contains controlled visible inputs, named visible fields, onSubmit handling, and no dot placeholders', () => {
+  it('should assert that the SetPasswordForm source code contains controlled visible inputs, named visible fields, onSubmit handling, and refs', () => {
     const formCode = fs.readFileSync(path.resolve(__dirname, '../app/auth/set-password/SetPasswordForm.tsx'), 'utf8');
 
     // Check that there are no dot placeholders
     expect(formCode).not.toContain('••••••••••••');
 
-    // Check for controlled React state
-    expect(formCode).toContain('const [password, setPassword] = React.useState');
-    expect(formCode).toContain('const [confirmation, setConfirmation] = React.useState');
+    // Check for controlled React state and refs
+    expect(formCode).toContain('useState');
+    expect(formCode).toContain('useRef');
+    expect(formCode).toContain('passwordRef');
+    expect(formCode).toContain('confirmationRef');
+    expect(formCode).toContain('submissionLockRef');
 
     // Check for named visible inputs
     expect(formCode).toContain('name="password"');
@@ -477,11 +468,11 @@ describe('Static Safety Assurances', () => {
     // Check no hidden inputs
     expect(formCode).not.toContain('type="hidden"');
 
-    // Check for onSubmit handler, useTransition, and DOM/controlled fallback extraction
+    // Check for onSubmit handler, useTransition, and resolvePasswordInputs extraction
     expect(formCode).toContain('onSubmit={handleSubmit}');
     expect(formCode).toContain('useTransition');
     expect(formCode).toContain('setPasswordAction');
-    expect(formCode).toContain('domPassword || password');
+    expect(formCode).toContain('resolvePasswordInputs');
 
     // Check aria configurations
     expect(formCode).toContain('aria-live="polite"');
@@ -489,30 +480,29 @@ describe('Static Safety Assurances', () => {
   });
 
   it('should prove server-side value preservation, defensive type checks, and raw password safety', async () => {
-    // 1. Missing fields return empty error
-    const emptyForm = new FormData();
-    const resEmpty = await setPasswordAction(null, emptyForm);
-    expect(resEmpty.error).toBe('PASSWORD_EMPTY');
+    // 1. Missing or non-object fields return empty error
+    const resNull = await setPasswordAction(null as unknown as { password?: unknown });
+    expect(resNull.error).toBe('PASSWORD_EMPTY');
 
-    // 2. Non-string FormData entry safety
-    const badForm = new FormData();
-    badForm.append('password', new File([], 'p.txt'));
-    badForm.append('confirmation', 'validpassword123');
-    const resBad = await setPasswordAction(null, badForm);
-    expect(resBad.error).toBe('PASSWORD_EMPTY');
+    const resArray = await setPasswordAction([] as unknown as { password?: unknown });
+    expect(resArray.error).toBe('PASSWORD_EMPTY');
+
+    const resFormData = await setPasswordAction(new FormData() as unknown as { password?: unknown });
+    expect(resFormData.error).toBe('PASSWORD_EMPTY');
+
+    // 2. Non-string property safety
+    const resBadTypes = await setPasswordAction({ password: 12345, confirmation: 'validpassword123' });
+    expect(resBadTypes.error).toBe('PASSWORD_EMPTY');
 
     // 3. Preservation of spacing, punctuation, and casing
-    const complexForm = new FormData();
-    complexForm.append('password', ' Complex Pass! 123 ');
-    complexForm.append('confirmation', ' Complex Pass! 123 ');
-
+    const rawComplex = ' Complex Pass! 123 ';
     mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } }, error: null });
     mockUpdateUser.mockResolvedValue({ error: null });
     mockSignOut.mockResolvedValue({ error: null });
 
-    await expect(setPasswordAction(null, complexForm)).rejects.toThrow(RedirectError);
+    await expect(setPasswordAction({ password: rawComplex, confirmation: rawComplex })).rejects.toThrow(RedirectError);
     // Raw password should reach updateUser exactly as entered without trimming
-    expect(mockUpdateUser).toHaveBeenCalledWith({ password: ' Complex Pass! 123 ' });
+    expect(mockUpdateUser).toHaveBeenCalledWith({ password: rawComplex });
 
     // Assert no password logs or references in action code
     expect(passwordActionCode).not.toContain('console.log(password)');
