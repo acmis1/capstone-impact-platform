@@ -32,7 +32,8 @@ Follow these step-by-step instructions to set up the staging database schema on 
 > In the present staging environment (`capstone-admin-cms-staging-2026` located in Singapore):
 > - migrations 0001 through 0006 have already been manually applied and read-only verified;
 > - the three Storage buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) have already been provisioned and verified;
-> - initial administrator bootstrap linkage has been completed (`CREATED`) and manually verified in Edge;
+> - initial administrator bootstrap linkage has been completed through the guarded CLI script (`CREATED`);
+> - dashboard login and session logout were manually verified in Microsoft Edge;
 > - do not rerun migrations or identity provisioning merely because this guide exists;
 > - reset, teardown, and destructive SQL require separate explicit approval.
 

@@ -1,16 +1,16 @@
 # Controlled Staging Authentication & Authorization Runbook
 
-This guide outlines the manual verification checklist to audit and validate the Next.js Admin/CMS authentication and Role-Based Access Control (RBAC) gates in the isolated staging environment.
+This guide outlines the manual verification checklist to audit and validate the Next.js Admin/CMS authentication and Role-Based Access Control (RBAC) gates in the isolated staging environment (`capstone-admin-cms-staging-2026`).
 
 ---
 
 ## ⚠️ Staging Mutation Checkpoints
 
 The following operations are **staging database mutations** that require explicit operator approval before execution:
-*   Applying database schema migration `0003` (Phase B);
-*   Creating the fictional test account in Supabase Auth (Phase C);
-*   Inserting/updating the `admin_users` record and linking the identity UUID (Phase E);
-*   Assigning or modifying administrative roles in `user_roles` (Phase E & Phase I);
+*   Applying database schema migrations (Phase B);
+*   Sending/processing an authorized user invitation in Supabase Auth (Phase C);
+*   Running the guarded bootstrap script (`npm run link:admin-staging`) to link an Auth user to `admin_users` and `user_roles` (Phase E);
+*   Assigning or modifying administrative roles in `user_roles` via an approved role-provisioning workflow (Phase E & Phase I);
 *   Executing project review actions or workflow transitions (Phase H).
 
 The `npm run check:admin-auth` script is strictly SELECT-only and remains safe to run at any time without these mutations.
@@ -19,8 +19,8 @@ The `npm run check:admin-auth` script is strictly SELECT-only and remains safe t
 
 ## Phase A: Read-Only Preflight
 
-1. **Staging Environment Confirmation**: Confirm that the active project in the Supabase Dashboard is exactly the isolated staging database.
-2. **No Production Data Ingress**: Ensure that no real RMIT stakeholder details, student profiles, or actual email addresses are present in the database.
+1. **Staging Environment Confirmation**: Confirm that the active project in the Supabase Dashboard is exactly the isolated staging database (`capstone-admin-cms-staging-2026`).
+2. **Data Isolation & Privacy**: Ensure that no real RMIT student records or stakeholder directories are loaded. One authorized administrator identity exists for controlled staging authentication. Identity values must never be printed, logged, or committed.
 3. **Execution Checklist**: Run the read-only check script from the repository root:
    ```bash
    npm run check:admin-auth
@@ -28,176 +28,119 @@ The `npm run check:admin-auth` script is strictly SELECT-only and remains safe t
 4. **Expected Output Profiles**:
    * **Migration Missing**: Exit code `2` with `MIGRATION_0003_MISSING` error.
    * **No Provisioned Admin**: Exit code `2` with `NO_LINKED_ADMIN` error.
-   * **Fully Provisioned Fictional Admin**: Exit code `0` with `READY_FOR_MANUAL_LOGIN_TEST`.
+   * **Fully Provisioned Admin**: Exit code `0` with `READY_FOR_MANUAL_LOGIN_TEST`.
 
 ---
 
-## Phase B: Manual Migration Checkpoint
+## Phase B: Manual Migration Guidance (Historical & Setup)
 
-*This step is a staging mutation and requires explicit operator approval.*
-
-Do not run migrations automatically. The operator must apply the database migration manually:
-
-1. Copy the SQL content from the idempotent migration:
-   [0003_admin_auth_identity.sql](../../infra/supabase/migrations/0003_admin_auth_identity.sql)
-2. Execute the script within the **SQL Editor** in the Supabase Dashboard.
-3. **Post-Migration Verification Checklist**:
-   * Navigate to Table Editor > `admin_users` and verify that the `auth_user_id` column exists.
-   * Confirm the foreign key references `auth.users(id)` with `ON DELETE CASCADE`.
-   * Verify that unique index constraints prevent duplicate non-null `auth_user_id` UUID values.
-   * Ensure existing administrator profiles with null `auth_user_id` values remain unchanged.
+*Note for Current Staging:* The active staging environment (`capstone-admin-cms-staging-2026`) already has migrations `0001` through `0006` applied. Do not rerun migrations on current staging. Refer to [manual-apply-guide.md](./manual-apply-guide.md) when setting up a genuinely new isolated environment.
 
 ---
 
-## Phase C: Fictional Auth Account Provisioning
+## Phase C: Authorized User Invitation & Setup
 
-*This step is a staging mutation and requires explicit operator approval.*
+1. Self-registration remains strictly disabled.
+2. The authorized operator sends/uses the approved Supabase invitation.
+3. The recipient completes the two-step invitation acceptance flow (`/auth/confirm` -> `/auth/confirm/accept`).
+4. The recipient privately sets a password on `/auth/set-password`.
+5. No password, token, UUID, email, or identity value is disclosed to agents or committed.
+6. See [auth-invitation-setup.md](./auth-invitation-setup.md) for full protocol details.
+7. *Note:* For the current staging environment, initial administrator Auth setup is already complete; do not create another invitation for the initial administrator.
 
-1. Navigate to **Authentication** > **Users** in the staging Supabase Dashboard.
-2. Click **Add User** > **Create User**.
-3. Create a fictional test user with the canonical reserved email:
-   ```text
-   auth-test-admin@example.com
+---
+
+## Phase D: Unprovisioned-User Authentication Check (NOT EXECUTED / PENDING)
+
+*Status:* **Pending / Not Executed**.
+
+This test verifies that a valid Supabase Auth account that is **not** linked to `admin_users` is denied access upon login.
+
+*Execution Requirement:* Requires a separately approved fictional Auth identity that is authenticated in Supabase Auth but intentionally not linked to `admin_users`. Note that invitation-session sign-out is part of the standard password setup flow and is not evidence of unprovisioned-user access denial.
+
+---
+
+## Phase E: Guarded Administrator Linkage
+
+To link an authenticated Supabase Auth user to the administrative schema in a new setup:
+
+1. Privately set temporary process variables:
+   ```powershell
+   $env:CAPSTONE_BOOTSTRAP_ADMIN_EMAIL = "admin@example.com"
+   $env:CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME = "Initial Admin"
+   $env:CAPSTONE_BOOTSTRAP_CONFIRM = "LINK_EXISTING_STAGING_ADMIN"
    ```
-4. **Security Rule**: The operator must enter a unique temporary password directly into the Dashboard input. Do not store or share this password in Git, configuration profiles, environment variables, or markdown files.
-5. Set **Auto-confirm User?** to `true` and click **Create User**.
-6. Copy the generated **User UID (UUID)** for the next steps.
+2. Execute `npm run link:admin-staging` only after explicit operator approval.
+3. Clear temporary process variables immediately.
+4. Run `npm run check:admin-auth` to confirm readiness status `READY_FOR_MANUAL_LOGIN_TEST`.
+5. **Security Invariant:** Never paste Auth UUIDs into SQL queries or manually modify administrator/role rows directly in the database.
+6. See [staging-admin-bootstrap.md](./staging-admin-bootstrap.md).
+7. *Note for Current Staging:* Initial administrator linkage has already completed (`CREATED`, 1 linked admin, 1 recognized role) and should not be rerun.
 
 ---
 
-## Phase D: Unprovisioned-User Authentication Check
+## Phase F: Protected Route & Session Verification
 
-Before linking the test Auth account to any database administrator profiles:
+Testing is divided between automated unauthenticated HTTP checks and manual authenticated Edge acceptance:
 
-1. Open the Admin/CMS login page in your browser.
-2. Enter the canonical fictional email `auth-test-admin@example.com` and your temporary password.
-3. **Verification Objectives**:
-   * Valid Supabase credentials authenticate successfully;
-   * The account is immediately denied Admin/CMS access;
-   * A generic access-denied message is displayed;
-   * The active Supabase session is signed out immediately;
-   * Attempting to navigate directly to `/admin` afterward redirects back to login;
-   * No raw database stack traces or internal SQL error messages are exposed.
+1. **Automated Unauthenticated HTTP Checks**:
+   * `GET /login`: Returns HTTP 200 OK.
+   * `GET /admin`: Returns HTTP 307 redirect to `/login?redirectTo=/admin`.
+   * `GET /admin/imports`: Returns HTTP 307 redirect to `/login?redirectTo=/admin`.
+   * `GET /admin/projects/{publicId}`: Returns HTTP 307 redirect to `/login?redirectTo=/admin`. (Note: Protected project detail routes use `/admin/projects/{publicId}`; no standalone `/admin/projects` index route exists).
+   * `GET /api/projects`: Returns HTTP 401 Unauthorized with sanitized response `{"success":false,"error":"Authentication required."}` (no stack traces or SQL details).
+   * `GET /api/health`: Returns HTTP 200 exposing safe configuration status classifications only.
 
----
-
-## Phase E: Manual Administrator Linkage
-
-*This step is a staging mutation and requires explicit operator approval.*
-
-To link your newly created Auth user UUID to the administrative schema, execute the guarded, idempotent provisioning SQL block documented in the [Staging User Provisioning Guide](./manual-apply-guide.md#administrative-user-provisioning-in-staging).
-
-After executing the provisioning SQL block, perform the following verification checks:
-
-1. **Read-Only Preflight Verification**:
-   Rerun the preflight check script from the repository root:
-   ```bash
-   npm run check:admin-auth
-   ```
-   **Expected Verification Output**:
-   * **Migration Status**: `PRESENT`
-   * **Linked Administrators**: `at least 1`
-   * **Linked Admins Lacking Role**: `0`
-   * **Invalid Role Assignments**: `0`
-   * **Readiness Status**: `READY_FOR_MANUAL_LOGIN_TEST`
-   * **Process exit code**: `0` (Successful readiness status).
-
-2. **Database Aggregate Count Verification**:
-   Run the following query in the SQL Editor to confirm profile linkage and role assignment. It returns only aggregate metrics and boolean statuses, keeping sensitive identifiers and UUIDs out of logs:
-   ```sql
-   SELECT 
-       COUNT(*) AS total_canonical_admin_rows,
-       COUNT(auth_user_id) AS linked_canonical_admin_rows,
-       EXISTS (
-           SELECT 1 
-           FROM user_roles 
-           WHERE role = 'admin' 
-             AND user_id = (SELECT id FROM admin_users WHERE email = 'auth-test-admin@example.com')
-       ) AS canonical_has_admin_role
-   FROM admin_users 
-   WHERE email = 'auth-test-admin@example.com';
-   ```
+2. **Manual Authenticated Edge Session Test**:
+   * Log in via Microsoft Edge at `/login`.
+   * Confirm successful authentication and redirection to `/admin`.
+   * Confirm dashboard header renders administrator identity representation and `ADMIN` role badge.
+   * Confirm sub-route `/admin/imports` loads successfully while authenticated.
+   * Confirm `GET /api/projects` returns HTTP 200 with JSON response and `count: 0`.
+   * *Project-Detail Route Test:* **Skipped** because zero project records currently exist in the staging database.
+   * Click **Log Out**: Confirm browser redirects to `/login`.
+   * Post-logout re-verification: Confirm `/admin` redirects to `/login?redirectTo=/admin` and `GET /api/projects` returns HTTP 401.
 
 ---
 
-## Phase F: Browser Session Verification
+## Phase G: CSRF Mutation Validation (PENDING)
 
-Using the local Admin/CMS:
-
-1. **Guarded Path Redirection**: Attempt to directly navigate to `/admin`. Verify that you are immediately redirected to `/login?redirectTo=/admin`.
-2. **Invalid Sign-In Attempt**: Enter incorrect credentials. Confirm that the page displays the generic message: `Invalid email or password.` (do not reveal if the email exists).
-3. **Valid Staging Access**: Log in using the canonical fictional account `auth-test-admin@example.com`. Confirm that `/admin` loads and presents the header showing the user email and roles.
-4. **Sub-Route Inheritance**: Verify that `/admin/projects` and `/admin/imports` load successfully without re-requesting credentials.
-5. **API Authentication Gates**:
-   * Make a request to `GET /api/projects` in the authenticated browser. Verify that the JSON response returns status code `200` with the project records.
-   * Attempt to request `GET /api/projects` from an unauthenticated browser session (e.g. private window). Verify that it returns status code `401` with error `Authentication required.`.
-6. **Session Sign-Out**: Click **Log Out**. Confirm that the browser is redirected to `/login`, and attempting to revisit `/admin` results in a redirect back to `/login`.
-7. **Client Token Security**: Inspect the browser console, sessionStorage, localStorage, and page source. Confirm that no Supabase service-role keys or raw access/refresh tokens are stored or rendered in client-visible code.
+*Status:* **Pending / Not Executed**. Requires active project rows and reviewer/editor role fixtures.
 
 ---
 
-## Phase G: CSRF Mutation Validation
+## Phase H: Audit Attribution Checkpoint (PENDING)
 
-The browser project review action utilizes cookie authentication, requiring Origin verification:
-
-1. **Same-Origin Allowed**: A standard POST mutation request sent from the Admin console same-origin is allowed (returns `200` or validation error codes).
-2. **Cross-Origin Rejected**: A POST mutation sent with an Origin header differing from `request.nextUrl.origin` is rejected with `403` and `Access denied.`.
-3. **Missing Origin Rejected**: A POST request with no Origin header is rejected with `403`.
-4. **Malformed Payload Rejected**: A request containing primitive body types, null values, or `comments: null` is rejected with `400` and `Validation failed.` before any repository read or write occurs.
+*Status:* **Pending / Not Executed**. Requires active project rows and workflow transitions.
 
 ---
 
-## Phase H: Audit Attribution Checkpoint
+## Phase I: Role Permission Verification Plan (PENDING)
 
-*This step is a staging mutation and requires explicit operator approval.*
+*Status:* **Pending / Not Executed**.
 
-To verify audit tracking, the operator must execute a test workflow transition:
-
-1. Ensure a mock project has been seeded to staging (e.g. status `submitted`).
-2. Log in using the canonical fictional test administrator account.
-3. Submit an approval action (e.g. transition `submitted` to `approved`).
-4. Run a query in the SQL Editor to audit the result:
-   ```sql
-   SELECT admin_id FROM approval_records ORDER BY created_at DESC LIMIT 1;
-   ```
-5. **Validation Invariants**:
-   * Verify `admin_id` equals the UUID of the `admin_users` record, **not** the Supabase Auth UUID or `null`.
-   * Confirm that no administrator UUID, email, or name is written into public showcase JSON feeds.
-
----
-
-## Phase I: Role Permission Verification Plan
-
-*This step is a staging mutation and requires explicit operator approval.*
-
-Role permission checks must be manually verified using the test administrator profile:
-
-1. **Procedural Guideline**: Role modifications must be performed manually in the Table Editor/SQL. The operator must log out and log back in to refresh the active session claims and context.
-2. **Permission Matrix Audit**:
-   * **`admin`**: Verify access to all projects, review workflows, archiving actions, and import batch pages.
-   * **`reviewer`**: Verify access to projects and review actions. Confirm that attempts to archive or edit return `403`.
-   * **`editor`**: Verify access to edit metadata fields. Confirm that attempts to approve, request changes, or archive return `403`.
-
-Expected permission matrix:
-*   **admin**: `projects.read`, `projects.review`, `projects.archive`, `projects.edit`
-*   **reviewer**: `projects.read`, `projects.review`
-*   **editor**: `projects.read`, `projects.edit`
+*Guidelines:*
+- Reviewer and editor role matrix tests remain pending.
+- Testing requires a separately reviewed, approved role-fixture and provisioning workflow.
+- Do not modify current administrator roles directly using SQL or Table Editor.
+- Do not repurpose the initial administrator profile during this closure task.
 
 ---
 
 ## Phase J: Verification Evidence Log
 
-The initial administrator authentication verification was executed in isolated staging (`capstone-admin-cms-staging-2026`) on **2026-07-21**:
+The initial administrator authentication verification was executed against isolated staging (`capstone-admin-cms-staging-2026`) on **2026-07-21**:
 
 | Test ID | Test Date | Environment | Expected Outcome | Actual Outcome | Pass/Fail | Evidence Reference | Notes / Operator |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **VAL-001** | 2026-07-21 | Staging | Preflight exits 2 (missing column) | Exit code 2 returned when migration pending | **PASS** | `checkStagingAuth.ts` | Historical baseline |
-| **VAL-002** | 2026-07-21 | Staging | Preflight exits 2 (missing user) | Exit code 2 (`NO_LINKED_ADMIN`) returned before bootstrap | **PASS** | `checkStagingAuth.ts` | Verified before linking |
-| **VAL-003** | 2026-07-21 | Staging | Preflight exits 0 (`READY_FOR_MANUAL_LOGIN_TEST`) | Exit code 0, 1 linked admin, 1 recognized role | **PASS** | `staging-auth-activation-evidence.md` | Verified post-bootstrap |
-| **VAL-004** | 2026-07-21 | Staging | Unprovisioned Auth user is denied, signed out | Denied access, temporary invitation session signed out | **PASS** | Edge browser verification | Two-step invite flow |
-| **VAL-005** | 2026-07-21 | Staging | Authenticated session loads `/admin` | `/admin`, header with ADMIN role, and `/admin/imports` loaded | **PASS** | Edge browser verification | Manual operator test |
-| **VAL-006** | 2026-07-21 | Staging | Unauthenticated `GET /api/projects`: 401 | Status HTTP 401 `Authentication required.` returned | **PASS** | Automated HTTP checks | Sanitized error response |
-| **VAL-007** | *Pending* | Staging | Missing/Cross-Origin POST mutation: 403 | *Pending multi-role mutation UAT* | *Pending* | | Requires project row |
-| **VAL-008** | *Pending* | Staging | Malformed comments/body payload: 400 | *Pending multi-role mutation UAT* | *Pending* | | Requires project row |
-| **VAL-009** | *Pending* | Staging | Audit record tracks `admin_users.id` | *Pending multi-role mutation UAT* | *Pending* | | Requires project row |
-| **VAL-010** | *Pending* | Staging | RBAC permission restrictions enforced | *Pending multi-role mutation UAT* | *Pending* | | Requires reviewer/editor roles |
+| **VAL-001** | *Historical* | Staging | Preflight exits 2 when migration 0003 is missing | *Not Executed* (Migration 0003 already applied on staging) | **NOT EXECUTED** | `checkStagingAuth.ts` | Setup historical baseline |
+| **VAL-002** | 2026-07-21 | Staging | Preflight exits 2 when no admin is linked | Exit code 2 (`NO_LINKED_ADMIN`) returned before bootstrap | **PASS** | `checkStagingAuth.ts` | Pre-bootstrap baseline |
+| **VAL-003** | 2026-07-21 | Staging | Preflight exits 0 (`READY_FOR_MANUAL_LOGIN_TEST`) | Exit code 0, 1 linked admin, 1 recognized role | **PASS** | `staging-auth-activation-evidence.md` | Post-bootstrap verification |
+| **VAL-004** | *Pending* | Staging | Unprovisioned Auth user is denied access upon login | *Pending* (Requires separately approved unlinked Auth user) | **PENDING** | | Not executed in initial activation |
+| **VAL-005** | 2026-07-21 | Staging | Authenticated Edge session loads `/admin` & `/admin/imports` | `/admin` and `/admin/imports` loaded; header rendered ADMIN role | **PASS** | Edge browser verification | Project detail `/admin/projects/{publicId}` skipped (0 project rows) |
+| **VAL-005b**| 2026-07-21 | Staging | Session logout & post-logout denial | Logged out to `/login`; `/admin` redirected to `/login?redirectTo=/admin` | **PASS** | Edge browser verification | Manual logout test |
+| **VAL-006** | 2026-07-21 | Staging | Unauthenticated `GET /api/projects`: 401 | Status HTTP 401 `Authentication required.` returned | **PASS** | Automated HTTP checks | Sanitized response |
+| **VAL-007** | *Pending* | Staging | Missing/Cross-Origin POST mutation: 403 | *Pending multi-role mutation UAT* | **PENDING** | | Requires project row |
+| **VAL-008** | *Pending* | Staging | Malformed comments/body payload: 400 | *Pending multi-role mutation UAT* | **PENDING** | | Requires project row |
+| **VAL-009** | *Pending* | Staging | Audit record tracks `admin_users.id` | *Pending multi-role mutation UAT* | **PENDING** | | Requires project row |
+| **VAL-010** | *Pending* | Staging | RBAC permission restrictions enforced | *Pending multi-role mutation UAT* | **PENDING** | | Requires reviewer/editor roles |

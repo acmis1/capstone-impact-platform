@@ -44,8 +44,8 @@ Ensure that administrative workflows, student project data, and public showcase 
 ---
 
 ## 5. Authentication and Authorization Status
-*   **CMS Authentication**: Initial administrative authentication, protected route guards, session cookies, and initial `admin` identity provisioning have been operationally verified in isolated staging (`capstone-admin-cms-staging-2026`). Full reviewer/editor RBAC matrices and multi-role RLS policy checks remain scheduled for future UAT.
-*   **Environment Lock**: Staging auth verification and session checks executed against the separate `capstone-admin-cms-staging-2026` environment in Singapore. The Prototype recovery project **was never and will never** be used for admin authentication.
+*   **CMS Authentication**: Initial administrator authentication operationally verified in isolated staging (`capstone-admin-cms-staging-2026`). Full reviewer/editor RBAC matrices and multi-role RLS policy checks remain scheduled for future UAT.
+*   **Environment Lock**: Staging auth verification and session checks executed against the separate `capstone-admin-cms-staging-2026` environment in Singapore. The Prototype recovery project **was not used during this activation and must not be used** for Admin/CMS authentication.
 *   **Least Privilege Credentials**: Supabase `service_role` keys are backend-only and their usage is isolated in server-only modules (`import 'server-only'`). Static client bundle scanning confirmed zero service-role keys or secret names exist in frontend assets.
 *   **Migration Technical Debt**: This staging database currently follows the established manually applied version-controlled migration process (`0001` through `0006`). Future delivery should adopt a standard Supabase CLI/CI migration workflow through a separately planned task. Migration-history reconciliation is intentionally not part of this closure PR.
 

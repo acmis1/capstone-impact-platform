@@ -83,7 +83,7 @@ The staging foundation is structured as follows:
 
 ## 💾 Database Schema & Administrative Authentication
 
-The staging database schema and authentication guards are fully scaffolded and operationally verified:
+The staging database schema and initial authentication guards are scaffolded and verified:
 
 1. **Schema Migrations:** Apply `infra/supabase/migrations/0001_staging_schema.sql` through `0006_fix_initial_admin_bootstrap_runtime.sql` to your project in order using the Supabase SQL Editor. See [manual-apply-guide.md](../../infra/supabase/manual-apply-guide.md) for details.
    * **0004_explicit_data_api_grants.sql:** Establishes explicit Data API grants. Postgres grants control whether a schema role can reach a table/object, whereas RLS controls row-level access once authorized.
@@ -94,7 +94,7 @@ The staging database schema and authentication guards are fully scaffolded and o
      * **Defaults:** Automatic privileges on future public schema objects are disabled. All future objects require explicit reviewed migrations.
    * **Safety WARNING:** No migration or database commands should ever target the Prototype recovery project.
 2. **Identity Linkage & Guarded Bootstrap:** Migration 0003 adds `auth_user_id UUID` to `admin_users` linked to `auth.users(id)`. Migrations 0005 and 0006 register `public.bootstrap_initial_admin` to transactionalize initial identity linkage securely under `service_role`.
-3. **Operational Activation:** Initial staging administrator authentication is operationally activated in isolated staging (`capstone-admin-cms-staging-2026`). One initial administrator profile and `admin` role have been linked via `npm run link:admin-staging`. Manual browser login/logout and protected route checks (`/admin`, `/admin/imports`, `/api/projects`) passed cleanly in Edge. Self-registration remains disabled. Staging database currently contains zero project rows, and production Duda remains disconnected.
+3. **Operational Activation:** Initial administrator authentication operationally verified in isolated staging (`capstone-admin-cms-staging-2026`). One initial administrator profile and `admin` role have been linked via `npm run link:admin-staging`. Manual browser login/logout and protected route checks (`/admin`, `/admin/imports`, `/api/projects`) passed cleanly in Edge. Self-registration remains disabled. Staging database currently contains zero project rows, and production Duda remains disconnected.
 4. **Client Distinctions:**
    * **Administrative Database Client (`admin.ts`):** Safe, server-only client using `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS. Only invoked *after* session authorization succeeds.
    * **Session Server Client (`server.ts`):** Bound to Next.js cookie headers via `@supabase/ssr` `createServerClient`. Used for cookie authentication checks.

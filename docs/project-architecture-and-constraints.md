@@ -46,7 +46,7 @@ Standard Project Package / Excel
 
 ## 5. Environment and Repository Isolation
 *   **Prototype Isolation**: The Prototype is isolated historical/feasibility evidence. It resides under `/Prototype` and must never share code or helper modules with `/apps/admin-cms`.
-*   **Supabase Project Isolation**: The Prototype recovery project uses its own Supabase instance. The production-oriented Admin/CMS must use the separate `capstone-impact-staging` environment and must **never** connect to or use the Prototype recovery Supabase project.
+*   **Supabase Project Isolation**: The Prototype recovery project uses its own Supabase instance. The production-oriented Admin/CMS must use the separate `capstone-admin-cms-staging-2026` environment and must **never** connect to or use the Prototype recovery Supabase project.
 
 ---
 

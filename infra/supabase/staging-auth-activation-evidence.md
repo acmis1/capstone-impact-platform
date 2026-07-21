@@ -27,10 +27,10 @@ This document records the sanitized operational verification evidence for the in
     *   `pg_catalog.btrim` present: `true`
     *   Invalid `pg_catalog.trim` absent: `true`
     *   Advisory transaction lock (`pg_catalog.pg_advisory_xact_lock`) retained: `true`
-    *   Execution denied to `PUBLIC`: `true`
-    *   Execution denied to `anon`: `true`
-    *   Execution denied to `authenticated`: `true`
-    *   Execution granted exclusively to `service_role`: `true`
+    *   Execution revoked from `PUBLIC` (migration contract): `true`
+    *   Execution denied to `anon` (live SQL check): `true`
+    *   Execution denied to `authenticated` (live SQL check): `true`
+    *   Execution granted exclusively to `service_role` (live SQL check): `true`
     *   Pre-bootstrap `admin_users` row count: `0`
     *   Pre-bootstrap `user_roles` row count: `0`
 
@@ -71,7 +71,7 @@ This document records the sanitized operational verification evidence for the in
 *   **Vitest Unit Suite:** 16 test files passed, 218 tests passed cleanly (`npm run test:admin`).
 *   **TypeScript Compiler:** `tsc --noEmit` passed with 0 errors (`npm run typecheck:admin`).
 *   **Next.js Production Build:** `next build` succeeded under Next.js version 16.2.6 Turbopack (`npm run build:admin`).
-*   **Lint Check:** ESLint passed on changed files (`✔ No ESLint warnings or errors`).
+*   **Lint Check:** Admin/CMS application lint passed with zero warnings/errors (`npm run lint --workspace=apps/admin-cms`).
 *   **Git Formatting:** `git diff --check` passed with 0 warnings/errors.
 *   **Client Bundle Isolation Scan:**
     *   Administrative client (`admin.ts`) uses `import 'server-only'`: `true`
@@ -81,17 +81,20 @@ This document records the sanitized operational verification evidence for the in
 
 ---
 
-## 6. Manual Browser Acceptance (Microsoft Edge)
+## 6. HTTP Route & Manual Browser Verification
 
-*   **GET `/login`:** Unauthenticated request loaded clean login page (HTTP 200).
-*   **GET `/admin`:** Unauthenticated request redirected to `/login?redirectTo=/admin` (HTTP 307).
-*   **GET `/admin/imports`:** Unauthenticated request redirected to `/login?redirectTo=/admin` (HTTP 307).
-*   **GET `/api/projects`:** Unauthenticated request returned HTTP 401 with sanitized body `{"success":false,"error":"Authentication required."}` (no stack traces, no SQL details, no environment values).
-*   **GET `/api/health`:** Unauthenticated request returned HTTP 200 exposing safe configuration status classifications only.
-*   **Authenticated Login:** Submitting valid credentials authenticated successfully and redirected to `/admin`.
+### A. Automated Unauthenticated HTTP Route Checks
+*   **GET `/login`:** Unauthenticated HTTP request loaded clean login page (HTTP 200).
+*   **GET `/admin`:** Unauthenticated HTTP request redirected to `/login?redirectTo=/admin` (HTTP 307).
+*   **GET `/admin/imports`:** Unauthenticated HTTP request redirected to `/login?redirectTo=/admin` (HTTP 307).
+*   **GET `/api/projects`:** Unauthenticated HTTP request returned HTTP 401 with sanitized body `{"success":false,"error":"Authentication required."}` (no stack traces, no SQL details, no environment values).
+*   **GET `/api/health`:** Unauthenticated HTTP request returned HTTP 200 exposing safe configuration status classifications only.
+
+### B. Manual Authenticated Edge Acceptance Test
+*   **Authenticated Login:** Submitting valid credentials authenticated successfully in Microsoft Edge and redirected to `/admin`.
 *   **Authenticated Dashboard:** `/admin` loaded, displaying the header with user identity representation and `ADMIN` role badge.
-*   **Authenticated Sub-Routes:** `/admin/imports` loaded successfully without re-prompting for credentials.
-*   **Authenticated API Access:** `GET /api/projects` returned HTTP 200 with project records array.
+*   **Authenticated Sub-Routes:** `/admin/imports` loaded successfully while authenticated without re-prompting for credentials.
+*   **Authenticated API Access:** `GET /api/projects` returned HTTP 200 with JSON response and `count: 0`.
 *   **Project Detail Test:** **Skipped** because zero project records currently exist in the staging database.
 *   **Session Logout:** Clicking **Log Out** signed out the session and redirected to `/login`.
 *   **Post-Logout Re-verification:** Re-navigating to `/admin` redirected to `/login?redirectTo=/admin`, and `GET /api/projects` returned HTTP 401.

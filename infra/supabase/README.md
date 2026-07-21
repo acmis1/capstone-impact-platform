@@ -4,7 +4,7 @@ This directory contains the initial staging database schema and RLS policies for
 
 ## ⚠️ Important Constraints
 
-1. **Target Environment Only:** These migrations are designed **exclusively** for the new `capstone-impact-staging` Supabase project.
+1. **Target Environment Only:** These migrations are designed **exclusively** for the isolated `capstone-admin-cms-staging-2026` Supabase project.
 2. **Never Apply to Old Projects:** Under no circumstances should these files be executed on the old demo Supabase project or any other existing production baseline.
 3. **Staging Foundations:** These tables, indexes, and policies represent a staging foundation, not the final production schema. Structure, column names, and RLS will be refined before production release.
 4. **Manual Application:** Execute these files manually through the **Supabase SQL Editor** UI of your staging project. Do not use the Supabase CLI to push migrations unless explicitly authorized at a later stage.
