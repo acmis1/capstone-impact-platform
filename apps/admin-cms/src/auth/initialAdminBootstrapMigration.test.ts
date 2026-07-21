@@ -3,11 +3,19 @@ import path from "node:path";
 import { describe, it, expect } from "vitest";
 
 describe("Initial Admin Bootstrap Migration Static Contract Test", () => {
-  it("should comply with every database safety rule in 0005_initial_admin_bootstrap.sql", () => {
-    // Read migration 0005 file
+  it("should comply with historical evidence in 0005_initial_admin_bootstrap.sql", () => {
     const migrationPath = path.resolve(
       process.cwd(),
       "../../infra/supabase/migrations/0005_initial_admin_bootstrap.sql"
+    );
+
+    expect(fs.existsSync(migrationPath)).toBe(true);
+  });
+
+  it("should comply with every database safety rule in 0006_fix_initial_admin_bootstrap_runtime.sql", () => {
+    const migrationPath = path.resolve(
+      process.cwd(),
+      "../../infra/supabase/migrations/0006_fix_initial_admin_bootstrap_runtime.sql"
     );
 
     expect(fs.existsSync(migrationPath)).toBe(true);
@@ -41,18 +49,16 @@ describe("Initial Admin Bootstrap Migration Static Contract Test", () => {
     expect(countRolesIdx).toBeGreaterThan(lockIdx);
 
     // 5. Schema qualification check
-    // Ensure all tables are qualified with public or auth
     expect(norm).toContain("public.admin_users");
     expect(norm).toContain("public.user_roles");
     expect(norm).toContain("auth.users");
 
-    // 6. Normalization inside sql
+    // 6. Normalization using pg_catalog.btrim (and rejecting pg_catalog.trim() in 0006)
     expect(norm).toContain("pg_catalog.lower");
-    expect(norm).toContain("pg_catalog.trim");
-    expect(norm).toContain("v_trimmed_full_name := pg_catalog.trim(p_full_name);");
-    
-    // Assert that the email read from public.admin_users is normalized
-    expect(norm).toContain("pg_catalog.lower(pg_catalog.trim(email))");
+    expect(norm).toContain("pg_catalog.btrim");
+    expect(norm).not.toContain("pg_catalog.trim(");
+    expect(norm).toContain("v_trimmed_full_name := pg_catalog.btrim(p_full_name);");
+    expect(norm).toContain("pg_catalog.lower(pg_catalog.btrim(email))");
 
     // 7. No role parameter exists
     expect(norm).toContain("public.bootstrap_initial_admin( p_auth_user_id uuid, p_email text, p_full_name text )");
@@ -67,7 +73,10 @@ describe("Initial Admin Bootstrap Migration Static Contract Test", () => {
     expect(norm).toContain("REVOKE EXECUTE ON FUNCTION public.bootstrap_initial_admin(uuid, text, text) FROM authenticated;");
     expect(norm).toContain("GRANT EXECUTE ON FUNCTION public.bootstrap_initial_admin(uuid, text, text) TO service_role;");
 
-    // 10. Forbidden commands
+    // 10. Migration does not invoke function
+    expect(norm).not.toContain("SELECT public.bootstrap_initial_admin(");
+
+    // 11. Forbidden commands
     expect(norm).not.toContain("DELETE FROM auth.users");
     expect(norm).not.toContain("UPDATE auth.users");
     expect(norm).not.toContain("INSERT INTO auth.users");
