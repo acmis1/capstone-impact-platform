@@ -477,10 +477,18 @@ describe('Static Safety Assurances', () => {
     // Check no hidden inputs
     expect(formCode).not.toContain('type="hidden"');
 
-    // Check for local action wrapper and helper use
-    expect(formCode).toContain('const handleSubmit = (formData: FormData) =>');
-    expect(formCode).toContain('canonicalizePasswordFormData(formData, { password, confirmation })');
-    expect(formCode).toContain('formAction(canonicalData)');
+    // Check for async local action wrapper and returned helper dispatch
+    expect(formCode).toContain('const handleSubmit = async (formData: FormData) =>');
+    expect(formCode).toContain('return dispatchCanonicalPasswordFormData(');
+    expect(formCode).not.toContain('formAction(canonicalData);'); // No bare unreturned dispatcher calls
+
+    // Check for stale error reset state
+    expect(formCode).toContain('setUserEdited(true)');
+    expect(formCode).toContain('const showError = !!(state?.error && !userEdited && !isPending);');
+
+    // Check aria configurations
+    expect(formCode).toContain('aria-live="polite"');
+    expect(formCode).toContain('aria-invalid=');
   });
 
   it('should prove server-side value preservation, defensive type checks, and raw password safety', async () => {

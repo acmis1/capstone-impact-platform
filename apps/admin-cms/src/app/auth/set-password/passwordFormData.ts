@@ -38,3 +38,20 @@ export function canonicalizePasswordFormData(
 
   return result;
 }
+
+export interface PasswordFallback {
+  password?: string;
+  confirmation?: string;
+}
+
+/**
+ * Intercepts form dispatch, builds canonical FormData, and returns/awaits dispatcher.
+ */
+export async function dispatchCanonicalPasswordFormData<T>(
+  formData: FormData,
+  fallback: PasswordFallback,
+  dispatcher: (data: FormData) => T | Promise<T>
+): Promise<T> {
+  const canonicalData = canonicalizePasswordFormData(formData, fallback);
+  return await dispatcher(canonicalData);
+}

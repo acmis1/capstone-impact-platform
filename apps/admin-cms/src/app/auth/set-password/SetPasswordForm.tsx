@@ -2,17 +2,36 @@
 
 import React, { useActionState } from 'react';
 import { setPasswordAction } from './actions';
-import { canonicalizePasswordFormData } from './passwordFormData';
+import { dispatchCanonicalPasswordFormData } from './passwordFormData';
 
 export function SetPasswordForm() {
   const [state, formAction, isPending] = useActionState(setPasswordAction, null);
   const [password, setPassword] = React.useState('');
   const [confirmation, setConfirmation] = React.useState('');
+  const [userEdited, setUserEdited] = React.useState(false);
 
-  const handleSubmit = (formData: FormData) => {
-    const canonicalData = canonicalizePasswordFormData(formData, { password, confirmation });
-    formAction(canonicalData);
+  const handleSubmit = async (formData: FormData) => {
+    setUserEdited(false);
+    return dispatchCanonicalPasswordFormData(
+      formData,
+      { password, confirmation },
+      formAction
+    );
   };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(e.target.value);
+    setUserEdited(true);
+  };
+
+  const handleConfirmationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setConfirmation(e.target.value);
+    setUserEdited(true);
+  };
+
+  const showError = !!(state?.error && !userEdited && !isPending);
+  const hasPasswordError = showError && (state?.error === 'PASSWORD_TOO_SHORT' || state?.error === 'PASSWORD_TOO_LONG' || state?.error === 'PASSWORD_EMPTY');
+  const hasConfirmationError = showError && (state?.error === 'CONFIRMATION_MISMATCH');
 
   return (
     <form action={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -30,8 +49,8 @@ export function SetPasswordForm() {
           minLength={12}
           maxLength={128}
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          aria-invalid={state?.error === 'PASSWORD_TOO_SHORT' || state?.error === 'PASSWORD_TOO_LONG' || state?.error === 'PASSWORD_EMPTY' ? 'true' : 'false'}
+          onChange={handlePasswordChange}
+          aria-invalid={hasPasswordError ? 'true' : 'false'}
           style={{
             backgroundColor: '#1F2937',
             border: '1px solid #374151',
@@ -59,8 +78,8 @@ export function SetPasswordForm() {
           minLength={12}
           maxLength={128}
           value={confirmation}
-          onChange={(e) => setConfirmation(e.target.value)}
-          aria-invalid={state?.error === 'CONFIRMATION_MISMATCH' ? 'true' : 'false'}
+          onChange={handleConfirmationChange}
+          aria-invalid={hasConfirmationError ? 'true' : 'false'}
           style={{
             backgroundColor: '#1F2937',
             border: '1px solid #374151',
@@ -74,7 +93,7 @@ export function SetPasswordForm() {
         />
       </div>
 
-      {state?.error && (
+      {showError && (
         <div
           aria-live="polite"
           style={{
