@@ -18,23 +18,27 @@ Useful interaction and information architecture patterns to learn from without c
 3. **Progressive Disclosure**: Expose advanced parameters only when required.
 4. **Dense But Readable**: High information density balanced with generous line height and clear typography.
 5. **Keyboard-First Design**: Full keyboard accessibility for repetitive administrative operations.
-6. **Accessibility by Construction**: Built atop accessible primitives matching WCAG 2.2 AA standards.
+6. **Accessibility by Construction**: Built atop accessible primitives matching WCAG 2.2 AA target standards.
 7. **Explicit System Status**: Unambiguous visual indicators for draft, review, ready, published, and archived states.
 8. **Reversible & Governed Operations**: Provide safe undo and controlled rollback mechanisms for critical editorial changes.
-9. **Auditability**: Track all status shifts, edits, and publishing events with server-side generated timestamps and audit attribution.
+9. **Auditability**: Track all status shifts, edits, and publishing events with server-side derived timestamps and audit attribution.
 10. **Consistent Terminology**: Standardized terminology across navigation, notifications, and modals.
 11. **Responsive Without Removing Critical Actions**: Adapt layouts across viewports without omitting essential tools.
 12. **Restrained Motion**: Subtle, functional animations respecting `prefers-reduced-motion`.
 13. **No Dark-Pattern Confirmations**: Clear, explicit dialogs for destructive actions without misleading copy.
 
-## D. Current Versus Target Routes
-Current temporary prototype routes:
-- `/admin` (Current project repository index)
-- `/admin/imports` (Batch import entry point)
-- `/admin/imports/{batchId}` (Batch import inspection and reconciliation view)
-- `/admin/projects/{publicId}` (Project detail and editing view)
+## D. Current Active Staging Routes
+Current active staging routes:
+- `/admin`
+  Current project index / dashboard;
+- `/admin/imports`
+  Current import-batch history / list;
+- `/admin/imports/{batchId}`
+  Current read-only import-batch inspection and validation-detail view;
+- `/admin/projects/{publicId}`
+  Current project inspection and authorized review-action view.
 
-Note: The current project index is rendered at `/admin`. No standalone `/admin/projects` index currently exists. Target navigation routes are planned and must not be rendered as working until fully implemented.
+Note: The current project index is rendered at `/admin`. No standalone `/admin/projects` index currently exists. Current active staging routes do not claim to provide a completed New Import UI, editable spreadsheet reconciliation, a full metadata editor, or a standalone `/admin/projects` index. Target navigation routes are planned and must not be shown as working until implemented.
 
 ## E. Target Information Architecture
 Target navigation modules (planned future routes):
@@ -92,7 +96,7 @@ Expected component library suite (built on Radix primitives and Tailwind v4):
 - **Overlay & Messaging**: `Dialog`, `AlertDialog`, `DropdownMenu`, `Tooltip`, `Toast`.
 - **Loading & Fallbacks**: `Progress`, `Skeleton`, `EmptyState`, `ErrorState`.
 
-All components must handle loading, empty, error, disabled, and permission-denied states.
+Relevant views and operations must handle applicable Loading, Empty, Error, Disabled, and Permission-Denied states.
 
 ## I. Page Templates
 1. **Overview Dashboard**: Metrics overview, pending review counts, recent import activities, system alerts.
@@ -129,16 +133,17 @@ Select submission folder/package
 Note: Package intake may accept folders or archive files; ZIP support is optional and not the sole supported intake method.
 
 ## L. Publication & Rollback Governance
-Controlled, authorized rollback workflow requiring:
+Controlled, authorized rollback workflow requires:
 - Snapshot selection from publication history;
 - Checksum or integrity verification;
-- Database restoration execution;
-- Public feed payload verification;
-- Duda sync verification when connected;
+- Authorization check;
+- Selected versioned public-feed snapshot restoration;
+- Fresh-feed retrieval and validation;
+- Duda listing/detail verification when connected;
 - Server-side audit attribution logging;
-- Clear failure handling and recovery alerts.
+- Failure handling and recovery alerts.
 
-Rollback must be a governed administrative operation, not an unverified instant toggle.
+Rollback refers specifically to selected versioned public-feed snapshot restoration, not generic database restoration or instant rollback.
 
 ## M. Security & Configuration UI
 Settings and configuration views may display:
@@ -150,7 +155,7 @@ Never display:
 - API keys, access tokens, service-role secret values, database passwords, or secret environment contents.
 
 ## N. Accessibility & Quality Gates
-Target standard is WCAG 2.2 AA compliance, verified through automated and manual evidence:
+WCAG 2.2 AA target requires automated and manual verification evidence:
 - Semantic landmarks (`<main>`, `<nav>`, `<aside>`, `<header>`, `<footer>`);
 - Keyboard navigation and focus indicator testing;
 - Screen-reader label and description relationship verification;
