@@ -5,6 +5,11 @@ export type BootstrapResult =
   | "SAFE_PRECONDITION_FAILURE"
   | "AUTH_USER_NOT_FOUND"
   | "MULTIPLE_AUTH_MATCHES"
+  | "DATABASE_FUNCTION_UNDEFINED"
+  | "DATABASE_FUNCTION_NOT_FOUND"
+  | "DATABASE_FUNCTION_AMBIGUOUS"
+  | "DATABASE_PERMISSION_FAILURE"
+  | "DATABASE_CONSTRAINT_FAILURE"
   | "DATABASE_BOOTSTRAP_FAILURE";
 
 export interface BootstrapInput {
@@ -58,6 +63,7 @@ export function mapRpcResponse(response: string | null | undefined): BootstrapRe
 export function mapDatabaseError(error: unknown): BootstrapResult {
   const err = error as Record<string, unknown> | null | undefined;
   const message = String(err?.message ?? "");
+  const code = String(err?.code ?? "");
 
   if (message.includes("AUTH_USER_NOT_FOUND")) {
     return "AUTH_USER_NOT_FOUND";
@@ -67,6 +73,22 @@ export function mapDatabaseError(error: unknown): BootstrapResult {
   }
   if (message.includes("BOOTSTRAP_PRECONDITION_FAILED")) {
     return "SAFE_PRECONDITION_FAILURE";
+  }
+
+  if (code === "42883" || (message.includes("function") && message.includes("does not exist"))) {
+    return "DATABASE_FUNCTION_UNDEFINED";
+  }
+  if (code === "PGRST202") {
+    return "DATABASE_FUNCTION_NOT_FOUND";
+  }
+  if (code === "PGRST203") {
+    return "DATABASE_FUNCTION_AMBIGUOUS";
+  }
+  if (code === "42501" || message.includes("permission denied") || message.includes("insufficient privilege")) {
+    return "DATABASE_PERMISSION_FAILURE";
+  }
+  if (code.startsWith("23") || message.includes("constraint") || message.includes("violates")) {
+    return "DATABASE_CONSTRAINT_FAILURE";
   }
 
   return "DATABASE_BOOTSTRAP_FAILURE";

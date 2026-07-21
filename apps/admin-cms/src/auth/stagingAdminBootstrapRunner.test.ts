@@ -300,4 +300,134 @@ describe("Staging Admin Bootstrap Runner", () => {
     expect(JSON.stringify(result)).not.toContain("trace");
     expect(JSON.stringify(result)).not.toContain("timeout");
   });
+
+  it("should map PostgreSQL 42883 undefined_function to DATABASE_FUNCTION_UNDEFINED", async () => {
+    const mockListUsers = vi.fn().mockResolvedValue({
+      data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
+      error: null
+    });
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "42883", message: "function pg_catalog.trim(text) does not exist" }
+    });
+    const client = {
+      auth: { admin: { listUsers: mockListUsers } },
+      rpc: mockRpc
+    } as unknown as InjectedSupabaseClient;
+
+    const result = await executeStagingAdminBootstrap({
+      client,
+      email: "admin@example.com",
+      fullName: "Admin User",
+      confirmation: "LINK_EXISTING_STAGING_ADMIN"
+    });
+
+    expect(result.classification).toBe("DATABASE_FUNCTION_UNDEFINED");
+    expect(result.provisioned).toBe(0);
+    expect(result.rpcCalled).toBe("YES");
+  });
+
+  it("should map PostgREST PGRST202 function not found to DATABASE_FUNCTION_NOT_FOUND", async () => {
+    const mockListUsers = vi.fn().mockResolvedValue({
+      data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
+      error: null
+    });
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "PGRST202", message: "Could not find function in schema cache" }
+    });
+    const client = {
+      auth: { admin: { listUsers: mockListUsers } },
+      rpc: mockRpc
+    } as unknown as InjectedSupabaseClient;
+
+    const result = await executeStagingAdminBootstrap({
+      client,
+      email: "admin@example.com",
+      fullName: "Admin User",
+      confirmation: "LINK_EXISTING_STAGING_ADMIN"
+    });
+
+    expect(result.classification).toBe("DATABASE_FUNCTION_NOT_FOUND");
+    expect(result.provisioned).toBe(0);
+    expect(result.rpcCalled).toBe("YES");
+  });
+
+  it("should map PostgREST PGRST203 ambiguous function to DATABASE_FUNCTION_AMBIGUOUS", async () => {
+    const mockListUsers = vi.fn().mockResolvedValue({
+      data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
+      error: null
+    });
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "PGRST203", message: "More than one function matches given parameters" }
+    });
+    const client = {
+      auth: { admin: { listUsers: mockListUsers } },
+      rpc: mockRpc
+    } as unknown as InjectedSupabaseClient;
+
+    const result = await executeStagingAdminBootstrap({
+      client,
+      email: "admin@example.com",
+      fullName: "Admin User",
+      confirmation: "LINK_EXISTING_STAGING_ADMIN"
+    });
+
+    expect(result.classification).toBe("DATABASE_FUNCTION_AMBIGUOUS");
+    expect(result.provisioned).toBe(0);
+    expect(result.rpcCalled).toBe("YES");
+  });
+
+  it("should map PostgreSQL 42501 permission error to DATABASE_PERMISSION_FAILURE", async () => {
+    const mockListUsers = vi.fn().mockResolvedValue({
+      data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
+      error: null
+    });
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "42501", message: "permission denied for function bootstrap_initial_admin" }
+    });
+    const client = {
+      auth: { admin: { listUsers: mockListUsers } },
+      rpc: mockRpc
+    } as unknown as InjectedSupabaseClient;
+
+    const result = await executeStagingAdminBootstrap({
+      client,
+      email: "admin@example.com",
+      fullName: "Admin User",
+      confirmation: "LINK_EXISTING_STAGING_ADMIN"
+    });
+
+    expect(result.classification).toBe("DATABASE_PERMISSION_FAILURE");
+    expect(result.provisioned).toBe(0);
+    expect(result.rpcCalled).toBe("YES");
+  });
+
+  it("should map PostgreSQL 23xxx constraint error to DATABASE_CONSTRAINT_FAILURE", async () => {
+    const mockListUsers = vi.fn().mockResolvedValue({
+      data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
+      error: null
+    });
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "23505", message: "duplicate key value violates unique constraint" }
+    });
+    const client = {
+      auth: { admin: { listUsers: mockListUsers } },
+      rpc: mockRpc
+    } as unknown as InjectedSupabaseClient;
+
+    const result = await executeStagingAdminBootstrap({
+      client,
+      email: "admin@example.com",
+      fullName: "Admin User",
+      confirmation: "LINK_EXISTING_STAGING_ADMIN"
+    });
+
+    expect(result.classification).toBe("DATABASE_CONSTRAINT_FAILURE");
+    expect(result.provisioned).toBe(0);
+    expect(result.rpcCalled).toBe("YES");
+  });
 });

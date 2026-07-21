@@ -88,7 +88,13 @@ The migrations must be applied in the exact order below:
 3. Paste it into the SQL Editor and click **Run**.
 4. This registers the secure, transactional PL/pgSQL function `public.bootstrap_initial_admin(uuid, text, text)` with executable permissions granted strictly to `service_role`.
 
-### Step 6: Sequence Verification
+### Step 6: Execute Corrective Admin Bootstrap Runtime Fix (0006)
+1. Click **New query** to open a clean editor workspace.
+2. Open the file **`migrations/0006_fix_initial_admin_bootstrap_runtime.sql`** and copy its content.
+3. Paste it into the SQL Editor and click **Run**.
+4. This replaces `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim` as the strongest supported code-level fix for the PL/pgSQL RPC failure.
+
+### Step 7: Sequence Verification
 1. **Schema & Permission Verification:** Perform a read-only audit of the database tables, schema privileges, and functions to ensure everything is correct.
 2. **Empty Anonymous Storage Responses:** Note that an empty anonymous Storage `.list()` response is inconclusive because RLS may return an empty set rather than a direct authorization error. Do not create or add anonymous Storage list policies.
 3. **Storage Architecture Confirmation:** The staging Storage architecture utilizes server-only administrative writes for private drafts, and public approved assets/JSON feeds for retrieval.
