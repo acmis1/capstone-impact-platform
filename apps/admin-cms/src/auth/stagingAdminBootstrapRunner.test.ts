@@ -82,14 +82,19 @@ describe("Staging Admin Bootstrap Runner", () => {
   });
 
   it("should succeed and call RPC once when exactly one Auth match is found (trim and case-insensitive verified)", async () => {
-    const mockListUsers = vi.fn().mockResolvedValue({
-      data: {
-        users: [
-          { id: "uuid-1234", email: "  Admin@EXAMPLE.com  " }
-        ]
-      },
-      error: null
-    });
+    const mockListUsers = vi.fn()
+      .mockResolvedValueOnce({
+        data: {
+          users: [
+            { id: "uuid-1234", email: "  Admin@EXAMPLE.com  " }
+          ]
+        },
+        error: null
+      })
+      .mockResolvedValue({
+        data: { users: [] },
+        error: null
+      });
     const mockRpc = vi.fn().mockResolvedValue({
       data: "CREATED",
       error: null
@@ -110,6 +115,7 @@ describe("Staging Admin Bootstrap Runner", () => {
     expect(result.rpcCalled).toBe("YES");
     expect(result.provisioned).toBe(1);
     expect(result.authMatchCount).toBe(1);
+    expect(mockListUsers).toHaveBeenCalledTimes(2);
     expect(mockRpc).toHaveBeenCalledWith("bootstrap_initial_admin", {
       p_auth_user_id: "uuid-1234",
       p_email: "admin@example.com",
@@ -123,15 +129,20 @@ describe("Staging Admin Bootstrap Runner", () => {
   });
 
   it("should return MULTIPLE_AUTH_MATCHES and NOT call RPC when multiple matches are found", async () => {
-    const mockListUsers = vi.fn().mockResolvedValue({
-      data: {
-        users: [
-          { id: "uuid-1234", email: "admin@example.com" },
-          { id: "uuid-5678", email: "admin@example.com" }
-        ]
-      },
-      error: null
-    });
+    const mockListUsers = vi.fn()
+      .mockResolvedValueOnce({
+        data: {
+          users: [
+            { id: "uuid-1234", email: "admin@example.com" },
+            { id: "uuid-5678", email: "admin@example.com" }
+          ]
+        },
+        error: null
+      })
+      .mockResolvedValue({
+        data: { users: [] },
+        error: null
+      });
     const mockRpc = vi.fn();
     const client = {
       auth: { admin: { listUsers: mockListUsers } },
@@ -147,6 +158,7 @@ describe("Staging Admin Bootstrap Runner", () => {
 
     expect(result.classification).toBe("MULTIPLE_AUTH_MATCHES");
     expect(result.rpcCalled).toBe("NO");
+    expect(mockListUsers).toHaveBeenCalledTimes(2);
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
@@ -193,6 +205,7 @@ describe("Staging Admin Bootstrap Runner", () => {
     expect(result.classification).toBe("ALREADY_PROVISIONED");
     expect(result.rpcCalled).toBe("YES");
     expect(result.pagesRead).toBe(3);
+    expect(mockListUsers).toHaveBeenCalledTimes(3);
     expect(mockRpc).toHaveBeenCalledTimes(1);
   });
 
@@ -220,12 +233,17 @@ describe("Staging Admin Bootstrap Runner", () => {
   });
 
   it("should return ROLE_REPAIRED on successful RPC recovery response", async () => {
-    const mockListUsers = vi.fn().mockResolvedValue({
-      data: {
-        users: [{ id: "uuid-1234", email: "admin@example.com" }]
-      },
-      error: null
-    });
+    const mockListUsers = vi.fn()
+      .mockResolvedValueOnce({
+        data: {
+          users: [{ id: "uuid-1234", email: "admin@example.com" }]
+        },
+        error: null
+      })
+      .mockResolvedValue({
+        data: { users: [] },
+        error: null
+      });
     const mockRpc = vi.fn().mockResolvedValue({
       data: "ROLE_REPAIRED",
       error: null
@@ -244,15 +262,21 @@ describe("Staging Admin Bootstrap Runner", () => {
 
     expect(result.classification).toBe("ROLE_REPAIRED");
     expect(result.provisioned).toBe(1);
+    expect(mockListUsers).toHaveBeenCalledTimes(2);
   });
 
   it("should handle controlled RPC database failures safely", async () => {
-    const mockListUsers = vi.fn().mockResolvedValue({
-      data: {
-        users: [{ id: "uuid-1234", email: "admin@example.com" }]
-      },
-      error: null
-    });
+    const mockListUsers = vi.fn()
+      .mockResolvedValueOnce({
+        data: {
+          users: [{ id: "uuid-1234", email: "admin@example.com" }]
+        },
+        error: null
+      })
+      .mockResolvedValue({
+        data: { users: [] },
+        error: null
+      });
     const mockRpc = vi.fn().mockResolvedValue({
       data: null,
       error: { code: "P0001", message: "exception: AUTH_EMAIL_MISMATCH" }
@@ -271,15 +295,21 @@ describe("Staging Admin Bootstrap Runner", () => {
 
     expect(result.classification).toBe("SAFE_PRECONDITION_FAILURE");
     expect(result.provisioned).toBe(0);
+    expect(mockListUsers).toHaveBeenCalledTimes(2);
   });
 
   it("should handle unexpected RPC failures safely without leaking raw error text", async () => {
-    const mockListUsers = vi.fn().mockResolvedValue({
-      data: {
-        users: [{ id: "uuid-1234", email: "admin@example.com" }]
-      },
-      error: null
-    });
+    const mockListUsers = vi.fn()
+      .mockResolvedValueOnce({
+        data: {
+          users: [{ id: "uuid-1234", email: "admin@example.com" }]
+        },
+        error: null
+      })
+      .mockResolvedValue({
+        data: { users: [] },
+        error: null
+      });
     const mockRpc = vi.fn().mockResolvedValue({
       data: null,
       error: { code: "57014", message: "Query timeout expired raw exception trace trace_id=884" }
@@ -299,13 +329,19 @@ describe("Staging Admin Bootstrap Runner", () => {
     expect(result.classification).toBe("DATABASE_BOOTSTRAP_FAILURE");
     expect(JSON.stringify(result)).not.toContain("trace");
     expect(JSON.stringify(result)).not.toContain("timeout");
+    expect(mockListUsers).toHaveBeenCalledTimes(2);
   });
 
   it("should map PostgreSQL 42883 undefined_function to DATABASE_FUNCTION_UNDEFINED", async () => {
-    const mockListUsers = vi.fn().mockResolvedValue({
-      data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
-      error: null
-    });
+    const mockListUsers = vi.fn()
+      .mockResolvedValueOnce({
+        data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
+        error: null
+      })
+      .mockResolvedValue({
+        data: { users: [] },
+        error: null
+      });
     const mockRpc = vi.fn().mockResolvedValue({
       data: null,
       error: { code: "42883", message: "function pg_catalog.trim(text) does not exist" }
@@ -325,13 +361,19 @@ describe("Staging Admin Bootstrap Runner", () => {
     expect(result.classification).toBe("DATABASE_FUNCTION_UNDEFINED");
     expect(result.provisioned).toBe(0);
     expect(result.rpcCalled).toBe("YES");
+    expect(mockListUsers).toHaveBeenCalledTimes(2);
   });
 
   it("should map PostgREST PGRST202 function not found to DATABASE_FUNCTION_NOT_FOUND", async () => {
-    const mockListUsers = vi.fn().mockResolvedValue({
-      data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
-      error: null
-    });
+    const mockListUsers = vi.fn()
+      .mockResolvedValueOnce({
+        data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
+        error: null
+      })
+      .mockResolvedValue({
+        data: { users: [] },
+        error: null
+      });
     const mockRpc = vi.fn().mockResolvedValue({
       data: null,
       error: { code: "PGRST202", message: "Could not find function in schema cache" }
@@ -351,13 +393,19 @@ describe("Staging Admin Bootstrap Runner", () => {
     expect(result.classification).toBe("DATABASE_FUNCTION_NOT_FOUND");
     expect(result.provisioned).toBe(0);
     expect(result.rpcCalled).toBe("YES");
+    expect(mockListUsers).toHaveBeenCalledTimes(2);
   });
 
   it("should map PostgREST PGRST203 ambiguous function to DATABASE_FUNCTION_AMBIGUOUS", async () => {
-    const mockListUsers = vi.fn().mockResolvedValue({
-      data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
-      error: null
-    });
+    const mockListUsers = vi.fn()
+      .mockResolvedValueOnce({
+        data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
+        error: null
+      })
+      .mockResolvedValue({
+        data: { users: [] },
+        error: null
+      });
     const mockRpc = vi.fn().mockResolvedValue({
       data: null,
       error: { code: "PGRST203", message: "More than one function matches given parameters" }
@@ -377,13 +425,19 @@ describe("Staging Admin Bootstrap Runner", () => {
     expect(result.classification).toBe("DATABASE_FUNCTION_AMBIGUOUS");
     expect(result.provisioned).toBe(0);
     expect(result.rpcCalled).toBe("YES");
+    expect(mockListUsers).toHaveBeenCalledTimes(2);
   });
 
   it("should map PostgreSQL 42501 permission error to DATABASE_PERMISSION_FAILURE", async () => {
-    const mockListUsers = vi.fn().mockResolvedValue({
-      data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
-      error: null
-    });
+    const mockListUsers = vi.fn()
+      .mockResolvedValueOnce({
+        data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
+        error: null
+      })
+      .mockResolvedValue({
+        data: { users: [] },
+        error: null
+      });
     const mockRpc = vi.fn().mockResolvedValue({
       data: null,
       error: { code: "42501", message: "permission denied for function bootstrap_initial_admin" }
@@ -403,13 +457,19 @@ describe("Staging Admin Bootstrap Runner", () => {
     expect(result.classification).toBe("DATABASE_PERMISSION_FAILURE");
     expect(result.provisioned).toBe(0);
     expect(result.rpcCalled).toBe("YES");
+    expect(mockListUsers).toHaveBeenCalledTimes(2);
   });
 
   it("should map PostgreSQL 23xxx constraint error to DATABASE_CONSTRAINT_FAILURE", async () => {
-    const mockListUsers = vi.fn().mockResolvedValue({
-      data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
-      error: null
-    });
+    const mockListUsers = vi.fn()
+      .mockResolvedValueOnce({
+        data: { users: [{ id: "uuid-1234", email: "admin@example.com" }] },
+        error: null
+      })
+      .mockResolvedValue({
+        data: { users: [] },
+        error: null
+      });
     const mockRpc = vi.fn().mockResolvedValue({
       data: null,
       error: { code: "23505", message: "duplicate key value violates unique constraint" }
@@ -429,5 +489,6 @@ describe("Staging Admin Bootstrap Runner", () => {
     expect(result.classification).toBe("DATABASE_CONSTRAINT_FAILURE");
     expect(result.provisioned).toBe(0);
     expect(result.rpcCalled).toBe("YES");
+    expect(mockListUsers).toHaveBeenCalledTimes(2);
   });
 });
