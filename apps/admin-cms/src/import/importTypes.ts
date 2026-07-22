@@ -15,7 +15,7 @@ export interface ImportPackageManifest {
   teamMembers: string[];
   posterText?: string;
   accessibilityText?: string;
-  layoutConfig: Record<string, any>;
+  layoutConfig: Record<string, unknown>;
 }
 
 export interface ImportPackageFile {
@@ -63,6 +63,6 @@ export interface ImportedProjectDraft {
   teamMembers: string[];
   posterText?: string;
   accessibilityText?: string;
-  layoutConfig: Record<string, any>;
+  layoutConfig: Record<string, unknown>;
   status: 'in_review';
 }

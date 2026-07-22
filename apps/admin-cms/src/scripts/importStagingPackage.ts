@@ -1,72 +1,84 @@
 import { loadEnvConfig } from '@next/env';
 loadEnvConfig(process.cwd());
 
+import * as fs from 'fs';
 import * as path from 'path';
+import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { parseLocalImportPackage } from '../import/parseImportPackage';
 import { validateImportPackage } from '../import/validateImportPackage';
-import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
-import { uploadDraftMediaAsset } from '../storage/mediaStorage';
+import { getStagingBuckets } from '../lib/supabase/buckets';
+import { cleanupStagingMediaForProjects } from '../storage/mediaCleanup';
 
-async function run() {
-  const packagePath = 'fixtures/import-packages/runtime-import-demo';
-  const resolvedPath = path.resolve(packagePath);
+async function main() {
+  const packagePath = process.argv[2] || 'packages/sample-capstone-package';
+  const resolvedPackagePath = path.resolve(packagePath);
 
-  console.log(`Starting staging package import from: [${packagePath}]`);
+  console.log(`Starting staging package ingestion from: [${resolvedPackagePath}]`);
 
-  // 1. Parse Package
-  let parsed;
-  try {
-    parsed = await parseLocalImportPackage(resolvedPath);
-  } catch (err: any) {
-    console.error(`❌ Parse Failed: ${err.message}`);
+  if (!fs.existsSync(resolvedPackagePath)) {
+    console.error(`❌ Error: Package path does not exist: [${resolvedPackagePath}]`);
     process.exit(1);
   }
 
-  // 2. Validate Package
-  const validation = validateImportPackage(parsed);
-  const totalErrors = validation.errors.length;
-  const totalWarnings = validation.warnings.length;
+  // 1. Parse local package
+  console.log('Parsing project.json manifest and media assets...');
+  let parseResult;
+  try {
+    parseResult = await parseLocalImportPackage(resolvedPackagePath);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown parsing error';
+    console.error(`❌ Ingestion Parse Failed: ${message}`);
+    process.exit(1);
+  }
 
-  console.log(`Validation Results: ${totalErrors} error(s), ${totalWarnings} warning(s)`);
+  const { manifest, posterImage, posterPdf, snapshot1 } = parseResult;
+  console.log(`Parsed Manifest for project: [${manifest.publicId}] - "${manifest.title}"`);
 
+  // 2. Validate manifest and assets against contract rules
+  console.log('Validating parsed package against administrative criteria...');
+  const validation = validateImportPackage(parseResult);
+
+  if (!validation.valid) {
+    console.error('❌ Package Validation FAILED with blocking errors:');
+    validation.errors.forEach((e) => console.error(` - [${e.ruleCode}] Field "${e.fieldName || 'package'}": ${e.message}`));
+    process.exit(1);
+  }
+
+  console.log('✅ Package Validation PASSED!');
+  if (validation.warnings.length > 0) {
+    console.log(`⚠️ Package Warnings Detected (${validation.warnings.length}):`);
+    validation.warnings.forEach((w) => console.log(` - [${w.ruleCode}] ${w.message}`));
+  }
+
+  // 3. Connect to Staging Supabase
   const supabase = createSupabaseAdminClientCore();
 
-  // If there are blocking validation errors, we fail the import.
-  // Note: For staging import package foundation safety, we exit cleanly but fail status.
-  if (!validation.valid) {
-    console.error(`❌ Ingestion Blocked: Staging package validation failed with ${totalErrors} blocking error(s).`);
-    validation.errors.forEach(e => console.error(` - [${e.ruleCode}] ${e.message}`));
-    process.exit(1);
-  }
-
-  // 3. Create import_batches row
-  const batchRow = {
-    batch_name: `Import Batch ${new Date().toLocaleDateString()}`,
-    mode: 'single',
-    source_folder: packagePath,
-    status: 'processing',
-    total_projects: 1,
-    warning_count: totalWarnings,
-    error_count: totalErrors
-  };
-
-  const { data: dbBatch, error: batchError } = await supabase
+  // Create an audit import_batches row
+  const batchName = `Staging CLI Ingestion - ${path.basename(resolvedPackagePath)}`;
+  const { data: batchRow, error: batchError } = await supabase
     .from('import_batches')
-    .insert(batchRow)
-    .select()
+    .insert({
+      batch_name: batchName,
+      source_folder: packagePath,
+      mode: 'local_package_cli',
+      status: 'processing',
+      total_projects: 1,
+      error_count: validation.errors.length,
+      warning_count: validation.warnings.length
+    })
+    .select('id')
     .single();
 
-  if (batchError || !dbBatch) {
-    console.error(`❌ Failed to record import batch: ${batchError?.message}`);
+  if (batchError || !batchRow) {
+    console.error(`❌ Failed to create import_batches row: ${batchError?.message}`);
     process.exit(1);
   }
 
-  const batchId = dbBatch.id;
-  console.log(`Created Import Batch. ID: [${batchId}]`);
+  const batchId = batchRow.id;
+  console.log(`Created Ingestion Batch ID: [${batchId}]`);
 
-  // 4. Create or Update Project in DB
-  const manifest = parsed.manifest;
-  const dbRow: any = {
+  // 4. Upsert target project record
+  const projectRow = {
     public_id: manifest.publicId,
     title: manifest.title,
     summary: manifest.summary,
@@ -100,7 +112,6 @@ async function run() {
     .maybeSingle();
 
   // Robust Idempotency Cleanup: Clean database media rows and storage objects before re-upload
-  const { cleanupStagingMediaForProjects } = require('../storage/mediaCleanup');
   console.log(`Cleaning existing staging media for [${manifest.publicId}] to prevent duplicates...`);
   const cleanup = await cleanupStagingMediaForProjects([manifest.publicId]);
   console.log(`🧹 Database media rows deleted:       ${cleanup.removedMediaRows}`);
@@ -120,136 +131,126 @@ async function run() {
       console.warn(`⚠️ Warning: Failed to clear old validation flags: ${deleteFlagsError.message}`);
     }
 
-    const { data: updatedProj, error: updateError } = await supabase
+    const { data: updated, error: updateError } = await supabase
       .from('projects')
-      .update(dbRow)
+      .update(projectRow)
       .eq('id', existingProject.id)
       .select('id')
       .single();
 
-    if (updateError || !updatedProj) {
-      console.error(`❌ Failed to update staging project: ${updateError?.message}`);
-      await supabase.from('import_batches').update({ status: 'failed' }).eq('id', batchId);
+    if (updateError || !updated) {
+      console.error(`❌ Failed to update project record: ${updateError?.message}`);
       process.exit(1);
     }
-    projectId = updatedProj.id;
+    projectId = updated.id;
   } else {
-    console.log(`Inserting new project [${manifest.publicId}]...`);
-    const { data: insertedProj, error: insertError } = await supabase
+    console.log(`Creating new project [${manifest.publicId}]...`);
+    const { data: created, error: createError } = await supabase
       .from('projects')
-      .insert(dbRow)
+      .insert(projectRow)
       .select('id')
       .single();
 
-    if (insertError || !insertedProj) {
-      console.error(`❌ Failed to insert staging project: ${insertError?.message}`);
-      await supabase.from('import_batches').update({ status: 'failed' }).eq('id', batchId);
+    if (createError || !created) {
+      console.error(`❌ Failed to create project record: ${createError?.message}`);
       process.exit(1);
     }
-    projectId = insertedProj.id;
+    projectId = created.id;
   }
 
-  // 5. Upload media files as draft private media
-  let mediaUploadedCount = 0;
-
-  try {
-    if (parsed.posterImage) {
-      await uploadDraftMediaAsset({
-        projectPublicId: manifest.publicId,
-        projectDbId: projectId,
-        assetType: 'poster_image',
-        fileName: parsed.posterImage.fileName,
-        content: parsed.posterImage.content,
-        mimeType: parsed.posterImage.mimeType
-      });
-      mediaUploadedCount++;
-    }
-
-    if (parsed.posterPdf) {
-      await uploadDraftMediaAsset({
-        projectPublicId: manifest.publicId,
-        projectDbId: projectId,
-        assetType: 'poster_pdf',
-        fileName: parsed.posterPdf.fileName,
-        content: parsed.posterPdf.content,
-        mimeType: parsed.posterPdf.mimeType
-      });
-      mediaUploadedCount++;
-    }
-
-    if (parsed.snapshot1) {
-      await uploadDraftMediaAsset({
-        projectPublicId: manifest.publicId,
-        projectDbId: projectId,
-        assetType: 'snapshot_image',
-        fileName: parsed.snapshot1.fileName,
-        content: parsed.snapshot1.content,
-        mimeType: parsed.snapshot1.mimeType
-      });
-      mediaUploadedCount++;
-    }
-  } catch (err: any) {
-    console.error(`❌ Error uploading draft media: ${err.message}`);
-    await supabase.from('import_batches').update({ status: 'failed' }).eq('id', batchId);
-    process.exit(1);
-  }
-
-  // 6. Insert validation_flags rows (warnings or errors)
-  const validationFlags: any[] = [];
-  validation.errors.forEach(e => {
-    validationFlags.push({
+  // Record audit validation flags inside validation_flags table
+  const flagRows = [
+    ...validation.errors.map(e => ({
       project_id: projectId,
-      severity: 'error',
       rule_code: e.ruleCode,
-      message: e.message,
-      field_name: e.fieldName || null
-    });
-  });
-  validation.warnings.forEach(w => {
-    validationFlags.push({
+      severity: 'error',
+      field_name: e.fieldName || null,
+      message: e.message
+    })),
+    ...validation.warnings.map(w => ({
       project_id: projectId,
-      severity: 'warning',
       rule_code: w.ruleCode,
-      message: w.message,
-      field_name: w.fieldName || null
-    });
-  });
+      severity: 'warning',
+      field_name: w.fieldName || null,
+      message: w.message
+    }))
+  ];
 
-  if (validationFlags.length > 0) {
-    console.log(`Recording ${validationFlags.length} validation flag(s) in staging DB...`);
-    const { error: flagsError } = await supabase
+  if (flagRows.length > 0) {
+    const { error: insertFlagsError } = await supabase
       .from('validation_flags')
-      .insert(validationFlags);
+      .insert(flagRows);
 
-    if (flagsError) {
-      console.warn(`⚠️ Warning: Failed to record validation flags: ${flagsError.message}`);
+    if (insertFlagsError) {
+      console.warn(`⚠️ Warning: Failed to insert validation audit flags: ${insertFlagsError.message}`);
     }
   }
 
-  // 7. Mark batch completed
-  const { error: completeError } = await supabase
+  // 5. Upload media files to private draft storage bucket
+  const buckets = getStagingBuckets();
+  const draftBucket = buckets.DRAFT_PRIVATE;
+  console.log(`Uploading package media to private draft storage bucket: [${draftBucket}]...`);
+
+  const mediaFilesToUpload = [
+    { file: posterImage, type: 'poster_image' },
+    { file: posterPdf, type: 'poster_pdf' },
+    { file: snapshot1, type: 'snapshot' }
+  ].filter(item => item.file !== null);
+
+  for (const { file, type } of mediaFilesToUpload) {
+    if (!file) continue;
+    const storagePath = `drafts/${manifest.publicId}/${file.fileName}`;
+
+    console.log(` - Uploading ${file.fileName} (${file.fileSizeBytes} bytes) -> [${storagePath}]...`);
+    const { error: uploadError } = await supabase.storage
+      .from(draftBucket)
+      .upload(storagePath, file.content, {
+        contentType: file.mimeType,
+        upsert: true
+      });
+
+    if (uploadError) {
+      console.error(`❌ Storage upload failed for ${file.fileName}: ${uploadError.message}`);
+      process.exit(1);
+    }
+
+    // Insert database record in media_assets table
+    const { error: mediaDbError } = await supabase
+      .from('media_assets')
+      .insert({
+        project_id: projectId,
+        file_name: file.fileName,
+        asset_type: type,
+        storage_bucket: draftBucket,
+        storage_path: storagePath,
+        mime_type: file.mimeType,
+        file_size_bytes: file.fileSizeBytes,
+        is_public_approved: false
+      });
+
+    if (mediaDbError) {
+      console.warn(`⚠️ Warning: Failed to record media asset in DB: ${mediaDbError.message}`);
+    }
+  }
+
+  // Update batch status to completed
+  await supabase
     .from('import_batches')
     .update({ status: 'completed' })
     .eq('id', batchId);
 
-  if (completeError) {
-    console.warn(`⚠️ Warning: Failed to set batch status to completed: ${completeError.message}`);
-  }
-
-  // Final Output
   console.log('\n====================================================');
-  console.log('✅ STAGING WORKSPACE IMPORT COMPLETED SUCCESSFULLY!');
+  console.log('✅ INGESTION COMPLETED SUCCESSFULLY!');
   console.log('====================================================');
-  console.log(`Import Batch ID:     [${batchId}]`);
-  console.log(`Project Public ID:   [${manifest.publicId}]`);
-  console.log(`Warning Count:       ${totalWarnings}`);
-  console.log(`Error Count:         ${totalErrors}`);
-  console.log(`Draft Media Upload:  ${mediaUploadedCount} file(s)`);
-  console.log(`Status Mapped:       [in_review]`);
+  console.log(`Batch ID:          ${batchId}`);
+  console.log(`Project Public ID: ${manifest.publicId}`);
+  console.log(`Database UUID:     ${projectId}`);
+  console.log(`Status Set To:     in_review (Requires admin approval)`);
+  console.log(`Uploaded Assets:   ${mediaFilesToUpload.length} file(s) in private draft bucket`);
   console.log('====================================================\n');
 }
 
-run().catch(err => {
-  console.error('Fatal Uncaught Importer Exception:', err);
+main().catch((err) => {
+  console.error('Fatal CLI Ingestion Error:', err);
   process.exit(1);
 });

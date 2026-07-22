@@ -1,6 +1,16 @@
 import React from 'react';
 
-export default function MediaAssetsTable({ assets }: { assets: any[] }) {
+export interface MediaAssetRow {
+  id: string;
+  file_name: string;
+  asset_type: string;
+  storage_bucket: string;
+  storage_path: string;
+  is_public_approved?: boolean;
+  public_url?: string | null;
+}
+
+export default function MediaAssetsTable({ assets }: { assets: Array<MediaAssetRow | Record<string, unknown>> }) {
   if (!assets || assets.length === 0) {
     return (
       <div style={{ padding: '1rem 0', color: '#9CA3AF', fontSize: '0.9rem' }}>
@@ -24,20 +34,27 @@ export default function MediaAssetsTable({ assets }: { assets: any[] }) {
         </thead>
         <tbody>
           {assets.map((a) => {
-            const isApproved = a.is_public_approved;
+            const id = String(a.id || '');
+            const fileName = String(a.file_name || '');
+            const assetType = String(a.asset_type || '');
+            const storageBucket = String(a.storage_bucket || '');
+            const storagePath = String(a.storage_path || '');
+            const isApproved = Boolean(a.is_public_approved);
+            const publicUrl = a.public_url ? String(a.public_url) : null;
+
             return (
-              <tr key={a.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+              <tr key={id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
                 <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600, color: '#E5E7EB' }}>
-                  {a.file_name}
+                  {fileName}
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', color: '#9CA3AF' }}>
-                  <code>{a.asset_type}</code>
+                  <code>{assetType}</code>
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', color: '#9CA3AF' }}>
-                  <code>{a.storage_bucket}</code>
+                  <code>{storageBucket}</code>
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', color: '#9CA3AF', fontFamily: 'monospace' }}>
-                  {a.storage_path}
+                  {storagePath}
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', textAlign: 'center' }}>
                   <span style={{
@@ -48,8 +65,8 @@ export default function MediaAssetsTable({ assets }: { assets: any[] }) {
                   </span>
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem' }}>
-                  {a.public_url ? (
-                    <a href={a.public_url} target="_blank" rel="noreferrer" style={{
+                  {publicUrl ? (
+                    <a href={publicUrl} target="_blank" rel="noreferrer" style={{
                       color: '#3B82F6',
                       textDecoration: 'none',
                       fontWeight: 600

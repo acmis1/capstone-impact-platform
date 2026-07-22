@@ -3,7 +3,7 @@ import React from 'react';
 export default function ImportBatchStatusBadge({ status }: { status: string }) {
   let backgroundColor = '#4B5563';
   let color = '#FFFFFF';
-  let label = status.toUpperCase();
+  const label = status.toUpperCase();
 
   switch (status) {
     case 'completed':

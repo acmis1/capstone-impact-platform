@@ -9,7 +9,7 @@ export interface FeedValidationResult {
 /**
  * Validates compiled public showcase feed payloads against the approved data contract.
  */
-export function validatePublicFeed(feed: any[]): FeedValidationResult {
+export function validatePublicFeed(feed: Array<PublicFeedRecord | Record<string, unknown>>): FeedValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -37,7 +37,7 @@ export function validatePublicFeed(feed: any[]): FeedValidationResult {
   ]);
 
   feed.forEach((record, index) => {
-    const recordId = record?.id || `Index_${index}`;
+    const recordId = (record && typeof record === 'object' && 'id' in record && record.id) ? record.id : `Index_${index}`;
     const prefix = `[Project ${recordId}]`;
 
     if (!record || typeof record !== 'object') {
@@ -79,9 +79,10 @@ export function validatePublicFeed(feed: any[]): FeedValidationResult {
         if (typeof val !== 'object') {
           errors.push(`${prefix} Type error: "layoutConfig" must be an object.`);
         } else {
-          const tId = val.templateId;
-          if (!tId || !validTemplates.includes(tId)) {
-            errors.push(`${prefix} Layout error: "templateId" must be one of [${validTemplates.join(', ')}]. Received "${tId}".`);
+          const configObj = val as Record<string, unknown>;
+          const tId = configObj.templateId;
+          if (!tId || typeof tId !== 'string' || !validTemplates.includes(tId)) {
+            errors.push(`${prefix} Layout error: "templateId" must be one of [${validTemplates.join(', ')}]. Received "${String(tId)}".`);
           }
         }
       }
@@ -99,7 +100,8 @@ export function validatePublicFeed(feed: any[]): FeedValidationResult {
     ];
 
     recommendedFields.forEach(({ name, desc }) => {
-      const val = record[name];
+      const rec = record as Record<string, unknown>;
+      const val = rec[name];
       if (val === undefined || val === null || String(val).trim() === '') {
         warnings.push(`${prefix} Recommended ${desc} ("${name}") is missing or empty.`);
       }

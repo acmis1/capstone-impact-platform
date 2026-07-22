@@ -1,9 +1,21 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
+export interface ImportBatchRow extends Record<string, unknown> {
+  id: string;
+  batch_name: string;
+  source_folder: string;
+  mode: string;
+  status: string;
+  total_projects: number;
+  error_count: number;
+  warning_count: number;
+  created_at: string;
+}
+
 export class ImportBatchRepositoryCore {
   constructor(protected readonly supabase: SupabaseClient) {}
 
-  async listRecentImportBatches(limit: number = 20): Promise<any[]> {
+  async listRecentImportBatches(limit: number = 20): Promise<ImportBatchRow[]> {
     const { data, error } = await this.supabase
       .from('import_batches')
       .select('*')
@@ -13,10 +25,10 @@ export class ImportBatchRepositoryCore {
     if (error) {
       throw new Error(`Failed to list recent import batches: ${error.message}`);
     }
-    return data || [];
+    return (data as ImportBatchRow[]) || [];
   }
 
-  async getImportBatchById(batchId: string): Promise<any | null> {
+  async getImportBatchById(batchId: string): Promise<ImportBatchRow | null> {
     const { data, error } = await this.supabase
       .from('import_batches')
       .select('*')
@@ -26,10 +38,10 @@ export class ImportBatchRepositoryCore {
     if (error) {
       throw new Error(`Failed to get import batch by ID [${batchId}]: ${error.message}`);
     }
-    return data;
+    return data as ImportBatchRow | null;
   }
 
-  async getImportedProjectsForBatch(batchId: string): Promise<any[]> {
+  async getImportedProjectsForBatch(batchId: string): Promise<Array<Record<string, unknown>>> {
     const { data, error } = await this.supabase
       .from('projects')
       .select('*')
@@ -39,10 +51,10 @@ export class ImportBatchRepositoryCore {
     if (error) {
       throw new Error(`Failed to get imported projects for batch [${batchId}]: ${error.message}`);
     }
-    return data || [];
+    return (data as Array<Record<string, unknown>>) || [];
   }
 
-  async getValidationFlagsForProject(projectId: string): Promise<any[]> {
+  async getValidationFlagsForProject(projectId: string): Promise<Array<Record<string, unknown>>> {
     const { data, error } = await this.supabase
       .from('validation_flags')
       .select('*')
@@ -52,10 +64,10 @@ export class ImportBatchRepositoryCore {
     if (error) {
       throw new Error(`Failed to get validation flags for project [${projectId}]: ${error.message}`);
     }
-    return data || [];
+    return (data as Array<Record<string, unknown>>) || [];
   }
 
-  async getMediaAssetsForProject(projectId: string): Promise<any[]> {
+  async getMediaAssetsForProject(projectId: string): Promise<Array<Record<string, unknown>>> {
     const { data, error } = await this.supabase
       .from('media_assets')
       .select('*')
@@ -65,6 +77,6 @@ export class ImportBatchRepositoryCore {
     if (error) {
       throw new Error(`Failed to get media assets for project [${projectId}]: ${error.message}`);
     }
-    return data || [];
+    return (data as Array<Record<string, unknown>>) || [];
   }
 }

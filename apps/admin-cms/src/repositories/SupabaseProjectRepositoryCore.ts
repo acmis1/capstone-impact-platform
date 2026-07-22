@@ -1,15 +1,83 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { Project } from '../domain/project';
+import { Project, LayoutConfig } from '../domain/project';
 import { ProjectRepository } from './ProjectRepository';
+import { applyReviewActionTransition } from '../workflow/projectWorkflow';
+
+export interface DatabaseProjectRow {
+  id: string;
+  public_id: string;
+  title?: string;
+  summary?: string;
+  background?: string;
+  solution?: string;
+  year?: number;
+  program_name?: string;
+  study_program?: string;
+  discipline?: string;
+  industry?: string;
+  industry_partner?: string;
+  academic_supervisor?: string;
+  group_name?: string;
+  team_members?: string[];
+  poster_url?: string;
+  poster_pdf_url?: string;
+  poster_text_public?: string;
+  accessibility_text_public?: string;
+  snapshots?: string[];
+  video_url?: string;
+  demo_url?: string;
+  repository_url?: string;
+  external_links?: Array<{ label?: string; url: string }>;
+  citations?: string[];
+  layout_config?: Record<string, unknown>;
+  status?: string;
+  import_batch_id?: string;
+  source_folder?: string;
+  internal_staff_notes?: string;
+  private_review_comments?: string;
+  validation_flags_cache?: Array<Record<string, unknown>>;
+  validation_errors?: string[];
+  validation_warnings?: string[];
+  pending_removal_from_public?: boolean;
+  public_removal_completed_at?: string;
+  archived_at?: string;
+  archived_from_status?: string;
+  archive_reason?: string;
+  created_at?: string;
+  updated_at?: string;
+  project_disciplines?: Array<{
+    disciplines?: {
+      name?: string;
+    };
+  }>;
+}
 
 export class SupabaseProjectRepositoryCore implements ProjectRepository {
   constructor(protected readonly supabase: SupabaseClient) {}
 
-  protected mapDbToDomain(row: any): Project {
-    const joinedDisciplines = row.project_disciplines?.map((pd: any) => pd.disciplines?.name).filter(Boolean) || [];
+  protected mapDbToDomain(row: DatabaseProjectRow): Project {
+    const joinedDisciplines = row.project_disciplines?.map((pd) => pd.disciplines?.name).filter(Boolean) as string[] || [];
     const finalDisciplines = joinedDisciplines.length > 0 
       ? joinedDisciplines 
       : (row.discipline ? [row.discipline] : []);
+
+    const rawExternalLinks = row.external_links || [];
+    const externalLinks = rawExternalLinks.map((link) => ({
+      label: link.label || link.url,
+      url: link.url
+    }));
+
+    const rawLayoutConfig = row.layout_config || {};
+    const layoutConfig: LayoutConfig = {
+      templateId: (rawLayoutConfig.templateId as LayoutConfig['templateId']) || 'poster_showcase',
+      featuredMedia: (rawLayoutConfig.featuredMedia as LayoutConfig['featuredMedia']) || 'poster',
+      sectionOrder: Array.isArray(rawLayoutConfig.sectionOrder)
+        ? (rawLayoutConfig.sectionOrder as LayoutConfig['sectionOrder'])
+        : ['background', 'solution', 'snapshots', 'video', 'links'],
+      ...(Array.isArray(rawLayoutConfig.hiddenSections)
+        ? { hiddenSections: rawLayoutConfig.hiddenSections as LayoutConfig['hiddenSections'] }
+        : {})
+    };
 
     return {
       id: this.hashStringToNumber(row.public_id),
@@ -36,29 +104,29 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       videoUrl: row.video_url || '',
       demoUrl: row.demo_url || '',
       repositoryUrl: row.repository_url || '',
-      externalLinks: row.external_links || [],
+      externalLinks,
       citations: row.citations || [],
-      layoutConfig: row.layout_config || {},
-      status: row.status || 'draft',
+      layoutConfig,
+      status: (row.status as Project['status']) || 'draft',
       importBatchId: row.import_batch_id || undefined,
       sourceFolder: row.source_folder || undefined,
       internalStaffNotes: row.internal_staff_notes || undefined,
       privateReviewComments: row.private_review_comments || undefined,
-      validationFlags: row.validation_flags_cache || undefined,
+      validationFlags: (row.validation_flags_cache as Project['validationFlags']) || undefined,
       validationErrors: row.validation_errors || [],
       validationWarnings: row.validation_warnings || [],
       pendingRemovalFromPublic: row.pending_removal_from_public || false,
       publicRemovalCompletedAt: row.public_removal_completed_at || undefined,
       archivedAt: row.archived_at || undefined,
-      archivedFromStatus: row.archived_from_status || undefined,
+      archivedFromStatus: (row.archived_from_status as Project['status']) || undefined,
       archiveReason: row.archive_reason || undefined,
       created_at: row.created_at || undefined,
       updated_at: row.updated_at || undefined
     };
   }
 
-  protected mapDomainToDb(proj: Partial<Project>): any {
-    const row: any = {};
+  protected mapDomainToDb(proj: Partial<Project>): Record<string, unknown> {
+    const row: Record<string, unknown> = {};
     if (proj.publicId !== undefined) row.public_id = proj.publicId;
     if (proj.title !== undefined) row.title = proj.title;
     if (proj.summary !== undefined) row.summary = proj.summary;
@@ -100,13 +168,13 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     return row;
   }
 
-  protected hashStringToNumber(str: string): number {
-    if (!str) return 0;
+  private hashStringToNumber(str: string): number {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
     }
-    return Math.abs(hash) % 2147483647;
+    return Math.abs(hash);
   }
 
   async listProjects(): Promise<Project[]> {
@@ -117,10 +185,9 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       .order('created_at', { ascending: false });
 
     if (error) {
-      throw new Error(`Failed to list projects from Supabase: ${error.message}`);
+      throw new Error(`Failed to list projects: ${error.message}`);
     }
-
-    return (data || []).map((row) => this.mapDbToDomain(row));
+    return (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
   }
 
   async getProjectByPublicId(publicId: string): Promise<Project | null> {
@@ -132,70 +199,83 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       .maybeSingle();
 
     if (error) {
-      throw new Error(`Failed to get project by public ID: ${error.message}`);
+      throw new Error(`Failed to get project by public ID [${publicId}]: ${error.message}`);
     }
 
-    return data ? this.mapDbToDomain(data) : null;
+    if (!data) return null;
+    return this.mapDbToDomain(data as DatabaseProjectRow);
   }
 
-  async createProject(input: Partial<Project> & { title: string; year: string; publicId: string }): Promise<Project> {
-    const dbRow = this.mapDomainToDb(input);
-    dbRow.public_id = input.publicId;
+  async getProjectById(id: number): Promise<Project | null> {
+    const projects = await this.listProjects();
+    return projects.find((p) => p.id === id) || null;
+  }
 
+  async createProject(project: Partial<Project>): Promise<Project> {
+    const dbRow = this.mapDomainToDb(project);
     const { data, error } = await this.supabase
       .from('projects')
       .insert(dbRow)
       .select('*, project_disciplines(disciplines(name))')
       .single();
 
-    if (error) {
-      throw new Error(`Failed to create project: ${error.message}`);
+    if (error || !data) {
+      throw new Error(`Failed to create project: ${error?.message || 'Returned data is null'}`);
     }
-
-    return this.mapDbToDomain(data);
+    return this.mapDbToDomain(data as DatabaseProjectRow);
   }
 
-  async updateProject(id: string, patch: Partial<Project>): Promise<Project> {
-    const dbRow = this.mapDomainToDb(patch);
-
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const query = this.supabase.from('projects').update(dbRow);
-    const filterQuery = isUuid ? query.eq('id', id) : query.eq('public_id', id);
-
-    const { data, error } = await filterQuery
+  async updateProject(publicId: string, updates: Partial<Project>): Promise<Project> {
+    const dbRow = this.mapDomainToDb(updates);
+    const { data, error } = await this.supabase
+      .from('projects')
+      .update(dbRow)
+      .eq('public_id', publicId)
+      .is('deleted_at', null)
       .select('*, project_disciplines(disciplines(name))')
       .single();
 
-    if (error) {
-      throw new Error(`Failed to update project: ${error.message}`);
+    if (error || !data) {
+      throw new Error(`Failed to update project [${publicId}]: ${error?.message || 'Returned data is null'}`);
     }
-
-    return this.mapDbToDomain(data);
+    return this.mapDbToDomain(data as DatabaseProjectRow);
   }
 
   async archiveProject(id: string, reason: string): Promise<Project> {
-    const patch: Partial<Project> = {
-      status: 'archived',
-      archivedAt: new Date().toISOString(),
-      archiveReason: reason,
-      pendingRemovalFromPublic: true
-    };
-    return this.updateProject(id, patch);
+    return this.performReviewAction({
+      publicId: id,
+      action: 'archive',
+      comments: reason
+    });
   }
 
-  async softDeleteProject(id: string): Promise<void> {
-    const patch = {
-      status: 'deleted' as const,
-      deleted_at: new Date().toISOString()
-    };
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const query = this.supabase.from('projects').update(patch);
-    const filterQuery = isUuid ? query.eq('id', id) : query.eq('public_id', id);
+  async softDeleteProject(publicId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('projects')
+      .update({
+        deleted_at: new Date().toISOString(),
+        status: 'deleted',
+        pending_removal_from_public: true
+      })
+      .eq('public_id', publicId);
 
-    const { error } = await filterQuery;
     if (error) {
-      throw new Error(`Failed to soft-delete project: ${error.message}`);
+      throw new Error(`Failed to soft-delete project [${publicId}]: ${error.message}`);
     }
+  }
+
+  async listApprovedProjectsForPublicFeed(): Promise<Project[]> {
+    const { data, error } = await this.supabase
+      .from('projects')
+      .select('*, project_disciplines(disciplines(name))')
+      .in('status', ['approved', 'published'])
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error(`Failed to list approved projects for public feed: ${error.message}`);
+    }
+    return (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
   }
 
   async performReviewAction(params: {
@@ -218,8 +298,6 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     }
 
     // 2. Validate transition
-    // Dynamic import to prevent dependency cycles if any
-    const { applyReviewActionTransition } = require('../workflow/projectWorkflow');
     const transition = applyReviewActionTransition(dbProject.status, action);
 
     if (!transition.allowed || !transition.toStatus) {
@@ -230,7 +308,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     const toStatus = transition.toStatus;
 
     // 3. Compose status updates
-    const updates: any = {
+    const updates: Record<string, unknown> = {
       status: toStatus
     };
 
@@ -278,6 +356,6 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       throw new Error(`Project status update completed but audit logging failed; staging data may require manual reset. Details: ${auditError.message}`);
     }
 
-    return this.mapDbToDomain(updatedProjectRow);
+    return this.mapDbToDomain(updatedProjectRow as DatabaseProjectRow);
   }
 }

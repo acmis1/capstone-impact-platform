@@ -41,7 +41,7 @@ export async function cleanupStagingMediaForProjects(projectPublicIds: string[])
     if (projectsError) {
       result.warnings.push(`Failed to fetch project IDs for database media rows cleanup: ${projectsError.message}`);
     } else if (dbProjects && dbProjects.length > 0) {
-      const projectDbIds = dbProjects.map((p: any) => p.id);
+      const projectDbIds = dbProjects.map((p: { id: string }) => p.id);
       
       const { count, error: deleteRowsError } = await supabase
         .from('media_assets')
@@ -54,8 +54,9 @@ export async function cleanupStagingMediaForProjects(projectPublicIds: string[])
         result.removedMediaRows = count || 0;
       }
     }
-  } catch (e: any) {
-    result.warnings.push(`Database media row cleanup exception: ${e.message}`);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown DB cleanup error';
+    result.warnings.push(`Database media row cleanup exception: ${message}`);
   }
 
   // Helper to list and delete files under a prefix
@@ -78,7 +79,7 @@ export async function cleanupStagingMediaForProjects(projectPublicIds: string[])
 
     // B. Map to relative paths
     const pathsToDelete = fileList
-      .map((f: any) => `${prefix}/${f.name}`)
+      .map((f: { name: string }) => `${prefix}/${f.name}`)
       .filter((p: string) => {
         // Strict guard: verify path starts with approved/ or drafts/ and matches the project public ID
         const isValidPrivate = p.startsWith(`drafts/`);
@@ -115,16 +116,18 @@ export async function cleanupStagingMediaForProjects(projectPublicIds: string[])
     try {
       const privateRemoved = await listAndDeleteFiles(privateBucket, `drafts/${publicId}`);
       result.removedPrivateObjects += privateRemoved;
-    } catch (e: any) {
-      result.warnings.push(`Private bucket prefix drafts/${publicId} cleanup exception: ${e.message}`);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Unknown private bucket error';
+      result.warnings.push(`Private bucket prefix drafts/${publicId} cleanup exception: ${message}`);
     }
 
     // Delete from public bucket under 'approved/{projectPublicId}'
     try {
       const publicRemoved = await listAndDeleteFiles(publicBucket, `approved/${publicId}`);
       result.removedPublicObjects += publicRemoved;
-    } catch (e: any) {
-      result.warnings.push(`Public bucket prefix approved/${publicId} cleanup exception: ${e.message}`);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Unknown public bucket error';
+      result.warnings.push(`Public bucket prefix approved/${publicId} cleanup exception: ${message}`);
     }
   }
 

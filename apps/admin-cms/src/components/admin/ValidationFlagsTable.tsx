@@ -1,6 +1,15 @@
 import React from 'react';
 
-export default function ValidationFlagsTable({ flags }: { flags: any[] }) {
+export interface ValidationFlagRow {
+  id: string;
+  severity: string;
+  rule_code: string;
+  field_name?: string | null;
+  message: string;
+  is_resolved?: boolean;
+}
+
+export default function ValidationFlagsTable({ flags }: { flags: Array<ValidationFlagRow | Record<string, unknown>> }) {
   if (!flags || flags.length === 0) {
     return (
       <div style={{ color: '#10B981', padding: '1rem 0', fontSize: '0.9rem', fontWeight: 600 }}>
@@ -23,9 +32,16 @@ export default function ValidationFlagsTable({ flags }: { flags: any[] }) {
         </thead>
         <tbody>
           {flags.map((f) => {
-            const isError = f.severity === 'error';
+            const id = String(f.id || '');
+            const severity = String(f.severity || '');
+            const ruleCode = String(f.rule_code || '');
+            const fieldName = f.field_name ? String(f.field_name) : 'n/a';
+            const message = String(f.message || '');
+            const isResolved = Boolean(f.is_resolved);
+            const isError = severity === 'error';
+
             return (
-              <tr key={f.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+              <tr key={id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
                 <td style={{ padding: '0.75rem 0.5rem' }}>
                   <span style={{
                     backgroundColor: isError ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
@@ -36,20 +52,20 @@ export default function ValidationFlagsTable({ flags }: { flags: any[] }) {
                     fontSize: '0.75rem',
                     display: 'inline-block'
                   }}>
-                    {f.severity.toUpperCase()}
+                    {severity.toUpperCase()}
                   </span>
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'monospace', color: '#E5E7EB' }}>
-                  {f.rule_code}
+                  {ruleCode}
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'monospace', color: '#9CA3AF' }}>
-                  {f.field_name || 'n/a'}
+                  {fieldName}
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', color: '#D1D5DB', lineHeight: '1.4' }}>
-                  {f.message}
+                  {message}
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', color: '#9CA3AF' }}>
-                  {f.is_resolved ? '✅ Resolved' : '❌ Staging Pending'}
+                  {isResolved ? '✅ Resolved' : '❌ Staging Pending'}
                 </td>
               </tr>
             );

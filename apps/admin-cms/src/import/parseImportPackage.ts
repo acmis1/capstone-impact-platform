@@ -37,8 +37,9 @@ export async function parseLocalImportPackage(packagePath: string): Promise<Impo
   let manifest: ImportPackageManifest;
   try {
     manifest = JSON.parse(manifestContent);
-  } catch (err: any) {
-    throw new Error(`Failed to parse 'project.json': ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'JSON parse error';
+    throw new Error(`Failed to parse 'project.json': ${message}`);
   }
 
   // Helper to load safe files from package

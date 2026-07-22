@@ -13,10 +13,10 @@ export default async function ImportBatchDetailPage({
   params: Promise<{ batchId: string }>
 }) {
   const { batchId } = await params;
-  let batch: any = null;
-  let projects: any[] = [];
-  let validationFlags: any[] = [];
-  let mediaAssets: any[] = [];
+  let batch: Record<string, unknown> | null = null;
+  let projects: Array<Record<string, unknown>> = [];
+  let validationFlags: Array<Record<string, unknown>> = [];
+  let mediaAssets: Array<Record<string, unknown>> = [];
   let errorMsg: string | null = null;
 
   try {
@@ -26,15 +26,18 @@ export default async function ImportBatchDetailPage({
     if (batch) {
       projects = await repository.getImportedProjectsForBatch(batchId);
       if (projects && projects.length > 0) {
-        // Collect flags and assets for the imported project(s)
+        // Collect flags and assets for the primary imported project
         const primaryProject = projects[0];
-        validationFlags = await repository.getValidationFlagsForProject(primaryProject.id);
-        mediaAssets = await repository.getMediaAssetsForProject(primaryProject.id);
+        if (typeof primaryProject.id === 'string') {
+          validationFlags = await repository.getValidationFlagsForProject(primaryProject.id);
+          mediaAssets = await repository.getMediaAssetsForProject(primaryProject.id);
+        }
       }
     }
-  } catch (err: any) {
-    console.error('[Staging Batch Detail Load Error]:', err.message || err);
-    errorMsg = err.message || 'database error';
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'database error';
+    console.error('[Staging Batch Detail Load Error]:', message);
+    errorMsg = message;
   }
 
   // Safe error card for missing batch parameters
@@ -59,24 +62,29 @@ export default async function ImportBatchDetailPage({
           textAlign: 'center',
           border: '1px solid rgba(239, 68, 68, 0.2)',
         }}>
-          <h3 style={{ color: '#EF4444', margin: '0 0 1rem 0' }}>Import Batch Not Found</h3>
-          <p style={{ color: '#9CA3AF', fontSize: '0.9rem', lineHeight: '1.6', margin: '0 0 1.5rem 0' }}>
-            The requested batch UUID is invalid or does not match any logged local package ingestion staging runs in the database.
+          <h2 style={{ color: '#EF4444', margin: '0 0 1rem 0', fontSize: '1.5rem' }}>
+            ⚠️ Batch Details Unavailable
+          </h2>
+          <p style={{ color: '#9CA3AF', fontSize: '0.95rem', lineHeight: '1.5', marginBottom: '1.5rem' }}>
+            {errorMsg ? `Database query failed: ${errorMsg}` : `No staging import batch record found for ID "${batchId}".`}
           </p>
           <Link href="/admin/imports" style={{
-            color: '#3B82F6',
+            color: '#FFFFFF',
+            backgroundColor: '#3B82F6',
+            padding: '0.6rem 1.25rem',
+            borderRadius: '6px',
             textDecoration: 'none',
             fontWeight: 600,
-            fontSize: '0.9rem',
+            fontSize: '0.9rem'
           }}>
-            ← Return to Import Batches
+            ← Return to Ingestion Batches
           </Link>
         </div>
       </div>
     );
   }
 
-  const primaryProject = projects[0] || null;
+  const primaryProject = projects.length > 0 ? projects[0] : null;
 
   return (
     <div style={{
@@ -102,16 +110,18 @@ export default async function ImportBatchDetailPage({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <Link href="/admin/imports" style={{ color: '#9CA3AF', textDecoration: 'none', fontSize: '0.9rem' }}>
-                ← Ingestion Batches
+                ← Ingestion Audit Log
               </Link>
             </div>
-            <h1 style={{ margin: '0.5rem 0 0 0', fontSize: '1.75rem', fontWeight: 800 }}>Batch: {batch.batch_name}</h1>
+            <h1 style={{ margin: '0.5rem 0 0 0', fontSize: '1.75rem', fontWeight: 800 }}>
+              Batch Ingestion Details
+            </h1>
             <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: '#9CA3AF', fontFamily: 'monospace' }}>
-              UUID: {batch.id}
+              ID: {batchId}
             </p>
           </div>
           <div>
-            <Link href="/admin/imports" style={{
+            <Link href="/admin" style={{
               color: '#3B82F6',
               textDecoration: 'none',
               fontSize: '0.95rem',
@@ -121,12 +131,12 @@ export default async function ImportBatchDetailPage({
               borderRadius: '6px',
               border: '1px solid rgba(59, 130, 246, 0.2)',
             }}>
-              All Batches
+              Console Home
             </Link>
           </div>
         </header>
 
-        {/* Layout details grid */}
+        {/* Overview grid layout */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: '1fr 2fr',
@@ -148,42 +158,42 @@ export default async function ImportBatchDetailPage({
               <div>
                 <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Ingestion Status</strong>
                 <div style={{ marginTop: '0.25rem' }}>
-                  <ImportBatchStatusBadge status={batch.status} />
+                  <ImportBatchStatusBadge status={String(batch.status || '')} />
                 </div>
               </div>
 
               <div>
                 <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Local Source Folder</strong>
                 <div style={{ marginTop: '0.25rem', fontFamily: 'monospace', wordBreak: 'break-all', color: '#E5E7EB' }}>
-                  {batch.source_folder}
+                  {String(batch.source_folder || '')}
                 </div>
               </div>
 
               <div>
                 <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Ingestion Mode</strong>
                 <div style={{ marginTop: '0.1rem', color: '#E5E7EB' }}>
-                  {batch.mode}
+                  {String(batch.mode || '')}
                 </div>
               </div>
 
               <div>
                 <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Imported Projects Count</strong>
                 <div style={{ marginTop: '0.1rem', color: '#E5E7EB', fontWeight: 'bold' }}>
-                  {batch.total_projects} project(s)
+                  {String(batch.total_projects || 0)} project(s)
                 </div>
               </div>
 
               <div>
                 <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Errors / Warnings Caught</strong>
                 <div style={{ marginTop: '0.1rem', color: '#E5E7EB' }}>
-                  {batch.error_count || 0} error(s), {batch.warning_count || 0} warning(s)
+                  {String(batch.error_count || 0)} error(s), {String(batch.warning_count || 0)} warning(s)
                 </div>
               </div>
 
               <div>
                 <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Ingested Timestamp</strong>
                 <div style={{ marginTop: '0.1rem', color: '#E5E7EB' }}>
-                  {new Date(batch.created_at).toLocaleString()}
+                  {batch.created_at ? new Date(String(batch.created_at)).toLocaleString() : 'N/A'}
                 </div>
               </div>
             </div>
@@ -228,12 +238,12 @@ export default async function ImportBatchDetailPage({
                   }}>
                     <div>
                       <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>
-                        {primaryProject.title}
+                        {String(primaryProject.title || '')}
                       </h4>
                       <div style={{ marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#9CA3AF' }}>
-                        <span>ID: <code style={{ color: '#E5E7EB' }}>{primaryProject.public_id}</code></span>
+                        <span>ID: <code style={{ color: '#E5E7EB' }}>{String(primaryProject.public_id || '')}</code></span>
                         <span>•</span>
-                        <span>State: <strong style={{ color: '#F59E0B' }}>{primaryProject.status}</strong></span>
+                        <span>State: <strong style={{ color: '#F59E0B' }}>{String(primaryProject.status || '')}</strong></span>
                       </div>
                     </div>
 

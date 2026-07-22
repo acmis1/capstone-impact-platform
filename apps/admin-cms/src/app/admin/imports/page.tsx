@@ -6,23 +6,24 @@ import ImportBatchTable from '../../../components/admin/ImportBatchTable';
 export const dynamic = 'force-dynamic';
 
 export default async function ImportBatchesPage() {
-  let batches: any[] = [];
+  let batches: Array<Record<string, unknown>> = [];
   let databaseError: string | null = null;
 
   try {
     const repository = new ImportBatchRepository();
     batches = await repository.listRecentImportBatches(50);
-  } catch (error: any) {
-    console.error('[Staging Import Batches Load Failure]:', error.message || error);
-    databaseError = error.message || 'Unknown database connection error';
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown database connection error';
+    console.error('[Staging Import Batches Load Failure]:', message);
+    databaseError = message;
   }
 
   // Summary aggregation metrics
   const totalBatches = batches.length;
   const completedCount = batches.filter((b) => b.status === 'completed').length;
   const failedCount = batches.filter((b) => b.status === 'failed').length;
-  const totalWarnings = batches.reduce((acc, b) => acc + (b.warning_count || 0), 0);
-  const totalErrors = batches.reduce((acc, b) => acc + (b.error_count || 0), 0);
+  const totalWarnings = batches.reduce((acc, b) => acc + (Number(b.warning_count) || 0), 0);
+  const totalErrors = batches.reduce((acc, b) => acc + (Number(b.error_count) || 0), 0);
 
   return (
     <div style={{

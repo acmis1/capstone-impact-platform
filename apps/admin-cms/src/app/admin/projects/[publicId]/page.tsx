@@ -6,8 +6,9 @@ import { ProjectDetailSection } from '../../../../components/admin/ProjectDetail
 import { ProjectMediaSummary } from '../../../../components/admin/ProjectMediaSummary';
 import { ProjectValidationSummary } from '../../../../components/admin/ProjectValidationSummary';
 import { StagingReviewActions } from '../../../../components/admin/StagingReviewActions';
-import { getAllowedReviewActions } from '../../../../workflow/projectWorkflow';
+import { getAllowedReviewActions, ProjectStatus } from '../../../../workflow/projectWorkflow';
 import { createSupabaseAdminClientCore } from '../../../../lib/supabase/adminCore';
+import { Project } from '../../../../domain/project';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -20,9 +21,9 @@ interface PageProps {
 
 export default async function ProjectDetailPage({ params }: PageProps) {
   const { publicId } = await params;
-  let project = null;
-  let loadError = null;
-  let auditRecords: any[] = [];
+  let project: Project | null = null;
+  let loadError: string | null = null;
+  let auditRecords: Array<Record<string, unknown>> = [];
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -51,9 +52,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         }
       }
     }
-  } catch (error: any) {
-    console.error(`[Staging Project Detail Failure]:`, error.message || error);
-    loadError = error.message || 'Unknown staging error';
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown staging error';
+    console.error(`[Staging Project Detail Failure]:`, message);
+    loadError = message;
   }
 
   if (loadError) {
@@ -61,39 +63,26 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       <div style={{
         minHeight: '100vh',
         backgroundColor: '#0B0F19',
-        color: '#EF4444',
+        color: '#F3F4F6',
         fontFamily: 'Inter, system-ui, sans-serif',
-        padding: '3rem',
         display: 'flex',
-        justifyContent: 'center',
         alignItems: 'center',
+        justifyContent: 'center',
+        padding: '2rem',
       }}>
         <div style={{
-          maxWidth: '600px',
+          maxWidth: '500px',
           width: '100%',
           backgroundColor: '#161F30',
           borderRadius: '12px',
-          padding: '2.5rem',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
+          padding: '2rem',
           textAlign: 'center',
+          border: '1px solid rgba(239, 68, 68, 0.2)',
         }}>
-          <h3 style={{ margin: '0 0 1rem 0' }}>Staging Database Connection Offline</h3>
-          <p style={{ color: '#D1D5DB', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '2rem' }}>
-            Next.js admin route failed to query project details from the staging database. Ensure that the migrations are applied and credentials set inside apps/admin-cms/.env.local.
+          <h2 style={{ color: '#EF4444', margin: '0 0 1rem 0' }}>⚠️ Staging Load Failure</h2>
+          <p style={{ color: '#9CA3AF', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '2rem' }}>
+            Failed to query staging database project details: {loadError}
           </p>
-          <div style={{
-            backgroundColor: '#0F172A',
-            padding: '1rem',
-            borderRadius: '8px',
-            fontFamily: 'Courier New, monospace',
-            fontSize: '0.85rem',
-            textAlign: 'left',
-            color: '#F87171',
-            overflowX: 'auto',
-            marginBottom: '2rem',
-          }}>
-            {loadError}
-          </div>
           <Link href="/admin" style={{
             color: '#FFFFFF',
             backgroundColor: '#3B82F6',
@@ -103,7 +92,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             fontWeight: '600',
             fontSize: '0.9rem'
           }}>
-            Back to Dashboard
+            Return to Dashboard
           </Link>
         </div>
       </div>
@@ -117,10 +106,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         backgroundColor: '#0B0F19',
         color: '#F3F4F6',
         fontFamily: 'Inter, system-ui, sans-serif',
-        padding: '3rem',
         display: 'flex',
-        justifyContent: 'center',
         alignItems: 'center',
+        justifyContent: 'center',
+        padding: '2rem',
       }}>
         <div style={{
           maxWidth: '500px',
@@ -133,7 +122,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         }}>
           <h2 style={{ margin: '0 0 0.5rem 0', color: '#F59E0B' }}>🔍 Project Not Found</h2>
           <p style={{ color: '#9CA3AF', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '2rem' }}>
-            Staging project public ID <code>"{publicId}"</code> was not found. Seed records or check search key formats.
+            Staging project public ID <code>&quot;{publicId}&quot;</code> was not found. Seed records or check search key formats.
           </p>
           <Link href="/admin" style={{
             color: '#FFFFFF',
@@ -152,7 +141,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   }
 
   const isEligible = project.status === 'approved' || project.status === 'published';
-  const allowedActions = getAllowedReviewActions(project.status as any);
+  const allowedActions = getAllowedReviewActions(project.status as ProjectStatus);
 
   return (
     <div style={{
@@ -355,7 +344,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                 <div style={{ color: '#9CA3AF', fontWeight: 'bold' }}>External Web Links:</div>
                 <ul style={{ margin: '0.25rem 0 0 0', paddingLeft: '1.25rem', color: '#D1D5DB' }}>
                   {project.externalLinks && project.externalLinks.length > 0 ? (
-                    project.externalLinks.map((link: any, i: number) => (
+                    project.externalLinks.map((link: { label?: string; url: string }, i: number) => (
                       <li key={i}>
                         <a href={link.url} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6', textDecoration: 'none' }}>
                           {link.label || link.url}
@@ -494,9 +483,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                   </thead>
                   <tbody>
                     {auditRecords.map((rec) => (
-                      <tr key={rec.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', color: '#D1D5DB' }}>
+                      <tr key={String(rec.id || '')} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', color: '#D1D5DB' }}>
                         <td style={{ padding: '0.5rem', fontSize: '0.8rem', color: '#9CA3AF' }}>
-                          {new Date(rec.created_at).toLocaleString()}
+                          {rec.created_at ? new Date(String(rec.created_at)).toLocaleString() : 'N/A'}
                         </td>
                         <td style={{ padding: '0.5rem', fontWeight: 'bold' }}>
                           <span style={{
@@ -507,14 +496,14 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                             fontSize: '0.75rem',
                             textTransform: 'uppercase'
                           }}>
-                            {rec.action_taken.replace('_', ' ')}
+                            {String(rec.action_taken || '').replace('_', ' ')}
                           </span>
                         </td>
                         <td style={{ padding: '0.5rem' }}>
-                          <code>{rec.from_status}</code> → <code>{rec.to_status}</code>
+                          <code>{String(rec.from_status || '')}</code> → <code>{String(rec.to_status || '')}</code>
                         </td>
                         <td style={{ padding: '0.5rem', color: '#F59E0B' }}>
-                          {rec.comments || 'N/A'}
+                          {String(rec.comments || 'N/A')}
                         </td>
                       </tr>
                     ))}

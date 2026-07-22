@@ -3,17 +3,19 @@ loadEnvConfig(process.cwd());
 
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
+import { Project } from '../domain/project';
 
 async function check() {
   const supabase = createSupabaseAdminClientCore();
   const repository = new SupabaseProjectRepositoryCore(supabase);
 
   console.log('Querying staging database projects...');
-  let projects;
+  let projects: Project[];
   try {
     projects = await repository.listProjects();
-  } catch (e: any) {
-    console.error('❌ Failed to connect or query staging database:', e.message);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown query error';
+    console.error('❌ Failed to connect or query staging database:', message);
     process.exit(1);
   }
 
