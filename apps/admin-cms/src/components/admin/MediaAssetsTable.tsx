@@ -1,16 +1,7 @@
 import React from 'react';
+import { MediaAssetRow } from '../../repositories/ImportBatchRepositoryCore';
 
-export interface MediaAssetRow {
-  id: string;
-  file_name: string;
-  asset_type: string;
-  storage_bucket: string;
-  storage_path: string;
-  is_public_approved?: boolean;
-  public_url?: string | null;
-}
-
-export default function MediaAssetsTable({ assets }: { assets: Array<MediaAssetRow | Record<string, unknown>> }) {
+export default function MediaAssetsTable({ assets }: { assets: MediaAssetRow[] }) {
   if (!assets || assets.length === 0) {
     return (
       <div style={{ padding: '1rem 0', color: '#9CA3AF', fontSize: '0.9rem' }}>
@@ -34,27 +25,20 @@ export default function MediaAssetsTable({ assets }: { assets: Array<MediaAssetR
         </thead>
         <tbody>
           {assets.map((a) => {
-            const id = String(a.id || '');
-            const fileName = String(a.file_name || '');
-            const assetType = String(a.asset_type || '');
-            const storageBucket = String(a.storage_bucket || '');
-            const storagePath = String(a.storage_path || '');
-            const isApproved = Boolean(a.is_public_approved);
-            const publicUrl = a.public_url ? String(a.public_url) : null;
-
+            const isApproved = a.is_public_approved;
             return (
-              <tr key={id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+              <tr key={a.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
                 <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600, color: '#E5E7EB' }}>
-                  {fileName}
+                  {a.file_name}
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', color: '#9CA3AF' }}>
-                  <code>{assetType}</code>
+                  <code>{a.asset_type}</code>
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', color: '#9CA3AF' }}>
-                  <code>{storageBucket}</code>
+                  <code>{a.storage_bucket}</code>
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', color: '#9CA3AF', fontFamily: 'monospace' }}>
-                  {storagePath}
+                  {a.storage_path}
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', textAlign: 'center' }}>
                   <span style={{
@@ -65,8 +49,8 @@ export default function MediaAssetsTable({ assets }: { assets: Array<MediaAssetR
                   </span>
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem' }}>
-                  {publicUrl ? (
-                    <a href={publicUrl} target="_blank" rel="noreferrer" style={{
+                  {a.public_url ? (
+                    <a href={a.public_url} target="_blank" rel="noreferrer" style={{
                       color: '#3B82F6',
                       textDecoration: 'none',
                       fontWeight: 600

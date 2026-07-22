@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
-export interface ImportBatchRow extends Record<string, unknown> {
+export interface ImportBatchRow {
   id: string;
   batch_name: string;
   source_folder: string;
@@ -10,6 +10,36 @@ export interface ImportBatchRow extends Record<string, unknown> {
   error_count: number;
   warning_count: number;
   created_at: string;
+}
+
+export interface ImportedProjectRow {
+  id: string;
+  public_id: string;
+  title: string;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ValidationFlagRow {
+  id: string;
+  project_id: string;
+  severity: string;
+  rule_code: string;
+  field_name?: string | null;
+  message: string;
+  is_resolved?: boolean;
+}
+
+export interface MediaAssetRow {
+  id: string;
+  project_id: string;
+  file_name: string;
+  asset_type: string;
+  storage_bucket: string;
+  storage_path: string;
+  is_public_approved?: boolean;
+  public_url?: string | null;
 }
 
 export class ImportBatchRepositoryCore {
@@ -41,7 +71,7 @@ export class ImportBatchRepositoryCore {
     return data as ImportBatchRow | null;
   }
 
-  async getImportedProjectsForBatch(batchId: string): Promise<Array<Record<string, unknown>>> {
+  async getImportedProjectsForBatch(batchId: string): Promise<ImportedProjectRow[]> {
     const { data, error } = await this.supabase
       .from('projects')
       .select('*')
@@ -51,10 +81,10 @@ export class ImportBatchRepositoryCore {
     if (error) {
       throw new Error(`Failed to get imported projects for batch [${batchId}]: ${error.message}`);
     }
-    return (data as Array<Record<string, unknown>>) || [];
+    return (data as ImportedProjectRow[]) || [];
   }
 
-  async getValidationFlagsForProject(projectId: string): Promise<Array<Record<string, unknown>>> {
+  async getValidationFlagsForProject(projectId: string): Promise<ValidationFlagRow[]> {
     const { data, error } = await this.supabase
       .from('validation_flags')
       .select('*')
@@ -64,10 +94,10 @@ export class ImportBatchRepositoryCore {
     if (error) {
       throw new Error(`Failed to get validation flags for project [${projectId}]: ${error.message}`);
     }
-    return (data as Array<Record<string, unknown>>) || [];
+    return (data as ValidationFlagRow[]) || [];
   }
 
-  async getMediaAssetsForProject(projectId: string): Promise<Array<Record<string, unknown>>> {
+  async getMediaAssetsForProject(projectId: string): Promise<MediaAssetRow[]> {
     const { data, error } = await this.supabase
       .from('media_assets')
       .select('*')
@@ -77,6 +107,6 @@ export class ImportBatchRepositoryCore {
     if (error) {
       throw new Error(`Failed to get media assets for project [${projectId}]: ${error.message}`);
     }
-    return (data as Array<Record<string, unknown>>) || [];
+    return (data as MediaAssetRow[]) || [];
   }
 }

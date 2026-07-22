@@ -9,7 +9,7 @@ export interface FeedValidationResult {
 /**
  * Validates compiled public showcase feed payloads against the approved data contract.
  */
-export function validatePublicFeed(feed: Array<PublicFeedRecord | Record<string, unknown>>): FeedValidationResult {
+export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -36,11 +36,12 @@ export function validatePublicFeed(feed: Array<PublicFeedRecord | Record<string,
     'archivedFromStatus', 'archiveReason', 'created_at', 'updated_at'
   ]);
 
-  feed.forEach((record, index) => {
-    const recordId = (record && typeof record === 'object' && 'id' in record && record.id) ? record.id : `Index_${index}`;
+  feed.forEach((untypedRecord, index) => {
+    const record = untypedRecord && typeof untypedRecord === 'object' ? (untypedRecord as Record<string, unknown>) : null;
+    const recordId = record?.id || `Index_${index}`;
     const prefix = `[Project ${recordId}]`;
 
-    if (!record || typeof record !== 'object') {
+    if (!record) {
       errors.push(`${prefix} Record is not a valid JSON object.`);
       return;
     }
@@ -100,8 +101,7 @@ export function validatePublicFeed(feed: Array<PublicFeedRecord | Record<string,
     ];
 
     recommendedFields.forEach(({ name, desc }) => {
-      const rec = record as Record<string, unknown>;
-      const val = rec[name];
+      const val = record[name];
       if (val === undefined || val === null || String(val).trim() === '') {
         warnings.push(`${prefix} Recommended ${desc} ("${name}") is missing or empty.`);
       }

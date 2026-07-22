@@ -2,11 +2,12 @@ import React from 'react';
 import Link from 'next/link';
 import { ImportBatchRepository } from '../../../repositories/ImportBatchRepository';
 import ImportBatchTable from '../../../components/admin/ImportBatchTable';
+import { ImportBatchRow } from '../../../repositories/ImportBatchRepositoryCore';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ImportBatchesPage() {
-  let batches: Array<Record<string, unknown>> = [];
+  let batches: ImportBatchRow[] = [];
   let databaseError: string | null = null;
 
   try {
@@ -22,8 +23,8 @@ export default async function ImportBatchesPage() {
   const totalBatches = batches.length;
   const completedCount = batches.filter((b) => b.status === 'completed').length;
   const failedCount = batches.filter((b) => b.status === 'failed').length;
-  const totalWarnings = batches.reduce((acc, b) => acc + (Number(b.warning_count) || 0), 0);
-  const totalErrors = batches.reduce((acc, b) => acc + (Number(b.error_count) || 0), 0);
+  const totalWarnings = batches.reduce((acc, b) => acc + (b.warning_count || 0), 0);
+  const totalErrors = batches.reduce((acc, b) => acc + (b.error_count || 0), 0);
 
   return (
     <div style={{

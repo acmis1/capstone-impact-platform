@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { Project, LayoutConfig } from '../domain/project';
+import { Project } from '../domain/project';
 import { ProjectRepository } from './ProjectRepository';
 import { applyReviewActionTransition } from '../workflow/projectWorkflow';
 
@@ -27,21 +27,21 @@ export interface DatabaseProjectRow {
   video_url?: string;
   demo_url?: string;
   repository_url?: string;
-  external_links?: Array<{ label?: string; url: string }>;
+  external_links?: Project['externalLinks'];
   citations?: string[];
-  layout_config?: Record<string, unknown>;
-  status?: string;
+  layout_config?: Project['layoutConfig'];
+  status?: Project['status'];
   import_batch_id?: string;
   source_folder?: string;
   internal_staff_notes?: string;
   private_review_comments?: string;
-  validation_flags_cache?: Array<Record<string, unknown>>;
+  validation_flags_cache?: Project['validationFlags'];
   validation_errors?: string[];
   validation_warnings?: string[];
   pending_removal_from_public?: boolean;
   public_removal_completed_at?: string;
   archived_at?: string;
-  archived_from_status?: string;
+  archived_from_status?: Project['status'];
   archive_reason?: string;
   created_at?: string;
   updated_at?: string;
@@ -60,24 +60,6 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     const finalDisciplines = joinedDisciplines.length > 0 
       ? joinedDisciplines 
       : (row.discipline ? [row.discipline] : []);
-
-    const rawExternalLinks = row.external_links || [];
-    const externalLinks = rawExternalLinks.map((link) => ({
-      label: link.label || link.url,
-      url: link.url
-    }));
-
-    const rawLayoutConfig = row.layout_config || {};
-    const layoutConfig: LayoutConfig = {
-      templateId: (rawLayoutConfig.templateId as LayoutConfig['templateId']) || 'poster_showcase',
-      featuredMedia: (rawLayoutConfig.featuredMedia as LayoutConfig['featuredMedia']) || 'poster',
-      sectionOrder: Array.isArray(rawLayoutConfig.sectionOrder)
-        ? (rawLayoutConfig.sectionOrder as LayoutConfig['sectionOrder'])
-        : ['background', 'solution', 'snapshots', 'video', 'links'],
-      ...(Array.isArray(rawLayoutConfig.hiddenSections)
-        ? { hiddenSections: rawLayoutConfig.hiddenSections as LayoutConfig['hiddenSections'] }
-        : {})
-    };
 
     return {
       id: this.hashStringToNumber(row.public_id),
@@ -104,21 +86,21 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       videoUrl: row.video_url || '',
       demoUrl: row.demo_url || '',
       repositoryUrl: row.repository_url || '',
-      externalLinks,
+      externalLinks: row.external_links || [],
       citations: row.citations || [],
-      layoutConfig,
-      status: (row.status as Project['status']) || 'draft',
+      layoutConfig: row.layout_config || { templateId: 'poster_showcase', featuredMedia: 'poster_image', sectionOrder: ['summary', 'background', 'solution'] },
+      status: row.status || 'draft',
       importBatchId: row.import_batch_id || undefined,
       sourceFolder: row.source_folder || undefined,
       internalStaffNotes: row.internal_staff_notes || undefined,
       privateReviewComments: row.private_review_comments || undefined,
-      validationFlags: (row.validation_flags_cache as Project['validationFlags']) || undefined,
+      validationFlags: row.validation_flags_cache || undefined,
       validationErrors: row.validation_errors || [],
       validationWarnings: row.validation_warnings || [],
       pendingRemovalFromPublic: row.pending_removal_from_public || false,
       publicRemovalCompletedAt: row.public_removal_completed_at || undefined,
       archivedAt: row.archived_at || undefined,
-      archivedFromStatus: (row.archived_from_status as Project['status']) || undefined,
+      archivedFromStatus: row.archived_from_status || undefined,
       archiveReason: row.archive_reason || undefined,
       created_at: row.created_at || undefined,
       updated_at: row.updated_at || undefined
@@ -168,13 +150,13 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     return row;
   }
 
-  private hashStringToNumber(str: string): number {
+  protected hashStringToNumber(str: string): number {
+    if (!str) return 0;
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash |= 0;
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
     }
-    return Math.abs(hash);
+    return Math.abs(hash) % 2147483647;
   }
 
   async listProjects(): Promise<Project[]> {
@@ -185,8 +167,9 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       .order('created_at', { ascending: false });
 
     if (error) {
-      throw new Error(`Failed to list projects: ${error.message}`);
+      throw new Error(`Failed to list projects from Supabase: ${error.message}`);
     }
+
     return (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
   }
 
@@ -199,83 +182,70 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       .maybeSingle();
 
     if (error) {
-      throw new Error(`Failed to get project by public ID [${publicId}]: ${error.message}`);
+      throw new Error(`Failed to get project by public ID: ${error.message}`);
     }
 
-    if (!data) return null;
-    return this.mapDbToDomain(data as DatabaseProjectRow);
+    return data ? this.mapDbToDomain(data as DatabaseProjectRow) : null;
   }
 
-  async getProjectById(id: number): Promise<Project | null> {
-    const projects = await this.listProjects();
-    return projects.find((p) => p.id === id) || null;
-  }
+  async createProject(input: Partial<Project> & { title: string; year: string; publicId: string }): Promise<Project> {
+    const dbRow = this.mapDomainToDb(input);
+    dbRow.public_id = input.publicId;
 
-  async createProject(project: Partial<Project>): Promise<Project> {
-    const dbRow = this.mapDomainToDb(project);
     const { data, error } = await this.supabase
       .from('projects')
       .insert(dbRow)
       .select('*, project_disciplines(disciplines(name))')
       .single();
 
-    if (error || !data) {
-      throw new Error(`Failed to create project: ${error?.message || 'Returned data is null'}`);
+    if (error) {
+      throw new Error(`Failed to create project: ${error.message}`);
     }
+
     return this.mapDbToDomain(data as DatabaseProjectRow);
   }
 
-  async updateProject(publicId: string, updates: Partial<Project>): Promise<Project> {
-    const dbRow = this.mapDomainToDb(updates);
-    const { data, error } = await this.supabase
-      .from('projects')
-      .update(dbRow)
-      .eq('public_id', publicId)
-      .is('deleted_at', null)
+  async updateProject(id: string, patch: Partial<Project>): Promise<Project> {
+    const dbRow = this.mapDomainToDb(patch);
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const query = this.supabase.from('projects').update(dbRow);
+    const filterQuery = isUuid ? query.eq('id', id) : query.eq('public_id', id);
+
+    const { data, error } = await filterQuery
       .select('*, project_disciplines(disciplines(name))')
       .single();
 
-    if (error || !data) {
-      throw new Error(`Failed to update project [${publicId}]: ${error?.message || 'Returned data is null'}`);
+    if (error) {
+      throw new Error(`Failed to update project: ${error.message}`);
     }
+
     return this.mapDbToDomain(data as DatabaseProjectRow);
   }
 
   async archiveProject(id: string, reason: string): Promise<Project> {
-    return this.performReviewAction({
-      publicId: id,
-      action: 'archive',
-      comments: reason
-    });
+    const patch: Partial<Project> = {
+      status: 'archived',
+      archivedAt: new Date().toISOString(),
+      archiveReason: reason,
+      pendingRemovalFromPublic: true
+    };
+    return this.updateProject(id, patch);
   }
 
-  async softDeleteProject(publicId: string): Promise<void> {
-    const { error } = await this.supabase
-      .from('projects')
-      .update({
-        deleted_at: new Date().toISOString(),
-        status: 'deleted',
-        pending_removal_from_public: true
-      })
-      .eq('public_id', publicId);
+  async softDeleteProject(id: string): Promise<void> {
+    const patch = {
+      status: 'deleted' as const,
+      deleted_at: new Date().toISOString()
+    };
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const query = this.supabase.from('projects').update(patch);
+    const filterQuery = isUuid ? query.eq('id', id) : query.eq('public_id', id);
 
+    const { error } = await filterQuery;
     if (error) {
-      throw new Error(`Failed to soft-delete project [${publicId}]: ${error.message}`);
+      throw new Error(`Failed to soft-delete project: ${error.message}`);
     }
-  }
-
-  async listApprovedProjectsForPublicFeed(): Promise<Project[]> {
-    const { data, error } = await this.supabase
-      .from('projects')
-      .select('*, project_disciplines(disciplines(name))')
-      .in('status', ['approved', 'published'])
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      throw new Error(`Failed to list approved projects for public feed: ${error.message}`);
-    }
-    return (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
   }
 
   async performReviewAction(params: {

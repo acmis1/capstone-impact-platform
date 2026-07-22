@@ -6,7 +6,7 @@ import { ProjectDetailSection } from '../../../../components/admin/ProjectDetail
 import { ProjectMediaSummary } from '../../../../components/admin/ProjectMediaSummary';
 import { ProjectValidationSummary } from '../../../../components/admin/ProjectValidationSummary';
 import { StagingReviewActions } from '../../../../components/admin/StagingReviewActions';
-import { getAllowedReviewActions, ProjectStatus } from '../../../../workflow/projectWorkflow';
+import { getAllowedReviewActions } from '../../../../workflow/projectWorkflow';
 import { createSupabaseAdminClientCore } from '../../../../lib/supabase/adminCore';
 import { Project } from '../../../../domain/project';
 
@@ -53,7 +53,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       }
     }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown staging error';
+    const message = error instanceof Error ? error.message : String(error);
     console.error(`[Staging Project Detail Failure]:`, message);
     loadError = message;
   }
@@ -63,26 +63,39 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       <div style={{
         minHeight: '100vh',
         backgroundColor: '#0B0F19',
-        color: '#F3F4F6',
+        color: '#EF4444',
         fontFamily: 'Inter, system-ui, sans-serif',
+        padding: '3rem',
         display: 'flex',
-        alignItems: 'center',
         justifyContent: 'center',
-        padding: '2rem',
+        alignItems: 'center',
       }}>
         <div style={{
-          maxWidth: '500px',
+          maxWidth: '600px',
           width: '100%',
           backgroundColor: '#161F30',
           borderRadius: '12px',
-          padding: '2rem',
-          textAlign: 'center',
+          padding: '2.5rem',
           border: '1px solid rgba(239, 68, 68, 0.2)',
+          textAlign: 'center',
         }}>
-          <h2 style={{ color: '#EF4444', margin: '0 0 1rem 0' }}>⚠️ Staging Load Failure</h2>
-          <p style={{ color: '#9CA3AF', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '2rem' }}>
-            Failed to query staging database project details: {loadError}
+          <h3 style={{ margin: '0 0 1rem 0' }}>Staging Database Connection Offline</h3>
+          <p style={{ color: '#D1D5DB', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '2rem' }}>
+            Next.js admin route failed to query project details from the staging database. Ensure that the migrations are applied and credentials set inside apps/admin-cms/.env.local.
           </p>
+          <div style={{
+            backgroundColor: '#0F172A',
+            padding: '1rem',
+            borderRadius: '8px',
+            fontFamily: 'Courier New, monospace',
+            fontSize: '0.85rem',
+            textAlign: 'left',
+            color: '#F87171',
+            overflowX: 'auto',
+            marginBottom: '2rem',
+          }}>
+            {loadError}
+          </div>
           <Link href="/admin" style={{
             color: '#FFFFFF',
             backgroundColor: '#3B82F6',
@@ -92,7 +105,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             fontWeight: '600',
             fontSize: '0.9rem'
           }}>
-            Return to Dashboard
+            Back to Dashboard
           </Link>
         </div>
       </div>
@@ -106,10 +119,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         backgroundColor: '#0B0F19',
         color: '#F3F4F6',
         fontFamily: 'Inter, system-ui, sans-serif',
+        padding: '3rem',
         display: 'flex',
-        alignItems: 'center',
         justifyContent: 'center',
-        padding: '2rem',
+        alignItems: 'center',
       }}>
         <div style={{
           maxWidth: '500px',
@@ -141,7 +154,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   }
 
   const isEligible = project.status === 'approved' || project.status === 'published';
-  const allowedActions = getAllowedReviewActions(project.status as ProjectStatus);
+  const allowedActions = getAllowedReviewActions(project.status);
 
   return (
     <div style={{
