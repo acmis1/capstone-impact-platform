@@ -24,6 +24,8 @@ export default async function ImportBatchDetailPage({
   let validationFlags: ValidationFlagRow[] = [];
   let mediaAssets: MediaAssetRow[] = [];
 
+  let errorMsg: string | null = null;
+
   try {
     const repository = new ImportBatchRepository();
     batch = await repository.getImportBatchById(batchId);
@@ -38,12 +40,13 @@ export default async function ImportBatchDetailPage({
       }
     }
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = err instanceof Error ? err.message : 'database error';
     console.error('[Staging Batch Detail Load Error]:', message);
+    errorMsg = message;
   }
 
   // Safe error card for missing batch parameters
-  if (!batch) {
+  if (!batch || errorMsg) {
     return (
       <div style={{
         minHeight: '100vh',

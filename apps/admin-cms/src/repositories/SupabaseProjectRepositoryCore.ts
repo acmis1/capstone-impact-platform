@@ -88,7 +88,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       repositoryUrl: row.repository_url || '',
       externalLinks: row.external_links || [],
       citations: row.citations || [],
-      layoutConfig: row.layout_config || { templateId: 'poster_showcase', featuredMedia: 'poster_image', sectionOrder: ['summary', 'background', 'solution'] },
+      layoutConfig: row.layout_config || ({} as Project['layoutConfig']),
       status: row.status || 'draft',
       importBatchId: row.import_batch_id || undefined,
       sourceFolder: row.source_folder || undefined,

@@ -1,6 +1,5 @@
 import { WorkflowStatus } from '../domain/workflowStatus';
 
-export type ProjectStatus = WorkflowStatus;
 export type ReviewAction = 'request_changes' | 'approve' | 'archive';
 
 /**
