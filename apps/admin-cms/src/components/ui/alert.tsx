@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { AlertCircle, AlertTriangle, CheckCircle2, Info } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils";
 
 export const alertVariants = cva(
   "relative w-full rounded-lg border p-4 [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground",
@@ -30,7 +30,7 @@ const variantIcons = {
 };
 
 export interface AlertProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends React.ComponentProps<"div">,
     VariantProps<typeof alertVariants> {
   icon?: React.ComponentType<{ className?: string }>;
   title?: string;
@@ -44,21 +44,25 @@ export function Alert({
   title,
   description,
   children,
+  role: callerRole,
+  ref,
   ...props
 }: AlertProps) {
   const Icon = CustomIcon || (variant ? variantIcons[variant] : Info);
-  const role = variant === "destructive" || variant === "warning" ? "alert" : "status";
+  const defaultRole = variant === "destructive" ? "alert" : "status";
+  const effectiveRole = callerRole ?? defaultRole;
 
   return (
     <div
       data-slot="alert"
-      role={role}
+      role={effectiveRole}
+      ref={ref}
       className={cn(alertVariants({ variant }), className)}
       {...props}
     >
       {Icon && <Icon className="h-4 w-4" aria-hidden="true" />}
       <div className="flex flex-col gap-1">
-        {title && <h5 className="font-medium leading-none tracking-tight">{title}</h5>}
+        {title && <div className="font-medium leading-none tracking-tight">{title}</div>}
         {description && <div className="text-sm text-muted-foreground">{description}</div>}
         {children}
       </div>

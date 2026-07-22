@@ -1,8 +1,8 @@
 import * as React from "react";
-import { Slot } from "@radix-ui/react-slot";
+import { Slot } from "radix-ui";
 import { cva, type VariantProps } from "class-variance-authority";
 import { Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils";
 
 export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -30,12 +30,20 @@ export const buttonVariants = cva(
   }
 );
 
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
-  asChild?: boolean;
-  isLoading?: boolean;
-}
+type BaseButtonProps = Omit<React.ComponentProps<"button">, "disabled"> &
+  VariantProps<typeof buttonVariants>;
+
+export type ButtonProps =
+  | (BaseButtonProps & {
+      asChild?: false;
+      isLoading?: boolean;
+      disabled?: boolean;
+    })
+  | (BaseButtonProps & {
+      asChild: true;
+      isLoading?: never;
+      disabled?: never;
+    });
 
 export function Button({
   className,
@@ -45,22 +53,37 @@ export function Button({
   isLoading = false,
   disabled,
   children,
-  type = "button",
+  type,
+  ref,
   ...props
 }: ButtonProps) {
-  const Comp = asChild ? Slot : "button";
+  if (asChild) {
+    return (
+      <Slot.Root
+        data-slot="button"
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref as React.Ref<HTMLElement>}
+        {...props}
+      >
+        {children}
+      </Slot.Root>
+    );
+  }
+
+  const isButtonDisabled = Boolean(disabled || isLoading);
 
   return (
-    <Comp
+    <button
       data-slot="button"
+      ref={ref}
+      type={type ?? "button"}
+      disabled={isButtonDisabled}
+      aria-busy={isLoading ? true : undefined}
       className={cn(buttonVariants({ variant, size, className }))}
-      disabled={disabled || isLoading}
-      aria-busy={isLoading || undefined}
-      type={asChild ? undefined : type}
       {...props}
     >
       {isLoading && <Loader2 className="animate-spin" aria-hidden="true" />}
       {children}
-    </Comp>
+    </button>
   );
 }

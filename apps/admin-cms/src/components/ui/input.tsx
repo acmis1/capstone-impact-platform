@@ -1,14 +1,15 @@
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils";
 
-export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+export interface InputProps extends React.ComponentProps<"input"> {
   isInvalid?: boolean;
 }
 
-export function Input({ className, type = "text", isInvalid = false, ...props }: InputProps) {
+export function Input({ className, type = "text", isInvalid = false, ref, ...props }: InputProps) {
   return (
     <input
       data-slot="input"
+      ref={ref}
       type={type}
       aria-invalid={isInvalid || undefined}
       className={cn(

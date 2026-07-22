@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "../components/ui/button";
 
 describe("buttonVariants", () => {
   it("returns default classes when no options are passed", () => {

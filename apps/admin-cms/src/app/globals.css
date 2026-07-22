@@ -67,7 +67,7 @@
   --surface-elevated: #ffffff;
 
   --muted: #f1f5f9;
-  --muted-foreground: #64748b;
+  --muted-foreground: #475569;
 
   --primary: #e61e2a;
   --primary-foreground: #ffffff;
@@ -81,13 +81,13 @@
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
 
-  --success: #16a34a;
+  --success: #15803d;
   --success-foreground: #ffffff;
 
-  --warning: #d97706;
+  --warning: #b45309;
   --warning-foreground: #ffffff;
 
-  --information: #2563eb;
+  --information: #1d4ed8;
   --information-foreground: #ffffff;
 
   --border: #e2e8f0;
@@ -143,8 +143,8 @@ select {
 }
 
 ::selection {
-  background-color: #e61e2a;
-  color: #ffffff;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
 }
 
 :focus-visible {
