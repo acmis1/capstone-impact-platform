@@ -7,6 +7,7 @@ import { compilePublicFeed } from '../feed/compilePublicFeed';
 import { validatePublicFeed } from '../feed/validatePublicFeed';
 import { uploadPublicFeedToStorage } from '../storage/publicFeedStorage';
 import { getServerEnv } from '../lib/env';
+import { Project } from '../domain/project';
 
 async function publish() {
   const env = getServerEnv();
@@ -14,11 +15,12 @@ async function publish() {
   const repository = new SupabaseProjectRepositoryCore(supabase);
 
   console.log('Fetching projects from staging database...');
-  let projects;
+  let projects: Project[];
   try {
     projects = await repository.listProjects();
-  } catch (e: any) {
-    console.error('❌ Failed to fetch projects from database:', e.message);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown query error';
+    console.error('❌ Failed to fetch projects from database:', message);
     process.exit(1);
   }
 
@@ -50,8 +52,9 @@ async function publish() {
   let uploadResult;
   try {
     uploadResult = await uploadPublicFeedToStorage({ feed });
-  } catch (e: any) {
-    console.error('❌ Storage upload failed:', e.message);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown upload error';
+    console.error('❌ Storage upload failed:', message);
     process.exit(1);
   }
 

@@ -1,6 +1,7 @@
 import React from 'react';
+import { ValidationFlagRow } from '../../repositories/ImportBatchRepositoryCore';
 
-export default function ValidationFlagsTable({ flags }: { flags: any[] }) {
+export default function ValidationFlagsTable({ flags }: { flags: ValidationFlagRow[] }) {
   if (!flags || flags.length === 0) {
     return (
       <div style={{ color: '#10B981', padding: '1rem 0', fontSize: '0.9rem', fontWeight: 600 }}>

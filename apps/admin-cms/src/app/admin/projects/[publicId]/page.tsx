@@ -8,6 +8,7 @@ import { ProjectValidationSummary } from '../../../../components/admin/ProjectVa
 import { StagingReviewActions } from '../../../../components/admin/StagingReviewActions';
 import { getAllowedReviewActions } from '../../../../workflow/projectWorkflow';
 import { createSupabaseAdminClientCore } from '../../../../lib/supabase/adminCore';
+import { Project } from '../../../../domain/project';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -20,9 +21,9 @@ interface PageProps {
 
 export default async function ProjectDetailPage({ params }: PageProps) {
   const { publicId } = await params;
-  let project = null;
-  let loadError = null;
-  let auditRecords: any[] = [];
+  let project: Project | null = null;
+  let loadError: string | null = null;
+  let auditRecords: Array<Record<string, unknown>> = [];
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -51,9 +52,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         }
       }
     }
-  } catch (error: any) {
-    console.error(`[Staging Project Detail Failure]:`, error.message || error);
-    loadError = error.message || 'Unknown staging error';
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[Staging Project Detail Failure]:`, message);
+    loadError = message;
   }
 
   if (loadError) {
@@ -133,7 +135,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         }}>
           <h2 style={{ margin: '0 0 0.5rem 0', color: '#F59E0B' }}>🔍 Project Not Found</h2>
           <p style={{ color: '#9CA3AF', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '2rem' }}>
-            Staging project public ID <code>"{publicId}"</code> was not found. Seed records or check search key formats.
+            Staging project public ID <code>&quot;{publicId}&quot;</code> was not found. Seed records or check search key formats.
           </p>
           <Link href="/admin" style={{
             color: '#FFFFFF',
@@ -152,7 +154,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   }
 
   const isEligible = project.status === 'approved' || project.status === 'published';
-  const allowedActions = getAllowedReviewActions(project.status as any);
+  const allowedActions = getAllowedReviewActions(project.status);
 
   return (
     <div style={{
@@ -355,7 +357,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                 <div style={{ color: '#9CA3AF', fontWeight: 'bold' }}>External Web Links:</div>
                 <ul style={{ margin: '0.25rem 0 0 0', paddingLeft: '1.25rem', color: '#D1D5DB' }}>
                   {project.externalLinks && project.externalLinks.length > 0 ? (
-                    project.externalLinks.map((link: any, i: number) => (
+                    project.externalLinks.map((link: { label?: string; url: string }, i: number) => (
                       <li key={i}>
                         <a href={link.url} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6', textDecoration: 'none' }}>
                           {link.label || link.url}
@@ -494,9 +496,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                   </thead>
                   <tbody>
                     {auditRecords.map((rec) => (
-                      <tr key={rec.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', color: '#D1D5DB' }}>
+                      <tr key={String(rec.id || '')} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', color: '#D1D5DB' }}>
                         <td style={{ padding: '0.5rem', fontSize: '0.8rem', color: '#9CA3AF' }}>
-                          {new Date(rec.created_at).toLocaleString()}
+                          {rec.created_at ? new Date(String(rec.created_at)).toLocaleString() : 'N/A'}
                         </td>
                         <td style={{ padding: '0.5rem', fontWeight: 'bold' }}>
                           <span style={{
@@ -507,14 +509,14 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                             fontSize: '0.75rem',
                             textTransform: 'uppercase'
                           }}>
-                            {rec.action_taken.replace('_', ' ')}
+                            {String(rec.action_taken || '').replace('_', ' ')}
                           </span>
                         </td>
                         <td style={{ padding: '0.5rem' }}>
-                          <code>{rec.from_status}</code> → <code>{rec.to_status}</code>
+                          <code>{String(rec.from_status || '')}</code> → <code>{String(rec.to_status || '')}</code>
                         </td>
                         <td style={{ padding: '0.5rem', color: '#F59E0B' }}>
-                          {rec.comments || 'N/A'}
+                          {String(rec.comments || 'N/A')}
                         </td>
                       </tr>
                     ))}

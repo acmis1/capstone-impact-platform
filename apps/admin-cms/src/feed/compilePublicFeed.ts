@@ -14,67 +14,47 @@ export function compilePublicFeed(projects: Project[]): PublicFeedRecord[] {
   return projects
     .filter((p) => p.status === 'approved' || p.status === 'published')
     .map((p) => {
-      // Deconstruct to exclude internal-only properties
-      const {
-        status,
-        importBatchId,
-        sourceFolder,
-        internalStaffNotes,
-        privateReviewComments,
-        validationFlags,
-        validationErrors,
-        validationWarnings,
-        pendingRemovalFromPublic,
-        publicRemovalCompletedAt,
-        archivedAt,
-        archivedFromStatus,
-        archiveReason,
-        created_at,
-        updated_at,
-        ...publicRecord
-      } = p;
-
-      // Ensure optional fields are handled correctly without introducing empty values or schema issues
+      // Explicitly construct public feed record from approved allowlist properties
       return {
-        id: publicRecord.id,
-        publicId: publicRecord.publicId || '',
-        title: publicRecord.title || '',
-        summary: publicRecord.summary || '',
-        background: publicRecord.background || '',
-        solution: publicRecord.solution || '',
-        year: publicRecord.year || '',
-        program: publicRecord.program || '',
-        studyProgram: publicRecord.studyProgram || '',
-        discipline: publicRecord.discipline || '',
-        disciplines: Array.isArray(publicRecord.disciplines) ? publicRecord.disciplines : [],
-        industry: publicRecord.industry || '',
-        industryPartner: publicRecord.industryPartner || '',
-        academicSupervisor: publicRecord.academicSupervisor || '',
-        groupName: publicRecord.groupName || '',
-        teamMembers: Array.isArray(publicRecord.teamMembers) ? publicRecord.teamMembers : [],
-        poster: publicRecord.poster || '',
-        posterPdf: publicRecord.posterPdf || '',
-        posterText: publicRecord.posterText || '',
-        accessibilityText: publicRecord.accessibilityText || '',
-        snapshots: Array.isArray(publicRecord.snapshots) ? publicRecord.snapshots : [],
+        id: p.id,
+        publicId: p.publicId || '',
+        title: p.title || '',
+        summary: p.summary || '',
+        background: p.background || '',
+        solution: p.solution || '',
+        year: p.year || '',
+        program: p.program || '',
+        studyProgram: p.studyProgram || '',
+        discipline: p.discipline || '',
+        disciplines: Array.isArray(p.disciplines) ? p.disciplines : [],
+        industry: p.industry || '',
+        industryPartner: p.industryPartner || '',
+        academicSupervisor: p.academicSupervisor || '',
+        groupName: p.groupName || '',
+        teamMembers: Array.isArray(p.teamMembers) ? p.teamMembers : [],
+        poster: p.poster || '',
+        posterPdf: p.posterPdf || '',
+        posterText: p.posterText || '',
+        accessibilityText: p.accessibilityText || '',
+        snapshots: Array.isArray(p.snapshots) ? p.snapshots : [],
         // Include optional fields conditionally if defined
-        ...(publicRecord.videoUrl ? { videoUrl: publicRecord.videoUrl } : {}),
-        ...(publicRecord.demoUrl ? { demoUrl: publicRecord.demoUrl } : {}),
-        ...(publicRecord.repositoryUrl ? { repositoryUrl: publicRecord.repositoryUrl } : {}),
-        ...(Array.isArray(publicRecord.externalLinks) && publicRecord.externalLinks.length > 0
-          ? { externalLinks: publicRecord.externalLinks }
+        ...(p.videoUrl ? { videoUrl: p.videoUrl } : {}),
+        ...(p.demoUrl ? { demoUrl: p.demoUrl } : {}),
+        ...(p.repositoryUrl ? { repositoryUrl: p.repositoryUrl } : {}),
+        ...(Array.isArray(p.externalLinks) && p.externalLinks.length > 0
+          ? { externalLinks: p.externalLinks }
           : {}),
-        ...(Array.isArray(publicRecord.citations) && publicRecord.citations.length > 0
-          ? { citations: publicRecord.citations }
+        ...(Array.isArray(p.citations) && p.citations.length > 0
+          ? { citations: p.citations }
           : {}),
         layoutConfig: {
-          templateId: publicRecord.layoutConfig?.templateId || 'poster_showcase',
-          featuredMedia: publicRecord.layoutConfig?.featuredMedia || 'poster',
-          sectionOrder: Array.isArray(publicRecord.layoutConfig?.sectionOrder)
-            ? publicRecord.layoutConfig.sectionOrder
+          templateId: p.layoutConfig?.templateId || 'poster_showcase',
+          featuredMedia: p.layoutConfig?.featuredMedia || 'poster',
+          sectionOrder: Array.isArray(p.layoutConfig?.sectionOrder)
+            ? p.layoutConfig.sectionOrder
             : ['background', 'solution', 'snapshots', 'video', 'links'],
-          ...(Array.isArray(publicRecord.layoutConfig?.hiddenSections)
-            ? { hiddenSections: publicRecord.layoutConfig.hiddenSections }
+          ...(Array.isArray(p.layoutConfig?.hiddenSections)
+            ? { hiddenSections: p.layoutConfig.hiddenSections }
             : {}),
         },
       };

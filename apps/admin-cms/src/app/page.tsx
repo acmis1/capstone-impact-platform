@@ -56,7 +56,7 @@ export default function Home() {
             borderLeft: '4px solid #10B981',
           }}>
             <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#10B981' }}>Staging CMS Workspace</h3>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#9CA3AF' }}>Next.js App Router & TypeScript framework initialized safely.</p>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#9CA3AF' }}>Next.js App Router &amp; TypeScript framework initialized safely.</p>
           </div>
 
           {/* Status Card 2 */}
@@ -78,7 +78,7 @@ export default function Home() {
             borderLeft: '4px solid #3B82F6',
           }}>
             <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#3B82F6' }}>Supabase Configured</h3>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#9CA3AF' }}>Linked to the 'capstone-impact-staging' storage project via environment variables.</p>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#9CA3AF' }}>Linked to the &apos;capstone-impact-staging&apos; storage project via environment variables.</p>
           </div>
 
           {/* Status Card 4 */}
@@ -100,7 +100,7 @@ export default function Home() {
           marginBottom: '3rem',
           border: '1px dashed rgba(255, 255, 255, 0.1)',
         }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#F3F4F6' }}>🛡️ Safety Boundaries & Protection</h3>
+          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#F3F4F6' }}>🛡️ Safety Boundaries &amp; Protection</h3>
           <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.9rem', color: '#9CA3AF', lineHeight: '1.6' }}>
             <li>Existing <strong>Prototype/</strong> folder remains completely untouched and preserved.</li>
             <li>No database credentials or secret keys are exposed or committed to the public Git repository.</li>

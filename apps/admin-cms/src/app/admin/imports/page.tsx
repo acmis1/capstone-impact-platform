@@ -2,19 +2,21 @@ import React from 'react';
 import Link from 'next/link';
 import { ImportBatchRepository } from '../../../repositories/ImportBatchRepository';
 import ImportBatchTable from '../../../components/admin/ImportBatchTable';
+import { ImportBatchRow } from '../../../repositories/ImportBatchRepositoryCore';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ImportBatchesPage() {
-  let batches: any[] = [];
+  let batches: ImportBatchRow[] = [];
   let databaseError: string | null = null;
 
   try {
     const repository = new ImportBatchRepository();
     batches = await repository.listRecentImportBatches(50);
-  } catch (error: any) {
-    console.error('[Staging Import Batches Load Failure]:', error.message || error);
-    databaseError = error.message || 'Unknown database connection error';
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown database connection error';
+    console.error('[Staging Import Batches Load Failure]:', message);
+    databaseError = message;
   }
 
   // Summary aggregation metrics

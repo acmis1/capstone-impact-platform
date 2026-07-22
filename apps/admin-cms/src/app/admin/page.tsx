@@ -14,9 +14,10 @@ export default async function AdminPage() {
   try {
     const repository = new SupabaseProjectRepository();
     projects = await repository.listProjects();
-  } catch (error: any) {
-    console.error('[Staging Dashboard Load Failure]:', error.message || error);
-    databaseError = error.message || 'Unknown database connection error';
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown database connection error';
+    console.error('[Staging Dashboard Load Failure]:', message);
+    databaseError = message;
   }
 
   // Aggregate metrics
