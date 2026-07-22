@@ -67,8 +67,9 @@ export async function extractProjectMetadata(
     };
 
     return result;
-  } catch (err: any) {
-    result.warnings.push(`Gemini API execution error: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown execution error';
+    result.warnings.push(`Gemini API execution error: ${message}`);
     return result;
   }
 }

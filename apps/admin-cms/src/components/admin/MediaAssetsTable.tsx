@@ -1,6 +1,7 @@
 import React from 'react';
+import { MediaAssetRow } from '../../repositories/ImportBatchRepositoryCore';
 
-export default function MediaAssetsTable({ assets }: { assets: any[] }) {
+export default function MediaAssetsTable({ assets }: { assets: MediaAssetRow[] }) {
   if (!assets || assets.length === 0) {
     return (
       <div style={{ padding: '1rem 0', color: '#9CA3AF', fontSize: '0.9rem' }}>

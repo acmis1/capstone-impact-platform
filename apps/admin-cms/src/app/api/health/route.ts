@@ -3,9 +3,9 @@ import { getServerEnv } from '../../../lib/env';
 
 export async function GET() {
   let supabaseUrlConfigured = false;
-  let publicKeyType: any = 'missing';
-  let databaseAdminKeyType: any = 'missing';
-  let databaseAdminKeyMode: any = 'missing';
+  let publicKeyType: string = 'missing';
+  let databaseAdminKeyType: string = 'missing';
+  let databaseAdminKeyMode: string = 'missing';
 
   try {
     const env = getServerEnv();
@@ -13,9 +13,10 @@ export async function GET() {
     publicKeyType = env.publicKeyType;
     databaseAdminKeyType = env.databaseAdminKeyType;
     databaseAdminKeyMode = env.databaseAdminKeyMode;
-  } catch (e: any) {
+  } catch (e: unknown) {
     // If loading server env fails, swallow to ensure health check itself stays online
-    console.warn('[Staging Health Diagnostic Warning]:', e.message);
+    const message = e instanceof Error ? e.message : 'Unknown environment error';
+    console.warn('[Staging Health Diagnostic Warning]:', message);
   }
 
   return NextResponse.json({

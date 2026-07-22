@@ -6,6 +6,15 @@ import { parseLocalImportPackage } from '../import/parseImportPackage';
 import { validateImportPackage } from '../import/validateImportPackage';
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { uploadDraftMediaAsset } from '../storage/mediaStorage';
+import { cleanupStagingMediaForProjects } from '../storage/mediaCleanup';
+
+interface ValidationFlagRowInput {
+  project_id: string;
+  severity: 'error' | 'warning';
+  rule_code: string;
+  message: string;
+  field_name: string | null;
+}
 
 async function run() {
   const packagePath = 'fixtures/import-packages/runtime-import-demo';
@@ -17,8 +26,9 @@ async function run() {
   let parsed;
   try {
     parsed = await parseLocalImportPackage(resolvedPath);
-  } catch (err: any) {
-    console.error(`❌ Parse Failed: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown staging import error';
+    console.error(`❌ Parse Failed: ${message}`);
     process.exit(1);
   }
 
@@ -66,7 +76,7 @@ async function run() {
 
   // 4. Create or Update Project in DB
   const manifest = parsed.manifest;
-  const dbRow: any = {
+  const dbRow: Record<string, unknown> = {
     public_id: manifest.publicId,
     title: manifest.title,
     summary: manifest.summary,
@@ -100,7 +110,6 @@ async function run() {
     .maybeSingle();
 
   // Robust Idempotency Cleanup: Clean database media rows and storage objects before re-upload
-  const { cleanupStagingMediaForProjects } = require('../storage/mediaCleanup');
   console.log(`Cleaning existing staging media for [${manifest.publicId}] to prevent duplicates...`);
   const cleanup = await cleanupStagingMediaForProjects([manifest.publicId]);
   console.log(`🧹 Database media rows deleted:       ${cleanup.removedMediaRows}`);
@@ -188,14 +197,15 @@ async function run() {
       });
       mediaUploadedCount++;
     }
-  } catch (err: any) {
-    console.error(`❌ Error uploading draft media: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown staging import error';
+    console.error(`❌ Error uploading draft media: ${message}`);
     await supabase.from('import_batches').update({ status: 'failed' }).eq('id', batchId);
     process.exit(1);
   }
 
   // 6. Insert validation_flags rows (warnings or errors)
-  const validationFlags: any[] = [];
+  const validationFlags: ValidationFlagRowInput[] = [];
   validation.errors.forEach(e => {
     validationFlags.push({
       project_id: projectId,
@@ -249,7 +259,8 @@ async function run() {
   console.log('====================================================\n');
 }
 
-run().catch(err => {
-  console.error('Fatal Uncaught Importer Exception:', err);
+run().catch((err: unknown) => {
+  const message = err instanceof Error ? err.message : 'Unknown staging import error';
+  console.error('Fatal Uncaught Importer Exception:', message);
   process.exit(1);
 });

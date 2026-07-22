@@ -17,7 +17,7 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
   if (allowedActions.length === 0 || currentStatus.toLowerCase() === 'deleted') {
     return (
       <div style={{ color: '#9CA3AF', fontSize: '0.85rem', fontStyle: 'italic' }}>
-        No administrative staging review actions are allowed from current status "{currentStatus}".
+        No administrative staging review actions are allowed from current status &quot;{currentStatus}&quot;.
       </div>
     );
   }
@@ -51,8 +51,9 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
       setTimeout(() => {
         window.location.reload();
       }, 1000);
-    } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred during status transition.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'An unexpected error occurred during status transition.';
+      setError(message);
     } finally {
       setLoading(false);
     }

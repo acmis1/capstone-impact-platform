@@ -4,6 +4,12 @@ import { ImportBatchRepository } from '../../../../repositories/ImportBatchRepos
 import ImportBatchStatusBadge from '../../../../components/admin/ImportBatchStatusBadge';
 import ValidationFlagsTable from '../../../../components/admin/ValidationFlagsTable';
 import MediaAssetsTable from '../../../../components/admin/MediaAssetsTable';
+import {
+  ImportBatchRow,
+  ImportedProjectRow,
+  ValidationFlagRow,
+  MediaAssetRow
+} from '../../../../repositories/ImportBatchRepositoryCore';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,10 +19,11 @@ export default async function ImportBatchDetailPage({
   params: Promise<{ batchId: string }>
 }) {
   const { batchId } = await params;
-  let batch: any = null;
-  let projects: any[] = [];
-  let validationFlags: any[] = [];
-  let mediaAssets: any[] = [];
+  let batch: ImportBatchRow | null = null;
+  let projects: ImportedProjectRow[] = [];
+  let validationFlags: ValidationFlagRow[] = [];
+  let mediaAssets: MediaAssetRow[] = [];
+
   let errorMsg: string | null = null;
 
   try {
@@ -32,9 +39,10 @@ export default async function ImportBatchDetailPage({
         mediaAssets = await repository.getMediaAssetsForProject(primaryProject.id);
       }
     }
-  } catch (err: any) {
-    console.error('[Staging Batch Detail Load Error]:', err.message || err);
-    errorMsg = err.message || 'database error';
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'database error';
+    console.error('[Staging Batch Detail Load Error]:', message);
+    errorMsg = message;
   }
 
   // Safe error card for missing batch parameters

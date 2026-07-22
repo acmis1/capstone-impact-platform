@@ -1,12 +1,62 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Project } from '../domain/project';
 import { ProjectRepository } from './ProjectRepository';
+import { applyReviewActionTransition } from '../workflow/projectWorkflow';
+
+export interface DatabaseProjectRow {
+  id: string;
+  public_id: string;
+  title?: string;
+  summary?: string;
+  background?: string;
+  solution?: string;
+  year?: number;
+  program_name?: string;
+  study_program?: string;
+  discipline?: string;
+  industry?: string;
+  industry_partner?: string;
+  academic_supervisor?: string;
+  group_name?: string;
+  team_members?: string[];
+  poster_url?: string;
+  poster_pdf_url?: string;
+  poster_text_public?: string;
+  accessibility_text_public?: string;
+  snapshots?: string[];
+  video_url?: string;
+  demo_url?: string;
+  repository_url?: string;
+  external_links?: Project['externalLinks'];
+  citations?: string[];
+  layout_config?: Project['layoutConfig'];
+  status?: Project['status'];
+  import_batch_id?: string;
+  source_folder?: string;
+  internal_staff_notes?: string;
+  private_review_comments?: string;
+  validation_flags_cache?: Project['validationFlags'];
+  validation_errors?: string[];
+  validation_warnings?: string[];
+  pending_removal_from_public?: boolean;
+  public_removal_completed_at?: string;
+  archived_at?: string;
+  archived_from_status?: Project['status'];
+  archive_reason?: string;
+  created_at?: string;
+  updated_at?: string;
+  project_disciplines?: Array<{
+    disciplines?: {
+      name?: string;
+    };
+  }>;
+}
 
 export class SupabaseProjectRepositoryCore implements ProjectRepository {
   constructor(protected readonly supabase: SupabaseClient) {}
 
-  protected mapDbToDomain(row: any): Project {
-    const joinedDisciplines = row.project_disciplines?.map((pd: any) => pd.disciplines?.name).filter(Boolean) || [];
+  protected mapDbToDomain(row: DatabaseProjectRow): Project {
+    const joinedDisciplines = row.project_disciplines?.map((pd) => pd.disciplines?.name).filter(Boolean) as string[] || [];
     const finalDisciplines = joinedDisciplines.length > 0 
       ? joinedDisciplines 
       : (row.discipline ? [row.discipline] : []);
@@ -38,7 +88,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       repositoryUrl: row.repository_url || '',
       externalLinks: row.external_links || [],
       citations: row.citations || [],
-      layoutConfig: row.layout_config || {},
+      layoutConfig: row.layout_config || ({} as Project['layoutConfig']),
       status: row.status || 'draft',
       importBatchId: row.import_batch_id || undefined,
       sourceFolder: row.source_folder || undefined,
@@ -57,8 +107,8 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     };
   }
 
-  protected mapDomainToDb(proj: Partial<Project>): any {
-    const row: any = {};
+  protected mapDomainToDb(proj: Partial<Project>): Record<string, unknown> {
+    const row: Record<string, unknown> = {};
     if (proj.publicId !== undefined) row.public_id = proj.publicId;
     if (proj.title !== undefined) row.title = proj.title;
     if (proj.summary !== undefined) row.summary = proj.summary;
@@ -120,7 +170,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       throw new Error(`Failed to list projects from Supabase: ${error.message}`);
     }
 
-    return (data || []).map((row) => this.mapDbToDomain(row));
+    return (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
   }
 
   async getProjectByPublicId(publicId: string): Promise<Project | null> {
@@ -135,7 +185,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       throw new Error(`Failed to get project by public ID: ${error.message}`);
     }
 
-    return data ? this.mapDbToDomain(data) : null;
+    return data ? this.mapDbToDomain(data as DatabaseProjectRow) : null;
   }
 
   async createProject(input: Partial<Project> & { title: string; year: string; publicId: string }): Promise<Project> {
@@ -152,7 +202,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       throw new Error(`Failed to create project: ${error.message}`);
     }
 
-    return this.mapDbToDomain(data);
+    return this.mapDbToDomain(data as DatabaseProjectRow);
   }
 
   async updateProject(id: string, patch: Partial<Project>): Promise<Project> {
@@ -170,7 +220,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       throw new Error(`Failed to update project: ${error.message}`);
     }
 
-    return this.mapDbToDomain(data);
+    return this.mapDbToDomain(data as DatabaseProjectRow);
   }
 
   async archiveProject(id: string, reason: string): Promise<Project> {
@@ -218,8 +268,6 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     }
 
     // 2. Validate transition
-    // Dynamic import to prevent dependency cycles if any
-    const { applyReviewActionTransition } = require('../workflow/projectWorkflow');
     const transition = applyReviewActionTransition(dbProject.status, action);
 
     if (!transition.allowed || !transition.toStatus) {
@@ -230,7 +278,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     const toStatus = transition.toStatus;
 
     // 3. Compose status updates
-    const updates: any = {
+    const updates: Record<string, unknown> = {
       status: toStatus
     };
 
@@ -278,6 +326,6 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       throw new Error(`Project status update completed but audit logging failed; staging data may require manual reset. Details: ${auditError.message}`);
     }
 
-    return this.mapDbToDomain(updatedProjectRow);
+    return this.mapDbToDomain(updatedProjectRow as DatabaseProjectRow);
   }
 }

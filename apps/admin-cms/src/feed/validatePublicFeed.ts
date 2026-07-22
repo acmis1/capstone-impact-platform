@@ -9,7 +9,7 @@ export interface FeedValidationResult {
 /**
  * Validates compiled public showcase feed payloads against the approved data contract.
  */
-export function validatePublicFeed(feed: any[]): FeedValidationResult {
+export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -36,11 +36,12 @@ export function validatePublicFeed(feed: any[]): FeedValidationResult {
     'archivedFromStatus', 'archiveReason', 'created_at', 'updated_at'
   ]);
 
-  feed.forEach((record, index) => {
+  feed.forEach((untypedRecord, index) => {
+    const record = untypedRecord && typeof untypedRecord === 'object' ? (untypedRecord as Record<string, unknown>) : null;
     const recordId = record?.id || `Index_${index}`;
     const prefix = `[Project ${recordId}]`;
 
-    if (!record || typeof record !== 'object') {
+    if (!record) {
       errors.push(`${prefix} Record is not a valid JSON object.`);
       return;
     }
@@ -79,9 +80,10 @@ export function validatePublicFeed(feed: any[]): FeedValidationResult {
         if (typeof val !== 'object') {
           errors.push(`${prefix} Type error: "layoutConfig" must be an object.`);
         } else {
-          const tId = val.templateId;
-          if (!tId || !validTemplates.includes(tId)) {
-            errors.push(`${prefix} Layout error: "templateId" must be one of [${validTemplates.join(', ')}]. Received "${tId}".`);
+          const configObj = val as Record<string, unknown>;
+          const tId = configObj.templateId;
+          if (!tId || typeof tId !== 'string' || !validTemplates.includes(tId)) {
+            errors.push(`${prefix} Layout error: "templateId" must be one of [${validTemplates.join(', ')}]. Received "${String(tId)}".`);
           }
         }
       }
