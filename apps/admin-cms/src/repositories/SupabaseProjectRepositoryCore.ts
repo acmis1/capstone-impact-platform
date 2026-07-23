@@ -10,6 +10,11 @@ import {
 import { ProjectRepository } from './ProjectRepository';
 import { applyReviewActionTransition } from '../workflow/projectWorkflow';
 
+/** Maximum number of lightweight filter-option rows fetched per database round-trip. */
+const PROJECT_FILTER_OPTION_CHUNK_SIZE = 500;
+/** Safety limit to prevent an infinite pagination loop for filter options. */
+const PROJECT_FILTER_OPTION_MAX_ITERATIONS = 200;
+
 export interface DatabaseProjectRow {
   id: string;
   public_id: string;
@@ -288,59 +293,91 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
   }
 
   async getProjectDashboardMetrics(): Promise<ProjectDashboardMetrics> {
-    const { data, error } = await this.supabase
-      .from('projects')
-      .select('status')
-      .is('deleted_at', null);
+    // Run all four count-only queries concurrently — no row data crosses the wire.
+    const [totalRes, publicRes, reviewRes, archiveRes] = await Promise.all([
+      this.supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .is('deleted_at', null),
+      this.supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .in('status', ['approved', 'published']),
+      this.supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .eq('status', 'in_review'),
+      this.supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .eq('status', 'archived'),
+    ]);
 
-    if (error) {
-      throw new Error(`Failed to fetch project dashboard metrics: ${error.message}`);
+    if (totalRes.error) {
+      throw new Error('Failed to fetch project dashboard metrics: unable to retrieve total count');
     }
-
-    const rows = data || [];
-    const totalProjects = rows.length;
-    let publicEligible = 0;
-    let inReview = 0;
-    let archived = 0;
-
-    for (const row of rows) {
-      const status = row.status;
-      if (status === 'approved' || status === 'published') {
-        publicEligible++;
-      } else if (status === 'in_review') {
-        inReview++;
-      } else if (status === 'archived') {
-        archived++;
-      }
+    if (publicRes.error) {
+      throw new Error('Failed to fetch project dashboard metrics: unable to retrieve public-eligible count');
+    }
+    if (reviewRes.error) {
+      throw new Error('Failed to fetch project dashboard metrics: unable to retrieve in-review count');
+    }
+    if (archiveRes.error) {
+      throw new Error('Failed to fetch project dashboard metrics: unable to retrieve archived count');
     }
 
     return {
-      totalProjects,
-      publicEligible,
-      inReview,
-      archived,
+      totalProjects: totalRes.count ?? 0,
+      publicEligible: publicRes.count ?? 0,
+      inReview: reviewRes.count ?? 0,
+      archived: archiveRes.count ?? 0,
     };
   }
 
   async getProjectFilterOptions(): Promise<ProjectFilterOptions> {
-    const { data, error } = await this.supabase
-      .from('projects')
-      .select('year, program_name, discipline')
-      .is('deleted_at', null);
-
-    if (error) {
-      throw new Error(`Failed to fetch project filter options: ${error.message}`);
-    }
-
-    const rows = data || [];
     const yearsSet = new Set<string>();
     const programsSet = new Set<string>();
     const disciplinesSet = new Set<string>();
 
-    for (const row of rows) {
-      if (row.year) yearsSet.add(row.year.toString());
-      if (row.program_name && row.program_name.trim()) programsSet.add(row.program_name.trim());
-      if (row.discipline && row.discipline.trim()) disciplinesSet.add(row.discipline.trim());
+    let iteration = 0;
+    let offset = 0;
+
+    while (iteration < PROJECT_FILTER_OPTION_MAX_ITERATIONS) {
+      iteration++;
+      const from = offset;
+      const to = offset + PROJECT_FILTER_OPTION_CHUNK_SIZE - 1;
+
+      const { data, error } = await this.supabase
+        .from('projects')
+        .select('year, program_name, discipline')
+        .is('deleted_at', null)
+        .order('id', { ascending: true })
+        .range(from, to);
+
+      if (error) {
+        throw new Error('Failed to fetch project filter options');
+      }
+
+      const rows = data || [];
+
+      for (const row of rows) {
+        if (row.year) yearsSet.add(row.year.toString());
+        if (row.program_name && row.program_name.trim()) programsSet.add(row.program_name.trim());
+        if (row.discipline && row.discipline.trim()) disciplinesSet.add(row.discipline.trim());
+      }
+
+      if (rows.length < PROJECT_FILTER_OPTION_CHUNK_SIZE) {
+        break;
+      }
+
+      offset += PROJECT_FILTER_OPTION_CHUNK_SIZE;
+    }
+
+    if (iteration >= PROJECT_FILTER_OPTION_MAX_ITERATIONS) {
+      throw new Error('Failed to fetch project filter options: exceeded maximum iteration limit');
     }
 
     const years = Array.from(yearsSet).sort((a, b) => parseInt(b, 10) - parseInt(a, 10));

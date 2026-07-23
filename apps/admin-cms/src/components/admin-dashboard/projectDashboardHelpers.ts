@@ -45,6 +45,26 @@ export function getValidationOutcome(project: Partial<Project>): ValidationStatu
   };
 }
 
+/**
+ * Maps a table column ID to its corresponding database sort field name.
+ * Returns null for non-sortable columns or unknown IDs.
+ *
+ * - title     → "title"
+ * - status    → "status"
+ * - year      → "year"
+ * - updatedAt → "updated_at"
+ * - all other column IDs → null
+ */
+export function getProjectColumnSortField(columnId: string): string | null {
+  const sortFieldMap: Record<string, string> = {
+    title: 'title',
+    status: 'status',
+    year: 'year',
+    updatedAt: 'updated_at',
+  };
+  return sortFieldMap[columnId] ?? null;
+}
+
 export interface ProjectIndexRow {
   id: string;
   publicId?: string;

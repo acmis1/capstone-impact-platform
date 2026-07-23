@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getProjectDetailHref, getValidationOutcome, toProjectIndexRow } from './projectDashboardHelpers';
+import { getProjectDetailHref, getValidationOutcome, getProjectColumnSortField, toProjectIndexRow } from './projectDashboardHelpers';
 import { Project } from '../../domain/project';
 
 describe('projectDashboardHelpers', () => {
@@ -45,6 +45,35 @@ describe('projectDashboardHelpers', () => {
         validationWarnings: ['Warning 1', 'Warning 2'],
       });
       expect(mixed).toEqual({ label: '1 Error', variant: 'destructive' });
+    });
+  });
+
+  describe('getProjectColumnSortField', () => {
+    it('maps title column to "title"', () => {
+      expect(getProjectColumnSortField('title')).toBe('title');
+    });
+
+    it('maps status column to "status"', () => {
+      expect(getProjectColumnSortField('status')).toBe('status');
+    });
+
+    it('maps year column to "year"', () => {
+      expect(getProjectColumnSortField('year')).toBe('year');
+    });
+
+    it('maps updatedAt column to "updated_at"', () => {
+      expect(getProjectColumnSortField('updatedAt')).toBe('updated_at');
+    });
+
+    it('returns null for non-sortable column IDs', () => {
+      expect(getProjectColumnSortField('program')).toBeNull();
+      expect(getProjectColumnSortField('validation')).toBeNull();
+      expect(getProjectColumnSortField('actions')).toBeNull();
+    });
+
+    it('returns null for unknown or empty column IDs', () => {
+      expect(getProjectColumnSortField('')).toBeNull();
+      expect(getProjectColumnSortField('unknown_column')).toBeNull();
     });
   });
 

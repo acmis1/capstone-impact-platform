@@ -17,6 +17,7 @@ import { Button } from '../ui/button';
 
 import {
   getProjectDetailHref,
+  getProjectColumnSortField,
   ProjectIndexRow,
   ProjectIndexResult,
 } from './projectDashboardHelpers';
@@ -190,6 +191,9 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
     [renderSortHeader]
   );
 
+  // TanStack Table's useReactTable returns an API that React Compiler cannot safely memoize;
+  // this component is explicitly opted out with "use no memo".
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: result.rows,
     columns,
@@ -213,9 +217,12 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
-                    const isSorted = query.sort === header.column.id;
+                    const sortField = getProjectColumnSortField(header.column.id);
+                    const isSorted = sortField !== null && query.sort === sortField;
                     const isAsc = query.direction === 'asc';
-                    const ariaSort = isSorted ? (isAsc ? 'ascending' : 'descending') : (['title', 'status', 'year', 'updated_at'].includes(header.column.id) ? 'none' : undefined);
+                    const ariaSort = isSorted
+                      ? (isAsc ? 'ascending' : 'descending')
+                      : (sortField !== null ? 'none' : undefined);
 
                     return (
                       <th
