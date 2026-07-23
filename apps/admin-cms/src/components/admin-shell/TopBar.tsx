@@ -42,8 +42,8 @@ export function TopBar({ displayName, email, roles = [], logoutAction }: UserSum
   const formattedRoles = roles.map((r) => r.toUpperCase()).join(', ');
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b bg-background/95 px-4 backdrop-blur-xs lg:px-6">
-      <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b bg-background/95 px-3 sm:px-4 backdrop-blur-xs lg:px-6 gap-2 min-w-0">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
         {/* Mobile Navigation Drawer Trigger */}
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger asChild>
@@ -51,7 +51,7 @@ export function TopBar({ displayName, email, roles = [], logoutAction }: UserSum
               variant="outline"
               size="sm"
               aria-label="Open main navigation menu"
-              className="lg:hidden min-h-[44px] min-w-[44px]"
+              className="lg:hidden min-h-[44px] min-w-[44px] shrink-0"
             >
               <Menu className="h-5 w-5" aria-hidden="true" />
             </IconButton>
@@ -68,18 +68,18 @@ export function TopBar({ displayName, email, roles = [], logoutAction }: UserSum
         </Sheet>
 
         {/* Route-aware breadcrumbs and title */}
-        <div className="flex flex-col justify-center">
+        <div className="flex flex-col justify-center min-w-0 flex-1">
           <Breadcrumbs items={descriptor.breadcrumbs} />
-          <h1 className="text-base font-semibold tracking-tight text-foreground">
+          <h1 className="text-sm sm:text-base font-semibold tracking-tight text-foreground truncate">
             {descriptor.title}
           </h1>
         </div>
       </div>
 
       {/* Top bar right utilities */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Environment Badge */}
-        <Badge variant="neutral" className="hidden sm:inline-flex text-xs font-semibold uppercase tracking-wider">
+        <Badge variant="neutral" className="inline-flex px-1.5 py-0.5 sm:px-2.5 sm:py-0.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">
           Staging
         </Badge>
 
