@@ -1,5 +1,11 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Project } from '../domain/project';
+import {
+  ProjectListQuery,
+  ProjectListResult,
+  ProjectDashboardMetrics,
+  normalizeSearchInput,
+} from '../domain/projectQuery';
 import { ProjectRepository } from './ProjectRepository';
 import { applyReviewActionTransition } from '../workflow/projectWorkflow';
 
@@ -173,6 +179,117 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     return (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
   }
 
+  async listProjectsPage(query: ProjectListQuery): Promise<ProjectListResult> {
+    const page = query.page && query.page > 0 ? query.page : 1;
+    const pageSize = query.pageSize && [10, 25, 50].includes(query.pageSize) ? query.pageSize : 10;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let dbQuery = this.supabase
+      .from('projects')
+      .select('*, project_disciplines(disciplines(name))', { count: 'exact' })
+      .is('deleted_at', null);
+
+    // Apply search
+    if (query.search) {
+      const sanitized = normalizeSearchInput(query.search);
+      if (sanitized) {
+        dbQuery = dbQuery.or(
+          `title.ilike.%${sanitized}%,public_id.ilike.%${sanitized}%,industry_partner.ilike.%${sanitized}%,group_name.ilike.%${sanitized}%`
+        );
+      }
+    }
+
+    // Apply status filter
+    if (query.status) {
+      dbQuery = dbQuery.eq('status', query.status);
+    }
+
+    // Apply year filter
+    if (query.year) {
+      const parsedYear = parseInt(query.year, 10);
+      if (!isNaN(parsedYear)) {
+        dbQuery = dbQuery.eq('year', parsedYear);
+      }
+    }
+
+    // Apply program filter
+    if (query.program) {
+      dbQuery = dbQuery.eq('program_name', query.program);
+    }
+
+    // Apply discipline filter
+    if (query.discipline) {
+      dbQuery = dbQuery.eq('discipline', query.discipline);
+    }
+
+    // Apply sort
+    const allowedSortFieldsMap: Record<string, string> = {
+      created_at: 'created_at',
+      updated_at: 'updated_at',
+      title: 'title',
+      year: 'year',
+      status: 'status',
+    };
+    const sortColumn = allowedSortFieldsMap[query.sort || 'created_at'] || 'created_at';
+    const isAscending = query.direction === 'asc';
+
+    dbQuery = dbQuery.order(sortColumn, { ascending: isAscending }).range(from, to);
+
+    const { data, count, error } = await dbQuery;
+
+    if (error) {
+      throw new Error(`Failed to query paginated projects from Supabase: ${error.message}`);
+    }
+
+    const total = count ?? 0;
+    const pageCount = total > 0 ? Math.ceil(total / pageSize) : 0;
+    const projects = (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
+
+    return {
+      projects,
+      total,
+      page,
+      pageSize,
+      pageCount,
+    };
+  }
+
+  async getProjectDashboardMetrics(): Promise<ProjectDashboardMetrics> {
+    const { data, error } = await this.supabase
+      .from('projects')
+      .select('status')
+      .is('deleted_at', null);
+
+    if (error) {
+      throw new Error(`Failed to fetch project dashboard metrics: ${error.message}`);
+    }
+
+    const rows = data || [];
+    const totalProjects = rows.length;
+    let publicEligible = 0;
+    let inReview = 0;
+    let archived = 0;
+
+    for (const row of rows) {
+      const status = row.status;
+      if (status === 'approved' || status === 'published') {
+        publicEligible++;
+      } else if (status === 'submitted' || status === 'in_review') {
+        inReview++;
+      } else if (status === 'archived') {
+        archived++;
+      }
+    }
+
+    return {
+      totalProjects,
+      publicEligible,
+      inReview,
+      archived,
+    };
+  }
+
   async getProjectByPublicId(publicId: string): Promise<Project | null> {
     const { data, error } = await this.supabase
       .from('projects')
@@ -316,8 +433,6 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       comments: comments || null
     };
 
-    // TODO: Production should replace this two-step update with a Postgres RPC function or transaction-backed server operation.
-    // Workflow action and audit insert must be atomic before real use to guarantee absolute database consistency.
     const { error: auditError } = await this.supabase
       .from('approval_records')
       .insert(auditRow);
