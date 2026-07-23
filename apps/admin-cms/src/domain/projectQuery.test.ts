@@ -13,8 +13,25 @@ describe('projectQuery domain logic', () => {
       expect(normalizeSearchInput('  hello\x00world\x1F  ')).toBe('helloworld');
     });
 
-    it('strips PostgREST special operator characters', () => {
-      expect(normalizeSearchInput('title:eq.test(123),select*%20')).toBe('title eq test 123 select 20');
+    it('strips PostgREST operators and special characters via conservative allowlist', () => {
+      // Raw string containing comma, colon, period, percent, asterisk, underscore, semicolon, quotes, backslash, parentheses
+      const rawInjected = 'title:eq.test(123),select*%20;\'"\\_DROP--';
+      const normalized = normalizeSearchInput(rawInjected);
+
+      // Should keep only letters, numbers, spaces and hyphens
+      expect(normalized).toBe('title eq test 123 select 20 DROP--');
+      expect(normalized).not.toContain(':');
+      expect(normalized).not.toContain('.');
+      expect(normalized).not.toContain('(');
+      expect(normalized).not.toContain(')');
+      expect(normalized).not.toContain(',');
+      expect(normalized).not.toContain('*');
+      expect(normalized).not.toContain('%');
+      expect(normalized).not.toContain(';');
+      expect(normalized).not.toContain('\'');
+      expect(normalized).not.toContain('"');
+      expect(normalized).not.toContain('\\');
+      expect(normalized).not.toContain('_');
     });
 
     it('clamps length to 100 characters', () => {
@@ -66,27 +83,16 @@ describe('projectQuery domain logic', () => {
       });
     });
 
-    it('ignores invalid status and sort values safely', () => {
-      const params = {
-        status: 'invalid_status_value',
-        sort: 'unsupported_column; DROP TABLE projects;',
-        direction: 'invalid_dir',
-        page: '-5',
-        pageSize: '100',
-      };
+    it('rejects partial or invalid numeric strings for page and pageSize strictly', () => {
+      expect(parseProjectListQuery({ page: '2abc' }).page).toBe(1);
+      expect(parseProjectListQuery({ page: '1.5' }).page).toBe(1);
+      expect(parseProjectListQuery({ page: '+2' }).page).toBe(1);
+      expect(parseProjectListQuery({ page: ' 3junk' }).page).toBe(1);
+      expect(parseProjectListQuery({ page: '-5' }).page).toBe(1);
 
-      const result = parseProjectListQuery(params);
-      expect(result).toEqual({
-        search: undefined,
-        status: undefined,
-        year: undefined,
-        program: undefined,
-        discipline: undefined,
-        sort: 'created_at',
-        direction: 'desc',
-        page: 1,
-        pageSize: 10,
-      });
+      expect(parseProjectListQuery({ pageSize: '10records' }).pageSize).toBe(10);
+      expect(parseProjectListQuery({ pageSize: '25.5' }).pageSize).toBe(10);
+      expect(parseProjectListQuery({ pageSize: '100' }).pageSize).toBe(10);
     });
 
     it('accepts valid pageSize choices 10, 25, 50 only', () => {

@@ -32,23 +32,28 @@ export interface ProjectDashboardMetrics {
   archived: number;
 }
 
+export interface ProjectFilterOptions {
+  years: string[];
+  programs: string[];
+  disciplines: string[];
+}
+
 /**
- * Normalizes and escapes user search input to prevent PostgREST syntax errors and limit length.
+ * Normalizes and escapes user search input using a conservative allowlist (Unicode letters/numbers, spaces, hyphens).
  */
 export function normalizeSearchInput(rawSearch: unknown): string {
   if (typeof rawSearch !== 'string') return '';
 
-  // Trim whitespace and limit to max 100 chars
   let cleaned = rawSearch.trim().slice(0, 100);
 
-  // Remove control characters (ASCII 0-31 and 127)
+  // Remove control characters
   cleaned = cleaned.replace(/[\x00-\x1F\x7F]/g, '');
 
-  // Strip PostgREST reserved character operators that could mess up filter queries
-  cleaned = cleaned.replace(/[\(\),:\.\%\*]/g, ' ');
+  // Conservative allowlist: keep Unicode letters/numbers (\p{L}, \p{N}), spaces, and hyphens. Replace everything else with space.
+  cleaned = cleaned.replace(/[^\p{L}\p{N}\s-]/gu, ' ');
 
   // Collapse multiple spaces
-  return cleaned.replace(/\s+/g, ' ').trim();
+  return cleaned.replace(/\s+/g, ' ').trim().slice(0, 100);
 }
 
 /**
@@ -97,12 +102,13 @@ export function parseProjectListQuery(rawParams: Record<string, string | string[
   const rawDirection = getSingleString('direction');
   const direction: SortDirection = rawDirection === 'asc' ? 'asc' : 'desc';
 
+  // Strict full-string decimal-integer check for page (e.g. "1", "25", no decimals, signs or trailing letters)
   const rawPage = getSingleString('page');
-  const parsedPage = rawPage ? parseInt(rawPage, 10) : 1;
-  const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const page = rawPage && /^[1-9]\d*$/.test(rawPage.trim()) ? parseInt(rawPage.trim(), 10) : 1;
 
+  // Strict full-string decimal-integer check for pageSize
   const rawPageSize = getSingleString('pageSize');
-  const parsedPageSize = rawPageSize ? parseInt(rawPageSize, 10) : 10;
+  const parsedPageSize = rawPageSize && /^\d+$/.test(rawPageSize.trim()) ? parseInt(rawPageSize.trim(), 10) : 10;
   const allowedSizes: PageSizeOption[] = [10, 25, 50];
   const pageSize: PageSizeOption = allowedSizes.includes(parsedPageSize as PageSizeOption)
     ? (parsedPageSize as PageSizeOption)

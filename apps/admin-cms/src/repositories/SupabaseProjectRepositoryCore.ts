@@ -4,6 +4,7 @@ import {
   ProjectListQuery,
   ProjectListResult,
   ProjectDashboardMetrics,
+  ProjectFilterOptions,
   normalizeSearchInput,
 } from '../domain/projectQuery';
 import { ProjectRepository } from './ProjectRepository';
@@ -244,6 +245,53 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
 
     const total = count ?? 0;
     const pageCount = total > 0 ? Math.ceil(total / pageSize) : 0;
+
+    // Handle out-of-range page clamping when total > 0 and page > pageCount
+    if (total > 0 && page > pageCount) {
+      const clampedPage = pageCount;
+      const clampedFrom = (clampedPage - 1) * pageSize;
+      const clampedTo = clampedFrom + pageSize - 1;
+
+      // Re-run range query for the clamped last page
+      let reQuery = this.supabase
+        .from('projects')
+        .select('*, project_disciplines(disciplines(name))')
+        .is('deleted_at', null);
+
+      if (query.search) {
+        const sanitized = normalizeSearchInput(query.search);
+        if (sanitized) {
+          reQuery = reQuery.or(
+            `title.ilike.%${sanitized}%,public_id.ilike.%${sanitized}%,industry_partner.ilike.%${sanitized}%,group_name.ilike.%${sanitized}%`
+          );
+        }
+      }
+
+      if (query.status) reQuery = reQuery.eq('status', query.status);
+      if (query.year) {
+        const parsedYear = parseInt(query.year, 10);
+        if (!isNaN(parsedYear)) reQuery = reQuery.eq('year', parsedYear);
+      }
+      if (query.program) reQuery = reQuery.eq('program_name', query.program);
+      if (query.discipline) reQuery = reQuery.eq('discipline', query.discipline);
+
+      reQuery = reQuery.order(sortColumn, { ascending: isAscending }).range(clampedFrom, clampedTo);
+
+      const { data: clampedData, error: clampedError } = await reQuery;
+      if (clampedError) {
+        throw new Error(`Failed to query clamped page from Supabase: ${clampedError.message}`);
+      }
+
+      const clampedProjects = (clampedData || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
+      return {
+        projects: clampedProjects,
+        total,
+        page: clampedPage,
+        pageSize,
+        pageCount,
+      };
+    }
+
     const projects = (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
 
     return {
@@ -275,7 +323,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       const status = row.status;
       if (status === 'approved' || status === 'published') {
         publicEligible++;
-      } else if (status === 'submitted' || status === 'in_review') {
+      } else if (status === 'in_review') {
         inReview++;
       } else if (status === 'archived') {
         archived++;
@@ -287,6 +335,38 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       publicEligible,
       inReview,
       archived,
+    };
+  }
+
+  async getProjectFilterOptions(): Promise<ProjectFilterOptions> {
+    const { data, error } = await this.supabase
+      .from('projects')
+      .select('year, program_name, discipline')
+      .is('deleted_at', null);
+
+    if (error) {
+      throw new Error(`Failed to fetch project filter options: ${error.message}`);
+    }
+
+    const rows = data || [];
+    const yearsSet = new Set<string>();
+    const programsSet = new Set<string>();
+    const disciplinesSet = new Set<string>();
+
+    for (const row of rows) {
+      if (row.year) yearsSet.add(row.year.toString());
+      if (row.program_name && row.program_name.trim()) programsSet.add(row.program_name.trim());
+      if (row.discipline && row.discipline.trim()) disciplinesSet.add(row.discipline.trim());
+    }
+
+    const years = Array.from(yearsSet).sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
+    const programs = Array.from(programsSet).sort((a, b) => a.localeCompare(b));
+    const disciplines = Array.from(disciplinesSet).sort((a, b) => a.localeCompare(b));
+
+    return {
+      years,
+      programs,
+      disciplines,
     };
   }
 
@@ -433,6 +513,8 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       comments: comments || null
     };
 
+    // TODO: Production should replace this two-step update with a Postgres RPC function or transaction-backed server operation.
+    // Workflow action and audit insert must be atomic before real use to guarantee absolute database consistency.
     const { error: auditError } = await this.supabase
       .from('approval_records')
       .insert(auditRow);

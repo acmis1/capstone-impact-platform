@@ -1,7 +1,12 @@
 import React from 'react';
 import Link from 'next/link';
 import { SupabaseProjectRepository } from '../../repositories/SupabaseProjectRepository';
-import { parseProjectListQuery, ProjectListResult, ProjectDashboardMetrics } from '../../domain/projectQuery';
+import {
+  parseProjectListQuery,
+  ProjectListResult,
+  ProjectDashboardMetrics,
+  ProjectFilterOptions,
+} from '../../domain/projectQuery';
 import { DashboardMetricsCards } from '../../components/admin-dashboard/DashboardMetricsCards';
 import { ProjectFilterBar } from '../../components/admin-dashboard/ProjectFilterBar';
 import { ProjectTableContainer } from '../../components/admin-dashboard/ProjectTableContainer';
@@ -21,42 +26,20 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
   let result: ProjectListResult | null = null;
   let metrics: ProjectDashboardMetrics | null = null;
+  let filterOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [] };
   let loadError: boolean = false;
-
-  let availableYears: string[] = ['2026', '2025', '2024'];
-  let availablePrograms: string[] = [
-    'Bachelor of Software Engineering',
-    'Bachelor of Computer Science',
-    'Bachelor of Information Technology',
-  ];
-  let availableDisciplines: string[] = [
-    'Software Engineering',
-    'AI & Data',
-    'Cyber Security',
-    'Cloud Systems',
-  ];
 
   try {
     const repository = new SupabaseProjectRepository();
-    const [fetchedResult, fetchedMetrics] = await Promise.all([
+    const [fetchedResult, fetchedMetrics, fetchedOptions] = await Promise.all([
       repository.listProjectsPage(query),
       repository.getProjectDashboardMetrics(),
+      repository.getProjectFilterOptions(),
     ]);
 
     result = fetchedResult;
     metrics = fetchedMetrics;
-
-    // Collect distinct filter options from full repository listing if available
-    const allProjects = await repository.listProjects();
-    if (allProjects.length > 0) {
-      const years = Array.from(new Set(allProjects.map((p) => p.year).filter(Boolean))).sort().reverse();
-      const programs = Array.from(new Set(allProjects.map((p) => p.program).filter(Boolean))).sort();
-      const disciplines = Array.from(new Set(allProjects.map((p) => p.discipline).filter(Boolean))).sort();
-
-      if (years.length > 0) availableYears = years;
-      if (programs.length > 0) availablePrograms = programs;
-      if (disciplines.length > 0) availableDisciplines = disciplines;
-    }
+    filterOptions = fetchedOptions;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown database query failure';
     console.error('[Admin Project Index Query Error]:', message);
@@ -100,9 +83,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           {/* Filter Bar */}
           <ProjectFilterBar
             query={query}
-            availableYears={availableYears}
-            availablePrograms={availablePrograms}
-            availableDisciplines={availableDisciplines}
+            availableYears={filterOptions.years}
+            availablePrograms={filterOptions.programs}
+            availableDisciplines={filterOptions.disciplines}
           />
 
           {/* Project List / Table Content */}

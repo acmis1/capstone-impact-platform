@@ -26,7 +26,7 @@ export function DashboardMetricsCards({ metrics }: DashboardMetricsCardsProps) {
     {
       title: 'In Review',
       value: metrics.inReview,
-      description: 'Pending review or changes',
+      description: 'Projects currently in review',
       icon: Clock,
       colorClass: 'text-warning bg-warning/10',
     },

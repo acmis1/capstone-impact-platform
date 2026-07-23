@@ -1,4 +1,6 @@
 'use client';
+// Opt out of React Compiler memoization for this component file because TanStack Table's useReactTable returns unmemoizable functions
+"use no memo";
 
 import * as React from 'react';
 import Link from 'next/link';
@@ -16,40 +18,14 @@ import { ProjectStatusBadge } from '../admin/ProjectStatusBadge';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 
+import { getProjectDetailHref, getValidationOutcome } from './projectDashboardHelpers';
+
 export interface ProjectTableContainerProps {
   query: ProjectListQuery;
   result: ProjectListResult;
 }
 
 const columnHelper = createColumnHelper<Project>();
-
-function getValidationBadge(project: Project) {
-  const flags = project.validationFlags;
-  const errorsCount = project.validationErrors?.length || 0;
-  const warningsCount = project.validationWarnings?.length || 0;
-
-  if (errorsCount > 0 || flags?.hasErrors) {
-    return (
-      <Badge variant="destructive" className="text-xs">
-        {errorsCount > 0 ? `${errorsCount} Error${errorsCount > 1 ? 's' : ''}` : 'Needs attention'}
-      </Badge>
-    );
-  }
-
-  if (warningsCount > 0 || flags?.hasWarnings) {
-    return (
-      <Badge variant="warning" className="text-xs">
-        {warningsCount > 0 ? `${warningsCount} Warning${warningsCount > 1 ? 's' : ''}` : 'Warnings'}
-      </Badge>
-    );
-  }
-
-  return (
-    <Badge variant="success" className="text-xs">
-      Ready
-    </Badge>
-  );
-}
 
 function formatDate(dateStr?: string) {
   if (!dateStr) return 'Not recorded';
@@ -67,6 +43,9 @@ function formatDate(dateStr?: string) {
 }
 
 export function ProjectTableContainer({ query, result }: ProjectTableContainerProps) {
+  // Opt out of React Compiler memoization because useReactTable is an incompatible library boundary
+  "use no memo";
+
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -175,7 +154,10 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
       columnHelper.display({
         id: 'validation',
         header: () => <span className="font-semibold text-xs text-muted-foreground">Validation</span>,
-        cell: (info) => getValidationBadge(info.row.original),
+        cell: (info) => {
+          const outcome = getValidationOutcome(info.row.original);
+          return <Badge variant={outcome.variant} className="text-xs">{outcome.label}</Badge>;
+        },
       }),
       columnHelper.accessor('updated_at', {
         header: () => renderSortHeader('Updated', 'updated_at'),
@@ -189,8 +171,10 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
         id: 'actions',
         header: () => <span className="sr-only">Actions</span>,
         cell: (info) => {
-          const publicId = info.row.original.publicId;
-          const href = publicId ? `/admin/projects/${encodeURIComponent(publicId)}` : '/admin';
+          const href = getProjectDetailHref(info.row.original.publicId);
+          if (!href) {
+            return <span className="text-xs text-muted-foreground italic">Unavailable</span>;
+          }
           return (
             <Link
               href={href}
@@ -227,13 +211,24 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
             <thead className="bg-muted/50 border-b">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <th key={header.id} className="p-3 font-semibold text-xs text-muted-foreground">
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                    </th>
-                  ))}
+                  {headerGroup.headers.map((header) => {
+                    const isSorted = query.sort === header.column.id;
+                    const isAsc = query.direction === 'asc';
+                    const ariaSort = isSorted ? (isAsc ? 'ascending' : 'descending') : (['title', 'status', 'year', 'updated_at'].includes(header.column.id) ? 'none' : undefined);
+
+                    return (
+                      <th
+                        key={header.id}
+                        scope="col"
+                        aria-sort={ariaSort}
+                        className="p-3 font-semibold text-xs text-muted-foreground"
+                      >
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                      </th>
+                    );
+                  })}
                 </tr>
               ))}
             </thead>
@@ -241,9 +236,9 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
               {table.getRowModel().rows.map((row) => (
                 <tr key={row.id} className="hover:bg-muted/30 transition-colors">
                   {row.getVisibleCells().map((cell) => (
-                    <th key={cell.id} className="p-3 align-middle font-normal">
+                    <td key={cell.id} className="p-3 align-middle font-normal">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </th>
+                    </td>
                   ))}
                 </tr>
               ))}
@@ -255,8 +250,8 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
       {/* Mobile Card List Fallback */}
       <div className="flex flex-col gap-3 md:hidden">
         {result.projects.map((project) => {
-          const publicId = project.publicId;
-          const href = publicId ? `/admin/projects/${encodeURIComponent(publicId)}` : '/admin';
+          const href = getProjectDetailHref(project.publicId);
+          const validationOutcome = getValidationOutcome(project);
 
           return (
             <div key={project.id} className="flex flex-col gap-2 rounded-lg border bg-card p-4 shadow-xs">
@@ -277,19 +272,25 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
                 <span>•</span>
                 <span>{project.year}</span>
                 <span>•</span>
-                {getValidationBadge(project)}
+                <Badge variant={validationOutcome.variant} className="text-xs">
+                  {validationOutcome.label}
+                </Badge>
               </div>
 
               <div className="flex items-center justify-between pt-2 border-t mt-1">
                 <span className="text-xs text-muted-foreground">
                   Updated: {formatDate(project.updated_at || project.created_at)}
                 </span>
-                <Link
-                  href={href}
-                  className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-semibold shadow-2xs hover:bg-primary/90 min-h-[44px]"
-                >
-                  View project
-                </Link>
+                {href ? (
+                  <Link
+                    href={href}
+                    className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-semibold shadow-2xs hover:bg-primary/90 min-h-[44px]"
+                  >
+                    View project
+                  </Link>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">Unavailable</span>
+                )}
               </div>
             </div>
           );

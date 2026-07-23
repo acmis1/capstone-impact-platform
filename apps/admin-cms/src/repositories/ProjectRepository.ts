@@ -3,6 +3,7 @@ import {
   ProjectListQuery,
   ProjectListResult,
   ProjectDashboardMetrics,
+  ProjectFilterOptions,
 } from '../domain/projectQuery';
 
 export interface ProjectRepository {
@@ -20,6 +21,11 @@ export interface ProjectRepository {
    * Retrieves high-level operational metrics across the full non-deleted project collection.
    */
   getProjectDashboardMetrics(): Promise<ProjectDashboardMetrics>;
+
+  /**
+   * Retrieves lightweight, distinct filter options (years, programs, disciplines) across non-deleted records.
+   */
+  getProjectFilterOptions(): Promise<ProjectFilterOptions>;
 
   /**
    * Retrieves a single project by its deterministic public identifier.

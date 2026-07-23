@@ -6,6 +6,8 @@ import { Search, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { ProjectListQuery } from '../../domain/projectQuery';
 
+import { buildQueryString } from './filterQueryHelpers';
+
 export interface ProjectFilterBarProps {
   query: ProjectListQuery;
   availableYears: string[];
@@ -31,33 +33,14 @@ export function ProjectFilterBar({
     setSearchInput(query.search || '');
   }
 
-  const createQueryString = (updates: Record<string, string | null>) => {
-    const params = new URLSearchParams(searchParams?.toString() || '');
-
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value === null || value === '') {
-        params.delete(key);
-      } else {
-        params.set(key, value);
-      }
-    });
-
-    // Reset page to 1 whenever filters or search change (unless page is explicitly updated)
-    if (!('page' in updates)) {
-      params.delete('page');
-    }
-
-    return params.toString();
-  };
-
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const queryString = createQueryString({ q: searchInput.trim() || null });
+    const queryString = buildQueryString(searchParams?.toString() || '', { q: searchInput.trim() || null });
     router.push(`${pathname}?${queryString}`);
   };
 
   const handleFilterChange = (key: string, value: string) => {
-    const queryString = createQueryString({ [key]: value || null });
+    const queryString = buildQueryString(searchParams?.toString() || '', { [key]: value || null });
     router.push(`${pathname}?${queryString}`);
   };
 
