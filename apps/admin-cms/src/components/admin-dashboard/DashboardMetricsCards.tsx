@@ -12,7 +12,7 @@ export function DashboardMetricsCards({ metrics }: DashboardMetricsCardsProps) {
     {
       title: 'Total Projects',
       value: metrics.totalProjects,
-      description: 'Active project records',
+      description: 'All non-deleted records',
       icon: FolderKanban,
       colorClass: 'text-primary bg-primary/10',
     },

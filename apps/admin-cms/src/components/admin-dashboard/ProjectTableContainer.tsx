@@ -1,6 +1,4 @@
 'use client';
-// Opt out of React Compiler memoization for this component file because TanStack Table's useReactTable returns unmemoizable functions
-"use no memo";
 
 import * as React from 'react';
 import Link from 'next/link';
@@ -12,20 +10,23 @@ import {
   createColumnHelper,
 } from '@tanstack/react-table';
 import { ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Project } from '../../domain/project';
-import { ProjectListQuery, ProjectListResult } from '../../domain/projectQuery';
+import { ProjectListQuery } from '../../domain/projectQuery';
 import { ProjectStatusBadge } from '../admin/ProjectStatusBadge';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 
-import { getProjectDetailHref, getValidationOutcome } from './projectDashboardHelpers';
+import {
+  getProjectDetailHref,
+  ProjectIndexRow,
+  ProjectIndexResult,
+} from './projectDashboardHelpers';
 
 export interface ProjectTableContainerProps {
   query: ProjectListQuery;
-  result: ProjectListResult;
+  result: ProjectIndexResult;
 }
 
-const columnHelper = createColumnHelper<Project>();
+const columnHelper = createColumnHelper<ProjectIndexRow>();
 
 function formatDate(dateStr?: string) {
   if (!dateStr) return 'Not recorded';
@@ -110,7 +111,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
         header: () => renderSortHeader('Project', 'title'),
         cell: (info) => {
           const row = info.row.original;
-          const secondary = row.groupName || row.industryPartner || row.summary;
+          const secondary = row.groupName || row.industryPartner;
           return (
             <div className="flex flex-col gap-0.5">
               <span className="font-semibold text-foreground text-sm leading-snug">
@@ -155,15 +156,15 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
         id: 'validation',
         header: () => <span className="font-semibold text-xs text-muted-foreground">Validation</span>,
         cell: (info) => {
-          const outcome = getValidationOutcome(info.row.original);
-          return <Badge variant={outcome.variant} className="text-xs">{outcome.label}</Badge>;
+          const row = info.row.original;
+          return <Badge variant={row.validationVariant} className="text-xs">{row.validationLabel}</Badge>;
         },
       }),
-      columnHelper.accessor('updated_at', {
+      columnHelper.accessor('updatedAt', {
         header: () => renderSortHeader('Updated', 'updated_at'),
         cell: (info) => (
           <span className="text-xs text-muted-foreground">
-            {formatDate(info.getValue() || info.row.original.created_at)}
+            {formatDate(info.getValue() || info.row.original.createdAt)}
           </span>
         ),
       }),
@@ -190,7 +191,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
   );
 
   const table = useReactTable({
-    data: result.projects,
+    data: result.rows,
     columns,
     getCoreRowModel: getCoreRowModel(),
     manualPagination: true,
@@ -249,37 +250,36 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
 
       {/* Mobile Card List Fallback */}
       <div className="flex flex-col gap-3 md:hidden">
-        {result.projects.map((project) => {
-          const href = getProjectDetailHref(project.publicId);
-          const validationOutcome = getValidationOutcome(project);
+        {result.rows.map((row) => {
+          const href = getProjectDetailHref(row.publicId);
 
           return (
-            <div key={project.id} className="flex flex-col gap-2 rounded-lg border bg-card p-4 shadow-xs">
+            <div key={row.id} className="flex flex-col gap-2 rounded-lg border bg-card p-4 shadow-xs">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex flex-col gap-0.5 min-w-0">
                   <span className="font-semibold text-foreground text-sm leading-snug">
-                    {project.title}
+                    {row.title}
                   </span>
                   <span className="font-mono text-xs text-primary font-medium">
-                    {project.publicId || `ID-${project.id}`}
+                    {row.publicId || `ID-${row.id}`}
                   </span>
                 </div>
-                <ProjectStatusBadge status={project.status} />
+                <ProjectStatusBadge status={row.status} />
               </div>
 
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground pt-1 border-t">
-                <span>{project.program || 'Program'}</span>
+                <span>{row.program || 'Program'}</span>
                 <span>•</span>
-                <span>{project.year}</span>
+                <span>{row.year}</span>
                 <span>•</span>
-                <Badge variant={validationOutcome.variant} className="text-xs">
-                  {validationOutcome.label}
+                <Badge variant={row.validationVariant} className="text-xs">
+                  {row.validationLabel}
                 </Badge>
               </div>
 
               <div className="flex items-center justify-between pt-2 border-t mt-1">
                 <span className="text-xs text-muted-foreground">
-                  Updated: {formatDate(project.updated_at || project.created_at)}
+                  Updated: {formatDate(row.updatedAt || row.createdAt)}
                 </span>
                 {href ? (
                   <Link

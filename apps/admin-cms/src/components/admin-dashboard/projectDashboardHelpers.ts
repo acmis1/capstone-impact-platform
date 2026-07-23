@@ -1,4 +1,5 @@
 import { Project } from '../../domain/project';
+import { WorkflowStatus } from '../../domain/workflowStatus';
 
 /**
  * Returns a valid URI-encoded project detail URL for non-empty public IDs, or null if missing/blank.
@@ -41,5 +42,52 @@ export function getValidationOutcome(project: Partial<Project>): ValidationStatu
   return {
     label: 'Ready',
     variant: 'success',
+  };
+}
+
+export interface ProjectIndexRow {
+  id: string;
+  publicId?: string;
+  title: string;
+  status: WorkflowStatus;
+  program?: string;
+  discipline?: string;
+  year?: string;
+  groupName?: string;
+  industryPartner?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  validationLabel: string;
+  validationVariant: 'destructive' | 'warning' | 'success';
+}
+
+export interface ProjectIndexResult {
+  rows: ProjectIndexRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+}
+
+/**
+ * Maps a complete internal Project domain entity into a client-safe ProjectIndexRow DTO.
+ * Excludes internal notes, private comments, raw validation arrays, media URLs, and unused CMS metadata.
+ */
+export function toProjectIndexRow(project: Project): ProjectIndexRow {
+  const validation = getValidationOutcome(project);
+  return {
+    id: String(project.id),
+    publicId: project.publicId,
+    title: project.title,
+    status: project.status,
+    program: project.program,
+    discipline: project.discipline,
+    year: project.year,
+    groupName: project.groupName,
+    industryPartner: project.industryPartner,
+    createdAt: project.created_at,
+    updatedAt: project.updated_at,
+    validationLabel: validation.label,
+    validationVariant: validation.variant,
   };
 }

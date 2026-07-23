@@ -14,6 +14,11 @@ import { ErrorState } from '../../components/ui/error-state';
 import { EmptyState } from '../../components/ui/empty-state';
 import { FolderOpen, SearchX } from 'lucide-react';
 
+import {
+  toProjectIndexRow,
+  ProjectIndexResult,
+} from '../../components/admin-dashboard/projectDashboardHelpers';
+
 export const dynamic = 'force-dynamic';
 
 interface AdminPageProps {
@@ -46,6 +51,16 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     loadError = true;
   }
 
+  const clientResult: ProjectIndexResult | null = result
+    ? {
+        rows: result.projects.map(toProjectIndexRow),
+        total: result.total,
+        page: result.page,
+        pageSize: result.pageSize,
+        pageCount: result.pageCount,
+      }
+    : null;
+
   const hasActiveFilters = Boolean(
     query.search || query.status || query.year || query.program || query.discipline
   );
@@ -62,7 +77,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
         </p>
       </div>
 
-      {loadError || !result || !metrics ? (
+      {loadError || !clientResult || !metrics ? (
         <ErrorState
           title="Projects could not be loaded"
           description="The requested project index information could not be retrieved from the database. Try again or contact the system administrator."
@@ -89,7 +104,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           />
 
           {/* Project List / Table Content */}
-          {result.total === 0 ? (
+          {clientResult.total === 0 ? (
             hasActiveFilters ? (
               <EmptyState
                 icon={SearchX}
@@ -112,7 +127,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               />
             )
           ) : (
-            <ProjectTableContainer query={query} result={result} />
+            <ProjectTableContainer query={query} result={clientResult} />
           )}
         </>
       )}

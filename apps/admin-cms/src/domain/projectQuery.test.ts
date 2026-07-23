@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseProjectListQuery, normalizeSearchInput } from './projectQuery';
+import { parseProjectListQuery, normalizeSearchInput, MAX_PROJECT_INDEX_PAGE } from './projectQuery';
 
 describe('projectQuery domain logic', () => {
   describe('normalizeSearchInput', () => {
@@ -14,11 +14,9 @@ describe('projectQuery domain logic', () => {
     });
 
     it('strips PostgREST operators and special characters via conservative allowlist', () => {
-      // Raw string containing comma, colon, period, percent, asterisk, underscore, semicolon, quotes, backslash, parentheses
       const rawInjected = 'title:eq.test(123),select*%20;\'"\\_DROP--';
       const normalized = normalizeSearchInput(rawInjected);
 
-      // Should keep only letters, numbers, spaces and hyphens
       expect(normalized).toBe('title eq test 123 select 20 DROP--');
       expect(normalized).not.toContain(':');
       expect(normalized).not.toContain('.');
@@ -89,10 +87,17 @@ describe('projectQuery domain logic', () => {
       expect(parseProjectListQuery({ page: '+2' }).page).toBe(1);
       expect(parseProjectListQuery({ page: ' 3junk' }).page).toBe(1);
       expect(parseProjectListQuery({ page: '-5' }).page).toBe(1);
+      expect(parseProjectListQuery({ page: '0' }).page).toBe(1);
 
       expect(parseProjectListQuery({ pageSize: '10records' }).pageSize).toBe(10);
       expect(parseProjectListQuery({ pageSize: '25.5' }).pageSize).toBe(10);
       expect(parseProjectListQuery({ pageSize: '100' }).pageSize).toBe(10);
+    });
+
+    it('falls back to page 1 for page inputs exceeding MAX_PROJECT_INDEX_PAGE or Number.MAX_SAFE_INTEGER', () => {
+      expect(parseProjectListQuery({ page: '1000001' }).page).toBe(1);
+      expect(parseProjectListQuery({ page: '99999999999999999999' }).page).toBe(1);
+      expect(parseProjectListQuery({ page: String(MAX_PROJECT_INDEX_PAGE) }).page).toBe(MAX_PROJECT_INDEX_PAGE);
     });
 
     it('accepts valid pageSize choices 10, 25, 50 only', () => {

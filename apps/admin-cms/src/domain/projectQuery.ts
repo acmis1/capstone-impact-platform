@@ -56,6 +56,8 @@ export function normalizeSearchInput(rawSearch: unknown): string {
   return cleaned.replace(/\s+/g, ' ').trim().slice(0, 100);
 }
 
+export const MAX_PROJECT_INDEX_PAGE = 1_000_000;
+
 /**
  * Parses and sanitizes raw URL search parameters into a safe, strongly-typed ProjectListQuery.
  */
@@ -102,9 +104,15 @@ export function parseProjectListQuery(rawParams: Record<string, string | string[
   const rawDirection = getSingleString('direction');
   const direction: SortDirection = rawDirection === 'asc' ? 'asc' : 'desc';
 
-  // Strict full-string decimal-integer check for page (e.g. "1", "25", no decimals, signs or trailing letters)
+  // Strict full-string decimal-integer check and safe boundary validation for page
   const rawPage = getSingleString('page');
-  const page = rawPage && /^[1-9]\d*$/.test(rawPage.trim()) ? parseInt(rawPage.trim(), 10) : 1;
+  let page = 1;
+  if (rawPage && /^[1-9]\d*$/.test(rawPage.trim())) {
+    const parsed = Number(rawPage.trim());
+    if (Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= MAX_PROJECT_INDEX_PAGE) {
+      page = parsed;
+    }
+  }
 
   // Strict full-string decimal-integer check for pageSize
   const rawPageSize = getSingleString('pageSize');

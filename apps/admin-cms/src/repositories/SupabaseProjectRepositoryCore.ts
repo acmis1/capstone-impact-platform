@@ -180,15 +180,10 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     return (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
   }
 
-  async listProjectsPage(query: ProjectListQuery): Promise<ProjectListResult> {
-    const page = query.page && query.page > 0 ? query.page : 1;
-    const pageSize = query.pageSize && [10, 25, 50].includes(query.pageSize) ? query.pageSize : 10;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
+  private buildFilteredQuery(query: ProjectListQuery, selectOpts?: { count?: 'exact' }) {
     let dbQuery = this.supabase
       .from('projects')
-      .select('*, project_disciplines(disciplines(name))', { count: 'exact' })
+      .select('*, project_disciplines(disciplines(name))', selectOpts)
       .is('deleted_at', null);
 
     // Apply search
@@ -224,7 +219,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       dbQuery = dbQuery.eq('discipline', query.discipline);
     }
 
-    // Apply sort
+    // Apply sort with deterministic public_id tie-breaker
     const allowedSortFieldsMap: Record<string, string> = {
       created_at: 'created_at',
       updated_at: 'updated_at',
@@ -235,7 +230,18 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     const sortColumn = allowedSortFieldsMap[query.sort || 'created_at'] || 'created_at';
     const isAscending = query.direction === 'asc';
 
-    dbQuery = dbQuery.order(sortColumn, { ascending: isAscending }).range(from, to);
+    return dbQuery
+      .order(sortColumn, { ascending: isAscending })
+      .order('public_id', { ascending: true });
+  }
+
+  async listProjectsPage(query: ProjectListQuery): Promise<ProjectListResult> {
+    const page = query.page && query.page > 0 ? query.page : 1;
+    const pageSize = query.pageSize && [10, 25, 50].includes(query.pageSize) ? query.pageSize : 10;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const dbQuery = this.buildFilteredQuery(query, { count: 'exact' }).range(from, to);
 
     const { data, count, error } = await dbQuery;
 
@@ -253,29 +259,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       const clampedTo = clampedFrom + pageSize - 1;
 
       // Re-run range query for the clamped last page
-      let reQuery = this.supabase
-        .from('projects')
-        .select('*, project_disciplines(disciplines(name))')
-        .is('deleted_at', null);
-
-      if (query.search) {
-        const sanitized = normalizeSearchInput(query.search);
-        if (sanitized) {
-          reQuery = reQuery.or(
-            `title.ilike.%${sanitized}%,public_id.ilike.%${sanitized}%,industry_partner.ilike.%${sanitized}%,group_name.ilike.%${sanitized}%`
-          );
-        }
-      }
-
-      if (query.status) reQuery = reQuery.eq('status', query.status);
-      if (query.year) {
-        const parsedYear = parseInt(query.year, 10);
-        if (!isNaN(parsedYear)) reQuery = reQuery.eq('year', parsedYear);
-      }
-      if (query.program) reQuery = reQuery.eq('program_name', query.program);
-      if (query.discipline) reQuery = reQuery.eq('discipline', query.discipline);
-
-      reQuery = reQuery.order(sortColumn, { ascending: isAscending }).range(clampedFrom, clampedTo);
+      const reQuery = this.buildFilteredQuery(query).range(clampedFrom, clampedTo);
 
       const { data: clampedData, error: clampedError } = await reQuery;
       if (clampedError) {
