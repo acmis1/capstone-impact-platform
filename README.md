@@ -1,26 +1,112 @@
-# Capstone Impact Platform Monorepo
+# Capstone Impact Platform
 
-Welcome to the central repository for the Capstone Impact Platform. This repository has been structured as a monorepo using npm workspaces to coordinate infrastructure staging and application logic for Part 2 of the Capstone project.
+The Capstone Impact Platform is a school-owned Admin/CMS and automation layer for collecting, reviewing and publishing capstone project showcases.
 
-## 📂 Repository Layout
+Manual email, spreadsheet, poster and Duda publishing workflows are difficult to validate and repeat at scale. This project introduces structured project records, validation, review controls and a stable publishing boundary while preserving the existing public showcase as the presentation layer.
 
-*   **`apps/admin-cms/`**: Next.js workspace app, serving as the staging foundation for the future production Admin/CMS.
-*   **`infra/supabase/`**: Staging Supabase database schema migrations, Row-Level Security (RLS) policies, and manual database application guides.
-*   **`docs/`**: Central architecture mapping, constraints, and stakeholder decision checklist documents.
-*   **`Prototype/`**: The original Prototype v2 codebase, preserved as feasibility evidence and untouched.
+The current hybrid design is: staff operate the Admin/CMS, authenticated server-side services manage source data in Supabase, and only approved records are compiled into stable JSON for Duda. `Prototype/` is retained as historical feasibility evidence, not as the active application.
 
-## 🏃 Quick Start Workspace Scripts
+> [!IMPORTANT]
+> Active development is in [`apps/admin-cms/`](./apps/admin-cms/). It is a production-oriented staging implementation. Staging operations are isolated from the live public showcase, synthetic data is required, and production cutover plus full reviewer/editor UAT remain pending.
 
-From the repository root, you can run convenience workspace commands:
+## Why the project exists
 
-*   **Install Dependencies**: `npm install`
-*   **TypeScript Checks**: `npm run typecheck:admin`
-*   **Audit Public feed**: `npm run check:feed`
-*   **Build Workspace**: `npm run build:admin`
-*   **Start Local CMS**: `npm run dev:admin`
+The target workflow needs structured submissions, validation, review, archival and repeatable publishing. Moving source data and operational control into a school-owned system reduces manual duplication while allowing the established public showcase to remain the presentation surface.
 
-## 🛡️ Staging Safety & Isolation Constraints
-*   **Feasibility Proof Only**: The original Prototype v2 code is kept as evidence only and is completely isolated.
-*   **Staging Project Buckets**: Database and feed operations are directed strictly to the new staging environment (`capstone-impact-staging`).
-*   **Isolated Public showcase**: The live Duda showcase remains isolated from these staging feed updates until stakeholder workflow confirmations are finalized in July.
-*   **No Real Data**: Mock or generated fake datasets are used exclusively; real RMIT stakeholder or supervisor lists are strictly prohibited.
+## Key capabilities
+
+| Area | Current status |
+| --- | --- |
+| Admin/CMS foundation | Authenticated internal shell, protected routes and operational project dashboard are implemented. |
+| Project index | Server-side search, filters, whitelisted sorting, exact-count pagination and deterministic ordering are implemented. |
+| Review | Project inspection and controlled `approve`, `request_changes` and `archive` actions are implemented; atomic transaction hardening remains pending. |
+| Ingestion | Package parsing, metadata/file validation, import-batch tracking and import-review foundations are implemented. |
+| Media and feed | Private draft storage, validated promotion foundations and approved-only JSON feed compilation are implemented. |
+| Data layer | Supabase schema, RLS and explicit grant migrations are versioned; broader production verification remains pending. |
+| Quality | Offline automated tests cover domain, auth helpers, validation, feed, import, media, repository and UI-token behavior. |
+| Not yet complete | Metadata editor, student confirmation, integrated preview, publishing/history and rollback UI, full manual accessibility QA, production hardening and controlled Duda cutover. |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Staff browser] --> B[Next.js Admin/CMS]
+    B --> C[Authenticated server-side services]
+    C --> D[Supabase Auth, Postgres and Storage]
+    D --> E[Approved-only stable JSON feed]
+    E --> F[Duda public showcase]
+    F -. staging isolated until cutover .- B
+```
+
+Staff use the protected Next.js application. Server-side authentication and authorization mediate access to Supabase. The feed compiler removes internal fields and includes only approved or published records. The architecture supports Duda as the public consumer, but staging feed output remains isolated from the live showcase until a controlled cutover.
+
+## Repository structure
+
+| Path | Purpose | Status |
+| --- | --- | --- |
+| [`apps/admin-cms/`](./apps/admin-cms/) | Active Next.js Admin/CMS application. | Active implementation and staging operations |
+| [`infra/supabase/`](./infra/supabase/) | Versioned schema, RLS, grants and database runbooks. | Operational infrastructure documentation |
+| [`docs/`](./docs/) | Architecture, UI, integration and project constraints. | Operational and planning documentation |
+| [`Prototype/`](./Prototype/) | Earlier feasibility/demo application. | Historical evidence only |
+| [`package.json`](./package.json) | Root npm workspace and convenience scripts. | Active repository contract |
+
+## Quick start
+
+From a fresh checkout:
+
+```bash
+git clone https://github.com/acmis1/capstone-impact-platform.git
+cd capstone-impact-platform
+npm install
+cp apps/admin-cms/.env.example apps/admin-cms/.env.local
+npm run dev:admin
+```
+
+PowerShell equivalent for the environment template:
+
+```powershell
+Copy-Item apps/admin-cms/.env.example apps/admin-cms/.env.local
+```
+
+Open [http://localhost:3000/login](http://localhost:3000/login). The local server needs valid local configuration for database-backed pages; offline tests do not require private dashboard access. See the [Admin/CMS guide](./apps/admin-cms/README.md) before using staging scripts or applying migrations.
+
+## Validation commands
+
+Run from the repository root:
+
+| Check | Command |
+| --- | --- |
+| Lint | `npm run lint --workspace=apps/admin-cms` |
+| Tests | `npm run test:admin` |
+| Typecheck | `npm run typecheck:admin` |
+| Build | `npm run build:admin` |
+| Public-feed contract | `npm run check:feed` |
+
+## Documentation map
+
+| Document | Role |
+| --- | --- |
+| [`apps/admin-cms/README.md`](./apps/admin-cms/README.md) | Authoritative developer and staging-operator guide. |
+| [`docs/admin-cms-ui-system.md`](./docs/admin-cms-ui-system.md) | Current UI and information-architecture contract. |
+| [`docs/duda-integration-plan.md`](./docs/duda-integration-plan.md) | Public-feed and Duda integration design/plan. |
+| [`docs/prototype-notes.md`](./docs/prototype-notes.md) | Historical prototype notes; not the current application contract. |
+| [`infra/supabase/README.md`](./infra/supabase/README.md) | Supabase migration and policy orientation. |
+| [`infra/supabase/manual-apply-guide.md`](./infra/supabase/manual-apply-guide.md) | Authorized migration and staging operations runbook. |
+| [`infra/supabase/staging-auth-verification.md`](./infra/supabase/staging-auth-verification.md) | Controlled authentication and authorization verification runbook. |
+
+## Security and data handling
+
+- Never commit `.env` or `.env.local` files.
+- Keep server-only credentials out of browser code and Client Components.
+- Autonomous agents must not access private administrative dashboards.
+- Use synthetic fixtures only; real student, staff or stakeholder personal data is prohibited in staging.
+- Keep `Prototype/` and staging environments isolated.
+- State-changing commands, migrations, bootstrap operations and publishing require explicit authorization.
+
+## Roadmap
+
+Implemented foundations include the authenticated Admin/CMS shell, project index, validation, import and media workflows, Supabase migration set and approved-only feed compiler.
+
+Remaining work includes a metadata editor, student confirmation, preview and publication-history workflows, transaction-backed review updates, reviewer/editor UAT, accessibility and visual QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
+
+This repository supports a university capstone project. No license, contribution policy or security policy is asserted here because those governance files are not currently present.
