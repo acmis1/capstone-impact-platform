@@ -1,6 +1,6 @@
 # Capstone Impact Platform — Admin/CMS
 
-The Admin/CMS is the active Next.js application for authenticated internal administration of structured capstone project records, validation, imports, review actions, media/storage foundations and approved-only public-feed compilation. It is a production-oriented staging implementation, not a production-readiness certification. See the [repository README](../../README.md) for the project-level overview.
+The Admin/CMS is the active Next.js application for authenticated internal administration of structured capstone project records, validation, imports, review actions, media/storage foundations and public-eligible feed compilation. It is a production-oriented staging implementation, not a production-readiness certification. See the [repository README](../../README.md) for the project-level overview.
 
 ## Scope and non-goals
 
@@ -11,7 +11,7 @@ The application currently owns:
 - package ingestion and import review;
 - project inspection and controlled review transitions;
 - private draft media and public-asset storage foundations;
-- approved-only stable JSON feed compilation.
+- public-eligible stable JSON feed compilation.
 
 It does not yet provide a completed metadata editor, student portal or final confirmation workflow, integrated preview workspace, publishing/history or rollback UI, production Duda cutover, or production-readiness certification.
 
@@ -27,7 +27,7 @@ It does not yet provide a completed metadata editor, student portal or final con
 | Review transitions | Yes | Workflow tests and protected mutation route implemented | Update plus audit insert is not transaction-backed |
 | Project metadata editing | No | Repository supports update operations, but no editor route/UI exists | Planned |
 | Media validation/storage | Foundations | Offline media validation tests; private-to-public storage functions exist | End-to-end staging and production verification pending |
-| Approved-only feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled public cutover pending |
+| Public-eligible feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled public cutover pending |
 | Duda integration | Design boundary | Stable-feed consumer is documented | Live Duda connection remains isolated |
 | Database schema/RLS | Versioned | Migration tests and SQL contracts exist | Full production RLS verification pending |
 | Automated testing | Yes | Vitest offline suite | No hosted CI evidence is asserted here |
@@ -58,7 +58,7 @@ flowchart LR
     D --> E[Supabase Auth and Postgres]
     D --> F[Private draft storage]
     F --> G[Validated public assets]
-    E --> H[Approved-only feed compiler]
+    E --> H[Public-eligible feed compiler]
     G --> H
     H --> I[Stable public JSON feed]
     I -. isolated in staging .-> J[Duda consumer]
@@ -78,19 +78,35 @@ Offline tests and the sample-feed check do not require access to a private dashb
 
 Run from the repository root:
 
-```bash
-npm install
-cp apps/admin-cms/.env.example apps/admin-cms/.env.local
-npm run dev:admin
-```
+1. Install dependencies.
 
-PowerShell:
+   ```bash
+   npm install
+   ```
 
-```powershell
-Copy-Item apps/admin-cms/.env.example apps/admin-cms/.env.local
-```
+2. Copy the environment template locally.
 
-Open [`/login`](http://localhost:3000/login) locally. The environment template is a blank contract: populate only an explicitly authorized isolated environment, never a production or recovery environment. Do not print or commit any values from the local file.
+   ```bash
+   cp apps/admin-cms/.env.example apps/admin-cms/.env.local
+   ```
+
+   PowerShell:
+
+   ```powershell
+   Copy-Item apps/admin-cms/.env.example apps/admin-cms/.env.local
+   ```
+
+3. Populate the required variable names for an explicitly authorized isolated environment. The template is a blank contract: never use a production or recovery environment, and do not print or commit values from the local file.
+
+4. Start the development server.
+
+   ```bash
+   npm run dev:admin
+   ```
+
+5. Open [`/login`](http://localhost:3000/login) locally.
+
+Offline tests and the sample-feed check do not require private dashboard access.
 
 ## Environment reference
 
@@ -112,31 +128,61 @@ The runtime contract in [`src/lib/env.ts`](./src/lib/env.ts) validates required 
 
 Run these from the repository root unless noted. Read-only checks do not change application data. Seed, import, media promotion, feed publication, migration and admin-linking commands are state-changing and require explicit operator authorization.
 
+### Development and quality
+
 | Purpose | Root command | App command | Classification |
 | --- | --- | --- | --- |
 | Develop | `npm run dev:admin` | `npm run dev` | Local server |
-| Lint | — | `npm run lint` | Read-only |
+| Lint | `npm run lint --workspace=apps/admin-cms` | `npm run lint` | Read-only |
 | Tests | `npm run test:admin` | `npm run test:run` | Offline read-only |
 | Typecheck | `npm run typecheck:admin` | `npm run typecheck` | Read-only |
 | Build | `npm run build:admin` | `npm run build` | Local build |
 | Feed contract check | `npm run check:feed` | `npm run check:sample-feed` | Offline read-only |
+
+### Read-only staging checks
+
+| Purpose | Root command | App command | Classification |
+| --- | --- | --- | --- |
 | Staging project check | `npm run check:admin-staging` | `npm run check:staging-projects` | Authorized read-only database check |
 | Staging media check | `npm run check:admin-media` | `npm run check:staging-media` | Authorized read-only database/storage check |
 | Auth check | `npm run check:admin-auth` | `npm run check:staging-auth` | Authorized read-only database check |
 | Import-batch check | `npm run check:admin-imports` | `npm run check:import-batches` | Authorized read-only database check |
+
+### State-changing staging operations
+
+> [!WARNING]
+> State-changing operations require explicit authorization and must target only the approved isolated staging environment.
+
+| Purpose | Root command | App command | Classification |
+| --- | --- | --- | --- |
 | Seed fake projects | `npm run seed:admin-staging` | `npm run seed:staging` | State-changing; synthetic data only |
 | Seed/promote fake media | `npm run seed:admin-media` | `npm run seed:staging-media` | State-changing; synthetic data only |
 | Import local package | `npm run import:admin-package` | `npm run import:staging-package` | State-changing; authorized fixture operation |
 | Publish staging feed | `npm run publish:admin-feed` | `npm run publish:staging-feed` | State-changing; authorized staging operation |
-| Link staging admin | `npm run link:admin-staging` | `npm run link:staging-admin` | State-changing; use the auth runbook |
+| Link initial administrator | `npm run link:admin-staging` | `npm run link:staging-admin` | State-changing; use the auth runbook |
 
 Do not blindly reinitialize an already-applied environment. Use the [Supabase migration guide](../../infra/supabase/manual-apply-guide.md) for a genuinely new authorized isolated environment and never target `Prototype/` or a recovery environment.
+
+## Database and migrations
+
+The migration set is manually governed for authorized isolated environments. It must never target `Prototype/`, recovery or unrelated environments, and an already provisioned environment must not be blindly reinitialized. Production migration delivery and verification remain pending.
+
+- [`0001_staging_schema.sql`](../../infra/supabase/migrations/0001_staging_schema.sql) defines the relational schema, constraints, indexes and timestamps.
+- [`0002_staging_rls_policies.sql`](../../infra/supabase/migrations/0002_staging_rls_policies.sql) establishes the restrictive Row-Level Security baseline.
+- [`0003_admin_auth_identity.sql`](../../infra/supabase/migrations/0003_admin_auth_identity.sql) links Admin/CMS users with Supabase Auth identities.
+- [`0004_explicit_data_api_grants.sql`](../../infra/supabase/migrations/0004_explicit_data_api_grants.sql) adds explicit least-privilege Data API grants.
+- [`0005_initial_admin_bootstrap.sql`](../../infra/supabase/migrations/0005_initial_admin_bootstrap.sql) adds the guarded initial-admin bootstrap function.
+- [`0006_fix_initial_admin_bootstrap_runtime.sql`](../../infra/supabase/migrations/0006_fix_initial_admin_bootstrap_runtime.sql) corrects the bootstrap runtime migration.
+
+See the [Supabase migration overview](../../infra/supabase/README.md), [manual apply guide](../../infra/supabase/manual-apply-guide.md) and [staging authentication verification runbook](../../infra/supabase/staging-auth-verification.md) before authorized operations.
 
 ## Authentication and authorization
 
 Authentication uses a Supabase Auth session. The server-only `requireAdmin` helper reads claims, resolves the linked `admin_users` record, loads recognized roles from `user_roles`, derives permissions and returns generic public errors for unauthenticated, unprovisioned or denied access. The `/admin` layout protects the page tree; the project collection API and review mutation authorize independently.
 
 Review mutations also require a same-origin `Origin` header. Audit attribution is derived from the authenticated server-side admin context rather than a trusted browser identity. Raw backend errors are logged for developers but sanitized before staff-facing responses.
+
+### Role-based access control
 
 | Role | Read | Edit metadata | Review | Archive | Verification status |
 | --- | --- | --- | --- | --- | --- |
@@ -152,12 +198,12 @@ Review mutations also require a same-origin `Origin` header. Audit attribution i
 | `/auth/confirm` | Public token flow | Accept invitation confirmation and establish a protected handoff. | Implemented; operational UAT remains bounded |
 | `/auth/confirm/accept` | Invitation session | Complete the invitation acceptance step. | Implemented |
 | `/auth/set-password` | Invitation session | Set a password, then terminate the invitation session. | Implemented |
-| `/admin` | Authenticated provisioned admin | Dashboard metrics, filters, search, sorting and pagination. | Implemented; manual UI QA pending |
-| `/admin/projects/[publicId]` | Authenticated provisioned admin | Inspect a project and access controlled review actions. | Implemented; editor and preview UI pending |
-| `/admin/imports` | Authenticated provisioned admin | List import batches and validation summaries. | Implemented |
-| `/admin/imports/[batchId]` | Authenticated provisioned admin | Inspect a batch, linked project and validation flags. | Implemented |
+| `/admin` | Authenticated provisioned Admin/CMS staff | Dashboard metrics, filters, search, sorting and pagination. | Implemented; manual UI QA pending |
+| `/admin/projects/[publicId]` | Authenticated provisioned Admin/CMS staff | Inspect a project and access controlled review actions. | Implemented; editor and preview UI pending |
+| `/admin/imports` | Authenticated provisioned Admin/CMS staff | List import batches and validation summaries. | Implemented |
+| `/admin/imports/[batchId]` | Authenticated provisioned Admin/CMS staff | Inspect a batch, linked project and validation flags. | Implemented |
 
-There is no implemented metadata editor, confirmation route, publishing-history route or settings route.
+There is no implemented student project-confirmation workflow or route, metadata editor, publishing-history route, or settings route.
 
 ## API routes
 

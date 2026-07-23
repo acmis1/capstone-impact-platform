@@ -4,7 +4,7 @@ The Capstone Impact Platform is a school-owned Admin/CMS and automation layer fo
 
 Manual email, spreadsheet, poster and Duda publishing workflows are difficult to validate and repeat at scale. This project introduces structured project records, validation, review controls and a stable publishing boundary while preserving the existing public showcase as the presentation layer.
 
-The current hybrid design is: staff operate the Admin/CMS, authenticated server-side services manage source data in Supabase, and only approved records are compiled into stable JSON for Duda. `Prototype/` is retained as historical feasibility evidence, not as the active application.
+The current hybrid design is: staff operate the Admin/CMS, authenticated server-side services manage source data in Supabase, and public-eligible (`approved` and `published`) records are compiled into stable JSON for Duda. `Prototype/` is retained as historical feasibility evidence, not as the active application.
 
 > [!IMPORTANT]
 > Active development is in [`apps/admin-cms/`](./apps/admin-cms/). It is a production-oriented staging implementation. Staging operations are isolated from the live public showcase, synthetic data is required, and production cutover plus full reviewer/editor UAT remain pending.
@@ -21,7 +21,7 @@ The target workflow needs structured submissions, validation, review, archival a
 | Project index | Server-side search, filters, whitelisted sorting, exact-count pagination and deterministic ordering are implemented. |
 | Review | Project inspection and controlled `approve`, `request_changes` and `archive` actions are implemented; atomic transaction hardening remains pending. |
 | Ingestion | Package parsing, metadata/file validation, import-batch tracking and import-review foundations are implemented. |
-| Media and feed | Private draft storage, validated promotion foundations and approved-only JSON feed compilation are implemented. |
+| Media and feed | Private draft storage, validated promotion foundations and public-eligible JSON feed compilation are implemented. |
 | Data layer | Supabase schema, RLS and explicit grant migrations are versioned; broader production verification remains pending. |
 | Quality | Offline automated tests cover domain, auth helpers, validation, feed, import, media, repository and UI-token behavior. |
 | Not yet complete | Metadata editor, student confirmation, integrated preview, publishing/history and rollback UI, full manual accessibility QA, production hardening and controlled Duda cutover. |
@@ -33,12 +33,11 @@ flowchart LR
     A[Staff browser] --> B[Next.js Admin/CMS]
     B --> C[Authenticated server-side services]
     C --> D[Supabase Auth, Postgres and Storage]
-    D --> E[Approved-only stable JSON feed]
-    E --> F[Duda public showcase]
-    F -. staging isolated until cutover .- B
+    D --> E[Public-eligible stable JSON feed]
+    E -. pending controlled cutover .-> F[Duda public showcase]
 ```
 
-Staff use the protected Next.js application. Server-side authentication and authorization mediate access to Supabase. The feed compiler removes internal fields and includes only approved or published records. The architecture supports Duda as the public consumer, but staging feed output remains isolated from the live showcase until a controlled cutover.
+Staff use the protected Next.js application. Server-side authentication and authorization mediate access to Supabase. The feed compiler removes internal fields and includes public-eligible `approved` and `published` records; all other workflow states are excluded. The architecture supports Duda as the public consumer, but staging feed output remains isolated from the live showcase until a controlled cutover.
 
 ## Repository structure
 
@@ -54,21 +53,35 @@ Staff use the protected Next.js application. Server-side authentication and auth
 
 From a fresh checkout:
 
-```bash
-git clone https://github.com/acmis1/capstone-impact-platform.git
-cd capstone-impact-platform
-npm install
-cp apps/admin-cms/.env.example apps/admin-cms/.env.local
-npm run dev:admin
-```
+1. Install dependencies.
 
-PowerShell equivalent for the environment template:
+   ```bash
+   npm install
+   ```
 
-```powershell
-Copy-Item apps/admin-cms/.env.example apps/admin-cms/.env.local
-```
+2. Copy the Admin/CMS environment template locally.
 
-Open [http://localhost:3000/login](http://localhost:3000/login). The local server needs valid local configuration for database-backed pages; offline tests do not require private dashboard access. See the [Admin/CMS guide](./apps/admin-cms/README.md) before using staging scripts or applying migrations.
+   ```bash
+   cp apps/admin-cms/.env.example apps/admin-cms/.env.local
+   ```
+
+   PowerShell equivalent for the environment template:
+
+   ```powershell
+   Copy-Item apps/admin-cms/.env.example apps/admin-cms/.env.local
+   ```
+
+3. Populate the required variable names for an explicitly authorized isolated environment. Do not disclose or commit values.
+
+4. Start the development server.
+
+   ```bash
+   npm run dev:admin
+   ```
+
+5. Open [http://localhost:3000/login](http://localhost:3000/login).
+
+The local server needs valid local configuration for database-backed pages. Offline tests and the sample-feed check do not require private dashboard access. See the [Admin/CMS guide](./apps/admin-cms/README.md) before using staging scripts or applying migrations.
 
 ## Validation commands
 
@@ -105,7 +118,7 @@ Run from the repository root:
 
 ## Roadmap
 
-Implemented foundations include the authenticated Admin/CMS shell, project index, validation, import and media workflows, Supabase migration set and approved-only feed compiler.
+Implemented foundations include the authenticated Admin/CMS shell, project index, validation, import and media workflows, Supabase migration set and public-eligible feed compiler.
 
 Remaining work includes a metadata editor, student confirmation, preview and publication-history workflows, transaction-backed review updates, reviewer/editor UAT, accessibility and visual QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
 
