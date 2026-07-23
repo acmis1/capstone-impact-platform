@@ -50,6 +50,15 @@ describe('navigation module', () => {
     });
   });
 
+  it('maps /admin/imports/ with trailing slash to Imports descriptor', () => {
+    const descriptor = getRouteDescriptor('/admin/imports/');
+    expect(descriptor).toEqual({
+      title: 'Import history',
+      breadcrumbs: [{ label: 'Imports' }],
+      activeHref: '/admin/imports',
+    });
+  });
+
   it('maps import detail routes to Imports descriptor and activeHref', () => {
     const descriptor = getRouteDescriptor('/admin/imports/batch-789');
     expect(descriptor).toEqual({
@@ -68,6 +77,16 @@ describe('navigation module', () => {
 
     const importDetailDescriptor = getRouteDescriptor('/admin/imports/batch-1');
     expect(importDetailDescriptor.activeHref).toBe('/admin/imports');
+  });
+
+  it('verifies descriptor activeHref matches correct NAVIGATION_ITEMS href for Projects & Imports', () => {
+    const projectDetail = getRouteDescriptor('/admin/projects/PRJ-001');
+    const projectItem = NAVIGATION_ITEMS.find((item) => item.href === projectDetail.activeHref);
+    expect(projectItem?.name).toBe('Projects');
+
+    const importDetail = getRouteDescriptor('/admin/imports/batch-002');
+    const importItem = NAVIGATION_ITEMS.find((item) => item.href === importDetail.activeHref);
+    expect(importItem?.name).toBe('Imports');
   });
 
   it('provides generic fallback descriptor for unknown admin routes without throwing', () => {

@@ -1,20 +1,20 @@
 'use client';
 
 import * as React from 'react';
-import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+import { DropdownMenu as RadixDropdownMenu } from 'radix-ui';
 import { cn } from '../../lib/utils';
 
-export const DropdownMenu = DropdownMenuPrimitive.Root;
-export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
-export const DropdownMenuGroup = DropdownMenuPrimitive.Group;
-export const DropdownMenuPortal = DropdownMenuPrimitive.Portal;
+export const DropdownMenu = RadixDropdownMenu.Root;
+export const DropdownMenuTrigger = RadixDropdownMenu.Trigger;
+export const DropdownMenuGroup = RadixDropdownMenu.Group;
+export const DropdownMenuPortal = RadixDropdownMenu.Portal;
 
 export const DropdownMenuContent = React.forwardRef<
-  React.ComponentRef<typeof DropdownMenuPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
+  React.ComponentRef<typeof RadixDropdownMenu.Content>,
+  React.ComponentPropsWithoutRef<typeof RadixDropdownMenu.Content>
 >(({ className, sideOffset = 8, ...props }, ref) => (
-  <DropdownMenuPrimitive.Portal>
-    <DropdownMenuPrimitive.Content
+  <RadixDropdownMenu.Portal>
+    <RadixDropdownMenu.Content
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
@@ -23,15 +23,15 @@ export const DropdownMenuContent = React.forwardRef<
       )}
       {...props}
     />
-  </DropdownMenuPrimitive.Portal>
+  </RadixDropdownMenu.Portal>
 ));
-DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName;
+DropdownMenuContent.displayName = RadixDropdownMenu.Content.displayName;
 
 export const DropdownMenuItem = React.forwardRef<
-  React.ComponentRef<typeof DropdownMenuPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item>
+  React.ComponentRef<typeof RadixDropdownMenu.Item>,
+  React.ComponentPropsWithoutRef<typeof RadixDropdownMenu.Item>
 >(({ className, ...props }, ref) => (
-  <DropdownMenuPrimitive.Item
+  <RadixDropdownMenu.Item
     ref={ref}
     className={cn(
       'relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
@@ -40,28 +40,28 @@ export const DropdownMenuItem = React.forwardRef<
     {...props}
   />
 ));
-DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName;
+DropdownMenuItem.displayName = RadixDropdownMenu.Item.displayName;
 
 export const DropdownMenuLabel = React.forwardRef<
-  React.ComponentRef<typeof DropdownMenuPrimitive.Label>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label>
+  React.ComponentRef<typeof RadixDropdownMenu.Label>,
+  React.ComponentPropsWithoutRef<typeof RadixDropdownMenu.Label>
 >(({ className, ...props }, ref) => (
-  <DropdownMenuPrimitive.Label
+  <RadixDropdownMenu.Label
     ref={ref}
     className={cn('px-2 py-1.5 text-xs font-semibold text-muted-foreground', className)}
     {...props}
   />
 ));
-DropdownMenuLabel.displayName = DropdownMenuPrimitive.Label.displayName;
+DropdownMenuLabel.displayName = RadixDropdownMenu.Label.displayName;
 
 export const DropdownMenuSeparator = React.forwardRef<
-  React.ComponentRef<typeof DropdownMenuPrimitive.Separator>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
+  React.ComponentRef<typeof RadixDropdownMenu.Separator>,
+  React.ComponentPropsWithoutRef<typeof RadixDropdownMenu.Separator>
 >(({ className, ...props }, ref) => (
-  <DropdownMenuPrimitive.Separator
+  <RadixDropdownMenu.Separator
     ref={ref}
     className={cn('-mx-1 my-1 h-px bg-border', className)}
     {...props}
   />
 ));
-DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName;
+DropdownMenuSeparator.displayName = RadixDropdownMenu.Separator.displayName;

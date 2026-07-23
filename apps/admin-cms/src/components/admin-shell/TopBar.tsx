@@ -51,9 +51,9 @@ export function TopBar({ displayName, email, roles = [], logoutAction }: UserSum
               variant="outline"
               size="sm"
               aria-label="Open main navigation menu"
-              className="lg:hidden"
+              className="lg:hidden min-h-[44px] min-w-[44px]"
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-5 w-5" aria-hidden="true" />
             </IconButton>
           </SheetTrigger>
           <SheetContent side="left" className="p-0 w-72">
@@ -86,9 +86,14 @@ export function TopBar({ displayName, email, roles = [], logoutAction }: UserSum
         {/* Account Dropdown Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-2 px-2 focus-visible:ring-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={`Open account menu for ${identityLabel}`}
+              className="gap-2 px-2 focus-visible:ring-2 min-h-[44px]"
+            >
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <User className="h-4 w-4" />
+                <User className="h-4 w-4" aria-hidden="true" />
               </div>
               <div className="hidden md:flex flex-col text-left">
                 <span className="text-xs font-semibold leading-tight text-foreground">
@@ -121,17 +126,17 @@ export function TopBar({ displayName, email, roles = [], logoutAction }: UserSum
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <form action={logoutAction} className="w-full">
+            <form action={logoutAction} className="w-full">
+              <DropdownMenuItem asChild>
                 <button
                   type="submit"
-                  className="flex w-full items-center gap-2 text-destructive focus:text-destructive cursor-pointer"
+                  className="flex w-full items-center gap-2 text-destructive focus:text-destructive cursor-pointer min-h-[44px] px-2 py-1.5"
                 >
-                  <LogOut className="h-4 w-4" />
+                  <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span>Log out</span>
                 </button>
-              </form>
-            </DropdownMenuItem>
+              </DropdownMenuItem>
+            </form>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

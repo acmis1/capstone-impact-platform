@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../ui/card';
+import { Card, CardHeader, CardContent, CardFooter } from '../ui/card';
 import { Button } from '../ui/button';
 import { ShieldAlert, AlertTriangle } from 'lucide-react';
 
@@ -19,15 +19,15 @@ export function AuthErrorScreen({
   const Icon = isConfigFailure ? AlertTriangle : ShieldAlert;
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
+    <main className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
       <Card className="max-w-md w-full text-center shadow-lg border-border">
         <CardHeader className="flex flex-col items-center gap-2">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-            <Icon className="h-6 w-6" />
+            <Icon className="h-6 w-6" aria-hidden="true" />
           </div>
-          <CardTitle className="text-xl font-bold text-destructive">
+          <h1 className="text-xl font-bold text-destructive">
             {heading}
-          </CardTitle>
+          </h1>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground leading-relaxed">
@@ -42,6 +42,6 @@ export function AuthErrorScreen({
           </form>
         </CardFooter>
       </Card>
-    </div>
+    </main>
   );
 }

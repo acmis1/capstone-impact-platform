@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { FolderKanban, FileSpreadsheet } from 'lucide-react';
-import { NAVIGATION_ITEMS, NavigationItem } from './navigation';
+import { NAVIGATION_ITEMS, NavigationItem, getRouteDescriptor } from './navigation';
 import { cn } from '../../lib/utils';
 import { Badge } from '../ui/badge';
 
@@ -22,6 +22,7 @@ function getNavIcon(href: string) {
 
 export function SidebarNav({ onNavClick, className }: SidebarProps) {
   const pathname = usePathname() || '/admin';
+  const activeHref = getRouteDescriptor(pathname).activeHref;
 
   return (
     <div className={cn('flex flex-col h-full bg-background border-r', className)}>
@@ -38,10 +39,7 @@ export function SidebarNav({ onNavClick, className }: SidebarProps) {
       <nav aria-label="Primary administration" className="flex-1 space-y-1 p-3">
         {NAVIGATION_ITEMS.map((item: NavigationItem) => {
           const Icon = getNavIcon(item.href);
-          const isExactMatch = pathname === item.href || pathname === `${item.href}/`;
-          const isPrefixMatch =
-            item.href !== '/admin' && pathname.startsWith(`${item.href}/`);
-          const isActive = isExactMatch || isPrefixMatch;
+          const isActive = item.href === activeHref;
 
           return (
             <Link
@@ -50,7 +48,7 @@ export function SidebarNav({ onNavClick, className }: SidebarProps) {
               onClick={onNavClick}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'flex items-center gap-3 rounded-md px-3 py-2.5 min-h-[44px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 isActive
                   ? 'bg-primary/10 text-primary border-l-2 border-primary font-semibold'
                   : 'text-muted-foreground hover:bg-accent hover:text-foreground'

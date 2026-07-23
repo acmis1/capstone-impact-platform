@@ -1,20 +1,20 @@
 'use client';
 
 import * as React from 'react';
-import * as DialogPrimitive from '@radix-ui/react-dialog';
+import { Dialog as RadixDialog } from 'radix-ui';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-export const Sheet = DialogPrimitive.Root;
-export const SheetTrigger = DialogPrimitive.Trigger;
-export const SheetClose = DialogPrimitive.Close;
-export const SheetPortal = DialogPrimitive.Portal;
+export const Sheet = RadixDialog.Root;
+export const SheetTrigger = RadixDialog.Trigger;
+export const SheetClose = RadixDialog.Close;
+export const SheetPortal = RadixDialog.Portal;
 
 export const SheetOverlay = React.forwardRef<
-  React.ComponentRef<typeof DialogPrimitive.Overlay>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
+  React.ComponentRef<typeof RadixDialog.Overlay>,
+  React.ComponentPropsWithoutRef<typeof RadixDialog.Overlay>
 >(({ className, ...props }, ref) => (
-  <DialogPrimitive.Overlay
+  <RadixDialog.Overlay
     className={cn(
       'fixed inset-0 z-50 bg-black/50 backdrop-blur-xs transition-opacity data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
       className
@@ -23,17 +23,17 @@ export const SheetOverlay = React.forwardRef<
     ref={ref}
   />
 ));
-SheetOverlay.displayName = DialogPrimitive.Overlay.displayName;
+SheetOverlay.displayName = RadixDialog.Overlay.displayName;
 
 export const SheetContent = React.forwardRef<
-  React.ComponentRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+  React.ComponentRef<typeof RadixDialog.Content>,
+  React.ComponentPropsWithoutRef<typeof RadixDialog.Content> & {
     side?: 'left' | 'right';
   }
 >(({ side = 'left', className, children, ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
-    <DialogPrimitive.Content
+    <RadixDialog.Content
       ref={ref}
       className={cn(
         'fixed z-50 flex flex-col gap-4 bg-background p-6 shadow-lg transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500 inset-y-0 border-r w-3/4 max-w-sm',
@@ -45,14 +45,14 @@ export const SheetContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-        <X className="h-5 w-5" />
+      <RadixDialog.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none min-h-[44px] min-w-[44px] flex items-center justify-center">
+        <X className="h-5 w-5" aria-hidden="true" />
         <span className="sr-only">Close navigation drawer</span>
-      </DialogPrimitive.Close>
-    </DialogPrimitive.Content>
+      </RadixDialog.Close>
+    </RadixDialog.Content>
   </SheetPortal>
 ));
-SheetContent.displayName = DialogPrimitive.Content.displayName;
+SheetContent.displayName = RadixDialog.Content.displayName;
 
 export const SheetHeader = ({
   className,
@@ -63,25 +63,25 @@ export const SheetHeader = ({
 SheetHeader.displayName = 'SheetHeader';
 
 export const SheetTitle = React.forwardRef<
-  React.ComponentRef<typeof DialogPrimitive.Title>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
+  React.ComponentRef<typeof RadixDialog.Title>,
+  React.ComponentPropsWithoutRef<typeof RadixDialog.Title>
 >(({ className, ...props }, ref) => (
-  <DialogPrimitive.Title
+  <RadixDialog.Title
     ref={ref}
     className={cn('text-lg font-semibold text-foreground', className)}
     {...props}
   />
 ));
-SheetTitle.displayName = DialogPrimitive.Title.displayName;
+SheetTitle.displayName = RadixDialog.Title.displayName;
 
 export const SheetDescription = React.forwardRef<
-  React.ComponentRef<typeof DialogPrimitive.Description>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
+  React.ComponentRef<typeof RadixDialog.Description>,
+  React.ComponentPropsWithoutRef<typeof RadixDialog.Description>
 >(({ className, ...props }, ref) => (
-  <DialogPrimitive.Description
+  <RadixDialog.Description
     ref={ref}
     className={cn('text-sm text-muted-foreground', className)}
     {...props}
   />
 ));
-SheetDescription.displayName = DialogPrimitive.Description.displayName;
+SheetDescription.displayName = RadixDialog.Description.displayName;
