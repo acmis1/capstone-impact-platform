@@ -1,7 +1,19 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Project } from '../domain/project';
+import {
+  ProjectListQuery,
+  ProjectListResult,
+  ProjectDashboardMetrics,
+  ProjectFilterOptions,
+  normalizeSearchInput,
+} from '../domain/projectQuery';
 import { ProjectRepository } from './ProjectRepository';
 import { applyReviewActionTransition } from '../workflow/projectWorkflow';
+
+/** Maximum number of lightweight filter-option rows fetched per database round-trip. */
+const PROJECT_FILTER_OPTION_CHUNK_SIZE = 500;
+/** Safety limit to prevent an infinite pagination loop for filter options. */
+const PROJECT_FILTER_OPTION_MAX_ITERATIONS = 200;
 
 export interface DatabaseProjectRow {
   id: string;
@@ -171,6 +183,212 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     }
 
     return (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
+  }
+
+  private buildFilteredQuery(query: ProjectListQuery, selectOpts?: { count?: 'exact' }) {
+    let dbQuery = this.supabase
+      .from('projects')
+      .select('*, project_disciplines(disciplines(name))', selectOpts)
+      .is('deleted_at', null);
+
+    // Apply search
+    if (query.search) {
+      const sanitized = normalizeSearchInput(query.search);
+      if (sanitized) {
+        dbQuery = dbQuery.or(
+          `title.ilike.%${sanitized}%,public_id.ilike.%${sanitized}%,industry_partner.ilike.%${sanitized}%,group_name.ilike.%${sanitized}%`
+        );
+      }
+    }
+
+    // Apply status filter
+    if (query.status) {
+      dbQuery = dbQuery.eq('status', query.status);
+    }
+
+    // Apply year filter
+    if (query.year) {
+      const parsedYear = parseInt(query.year, 10);
+      if (!isNaN(parsedYear)) {
+        dbQuery = dbQuery.eq('year', parsedYear);
+      }
+    }
+
+    // Apply program filter
+    if (query.program) {
+      dbQuery = dbQuery.eq('program_name', query.program);
+    }
+
+    // Apply discipline filter
+    if (query.discipline) {
+      dbQuery = dbQuery.eq('discipline', query.discipline);
+    }
+
+    // Apply sort with deterministic public_id tie-breaker
+    const allowedSortFieldsMap: Record<string, string> = {
+      created_at: 'created_at',
+      updated_at: 'updated_at',
+      title: 'title',
+      year: 'year',
+      status: 'status',
+    };
+    const sortColumn = allowedSortFieldsMap[query.sort || 'created_at'] || 'created_at';
+    const isAscending = query.direction === 'asc';
+
+    return dbQuery
+      .order(sortColumn, { ascending: isAscending })
+      .order('public_id', { ascending: true });
+  }
+
+  async listProjectsPage(query: ProjectListQuery): Promise<ProjectListResult> {
+    const page = query.page && query.page > 0 ? query.page : 1;
+    const pageSize = query.pageSize && [10, 25, 50].includes(query.pageSize) ? query.pageSize : 10;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const dbQuery = this.buildFilteredQuery(query, { count: 'exact' }).range(from, to);
+
+    const { data, count, error } = await dbQuery;
+
+    if (error) {
+      throw new Error(`Failed to query paginated projects from Supabase: ${error.message}`);
+    }
+
+    const total = count ?? 0;
+    const pageCount = total > 0 ? Math.ceil(total / pageSize) : 0;
+
+    // Handle out-of-range page clamping when total > 0 and page > pageCount
+    if (total > 0 && page > pageCount) {
+      const clampedPage = pageCount;
+      const clampedFrom = (clampedPage - 1) * pageSize;
+      const clampedTo = clampedFrom + pageSize - 1;
+
+      // Re-run range query for the clamped last page
+      const reQuery = this.buildFilteredQuery(query).range(clampedFrom, clampedTo);
+
+      const { data: clampedData, error: clampedError } = await reQuery;
+      if (clampedError) {
+        throw new Error(`Failed to query clamped page from Supabase: ${clampedError.message}`);
+      }
+
+      const clampedProjects = (clampedData || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
+      return {
+        projects: clampedProjects,
+        total,
+        page: clampedPage,
+        pageSize,
+        pageCount,
+      };
+    }
+
+    const projects = (data || []).map((row: DatabaseProjectRow) => this.mapDbToDomain(row));
+
+    return {
+      projects,
+      total,
+      page,
+      pageSize,
+      pageCount,
+    };
+  }
+
+  async getProjectDashboardMetrics(): Promise<ProjectDashboardMetrics> {
+    // Run all four count-only queries concurrently — no row data crosses the wire.
+    const [totalRes, publicRes, reviewRes, archiveRes] = await Promise.all([
+      this.supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .is('deleted_at', null),
+      this.supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .in('status', ['approved', 'published']),
+      this.supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .eq('status', 'in_review'),
+      this.supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .eq('status', 'archived'),
+    ]);
+
+    if (totalRes.error) {
+      throw new Error('Failed to fetch project dashboard metrics: unable to retrieve total count');
+    }
+    if (publicRes.error) {
+      throw new Error('Failed to fetch project dashboard metrics: unable to retrieve public-eligible count');
+    }
+    if (reviewRes.error) {
+      throw new Error('Failed to fetch project dashboard metrics: unable to retrieve in-review count');
+    }
+    if (archiveRes.error) {
+      throw new Error('Failed to fetch project dashboard metrics: unable to retrieve archived count');
+    }
+
+    return {
+      totalProjects: totalRes.count ?? 0,
+      publicEligible: publicRes.count ?? 0,
+      inReview: reviewRes.count ?? 0,
+      archived: archiveRes.count ?? 0,
+    };
+  }
+
+  async getProjectFilterOptions(): Promise<ProjectFilterOptions> {
+    const yearsSet = new Set<string>();
+    const programsSet = new Set<string>();
+    const disciplinesSet = new Set<string>();
+
+    let iteration = 0;
+    let offset = 0;
+
+    while (iteration < PROJECT_FILTER_OPTION_MAX_ITERATIONS) {
+      iteration++;
+      const from = offset;
+      const to = offset + PROJECT_FILTER_OPTION_CHUNK_SIZE - 1;
+
+      const { data, error } = await this.supabase
+        .from('projects')
+        .select('year, program_name, discipline')
+        .is('deleted_at', null)
+        .order('id', { ascending: true })
+        .range(from, to);
+
+      if (error) {
+        throw new Error('Failed to fetch project filter options');
+      }
+
+      const rows = data || [];
+
+      for (const row of rows) {
+        if (row.year) yearsSet.add(row.year.toString());
+        if (row.program_name && row.program_name.trim()) programsSet.add(row.program_name.trim());
+        if (row.discipline && row.discipline.trim()) disciplinesSet.add(row.discipline.trim());
+      }
+
+      if (rows.length < PROJECT_FILTER_OPTION_CHUNK_SIZE) {
+        break;
+      }
+
+      offset += PROJECT_FILTER_OPTION_CHUNK_SIZE;
+    }
+
+    if (iteration >= PROJECT_FILTER_OPTION_MAX_ITERATIONS) {
+      throw new Error('Failed to fetch project filter options: exceeded maximum iteration limit');
+    }
+
+    const years = Array.from(yearsSet).sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
+    const programs = Array.from(programsSet).sort((a, b) => a.localeCompare(b));
+    const disciplines = Array.from(disciplinesSet).sort((a, b) => a.localeCompare(b));
+
+    return {
+      years,
+      programs,
+      disciplines,
+    };
   }
 
   async getProjectByPublicId(publicId: string): Promise<Project | null> {
