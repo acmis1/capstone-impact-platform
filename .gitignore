@@ -23,3 +23,8 @@ Thumbs.db
 # optional local temp files
 .vscode/
 .idea/
+
+# local Supabase development state
+infra/supabase/.temp/
+infra/supabase/.branches/
+apps/admin-cms/.local-users.json
