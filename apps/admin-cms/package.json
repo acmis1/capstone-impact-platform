@@ -17,6 +17,9 @@
     "publish:staging-feed": "tsx src/scripts/publishStagingFeed.ts",
     "import:staging-package": "tsx src/scripts/importStagingPackage.ts",
     "check:import-batches": "tsx src/scripts/checkImportBatches.ts",
+    "env:local": "tsx src/scripts/writeLocalSupabaseEnv.ts",
+    "users:local": "tsx src/scripts/provisionLocalSupabaseUsers.ts",
+    "verify:local": "tsx src/scripts/verifyLocalSupabase.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run"

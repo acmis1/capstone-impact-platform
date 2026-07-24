@@ -5,7 +5,7 @@ import path from "node:path";
 describe("Database Migration 0004 Permission Contract Test", () => {
   const migrationPath = path.resolve(
     __dirname,
-    "../../../../infra/supabase/migrations/0004_explicit_data_api_grants.sql"
+    "../../../../infra/supabase/migrations/20260719003407_explicit_data_api_grants.sql"
   );
 
   // Helper to normalize SQL content (collapses whitespace, removes comments, converts to uppercase)

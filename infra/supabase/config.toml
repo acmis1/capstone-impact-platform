@@ -1,0 +1,61 @@
+# Capstone Impact Platform - Local Supabase CLI Configuration
+project_id = "capstone-impact-platform"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public", "storage"]
+extra_search_path = ["public", "extensions", "storage"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+seed = { sql_paths = ["./seed.sql"] }
+
+[db.pooler]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+[local_smtp]
+enabled = true
+port = 54324
+smtp_port = 54325
+pop3_port = 54326
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = [
+  "http://localhost:3000/auth/callback",
+  "http://localhost:3000/auth/set-password",
+  "http://localhost:3000/admin"
+]
+jwt_expiry = 3600
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+
+[storage]
+enabled = true
+
+[storage.buckets.project-drafts-private]
+public = false
+file_size_limit = "20MB"
+allowed_mime_types = ["image/png", "image/jpeg", "image/webp", "application/pdf"]
+
+[storage.buckets.project-public-assets]
+public = true
+file_size_limit = "20MB"
+allowed_mime_types = ["image/png", "image/jpeg", "image/webp", "application/pdf"]
+
+[storage.buckets.public-feeds]
+public = true
+file_size_limit = "10MB"
+allowed_mime_types = ["application/json"]

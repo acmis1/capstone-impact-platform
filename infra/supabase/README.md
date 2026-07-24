@@ -11,7 +11,19 @@ This directory contains the version-controlled database schema migrations and po
 > * **Corrective Fix:** Migration `0006` corrected the initial administrator bootstrap runtime by replacing `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim`.
 > * **Identity Linkage:** Initial administrator linkage has already been completed (`CREATED`) and verified (`READY_FOR_MANUAL_LOGIN_TEST`).
 > * **Do Not Rerun:** Do not rerun the migration sequence or initial bootstrap merely because these files exist.
-> * **Pending Scope:** Broader multi-role RLS matrices, reviewer/editor UAT, CSRF mutation tests, and production deployment remain pending. Standard Supabase CLI migration delivery is not currently implemented.
+> * **Pending Scope:** Broader multi-role RLS matrices, reviewer/editor UAT, CSRF mutation tests, and production deployment remain pending.
+
+## Local Development
+
+Reproducible local Supabase development is fully supported via Docker and the pinned repository CLI. See [Local Development Guide](./local-development.md) for quickstart and setup instructions.
+
+```bash
+npm run supabase:start
+npm run supabase:reset
+npm run supabase:env:local
+npm run supabase:users:local
+npm run supabase:verify:local
+```
 
 ---
 
@@ -27,9 +39,9 @@ This directory contains the version-controlled database schema migrations and po
 
 ## Migration Inventory
 
-* **[0001_staging_schema.sql](./migrations/0001_staging_schema.sql):** Creates core relational tables (`programs`, `disciplines`, `industry_categories`, `admin_users`, `user_roles`, `import_batches`, `projects`, `project_disciplines`, `project_industry_categories`, `media_assets`, `validation_flags`, `approval_records`, `published_snapshots`), check constraints, indexes, and `updated_at` triggers.
-* **[0002_staging_rls_policies.sql](./migrations/0002_staging_rls_policies.sql):** Enables Row-Level Security (RLS) across all tables with restrictive defaults.
-* **[0003_admin_auth_identity.sql](./migrations/0003_admin_auth_identity.sql):** Adds `auth_user_id UUID` column to `admin_users` linked to `auth.users(id)`.
-* **[0004_explicit_data_api_grants.sql](./migrations/0004_explicit_data_api_grants.sql):** Establishes explicit least-privilege Data API grants (`anon` denied, `authenticated` read-only lookups, `service_role` full administrative CRUD).
-* **[0005_initial_admin_bootstrap.sql](./migrations/0005_initial_admin_bootstrap.sql):** Registers transactional PL/pgSQL function `public.bootstrap_initial_admin(uuid, text, text)` with advisory transaction locking.
-* **[0006_fix_initial_admin_bootstrap_runtime.sql](./migrations/0006_fix_initial_admin_bootstrap_runtime.sql):** Replaces `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim` as the corrective runtime fix for initial administrator linkage.
+* **[20260601035138_staging_schema.sql](./migrations/20260601035138_staging_schema.sql):** Creates core relational tables (`programs`, `disciplines`, `industry_categories`, `admin_users`, `user_roles`, `import_batches`, `projects`, `project_disciplines`, `project_industry_categories`, `media_assets`, `validation_flags`, `approval_records`, `published_snapshots`), check constraints, indexes, and `updated_at` triggers.
+* **[20260601035139_staging_rls_policies.sql](./migrations/20260601035139_staging_rls_policies.sql):** Enables Row-Level Security (RLS) across all tables with restrictive defaults.
+* **[20260715102956_admin_auth_identity.sql](./migrations/20260715102956_admin_auth_identity.sql):** Adds `auth_user_id UUID` column to `admin_users` linked to `auth.users(id)`.
+* **[20260719003407_explicit_data_api_grants.sql](./migrations/20260719003407_explicit_data_api_grants.sql):** Establishes explicit least-privilege Data API grants (`anon` denied, `authenticated` read-only lookups, `service_role` full administrative CRUD).
+* **[20260719165118_initial_admin_bootstrap.sql](./migrations/20260719165118_initial_admin_bootstrap.sql):** Registers transactional PL/pgSQL function `public.bootstrap_initial_admin(uuid, text, text)` with advisory transaction locking.
+* **[20260719165119_fix_initial_admin_bootstrap_runtime.sql](./migrations/20260719165119_fix_initial_admin_bootstrap_runtime.sql):** Replaces `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim` as the corrective runtime fix for initial administrator linkage.
