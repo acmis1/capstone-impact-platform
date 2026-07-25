@@ -10,7 +10,11 @@ This guide documents the canonical, local-only Supabase development workflow for
 - **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real student or stakeholder PII or credentials are used or committed.
 - **Verification Strategy & Scope:**
   - Static migration tests inspect committed SQL contracts.
-  - Runtime verification inspects the actual local database reset, live schema, storage buckets, and Auth identities.
+  - Runtime verification inspects the actual local database reset, live schema, policy semantics, exact table-grant matrix, function execution privileges, storage buckets, and real password logins for all three synthetic accounts.
+  - Real password sign-in was verified for all three synthetic accounts (`local.admin@capstone.test`, `local.reviewer@capstone.test`, `local.editor@capstone.test`).
+  - The exact live table-grant matrix was verified across all 13 tables (anon 0 privileges; authenticated lookup SELECT only; service_role full CRUD).
+  - Bootstrap function positive (`service_role`) and negative (`PUBLIC`, `anon`, `authenticated`) execution grants were verified, and trigger-helper execution privileges were verified as unexposed.
+  - Live policy roles, commands, and expressions were verified (`select_*_authenticated` = true; `admin_all_*` = false).
   - Validation was performed on one Windows Docker Desktop environment; another teammate must still confirm cross-platform onboarding.
   - No hosted service was contacted in this final run.
   - `supabase:seed:buckets` is a dedicated local-only script (`seedLocalSupabaseFixtures.ts`).

@@ -60,8 +60,27 @@ export async function seedLocalSupabaseFixturesWorker(client: SupabaseClient): P
   const bucketsVerified: string[] = [];
   const fixturesUploaded: string[] = [];
 
-  // 1. List existing buckets
-  const { data: existingBuckets, error: listErr } = await client.storage.listBuckets();
+  // 1. List existing buckets with retry for transient container startup readiness
+  let existingBuckets: Array<{ name: string; public: boolean; file_size_limit?: number | string | null; allowed_mime_types?: string[] | null }> = [];
+  let listErr: unknown = null;
+
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    try {
+      const res = await client.storage.listBuckets();
+      if (!res.error && Array.isArray(res.data)) {
+        existingBuckets = res.data;
+        listErr = null;
+        break;
+      }
+      listErr = res.error || new Error('Storage listBuckets returned no data.');
+    } catch (err) {
+      listErr = err;
+    }
+    if (attempt < 10) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  }
+
   if (listErr) {
     throw new Error('Failed to list local storage buckets.');
   }
@@ -182,8 +201,23 @@ export async function seedLocalSupabaseFixtures(options: SeedFixturesOptions = {
     const workdir = path.resolve(repoRoot, 'infra');
     const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
     const cmd = `"${cliPath}" status --workdir "${workdir}" -o env`;
+
+    let rawEnv = options.cliOutput || '';
+    if (!rawEnv) {
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+          rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+          if (rawEnv.includes('API_URL')) break;
+        } catch {
+          // retry
+        }
+        if (attempt < 5) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+    }
+
     try {
-      const rawEnv = options.cliOutput || execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
       const parsed = parseSupabaseCliEnv(rawEnv);
       apiUrl = parsed.API_URL || apiUrl;
       serviceKey = parsed.SERVICE_ROLE_KEY || serviceKey;
@@ -202,6 +236,9 @@ export async function seedLocalSupabaseFixtures(options: SeedFixturesOptions = {
 
   const client = createClient(apiUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      fetch: (url, options) => fetch(url, { ...options, signal: AbortSignal.timeout(5000) }),
+    },
   });
 
   return seedLocalSupabaseFixturesWorker(client);

@@ -231,8 +231,22 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
     const workdir = path.resolve(repoRoot, 'infra');
     const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
     const cmd = `"${cliPath}" status --workdir "${workdir}" -o env`;
+    let rawEnv = options.cliOutput || '';
+    if (!rawEnv) {
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+          rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+          if (rawEnv.includes('API_URL')) break;
+        } catch {
+          // retry
+        }
+        if (attempt < 5) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+    }
+
     try {
-      const rawEnv = options.cliOutput || execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
       const parsed = parseSupabaseCliEnv(rawEnv);
       apiUrl = parsed.API_URL || apiUrl;
       serviceKey = parsed.SERVICE_ROLE_KEY || serviceKey;

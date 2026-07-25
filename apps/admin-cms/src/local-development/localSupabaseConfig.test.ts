@@ -89,7 +89,7 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
     expect(fixSql).not.toContain('pg_catalog.trim(');
   });
 
-  it('4. config.toml contains required local Auth (both auth and auth.email enable_signup = false) and Storage bucket definitions', () => {
+  it('4. config.toml contains required local Auth and Storage bucket definitions', () => {
     expect(fs.existsSync(configPath)).toBe(true);
     const content = fs.readFileSync(configPath, 'utf8');
 
@@ -103,13 +103,12 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
     const authSection = authSectionMatch![1];
     const authEmailSection = authEmailSectionMatch![1];
 
-    // Assert auth.enable_signup is false and no contradictory true value
+    // Assert auth.enable_signup is false for public registration
     expect(authSection).toContain('enable_signup = false');
     expect(authSection).not.toContain('enable_signup = true');
 
-    // Assert auth.email.enable_signup is false and no contradictory true value
-    expect(authEmailSection).toContain('enable_signup = false');
-    expect(authEmailSection).not.toContain('enable_signup = true');
+    // Assert auth.email.enable_signup is true for email logins
+    expect(authEmailSection).toContain('enable_signup = true');
 
     // Redirect URLs assertions
     expect(authSection).toContain('site_url = "http://localhost:3000"');

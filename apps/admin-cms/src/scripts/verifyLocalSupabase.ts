@@ -2,7 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
-import { SYNTHETIC_STAFF_DEFINITIONS } from '../local-development/localStaffUsers';
+import {
+  validateCredentialsStructure,
+  verifySyntheticStaffAuthLogins,
+} from '../local-development/localStaffAuthVerification';
 import { compilePublicFeed } from '../feed/compilePublicFeed';
 import { validatePublicFeed } from '../feed/validatePublicFeed';
 import { execSync } from 'node:child_process';
@@ -23,6 +26,8 @@ const EXPECTED_TABLES = [
   'approval_records',
   'published_snapshots',
 ];
+
+const LOOKUP_TABLES = ['programs', 'disciplines', 'industry_categories'];
 
 const EXPECTED_BUCKETS = [
   {
@@ -55,6 +60,24 @@ function areMimeTypesEqual(a?: string[] | null, b?: string[] | null): boolean {
   const normB = normalizeMimeTypes(b);
   if (normA.length !== normB.length) return false;
   return normA.every((val, index) => val === normB[index]);
+}
+
+function normalizeRoles(rolesInput: unknown): string[] {
+  if (!rolesInput) return [];
+  if (Array.isArray(rolesInput)) {
+    return rolesInput.map((r) => String(r).replace(/[{}]/g, '').toLowerCase().trim());
+  }
+  const str = String(rolesInput).replace(/[{}]/g, '').toLowerCase().trim();
+  return str.split(',').map((s) => s.trim());
+}
+
+function normalizePolicyExpr(expr: unknown): string {
+  if (expr == null) return '';
+  let str = String(expr).toLowerCase().trim();
+  while (str.startsWith('(') && str.endsWith(')')) {
+    str = str.slice(1, -1).trim();
+  }
+  return str;
 }
 
 function hashStringToNumber(str: string): number {
@@ -122,18 +145,20 @@ function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, un
   const workdir = path.resolve(repoRoot, 'infra');
   const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
   const cmd = `"${cliPath}" db query --local --workdir "${workdir}" -o json "${sql.replace(/"/g, '\\"')}"`;
-  try {
-    const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
-    const firstBrace = raw.indexOf('{');
-    const lastBrace = raw.lastIndexOf('}');
-    if (firstBrace === -1 || lastBrace === -1) {
-      throw new Error('Local DB query JSON parsing failed.');
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+      const firstBrace = raw.indexOf('{');
+      const lastBrace = raw.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        const parsed = JSON.parse(raw.slice(firstBrace, lastBrace + 1)) as { rows?: Array<Record<string, unknown>> };
+        return parsed.rows || [];
+      }
+    } catch {
+      // Retry for container readiness
     }
-    const parsed = JSON.parse(raw.slice(firstBrace, lastBrace + 1)) as { rows?: Array<Record<string, unknown>> };
-    return parsed.rows || [];
-  } catch {
-    throw new Error('Local database schema query failed.');
   }
+  throw new Error('Local database schema query failed.');
 }
 
 export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promise<boolean> {
@@ -147,9 +172,16 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
   const cmd = `"${cliPath}" status --workdir "${workdir}" -o env`;
 
   let rawEnv = '';
-  try {
-    rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
-  } catch {
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+      if (rawEnv.includes('API_URL')) break;
+    } catch {
+      // Retry
+    }
+  }
+
+  if (!rawEnv) {
     console.error('❌ Failed to query local Supabase CLI status.');
     return false;
   }
@@ -175,6 +207,11 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
   const adminClient = createClient(apiUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  const createAnonClient = () =>
+    createClient(apiUrl, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
   // 3. Live local schema verification via local CLI db query
   try {
@@ -237,56 +274,156 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
     }
     console.log('✔ Live database indexes & triggers verified.');
 
-    // 3d. Policies verification
+    // 3d. Live Policy Semantics verification (Section 6)
     const policyRows = runLocalDbQuery(
-      "SELECT policyname FROM pg_policies WHERE schemaname = 'public'",
+      "SELECT tablename, policyname, roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = 'public'",
       repoRoot
     );
-    const existingPolicies = new Set(policyRows.map((r) => String(r.policyname)));
-    const requiredPolicies = [
-      'select_programs_authenticated',
-      'select_disciplines_authenticated',
-      'select_industry_categories_authenticated',
-      'admin_all_projects',
-      'admin_all_admin_users',
-      'admin_all_user_roles',
-    ];
-    for (const pol of requiredPolicies) {
-      if (!existingPolicies.has(pol)) {
-        console.error(`❌ Policy verification failed: missing policy [${pol}].`);
+
+    // Verify lookup policies (select_*_authenticated)
+    for (const lookupTable of LOOKUP_TABLES) {
+      const polName = `select_${lookupTable}_authenticated`;
+      const foundPol = policyRows.find((r) => String(r.policyname) === polName);
+      if (!foundPol) {
+        console.error(`❌ Policy verification failed: missing lookup policy [${polName}].`);
+        return false;
+      }
+      if (String(foundPol.tablename) !== lookupTable) {
+        console.error(`❌ Policy table mismatch for [${polName}].`);
+        return false;
+      }
+      if (String(foundPol.cmd).toUpperCase() !== 'SELECT') {
+        console.error(`❌ Policy command mismatch for [${polName}].`);
+        return false;
+      }
+      const rolesArr = normalizeRoles(foundPol.roles);
+      if (!rolesArr.includes('authenticated')) {
+        console.error(`❌ Policy role mismatch for [${polName}].`);
+        return false;
+      }
+      if (normalizePolicyExpr(foundPol.qual) !== 'true') {
+        console.error(`❌ Policy qual expression mismatch for [${polName}].`);
         return false;
       }
     }
-    console.log('✔ Live database RLS policies verified.');
 
-    // 3e. Grants & Function execution restrictions verification
+    // Verify all 13 admin_all_* policies
+    for (const tableName of EXPECTED_TABLES) {
+      const polName = `admin_all_${tableName}`;
+      const foundPol = policyRows.find((r) => String(r.policyname) === polName);
+      if (!foundPol) {
+        console.error(`❌ Policy verification failed: missing restrictive policy [${polName}].`);
+        return false;
+      }
+      if (String(foundPol.tablename) !== tableName) {
+        console.error(`❌ Policy table mismatch for [${polName}].`);
+        return false;
+      }
+      if (String(foundPol.cmd).toUpperCase() !== 'ALL') {
+        console.error(`❌ Policy command mismatch for [${polName}].`);
+        return false;
+      }
+      const rolesArr = normalizeRoles(foundPol.roles);
+      if (!rolesArr.includes('authenticated')) {
+        console.error(`❌ Policy role mismatch for [${polName}].`);
+        return false;
+      }
+      if (normalizePolicyExpr(foundPol.qual) !== 'false' || normalizePolicyExpr(foundPol.with_check) !== 'false') {
+        console.error(`❌ Policy expression mismatch for restrictive policy [${polName}].`);
+        return false;
+      }
+    }
+    console.log('✔ Live database policy semantics verified (lookup SELECT true & 13 restrictive admin_all FALSE).');
+
+    // 3e. Exact Live Table-Grant Matrix verification (Section 4)
     const grantRows = runLocalDbQuery(
       "SELECT grantee, table_name, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public'",
       repoRoot
     );
-    const anonGrants = grantRows.filter((r) => String(r.grantee) === 'anon');
-    const forbiddenAnonTables = new Set(['admin_users', 'user_roles', 'projects', 'import_batches', 'media_assets']);
-    for (const g of anonGrants) {
-      if (forbiddenAnonTables.has(String(g.table_name))) {
-        console.error(`❌ Security grant violation: anon role has ${g.privilege_type} access to ${g.table_name}.`);
-        return false;
+
+    // Set of "grantee|table_name|privilege_type"
+    const grantSet = new Set(
+      grantRows.map((r) => `${String(r.grantee).toLowerCase()}|${String(r.table_name).toLowerCase()}|${String(r.privilege_type).toUpperCase()}`)
+    );
+
+    const CRUD_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'DELETE'];
+
+    // Assert anon has ZERO privileges on all 13 tables
+    for (const t of EXPECTED_TABLES) {
+      for (const priv of CRUD_PRIVILEGES) {
+        if (grantSet.has(`anon|${t}|${priv}`)) {
+          console.error(`❌ Security grant violation: anon role has unexpected ${priv} grant on ${t}.`);
+          return false;
+        }
       }
     }
 
+    // Assert authenticated has SELECT on lookup tables ONLY, no INSERT/UPDATE/DELETE, and ZERO privileges on remaining 10 tables
+    for (const t of EXPECTED_TABLES) {
+      const isLookup = LOOKUP_TABLES.includes(t);
+      if (isLookup) {
+        if (!grantSet.has(`authenticated|${t}|SELECT`)) {
+          console.error(`❌ Missing required grant: authenticated role missing SELECT grant on lookup table ${t}.`);
+          return false;
+        }
+        for (const priv of ['INSERT', 'UPDATE', 'DELETE']) {
+          if (grantSet.has(`authenticated|${t}|${priv}`)) {
+            console.error(`❌ Security grant violation: authenticated role has unexpected ${priv} grant on lookup table ${t}.`);
+            return false;
+          }
+        }
+      } else {
+        for (const priv of CRUD_PRIVILEGES) {
+          if (grantSet.has(`authenticated|${t}|${priv}`)) {
+            console.error(`❌ Security grant violation: authenticated role has unexpected ${priv} grant on internal table ${t}.`);
+            return false;
+          }
+        }
+      }
+    }
+
+    // Assert service_role has SELECT, INSERT, UPDATE, DELETE on all 13 tables
+    for (const t of EXPECTED_TABLES) {
+      for (const priv of CRUD_PRIVILEGES) {
+        if (!grantSet.has(`service_role|${t}|${priv}`)) {
+          console.error(`❌ Missing required grant: service_role missing ${priv} grant on table ${t}.`);
+          return false;
+        }
+      }
+    }
+    console.log('✔ Exact live table-grant matrix verified (anon 0, authenticated lookup SELECT only, service_role full CRUD across all 13 tables).');
+
+    // 3f. Function Execution Grants verification (Section 5)
     const funcGrantRows = runLocalDbQuery(
-      "SELECT grantee, routine_name FROM information_schema.routine_privileges WHERE routine_schema = 'public' AND routine_name = 'bootstrap_initial_admin'",
+      "SELECT grantee, routine_name FROM information_schema.routine_privileges WHERE routine_schema = 'public'",
       repoRoot
     );
-    const forbiddenFuncGrantees = new Set(['PUBLIC', 'anon', 'authenticated']);
-    for (const fg of funcGrantRows) {
-      if (forbiddenFuncGrantees.has(String(fg.grantee))) {
-        console.error(`❌ Function execution grant violation: ${fg.grantee} has access to bootstrap_initial_admin.`);
+    const funcGrantSet = new Set(
+      funcGrantRows.map((r) => `${String(r.grantee).toUpperCase()}|${String(r.routine_name).toLowerCase()}`)
+    );
+
+    // bootstrap_initial_admin assertions: service_role HAS execute, PUBLIC/anon/authenticated DO NOT
+    if (!funcGrantSet.has('SERVICE_ROLE|bootstrap_initial_admin')) {
+      console.error('❌ Function grant verification failed: service_role missing EXECUTE on bootstrap_initial_admin.');
+      return false;
+    }
+    for (const forbiddenGrantee of ['PUBLIC', 'ANON', 'AUTHENTICATED']) {
+      if (funcGrantSet.has(`${forbiddenGrantee}|bootstrap_initial_admin`)) {
+        console.error(`❌ Function grant security violation: ${forbiddenGrantee} has EXECUTE on bootstrap_initial_admin.`);
         return false;
       }
     }
-    console.log('✔ Live database table grants & function execution restrictions verified.');
 
-    // 3f. Bootstrap function definition verification
+    // update_updated_at_column assertions: PUBLIC, anon, authenticated, service_role ALL DO NOT HAVE EXECUTE
+    for (const grantee of ['PUBLIC', 'ANON', 'AUTHENTICATED', 'SERVICE_ROLE']) {
+      if (funcGrantSet.has(`${grantee}|update_updated_at_column`)) {
+        console.error(`❌ Function grant security violation: ${grantee} has EXECUTE on update_updated_at_column.`);
+        return false;
+      }
+    }
+    console.log('✔ Function execution grants verified (bootstrap_initial_admin restricted to service_role; update_updated_at_column unexposed).');
+
+    // 3g. Bootstrap function definition verification
     const funcDefRows = runLocalDbQuery(
       "SELECT pg_get_functiondef(oid) AS funcdef FROM pg_proc WHERE proname = 'bootstrap_initial_admin' AND pronamespace = 'public'::regnamespace",
       repoRoot
@@ -421,50 +558,28 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
 
   console.log('✔ Public feed compilation verified (exact public IDs, internal/sensitive fields excluded).');
 
-  // 6. Verify credentials file & Synthetic staff user identities and role mappings
+  // 6. Real Password Sign-in & Synthetic staff user credentials verification (Section 2)
   if (!fs.existsSync(credsPath)) {
     console.error('❌ Local credentials file missing.');
     return false;
   }
 
-  const { data: authUsersData, error: listAuthErr } = await adminClient.auth.admin.listUsers();
-  if (listAuthErr || !authUsersData || !authUsersData.users) {
-    console.error('❌ Failed to query Auth users for synthetic staff verification.');
+  let userCreds: Record<string, string>;
+  try {
+    const fileContent = fs.readFileSync(credsPath, 'utf8');
+    const parsed = JSON.parse(fileContent) as unknown;
+    userCreds = validateCredentialsStructure(parsed);
+  } catch {
+    console.error('❌ Local credentials file validation failed.');
     return false;
   }
 
-  const authUserMap = new Map(authUsersData.users.map((u) => [u.email?.toLowerCase(), u]));
-
-  for (const def of SYNTHETIC_STAFF_DEFINITIONS) {
-    const authUser = authUserMap.get(def.email.toLowerCase());
-    if (!authUser) {
-      console.error(`❌ Missing Auth user identity for synthetic staff [${def.label}].`);
-      return false;
-    }
-
-    const { data: adminUserRow, error: profileErr } = await adminClient
-      .from('admin_users')
-      .select('id')
-      .eq('auth_user_id', authUser.id)
-      .single();
-
-    if (profileErr || !adminUserRow) {
-      console.error(`❌ Profile linkage failed for synthetic staff [${def.label}].`);
-      return false;
-    }
-
-    const { data: roleRows, error: roleErr } = await adminClient
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', adminUserRow.id);
-
-    if (roleErr || !roleRows || roleRows.length !== 1 || roleRows[0].role !== def.role) {
-      console.error(`❌ Role mapping mismatch for synthetic staff [${def.label}].`);
-      return false;
-    }
+  const loginSuccess = await verifySyntheticStaffAuthLogins(userCreds, createAnonClient, adminClient);
+  if (!loginSuccess) {
+    return false;
   }
 
-  console.log('✔ Synthetic staff accounts verified (Admin, Reviewer, Editor identities & roles exact).');
+  console.log('✔ Synthetic staff accounts verified via real password sign-in (Admin, Reviewer, Editor logins, profile linkages & roles exact).');
   console.log('✔ Local Supabase verification complete and verified on local environment.');
   return true;
 }
