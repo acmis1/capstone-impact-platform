@@ -50,7 +50,6 @@ export interface ProvisionUsersOptions {
   supabaseUrl?: string;
   serviceRoleKey?: string;
   cliOutput?: string;
-  customClient?: SupabaseClient;
 }
 
 /**
@@ -79,51 +78,16 @@ export function loadOrGenerateLocalCredentials(credsPath: string): Record<string
 }
 
 /**
- * Main provisioner logic for local synthetic staff users.
+ * Worker function containing synthetic staff user provisioning logic.
+ * Accepts a Supabase client dependency and a target credentials file path.
  */
-export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = {}): Promise<{
+export async function provisionLocalStaffUsersWorker(
+  supabaseAdmin: SupabaseClient,
+  credsPath: string
+): Promise<{
   credentialsPath: string;
   provisionedRoles: string[];
 }> {
-  const repoRoot = path.resolve(__dirname, '../../../..');
-  const defaultCredsPath = path.resolve(repoRoot, 'apps/admin-cms/.local-users.json');
-  const credsPath = options.credentialsOutputPath ? path.resolve(options.credentialsOutputPath) : defaultCredsPath;
-
-  // Validate allowed output path restriction
-  validateAllowedOutputPath(credsPath, defaultCredsPath, repoRoot);
-
-  let apiUrl = options.supabaseUrl;
-  let serviceKey = options.serviceRoleKey;
-
-  if (!options.customClient && (!apiUrl || !serviceKey)) {
-    const workdir = path.resolve(repoRoot, 'infra');
-    const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
-    const cmd = `"${cliPath}" status --workdir "${workdir}" -o env`;
-    try {
-      const rawEnv = options.cliOutput || execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
-      const parsed = parseSupabaseCliEnv(rawEnv);
-      apiUrl = parsed.API_URL || apiUrl;
-      serviceKey = parsed.SERVICE_ROLE_KEY || serviceKey;
-    } catch {
-      throw new Error('Local Supabase CLI status query failed.');
-    }
-  }
-
-  if (!options.customClient) {
-    if (!apiUrl || !isLoopbackUrl(apiUrl)) {
-      throw new Error('Non-loopback Supabase endpoint rejected.');
-    }
-    if (!serviceKey) {
-      throw new Error('Local service-role administrative key required.');
-    }
-  }
-
-  const supabaseAdmin =
-    options.customClient ||
-    createClient(apiUrl!, serviceKey!, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
   // Load or generate credentials map
   const credentialsMap = loadOrGenerateLocalCredentials(credsPath);
 
@@ -143,20 +107,31 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
   let page = 1;
   const perPage = 50;
   const maxPages = 10;
+  let reachedEnd = false;
 
   while (page <= maxPages) {
     const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
     if (error) {
       throw new Error('Failed to list local Auth users.');
     }
-    if (!data.users || data.users.length === 0) break;
+    if (!data.users || data.users.length === 0) {
+      reachedEnd = true;
+      break;
+    }
     for (const u of data.users) {
       if (u.email) {
         existingAuthUsers[u.email.toLowerCase()] = u.id;
       }
     }
-    if (data.users.length < perPage) break;
+    if (data.users.length < perPage) {
+      reachedEnd = true;
+      break;
+    }
     page++;
+  }
+
+  if (!reachedEnd) {
+    throw new Error('Pagination limit reached while listing Auth users.');
   }
 
   const provisionedRoles: string[] = [];
@@ -175,7 +150,7 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
         user_metadata: { full_name: def.fullName },
       });
       if (createErr || !newUser.user) {
-        throw new Error(`Failed to create Auth user [${def.label}].`);
+        throw new Error(`Failed to create Auth user.`);
       }
       authUserId = newUser.user.id;
     } else {
@@ -185,7 +160,7 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
         user_metadata: { full_name: def.fullName },
       });
       if (updateErr) {
-        throw new Error(`Failed to update Auth user [${def.label}].`);
+        throw new Error(`Failed to update Auth user.`);
       }
     }
 
@@ -204,7 +179,7 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
       .single();
 
     if (adminErr || !adminUserRow) {
-      throw new Error(`Failed to upsert admin_users profile for [${def.label}].`);
+      throw new Error(`Failed to upsert admin_users profile.`);
     }
 
     const adminProfileId = adminUserRow.id;
@@ -216,7 +191,7 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
       .eq('user_id', adminProfileId);
 
     if (deleteRoleErr) {
-      throw new Error(`Failed to reset roles for [${def.label}].`);
+      throw new Error(`Failed to reset roles for user.`);
     }
 
     const { error: insertRoleErr } = await supabaseAdmin.from('user_roles').insert({
@@ -225,11 +200,58 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
     });
 
     if (insertRoleErr) {
-      throw new Error(`Failed to set user_role for [${def.label}].`);
+      throw new Error(`Failed to set user_role for user.`);
     }
 
     provisionedRoles.push(`${def.role}:${def.email}`);
   }
 
   return { credentialsPath: credsPath, provisionedRoles };
+}
+
+/**
+ * Public local entry point. Always performs local status and loopback URL validation.
+ * Never imports server-only environment modules or contacts hosted endpoints.
+ */
+export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = {}): Promise<{
+  credentialsPath: string;
+  provisionedRoles: string[];
+}> {
+  const repoRoot = path.resolve(__dirname, '../../../..');
+  const defaultCredsPath = path.resolve(repoRoot, 'apps/admin-cms/.local-users.json');
+  const credsPath = options.credentialsOutputPath ? path.resolve(options.credentialsOutputPath) : defaultCredsPath;
+
+  // Validate allowed output path restriction
+  validateAllowedOutputPath(credsPath, defaultCredsPath, repoRoot);
+
+  let apiUrl = options.supabaseUrl;
+  let serviceKey = options.serviceRoleKey;
+
+  if (!apiUrl || !serviceKey) {
+    const workdir = path.resolve(repoRoot, 'infra');
+    const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
+    const cmd = `"${cliPath}" status --workdir "${workdir}" -o env`;
+    try {
+      const rawEnv = options.cliOutput || execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+      const parsed = parseSupabaseCliEnv(rawEnv);
+      apiUrl = parsed.API_URL || apiUrl;
+      serviceKey = parsed.SERVICE_ROLE_KEY || serviceKey;
+    } catch {
+      throw new Error('Local Supabase CLI status query failed.');
+    }
+  }
+
+  if (!apiUrl || !isLoopbackUrl(apiUrl)) {
+    throw new Error('Non-loopback Supabase endpoint rejected.');
+  }
+
+  if (!serviceKey) {
+    throw new Error('Local service-role administrative key required.');
+  }
+
+  const supabaseAdmin = createClient(apiUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  return provisionLocalStaffUsersWorker(supabaseAdmin, credsPath);
 }

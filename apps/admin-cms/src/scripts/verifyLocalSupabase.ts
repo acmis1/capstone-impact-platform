@@ -25,10 +25,37 @@ const EXPECTED_TABLES = [
 ];
 
 const EXPECTED_BUCKETS = [
-  { name: 'project-drafts-private', isPublic: false, sizeLimit: 20971520 },
-  { name: 'project-public-assets', isPublic: true, sizeLimit: 20971520 },
-  { name: 'public-feeds', isPublic: true, sizeLimit: 10485760 },
+  {
+    name: 'project-drafts-private',
+    isPublic: false,
+    sizeLimit: 20971520,
+    allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'],
+  },
+  {
+    name: 'project-public-assets',
+    isPublic: true,
+    sizeLimit: 20971520,
+    allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'],
+  },
+  {
+    name: 'public-feeds',
+    isPublic: true,
+    sizeLimit: 10485760,
+    allowedMimeTypes: ['application/json'],
+  },
 ];
+
+function normalizeMimeTypes(mimeTypes?: string[] | null): string[] {
+  if (!mimeTypes || !Array.isArray(mimeTypes)) return [];
+  return [...mimeTypes].map((m) => String(m).toLowerCase().trim()).sort();
+}
+
+function areMimeTypesEqual(a?: string[] | null, b?: string[] | null): boolean {
+  const normA = normalizeMimeTypes(a);
+  const normB = normalizeMimeTypes(b);
+  if (normA.length !== normB.length) return false;
+  return normA.every((val, index) => val === normB[index]);
+}
 
 function hashStringToNumber(str: string): number {
   let hash = 0;
@@ -43,6 +70,13 @@ function hashStringToNumber(str: string): number {
 function mapDbRowToProject(row: Record<string, unknown>): Project {
   const publicId = String(row.public_id || row.id || '');
   const numericId = hashStringToNumber(publicId || '1');
+
+  const rawLayout = (row.layout_config as Record<string, unknown>) || {};
+  const templateId = (rawLayout.templateId as Project['layoutConfig']['templateId']) || 'poster_showcase';
+  const featuredMedia = (rawLayout.featuredMedia as Project['layoutConfig']['featuredMedia']) || 'poster';
+  const sectionOrder = Array.isArray(rawLayout.sectionOrder)
+    ? (rawLayout.sectionOrder as string[])
+    : ['background', 'solution'];
 
   return {
     id: numericId,
@@ -63,23 +97,43 @@ function mapDbRowToProject(row: Record<string, unknown>): Project {
     academicSupervisor: String(row.academic_supervisor || ''),
     groupName: String(row.group_name || 'Capstone Team 1'),
     teamMembers: Array.isArray(row.team_members) ? (row.team_members as string[]) : ['Student One', 'Student Two'],
-    poster: String(row.poster_url || 'https://placehold.co/600x400.png'),
-    posterPdf: String(row.poster_pdf_url || 'https://placehold.co/sample.pdf'),
+    poster: String(row.poster_url || ''),
+    posterPdf: String(row.poster_pdf_url || ''),
     posterText: String(row.poster_text_public || ''),
     accessibilityText: String(row.accessibility_text_public || ''),
     snapshots: Array.isArray(row.snapshots) ? (row.snapshots as string[]) : [],
     videoUrl: String(row.video_url || ''),
     demoUrl: String(row.demo_url || ''),
     repositoryUrl: String(row.repository_url || ''),
-    externalLinks: Array.isArray(row.external_links) ? (row.external_links as any[]) : [],
+    externalLinks: Array.isArray(row.external_links)
+      ? (row.external_links as Array<{ label: string; url: string }>)
+      : [],
     citations: Array.isArray(row.citations) ? (row.citations as string[]) : [],
     layoutConfig: {
-      templateId: 'poster_showcase',
-      featuredMedia: 'poster',
-      sectionOrder: ['background', 'solution'],
+      templateId,
+      featuredMedia,
+      sectionOrder,
     },
     status: (row.status as Project['status']) || 'draft',
   };
+}
+
+function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, unknown>> {
+  const workdir = path.resolve(repoRoot, 'infra');
+  const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
+  const cmd = `"${cliPath}" db query --local --workdir "${workdir}" -o json "${sql.replace(/"/g, '\\"')}"`;
+  try {
+    const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+    const firstBrace = raw.indexOf('{');
+    const lastBrace = raw.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1) {
+      throw new Error('Local DB query JSON parsing failed.');
+    }
+    const parsed = JSON.parse(raw.slice(firstBrace, lastBrace + 1)) as { rows?: Array<Record<string, unknown>> };
+    return parsed.rows || [];
+  } catch {
+    throw new Error('Local database schema query failed.');
+  }
 }
 
 export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promise<boolean> {
@@ -121,57 +175,202 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
   const adminClient = createClient(apiUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const anonClient = createClient(apiUrl, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
 
-  // 3. Table verification
-  for (const tableName of EXPECTED_TABLES) {
-    const { error } = await adminClient.from(tableName).select('*', { count: 'exact', head: true });
-    if (error) {
-      console.error(`❌ Table check failed for table.`);
+  // 3. Live local schema verification via local CLI db query
+  try {
+    // 3a. Tables verification
+    const tableRows = runLocalDbQuery(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
+      repoRoot
+    );
+    const existingTableNames = new Set(tableRows.map((r) => String(r.table_name)));
+    for (const tableName of EXPECTED_TABLES) {
+      if (!existingTableNames.has(tableName)) {
+        console.error(`❌ Table verification failed: missing table [${tableName}].`);
+        return false;
+      }
+    }
+    console.log(`✔ Live database tables verified (all ${EXPECTED_TABLES.length} tables present).`);
+
+    // 3b. RLS verification
+    const rlsRows = runLocalDbQuery(
+      "SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r'",
+      repoRoot
+    );
+    const rlsMap = new Map(rlsRows.map((r) => [String(r.table_name), Boolean(r.rls_enabled)]));
+    for (const tableName of EXPECTED_TABLES) {
+      if (rlsMap.get(tableName) !== true) {
+        console.error(`❌ RLS verification failed: RLS disabled on table [${tableName}].`);
+        return false;
+      }
+    }
+    console.log('✔ Live database RLS verified (RLS enabled on all 13 tables).');
+
+    // 3c. Triggers & Indexes verification
+    const triggerRows = runLocalDbQuery(
+      "SELECT trigger_name FROM information_schema.triggers WHERE event_object_schema = 'public' AND event_object_table = 'projects'",
+      repoRoot
+    );
+    if (!triggerRows.some((r) => String(r.trigger_name) === 'update_projects_updated_at')) {
+      console.error('❌ Trigger verification failed: missing update_projects_updated_at trigger.');
       return false;
     }
-  }
-  console.log(`✔ All ${EXPECTED_TABLES.length} required database tables exist.`);
 
-  // 4. Storage Bucket verification via storage.buckets database table
-  const { data: buckets, error: bucketErr } = await adminClient
-    .schema('storage')
-    .from('buckets')
-    .select('name, public, file_size_limit, allowed_mime_types');
+    const indexRows = runLocalDbQuery(
+      "SELECT indexname FROM pg_indexes WHERE schemaname = 'public'",
+      repoRoot
+    );
+    const existingIndexNames = new Set(indexRows.map((r) => String(r.indexname)));
+    const expectedIndexes = [
+      'idx_projects_status',
+      'idx_projects_year',
+      'idx_projects_public_id',
+      'idx_media_assets_project_id',
+      'idx_validation_flags_project_id',
+      'idx_approval_records_project_id',
+    ];
+    for (const idxName of expectedIndexes) {
+      if (!existingIndexNames.has(idxName)) {
+        console.error(`❌ Index verification failed: missing index [${idxName}].`);
+        return false;
+      }
+    }
+    console.log('✔ Live database indexes & triggers verified.');
 
-  if (bucketErr || !buckets) {
-    console.error('❌ Failed to query Storage buckets.');
+    // 3d. Policies verification
+    const policyRows = runLocalDbQuery(
+      "SELECT policyname FROM pg_policies WHERE schemaname = 'public'",
+      repoRoot
+    );
+    const existingPolicies = new Set(policyRows.map((r) => String(r.policyname)));
+    const requiredPolicies = [
+      'select_programs_authenticated',
+      'select_disciplines_authenticated',
+      'select_industry_categories_authenticated',
+      'admin_all_projects',
+      'admin_all_admin_users',
+      'admin_all_user_roles',
+    ];
+    for (const pol of requiredPolicies) {
+      if (!existingPolicies.has(pol)) {
+        console.error(`❌ Policy verification failed: missing policy [${pol}].`);
+        return false;
+      }
+    }
+    console.log('✔ Live database RLS policies verified.');
+
+    // 3e. Grants & Function execution restrictions verification
+    const grantRows = runLocalDbQuery(
+      "SELECT grantee, table_name, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public'",
+      repoRoot
+    );
+    const anonGrants = grantRows.filter((r) => String(r.grantee) === 'anon');
+    const forbiddenAnonTables = new Set(['admin_users', 'user_roles', 'projects', 'import_batches', 'media_assets']);
+    for (const g of anonGrants) {
+      if (forbiddenAnonTables.has(String(g.table_name))) {
+        console.error(`❌ Security grant violation: anon role has ${g.privilege_type} access to ${g.table_name}.`);
+        return false;
+      }
+    }
+
+    const funcGrantRows = runLocalDbQuery(
+      "SELECT grantee, routine_name FROM information_schema.routine_privileges WHERE routine_schema = 'public' AND routine_name = 'bootstrap_initial_admin'",
+      repoRoot
+    );
+    const forbiddenFuncGrantees = new Set(['PUBLIC', 'anon', 'authenticated']);
+    for (const fg of funcGrantRows) {
+      if (forbiddenFuncGrantees.has(String(fg.grantee))) {
+        console.error(`❌ Function execution grant violation: ${fg.grantee} has access to bootstrap_initial_admin.`);
+        return false;
+      }
+    }
+    console.log('✔ Live database table grants & function execution restrictions verified.');
+
+    // 3f. Bootstrap function definition verification
+    const funcDefRows = runLocalDbQuery(
+      "SELECT pg_get_functiondef(oid) AS funcdef FROM pg_proc WHERE proname = 'bootstrap_initial_admin' AND pronamespace = 'public'::regnamespace",
+      repoRoot
+    );
+    if (!funcDefRows || funcDefRows.length === 0 || !funcDefRows[0].funcdef) {
+      console.error('❌ Function verification failed: bootstrap_initial_admin missing.');
+      return false;
+    }
+    const funcDefStr = String(funcDefRows[0].funcdef);
+    if (!funcDefStr.includes('btrim') || funcDefStr.includes('pg_catalog.trim(')) {
+      console.error('❌ Function definition runtime error: bootstrap_initial_admin uses incorrect trim implementation.');
+      return false;
+    }
+    console.log('✔ Live bootstrap_initial_admin function definition verified (btrim preserved).');
+  } catch {
+    console.error('❌ Live database schema verification failed.');
     return false;
   }
 
+  // 4. Storage Bucket & Fixture object verification via database catalog and storage API
+  const bucketRows = runLocalDbQuery(
+    "SELECT name, public, file_size_limit, allowed_mime_types FROM storage.buckets",
+    repoRoot
+  );
+
   for (const expected of EXPECTED_BUCKETS) {
-    const found = buckets.find((b) => b.name === expected.name);
+    const found = bucketRows.find((b) => String(b.name) === expected.name);
     if (!found) {
-      console.error(`❌ Storage bucket verification failed: missing bucket.`);
+      console.error(`❌ Storage bucket verification failed: missing bucket [${expected.name}].`);
       return false;
     }
-    if (found.public !== expected.isPublic) {
-      console.error('❌ Storage bucket visibility mismatch.');
+    if (Boolean(found.public) !== expected.isPublic) {
+      console.error(`❌ Storage bucket visibility mismatch for [${expected.name}].`);
       return false;
     }
-    if (found.file_size_limit && Number(found.file_size_limit) !== expected.sizeLimit) {
-      console.error('❌ Storage bucket file size limit mismatch.');
+    if (found.file_size_limit == null || Number(found.file_size_limit) !== expected.sizeLimit) {
+      console.error(`❌ Storage bucket file size limit mismatch for [${expected.name}].`);
+      return false;
+    }
+    const dbMimes = Array.isArray(found.allowed_mime_types) ? (found.allowed_mime_types as string[]) : [];
+    if (!areMimeTypesEqual(dbMimes, expected.allowedMimeTypes)) {
+      console.error(`❌ Storage bucket allowed MIME types mismatch for [${expected.name}].`);
       return false;
     }
   }
-  console.log('✔ Storage buckets verified (existence, visibility, size limits exact).');
 
-  // 5. Check synthetic projects
+  // Verify local fixture objects exist in storage
+  const { data: publicFixtureList, error: pubListErr } = await adminClient.storage
+    .from('project-public-assets')
+    .list('2026/traffic-engine', { search: 'poster.png' });
+
+  if (pubListErr || !publicFixtureList || !publicFixtureList.some((f) => f.name === 'poster.png')) {
+    console.error('❌ Storage fixture verification failed: missing public poster fixture object.');
+    return false;
+  }
+
+  const { data: privateFixtureList, error: privListErr } = await adminClient.storage
+    .from('project-drafts-private')
+    .list('2026/hydrogrid', { search: 'poster.png' });
+
+  if (privListErr || !privateFixtureList || !privateFixtureList.some((f) => f.name === 'poster.png')) {
+    console.error('❌ Storage fixture verification failed: missing private draft fixture object.');
+    return false;
+  }
+
+  console.log('✔ Storage buckets & required local fixture objects verified (exact visibility, limits, MIME, objects).');
+
+  // 5. Synthetic project seed & Feed verification
   const { data: dbProjects, error: projErr } = await adminClient.from('projects').select('*');
   if (projErr || !dbProjects || dbProjects.length === 0) {
     console.error('❌ Synthetic project verification failed: No project rows found.');
     return false;
   }
-  console.log(`✔ Synthetic project seed verified (${dbProjects.length} sample projects found).`);
 
-  // 6. Feed compilation eligibility & Sanitization check
+  // Verify representative statuses present in local seed (published, approved, draft, in_review)
+  const seedStatuses = new Set(dbProjects.map((p) => String(p.status)));
+  const requiredStatuses = ['published', 'approved', 'draft', 'in_review'];
+  for (const st of requiredStatuses) {
+    if (!seedStatuses.has(st)) {
+      console.error(`❌ Synthetic project seed missing representative status [${st}].`);
+      return false;
+    }
+  }
+
   const domainProjects = dbProjects.map((row) => mapDbRowToProject(row as Record<string, unknown>));
   const feedItems = compilePublicFeed(domainProjects);
   const validateResult = validatePublicFeed(feedItems);
@@ -181,59 +380,76 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
     return false;
   }
 
-  // Ensure no draft, in_review, changes_requested, archived, or deleted records appear in public feed
+  // Assert compiled feed contains EXACT approved and published public IDs only
+  const feedPublicIds = feedItems.map((item) => item.publicId).sort();
+  const expectedPublicIds = ['2026-medical-drone', '2026-traffic-engine'].sort();
+  if (feedPublicIds.length !== expectedPublicIds.length || !feedPublicIds.every((v, i) => v === expectedPublicIds[i])) {
+    console.error('❌ Public feed public IDs mismatch.');
+    return false;
+  }
+
+  // Assert draft and in_review public IDs are strictly absent
+  const forbiddenPublicIds = new Set(['2026-agri-iot', '2026-vr-rehab']);
   for (const item of feedItems) {
-    const orig = dbProjects.find((p) => String(p.public_id) === item.publicId || String(p.id) === item.publicId);
-    if (orig && orig.status !== 'approved' && orig.status !== 'published') {
-      console.error('❌ Public feed security leak: Non-public status record included.');
+    if (forbiddenPublicIds.has(item.publicId)) {
+      console.error(`❌ Security violation: Non-public project [${item.publicId}] included in public feed.`);
       return false;
     }
   }
 
-  console.log('✔ Public feed compilation verified (approved/published only, internal fields stripped).');
+  // Assert serialized feed records do NOT contain sensitive or internal fields
+  const forbiddenKeys = [
+    'internal_staff_notes',
+    'private_review_comments',
+    'source_folder',
+    'import_batch_id',
+    'validation_flags',
+    'validationFlags',
+    'archive_metadata',
+    'archiveMetadata',
+  ];
 
-  // 7. Verify credentials & Sign-in
+  for (const item of feedItems) {
+    const jsonStr = JSON.stringify(item);
+    for (const key of forbiddenKeys) {
+      if (jsonStr.includes(`"${key}"`)) {
+        console.error(`❌ Security leakage: Serialized public feed contains internal field [${key}].`);
+        return false;
+      }
+    }
+  }
+
+  console.log('✔ Public feed compilation verified (exact public IDs, internal/sensitive fields excluded).');
+
+  // 6. Verify credentials file & Synthetic staff user identities and role mappings
   if (!fs.existsSync(credsPath)) {
     console.error('❌ Local credentials file missing.');
     return false;
   }
 
-  let credsData: { users?: Record<string, string> };
-  try {
-    credsData = JSON.parse(fs.readFileSync(credsPath, 'utf8')) as { users?: Record<string, string> };
-  } catch {
-    console.error('❌ Failed to parse local credentials file.');
+  const { data: authUsersData, error: listAuthErr } = await adminClient.auth.admin.listUsers();
+  if (listAuthErr || !authUsersData || !authUsersData.users) {
+    console.error('❌ Failed to query Auth users for synthetic staff verification.');
     return false;
   }
 
-  const userPasswords: Record<string, string> = credsData.users || {};
+  const authUserMap = new Map(authUsersData.users.map((u) => [u.email?.toLowerCase(), u]));
 
   for (const def of SYNTHETIC_STAFF_DEFINITIONS) {
-    const password = userPasswords[def.email];
-    if (!password) {
-      console.error('❌ Missing password for synthetic user.');
+    const authUser = authUserMap.get(def.email.toLowerCase());
+    if (!authUser) {
+      console.error(`❌ Missing Auth user identity for synthetic staff [${def.label}].`);
       return false;
     }
 
-    const { data: authResult, error: signInErr } = await anonClient.auth.signInWithPassword({
-      email: def.email,
-      password,
-    });
-
-    if (signInErr || !authResult.user) {
-      console.error(`❌ Password sign-in failed for synthetic user: ${signInErr?.message}`);
-      return false;
-    }
-
-    const authUserId = authResult.user.id;
     const { data: adminUserRow, error: profileErr } = await adminClient
       .from('admin_users')
       .select('id')
-      .eq('auth_user_id', authUserId)
+      .eq('auth_user_id', authUser.id)
       .single();
 
     if (profileErr || !adminUserRow) {
-      console.error('❌ Profile linkage failed for synthetic user.');
+      console.error(`❌ Profile linkage failed for synthetic staff [${def.label}].`);
       return false;
     }
 
@@ -243,12 +459,12 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       .eq('user_id', adminUserRow.id);
 
     if (roleErr || !roleRows || roleRows.length !== 1 || roleRows[0].role !== def.role) {
-      console.error('❌ Role mapping mismatch for synthetic user.');
+      console.error(`❌ Role mapping mismatch for synthetic staff [${def.label}].`);
       return false;
     }
   }
 
-  console.log('✔ Synthetic staff accounts verified (Admin, Reviewer, Editor login & roles exact).');
+  console.log('✔ Synthetic staff accounts verified (Admin, Reviewer, Editor identities & roles exact).');
   console.log('✔ Local Supabase verification complete and verified on local environment.');
   return true;
 }

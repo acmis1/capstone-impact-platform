@@ -27,11 +27,17 @@ export function isLoopbackUrl(urlStr: string): boolean {
   }
 }
 
+function isDescendantOrEqual(parentPath: string, childPath: string): boolean {
+  const rel = path.relative(parentPath, childPath);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
 /**
  * Validates whether an output path is an authorized destination:
  * 1. Default ignored path inside admin-cms (`apps/admin-cms/.env.local` or `apps/admin-cms/.local-users.json`);
  * 2. Or located inside OS temporary directory (`os.tmpdir()`);
  * 3. Or strictly outside the repository directory.
+ * Uses path.relative to prevent false positives on shared prefix sibling paths.
  */
 export function validateAllowedOutputPath(targetPath: string, defaultPath: string, repoRoot: string): void {
   const normTarget = path.resolve(targetPath);
@@ -39,16 +45,29 @@ export function validateAllowedOutputPath(targetPath: string, defaultPath: strin
   const normRepo = path.resolve(repoRoot);
   const normTmp = path.resolve(os.tmpdir());
 
-  // Allowed if exact default path
-  if (normTarget === normDefault) return;
+  let realTarget = normTarget;
+  if (fs.existsSync(normTarget)) {
+    try {
+      realTarget = fs.realpathSync(normTarget);
+    } catch {
+      // Ignore resolution errors if non-resolvable
+    }
+  }
 
-  // Allowed if inside OS tmp directory
-  if (normTarget.startsWith(normTmp)) return;
+  // 1. Allowed if exact default path
+  if (normTarget === normDefault || realTarget === normDefault) return;
 
-  // Allowed if outside repo root
-  if (!normTarget.startsWith(normRepo)) return;
+  // 2. Allowed if inside OS temporary directory
+  if (isDescendantOrEqual(normTmp, normTarget) || isDescendantOrEqual(normTmp, realTarget)) return;
 
-  throw new Error('Invalid output path: Custom destination must be outside the repository or inside the OS temporary directory.');
+  // 3. Reject if inside repository (unless exact default path)
+  if (isDescendantOrEqual(normRepo, normTarget) || isDescendantOrEqual(normRepo, realTarget)) {
+    throw new Error(
+      'Invalid output path: Custom destination must be outside the repository or inside the OS temporary directory.'
+    );
+  }
+
+  // Otherwise allowed (strictly outside repository directory)
 }
 
 /**

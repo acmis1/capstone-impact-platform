@@ -8,7 +8,13 @@ This guide documents the canonical, local-only Supabase development workflow for
 - **No Supabase Organization Membership Required:** Developers do not need access to hosted Supabase, Duda, Render, or Vercel dashboards to build, test, and run the application locally.
 - **Isolated Local State:** All database tables, authentication identities, storage buckets, and Mailpit email captures run on `http://127.0.0.1`.
 - **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real student or stakeholder PII or credentials are used or committed.
-- **Scope & Limitations:** Validation occurred on the recorded local Docker environment; cross-platform onboarding remains to be confirmed by another team member. Hosted staging migration history remains separate and is not altered by local setup.
+- **Verification Strategy & Scope:**
+  - Static migration tests inspect committed SQL contracts.
+  - Runtime verification inspects the actual local database reset, live schema, storage buckets, and Auth identities.
+  - Validation was performed on one Windows Docker Desktop environment; another teammate must still confirm cross-platform onboarding.
+  - No hosted service was contacted in this final run.
+  - `supabase:seed:buckets` is a dedicated local-only script (`seedLocalSupabaseFixtures.ts`).
+  - Hosted staging migration history remains separate and is not altered by local setup.
 
 ---
 
@@ -46,7 +52,7 @@ Ensure storage buckets exist with exact local policies and synthetic poster fixt
 ```bash
 npm run supabase:seed:buckets
 ```
-*Note: `supabase:seed:buckets` is strictly local-only and does not invoke staging scripts.*
+*Note: `supabase:seed:buckets` is strictly local-only (`seedLocalSupabaseFixtures.ts`) and does not invoke staging scripts.*
 
 ### Step 6: Generate Local Environment Configuration
 Write validated loopback environment settings to `apps/admin-cms/.env.local`:

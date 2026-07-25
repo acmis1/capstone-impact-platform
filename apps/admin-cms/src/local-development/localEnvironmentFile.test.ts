@@ -105,4 +105,16 @@ SERVICE_ROLE_KEY='sb_service_mock_456'
     expect(content).toContain('SUPABASE_SERVICE_ROLE_KEY=mock_service');
     expect(content).not.toContain('EXISTING=true');
   });
+
+  it('7. validateAllowedOutputPath correctly handles shared string prefix and path traversal', () => {
+    // Shared prefix sibling path (strictly outside repository directory)
+    const siblingPath = path.resolve(repoRoot + '-other', 'custom.env');
+    expect(() => validateAllowedOutputPath(siblingPath, defaultEnvPath, repoRoot)).not.toThrow();
+
+    // Path traversal attempting to navigate out and back into repository
+    const traversalPath = path.resolve(repoRoot, 'apps/admin-cms/../../apps/admin-cms/src/test.env');
+    expect(() => validateAllowedOutputPath(traversalPath, defaultEnvPath, repoRoot)).toThrow(
+      'Invalid output path'
+    );
+  });
 });

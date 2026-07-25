@@ -35,54 +35,32 @@ export interface SeedFixturesOptions {
   supabaseUrl?: string;
   serviceRoleKey?: string;
   cliOutput?: string;
-  customClient?: SupabaseClient;
+}
+
+function normalizeMimeTypes(mimeTypes?: string[] | null): string[] {
+  if (!mimeTypes || !Array.isArray(mimeTypes)) return [];
+  return [...mimeTypes].map((m) => m.toLowerCase().trim()).sort();
+}
+
+function areMimeTypesEqual(a?: string[] | null, b?: string[] | null): boolean {
+  const normA = normalizeMimeTypes(a);
+  const normB = normalizeMimeTypes(b);
+  if (normA.length !== normB.length) return false;
+  return normA.every((val, index) => val === normB[index]);
 }
 
 /**
- * Ensures local storage buckets exist with expected visibility and uploads synthetic fixtures safely.
- * Never imports server-only environment modules or contacts hosted endpoints.
+ * Worker function containing storage bucket reconciliation and fixture upload logic.
+ * Used directly by unit tests with a mock Supabase client.
  */
-export async function seedLocalSupabaseFixtures(options: SeedFixturesOptions = {}): Promise<{
+export async function seedLocalSupabaseFixturesWorker(client: SupabaseClient): Promise<{
   bucketsVerified: string[];
   fixturesUploaded: string[];
 }> {
-  let apiUrl = options.supabaseUrl;
-  let serviceKey = options.serviceRoleKey;
-
-  if (!options.customClient && (!apiUrl || !serviceKey)) {
-    const repoRoot = path.resolve(__dirname, '../../../..');
-    const workdir = path.resolve(repoRoot, 'infra');
-    const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
-    const cmd = `"${cliPath}" status --workdir "${workdir}" -o env`;
-    try {
-      const rawEnv = options.cliOutput || execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
-      const parsed = parseSupabaseCliEnv(rawEnv);
-      apiUrl = parsed.API_URL || apiUrl;
-      serviceKey = parsed.SERVICE_ROLE_KEY || serviceKey;
-    } catch {
-      throw new Error('Local Supabase CLI status query failed.');
-    }
-  }
-
-  if (!options.customClient) {
-    if (!apiUrl || !isLoopbackUrl(apiUrl)) {
-      throw new Error('Non-loopback Supabase endpoint rejected.');
-    }
-    if (!serviceKey) {
-      throw new Error('Local service-role administrative key required.');
-    }
-  }
-
-  const client =
-    options.customClient ||
-    createClient(apiUrl!, serviceKey!, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
   const bucketsVerified: string[] = [];
   const fixturesUploaded: string[] = [];
 
-  // 1. Verify/create storage buckets
+  // 1. List existing buckets
   const { data: existingBuckets, error: listErr } = await client.storage.listBuckets();
   if (listErr) {
     throw new Error('Failed to list local storage buckets.');
@@ -99,18 +77,41 @@ export async function seedLocalSupabaseFixtures(options: SeedFixturesOptions = {
         allowedMimeTypes: spec.allowedMimeTypes,
       });
       if (createErr) {
-        throw new Error(`Failed to create bucket [${spec.name}].`);
+        throw new Error('Failed to create local storage bucket.');
       }
-    } else if (existing.public !== spec.isPublic) {
-      const { error: updateErr } = await client.storage.updateBucket(spec.name, {
-        public: spec.isPublic,
-        fileSizeLimit: spec.fileSizeLimit,
-        allowedMimeTypes: spec.allowedMimeTypes,
-      });
-      if (updateErr) {
-        throw new Error(`Failed to update bucket visibility for [${spec.name}].`);
+    } else {
+      const existingSize = existing.file_size_limit != null ? Number(existing.file_size_limit) : null;
+      const isPublicDiffers = existing.public !== spec.isPublic;
+      const isSizeDiffers = existingSize !== spec.fileSizeLimit;
+      const isMimeDiffers = !areMimeTypesEqual(existing.allowed_mime_types, spec.allowedMimeTypes);
+
+      if (isPublicDiffers || isSizeDiffers || isMimeDiffers) {
+        const { error: updateErr } = await client.storage.updateBucket(spec.name, {
+          public: spec.isPublic,
+          fileSizeLimit: spec.fileSizeLimit,
+          allowedMimeTypes: spec.allowedMimeTypes,
+        });
+        if (updateErr) {
+          throw new Error('Failed to update local storage bucket properties.');
+        }
       }
     }
+
+    // Retrieve bucket post create/update and verify all properties match exact expected contract
+    const { data: retrieved, error: getErr } = await client.storage.getBucket(spec.name);
+    if (getErr || !retrieved) {
+      throw new Error('Failed to verify created or updated bucket.');
+    }
+
+    const retSize = retrieved.file_size_limit != null ? Number(retrieved.file_size_limit) : null;
+    if (
+      retrieved.public !== spec.isPublic ||
+      retSize !== spec.fileSizeLimit ||
+      !areMimeTypesEqual(retrieved.allowed_mime_types, spec.allowedMimeTypes)
+    ) {
+      throw new Error('Storage bucket property mismatch after configuration.');
+    }
+
     bucketsVerified.push(spec.name);
   }
 
@@ -120,25 +121,88 @@ export async function seedLocalSupabaseFixtures(options: SeedFixturesOptions = {
     'base64'
   );
 
-  // Upload synthetic poster to public assets
+  // Upload public fixture
+  const publicBucket = 'project-public-assets';
   const publicPath = '2026/traffic-engine/poster.png';
   const { error: uploadPublicErr } = await client.storage
-    .from('project-public-assets')
+    .from(publicBucket)
     .upload(publicPath, syntheticPosterBuffer, { contentType: 'image/png', upsert: true });
 
-  if (!uploadPublicErr) {
-    fixturesUploaded.push(`project-public-assets:${publicPath}`);
+  if (uploadPublicErr) {
+    throw new Error('Failed to upload public poster fixture.');
   }
 
-  // Upload synthetic private draft poster
+  // Verify public fixture object exists in storage
+  const { data: publicList, error: listPublicErr } = await client.storage
+    .from(publicBucket)
+    .list('2026/traffic-engine', { search: 'poster.png' });
+
+  if (listPublicErr || !publicList || !publicList.some((f) => f.name === 'poster.png')) {
+    throw new Error('Verification failed: Uploaded public fixture object missing.');
+  }
+  fixturesUploaded.push(`${publicBucket}:${publicPath}`);
+
+  // Upload private fixture
+  const privateBucket = 'project-drafts-private';
   const privatePath = '2026/hydrogrid/poster.png';
   const { error: uploadPrivateErr } = await client.storage
-    .from('project-drafts-private')
+    .from(privateBucket)
     .upload(privatePath, syntheticPosterBuffer, { contentType: 'image/png', upsert: true });
 
-  if (!uploadPrivateErr) {
-    fixturesUploaded.push(`project-drafts-private:${privatePath}`);
+  if (uploadPrivateErr) {
+    throw new Error('Failed to upload private draft fixture.');
   }
 
+  // Verify private fixture object exists in storage
+  const { data: privateList, error: listPrivateErr } = await client.storage
+    .from(privateBucket)
+    .list('2026/hydrogrid', { search: 'poster.png' });
+
+  if (listPrivateErr || !privateList || !privateList.some((f) => f.name === 'poster.png')) {
+    throw new Error('Verification failed: Uploaded private fixture object missing.');
+  }
+  fixturesUploaded.push(`${privateBucket}:${privatePath}`);
+
   return { bucketsVerified, fixturesUploaded };
+}
+
+/**
+ * Public local entry point. Always resolves local CLI status and enforces loopback URL validation.
+ * Never imports server-only environment modules or contacts hosted endpoints.
+ */
+export async function seedLocalSupabaseFixtures(options: SeedFixturesOptions = {}): Promise<{
+  bucketsVerified: string[];
+  fixturesUploaded: string[];
+}> {
+  let apiUrl = options.supabaseUrl;
+  let serviceKey = options.serviceRoleKey;
+
+  if (!apiUrl || !serviceKey) {
+    const repoRoot = path.resolve(__dirname, '../../../..');
+    const workdir = path.resolve(repoRoot, 'infra');
+    const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
+    const cmd = `"${cliPath}" status --workdir "${workdir}" -o env`;
+    try {
+      const rawEnv = options.cliOutput || execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+      const parsed = parseSupabaseCliEnv(rawEnv);
+      apiUrl = parsed.API_URL || apiUrl;
+      serviceKey = parsed.SERVICE_ROLE_KEY || serviceKey;
+    } catch {
+      throw new Error('Local Supabase CLI status query failed.');
+    }
+  }
+
+  if (!apiUrl || !isLoopbackUrl(apiUrl)) {
+    throw new Error('Non-loopback Supabase endpoint rejected.');
+  }
+
+  if (!serviceKey) {
+    throw new Error('Local service-role administrative key required.');
+  }
+
+  const client = createClient(apiUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  return seedLocalSupabaseFixturesWorker(client);
 }

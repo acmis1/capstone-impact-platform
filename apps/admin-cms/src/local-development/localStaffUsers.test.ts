@@ -3,9 +3,11 @@ import path from 'node:path';
 import os from 'node:os';
 import {
   provisionLocalStaffUsers,
+  provisionLocalStaffUsersWorker,
   SYNTHETIC_STAFF_DEFINITIONS,
   loadOrGenerateLocalCredentials,
 } from './localStaffUsers';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 describe('Local Staff Provisioning Security & Logic Tests', () => {
   const repoRoot = path.resolve(__dirname, '../../../..');
@@ -52,7 +54,7 @@ describe('Local Staff Provisioning Security & Logic Tests', () => {
     }
   });
 
-  it('5. Provisioning works deterministically with a mocked Supabase administrative client boundary', async () => {
+  it('5. Worker function provisionLocalStaffUsersWorker provisions users deterministically with a mocked client', async () => {
     const tmpCredsPath = path.resolve(os.tmpdir(), `test-staff-${Date.now()}.json`);
 
     const mockUserRoles: Array<{ user_id: string; role: string }> = [];
@@ -95,14 +97,29 @@ describe('Local Staff Provisioning Security & Logic Tests', () => {
         }
         return {};
       }),
-    };
+    } as unknown as SupabaseClient;
 
-    const res = await provisionLocalStaffUsers({
-      credentialsOutputPath: tmpCredsPath,
-      customClient: mockClient as unknown as import('@supabase/supabase-js').SupabaseClient,
-    });
+    const res = await provisionLocalStaffUsersWorker(mockClient, tmpCredsPath);
 
     expect(res.provisionedRoles.length).toBe(3);
     expect(mockUserRoles.length).toBe(3);
+  });
+
+  it('6. Worker function throws generic error when pagination limit is exhausted without terminal partial page', async () => {
+    const tmpCredsPath = path.resolve(os.tmpdir(), `test-staff-paged-${Date.now()}.json`);
+    // Create 50 dummy users per page to simulate non-terminal full pages across maxPages (10)
+    const fullPage = Array.from({ length: 50 }, (_, i) => ({ id: `u-${i}`, email: `user${i}@test.com` }));
+
+    const mockClient = {
+      auth: {
+        admin: {
+          listUsers: vi.fn().mockResolvedValue({ data: { users: fullPage }, error: null }),
+        },
+      },
+    } as unknown as SupabaseClient;
+
+    await expect(provisionLocalStaffUsersWorker(mockClient, tmpCredsPath)).rejects.toThrow(
+      'Pagination limit reached while listing Auth users.'
+    );
   });
 });

@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { seedLocalSupabaseFixtures, EXPECTED_BUCKETS } from './localSupabaseFixtures';
+import {
+  seedLocalSupabaseFixtures,
+  seedLocalSupabaseFixturesWorker,
+  EXPECTED_BUCKETS,
+} from './localSupabaseFixtures';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 describe('Local Supabase Fixtures Unit Tests', () => {
   it('1. Exactly 3 local storage buckets are defined with exact visibility and size limits', () => {
@@ -20,7 +25,7 @@ describe('Local Supabase Fixtures Unit Tests', () => {
     expect(publicFeeds?.fileSizeLimit).toBe(10 * 1024 * 1024);
   });
 
-  it('2. Reject non-loopback Supabase URL with generic error without exposing hosted URL or key', async () => {
+  it('2. Public entry point seedLocalSupabaseFixtures rejects non-loopback Supabase URL with generic error', async () => {
     const sensitiveUrl = 'https://abcdefghijkl.supabase.co';
     const secretKey = 'sb_secret_key_12345';
     try {
@@ -38,30 +43,108 @@ describe('Local Supabase Fixtures Unit Tests', () => {
     }
   });
 
-  it('3. Fixture creation works with a mocked Supabase storage boundary', async () => {
-    const existingBuckets: Array<{ name: string; public: boolean }> = [];
-    const mockStorage = {
-      listBuckets: vi.fn().mockImplementation(async () => {
-        return { data: existingBuckets, error: null };
-      }),
-      createBucket: vi.fn().mockImplementation(async (name: string, opts: { public: boolean }) => {
-        existingBuckets.push({ name, public: opts.public });
-        return { error: null };
-      }),
-      updateBucket: vi.fn().mockResolvedValue({ error: null }),
-      from: vi.fn().mockReturnValue({
-        upload: vi.fn().mockResolvedValue({ error: null }),
-      }),
-    };
+  function createMockSupabaseClient(overrides: {
+    uploadPublicError?: boolean;
+    uploadPrivateError?: boolean;
+    missingPublicList?: boolean;
+  } = {}) {
+    const bucketsMap = new Map<
+      string,
+      { name: string; public: boolean; file_size_limit: number; allowed_mime_types: string[] }
+    >();
 
-    const mockClient = {
-      storage: mockStorage,
-    };
+    return {
+      storage: {
+        listBuckets: vi.fn().mockImplementation(async () => {
+          return { data: Array.from(bucketsMap.values()), error: null };
+        }),
+        createBucket: vi.fn().mockImplementation(
+          async (name: string, opts: { public: boolean; fileSizeLimit: number; allowedMimeTypes: string[] }) => {
+            const item = {
+              name,
+              public: opts.public,
+              file_size_limit: opts.fileSizeLimit,
+              allowed_mime_types: opts.allowedMimeTypes,
+            };
+            bucketsMap.set(name, item);
+            return { error: null };
+          }
+        ),
+        updateBucket: vi.fn().mockImplementation(
+          async (name: string, opts: { public: boolean; fileSizeLimit: number; allowedMimeTypes: string[] }) => {
+            const existing = bucketsMap.get(name) || {
+              name,
+              public: opts.public,
+              file_size_limit: opts.fileSizeLimit,
+              allowed_mime_types: opts.allowedMimeTypes,
+            };
+            const item = {
+              ...existing,
+              public: opts.public,
+              file_size_limit: opts.fileSizeLimit,
+              allowed_mime_types: opts.allowedMimeTypes,
+            };
+            bucketsMap.set(name, item);
+            return { error: null };
+          }
+        ),
+        getBucket: vi.fn().mockImplementation(async (name: string) => {
+          const item = bucketsMap.get(name);
+          return item ? { data: item, error: null } : { data: null, error: new Error('Bucket not found') };
+        }),
+        from: vi.fn().mockImplementation((bucketName: string) => {
+          return {
+            upload: vi.fn().mockImplementation(async () => {
+              if (bucketName === 'project-public-assets' && overrides.uploadPublicError) {
+                return { error: new Error('Storage write failed') };
+              }
+              if (bucketName === 'project-drafts-private' && overrides.uploadPrivateError) {
+                return { error: new Error('Storage write failed') };
+              }
+              return { error: null };
+            }),
+            list: vi.fn().mockImplementation(async () => {
+              if (bucketName === 'project-public-assets' && overrides.missingPublicList) {
+                return { data: [], error: null };
+              }
+              return { data: [{ name: 'poster.png' }], error: null };
+            }),
+          };
+        }),
+      },
+    } as unknown as SupabaseClient;
+  }
 
-    const res = await seedLocalSupabaseFixtures({
-      customClient: mockClient as unknown as import('@supabase/supabase-js').SupabaseClient,
-    });
-    expect(res.bucketsVerified.length).toBe(3);
-    expect(res.fixturesUploaded.length).toBe(2);
+  it('3. Worker function seedLocalSupabaseFixturesWorker reconciles buckets and uploads fixtures idempotently', async () => {
+    const mockClient = createMockSupabaseClient();
+    const res1 = await seedLocalSupabaseFixturesWorker(mockClient);
+    expect(res1.bucketsVerified.length).toBe(3);
+    expect(res1.fixturesUploaded.length).toBe(2);
+
+    // Second execution remains idempotent
+    const res2 = await seedLocalSupabaseFixturesWorker(mockClient);
+    expect(res2.bucketsVerified.length).toBe(3);
+    expect(res2.fixturesUploaded.length).toBe(2);
+  });
+
+  it('4. Worker function fails with generic error when public fixture upload fails', async () => {
+    const mockClient = createMockSupabaseClient({ uploadPublicError: true });
+    await expect(seedLocalSupabaseFixturesWorker(mockClient)).rejects.toThrow(
+      'Failed to upload public poster fixture.'
+    );
+  });
+
+  it('5. Worker function fails with generic error when private fixture upload fails', async () => {
+    const mockClient = createMockSupabaseClient({ uploadPrivateError: true });
+    await expect(seedLocalSupabaseFixturesWorker(mockClient)).rejects.toThrow(
+      'Failed to upload private draft fixture.'
+    );
+  });
+
+  it('6. Worker function fails with generic error when post-upload object verification fails', async () => {
+    const mockClient = createMockSupabaseClient({ missingPublicList: true });
+    await expect(seedLocalSupabaseFixturesWorker(mockClient)).rejects.toThrow(
+      'Verification failed: Uploaded public fixture object missing.'
+    );
   });
 });

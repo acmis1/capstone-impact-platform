@@ -89,17 +89,34 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
     expect(fixSql).not.toContain('pg_catalog.trim(');
   });
 
-  it('4. config.toml contains required local Auth (enable_signup = false) and Storage bucket definitions', () => {
+  it('4. config.toml contains required local Auth (both auth and auth.email enable_signup = false) and Storage bucket definitions', () => {
     expect(fs.existsSync(configPath)).toBe(true);
     const content = fs.readFileSync(configPath, 'utf8');
 
-    // Auth configuration
-    expect(content).toContain('site_url = "http://localhost:3000"');
-    expect(content).toContain('enable_signup = false');
-    expect(content).toContain('http://localhost:3000/auth/confirm');
-    expect(content).toContain('http://localhost:3000/auth/confirm/accept');
-    expect(content).toContain('http://localhost:3000/auth/set-password');
-    expect(content).not.toContain('/auth/callback');
+    // Parse [auth] and [auth.email] sections independently
+    const authSectionMatch = content.match(/\[auth\]\s*\n([\s\S]*?)(?=\n\s*\[|$)/);
+    const authEmailSectionMatch = content.match(/\[auth\.email\]\s*\n([\s\S]*?)(?=\n\s*\[|$)/);
+
+    expect(authSectionMatch).not.toBeNull();
+    expect(authEmailSectionMatch).not.toBeNull();
+
+    const authSection = authSectionMatch![1];
+    const authEmailSection = authEmailSectionMatch![1];
+
+    // Assert auth.enable_signup is false and no contradictory true value
+    expect(authSection).toContain('enable_signup = false');
+    expect(authSection).not.toContain('enable_signup = true');
+
+    // Assert auth.email.enable_signup is false and no contradictory true value
+    expect(authEmailSection).toContain('enable_signup = false');
+    expect(authEmailSection).not.toContain('enable_signup = true');
+
+    // Redirect URLs assertions
+    expect(authSection).toContain('site_url = "http://localhost:3000"');
+    expect(authSection).toContain('"http://localhost:3000/auth/confirm"');
+    expect(authSection).toContain('"http://localhost:3000/auth/confirm/accept"');
+    expect(authSection).toContain('"http://localhost:3000/auth/set-password"');
+    expect(authSection).not.toContain('/auth/callback');
 
     // Storage buckets
     expect(content).toContain('[storage.buckets.project-drafts-private]');
