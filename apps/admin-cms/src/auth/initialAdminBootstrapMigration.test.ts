@@ -6,7 +6,7 @@ describe("Initial Admin Bootstrap Migration Static Contract Test", () => {
   it("should comply with historical evidence in 0005_initial_admin_bootstrap.sql", () => {
     const migrationPath = path.resolve(
       process.cwd(),
-      "../../infra/supabase/migrations/0005_initial_admin_bootstrap.sql"
+      "../../infra/supabase/migrations/20260719165118_initial_admin_bootstrap.sql"
     );
 
     expect(fs.existsSync(migrationPath)).toBe(true);
@@ -15,7 +15,7 @@ describe("Initial Admin Bootstrap Migration Static Contract Test", () => {
   it("should comply with every database safety rule in 0006_fix_initial_admin_bootstrap_runtime.sql", () => {
     const migrationPath = path.resolve(
       process.cwd(),
-      "../../infra/supabase/migrations/0006_fix_initial_admin_bootstrap_runtime.sql"
+      "../../infra/supabase/migrations/20260719165119_fix_initial_admin_bootstrap_runtime.sql"
     );
 
     expect(fs.existsSync(migrationPath)).toBe(true);

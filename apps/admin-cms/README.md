@@ -167,12 +167,12 @@ Do not blindly reinitialize an already-applied environment. Use the [Supabase mi
 
 The migration set is manually governed for authorized isolated environments. It must never target `Prototype/`, recovery or unrelated environments, and an already provisioned environment must not be blindly reinitialized. Production migration delivery and verification remain pending.
 
-- [`0001_staging_schema.sql`](../../infra/supabase/migrations/0001_staging_schema.sql) defines the relational schema, constraints, indexes and timestamps.
-- [`0002_staging_rls_policies.sql`](../../infra/supabase/migrations/0002_staging_rls_policies.sql) establishes the restrictive Row-Level Security baseline.
-- [`0003_admin_auth_identity.sql`](../../infra/supabase/migrations/0003_admin_auth_identity.sql) links Admin/CMS users with Supabase Auth identities.
-- [`0004_explicit_data_api_grants.sql`](../../infra/supabase/migrations/0004_explicit_data_api_grants.sql) adds explicit least-privilege Data API grants.
-- [`0005_initial_admin_bootstrap.sql`](../../infra/supabase/migrations/0005_initial_admin_bootstrap.sql) adds the guarded initial-admin bootstrap function.
-- [`0006_fix_initial_admin_bootstrap_runtime.sql`](../../infra/supabase/migrations/0006_fix_initial_admin_bootstrap_runtime.sql) corrects the bootstrap runtime migration.
+- [`20260601035138_staging_schema.sql`](../../infra/supabase/migrations/20260601035138_staging_schema.sql) defines the relational schema, constraints, indexes and timestamps.
+- [`20260601035139_staging_rls_policies.sql`](../../infra/supabase/migrations/20260601035139_staging_rls_policies.sql) establishes the restrictive Row-Level Security baseline.
+- [`20260715102956_admin_auth_identity.sql`](../../infra/supabase/migrations/20260715102956_admin_auth_identity.sql) links Admin/CMS users with Supabase Auth identities.
+- [`20260719003407_explicit_data_api_grants.sql`](../../infra/supabase/migrations/20260719003407_explicit_data_api_grants.sql) adds explicit least-privilege Data API grants.
+- [`20260719165118_initial_admin_bootstrap.sql`](../../infra/supabase/migrations/20260719165118_initial_admin_bootstrap.sql) adds the guarded initial-admin bootstrap function.
+- [`20260719165119_fix_initial_admin_bootstrap_runtime.sql`](../../infra/supabase/migrations/20260719165119_fix_initial_admin_bootstrap_runtime.sql) corrects the bootstrap runtime migration.
 
 See the [Supabase migration overview](../../infra/supabase/README.md), [manual apply guide](../../infra/supabase/manual-apply-guide.md) and [staging authentication verification runbook](../../infra/supabase/staging-auth-verification.md) before authorized operations.
 

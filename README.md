@@ -59,29 +59,25 @@ From a fresh checkout:
    npm install
    ```
 
-2. Copy the Admin/CMS environment template locally.
+2. Start local Supabase development stack (requires Docker Desktop):
 
    ```bash
-   cp apps/admin-cms/.env.example apps/admin-cms/.env.local
+   npm run supabase:start
+   npm run supabase:reset
+   npm run supabase:env:local
+   npm run supabase:users:local
+   npm run supabase:verify:local
    ```
 
-   PowerShell equivalent for the environment template:
-
-   ```powershell
-   Copy-Item apps/admin-cms/.env.example apps/admin-cms/.env.local
-   ```
-
-3. Populate the required variable names for an explicitly authorized isolated environment. Do not disclose or commit values.
-
-4. Start the development server.
+3. Start the Next.js development server:
 
    ```bash
    npm run dev:admin
    ```
 
-5. Open [http://localhost:3000/login](http://localhost:3000/login).
+4. Open [http://localhost:3000/login](http://localhost:3000/login) and log in using synthetic credentials from `apps/admin-cms/.local-users.json`.
 
-The local server needs valid local configuration for database-backed pages. Offline tests and the sample-feed check do not require private dashboard access. See the [Admin/CMS guide](./apps/admin-cms/README.md) before using staging scripts or applying migrations.
+For detailed local onboarding guidance, see the [Local Development Guide](./infra/supabase/local-development.md). Offline tests and the sample-feed check do not require private dashboard access or hosted database connections.
 
 ## Validation commands
 

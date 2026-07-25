@@ -43,40 +43,40 @@ Follow these step-by-step instructions to set up the staging database schema on 
 
 The migrations must be applied in the exact order below:
 
-1. `0001_staging_schema.sql`
-2. `0002_staging_rls_policies.sql`
-3. `0003_admin_auth_identity.sql`
-4. `0004_explicit_data_api_grants.sql`
-5. `0005_initial_admin_bootstrap.sql`
-6. `0006_fix_initial_admin_bootstrap_runtime.sql`
+1. `20260601035138_staging_schema.sql`
+2. `20260601035139_staging_rls_policies.sql`
+3. `20260715102956_admin_auth_identity.sql`
+4. `20260719003407_explicit_data_api_grants.sql`
+5. `20260719165118_initial_admin_bootstrap.sql`
+6. `20260719165119_fix_initial_admin_bootstrap_runtime.sql`
 7. Read-only verification before any seed or identity provisioning
 
 ---
 
-### Step 1: Execute Staging Schema (0001)
+### Step 1: Execute Staging Schema (20260601035138)
 1. In the Supabase Dashboard, navigate to the **SQL Editor** from the left navigation panel.
 2. Click **New query** (or "+ New Query").
-3. Open the file **`migrations/0001_staging_schema.sql`** in your editor and copy its entire contents.
+3. Open the file **`migrations/20260601035138_staging_schema.sql`** in your editor and copy its entire contents.
 4. Paste the SQL query into the Supabase SQL Editor workspace.
 5. Click the **Run** button.
 6. Ensure the query completes successfully.
 
-### Step 2: Execute RLS Policies (0002)
+### Step 2: Execute RLS Policies (20260601035139)
 1. Click **New query** to open a clean editor workspace.
-2. Open the file **`migrations/0002_staging_rls_policies.sql`** and copy its entire contents.
+2. Open the file **`migrations/20260601035139_staging_rls_policies.sql`** and copy its entire contents.
 3. Paste the SQL query into the Supabase SQL Editor.
 4. Click **Run**.
 5. Ensure the query completes successfully.
 
-### Step 3: Execute Admin Auth Identity Link (0003)
+### Step 3: Execute Admin Auth Identity Link (20260715102956)
 1. Click **New query** to open a clean editor workspace.
-2. Open the file **`migrations/0003_admin_auth_identity.sql`** and copy its content.
+2. Open the file **`migrations/20260715102956_admin_auth_identity.sql`** and copy its content.
 3. Paste it into the SQL Editor and click **Run**.
 4. This adds the `auth_user_id` column to the `admin_users` table to link identity credentials.
 
-### Step 4: Execute Explicit Data API Grants (0004)
+### Step 4: Execute Explicit Data API Grants (20260719003407)
 1. Click **New query** to open a clean editor workspace.
-2. Open the file **`migrations/0004_explicit_data_api_grants.sql`** and copy its content.
+2. Open the file **`migrations/20260719003407_explicit_data_api_grants.sql`** and copy its content.
 3. Paste it into the SQL Editor and click **Run**.
 4. This establishes explicit least-privilege Data API grants:
    * **Grants vs RLS:** Postgres grants control whether a role has basic permission to reach a table/object. RLS controls row-level permissions once access is authorized.
@@ -85,15 +85,15 @@ The migrations must be applied in the exact order below:
    * **service_role:** Receives full administrative CRUD (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) privileges on all 13 tables. The service-role / secret key must remain strictly server-side.
    * **Future Defaults:** Automatic table exposure on future public-schema objects is disabled. Every future table requires an explicit reviewed grant migration.
 
-### Step 5: Execute Initial Admin Bootstrap (0005)
+### Step 5: Execute Initial Admin Bootstrap (20260719165118)
 1. Click **New query** to open a clean editor workspace.
-2. Open the file **`migrations/0005_initial_admin_bootstrap.sql`** and copy its content.
+2. Open the file **`migrations/20260719165118_initial_admin_bootstrap.sql`** and copy its content.
 3. Paste it into the SQL Editor and click **Run**.
 4. This registers the secure, transactional PL/pgSQL function `public.bootstrap_initial_admin(uuid, text, text)` with executable permissions granted strictly to `service_role`.
 
-### Step 6: Execute Corrective Admin Bootstrap Runtime Fix (0006)
+### Step 6: Execute Corrective Admin Bootstrap Runtime Fix (20260719165119)
 1. Click **New query** to open a clean editor workspace.
-2. Open the file **`migrations/0006_fix_initial_admin_bootstrap_runtime.sql`** and copy its content.
+2. Open the file **`migrations/20260719165119_fix_initial_admin_bootstrap_runtime.sql`** and copy its content.
 3. Paste it into the SQL Editor and click **Run**.
 4. This replaces `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim` as the strongest supported code-level fix for the PL/pgSQL RPC failure.
 
