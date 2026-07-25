@@ -24,7 +24,7 @@
     "supabase:stop": "supabase stop --workdir infra",
     "supabase:status": "supabase status --workdir infra",
     "supabase:reset": "supabase db reset --local --workdir infra",
-    "supabase:seed:buckets": "npm run seed:admin-media",
+    "supabase:seed:buckets": "npm run seed:buckets:local --workspace=apps/admin-cms --",
     "supabase:env:local": "npm run env:local --workspace=apps/admin-cms --",
     "supabase:users:local": "npm run users:local --workspace=apps/admin-cms --",
     "supabase:verify:local": "npm run verify:local --workspace=apps/admin-cms --"

@@ -20,6 +20,7 @@
     "env:local": "tsx src/scripts/writeLocalSupabaseEnv.ts",
     "users:local": "tsx src/scripts/provisionLocalSupabaseUsers.ts",
     "verify:local": "tsx src/scripts/verifyLocalSupabase.ts",
+    "seed:buckets:local": "tsx src/scripts/seedLocalSupabaseFixtures.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run"

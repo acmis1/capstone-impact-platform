@@ -29,11 +29,12 @@ pop3_port = 54326
 
 [auth]
 enabled = true
+enable_signup = false
 site_url = "http://localhost:3000"
 additional_redirect_urls = [
-  "http://localhost:3000/auth/callback",
-  "http://localhost:3000/auth/set-password",
-  "http://localhost:3000/admin"
+  "http://localhost:3000/auth/confirm",
+  "http://localhost:3000/auth/confirm/accept",
+  "http://localhost:3000/auth/set-password"
 ]
 jwt_expiry = 3600
 

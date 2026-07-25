@@ -1,8 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { isLoopbackUrl, parseSupabaseCliEnv } from './localEnvironmentFile';
+import { isLoopbackUrl, parseSupabaseCliEnv, validateAllowedOutputPath } from './localEnvironmentFile';
 import { execSync } from 'node:child_process';
 
 export interface StaffUserConfig {
@@ -33,13 +33,6 @@ export const SYNTHETIC_STAFF_DEFINITIONS: StaffUserConfig[] = [
   },
 ];
 
-export interface StoredUserCredential {
-  email: string;
-  role: string;
-  passwordHash?: string;
-  password?: string;
-}
-
 export interface CredentialsFileFormat {
   generatedAt: string;
   users: Record<string, string>; // email -> password
@@ -56,6 +49,8 @@ export interface ProvisionUsersOptions {
   credentialsOutputPath?: string;
   supabaseUrl?: string;
   serviceRoleKey?: string;
+  cliOutput?: string;
+  customClient?: SupabaseClient;
 }
 
 /**
@@ -94,38 +89,42 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
   const defaultCredsPath = path.resolve(repoRoot, 'apps/admin-cms/.local-users.json');
   const credsPath = options.credentialsOutputPath ? path.resolve(options.credentialsOutputPath) : defaultCredsPath;
 
-  // 1. Resolve URL and service role key from CLI status if not supplied
+  // Validate allowed output path restriction
+  validateAllowedOutputPath(credsPath, defaultCredsPath, repoRoot);
+
   let apiUrl = options.supabaseUrl;
   let serviceKey = options.serviceRoleKey;
 
-  if (!apiUrl || !serviceKey) {
+  if (!options.customClient && (!apiUrl || !serviceKey)) {
     const workdir = path.resolve(repoRoot, 'infra');
     const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
     const cmd = `"${cliPath}" status --workdir "${workdir}" -o env`;
     try {
-      const rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+      const rawEnv = options.cliOutput || execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
       const parsed = parseSupabaseCliEnv(rawEnv);
       apiUrl = parsed.API_URL || apiUrl;
       serviceKey = parsed.SERVICE_ROLE_KEY || serviceKey;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new Error(`Failed to read local status output: ${msg}`);
+    } catch {
+      throw new Error('Local Supabase CLI status query failed.');
     }
   }
 
-  if (!apiUrl || !isLoopbackUrl(apiUrl)) {
-    throw new Error(`Security Error: Non-loopback Supabase URL rejected: ${apiUrl}`);
+  if (!options.customClient) {
+    if (!apiUrl || !isLoopbackUrl(apiUrl)) {
+      throw new Error('Non-loopback Supabase endpoint rejected.');
+    }
+    if (!serviceKey) {
+      throw new Error('Local service-role administrative key required.');
+    }
   }
 
-  if (!serviceKey) {
-    throw new Error('Security Error: Local service-role key is required to provision staff users.');
-  }
+  const supabaseAdmin =
+    options.customClient ||
+    createClient(apiUrl!, serviceKey!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
-  const supabaseAdmin = createClient(apiUrl, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  // 2. Load or generate credentials map
+  // Load or generate credentials map
   const credentialsMap = loadOrGenerateLocalCredentials(credsPath);
 
   // Save updated credentials map to disk
@@ -139,14 +138,16 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
   }
   fs.writeFileSync(credsPath, JSON.stringify(credsData, null, 2), { encoding: 'utf8', mode: 0o600 });
 
-  // 3. Paginate Auth users list
+  // Paginate Auth users list with a finite maximum-page guard
   const existingAuthUsers: Record<string, string> = {}; // email -> auth_id
   let page = 1;
   const perPage = 50;
-  while (true) {
+  const maxPages = 10;
+
+  while (page <= maxPages) {
     const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
     if (error) {
-      throw new Error(`Failed to list local Auth users: ${error.message}`);
+      throw new Error('Failed to list local Auth users.');
     }
     if (!data.users || data.users.length === 0) break;
     for (const u of data.users) {
@@ -160,14 +161,13 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
 
   const provisionedRoles: string[] = [];
 
-  // 4. Provision each synthetic user deterministically
+  // Provision each synthetic user deterministically
   for (const def of SYNTHETIC_STAFF_DEFINITIONS) {
     const emailNorm = def.email.toLowerCase();
     const password = credentialsMap[def.email];
     let authUserId = existingAuthUsers[emailNorm];
 
     if (!authUserId) {
-      // Create missing Auth user
       const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
         email: def.email,
         password,
@@ -175,22 +175,21 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
         user_metadata: { full_name: def.fullName },
       });
       if (createErr || !newUser.user) {
-        throw new Error(`Failed to create Auth user [${def.email}]: ${createErr?.message}`);
+        throw new Error(`Failed to create Auth user [${def.label}].`);
       }
       authUserId = newUser.user.id;
     } else {
-      // Update password & ensure confirmed
       const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(authUserId, {
         password,
         email_confirm: true,
         user_metadata: { full_name: def.fullName },
       });
       if (updateErr) {
-        throw new Error(`Failed to update Auth user [${def.email}]: ${updateErr.message}`);
+        throw new Error(`Failed to update Auth user [${def.label}].`);
       }
     }
 
-    // 5. Upsert public.admin_users record
+    // Upsert public.admin_users record
     const { data: adminUserRow, error: adminErr } = await supabaseAdmin
       .from('admin_users')
       .upsert(
@@ -205,21 +204,28 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
       .single();
 
     if (adminErr || !adminUserRow) {
-      throw new Error(`Failed to upsert admin_users profile for [${def.email}]: ${adminErr?.message}`);
+      throw new Error(`Failed to upsert admin_users profile for [${def.label}].`);
     }
 
     const adminProfileId = adminUserRow.id;
 
-    // 6. Delete existing roles for this profile and insert exact target role
-    await supabaseAdmin.from('user_roles').delete().eq('user_id', adminProfileId);
+    // Delete existing roles for ONLY this profile and insert exact target role
+    const { error: deleteRoleErr } = await supabaseAdmin
+      .from('user_roles')
+      .delete()
+      .eq('user_id', adminProfileId);
 
-    const { error: roleErr } = await supabaseAdmin.from('user_roles').insert({
+    if (deleteRoleErr) {
+      throw new Error(`Failed to reset roles for [${def.label}].`);
+    }
+
+    const { error: insertRoleErr } = await supabaseAdmin.from('user_roles').insert({
       user_id: adminProfileId,
       role: def.role,
     });
 
-    if (roleErr) {
-      throw new Error(`Failed to set user_role [${def.role}] for [${def.email}]: ${roleErr.message}`);
+    if (insertRoleErr) {
+      throw new Error(`Failed to set user_role for [${def.label}].`);
     }
 
     provisionedRoles.push(`${def.role}:${def.email}`);

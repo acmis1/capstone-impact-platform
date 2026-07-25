@@ -7,10 +7,13 @@ import {
   parseSupabaseCliEnv,
   buildLocalEnvContent,
   generateLocalEnvironmentFile,
+  validateAllowedOutputPath,
 } from './localEnvironmentFile';
 
 describe('Local Environment File Generator Unit Tests', () => {
   let tmpDir: string;
+  const repoRoot = path.resolve(__dirname, '../../../..');
+  const defaultEnvPath = path.resolve(repoRoot, 'apps/admin-cms/.env.local');
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'env-test-'));
@@ -43,13 +46,32 @@ SERVICE_ROLE_KEY='sb_service_mock_456'
     expect(parsed.SERVICE_ROLE_KEY).toBe('sb_service_mock_456');
   });
 
-  it('3. buildLocalEnvContent rejects non-loopback URLs', () => {
-    expect(() =>
-      buildLocalEnvContent({ API_URL: 'https://hosted.supabase.co' })
-    ).toThrow('Non-loopback Supabase URL rejected');
+  it('3. buildLocalEnvContent rejects non-loopback URLs with generic error without printing secret/URL', () => {
+    const secretUrl = 'https://abcdefghijkl.supabase.co';
+    try {
+      buildLocalEnvContent({ API_URL: secretUrl });
+      expect.fail('Should have thrown error');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      expect(msg).toBe('Non-loopback Supabase endpoint rejected.');
+      expect(msg).not.toContain(secretUrl);
+      expect(msg).not.toContain('abcdefghijkl');
+    }
   });
 
-  it('4. generateLocalEnvironmentFile refuses to overwrite existing file without force', () => {
+  it('4. validateAllowedOutputPath allows default path and OS temp directory, rejects tracked repo path', () => {
+    expect(() => validateAllowedOutputPath(defaultEnvPath, defaultEnvPath, repoRoot)).not.toThrow();
+
+    const tmpPath = path.resolve(tmpDir, 'custom.env');
+    expect(() => validateAllowedOutputPath(tmpPath, defaultEnvPath, repoRoot)).not.toThrow();
+
+    const trackedRepoPath = path.resolve(repoRoot, 'apps/admin-cms/src/secret.env');
+    expect(() => validateAllowedOutputPath(trackedRepoPath, defaultEnvPath, repoRoot)).toThrow(
+      'Invalid output path'
+    );
+  });
+
+  it('5. generateLocalEnvironmentFile refuses to overwrite existing file without force', () => {
     const testFile = path.join(tmpDir, '.env.local');
     fs.writeFileSync(testFile, 'EXISTING=true');
 
@@ -64,7 +86,7 @@ SERVICE_ROLE_KEY='sb_service_mock_456'
     ).toThrow('File overwrite refused');
   });
 
-  it('5. generateLocalEnvironmentFile overwrites file when force=true', () => {
+  it('6. generateLocalEnvironmentFile overwrites file when force=true', () => {
     const testFile = path.join(tmpDir, '.env.local');
     fs.writeFileSync(testFile, 'EXISTING=true');
 

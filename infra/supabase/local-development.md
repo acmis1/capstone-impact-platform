@@ -1,6 +1,6 @@
 # Reproducible Local Supabase Development Guide
 
-This guide documents the canonical, 100% reproducible local Supabase development workflow for the Capstone Impact Platform (`acmis1/capstone-impact-platform`).
+This guide documents the canonical, local-only Supabase development workflow for the Capstone Impact Platform (`acmis1/capstone-impact-platform`).
 
 ## 1. Architectural Principles
 
@@ -8,6 +8,7 @@ This guide documents the canonical, 100% reproducible local Supabase development
 - **No Supabase Organization Membership Required:** Developers do not need access to hosted Supabase, Duda, Render, or Vercel dashboards to build, test, and run the application locally.
 - **Isolated Local State:** All database tables, authentication identities, storage buckets, and Mailpit email captures run on `http://127.0.0.1`.
 - **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real student or stakeholder PII or credentials are used or committed.
+- **Scope & Limitations:** Validation occurred on the recorded local Docker environment; cross-platform onboarding remains to be confirmed by another team member. Hosted staging migration history remains separate and is not altered by local setup.
 
 ---
 
@@ -40,26 +41,34 @@ Replay all timestamped migrations (`20260601035138_...` through `20260719165119_
 npm run supabase:reset
 ```
 
-### Step 5: Generate Local Environment Configuration
+### Step 5: Seed Local Storage Buckets & Synthetic Fixtures
+Ensure storage buckets exist with exact local policies and synthetic poster fixtures:
+```bash
+npm run supabase:seed:buckets
+```
+*Note: `supabase:seed:buckets` is strictly local-only and does not invoke staging scripts.*
+
+### Step 6: Generate Local Environment Configuration
 Write validated loopback environment settings to `apps/admin-cms/.env.local`:
 ```bash
 npm run supabase:env:local
 ```
+*Note: Existing hosted environment files must never be overwritten by local setup.*
 
-### Step 6: Provision Local Synthetic Staff Accounts
+### Step 7: Provision Local Synthetic Staff Accounts
 Create reproducible synthetic accounts for `admin`, `reviewer`, and `editor`:
 ```bash
 npm run supabase:users:local
 ```
 This writes random per-developer passwords into the ignored file `apps/admin-cms/.local-users.json`.
 
-### Step 7: Verify Local Stack Integrity
+### Step 8: Verify Local Stack Integrity
 Run the automated verification suite:
 ```bash
 npm run supabase:verify:local
 ```
 
-### Step 8: Launch Admin/CMS Application
+### Step 9: Launch Admin/CMS Application
 Start the Next.js development server:
 ```bash
 npm run dev:admin
@@ -72,8 +81,8 @@ Open [http://localhost:3000](http://localhost:3000) and sign in using the synthe
 
 | Bucket Name | Visibility | Purpose | Allowed Types | Max File Size |
 |---|---|---|---|---|
-| `project-drafts-private` | Private | Raw student uploads & internal draft media | PNG, JPEG, WEBP, PDF | 20 MB |
-| `project-public-assets` | Public | Public showcase images and posters | PNG, JPEG, WEBP, PDF | 20 MB |
+| `project-drafts-private` | Private | Local synthetic draft media & private uploads | PNG, JPEG, WEBP, PDF | 20 MB |
+| `project-public-assets` | Public | Local synthetic showcase images & posters | PNG, JPEG, WEBP, PDF | 20 MB |
 | `public-feeds` | Public | Exported JSON showcase feeds (`capstones-latest.json`) | JSON | 10 MB |
 
 ---

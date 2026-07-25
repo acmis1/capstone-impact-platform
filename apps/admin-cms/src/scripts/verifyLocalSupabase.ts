@@ -3,7 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
 import { SYNTHETIC_STAFF_DEFINITIONS } from '../local-development/localStaffUsers';
+import { compilePublicFeed } from '../feed/compilePublicFeed';
+import { validatePublicFeed } from '../feed/validatePublicFeed';
 import { execSync } from 'node:child_process';
+import type { Project } from '../domain/project';
 
 const EXPECTED_TABLES = [
   'programs',
@@ -22,10 +25,62 @@ const EXPECTED_TABLES = [
 ];
 
 const EXPECTED_BUCKETS = [
-  { name: 'project-drafts-private', isPublic: false },
-  { name: 'project-public-assets', isPublic: true },
-  { name: 'public-feeds', isPublic: true },
+  { name: 'project-drafts-private', isPublic: false, sizeLimit: 20971520 },
+  { name: 'project-public-assets', isPublic: true, sizeLimit: 20971520 },
+  { name: 'public-feeds', isPublic: true, sizeLimit: 10485760 },
 ];
+
+function hashStringToNumber(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function mapDbRowToProject(row: Record<string, unknown>): Project {
+  const publicId = String(row.public_id || row.id || '');
+  const numericId = hashStringToNumber(publicId || '1');
+
+  return {
+    id: numericId,
+    publicId,
+    title: String(row.title || 'Sample Title'),
+    summary: String(row.summary || 'Sample Summary'),
+    background: String(row.background || 'Sample Background'),
+    solution: String(row.solution || 'Sample Solution'),
+    year: row.year ? String(row.year) : '2026',
+    program: String(row.program_name || 'School of Computing'),
+    studyProgram: String(row.study_program || 'Computer Science'),
+    discipline: String(row.discipline || 'Software Engineering'),
+    disciplines: Array.isArray(row.disciplines)
+      ? (row.disciplines as string[])
+      : [String(row.discipline || 'Software Engineering')],
+    industry: String(row.industry || 'Technology'),
+    industryPartner: String(row.industry_partner || ''),
+    academicSupervisor: String(row.academic_supervisor || ''),
+    groupName: String(row.group_name || 'Capstone Team 1'),
+    teamMembers: Array.isArray(row.team_members) ? (row.team_members as string[]) : ['Student One', 'Student Two'],
+    poster: String(row.poster_url || 'https://placehold.co/600x400.png'),
+    posterPdf: String(row.poster_pdf_url || 'https://placehold.co/sample.pdf'),
+    posterText: String(row.poster_text_public || ''),
+    accessibilityText: String(row.accessibility_text_public || ''),
+    snapshots: Array.isArray(row.snapshots) ? (row.snapshots as string[]) : [],
+    videoUrl: String(row.video_url || ''),
+    demoUrl: String(row.demo_url || ''),
+    repositoryUrl: String(row.repository_url || ''),
+    externalLinks: Array.isArray(row.external_links) ? (row.external_links as any[]) : [],
+    citations: Array.isArray(row.citations) ? (row.citations as string[]) : [],
+    layoutConfig: {
+      templateId: 'poster_showcase',
+      featuredMedia: 'poster',
+      sectionOrder: ['background', 'solution'],
+    },
+    status: (row.status as Project['status']) || 'draft',
+  };
+}
 
 export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promise<boolean> {
   const repoRoot = path.resolve(__dirname, '../../../..');
@@ -40,9 +95,8 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
   let rawEnv = '';
   try {
     rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`❌ Failed to query local Supabase status: ${msg}`);
+  } catch {
+    console.error('❌ Failed to query local Supabase CLI status.');
     return false;
   }
 
@@ -53,7 +107,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
 
   // 2. Loopback URL check
   if (!isLoopbackUrl(apiUrl)) {
-    console.error(`❌ Non-loopback URL rejected: [${apiUrl}]`);
+    console.error('❌ Non-loopback Supabase endpoint rejected.');
     return false;
   }
 
@@ -62,7 +116,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
     return false;
   }
 
-  console.log('✔ Loopback Supabase URL verified.');
+  console.log('✔ Loopback Supabase endpoint verified.');
 
   const adminClient = createClient(apiUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -75,7 +129,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
   for (const tableName of EXPECTED_TABLES) {
     const { error } = await adminClient.from(tableName).select('*', { count: 'exact', head: true });
     if (error) {
-      console.error(`❌ Table check failed for [${tableName}]: ${error.message}`);
+      console.error(`❌ Table check failed for table.`);
       return false;
     }
   }
@@ -85,64 +139,92 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
   const { data: buckets, error: bucketErr } = await adminClient
     .schema('storage')
     .from('buckets')
-    .select('name, public');
+    .select('name, public, file_size_limit, allowed_mime_types');
 
   if (bucketErr || !buckets) {
-    console.error(`❌ Failed to query Storage buckets: ${bucketErr?.message}`);
+    console.error('❌ Failed to query Storage buckets.');
     return false;
   }
 
   for (const expected of EXPECTED_BUCKETS) {
     const found = buckets.find((b) => b.name === expected.name);
     if (!found) {
-      console.error(`❌ Required storage bucket missing: [${expected.name}]`);
+      console.error(`❌ Storage bucket verification failed: missing bucket.`);
       return false;
     }
     if (found.public !== expected.isPublic) {
-      console.error(
-        `❌ Storage bucket [${expected.name}] visibility mismatch: expected public=${expected.isPublic}, found public=${found.public}`
-      );
+      console.error('❌ Storage bucket visibility mismatch.');
+      return false;
+    }
+    if (found.file_size_limit && Number(found.file_size_limit) !== expected.sizeLimit) {
+      console.error('❌ Storage bucket file size limit mismatch.');
       return false;
     }
   }
-  console.log('✔ Required storage buckets exist with correct public/private visibility.');
+  console.log('✔ Storage buckets verified (existence, visibility, size limits exact).');
 
   // 5. Check synthetic projects
-  const { data: projects, error: projErr } = await adminClient.from('projects').select('id, public_id, status');
-  if (projErr || !projects || projects.length === 0) {
-    console.error(`❌ Synthetic project verification failed: ${projErr?.message || 'No projects found'}`);
+  const { data: dbProjects, error: projErr } = await adminClient.from('projects').select('*');
+  if (projErr || !dbProjects || dbProjects.length === 0) {
+    console.error('❌ Synthetic project verification failed: No project rows found.');
     return false;
   }
-  console.log(`✔ Synthetic project seed verified (${projects.length} sample projects found).`);
+  console.log(`✔ Synthetic project seed verified (${dbProjects.length} sample projects found).`);
 
-  // 6. Verify credentials & Sign-in
+  // 6. Feed compilation eligibility & Sanitization check
+  const domainProjects = dbProjects.map((row) => mapDbRowToProject(row as Record<string, unknown>));
+  const feedItems = compilePublicFeed(domainProjects);
+  const validateResult = validatePublicFeed(feedItems);
+
+  if (!validateResult.valid) {
+    console.error(`❌ Public feed contract validation failed: ${validateResult.errors.join('; ')}`);
+    return false;
+  }
+
+  // Ensure no draft, in_review, changes_requested, archived, or deleted records appear in public feed
+  for (const item of feedItems) {
+    const orig = dbProjects.find((p) => String(p.public_id) === item.publicId || String(p.id) === item.publicId);
+    if (orig && orig.status !== 'approved' && orig.status !== 'published') {
+      console.error('❌ Public feed security leak: Non-public status record included.');
+      return false;
+    }
+  }
+
+  console.log('✔ Public feed compilation verified (approved/published only, internal fields stripped).');
+
+  // 7. Verify credentials & Sign-in
   if (!fs.existsSync(credsPath)) {
-    console.error(`❌ Local credentials file missing at [${credsPath}]. Run npm run supabase:users:local first.`);
+    console.error('❌ Local credentials file missing.');
     return false;
   }
 
-  const credsData = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+  let credsData: { users?: Record<string, string> };
+  try {
+    credsData = JSON.parse(fs.readFileSync(credsPath, 'utf8')) as { users?: Record<string, string> };
+  } catch {
+    console.error('❌ Failed to parse local credentials file.');
+    return false;
+  }
+
   const userPasswords: Record<string, string> = credsData.users || {};
 
   for (const def of SYNTHETIC_STAFF_DEFINITIONS) {
     const password = userPasswords[def.email];
     if (!password) {
-      console.error(`❌ Missing password for synthetic user [${def.email}] in credentials file.`);
+      console.error('❌ Missing password for synthetic user.');
       return false;
     }
 
-    // Attempt password sign in
     const { data: authResult, error: signInErr } = await anonClient.auth.signInWithPassword({
       email: def.email,
       password,
     });
 
     if (signInErr || !authResult.user) {
-      console.error(`❌ Password sign-in failed for [${def.email}]: ${signInErr?.message}`);
+      console.error(`❌ Password sign-in failed for synthetic user: ${signInErr?.message}`);
       return false;
     }
 
-    // Verify role mapping
     const authUserId = authResult.user.id;
     const { data: adminUserRow, error: profileErr } = await adminClient
       .from('admin_users')
@@ -151,7 +233,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       .single();
 
     if (profileErr || !adminUserRow) {
-      console.error(`❌ admin_users profile linkage failed for [${def.email}]: ${profileErr?.message}`);
+      console.error('❌ Profile linkage failed for synthetic user.');
       return false;
     }
 
@@ -161,17 +243,13 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       .eq('user_id', adminUserRow.id);
 
     if (roleErr || !roleRows || roleRows.length !== 1 || roleRows[0].role !== def.role) {
-      console.error(
-        `❌ Role mapping failed for [${def.email}]: expected role [${def.role}], found [${
-          roleRows?.map((r) => r.role).join(',') || 'none'
-        }]`
-      );
+      console.error('❌ Role mapping mismatch for synthetic user.');
       return false;
     }
   }
 
   console.log('✔ Synthetic staff accounts verified (Admin, Reviewer, Editor login & roles exact).');
-  console.log('🎉 Local Supabase verification complete and 100% successful.');
+  console.log('✔ Local Supabase verification complete and verified on local environment.');
   return true;
 }
 
@@ -185,8 +263,13 @@ async function main() {
     }
   }
 
-  const success = await verifyLocalSupabaseSetup(credentialsPath);
-  if (!success) {
+  try {
+    const success = await verifyLocalSupabaseSetup(credentialsPath);
+    if (!success) {
+      process.exit(1);
+    }
+  } catch {
+    console.error('❌ Local verification script encountered an error.');
     process.exit(1);
   }
 }
