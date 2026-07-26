@@ -4,23 +4,17 @@ loadEnvConfig(process.cwd());
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { evaluateStagingAuthReadiness, AdminIdentityRecord, RoleAssignmentRecord, AuditAttributionRecord } from '../auth/stagingAuthVerification';
 import { isMissingAuthUserIdColumnError } from '../auth/stagingAuthCheckErrors';
+import { validateStagingGuard } from '../security/stagingExecutionGuard';
 
-/**
- * Read-only script executing SELECT-only queries to check authentication readiness on staging database.
- * 
- * Rules:
- * - Does not perform updates, inserts, deletes or signUp triggers.
- * - Restricts selected fields to prevent printing email, full name, or credential tokens.
- * - Gracefully maps trusted missing-column errors to MIGRATION_0003_MISSING status.
- * - Exits with status 0 (Ready), 2 (Incomplete Setup), or 1 (Unexpected connection error).
- */
-async function runCheck() {
+export async function runCheckStagingAuth(args?: string[]): Promise<boolean> {
+  validateStagingGuard({ operationId: 'check-staging-auth', args });
+
   let supabase;
   try {
     supabase = createSupabaseAdminClientCore();
   } catch {
     console.error('STAGING_AUTH_CHECK_FAILED');
-    process.exit(1);
+    return false;
   }
 
   let migrationPresent = true;
@@ -28,7 +22,7 @@ async function runCheck() {
   let userRoles: RoleAssignmentRecord[] = [];
   let approvalRecords: AuditAttributionRecord[] = [];
 
-  // 1. SELECT-only query on admin_users table (id and auth_user_id fields only)
+  // 1. SELECT-only query on admin_users table
   try {
     const { data, error } = await supabase
       .from('admin_users')
@@ -37,11 +31,10 @@ async function runCheck() {
     if (error) {
       if (isMissingAuthUserIdColumnError(error)) {
         migrationPresent = false;
-        // Column is missing. Count legacy administrators using ID only.
         const { data: legacyData, error: legacyError } = await supabase
           .from('admin_users')
           .select('id');
-        
+
         if (legacyError) {
           throw legacyError;
         }
@@ -49,7 +42,7 @@ async function runCheck() {
           const r = row as { id: string };
           return {
             adminUserId: r.id,
-            authUserId: null
+            authUserId: null,
           };
         });
       } else {
@@ -60,94 +53,84 @@ async function runCheck() {
         const r = row as { id: string; auth_user_id: string | null };
         return {
           adminUserId: r.id,
-          authUserId: r.auth_user_id
+          authUserId: r.auth_user_id,
         };
       });
     }
   } catch {
     console.error('STAGING_AUTH_CHECK_FAILED');
-    process.exit(1);
+    return false;
   }
 
-  // 2. SELECT-only query on user_roles table (user_id and role fields only)
+  // 2. SELECT-only query on user_roles table
   try {
     const { data, error } = await supabase
       .from('user_roles')
-      .select('user_id, role');
+      .select('id, admin_user_id, role');
 
     if (error) {
       throw error;
     }
+
     userRoles = (data || []).map((row) => {
-      const r = row as { user_id: string; role: string };
+      const r = row as { id: string; admin_user_id: string; role: string };
       return {
-        adminUserId: r.user_id,
-        role: r.role
+        roleRecordId: r.id,
+        adminUserId: r.admin_user_id,
+        role: r.role,
       };
     });
   } catch {
     console.error('STAGING_AUTH_CHECK_FAILED');
-    process.exit(1);
+    return false;
   }
 
-  // 3. SELECT-only query on approval_records table (admin_id field only)
+  // 3. SELECT-only query on approval_records table
   try {
     const { data, error } = await supabase
       .from('approval_records')
-      .select('admin_id');
+      .select('id, admin_user_id');
 
     if (error) {
       throw error;
     }
+
     approvalRecords = (data || []).map((row) => {
-      const r = row as { admin_id: string | null };
+      const r = row as { id: string; admin_user_id: string };
       return {
-        adminUserId: r.admin_id
+        approvalRecordId: r.id,
+        adminUserId: r.admin_user_id,
       };
     });
   } catch {
     console.error('STAGING_AUTH_CHECK_FAILED');
-    process.exit(1);
+    return false;
   }
 
-  // 4. Run pure evaluator to compile counts
   const evaluation = evaluateStagingAuthReadiness({
     migrationPresent,
     adminUsers,
     userRoles,
-    approvalRecords
+    approvalRecords,
   });
 
-  console.log('====================================================');
-  console.log('🛡️  STAGING AUTHENTICATION STATUS SUMMARY');
-  console.log('====================================================');
-  console.log(`Migration Status (0003):      ${evaluation.migrationPresent ? 'PRESENT' : 'MIGRATION_0003_MISSING'}`);
-  console.log(`Total Administrator Rows:     ${evaluation.totalAdminRows}`);
-  console.log(`Linked Administrators:        ${evaluation.linkedAdminCount}`);
-  console.log(`Unlinked Administrators:      ${evaluation.unlinkedAdminCount}`);
-  console.log(`Recognized Role Assignments:  ${evaluation.recognizedRoleAssignmentCount}`);
-  console.log(`Invalid Role Assignments:     ${evaluation.invalidRoleAssignmentCount}`);
-  console.log(`Linked Admins Lacking Role:   ${evaluation.linkedAdminsWithoutRecognizedRole}`);
-  console.log(`Audit Rows (with Actor):      ${evaluation.auditRecordsWithAdminId}`);
-  console.log(`Audit Rows (Historical Null): ${evaluation.auditRecordsWithoutAdminId}`);
-  console.log('----------------------------------------------------');
-  console.log(`Readiness Status:             ${evaluation.readyForManualLoginTest ? 'READY_FOR_MANUAL_LOGIN_TEST' : 'INCOMPLETE'}`);
-  
-  if (evaluation.errors.length > 0) {
-    console.log('Errors:');
-    evaluation.errors.forEach((err) => console.log(`  - [ERROR]: ${err}`));
-  }
-  if (evaluation.warnings.length > 0) {
-    console.log('Warnings:');
-    evaluation.warnings.forEach((warn) => console.log(`  - [WARNING]: ${warn}`));
-  }
-  console.log('====================================================\n');
+  const classification = evaluation.readyForManualLoginTest ? 'STAGING_AUTH_READY' : 'INCOMPLETE_SETUP';
 
-  if (!evaluation.readyForManualLoginTest) {
-    process.exit(2);
-  } else {
-    process.exit(0);
-  }
+  console.log(`classification=${classification}`);
+  console.log(`admin_users_count=${evaluation.totalAdminRows}`);
+  console.log(`linked_auth_users_count=${evaluation.linkedAdminCount}`);
+  console.log(`unlinked_admin_users_count=${evaluation.unlinkedAdminCount}`);
+  console.log(`user_roles_count=${evaluation.recognizedRoleAssignmentCount}`);
+  console.log(`approval_records_count=${evaluation.auditRecordsWithAdminId}`);
+
+  return evaluation.readyForManualLoginTest;
 }
 
-runCheck();
+if (require.main === module) {
+  runCheckStagingAuth().then((success) => {
+    if (!success) process.exit(1);
+  }).catch(() => {
+    console.error('STAGING_AUTH_CHECK_FAILED');
+    process.exit(1);
+  });
+}

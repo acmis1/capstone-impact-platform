@@ -4,8 +4,11 @@ loadEnvConfig(process.cwd());
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
 import { Project } from '../domain/project';
+import { validateStagingGuard } from '../security/stagingExecutionGuard';
 
-async function check() {
+export async function runCheckStagingProjects(args?: string[]): Promise<boolean> {
+  validateStagingGuard({ operationId: 'check-staging-projects', args });
+
   const supabase = createSupabaseAdminClientCore();
   const repository = new SupabaseProjectRepositoryCore(supabase);
 
@@ -16,7 +19,7 @@ async function check() {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Unknown query error';
     console.error('❌ Failed to connect or query staging database:', message);
-    process.exit(1);
+    return false;
   }
 
   const total = projects.length;
@@ -37,13 +40,21 @@ async function check() {
   console.log(`Public-Eligible Projects:     ${publicEligible}`);
   console.log('----------------------------------------------------');
   console.log('Breakdown by Status:');
-  
+
   const allStatuses = ['draft', 'submitted', 'in_review', 'changes_requested', 'approved', 'published', 'archived', 'deleted'];
   allStatuses.forEach((status) => {
     const count = statusCounts[status] || 0;
     console.log(` - [${status.toUpperCase().padEnd(17)}]: ${count}`);
   });
   console.log('====================================================\n');
+  return true;
 }
 
-check();
+if (require.main === module) {
+  runCheckStagingProjects().then((success) => {
+    if (!success) process.exit(1);
+  }).catch((err) => {
+    console.error('❌ Fatal error:', err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
+}

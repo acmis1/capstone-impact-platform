@@ -2,6 +2,7 @@ import { loadEnvConfig } from '@next/env';
 loadEnvConfig(process.cwd());
 
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
+import { validateStagingGuard } from '../security/stagingExecutionGuard';
 
 const fakeProjects = [
   {
@@ -33,9 +34,9 @@ const fakeProjects = [
     layout_config: {
       templateId: 'poster_showcase',
       featuredMedia: 'poster',
-      sectionOrder: ['background', 'solution', 'snapshots', 'video', 'links']
+      sectionOrder: ['background', 'solution', 'snapshots', 'video', 'links'],
     },
-    status: 'approved'
+    status: 'approved',
   },
   {
     public_id: '2026-runtime-demo-published',
@@ -66,9 +67,9 @@ const fakeProjects = [
     layout_config: {
       templateId: 'technical_detail',
       featuredMedia: 'snapshots',
-      sectionOrder: ['solution', 'background', 'snapshots', 'video', 'links']
+      sectionOrder: ['solution', 'background', 'snapshots', 'video', 'links'],
     },
-    status: 'published'
+    status: 'published',
   },
   {
     public_id: '2026-runtime-demo-review',
@@ -99,9 +100,9 @@ const fakeProjects = [
     layout_config: {
       templateId: 'media_rich',
       featuredMedia: 'video',
-      sectionOrder: ['background', 'solution']
+      sectionOrder: ['background', 'solution'],
     },
-    status: 'in_review'
+    status: 'in_review',
   },
   {
     public_id: '2026-runtime-demo-archived',
@@ -132,29 +133,34 @@ const fakeProjects = [
     layout_config: {
       templateId: 'poster_showcase',
       featuredMedia: 'poster',
-      sectionOrder: ['background']
+      sectionOrder: ['background'],
     },
     status: 'archived',
     archived_at: new Date().toISOString(),
-    archive_reason: 'Archived due to age guidelines.'
-  }
+    archive_reason: 'Archived due to age guidelines.',
+  },
 ];
 
-async function seed() {
+export async function runSeedStagingProjects(args?: string[]): Promise<boolean> {
+  const guard = validateStagingGuard({ operationId: 'seed-staging-projects', args });
+
+  if (!guard.isAuthorized) {
+    console.log(`[DRY-RUN] ${guard.dryRunReason}`);
+    console.log(`[DRY-RUN] Planned operation: Seed ${fakeProjects.length} synthetic projects into table [projects].`);
+    return false;
+  }
+
   const supabase = createSupabaseAdminClientCore();
   const idsToDelete = fakeProjects.map((p) => p.public_id);
 
   console.log('Seeding staging database with fake projects...');
-  
+
   // 1. Delete existing mock cases for clean re-run safety
-  const { error: deleteError } = await supabase
-    .from('projects')
-    .delete()
-    .in('public_id', idsToDelete);
+  const { error: deleteError } = await supabase.from('projects').delete().in('public_id', idsToDelete);
 
   if (deleteError) {
     console.error('❌ Error clearing existing mock projects:', deleteError.message);
-    process.exit(1);
+    return false;
   }
 
   // 2. Insert fake staging cases
@@ -165,14 +171,24 @@ async function seed() {
 
   if (insertError) {
     console.error('❌ Error seeding fake staging projects:', insertError.message);
-    process.exit(1);
+    return false;
   }
 
   console.log('✅ Successfully seeded fake staging projects!');
   console.log('Seeded projects details:');
-  data.forEach((p) => {
-    console.log(` - ID: ${p.public_id} [Status: ${p.status}]`);
-  });
+  if (data) {
+    data.forEach((p) => {
+      console.log(` - ID: ${p.public_id} [Status: ${p.status}]`);
+    });
+  }
+  return true;
 }
 
-seed();
+if (require.main === module) {
+  runSeedStagingProjects().then((success) => {
+    if (!success) process.exit(1);
+  }).catch((err) => {
+    console.error('❌ Fatal error:', err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
+}

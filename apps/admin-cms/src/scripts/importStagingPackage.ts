@@ -7,6 +7,7 @@ import { validateImportPackage } from '../import/validateImportPackage';
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { uploadDraftMediaAsset } from '../storage/mediaStorage';
 import { cleanupStagingMediaForProjects } from '../storage/mediaCleanup';
+import { validateStagingGuard } from '../security/stagingExecutionGuard';
 
 interface ValidationFlagRowInput {
   project_id: string;
@@ -16,7 +17,15 @@ interface ValidationFlagRowInput {
   field_name: string | null;
 }
 
-async function run() {
+export async function runImportStagingPackage(args?: string[]): Promise<boolean> {
+  const guard = validateStagingGuard({ operationId: 'import-staging-package', args });
+
+  if (!guard.isAuthorized) {
+    console.log(`[DRY-RUN] ${guard.dryRunReason}`);
+    console.log('[DRY-RUN] Planned operation: Parse, validate and import staging package into DB and Storage.');
+    return false;
+  }
+
   const packagePath = 'fixtures/import-packages/runtime-import-demo';
   const resolvedPath = path.resolve(packagePath);
 
@@ -29,7 +38,7 @@ async function run() {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown staging import error';
     console.error(`❌ Parse Failed: ${message}`);
-    process.exit(1);
+    return false;
   }
 
   // 2. Validate Package
@@ -41,12 +50,10 @@ async function run() {
 
   const supabase = createSupabaseAdminClientCore();
 
-  // If there are blocking validation errors, we fail the import.
-  // Note: For staging import package foundation safety, we exit cleanly but fail status.
   if (!validation.valid) {
     console.error(`❌ Ingestion Blocked: Staging package validation failed with ${totalErrors} blocking error(s).`);
-    validation.errors.forEach(e => console.error(` - [${e.ruleCode}] ${e.message}`));
-    process.exit(1);
+    validation.errors.forEach((e) => console.error(` - [${e.ruleCode}] ${e.message}`));
+    return false;
   }
 
   // 3. Create import_batches row
@@ -57,7 +64,7 @@ async function run() {
     status: 'processing',
     total_projects: 1,
     warning_count: totalWarnings,
-    error_count: totalErrors
+    error_count: totalErrors,
   };
 
   const { data: dbBatch, error: batchError } = await supabase
@@ -68,7 +75,7 @@ async function run() {
 
   if (batchError || !dbBatch) {
     console.error(`❌ Failed to record import batch: ${batchError?.message}`);
-    process.exit(1);
+    return false;
   }
 
   const batchId = dbBatch.id;
@@ -97,19 +104,16 @@ async function run() {
     status: 'in_review',
     import_batch_id: batchId,
     source_folder: packagePath,
-    // Store validation summary array directly in the project object JSON column
-    validation_errors: validation.errors.map(e => e.message),
-    validation_warnings: validation.warnings.map(e => e.message)
+    validation_errors: validation.errors.map((e) => e.message),
+    validation_warnings: validation.warnings.map((e) => e.message),
   };
 
-  // Check if project already exists
   const { data: existingProject } = await supabase
     .from('projects')
     .select('id')
     .eq('public_id', manifest.publicId)
     .maybeSingle();
 
-  // Robust Idempotency Cleanup: Clean database media rows and storage objects before re-upload
   console.log(`Cleaning existing staging media for [${manifest.publicId}] to prevent duplicates...`);
   const cleanup = await cleanupStagingMediaForProjects([manifest.publicId]);
   console.log(`🧹 Database media rows deleted:       ${cleanup.removedMediaRows}`);
@@ -119,8 +123,6 @@ async function run() {
   let projectId: string;
   if (existingProject) {
     console.log(`Updating existing project [${manifest.publicId}]...`);
-    
-    // Clean existing validation flags for this project to prevent accumulation of stale warnings/errors
     const { error: deleteFlagsError } = await supabase
       .from('validation_flags')
       .delete()
@@ -139,7 +141,7 @@ async function run() {
     if (updateError || !updatedProj) {
       console.error(`❌ Failed to update staging project: ${updateError?.message}`);
       await supabase.from('import_batches').update({ status: 'failed' }).eq('id', batchId);
-      process.exit(1);
+      return false;
     }
     projectId = updatedProj.id;
   } else {
@@ -153,7 +155,7 @@ async function run() {
     if (insertError || !insertedProj) {
       console.error(`❌ Failed to insert staging project: ${insertError?.message}`);
       await supabase.from('import_batches').update({ status: 'failed' }).eq('id', batchId);
-      process.exit(1);
+      return false;
     }
     projectId = insertedProj.id;
   }
@@ -169,7 +171,7 @@ async function run() {
         assetType: 'poster_image',
         fileName: parsed.posterImage.fileName,
         content: parsed.posterImage.content,
-        mimeType: parsed.posterImage.mimeType
+        mimeType: parsed.posterImage.mimeType,
       });
       mediaUploadedCount++;
     }
@@ -181,7 +183,7 @@ async function run() {
         assetType: 'poster_pdf',
         fileName: parsed.posterPdf.fileName,
         content: parsed.posterPdf.content,
-        mimeType: parsed.posterPdf.mimeType
+        mimeType: parsed.posterPdf.mimeType,
       });
       mediaUploadedCount++;
     }
@@ -193,7 +195,7 @@ async function run() {
         assetType: 'snapshot_image',
         fileName: parsed.snapshot1.fileName,
         content: parsed.snapshot1.content,
-        mimeType: parsed.snapshot1.mimeType
+        mimeType: parsed.snapshot1.mimeType,
       });
       mediaUploadedCount++;
     }
@@ -201,52 +203,44 @@ async function run() {
     const message = err instanceof Error ? err.message : 'Unknown staging import error';
     console.error(`❌ Error uploading draft media: ${message}`);
     await supabase.from('import_batches').update({ status: 'failed' }).eq('id', batchId);
-    process.exit(1);
+    return false;
   }
 
   // 6. Insert validation_flags rows (warnings or errors)
   const validationFlags: ValidationFlagRowInput[] = [];
-  validation.errors.forEach(e => {
+  validation.errors.forEach((e) => {
     validationFlags.push({
       project_id: projectId,
       severity: 'error',
       rule_code: e.ruleCode,
       message: e.message,
-      field_name: e.fieldName || null
+      field_name: e.fieldName || null,
     });
   });
-  validation.warnings.forEach(w => {
+  validation.warnings.forEach((w) => {
     validationFlags.push({
       project_id: projectId,
       severity: 'warning',
       rule_code: w.ruleCode,
       message: w.message,
-      field_name: w.fieldName || null
+      field_name: w.fieldName || null,
     });
   });
 
   if (validationFlags.length > 0) {
     console.log(`Recording ${validationFlags.length} validation flag(s) in staging DB...`);
-    const { error: flagsError } = await supabase
-      .from('validation_flags')
-      .insert(validationFlags);
-
+    const { error: flagsError } = await supabase.from('validation_flags').insert(validationFlags);
     if (flagsError) {
       console.warn(`⚠️ Warning: Failed to record validation flags: ${flagsError.message}`);
     }
   }
 
   // 7. Mark batch completed
-  const { error: completeError } = await supabase
-    .from('import_batches')
-    .update({ status: 'completed' })
-    .eq('id', batchId);
-
+  const { error: completeError } = await supabase.from('import_batches').update({ status: 'completed' }).eq('id', batchId);
   if (completeError) {
     console.warn(`⚠️ Warning: Failed to set batch status to completed: ${completeError.message}`);
   }
 
-  // Final Output
   console.log('\n====================================================');
   console.log('✅ STAGING WORKSPACE IMPORT COMPLETED SUCCESSFULLY!');
   console.log('====================================================');
@@ -257,10 +251,15 @@ async function run() {
   console.log(`Draft Media Upload:  ${mediaUploadedCount} file(s)`);
   console.log(`Status Mapped:       [in_review]`);
   console.log('====================================================\n');
+  return true;
 }
 
-run().catch((err: unknown) => {
-  const message = err instanceof Error ? err.message : 'Unknown staging import error';
-  console.error('Fatal Uncaught Importer Exception:', message);
-  process.exit(1);
-});
+if (require.main === module) {
+  runImportStagingPackage().then((success) => {
+    if (!success) process.exit(1);
+  }).catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : 'Unknown staging import error';
+    console.error('Fatal Uncaught Importer Exception:', message);
+    process.exit(1);
+  });
+}

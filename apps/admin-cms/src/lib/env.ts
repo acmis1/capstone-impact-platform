@@ -25,7 +25,7 @@ const serverEnvSchema = z.object({
   (data) => data.SUPABASE_SECRET_KEY || data.SUPABASE_SERVICE_ROLE_KEY,
   {
     message: 'Either SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY must be provided',
-    path: ['SUPABASE_SERVICE_ROLE_KEY'],
+    path: ['SUPABASE_SECRET_KEY'],
   }
 );
 
@@ -53,7 +53,7 @@ export interface ServerEnv extends PublicEnv {
   SUPABASE_SERVICE_ROLE_KEY: string;
   supabaseDatabaseAdminKey: string;
   databaseAdminKeyType: "secret" | "legacy_service_role_jwt" | "missing" | "unknown";
-  databaseAdminKeyMode: "legacy_service_role_jwt_preferred" | "secret_key_fallback" | "missing";
+  databaseAdminKeyMode: "secret_key_preferred" | "legacy_service_role_jwt_fallback" | "missing";
   SUPABASE_DRAFT_BUCKET: string;
   SUPABASE_PUBLIC_ASSETS_BUCKET: string;
   SUPABASE_PUBLIC_FEEDS_BUCKET: string;
@@ -92,7 +92,7 @@ export function getPublicEnv(): PublicEnv {
       .map((i) => `${i.path.join('.')}: ${i.message}`)
       .join(', ');
     throw new Error(
-      `Staging Configuration Error: Required public client variables are missing. ${errorDetails}. Please ensure .env.local is configured.`
+      `Staging Configuration Error: Required public client variables are missing. ${errorDetails}. Please ensure environment is configured.`
     );
   }
 
@@ -112,9 +112,9 @@ export function getPublicEnv(): PublicEnv {
 
 /**
  * Validates and retrieves server-only variables (including client keys).
- * For DB admin operations, prefers legacy SUPABASE_SERVICE_ROLE_KEY JWT for reliable PostgREST bypass,
- * falling back to SUPABASE_SECRET_KEY.
- * Never prints secret values inside error arrays.
+ * For DB admin operations, prefers modern SUPABASE_SECRET_KEY for database admin access,
+ * falling back to legacy SUPABASE_SERVICE_ROLE_KEY JWT for temporary compatibility.
+ * Never prints secret values inside error messages or logs.
  */
 export function getServerEnv(): ServerEnv {
   const publicKeys = getPublicEnv();
@@ -140,14 +140,14 @@ export function getServerEnv(): ServerEnv {
 
   const data = parsed.data;
 
-  // 🔑 DB ADMIN SELECTION: Prefer legacy service_role JWT key for database admin access
-  const rawDatabaseAdminKey = data.SUPABASE_SERVICE_ROLE_KEY || data.SUPABASE_SECRET_KEY || '';
+  // 🔑 DB ADMIN SELECTION: Prefer modern SUPABASE_SECRET_KEY for database admin access, with legacy fallback to SUPABASE_SERVICE_ROLE_KEY
+  const rawDatabaseAdminKey = data.SUPABASE_SECRET_KEY || data.SUPABASE_SERVICE_ROLE_KEY || '';
   const keyType = classifyKey(rawDatabaseAdminKey, true) as ServerEnv["databaseAdminKeyType"];
-  
-  const keyMode = data.SUPABASE_SERVICE_ROLE_KEY
-    ? ("legacy_service_role_jwt_preferred" as const)
-    : data.SUPABASE_SECRET_KEY
-    ? ("secret_key_fallback" as const)
+
+  const keyMode = data.SUPABASE_SECRET_KEY
+    ? ("secret_key_preferred" as const)
+    : data.SUPABASE_SERVICE_ROLE_KEY
+    ? ("legacy_service_role_jwt_fallback" as const)
     : ("missing" as const);
 
   return {

@@ -1,8 +1,11 @@
 import { SAMPLE_PROJECTS } from '../fixtures/sampleProjects';
 import { compilePublicFeed } from '../feed/compilePublicFeed';
 import { validatePublicFeed } from '../feed/validatePublicFeed';
+import { validateStagingGuard } from '../security/stagingExecutionGuard';
 
-function main() {
+export function runCheckSampleFeed(args?: string[]): boolean {
+  validateStagingGuard({ operationId: 'check-sample-feed', args });
+
   console.log('====================================================');
   console.log('STAGING WORKSPACE: RUNNING PUBLIC FEED AUDIT RUN');
   console.log('====================================================');
@@ -33,11 +36,15 @@ function main() {
     console.error('\n--- VALIDATION ERRORS (CRITICAL BLOCKERS) ---');
     validation.errors.forEach((error) => console.error(`❌  ${error}`));
     console.error('\nResult: Verification FAILED due to critical schema contract errors.');
-    process.exit(1);
+    return false;
   }
 
   console.log('\nResult: Verification PASSED! Showcase feed is schema-compliant.');
   console.log('====================================================');
+  return true;
 }
 
-main();
+if (require.main === module) {
+  const success = runCheckSampleFeed();
+  if (!success) process.exit(1);
+}
