@@ -6,15 +6,24 @@ import { evaluateStagingAuthReadiness, AdminIdentityRecord, RoleAssignmentRecord
 import { isMissingAuthUserIdColumnError } from '../auth/stagingAuthCheckErrors';
 import { validateStagingGuard } from '../security/stagingExecutionGuard';
 
-export async function runCheckStagingAuth(args?: string[]): Promise<boolean> {
+export interface CheckStagingAuthRunnerResult {
+  classification: 'READY_FOR_MANUAL_LOGIN_TEST' | 'INCOMPLETE' | 'FAILED';
+  exitCode: 0 | 1 | 2;
+}
+
+export async function runCheckStagingAuth(
+  args?: string[],
+  clientFactory?: () => any
+): Promise<CheckStagingAuthRunnerResult> {
+  // Staging guard MUST execute before client creation
   validateStagingGuard({ operationId: 'check-staging-auth', args });
 
   let supabase;
   try {
-    supabase = createSupabaseAdminClientCore();
+    supabase = clientFactory ? clientFactory() : createSupabaseAdminClientCore();
   } catch {
     console.error('STAGING_AUTH_CHECK_FAILED');
-    return false;
+    return { classification: 'FAILED', exitCode: 1 };
   }
 
   let migrationPresent = true;
@@ -22,7 +31,7 @@ export async function runCheckStagingAuth(args?: string[]): Promise<boolean> {
   let userRoles: RoleAssignmentRecord[] = [];
   let approvalRecords: AuditAttributionRecord[] = [];
 
-  // 1. SELECT-only query on admin_users table
+  // 1. SELECT-only query on admin_users table (id and auth_user_id fields)
   try {
     const { data, error } = await supabase
       .from('admin_users')
@@ -38,73 +47,59 @@ export async function runCheckStagingAuth(args?: string[]): Promise<boolean> {
         if (legacyError) {
           throw legacyError;
         }
-        adminUsers = (legacyData || []).map((row) => {
-          const r = row as { id: string };
-          return {
-            adminUserId: r.id,
-            authUserId: null,
-          };
-        });
+        adminUsers = (legacyData || []).map((row: { id: string }) => ({
+          adminUserId: row.id,
+          authUserId: null,
+        }));
       } else {
         throw error;
       }
     } else {
-      adminUsers = (data || []).map((row) => {
-        const r = row as { id: string; auth_user_id: string | null };
-        return {
-          adminUserId: r.id,
-          authUserId: r.auth_user_id,
-        };
-      });
+      adminUsers = (data || []).map((row: { id: string; auth_user_id: string | null }) => ({
+        adminUserId: row.id,
+        authUserId: row.auth_user_id,
+      }));
     }
   } catch {
     console.error('STAGING_AUTH_CHECK_FAILED');
-    return false;
+    return { classification: 'FAILED', exitCode: 1 };
   }
 
-  // 2. SELECT-only query on user_roles table
+  // 2. SELECT-only query on user_roles table (selecting DB schema user_id)
   try {
     const { data, error } = await supabase
       .from('user_roles')
-      .select('id, admin_user_id, role');
+      .select('id, user_id, role');
 
     if (error) {
       throw error;
     }
 
-    userRoles = (data || []).map((row) => {
-      const r = row as { id: string; admin_user_id: string; role: string };
-      return {
-        roleRecordId: r.id,
-        adminUserId: r.admin_user_id,
-        role: r.role,
-      };
-    });
+    userRoles = (data || []).map((row: { id: string; user_id: string; role: string }) => ({
+      adminUserId: row.user_id,
+      role: row.role,
+    }));
   } catch {
     console.error('STAGING_AUTH_CHECK_FAILED');
-    return false;
+    return { classification: 'FAILED', exitCode: 1 };
   }
 
-  // 3. SELECT-only query on approval_records table
+  // 3. SELECT-only query on approval_records table (selecting DB schema admin_id)
   try {
     const { data, error } = await supabase
       .from('approval_records')
-      .select('id, admin_user_id');
+      .select('id, admin_id');
 
     if (error) {
       throw error;
     }
 
-    approvalRecords = (data || []).map((row) => {
-      const r = row as { id: string; admin_user_id: string };
-      return {
-        approvalRecordId: r.id,
-        adminUserId: r.admin_user_id,
-      };
-    });
+    approvalRecords = (data || []).map((row: { id: string; admin_id: string | null }) => ({
+      adminUserId: row.admin_id,
+    }));
   } catch {
     console.error('STAGING_AUTH_CHECK_FAILED');
-    return false;
+    return { classification: 'FAILED', exitCode: 1 };
   }
 
   const evaluation = evaluateStagingAuthReadiness({
@@ -114,7 +109,11 @@ export async function runCheckStagingAuth(args?: string[]): Promise<boolean> {
     approvalRecords,
   });
 
-  const classification = evaluation.readyForManualLoginTest ? 'STAGING_AUTH_READY' : 'INCOMPLETE_SETUP';
+  const classification: 'READY_FOR_MANUAL_LOGIN_TEST' | 'INCOMPLETE' = evaluation.readyForManualLoginTest
+    ? 'READY_FOR_MANUAL_LOGIN_TEST'
+    : 'INCOMPLETE';
+
+  const exitCode: 0 | 2 = evaluation.readyForManualLoginTest ? 0 : 2;
 
   console.log(`classification=${classification}`);
   console.log(`admin_users_count=${evaluation.totalAdminRows}`);
@@ -123,12 +122,12 @@ export async function runCheckStagingAuth(args?: string[]): Promise<boolean> {
   console.log(`user_roles_count=${evaluation.recognizedRoleAssignmentCount}`);
   console.log(`approval_records_count=${evaluation.auditRecordsWithAdminId}`);
 
-  return evaluation.readyForManualLoginTest;
+  return { classification, exitCode };
 }
 
 if (require.main === module) {
-  runCheckStagingAuth().then((success) => {
-    if (!success) process.exit(1);
+  runCheckStagingAuth().then((res) => {
+    process.exit(res.exitCode);
   }).catch(() => {
     console.error('STAGING_AUTH_CHECK_FAILED');
     process.exit(1);

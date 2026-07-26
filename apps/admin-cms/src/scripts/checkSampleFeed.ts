@@ -1,11 +1,8 @@
 import { SAMPLE_PROJECTS } from '../fixtures/sampleProjects';
 import { compilePublicFeed } from '../feed/compilePublicFeed';
 import { validatePublicFeed } from '../feed/validatePublicFeed';
-import { validateStagingGuard } from '../security/stagingExecutionGuard';
 
-export function runCheckSampleFeed(args?: string[]): boolean {
-  validateStagingGuard({ operationId: 'check-sample-feed', args });
-
+export function runCheckSampleFeed(): boolean {
   console.log('====================================================');
   console.log('STAGING WORKSPACE: RUNNING PUBLIC FEED AUDIT RUN');
   console.log('====================================================');

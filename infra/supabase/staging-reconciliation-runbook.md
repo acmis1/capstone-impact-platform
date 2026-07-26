@@ -27,12 +27,11 @@ supabase --version
 Ensure local git working tree is clean and `main` branch is up to date before proceeding.
 
 ### Gate 2: Read-Only Target Identity & Schema Inventory
-Connect to the target staging environment in read-only mode to verify host identity and list existing tables:
-```bash
-# Verify target identity configuration
-echo $CAPSTONE_RUNTIME_ENV
-echo $CAPSTONE_EXPECTED_SUPABASE_HOST
-```
+Connect to the target staging environment in read-only mode to verify target identity status without echoing secret values or hostnames:
+- Runtime environment configured: YES/NO
+- Expected target host configured: YES/NO
+- Host identity comparison passed: YES/NO
+
 Inspect existing database tables and structure in the hosted database using safe read-only queries or dashboard inspection.
 
 ### Gate 3: Read-Only Migration History Inventory
@@ -97,10 +96,22 @@ If new timestamped migrations need to be applied after tracking history is align
 ### Gate 7: Post-Change Verification and Incident Response
 1. Execute read-only verification suite:
    ```bash
-   npm run check:admin-staging-auth
+   npm run check:admin-auth
    ```
 2. Verify application health route:
    ```bash
    curl -s https://<staging-app-domain>/api/health
    ```
-3. If any failure or unexpected schema drift is observed, execute rollback procedures immediately and notify project owners.
+
+---
+
+## Incident Response & Contained Error Handling Procedure
+
+If an unexpected error, schema mismatch, or migration tracking discrepancy occurs during reconciliation:
+1. **Stop Further Commands Immediately**: Cease all CLI execution. Do not retry `supabase db push` or `supabase migration repair`.
+2. **Preserve Logs Privately**: Capture terminal output and log files safely, ensuring no secret keys, connection strings, or hostnames are logged publicly or committed.
+3. **Verify Application Health**: Check application health endpoint (`/api/health`) to confirm operational availability.
+4. **Assess Scope of Drift**: Determine whether changes were limited to tracking metadata (`schema_migrations`) or affected database schema structures.
+5. **Restore Previous Tracking State Only Under Review**: Revert tracking metadata changes only when guided by an explicitly reviewed and authorized remediation plan.
+6. **Notify Project Owner**: Report the exact error classification and schema status to project governance leads.
+7. **Document Incident & Decision**: Record the incident cause, root cause analysis, and resolution step in project technical logs.
