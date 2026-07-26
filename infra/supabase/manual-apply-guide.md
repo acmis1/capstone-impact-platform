@@ -1,6 +1,9 @@
 # Manual Supabase Migration Application Guide
 
-Follow these step-by-step instructions to set up the staging database schema on your newly created `capstone-admin-cms-staging-2026` Supabase project.
+This guide documents historical manual migration steps for initializing a *new*, blank Supabase project.
+
+> [!IMPORTANT]
+> **GOVERNANCE NOTICE:** For an already-existing staging project (such as `capstone-admin-cms-staging-2026`), the [Staging Reconciliation Runbook](./staging-reconciliation-runbook.md) **OUTRANKS** this document. Do not rerun migrations or apply manual SQL scripts to an already-provisioned staging database.
 
 ## ⚠️ Pre-Flight Safety Checks & Critical Warnings
 
@@ -12,20 +15,10 @@ Follow these step-by-step instructions to set up the staging database schema on 
 > * **DO NOT run these scripts against the old demo project.**
 > * **DO NOT run these scripts against the Prototype recovery project.** No migration or database commands should ever target the Prototype recovery project.
 > * **DO NOT connect Duda to this database yet.**
-> * **Storage Provisioning Is a Separate Task:** Do not create or configure
->   Storage buckets during this migration application task. After migrations
->   0001 through 0004 have been applied and verified read-only, provision and
->   verify the following buckets through a separately approved Storage task:
->
->   - `project-drafts-private` — private draft uploads
->   - `project-public-assets` — approved public images and downloadable PDFs
->   - `public-feeds` — approved public JSON feed files
->
->   No media upload, seed, or feed publication may occur before that separate
->   Storage setup and policy verification is complete.
+> * **Storage Provisioning Is a Separate Task:** Do not create or configure Storage buckets during this migration application task. After migrations 0001 through 0004 have been applied and verified read-only, provision and verify storage buckets through a separately approved Storage task.
 
 > [!CAUTION]
-> * **Destructive Operations Warning:** Reset, teardown, and destructive SQL (Option A and Option B below) require separate, explicit approval and are not part of the normal staging migration flow.
+> * **Destructive Operations Warning:** Database resets, table drops, and destructive SQL teardowns are **STRICTLY PROHIBITED** on active staging projects without explicit project-owner authorization. CLI `supabase db push` and `supabase migration repair` are not authorized.
 
 > [!NOTE]
 > **Current Environment & Staging Status:**
@@ -39,7 +32,7 @@ Follow these step-by-step instructions to set up the staging database schema on 
 
 ---
 
-## Step-by-Step Setup
+## Step-by-Step Setup for a New Environment
 
 The migrations must be applied in the exact order below:
 
@@ -107,34 +100,27 @@ The migrations must be applied in the exact order below:
 
 ---
 
-## Staging Rollback / Reset Instructions
+## ⛔ QUARANTINED: Teardown / Reset Policy
 
-If you need to clean up or re-apply a fresh staging database schema (note that reset, teardown, and destructive SQL require separate explicit approval and are not part of the normal staging migration flow; teardown/reset is not approved by this PR, current staging must not be reset, and migration history must not be destructively replayed without explicit approval):
-
-### Option A: Complete Project Reset
-If there is no critical test data:
-1. Navigate to **Project Settings** in your Supabase Dashboard.
-2. If using Supabase local CLI environment or you wish to start completely fresh, you can reset the database.
-
-### Option B: Manual SQL Table Teardown
-Open the **SQL Editor** and run the following script to drop all tables in reverse dependency order:
+> [!CAUTION]
+> The following table drop procedures are **HISTORICAL ARCHIVAL CONTEXT ONLY**. Executing destructive SQL, table drops, or resets against an existing staging database is **PROHIBITED** without explicit project-owner authorization.
 
 ```sql
-DROP TABLE IF EXISTS published_snapshots CASCADE;
-DROP TABLE IF EXISTS approval_records CASCADE;
-DROP TABLE IF EXISTS validation_flags CASCADE;
-DROP TABLE IF EXISTS media_assets CASCADE;
-DROP TABLE IF EXISTS project_industry_categories CASCADE;
-DROP TABLE IF EXISTS project_disciplines CASCADE;
-DROP TABLE IF EXISTS projects CASCADE;
-DROP TABLE IF EXISTS import_batches CASCADE;
-DROP TABLE IF EXISTS user_roles CASCADE;
-DROP TABLE IF EXISTS admin_users CASCADE;
-DROP TABLE IF EXISTS industry_categories CASCADE;
-DROP TABLE IF EXISTS disciplines CASCADE;
-DROP TABLE IF EXISTS programs CASCADE;
+-- ARCHIVAL REFERENCE ONLY - DO NOT RUN ON ACTIVE STAGING
+-- DROP TABLE IF EXISTS published_snapshots CASCADE;
+-- DROP TABLE IF EXISTS approval_records CASCADE;
+-- DROP TABLE IF EXISTS validation_flags CASCADE;
+-- DROP TABLE IF EXISTS media_assets CASCADE;
+-- DROP TABLE IF EXISTS project_industry_categories CASCADE;
+-- DROP TABLE IF EXISTS project_disciplines CASCADE;
+-- DROP TABLE IF EXISTS projects CASCADE;
+-- DROP TABLE IF EXISTS import_batches CASCADE;
+-- DROP TABLE IF EXISTS user_roles CASCADE;
+-- DROP TABLE IF EXISTS admin_users CASCADE;
+-- DROP TABLE IF EXISTS industry_categories CASCADE;
+-- DROP TABLE IF EXISTS disciplines CASCADE;
+-- DROP TABLE IF EXISTS programs CASCADE;
 ```
-After a separately approved teardown, apply the complete sequence in order: 0001, 0002, 0003, 0004, 0005, 0006, followed by read-only verification.
 
 ---
 
@@ -142,7 +128,7 @@ After a separately approved teardown, apply the complete sequence in order: 0001
 
 Initial administrator provisioning in a fresh isolated environment must use the guarded initial-bootstrap workflow as documented in:
 
-[./staging-admin-bootstrap.md](./staging-admin-bootstrap.md)
+[./staging-auth-verification.md](./staging-auth-verification.md)
 
 *Note for Current Staging:* Current staging (`capstone-admin-cms-staging-2026`) has already completed its initial administrator bootstrap (`CREATED`). Do not rerun the initial bootstrap to add another person. Provisioning additional university staff remains a separate future workflow.
 
@@ -157,9 +143,22 @@ Follow this exact safe sequence to provision the initial administrator in a fres
 
 1. **Complete the secure invitation and password setup:** Follow the two-step flow from the email link to private password setup, routing to `/auth/confirm/accept` and then `/auth/set-password`.
 2. **Confirm exactly one Auth user exists:** Verify the user is registered in `auth.users` in Supabase with status verified.
-3. **Set temporary local bootstrap variables privately:** Configure your local process environment variables privately (e.g. `CAPSTONE_BOOTSTRAP_ADMIN_EMAIL`, `CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME`, `CAPSTONE_BOOTSTRAP_CONFIRM`).
-4. **Run the linking script once:** Run `npm run link:admin-staging` (or `npm run link:staging-admin` in `apps/admin-cms`).
+3. **Set required staging target identity & bootstrap variables privately:**
+   ```bash
+   export CAPSTONE_RUNTIME_ENV=staging
+   export CAPSTONE_EXPECTED_SUPABASE_HOST=app-staging.supabase.co
+   export CAPSTONE_BOOTSTRAP_ADMIN_EMAIL=admin@school.edu
+   export CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME="Initial Admin"
+   export CAPSTONE_BOOTSTRAP_CONFIRM=capstone-admin-cms-staging-2026
+   ```
+4. **Run the guarded linking script with double-acknowledgment flags:**
+   ```bash
+   npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026
+   ```
 5. **Clear all temporary variables:** Immediately clear the temporary bootstrap variables from your shell process.
-6. **Run the check command:** Run `npm run check:admin-auth`.
+6. **Run the check command:**
+   ```bash
+   npm run check:admin-auth
+   ```
 7. **Verify readiness status:** Continue only when the checker reports `READY_FOR_MANUAL_LOGIN_TEST`.
 8. **Perform the manual login test:** Log in to the Console dashboard at `/login` to confirm the flow is working.

@@ -1,29 +1,48 @@
 # Staging Supabase Migrations (`infra/supabase`)
 
-This directory contains the version-controlled database schema migrations and policy definitions for the Capstone Admin/CMS staging environment (`capstone-admin-cms-staging-2026`).
+This directory contains the version-controlled database schema migrations, policy definitions, local development setup scripts, and operational governance runbooks for the Capstone Admin/CMS platform.
 
 ---
 
 ## ⚠️ Current Environment & Staging Status
 
 > [!NOTE]
-> * **Applied Status:** Migrations `0001` through `0006` have been manually applied and verified in the isolated staging project (`capstone-admin-cms-staging-2026` in Singapore).
+> * **Local Development:** Reproducible local Supabase development is 100% verified via CLI 2.109.1 and Docker. Local migrations replay cleanly and pass automated verifiers.
+> * **Hosted Staging Status:** Migrations `0001` through `0006` were manually applied to the isolated staging project (`capstone-admin-cms-staging-2026`). Local migration replay success is distinct from unknown hosted CLI migration history, which remains unverified until the 7-gate reconciliation runbook is executed.
 > * **Corrective Fix:** Migration `0006` corrected the initial administrator bootstrap runtime by replacing `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim`.
-> * **Identity Linkage:** Initial administrator linkage has already been completed (`CREATED`) and verified (`READY_FOR_MANUAL_LOGIN_TEST`).
+> * **Identity Linkage:** Initial administrator linkage was verified in isolated staging (`READY_FOR_MANUAL_LOGIN_TEST`).
 > * **Do Not Rerun:** Do not rerun the migration sequence or initial bootstrap merely because these files exist.
-> * **Pending Scope:** Broader multi-role RLS matrices, reviewer/editor UAT, CSRF mutation tests, and production deployment remain pending.
+> * **Pending Scope:** Hosted migration reconciliation, hosted staff lifecycle provisioning, reviewer/editor UAT, and production deployment remain pending.
 
-## Local Development
+## Local Development Quick Start
 
 Reproducible local Supabase development is fully supported via Docker and the pinned repository CLI. See [Local Development Guide](./local-development.md) for quickstart and setup instructions.
 
 ```bash
 npm run supabase:start
 npm run supabase:reset
+npm run supabase:seed:buckets
 npm run supabase:env:local
 npm run supabase:users:local
 npm run supabase:verify:local
 ```
+
+Clean up when finished:
+
+```bash
+npm run supabase:stop
+```
+
+---
+
+## Operational Runbooks & Governance
+
+* **[Local Development Guide](./local-development.md):** Complete local environment setup, seed fixtures, synthetic staff credentials, and acceptance checklist.
+* **[Staging Reconciliation Runbook](./staging-reconciliation-runbook.md):** 7-gate procedure to verify, back up, reconcile, and validate hosted database schema and migration tracking tables.
+* **[Key Migration Governance](./key-migration-governance.md):** Standards for modern server key preference (`SUPABASE_SECRET_KEY` over legacy `SUPABASE_SERVICE_ROLE_KEY`) and secret rotation policies.
+* **[Staff Lifecycle Design](./staff-lifecycle-design.md):** Governance design for staff provisioning, role modification, emergency offboarding, and audit attribution.
+* **[Staging Auth Verification](./staging-auth-verification.md):** Controlled authentication and authorization verification runbook.
+* **[Manual Apply Guide](./manual-apply-guide.md):** Historical manual migration reference (the staging reconciliation runbook outranks this for existing projects).
 
 ---
 
@@ -31,7 +50,7 @@ npm run supabase:verify:local
 
 1. **Target Environment Only:** These migrations are designed **exclusively** for the isolated `capstone-admin-cms-staging-2026` Supabase project.
 2. **Never Apply to Recovery/Demo Projects:** Under no circumstances should these files be executed on the Prototype recovery project or any previous demo baseline.
-3. **Manual Application:** In the current manual workflow, migrations are applied in order through the Supabase Dashboard **SQL Editor**.
+3. **Manual Application:** In the current manual workflow, migrations are applied in order through the Supabase Dashboard **SQL Editor** or CLI migration repair.
 4. **No Duda Connection:** The public Duda showcase site remains disconnected from staging buckets and live feeds.
 5. **No Real Personal Data:** Real student, supervisor, or stakeholder personal data must never be loaded into staging.
 

@@ -38,7 +38,7 @@ This document records the sanitized operational verification evidence for the in
 
 ## 3. Guarded Initial Administrator Bootstrap
 
-*   **Execution Method:** Executed once by the authorized operator via `npm run link:admin-staging` (`linkExistingStagingAdmin.ts`).
+*   **Execution Method:** Executed once by the authorized operator via `npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026` (`linkExistingStagingAdmin.ts`).
 *   **Sanitized Summary Result:**
     *   Classification: `CREATED`
     *   Provisioned: `1`

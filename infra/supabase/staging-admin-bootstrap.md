@@ -48,30 +48,31 @@ Follow these steps once the replacement invitation flow has been completed and v
    > * **The replacement invitation flow must be fully completed and the invitation session signed out before the linking command runs.**
 
 2. **Set Temporary Process Variables**:
-   In your local terminal session, configure the temporary process variables containing the email and full name of the existing Auth user, along with the fixed safety-confirmation phrase:
-   ```powershell
-   $env:CAPSTONE_BOOTSTRAP_ADMIN_EMAIL = "admin@example.com"
-   $env:CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME = "Initial Admin"
-   $env:CAPSTONE_BOOTSTRAP_CONFIRM = "LINK_EXISTING_STAGING_ADMIN"
+   In your local terminal session, configure the temporary target environment and process variables containing the email and full name of the existing Auth user, along with the fixed safety-confirmation phrase:
+   ```bash
+   export CAPSTONE_RUNTIME_ENV=staging
+   export CAPSTONE_EXPECTED_SUPABASE_HOST=app-staging.supabase.co
+   export CAPSTONE_BOOTSTRAP_ADMIN_EMAIL="admin@example.com"
+   export CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME="Initial Admin"
+   export CAPSTONE_BOOTSTRAP_CONFIRM="capstone-admin-cms-staging-2026"
    ```
-   *Note: `CAPSTONE_BOOTSTRAP_CONFIRM` must equal the documented fixed phrase required by the guarded script. It is a safety-confirmation phrase, NOT an invitation token, access token, refresh token, password, or Supabase credential.*
 
-3. **Run linking script**:
+3. **Run linking script with double-acknowledgment flags**:
    From the repository root directory, execute the link script:
    ```bash
-   npm run link:admin-staging
+   npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026
    ```
    Or inside `apps/admin-cms`:
    ```bash
-   npm run link:staging-admin
+   npm run link:staging-admin -- --apply --confirm-staging=capstone-admin-cms-staging-2026
    ```
 
 4. **Clean up variables**:
    Immediately clear the temporary variables from your process environment:
-   ```powershell
-   Remove-Item Env:CAPSTONE_BOOTSTRAP_ADMIN_EMAIL
-   Remove-Item Env:CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME
-   Remove-Item Env:CAPSTONE_BOOTSTRAP_CONFIRM
+   ```bash
+   unset CAPSTONE_BOOTSTRAP_ADMIN_EMAIL
+   unset CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME
+   unset CAPSTONE_BOOTSTRAP_CONFIRM
    ```
 
 5. **Verify authentication readiness**:

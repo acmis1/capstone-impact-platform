@@ -108,9 +108,9 @@ GET requests from automated link scanners, prefetchers, or email servers do not 
 
 Always run canonical root-level commands from the repository root:
 
-* **Link Initial Administrator:**
+* **Link Initial Administrator (requires staging target env vars and double-acknowledgment flags):**
   ```bash
-  npm run link:admin-staging
+  npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026
   ```
 * **Verify Staging Readiness:**
   ```bash
@@ -121,6 +121,6 @@ Always run canonical root-level commands from the repository root:
 Only when run inside the `apps/admin-cms` directory context:
 ```bash
 cd apps/admin-cms
-npm run link:staging-admin
+npm run link:staging-admin -- --apply --confirm-staging=capstone-admin-cms-staging-2026
 npm run check:staging-auth
 ```
