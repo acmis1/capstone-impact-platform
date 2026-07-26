@@ -62,7 +62,42 @@ describe('Staging Scripts Integration & Classification Registry Tests', () => {
     expect(readOnlyOps.length).toBe(4);
   });
 
-  it('3. checkSampleFeed is not in registry and runs cleanly with staging variables absent', () => {
+  it('3. Specific operations enforce exact touchesAuth and changesDatabaseRows flags', () => {
+    const checkAuthOp = getStagingOperation('check-staging-auth');
+    expect(checkAuthOp.touchesAuth).toBe(false);
+    expect(checkAuthOp.type).toBe('read_only');
+
+    const linkAdminOp = getStagingOperation('link-existing-staging-admin');
+    expect(linkAdminOp.touchesAuth).toBe(true);
+    expect(linkAdminOp.type).toBe('mutating');
+
+    const publishFeedOp = getStagingOperation('publish-staging-feed');
+    expect(publishFeedOp.changesDatabaseRows).toBe(true);
+    expect(publishFeedOp.touchesStorage).toBe(true);
+    expect(publishFeedOp.type).toBe('mutating');
+  });
+
+  it('4. Registry expectedEffect descriptions are executably accurate', () => {
+    const seedProjectsOp = getStagingOperation('seed-staging-projects');
+    expect(seedProjectsOp.expectedEffect).toContain('Deletes matching synthetic public IDs');
+    expect(seedProjectsOp.expectedEffect).toContain('inserts');
+    expect(seedProjectsOp.expectedEffect).not.toContain('Upserts');
+
+    const importOp = getStagingOperation('import-staging-package');
+    expect(importOp.expectedEffect).toContain('runtime-import-demo');
+    expect(importOp.expectedEffect).toContain('import_batches');
+    expect(importOp.expectedEffect).toContain('cleanup');
+    expect(importOp.expectedEffect).toContain('Storage');
+    expect(importOp.expectedEffect).toContain('validation_flags');
+    expect(importOp.expectedEffect).not.toContain('ZIP');
+
+    const mediaSeedOp = getStagingOperation('seed-fake-media-assets');
+    expect(mediaSeedOp.expectedEffect).toContain('Deletes existing media_assets rows');
+    expect(mediaSeedOp.expectedEffect).toContain('promotes assets to public');
+    expect(mediaSeedOp.expectedEffect).toContain('updates project poster/snapshot URLs');
+  });
+
+  it('5. checkSampleFeed is not in registry and runs cleanly with staging variables absent', () => {
     delete process.env.CAPSTONE_RUNTIME_ENV;
     delete process.env.CAPSTONE_EXPECTED_SUPABASE_HOST;
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -73,7 +108,7 @@ describe('Staging Scripts Integration & Classification Registry Tests', () => {
     expect(result).toBe(true);
   });
 
-  it('4. All nine staging-capable runner modules are imported and callable', () => {
+  it('6. All nine staging-capable runner modules are imported and callable', () => {
     expect(typeof runSeedStagingProjects).toBe('function');
     expect(typeof runSeedFakeMediaAssets).toBe('function');
     expect(typeof runImportStagingPackage).toBe('function');
@@ -85,7 +120,7 @@ describe('Staging Scripts Integration & Classification Registry Tests', () => {
     expect(typeof runCheckImportBatches).toBe('function');
   });
 
-  it('5. Default mutating script invocations create zero Supabase admin clients (dry-run protection)', async () => {
+  it('7. Default mutating script invocations create zero Supabase admin clients (dry-run protection)', async () => {
     const adminClientSpy = vi.spyOn(adminCore, 'createSupabaseAdminClientCore');
 
     const resSeedProjects = await runSeedStagingProjects([]);
@@ -100,7 +135,6 @@ describe('Staging Scripts Integration & Classification Registry Tests', () => {
     expect(resPublishFeed).toBe(false);
     expect(resLinkAdmin).toBe(false);
 
-    // Verify zero client instantiations occurred
     expect(adminClientSpy).not.toHaveBeenCalled();
   });
 });

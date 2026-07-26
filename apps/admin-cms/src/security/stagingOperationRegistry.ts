@@ -1,3 +1,11 @@
+/**
+ * Staging Operation Definition Interface
+ *
+ * Note on touchesAuth property:
+ * touchesAuth=true signifies that the operation directly invokes the Supabase Auth service
+ * or Auth Admin API (e.g. creating/linking Auth users, generating invite links, or updating auth.users),
+ * NOT merely querying application profile tables (admin_users) or referencing an auth_user_id column.
+ */
 export interface StagingOperationDefinition {
   id: string;
   type: 'read_only' | 'mutating';
@@ -12,7 +20,7 @@ export const STAGING_OPERATIONS_REGISTRY: Record<string, StagingOperationDefinit
   'seed-staging-projects': {
     id: 'seed-staging-projects',
     type: 'mutating',
-    expectedEffect: 'Deletes matching synthetic public IDs and inserts synthetic demo projects into the database',
+    expectedEffect: 'Deletes matching synthetic public IDs from projects table and inserts synthetic demo project records',
     usesFileInput: false,
     touchesStorage: false,
     touchesAuth: false,
@@ -21,7 +29,7 @@ export const STAGING_OPERATIONS_REGISTRY: Record<string, StagingOperationDefinit
   'seed-fake-media-assets': {
     id: 'seed-fake-media-assets',
     type: 'mutating',
-    expectedEffect: 'Cleans existing media for demo projects, uploads synthetic files to Storage, and inserts media_assets database records',
+    expectedEffect: 'Deletes existing media_assets rows and Storage objects for target demo projects, performs private uploads, promotes assets to public, inserts media_assets database records, and updates project poster/snapshot URLs',
     usesFileInput: false,
     touchesStorage: true,
     touchesAuth: false,
@@ -30,7 +38,7 @@ export const STAGING_OPERATIONS_REGISTRY: Record<string, StagingOperationDefinit
   'import-staging-package': {
     id: 'import-staging-package',
     type: 'mutating',
-    expectedEffect: 'Imports an admin package zip file into projects, media_assets, and validation_flags tables',
+    expectedEffect: 'Reads the committed runtime-import-demo package directory, creates/updates import_batches records, performs existing media cleanup, inserts or updates project rows, performs Storage draft media uploads, and inserts media_assets and validation_flags records',
     usesFileInput: true,
     touchesStorage: true,
     touchesAuth: false,
@@ -39,7 +47,7 @@ export const STAGING_OPERATIONS_REGISTRY: Record<string, StagingOperationDefinit
   'publish-staging-feed': {
     id: 'publish-staging-feed',
     type: 'mutating',
-    expectedEffect: 'Compiles public feed, uploads JSON artifact to Storage public-feeds bucket, and inserts audit snapshot record into published_snapshots table',
+    expectedEffect: 'Compiles public feed array, uploads JSON feed artifact to Storage public-feeds bucket, and inserts audit log record into published_snapshots database table',
     usesFileInput: false,
     touchesStorage: true,
     touchesAuth: false,
@@ -48,7 +56,7 @@ export const STAGING_OPERATIONS_REGISTRY: Record<string, StagingOperationDefinit
   'link-existing-staging-admin': {
     id: 'link-existing-staging-admin',
     type: 'mutating',
-    expectedEffect: 'Executes bootstrap RPC to link an Auth user identity to an admin_users profile record',
+    expectedEffect: 'Executes bootstrap RPC to link an Auth user identity to an admin_users profile record and assign initial admin privileges via Auth service RPC',
     usesFileInput: false,
     touchesStorage: false,
     touchesAuth: true,
@@ -57,7 +65,7 @@ export const STAGING_OPERATIONS_REGISTRY: Record<string, StagingOperationDefinit
   'check-staging-projects': {
     id: 'check-staging-projects',
     type: 'read_only',
-    expectedEffect: 'Reads and reports counts of projects by status',
+    expectedEffect: 'Reads projects table and reports counts of projects by status and public showcase eligibility',
     usesFileInput: false,
     touchesStorage: false,
     touchesAuth: false,
@@ -66,7 +74,7 @@ export const STAGING_OPERATIONS_REGISTRY: Record<string, StagingOperationDefinit
   'check-media-assets': {
     id: 'check-media-assets',
     type: 'read_only',
-    expectedEffect: 'Reads and checks media_assets table records',
+    expectedEffect: 'Reads media_assets table and reports counts by asset type, storage bucket, approval status, and storage paths',
     usesFileInput: false,
     touchesStorage: false,
     touchesAuth: false,
@@ -75,16 +83,16 @@ export const STAGING_OPERATIONS_REGISTRY: Record<string, StagingOperationDefinit
   'check-staging-auth': {
     id: 'check-staging-auth',
     type: 'read_only',
-    expectedEffect: 'Verifies staging Auth user identities, profile linkages, and role assignments',
+    expectedEffect: 'Reads application admin_users profile, user_roles assignment, and approval_records audit-attribution linkage records without calling Auth Admin API',
     usesFileInput: false,
     touchesStorage: false,
-    touchesAuth: true,
+    touchesAuth: false,
     changesDatabaseRows: false,
   },
   'check-import-batches': {
     id: 'check-import-batches',
     type: 'read_only',
-    expectedEffect: 'Reads and lists import_batches records',
+    expectedEffect: 'Reads import_batches table and reports total count and latest batch execution runs',
     usesFileInput: false,
     touchesStorage: false,
     touchesAuth: false,
