@@ -4,8 +4,17 @@ loadEnvConfig(process.cwd());
 import { createSupabaseAdminClientCore } from "../lib/supabase/adminCore";
 import { executeStagingAdminBootstrap, InjectedSupabaseClient } from "../auth/stagingAdminBootstrapRunner";
 import { validateBootstrapInput } from "../auth/stagingAdminBootstrap";
+import { validateStagingGuard } from "../security/stagingExecutionGuard";
 
-async function runBootstrap() {
+export async function runLinkExistingStagingAdmin(args?: string[]): Promise<boolean> {
+  const guard = validateStagingGuard({ operationId: 'link-existing-staging-admin', args });
+
+  if (!guard.isAuthorized) {
+    console.log(`[DRY-RUN] ${guard.dryRunReason}`);
+    console.log('[DRY-RUN] Planned operation: Link Auth user identity to admin_users profile record.');
+    return false;
+  }
+
   const email = process.env.CAPSTONE_BOOTSTRAP_ADMIN_EMAIL;
   const fullName = process.env.CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME;
   const confirmation = process.env.CAPSTONE_BOOTSTRAP_CONFIRM;
@@ -18,8 +27,7 @@ async function runBootstrap() {
     console.log("auth_match_count=0");
     console.log("pages_read=0");
     console.log("rpc_called=NO");
-    process.exitCode = 1;
-    return;
+    return false;
   }
 
   let supabase;
@@ -31,8 +39,7 @@ async function runBootstrap() {
     console.log("auth_match_count=0");
     console.log("pages_read=0");
     console.log("rpc_called=NO");
-    process.exitCode = 1;
-    return;
+    return false;
   }
 
   try {
@@ -40,7 +47,7 @@ async function runBootstrap() {
       client: supabase as unknown as InjectedSupabaseClient,
       email,
       fullName,
-      confirmation
+      confirmation,
     });
 
     console.log(`classification=${result.classification}`);
@@ -49,19 +56,22 @@ async function runBootstrap() {
     console.log(`pages_read=${result.pagesRead}`);
     console.log(`rpc_called=${result.rpcCalled}`);
 
-    if (result.provisioned === 1) {
-      process.exitCode = 0;
-    } else {
-      process.exitCode = 1;
-    }
+    return result.provisioned === 1;
   } catch {
     console.log("classification=DATABASE_BOOTSTRAP_FAILURE");
     console.log("provisioned=0");
     console.log("auth_match_count=0");
     console.log("pages_read=0");
     console.log("rpc_called=NO");
-    process.exitCode = 1;
+    return false;
   }
 }
 
-runBootstrap();
+if (require.main === module) {
+  runLinkExistingStagingAdmin().then((success) => {
+    if (!success) process.exit(1);
+  }).catch((err) => {
+    console.error('❌ Fatal error:', err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
+}

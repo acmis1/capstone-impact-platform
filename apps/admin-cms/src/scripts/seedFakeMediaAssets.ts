@@ -4,8 +4,17 @@ loadEnvConfig(process.cwd());
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { uploadDraftMediaAsset, promoteDraftMediaAssetToPublic } from '../storage/mediaStorage';
 import { cleanupStagingMediaForProjects } from '../storage/mediaCleanup';
+import { validateStagingGuard } from '../security/stagingExecutionGuard';
 
-async function seedMedia() {
+export async function runSeedFakeMediaAssets(args?: string[]): Promise<boolean> {
+  const guard = validateStagingGuard({ operationId: 'seed-fake-media-assets', args });
+
+  if (!guard.isAuthorized) {
+    console.log(`[DRY-RUN] ${guard.dryRunReason}`);
+    console.log('[DRY-RUN] Planned operation: Clean existing synthetic media and upload/promote demo assets in Storage & DB.');
+    return false;
+  }
+
   const supabase = createSupabaseAdminClientCore();
 
   console.log('Verifying staging projects exist...');
@@ -15,12 +24,12 @@ async function seedMedia() {
 
   if (projectsError) {
     console.error('❌ Failed to fetch projects:', projectsError.message);
-    process.exit(1);
+    return false;
   }
 
   if (!projects || projects.length === 0) {
     console.error('❌ No staging projects found. Please run "npm run seed:staging" first.');
-    process.exit(1);
+    return false;
   }
 
   const approvedProject = projects.find((p) => p.status === 'approved');
@@ -28,7 +37,7 @@ async function seedMedia() {
 
   if (!approvedProject || !publishedProject) {
     console.error('❌ Could not find both "approved" and "published" showcase mock projects in database.');
-    process.exit(1);
+    return false;
   }
 
   const targetProjectIds = [approvedProject.public_id, publishedProject.public_id];
@@ -45,7 +54,7 @@ async function seedMedia() {
 
   // --- 1. SEED APPROVED PROJECT MEDIA (Poster Image + Poster PDF) ---
   console.log('\n--- Seeding Media for Approved Staging Showcase ---');
-  
+
   const fakePng = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
     'base64'
@@ -58,7 +67,7 @@ async function seedMedia() {
     assetType: 'poster_image',
     fileName: 'staging-poster-showcase.png',
     content: fakePng,
-    mimeType: 'image/png'
+    mimeType: 'image/png',
   });
 
   const draftPosterPdf = await uploadDraftMediaAsset({
@@ -67,7 +76,7 @@ async function seedMedia() {
     assetType: 'poster_pdf',
     fileName: 'staging-poster-document.pdf',
     content: fakePdf,
-    mimeType: 'application/pdf'
+    mimeType: 'application/pdf',
   });
 
   console.log('Draft media assets successfully uploaded privately.');
@@ -83,13 +92,13 @@ async function seedMedia() {
     .from('projects')
     .update({
       poster_url: publicPosterImage.publicUrl,
-      poster_pdf_url: publicPosterPdf.publicUrl
+      poster_pdf_url: publicPosterPdf.publicUrl,
     })
     .eq('id', approvedProject.id);
 
   if (updateApprovedError) {
     console.error('❌ Failed to update approved project with media URLs:', updateApprovedError.message);
-    process.exit(1);
+    return false;
   }
 
   // --- 2. SEED PUBLISHED PROJECT MEDIA (Snapshot Image) ---
@@ -101,7 +110,7 @@ async function seedMedia() {
     assetType: 'snapshot_image',
     fileName: 'staging-snapshot-one.png',
     content: fakePng,
-    mimeType: 'image/png'
+    mimeType: 'image/png',
   });
 
   console.log('Draft snapshot asset uploaded privately.');
@@ -114,13 +123,13 @@ async function seedMedia() {
   const { error: updatePublishedError } = await supabase
     .from('projects')
     .update({
-      snapshots: [publicSnapshotImage.publicUrl]
+      snapshots: [publicSnapshotImage.publicUrl],
     })
     .eq('id', publishedProject.id);
 
   if (updatePublishedError) {
     console.error('❌ Failed to update published project with snapshot array:', updatePublishedError.message);
-    process.exit(1);
+    return false;
   }
 
   console.log('\n====================================================');
@@ -131,6 +140,14 @@ async function seedMedia() {
   console.log(` - Approved PDF:    Type: [${publicPosterPdf.assetType}] | Bucket: [${publicPosterPdf.storageBucket}] | Path: [${publicPosterPdf.storagePath}] | Approved: [${publicPosterPdf.isPublicApproved}]`);
   console.log(` - Published Snap:  Type: [${publicSnapshotImage.assetType}] | Bucket: [${publicSnapshotImage.storageBucket}] | Path: [${publicSnapshotImage.storagePath}] | Approved: [${publicSnapshotImage.isPublicApproved}]`);
   console.log('====================================================\n');
+  return true;
 }
 
-seedMedia();
+if (require.main === module) {
+  runSeedFakeMediaAssets().then((success) => {
+    if (!success) process.exit(1);
+  }).catch((err) => {
+    console.error('❌ Fatal error:', err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
+}

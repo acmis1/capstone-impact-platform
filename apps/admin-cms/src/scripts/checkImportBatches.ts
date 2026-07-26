@@ -2,27 +2,28 @@ import { loadEnvConfig } from '@next/env';
 loadEnvConfig(process.cwd());
 
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
+import { validateStagingGuard } from '../security/stagingExecutionGuard';
 
-async function run() {
+export async function runCheckImportBatches(args?: string[]): Promise<boolean> {
+  validateStagingGuard({ operationId: 'check-import-batches', args });
+
   console.log('====================================================');
   console.log('STAGING WORKSPACE: AUDITING IMPORT BATCHES');
   console.log('====================================================');
 
   const supabase = createSupabaseAdminClientCore();
 
-  // 1. Fetch totals
   const { count: totalBatches, error: countError } = await supabase
     .from('import_batches')
     .select('*', { count: 'exact', head: true });
 
   if (countError) {
     console.error(`❌ Failed to query import batches total: ${countError.message}`);
-    process.exit(1);
+    return false;
   }
 
   console.log(`Total Import Batches Logged: ${totalBatches || 0}\n`);
 
-  // 2. Fetch latest 5 batches
   const { data: batches, error: fetchError } = await supabase
     .from('import_batches')
     .select('*')
@@ -31,7 +32,7 @@ async function run() {
 
   if (fetchError) {
     console.error(`❌ Failed to load batches records: ${fetchError.message}`);
-    process.exit(1);
+    return false;
   }
 
   if (!batches || batches.length === 0) {
@@ -51,9 +52,14 @@ async function run() {
   }
 
   console.log('\n====================================================');
+  return true;
 }
 
-run().catch(err => {
-  console.error('Fatal Audit Ingestion Exception:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  runCheckImportBatches().then((success) => {
+    if (!success) process.exit(1);
+  }).catch((err) => {
+    console.error('Fatal Audit Ingestion Exception:', err);
+    process.exit(1);
+  });
+}

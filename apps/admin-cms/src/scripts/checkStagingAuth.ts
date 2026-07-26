@@ -2,152 +2,162 @@ import { loadEnvConfig } from '@next/env';
 loadEnvConfig(process.cwd());
 
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
-import { evaluateStagingAuthReadiness, AdminIdentityRecord, RoleAssignmentRecord, AuditAttributionRecord } from '../auth/stagingAuthVerification';
+import {
+  evaluateStagingAuthReadiness,
+  AdminIdentityRecord,
+  RoleAssignmentRecord,
+  AuditAttributionRecord,
+  VerificationResult,
+} from '../auth/stagingAuthVerification';
 import { isMissingAuthUserIdColumnError } from '../auth/stagingAuthCheckErrors';
+import { validateStagingGuard } from '../security/stagingExecutionGuard';
+
+export interface StagingAuthCheckClient {
+  from(table: string): {
+    select(cols: string): Promise<{ data: any[] | null; error: any | null }>;
+  };
+}
+
+export interface CheckStagingAuthRunnerResult {
+  classification: 'READY_FOR_MANUAL_LOGIN_TEST' | 'INCOMPLETE' | 'FAILED';
+  exitCode: 0 | 1 | 2;
+  details?: VerificationResult;
+}
 
 /**
- * Read-only script executing SELECT-only queries to check authentication readiness on staging database.
- * 
- * Rules:
- * - Does not perform updates, inserts, deletes or signUp triggers.
- * - Restricts selected fields to prevent printing email, full name, or credential tokens.
- * - Gracefully maps trusted missing-column errors to MIGRATION_0003_MISSING status.
- * - Exits with status 0 (Ready), 2 (Incomplete Setup), or 1 (Unexpected connection error).
+ * Testable worker executing database queries using an injected narrow client.
+ * Performs NO environment loading, client creation, or guard checks.
  */
-async function runCheck() {
-  let supabase;
-  try {
-    supabase = createSupabaseAdminClientCore();
-  } catch {
-    console.error('STAGING_AUTH_CHECK_FAILED');
-    process.exit(1);
-  }
-
+export async function checkStagingAuthWithClient(
+  client: StagingAuthCheckClient
+): Promise<CheckStagingAuthRunnerResult> {
   let migrationPresent = true;
   let adminUsers: AdminIdentityRecord[] = [];
   let userRoles: RoleAssignmentRecord[] = [];
   let approvalRecords: AuditAttributionRecord[] = [];
 
-  // 1. SELECT-only query on admin_users table (id and auth_user_id fields only)
+  // 1. SELECT-only query on admin_users table (id and auth_user_id fields)
   try {
-    const { data, error } = await supabase
-      .from('admin_users')
-      .select('id, auth_user_id');
+    const { data, error } = await client.from('admin_users').select('id, auth_user_id');
 
     if (error) {
       if (isMissingAuthUserIdColumnError(error)) {
         migrationPresent = false;
-        // Column is missing. Count legacy administrators using ID only.
-        const { data: legacyData, error: legacyError } = await supabase
-          .from('admin_users')
-          .select('id');
-        
+        const { data: legacyData, error: legacyError } = await client.from('admin_users').select('id');
+
         if (legacyError) {
           throw legacyError;
         }
-        adminUsers = (legacyData || []).map((row) => {
-          const r = row as { id: string };
-          return {
-            adminUserId: r.id,
-            authUserId: null
-          };
-        });
+        adminUsers = (legacyData || []).map((row: { id: string }) => ({
+          adminUserId: row.id,
+          authUserId: null,
+        }));
       } else {
         throw error;
       }
     } else {
-      adminUsers = (data || []).map((row) => {
-        const r = row as { id: string; auth_user_id: string | null };
-        return {
-          adminUserId: r.id,
-          authUserId: r.auth_user_id
-        };
-      });
+      adminUsers = (data || []).map((row: { id: string; auth_user_id: string | null }) => ({
+        adminUserId: row.id,
+        authUserId: row.auth_user_id,
+      }));
     }
   } catch {
     console.error('STAGING_AUTH_CHECK_FAILED');
-    process.exit(1);
+    return { classification: 'FAILED', exitCode: 1 };
   }
 
-  // 2. SELECT-only query on user_roles table (user_id and role fields only)
+  // 2. SELECT-only query on user_roles table (selecting DB schema user_id)
   try {
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('user_id, role');
+    const { data, error } = await client.from('user_roles').select('id, user_id, role');
 
     if (error) {
       throw error;
     }
-    userRoles = (data || []).map((row) => {
-      const r = row as { user_id: string; role: string };
-      return {
-        adminUserId: r.user_id,
-        role: r.role
-      };
-    });
+
+    userRoles = (data || []).map((row: { id: string; user_id: string; role: string }) => ({
+      adminUserId: row.user_id,
+      role: row.role,
+    }));
   } catch {
     console.error('STAGING_AUTH_CHECK_FAILED');
-    process.exit(1);
+    return { classification: 'FAILED', exitCode: 1 };
   }
 
-  // 3. SELECT-only query on approval_records table (admin_id field only)
+  // 3. SELECT-only query on approval_records table (selecting DB schema admin_id)
   try {
-    const { data, error } = await supabase
-      .from('approval_records')
-      .select('admin_id');
+    const { data, error } = await client.from('approval_records').select('id, admin_id');
 
     if (error) {
       throw error;
     }
-    approvalRecords = (data || []).map((row) => {
-      const r = row as { admin_id: string | null };
-      return {
-        adminUserId: r.admin_id
-      };
-    });
+
+    approvalRecords = (data || []).map((row: { id: string; admin_id: string | null }) => ({
+      adminUserId: row.admin_id,
+    }));
   } catch {
     console.error('STAGING_AUTH_CHECK_FAILED');
-    process.exit(1);
+    return { classification: 'FAILED', exitCode: 1 };
   }
 
-  // 4. Run pure evaluator to compile counts
   const evaluation = evaluateStagingAuthReadiness({
     migrationPresent,
     adminUsers,
     userRoles,
-    approvalRecords
+    approvalRecords,
   });
 
-  console.log('====================================================');
-  console.log('🛡️  STAGING AUTHENTICATION STATUS SUMMARY');
-  console.log('====================================================');
-  console.log(`Migration Status (0003):      ${evaluation.migrationPresent ? 'PRESENT' : 'MIGRATION_0003_MISSING'}`);
-  console.log(`Total Administrator Rows:     ${evaluation.totalAdminRows}`);
-  console.log(`Linked Administrators:        ${evaluation.linkedAdminCount}`);
-  console.log(`Unlinked Administrators:      ${evaluation.unlinkedAdminCount}`);
-  console.log(`Recognized Role Assignments:  ${evaluation.recognizedRoleAssignmentCount}`);
-  console.log(`Invalid Role Assignments:     ${evaluation.invalidRoleAssignmentCount}`);
-  console.log(`Linked Admins Lacking Role:   ${evaluation.linkedAdminsWithoutRecognizedRole}`);
-  console.log(`Audit Rows (with Actor):      ${evaluation.auditRecordsWithAdminId}`);
-  console.log(`Audit Rows (Historical Null): ${evaluation.auditRecordsWithoutAdminId}`);
-  console.log('----------------------------------------------------');
-  console.log(`Readiness Status:             ${evaluation.readyForManualLoginTest ? 'READY_FOR_MANUAL_LOGIN_TEST' : 'INCOMPLETE'}`);
-  
-  if (evaluation.errors.length > 0) {
-    console.log('Errors:');
-    evaluation.errors.forEach((err) => console.log(`  - [ERROR]: ${err}`));
-  }
-  if (evaluation.warnings.length > 0) {
-    console.log('Warnings:');
-    evaluation.warnings.forEach((warn) => console.log(`  - [WARNING]: ${warn}`));
-  }
-  console.log('====================================================\n');
+  const classification: 'READY_FOR_MANUAL_LOGIN_TEST' | 'INCOMPLETE' = evaluation.readyForManualLoginTest
+    ? 'READY_FOR_MANUAL_LOGIN_TEST'
+    : 'INCOMPLETE';
 
-  if (!evaluation.readyForManualLoginTest) {
-    process.exit(2);
-  } else {
-    process.exit(0);
-  }
+  const exitCode: 0 | 2 = evaluation.readyForManualLoginTest ? 0 : 2;
+
+  const errorCodesStr = evaluation.errors.length > 0 ? evaluation.errors.join(',') : 'NONE';
+  const warningCodesStr = evaluation.warnings.length > 0 ? evaluation.warnings.join(',') : 'NONE';
+
+  console.log(`classification=${classification}`);
+  console.log(`migration_present=${evaluation.migrationPresent ? 'YES' : 'NO'}`);
+  console.log(`admin_users_count=${evaluation.totalAdminRows}`);
+  console.log(`linked_auth_users_count=${evaluation.linkedAdminCount}`);
+  console.log(`unlinked_admin_users_count=${evaluation.unlinkedAdminCount}`);
+  console.log(`recognized_role_assignments=${evaluation.recognizedRoleAssignmentCount}`);
+  console.log(`invalid_role_assignments=${evaluation.invalidRoleAssignmentCount}`);
+  console.log(`linked_admins_without_recognized_role=${evaluation.linkedAdminsWithoutRecognizedRole}`);
+  console.log(`audit_records_with_actor=${evaluation.auditRecordsWithAdminId}`);
+  console.log(`audit_records_without_actor=${evaluation.auditRecordsWithoutAdminId}`);
+  console.log(`error_codes=${errorCodesStr}`);
+  console.log(`warning_codes=${warningCodesStr}`);
+
+  return { classification, exitCode, details: evaluation };
 }
 
-runCheck();
+/**
+ * Public CLI runner function.
+ * Enforces guard execution BEFORE environment-derived client creation,
+ * then delegates query execution to checkStagingAuthWithClient.
+ */
+export async function runCheckStagingAuth(args?: string[]): Promise<CheckStagingAuthRunnerResult> {
+  // 1. Staging guard MUST execute before client creation
+  validateStagingGuard({ operationId: 'check-staging-auth', args });
+
+  // 2. Create environment-derived client
+  let supabase;
+  try {
+    supabase = createSupabaseAdminClientCore();
+  } catch {
+    console.error('STAGING_AUTH_CHECK_FAILED');
+    return { classification: 'FAILED', exitCode: 1 };
+  }
+
+  // 3. Delegate execution to testable worker
+  return checkStagingAuthWithClient(supabase as unknown as StagingAuthCheckClient);
+}
+
+if (require.main === module) {
+  runCheckStagingAuth().then((res) => {
+    process.exit(res.exitCode);
+  }).catch(() => {
+    console.error('STAGING_AUTH_CHECK_FAILED');
+    process.exit(1);
+  });
+}

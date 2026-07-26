@@ -8,8 +8,17 @@ import { validatePublicFeed } from '../feed/validatePublicFeed';
 import { uploadPublicFeedToStorage } from '../storage/publicFeedStorage';
 import { getServerEnv } from '../lib/env';
 import { Project } from '../domain/project';
+import { validateStagingGuard } from '../security/stagingExecutionGuard';
 
-async function publish() {
+export async function runPublishStagingFeed(args?: string[]): Promise<boolean> {
+  const guard = validateStagingGuard({ operationId: 'publish-staging-feed', args });
+
+  if (!guard.isAuthorized) {
+    console.log(`[DRY-RUN] ${guard.dryRunReason}`);
+    console.log('[DRY-RUN] Planned operation: Compile public feed and upload JSON artifact to Storage public-feeds bucket.');
+    return false;
+  }
+
   const env = getServerEnv();
   const supabase = createSupabaseAdminClientCore();
   const repository = new SupabaseProjectRepositoryCore(supabase);
@@ -21,7 +30,7 @@ async function publish() {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Unknown query error';
     console.error('❌ Failed to fetch projects from database:', message);
-    process.exit(1);
+    return false;
   }
 
   console.log(`Loaded ${projects.length} projects from database.`);
@@ -38,7 +47,7 @@ async function publish() {
   if (!validation.valid) {
     console.error('❌ Staging Feed Contract Validation FAILED:');
     validation.errors.forEach((err) => console.error(` - Error: ${err}`));
-    process.exit(1);
+    return false;
   }
 
   console.log('✅ Staging Feed Contract Validation PASSED!');
@@ -55,25 +64,23 @@ async function publish() {
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Unknown upload error';
     console.error('❌ Storage upload failed:', message);
-    process.exit(1);
+    return false;
   }
 
   // 4. Record published snapshot inside DB audit log
   console.log('Recording audit log snapshot in database...');
-  const { error: snapshotError } = await supabase
-    .from('published_snapshots')
-    .insert({
-      feed_file_name: env.SUPABASE_PUBLIC_FEED_FILE,
-      storage_bucket: env.SUPABASE_PUBLIC_FEEDS_BUCKET,
-      storage_path: uploadResult.storagePath,
-      public_url: uploadResult.publicUrl,
-      record_count: uploadResult.recordCount,
-      feed_hash: uploadResult.feedHash
-    });
+  const { error: snapshotError } = await supabase.from('published_snapshots').insert({
+    feed_file_name: env.SUPABASE_PUBLIC_FEED_FILE,
+    storage_bucket: env.SUPABASE_PUBLIC_FEEDS_BUCKET,
+    storage_path: uploadResult.storagePath,
+    public_url: uploadResult.publicUrl,
+    record_count: uploadResult.recordCount,
+    feed_hash: uploadResult.feedHash,
+  });
 
   if (snapshotError) {
     console.error('❌ Failed to insert published snapshot log:', snapshotError.message);
-    process.exit(1);
+    return false;
   }
 
   console.log('\n====================================================');
@@ -86,6 +93,14 @@ async function publish() {
   console.log(`Public Showcase Feed URL:    ${uploadResult.publicUrl}`);
   console.log(`Feed SHA-256 Checksum:       ${uploadResult.feedHash}`);
   console.log('====================================================\n');
+  return true;
 }
 
-publish();
+if (require.main === module) {
+  runPublishStagingFeed().then((success) => {
+    if (!success) process.exit(1);
+  }).catch((err) => {
+    console.error('❌ Fatal error:', err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
+}

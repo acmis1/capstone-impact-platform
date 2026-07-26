@@ -2,8 +2,11 @@ import { loadEnvConfig } from '@next/env';
 loadEnvConfig(process.cwd());
 
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
+import { validateStagingGuard } from '../security/stagingExecutionGuard';
 
-async function checkMedia() {
+export async function runCheckMediaAssets(args?: string[]): Promise<boolean> {
+  validateStagingGuard({ operationId: 'check-media-assets', args });
+
   const supabase = createSupabaseAdminClientCore();
 
   console.log('Querying staging database media assets...');
@@ -13,7 +16,7 @@ async function checkMedia() {
 
   if (error) {
     console.error('❌ Failed to fetch media assets:', error.message);
-    process.exit(1);
+    return false;
   }
 
   const total = assets.length;
@@ -54,6 +57,14 @@ async function checkMedia() {
     console.log(` - Project: ${asset.projects?.public_id || 'Unknown'} | Type: ${asset.asset_type} | Path: ${asset.storage_bucket}/${asset.storage_path}`);
   });
   console.log('====================================================\n');
+  return true;
 }
 
-checkMedia();
+if (require.main === module) {
+  runCheckMediaAssets().then((success) => {
+    if (!success) process.exit(1);
+  }).catch((err) => {
+    console.error('❌ Fatal error:', err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
+}
