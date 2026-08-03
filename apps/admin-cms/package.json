@@ -2,11 +2,16 @@
   "name": "admin-cms",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=24.14.1 <25",
+    "npm": ">=11.11.0 <12"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "check:onboarding": "tsx src/scripts/onboardingCheck.ts",
     "check:sample-feed": "tsx src/scripts/checkSampleFeed.ts",
     "seed:staging": "tsx src/scripts/seedStagingProjects.ts",
     "check:staging-projects": "tsx src/scripts/checkStagingProjects.ts",

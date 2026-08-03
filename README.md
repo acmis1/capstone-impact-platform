@@ -22,10 +22,10 @@ The target workflow needs structured submissions, validation, review, archival a
 | Review | Project inspection and controlled `approve`, `request_changes` and `archive` actions are implemented; atomic transaction hardening remains pending. |
 | Ingestion | Package parsing, metadata/file validation, import-batch tracking and import-review foundations are implemented. |
 | Media and feed | Private draft storage, validated promotion foundations and public-eligible JSON feed compilation are implemented. |
-| Local Supabase | Pinned CLI 2.109.1, timestamped migrations, 3 local storage buckets, synthetic staff provisioning and automated verifier implemented. |
+| Local Supabase | Pinned CLI 2.109.1, 7 timestamped migrations, 3 local storage buckets, synthetic staff provisioning and automated verifier implemented. *(Migration 0007 is repository/local only and not applied to hosted staging.)* |
 | Staging Guardrails | Target environment identity checks, hostname matching, loopback rejection and double-acknowledgement CLI flags implemented. |
-| Quality | Offline automated tests cover domain, auth helpers, validation, feed, import, media, repository, staging guardrails and UI tokens. |
-| Pending | Hosted migration reconciliation, hosted staff lifecycle, interactive browser UAT matrix, second-developer onboarding verification and production cutover. |
+| Quality & Onboarding | Node 24.14.1 and npm 11.11.0 toolchain contract, `npm run onboarding:check` precheck, and unit tests implemented. Verified in a clean Windows remote-clone run; macOS, Linux and independent human onboarding remain unverified. |
+| Pending | Hosted migration reconciliation, hosted staff lifecycle, interactive browser UAT matrix, cross-platform human onboarding verification and production cutover. |
 
 ## Architecture
 
@@ -47,6 +47,7 @@ Staff use the protected Next.js application. Server-side authentication and auth
 | [`apps/admin-cms/`](./apps/admin-cms/) | Active Next.js Admin/CMS application. | Active implementation and staging operations |
 | [`infra/supabase/`](./infra/supabase/) | Versioned schema, RLS, grants and database runbooks. | Operational infrastructure documentation |
 | [`docs/`](./docs/) | Architecture, UI, integration and project constraints. | Operational and planning documentation |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Contributor workflow, branch rules, and safety contract. | Authoritative developer governance guide |
 | [`Prototype/`](./Prototype/) | Earlier feasibility/demo application. | Historical evidence only |
 | [`package.json`](./package.json) | Root npm workspace and convenience scripts. | Active repository contract |
 
@@ -54,13 +55,24 @@ Staff use the protected Next.js application. Server-side authentication and auth
 
 From a fresh checkout (no hosted keys or organization access needed for local development):
 
-1. Install dependencies:
+Prerequisites:
+- **Node.js**: `>= 24.14.1 < 25` (Pinned via `.nvmrc` to `24.14.1`)
+- **npm**: `>= 11.11.0 < 12` (Declared in `packageManager` as `npm@11.11.0`)
+- **Docker Desktop / Engine**: Must be active locally.
+
+1. Clean install dependencies:
 
    ```bash
-   npm install
+   npm ci
    ```
 
-2. Start local Supabase development stack (requires Docker Desktop):
+2. Run automated onboarding precheck (12 checks):
+
+   ```bash
+   npm run onboarding:check
+   ```
+
+3. Start local Supabase development stack:
 
    ```bash
    npm run supabase:start
@@ -71,21 +83,21 @@ From a fresh checkout (no hosted keys or organization access needed for local de
    npm run supabase:verify:local
    ```
 
-3. Start the Next.js development server:
+4. Start the Next.js development server:
 
    ```bash
    npm run dev:admin
    ```
 
-4. Open [http://localhost:3000/login](http://localhost:3000/login) and log in using synthetic credentials from `apps/admin-cms/.local-users.json` (verifies `admin`, `reviewer`, and `editor` synthetic staff accounts via local GoTrue password login).
+5. Open [http://localhost:3000/login](http://localhost:3000/login) and log in using synthetic credentials from `apps/admin-cms/.local-users.json` (verifies `admin`, `reviewer`, and `editor` synthetic staff accounts via local GoTrue password login).
 
-5. Clean up local stack when finished:
+6. Clean up local stack when finished:
 
    ```bash
    npm run supabase:stop
    ```
 
-For detailed local onboarding guidance, see the [Local Development Guide](./infra/supabase/local-development.md). Offline unit tests and the sample-feed check (`npm run check:feed`) do not require private dashboard access or hosted database connections.
+For detailed contributor guidelines and branch rules, see the [Contributor Guide](./CONTRIBUTING.md). For local database setup details, see the [Local Development Guide](./infra/supabase/local-development.md). Offline unit tests and the sample-feed check (`npm run check:feed`) do not require private dashboard access or hosted database connections.
 
 ## Validation commands
 
@@ -93,6 +105,7 @@ Run from the repository root:
 
 | Check | Command |
 | --- | --- |
+| Onboarding Precheck | `npm run onboarding:check` |
 | Lint | `npm run lint --workspace=apps/admin-cms` |
 | Tests | `npm run test:admin` |
 | Typecheck | `npm run typecheck:admin` |
@@ -103,6 +116,7 @@ Run from the repository root:
 
 | Document | Role |
 | --- | --- |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Contributor workflow, branch rules, and safety contract. |
 | [`apps/admin-cms/README.md`](./apps/admin-cms/README.md) | Authoritative developer and staging-operator guide. |
 | [`infra/supabase/local-development.md`](./infra/supabase/local-development.md) | Local Supabase environment setup and onboarding guide. |
 | [`infra/supabase/staging-reconciliation-runbook.md`](./infra/supabase/staging-reconciliation-runbook.md) | 7-gate hosted database migration reconciliation runbook. |
@@ -131,4 +145,4 @@ Implemented foundations include the authenticated Admin/CMS shell, project index
 
 Remaining work includes hosted migration history reconciliation, controlled hosted staff lifecycle tooling, interactive browser UAT matrix validation, metadata editor, student confirmation, preview and publication-history workflows, transaction-backed review updates, accessibility QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
 
-This repository supports a university capstone project. No license, contribution policy or security policy is asserted here because those governance files are not currently present.
+Developer contribution policies and security boundaries are defined in [`CONTRIBUTING.md`](./CONTRIBUTING.md).
