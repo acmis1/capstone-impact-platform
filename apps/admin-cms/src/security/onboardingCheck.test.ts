@@ -47,7 +47,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       if (norm.endsWith('.gitignore')) return true;
       return false;
     },
-    readFileSync: (p: string, _enc?: string) => {
+    readFileSync: (p: string) => {
       const norm = p.replace(/\\/g, '/');
       if (norm.endsWith('node_modules/supabase/package.json')) {
         return JSON.stringify({ version: '2.109.1' });
@@ -64,6 +64,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
   };
 
   it('1. Supported Node 24 (24.14.1) and npm 11 (11.11.0) pass toolchain checks', () => {
+    expect(parseSemverMajorMinorPatch('24.14.1')).toEqual({ major: 24, minor: 14, patch: 1 });
     expect(isVersionInNode24Range('24.14.1')).toBe(true);
     expect(isVersionInNode24Range('v24.14.1')).toBe(true);
     expect(isVersionInNpm11Range('11.11.0')).toBe(true);
