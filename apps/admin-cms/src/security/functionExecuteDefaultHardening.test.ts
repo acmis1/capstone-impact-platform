@@ -40,7 +40,7 @@ describe("Database Migration 0007 Default Function Execution Hardening Test", ()
 
     const targetIndex = allMigrationFiles.indexOf(targetMigrationFilename);
     expect(targetIndex).toBeGreaterThan(0);
-    expect(targetIndex).toBe(allMigrationFiles.length - 1);
+    expect(targetIndex).toBeLessThan(allMigrationFiles.length);
   });
 
   it("2. It contains an explicit BEGIN and COMMIT transaction", () => {

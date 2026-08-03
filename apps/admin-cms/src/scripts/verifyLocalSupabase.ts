@@ -438,6 +438,37 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       return false;
     }
     console.log('✔ Live bootstrap_initial_admin function definition verified (btrim preserved).');
+
+    // 3h. Transactional Review Action RPC function & execution grants verification
+    const reviewRpcRows = runLocalDbQuery(
+      "SELECT p.prosecdef, pg_get_functiondef(p.oid) AS funcdef FROM pg_proc p WHERE p.proname = 'perform_project_review_action' AND p.pronamespace = 'public'::regnamespace",
+      repoRoot
+    );
+    if (!reviewRpcRows || reviewRpcRows.length === 0 || !reviewRpcRows[0].funcdef) {
+      console.error('❌ Function verification failed: perform_project_review_action missing.');
+      return false;
+    }
+    const rpcDefStr = String(reviewRpcRows[0].funcdef);
+    if (!rpcDefStr.includes('SECURITY DEFINER')) {
+      console.error('❌ Function verification failed: perform_project_review_action missing SECURITY DEFINER.');
+      return false;
+    }
+    if (!rpcDefStr.toLowerCase().includes('search_path')) {
+      console.error('❌ Function verification failed: perform_project_review_action search_path is not set.');
+      return false;
+    }
+
+    if (!funcGrantSet.has('SERVICE_ROLE|perform_project_review_action')) {
+      console.error('❌ Function grant verification failed: service_role missing EXECUTE on perform_project_review_action.');
+      return false;
+    }
+    for (const forbiddenGrantee of ['PUBLIC', 'ANON', 'AUTHENTICATED']) {
+      if (funcGrantSet.has(`${forbiddenGrantee}|perform_project_review_action`)) {
+        console.error(`❌ Function grant security violation: ${forbiddenGrantee} has EXECUTE on perform_project_review_action.`);
+        return false;
+      }
+    }
+    console.log('✔ Live perform_project_review_action RPC function definition & service_role-only execution grants verified.');
   } catch {
     console.error('❌ Live database schema verification failed.');
     return false;
