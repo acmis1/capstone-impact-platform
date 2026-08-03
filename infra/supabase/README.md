@@ -7,18 +7,21 @@ This directory contains the version-controlled database schema migrations, polic
 ## ⚠️ Current Environment & Staging Status
 
 > [!NOTE]
-> * **Local Development:** Reproducible local Supabase development is 100% verified via CLI 2.109.1 and Docker. Local migrations replay cleanly and pass automated verifiers.
+> * **Local Development:** Reproducible local Supabase development is 100% verified via CLI 2.109.1 and Docker. Local migrations (`0001` through `0007`) replay cleanly and pass automated verifiers.
 > * **Hosted Staging Status:** Migrations `0001` through `0006` were manually applied to the isolated staging project (`capstone-admin-cms-staging-2026`). Local migration replay success is distinct from unknown hosted CLI migration history, which remains unverified until the 7-gate reconciliation runbook is executed.
 > * **Corrective Fix:** Migration `0006` corrected the initial administrator bootstrap runtime by replacing `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim`.
+> * **Default Execution Hardening:** Migration `0007` establishes global postgres-owned function default privilege revokes and conditionally revokes execution on the optional hosted RLS helper. *(Committed in repository; not yet applied to hosted staging.)*
 > * **Identity Linkage:** Initial administrator linkage was verified in isolated staging (`READY_FOR_MANUAL_LOGIN_TEST`).
 > * **Do Not Rerun:** Do not rerun the migration sequence or initial bootstrap merely because these files exist.
 > * **Pending Scope:** Hosted migration reconciliation, hosted staff lifecycle provisioning, reviewer/editor UAT, and production deployment remain pending.
 
 ## Local Development Quick Start
 
-Reproducible local Supabase development is fully supported via Docker and the pinned repository CLI. See [Local Development Guide](./local-development.md) for quickstart and setup instructions.
+Reproducible local Supabase development is fully supported via Docker and the pinned repository CLI. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) and the [Local Development Guide](./local-development.md) for developer standards and setup instructions.
 
 ```bash
+npm ci
+npm run onboarding:check
 npm run supabase:start
 npm run supabase:reset
 npm run supabase:seed:buckets
@@ -37,6 +40,7 @@ npm run supabase:stop
 
 ## Operational Runbooks & Governance
 
+* **[Contributor Guide](../../CONTRIBUTING.md):** Authoritative developer onboarding standards, toolchain contract, and security rules.
 * **[Local Development Guide](./local-development.md):** Complete local environment setup, seed fixtures, synthetic staff credentials, and acceptance checklist.
 * **[Staging Reconciliation Runbook](./staging-reconciliation-runbook.md):** 7-gate procedure to verify, back up, reconcile, and validate hosted database schema and migration tracking tables.
 * **[Key Migration Governance](./key-migration-governance.md):** Standards for modern server key preference (`SUPABASE_SECRET_KEY` over legacy `SUPABASE_SERVICE_ROLE_KEY`) and secret rotation policies.
@@ -64,3 +68,4 @@ npm run supabase:stop
 * **[20260719003407_explicit_data_api_grants.sql](./migrations/20260719003407_explicit_data_api_grants.sql):** Establishes explicit least-privilege Data API grants (`anon` denied, `authenticated` read-only lookups, `service_role` full administrative CRUD).
 * **[20260719165118_initial_admin_bootstrap.sql](./migrations/20260719165118_initial_admin_bootstrap.sql):** Registers transactional PL/pgSQL function `public.bootstrap_initial_admin(uuid, text, text)` with advisory transaction locking.
 * **[20260719165119_fix_initial_admin_bootstrap_runtime.sql](./migrations/20260719165119_fix_initial_admin_bootstrap_runtime.sql):** Replaces `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim` as the corrective runtime fix for initial administrator linkage.
+* **[20260803174000_harden_function_execute_defaults.sql](./migrations/20260803174000_harden_function_execute_defaults.sql):** Establishes global postgres-owned function default privilege revokes and conditionally revokes execution on the optional hosted RLS helper. *(Committed in repository; not yet applied to hosted staging.)*

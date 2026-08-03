@@ -14,7 +14,7 @@ import { validateStagingGuard } from '../security/stagingExecutionGuard';
 
 export interface StagingAuthCheckClient {
   from(table: string): {
-    select(cols: string): Promise<{ data: any[] | null; error: any | null }>;
+    select(cols: string): Promise<{ data: Record<string, unknown>[] | null; error: unknown | null }>;
   };
 }
 
@@ -48,7 +48,7 @@ export async function checkStagingAuthWithClient(
         if (legacyError) {
           throw legacyError;
         }
-        adminUsers = (legacyData || []).map((row: { id: string }) => ({
+        adminUsers = ((legacyData as unknown as { id: string }[]) || []).map((row) => ({
           adminUserId: row.id,
           authUserId: null,
         }));
@@ -56,7 +56,7 @@ export async function checkStagingAuthWithClient(
         throw error;
       }
     } else {
-      adminUsers = (data || []).map((row: { id: string; auth_user_id: string | null }) => ({
+      adminUsers = ((data as unknown as { id: string; auth_user_id: string | null }[]) || []).map((row) => ({
         adminUserId: row.id,
         authUserId: row.auth_user_id,
       }));
@@ -74,7 +74,7 @@ export async function checkStagingAuthWithClient(
       throw error;
     }
 
-    userRoles = (data || []).map((row: { id: string; user_id: string; role: string }) => ({
+    userRoles = ((data as unknown as { id: string; user_id: string; role: string }[]) || []).map((row) => ({
       adminUserId: row.user_id,
       role: row.role,
     }));
@@ -91,7 +91,7 @@ export async function checkStagingAuthWithClient(
       throw error;
     }
 
-    approvalRecords = (data || []).map((row: { id: string; admin_id: string | null }) => ({
+    approvalRecords = ((data as unknown as { id: string; admin_id: string | null }[]) || []).map((row) => ({
       adminUserId: row.admin_id,
     }));
   } catch {

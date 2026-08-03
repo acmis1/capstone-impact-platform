@@ -22,10 +22,10 @@ The target workflow needs structured submissions, validation, review, archival a
 | Review | Project inspection and controlled `approve`, `request_changes` and `archive` actions are implemented; atomic transaction hardening remains pending. |
 | Ingestion | Package parsing, metadata/file validation, import-batch tracking and import-review foundations are implemented. |
 | Media and feed | Private draft storage, validated promotion foundations and public-eligible JSON feed compilation are implemented. |
-| Local Supabase | Pinned CLI 2.109.1, timestamped migrations, 3 local storage buckets, synthetic staff provisioning and automated verifier implemented. |
+| Local Supabase | Pinned CLI 2.109.1, 7 timestamped migrations, 3 local storage buckets, synthetic staff provisioning and automated verifier implemented. |
 | Staging Guardrails | Target environment identity checks, hostname matching, loopback rejection and double-acknowledgement CLI flags implemented. |
-| Quality | Offline automated tests cover domain, auth helpers, validation, feed, import, media, repository, staging guardrails and UI tokens. |
-| Pending | Hosted migration reconciliation, hosted staff lifecycle, interactive browser UAT matrix, second-developer onboarding verification and production cutover. |
+| Quality | Offline automated tests cover domain, auth helpers, validation, feed, import, media, repository, staging guardrails, migration contracts and UI tokens. |
+| Pending | Hosted migration reconciliation, hosted staff lifecycle, interactive browser UAT matrix, second-developer human onboarding confirmation and production cutover. |
 
 ## Architecture
 
@@ -47,20 +47,27 @@ Staff use the protected Next.js application. Server-side authentication and auth
 | [`apps/admin-cms/`](./apps/admin-cms/) | Active Next.js Admin/CMS application. | Active implementation and staging operations |
 | [`infra/supabase/`](./infra/supabase/) | Versioned schema, RLS, grants and database runbooks. | Operational infrastructure documentation |
 | [`docs/`](./docs/) | Architecture, UI, integration and project constraints. | Operational and planning documentation |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Developer onboarding, toolchain contract and security rules. | Authoritative contributor guide |
 | [`Prototype/`](./Prototype/) | Earlier feasibility/demo application. | Historical evidence only |
 | [`package.json`](./package.json) | Root npm workspace and convenience scripts. | Active repository contract |
 
 ## Quick start
 
-From a fresh checkout (no hosted keys or organization access needed for local development):
+From a fresh checkout (requires Node.js `>= 20.9.0` pinned via `.nvmrc` and npm `>= 10.0.0`; no hosted keys or organization access needed for local development):
 
-1. Install dependencies:
+1. Install dependencies cleanly using lockfile:
 
    ```bash
-   npm install
+   npm ci
    ```
 
-2. Start local Supabase development stack (requires Docker Desktop):
+2. Run the onboarding precheck:
+
+   ```bash
+   npm run onboarding:check
+   ```
+
+3. Start local Supabase development stack (requires Docker Desktop or a reachable Docker daemon):
 
    ```bash
    npm run supabase:start
@@ -71,21 +78,21 @@ From a fresh checkout (no hosted keys or organization access needed for local de
    npm run supabase:verify:local
    ```
 
-3. Start the Next.js development server:
+4. Start the Next.js development server:
 
    ```bash
    npm run dev:admin
    ```
 
-4. Open [http://localhost:3000/login](http://localhost:3000/login) and log in using synthetic credentials from `apps/admin-cms/.local-users.json` (verifies `admin`, `reviewer`, and `editor` synthetic staff accounts via local GoTrue password login).
+5. Open [http://localhost:3000/login](http://localhost:3000/login) and log in using synthetic credentials from `apps/admin-cms/.local-users.json` (verifies `admin`, `reviewer`, and `editor` synthetic staff accounts via local GoTrue password login).
 
-5. Clean up local stack when finished:
+6. Clean up local stack when finished:
 
    ```bash
    npm run supabase:stop
    ```
 
-For detailed local onboarding guidance, see the [Local Development Guide](./infra/supabase/local-development.md). Offline unit tests and the sample-feed check (`npm run check:feed`) do not require private dashboard access or hosted database connections.
+For detailed onboarding and contributor standards, see [`CONTRIBUTING.md`](./CONTRIBUTING.md) and the [Local Development Guide](./infra/supabase/local-development.md). Offline unit tests and the sample-feed check (`npm run check:feed`) do not require private dashboard access or hosted database connections.
 
 ## Validation commands
 
@@ -93,6 +100,7 @@ Run from the repository root:
 
 | Check | Command |
 | --- | --- |
+| Onboarding precheck | `npm run onboarding:check` |
 | Lint | `npm run lint --workspace=apps/admin-cms` |
 | Tests | `npm run test:admin` |
 | Typecheck | `npm run typecheck:admin` |
@@ -103,6 +111,7 @@ Run from the repository root:
 
 | Document | Role |
 | --- | --- |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Authoritative developer onboarding guide and engineering standards. |
 | [`apps/admin-cms/README.md`](./apps/admin-cms/README.md) | Authoritative developer and staging-operator guide. |
 | [`infra/supabase/local-development.md`](./infra/supabase/local-development.md) | Local Supabase environment setup and onboarding guide. |
 | [`infra/supabase/staging-reconciliation-runbook.md`](./infra/supabase/staging-reconciliation-runbook.md) | 7-gate hosted database migration reconciliation runbook. |
@@ -127,8 +136,8 @@ Run from the repository root:
 
 ## Roadmap
 
-Implemented foundations include the authenticated Admin/CMS shell, project index, validation, import and media workflows, reproducible local Supabase stack, shared-staging execution guardrails, key preference model and public-eligible feed compiler.
+Implemented foundations include the authenticated Admin/CMS shell, project index, validation, import and media workflows, reproducible local Supabase stack with 7 migrations, shared-staging execution guardrails, key preference model, public-eligible feed compiler, and second-developer onboarding prechecks.
 
 Remaining work includes hosted migration history reconciliation, controlled hosted staff lifecycle tooling, interactive browser UAT matrix validation, metadata editor, student confirmation, preview and publication-history workflows, transaction-backed review updates, accessibility QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
 
-This repository supports a university capstone project. No license, contribution policy or security policy is asserted here because those governance files are not currently present.
+Developer contribution policies, toolchain specifications, and safety guidelines are documented in [`CONTRIBUTING.md`](./CONTRIBUTING.md).

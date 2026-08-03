@@ -1,11 +1,17 @@
 {
   "name": "capstone-impact-platform",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0",
+    "npm": ">=10.0.0"
+  },
+  "packageManager": "npm@10.8.2",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
+    "onboarding:check": "npm run check:onboarding --workspace=apps/admin-cms",
     "dev:admin": "npm run dev --workspace=apps/admin-cms",
     "build:admin": "npm run build --workspace=apps/admin-cms",
     "typecheck:admin": "npm run typecheck --workspace=apps/admin-cms",

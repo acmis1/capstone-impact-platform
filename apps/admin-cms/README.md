@@ -1,6 +1,6 @@
 # Capstone Impact Platform — Admin/CMS
 
-The Admin/CMS is the active Next.js application for authenticated internal administration of structured capstone project records, validation, imports, review actions, media/storage foundations and public-eligible feed compilation. It is a production-oriented staging implementation, not a production-readiness certification. See the [repository README](../../README.md) for the project-level overview.
+The Admin/CMS is the active Next.js application for authenticated internal administration of structured capstone project records, validation, imports, review actions, media/storage foundations and public-eligible feed compilation. It is a production-oriented staging implementation, not a production-readiness certification. See the [repository README](../../README.md) and [`CONTRIBUTING.md`](../../CONTRIBUTING.md) for project-level guidelines and contributor standards.
 
 ## Scope and non-goals
 
@@ -29,7 +29,7 @@ It does not yet provide a completed metadata editor, student portal or final con
 | Media validation/storage | Foundations | Offline media validation tests; private-to-public storage functions exist | End-to-end staging and production verification pending |
 | Public-eligible feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled public cutover pending |
 | Duda integration | Design boundary | Stable-feed consumer is documented | Live Duda connection remains isolated |
-| Database schema/RLS | Versioned | Migration tests and SQL contracts exist | Full production RLS verification pending |
+| Database schema/RLS | Versioned | 7 timestamped migration tests and SQL contracts exist | Full production RLS verification pending |
 | Automated testing | Yes | Vitest offline suite | No hosted CI evidence is asserted here |
 | Production deployment | No | Not production-verified | Hardening and controlled cutover pending |
 
@@ -68,9 +68,10 @@ The browser receives only browser-safe configuration. Server code resolves the a
 
 ## Prerequisites
 
-- Node.js compatible with the repository’s installed Next.js and lockfile contract; no narrower version is asserted here.
-- npm with workspace support.
-- An explicitly authorized isolated Supabase environment for database-backed development, staging checks and mutations.
+- Node.js `>= 20.9.0` (pinned via `.nvmrc` to Node 20 LTS `20.18.0`).
+- npm `>= 10.0.0` (package manager `npm@10.8.2`).
+- Docker Desktop or a compatible Docker daemon for local Supabase.
+- No Supabase organization membership or hosted credentials required for local development.
 
 Offline tests and the sample-feed check (`npm run check:feed`) do not require access to a private dashboard or a staging database.
 
@@ -78,35 +79,42 @@ Offline tests and the sample-feed check (`npm run check:feed`) do not require ac
 
 Run from the repository root:
 
-1. Install dependencies.
+### Local Development (Zero Remote Dependencies)
+
+1. Install dependencies cleanly using lockfile contract:
 
    ```bash
-   npm install
+   npm ci
    ```
 
-2. Copy the environment template locally.
+2. Run the onboarding precheck:
 
    ```bash
-   cp apps/admin-cms/.env.example apps/admin-cms/.env.local
+   npm run onboarding:check
    ```
 
-   PowerShell:
+3. Start local Supabase, replay all 7 migrations, seed buckets, generate local loopback environment, and provision synthetic staff accounts:
 
-   ```powershell
-   Copy-Item apps/admin-cms/.env.example apps/admin-cms/.env.local
+   ```bash
+   npm run supabase:start
+   npm run supabase:reset
+   npm run supabase:seed:buckets
+   npm run supabase:env:local
+   npm run supabase:users:local
+   npm run supabase:verify:local
    ```
 
-3. Populate the required variable names for an explicitly authorized isolated environment. The template is a blank contract: never use a production or recovery environment, and do not print or commit values from the local file.
-
-4. Start the development server.
+4. Start the Next.js development server:
 
    ```bash
    npm run dev:admin
    ```
 
-5. Open [`/login`](http://localhost:3000/login) locally.
+5. Open [`/login`](http://localhost:3000/login) locally and sign in using synthetic credentials from `apps/admin-cms/.local-users.json`.
 
-Offline tests and the sample-feed check do not require private dashboard access.
+### Authorized Shared Staging (Requires Operator Authorization)
+
+The `.env.example` template at `apps/admin-cms/.env.example` is reserved for shared staging operations (`CAPSTONE_RUNTIME_ENV=staging`, `CAPSTONE_EXPECTED_SUPABASE_HOST`). Do not populate `.env.example` values for local development—local development uses `npm run supabase:env:local` to generate `apps/admin-cms/.env.local`.
 
 ## Environment reference
 
@@ -135,6 +143,7 @@ Run these from the repository root unless noted. Read-only checks do not change 
 
 | Purpose | Root command | App command | Classification |
 | --- | --- | --- | --- |
+| Onboarding precheck | `npm run onboarding:check` | `npm run check:onboarding` | Pure offline read-only precheck |
 | Develop | `npm run dev:admin` | `npm run dev` | Local server |
 | Lint | `npm run lint --workspace=apps/admin-cms` | `npm run lint` | Read-only |
 | Tests | `npm run test:admin` | `npm run test:run` | Offline read-only |
@@ -180,6 +189,7 @@ The migration set is manually governed for authorized isolated environments. It 
 - [`20260719003407_explicit_data_api_grants.sql`](../../infra/supabase/migrations/20260719003407_explicit_data_api_grants.sql) adds explicit least-privilege Data API grants.
 - [`20260719165118_initial_admin_bootstrap.sql`](../../infra/supabase/migrations/20260719165118_initial_admin_bootstrap.sql) adds the guarded initial-admin bootstrap function.
 - [`20260719165119_fix_initial_admin_bootstrap_runtime.sql`](../../infra/supabase/migrations/20260719165119_fix_initial_admin_bootstrap_runtime.sql) corrects the bootstrap runtime migration.
+- [`20260803174000_harden_function_execute_defaults.sql`](../../infra/supabase/migrations/20260803174000_harden_function_execute_defaults.sql) establishes global postgres-owned function default privilege revokes and conditionally revokes execution on the optional hosted RLS helper. *(Committed in repository; not yet applied to hosted staging.)*
 
 See the [Supabase migration overview](../../infra/supabase/README.md), [manual apply guide](../../infra/supabase/manual-apply-guide.md), [staging reconciliation runbook](../../infra/supabase/staging-reconciliation-runbook.md) and [staging authentication verification runbook](../../infra/supabase/staging-auth-verification.md) before authorized operations.
 
@@ -265,6 +275,7 @@ The feed compiler includes only `approved` and `published` records and validates
 Canonical checks:
 
 ```bash
+npm run onboarding:check
 npm run lint --workspace=apps/admin-cms
 npm run test:admin
 npm run typecheck:admin
@@ -273,7 +284,7 @@ npm run check:feed
 git diff --check
 ```
 
-The offline suite covers authentication and authorization helpers, workflow transitions, project and import validation, feed compilation and validation, media safety, project-query parsing, repository query behavior, invitation/password flows and design-token contrast. Automated offline coverage is distinct from staging UAT. Hosted CI evidence, authenticated browser regression, full screen-reader validation and production deployment verification are not asserted here.
+The offline suite covers authentication and authorization helpers, workflow transitions, project and import validation, feed compilation and validation, media safety, project-query parsing, repository query behavior, invitation/password flows, migration contracts and design-token contrast. Automated offline coverage is distinct from staging UAT. Hosted CI evidence, authenticated browser regression, full screen-reader validation and production deployment verification are not asserted here.
 
 ## Security and privacy boundaries
 
@@ -302,16 +313,17 @@ The offline suite covers authentication and authorization helpers, workflow tran
 
 | Symptom | Safe next step |
 | --- | --- |
-| Missing environment configuration | Copy the template locally, verify variable names against [`src/lib/env.ts`](./src/lib/env.ts), and never disclose values. |
+| Missing environment configuration | Run `npm run supabase:env:local` for local development. For staging, verify variable names against [`src/lib/env.ts`](./src/lib/env.ts) and never disclose values. |
 | Build or typecheck failure | Run the failing command from the repository root and inspect the first actionable diagnostic; do not change environment secrets to suppress it. |
-| Authentication not provisioned | Follow [`staging-auth-verification.md`](../../infra/supabase/staging-auth-verification.md); admin linking is an explicitly authorized mutation. |
-| Missing migration baseline | Follow [`manual-apply-guide.md`](../../infra/supabase/manual-apply-guide.md) for a new authorized isolated environment; do not blindly reinitialize an applied environment. |
+| Authentication not provisioned | Run `npm run supabase:users:local` for local development. For staging, follow [`staging-auth-verification.md`](../../infra/supabase/staging-auth-verification.md). |
+| Missing migration baseline | Run `npm run supabase:reset` for local development. For staging, follow [`manual-apply-guide.md`](../../infra/supabase/manual-apply-guide.md). |
 | Staging database unavailable | Confirm the authorized environment and local configuration with the operator; offline tests and feed checks remain available without it. |
 | Projects or imports do not appear | Use the read-only check scripts, inspect the relevant batch/status and review sanitized application errors; do not seed, delete or reset data by default. |
 
 ## Related documentation
 
 - [Repository README](../../README.md)
+- [Contributor guide](../../CONTRIBUTING.md)
 - [Local development guide](../../infra/supabase/local-development.md)
 - [Staging reconciliation runbook](../../infra/supabase/staging-reconciliation-runbook.md)
 - [Key migration governance](../../infra/supabase/key-migration-governance.md)
