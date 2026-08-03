@@ -8,7 +8,6 @@ import {
   normalizeSearchInput,
 } from '../domain/projectQuery';
 import { ProjectRepository } from './ProjectRepository';
-import { applyReviewActionTransition } from '../workflow/projectWorkflow';
 
 /** Maximum number of lightweight filter-option rows fetched per database round-trip. */
 const PROJECT_FILTER_OPTION_CHUNK_SIZE = 500;
@@ -470,80 +469,62 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     publicId: string;
     action: 'request_changes' | 'approve' | 'archive';
     comments?: string;
-    adminId?: string | null;
-  }): Promise<Project> {
+    adminId: string;
+  }): Promise<{ publicId: string; status: Project['status']; auditRecordId: string }> {
     const { publicId, action, comments, adminId } = params;
 
-    // 1. Fetch current project state
-    const { data: dbProject, error: fetchError } = await this.supabase
-      .from('projects')
-      .select('*')
-      .eq('public_id', publicId)
-      .maybeSingle();
-
-    if (fetchError || !dbProject) {
-      throw new Error(`Failed to find target staging project [${publicId}] for review: ${fetchError?.message || 'Not Found'}`);
+    if (!adminId || typeof adminId !== 'string') {
+      throw new Error('Admin ID is required to execute a project review action.');
     }
 
-    // 2. Validate transition
-    const transition = applyReviewActionTransition(dbProject.status, action);
+    const { data, error } = await this.supabase.rpc('perform_project_review_action', {
+      p_public_id: publicId,
+      p_action: action,
+      p_comments: comments || null,
+      p_admin_id: adminId,
+    });
 
-    if (!transition.allowed || !transition.toStatus) {
-      throw new Error(`Staging transition invalid: ${transition.error || 'Disallowed status change'}`);
+    if (error) {
+      throw new Error(`Failed to execute review action: ${error.message}`);
     }
 
-    const fromStatus = dbProject.status;
-    const toStatus = transition.toStatus;
+    if (!data || typeof data !== 'object') {
+      throw new Error('Failed to execute review action: Invalid RPC response format');
+    }
 
-    // 3. Compose status updates
-    const updates: Record<string, unknown> = {
-      status: toStatus
+    const res = data as Record<string, unknown>;
+    const resPublicId = res.publicId;
+    const resStatus = res.status;
+    const resAuditRecordId = res.auditRecordId;
+
+    const validStatuses: Array<Project['status']> = [
+      'draft',
+      'submitted',
+      'in_review',
+      'changes_requested',
+      'approved',
+      'published',
+      'archived',
+      'deleted',
+    ];
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (
+      typeof resPublicId !== 'string' ||
+      !resPublicId ||
+      typeof resStatus !== 'string' ||
+      !validStatuses.includes(resStatus as Project['status']) ||
+      typeof resAuditRecordId !== 'string' ||
+      !uuidRegex.test(resAuditRecordId)
+    ) {
+      throw new Error('Failed to execute review action: RPC response schema validation failed');
+    }
+
+    return {
+      publicId: resPublicId,
+      status: resStatus as Project['status'],
+      auditRecordId: resAuditRecordId,
     };
-
-    if (action === 'archive') {
-      updates.archived_at = new Date().toISOString();
-      updates.archived_from_status = fromStatus;
-      updates.archive_reason = comments || 'Archived under standard review workflow';
-      updates.pending_removal_from_public = true;
-    } else if (action === 'approve') {
-      // Clear archival info if approved again
-      updates.archived_at = null;
-      updates.archived_from_status = null;
-      updates.archive_reason = null;
-    }
-
-    // 4. Perform database update
-    const { data: updatedProjectRow, error: updateError } = await this.supabase
-      .from('projects')
-      .update(updates)
-      .eq('id', dbProject.id)
-      .select('*, project_disciplines(disciplines(name))')
-      .single();
-
-    if (updateError || !updatedProjectRow) {
-      throw new Error(`Failed to update project status in staging: ${updateError?.message || 'Returned row is null'}`);
-    }
-
-    // 5. Insert audit log inside approval_records
-    const auditRow = {
-      project_id: dbProject.id,
-      admin_id: adminId || null,
-      action_taken: action,
-      from_status: fromStatus,
-      to_status: toStatus,
-      comments: comments || null
-    };
-
-    // TODO: Production should replace this two-step update with a Postgres RPC function or transaction-backed server operation.
-    // Workflow action and audit insert must be atomic before real use to guarantee absolute database consistency.
-    const { error: auditError } = await this.supabase
-      .from('approval_records')
-      .insert(auditRow);
-
-    if (auditError) {
-      throw new Error(`Project status update completed but audit logging failed; staging data may require manual reset. Details: ${auditError.message}`);
-    }
-
-    return this.mapDbToDomain(updatedProjectRow as DatabaseProjectRow);
   }
 }

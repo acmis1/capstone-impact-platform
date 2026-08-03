@@ -6,6 +6,12 @@ import {
   ProjectFilterOptions,
 } from '../domain/projectQuery';
 
+export interface ReviewActionExecutionResult {
+  publicId: string;
+  status: Project['status'];
+  auditRecordId: string;
+}
+
 export interface ProjectRepository {
   /**
    * Retrieves all projects in the database that are not soft-deleted.
@@ -60,12 +66,12 @@ export interface ProjectRepository {
   softDeleteProject(id: string): Promise<void>;
 
   /**
-   * Safe staging review action transition mapping project workflows and audit tracking.
+   * Safe atomic review action transition mapping project workflows and audit tracking via PostgreSQL RPC.
    */
   performReviewAction(params: {
     publicId: string;
     action: 'request_changes' | 'approve' | 'archive';
     comments?: string;
-    adminId?: string | null;
-  }): Promise<Project>;
+    adminId: string;
+  }): Promise<ReviewActionExecutionResult>;
 }
