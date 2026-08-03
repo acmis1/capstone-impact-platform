@@ -58,13 +58,11 @@ export function validateMigrationsList(filenames: string[]): { passed: boolean; 
     timestamps.push(match[1]);
   }
 
-  // Check timestamp uniqueness
   const uniqueTimestamps = new Set(timestamps);
   if (uniqueTimestamps.size !== timestamps.length) {
     return { passed: false, message: `FAIL: Duplicate migration timestamps detected` };
   }
 
-  // Sort internally and verify strict ascending order
   const sortedFiles = [...sqlFiles].sort((a, b) => a.localeCompare(b));
   const sortedTimestamps = sortedFiles.map((f) => f.match(timestampRegex)![1]);
 
@@ -84,7 +82,6 @@ export function validateMigrationsList(filenames: string[]): { passed: boolean; 
 }
 
 export function sanitizePublicSafeMessage(msg: string): string {
-  // Strip absolute paths and user profile directory paths to prevent leaking personal paths
   return msg
     .replace(/[A-Za-z]:\\[^\s:]+/g, '<relative-path>')
     .replace(/\/Users\/[^\s:]+/g, '<relative-path>')
@@ -110,7 +107,6 @@ export function performOnboardingCheck(options?: {
 
   const items: OnboardingCheckItem[] = [];
 
-  // 1. Node version check (Supported range: >=24.14.1 <25, recommended .nvmrc 24.14.1)
   const nodeOk = isVersionInNode24Range(currentNodeVer);
   items.push({
     name: 'Node.js Toolchain (>=24.14.1 <25)',
@@ -120,7 +116,6 @@ export function performOnboardingCheck(options?: {
       : `FAIL: Node.js ${currentNodeVer} does not satisfy supported Node 24 range (>=24.14.1 <25)`,
   });
 
-  // 2. npm version check (Supported range: >=11.11.0 <12, recommended packageManager npm@11.11.0)
   let npmVer = 'unknown';
   let npmOk = false;
   try {
@@ -141,7 +136,6 @@ export function performOnboardingCheck(options?: {
     });
   }
 
-  // 3. Docker CLI check
   let dockerCliOk = false;
   try {
     const dockerVer = exec('docker --version').trim();
@@ -159,7 +153,6 @@ export function performOnboardingCheck(options?: {
     });
   }
 
-  // 4. Docker Daemon Reachability check
   try {
     exec('docker info');
     items.push({
@@ -175,7 +168,6 @@ export function performOnboardingCheck(options?: {
     });
   }
 
-  // 5. Git CLI & Repository Index check
   let gitOk = false;
   let trackedFiles: string[] = [];
   try {
@@ -195,7 +187,6 @@ export function performOnboardingCheck(options?: {
     message: gitOk ? 'PASS: Git CLI available and repository index queried' : 'FAIL: Git CLI is unavailable or git ls-files command failed',
   });
 
-  // 6. Supabase CLI Pinned Dependency & Local Installed Binary check
   const rootPkgPath = path.join(repoRoot, 'package.json');
   const installedSupaPkgPath = path.join(repoRoot, 'node_modules/supabase/package.json');
 
@@ -221,7 +212,6 @@ export function performOnboardingCheck(options?: {
     }
   }
 
-  // Check for local CLI binary target inside node_modules
   const localBinaryPathWin = path.join(repoRoot, 'node_modules/supabase/bin/supabase.exe');
   const localBinaryPathNix = path.join(repoRoot, 'node_modules/supabase/bin/supabase');
   const localBinCmdPathWin = path.join(repoRoot, 'node_modules/.bin/supabase.cmd');
@@ -245,7 +235,6 @@ export function performOnboardingCheck(options?: {
     message: supaMsg,
   });
 
-  // 7. package-lock.json check
   const lockfileOk = existsSync(path.join(repoRoot, 'package-lock.json'));
   items.push({
     name: 'package-lock.json Contract',
@@ -253,7 +242,6 @@ export function performOnboardingCheck(options?: {
     message: lockfileOk ? 'PASS: package-lock.json exists at root' : 'FAIL: package-lock.json is missing',
   });
 
-  // 8. Timestamped migrations check
   const migrationsDir = path.join(repoRoot, 'infra/supabase/migrations');
   if (existsSync(migrationsDir)) {
     const rawFiles = readdirSync(migrationsDir);
@@ -271,7 +259,6 @@ export function performOnboardingCheck(options?: {
     });
   }
 
-  // 9. Supabase config.toml check
   const configTomlOk = existsSync(path.join(repoRoot, 'infra/supabase/config.toml'));
   items.push({
     name: 'Supabase Configuration (config.toml)',
@@ -279,7 +266,6 @@ export function performOnboardingCheck(options?: {
     message: configTomlOk ? 'PASS: infra/supabase/config.toml exists' : 'FAIL: infra/supabase/config.toml missing',
   });
 
-  // 10. Local setup scripts check
   const scriptsDir = path.join(repoRoot, 'apps/admin-cms/src/scripts');
   const requiredScripts = [
     'writeLocalSupabaseEnv.ts',
@@ -296,7 +282,6 @@ export function performOnboardingCheck(options?: {
       : 'FAIL: Missing required local setup scripts in scripts directory',
   });
 
-  // 11. .gitignore local credentials guard check
   const gitignorePath = path.join(repoRoot, '.gitignore');
   let gitignoreOk = false;
   if (existsSync(gitignorePath)) {
@@ -319,7 +304,6 @@ export function performOnboardingCheck(options?: {
     });
   }
 
-  // 12. No tracked local credential files check (fails if git unavailable or tracked)
   if (!gitOk) {
     items.push({
       name: 'No Tracked Local Credential Files',
@@ -339,7 +323,6 @@ export function performOnboardingCheck(options?: {
     });
   }
 
-  // Sanitize all messages for public-safe output
   const sanitizedItems = items.map((i) => ({
     ...i,
     message: sanitizePublicSafeMessage(i.message),
