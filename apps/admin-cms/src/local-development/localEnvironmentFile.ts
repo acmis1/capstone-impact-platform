@@ -57,15 +57,15 @@ export function validateAllowedOutputPath(targetPath: string, defaultPath: strin
   // 1. Allowed if exact default path
   if (normTarget === normDefault || realTarget === normDefault) return;
 
-  // 2. Allowed if inside OS temporary directory
-  if (isDescendantOrEqual(normTmp, normTarget) || isDescendantOrEqual(normTmp, realTarget)) return;
-
-  // 3. Reject if inside repository (unless exact default path)
+  // 2. Reject if inside repository (unless exact default path)
   if (isDescendantOrEqual(normRepo, normTarget) || isDescendantOrEqual(normRepo, realTarget)) {
     throw new Error(
       'Invalid output path: Custom destination must be outside the repository or inside the OS temporary directory.'
     );
   }
+
+  // 3. Allowed if inside OS temporary directory (outside repository)
+  if (isDescendantOrEqual(normTmp, normTarget) || isDescendantOrEqual(normTmp, realTarget)) return;
 
   // Otherwise allowed (strictly outside repository directory)
 }
