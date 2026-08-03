@@ -47,7 +47,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       if (norm.endsWith('.gitignore')) return true;
       return false;
     },
-    readFileSync: (p: string) => {
+    readFileSync: (p: string, _enc?: string) => {
       const norm = p.replace(/\\/g, '/');
       if (norm.endsWith('node_modules/supabase/package.json')) {
         return JSON.stringify({ version: '2.109.1' });
