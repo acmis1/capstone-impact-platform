@@ -19,6 +19,8 @@ BEGIN
     WHERE n.nspname = 'public'
       AND p.proname = 'rls_auto_enable'
       AND p.pronargs = 0
+      AND p.prokind = 'f'
+      AND p.prorettype = 'event_trigger'::regtype
   ) THEN
     EXECUTE 'REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC, anon, authenticated, service_role';
   END IF;

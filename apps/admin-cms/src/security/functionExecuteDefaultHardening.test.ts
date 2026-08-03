@@ -74,12 +74,14 @@ describe("Database Migration 0007 Default Function Execution Hardening Test", ()
   it("5 & 6. The public.rls_auto_enable() revoke is protected by a PL/pgSQL existence check for the exact 0-argument function in schema public", () => {
     const sql = getNormalizedSql(targetMigrationPath);
 
-    // Verify DO block and existence check
+    // Verify DO block and existence check predicates
     expect(sql).toContain("DO $$");
     expect(sql).toContain("IF EXISTS");
     expect(sql).toContain("NSPNAME = 'PUBLIC'");
     expect(sql).toContain("PRONAME = 'RLS_AUTO_ENABLE'");
     expect(sql).toContain("PRONARGS = 0");
+    expect(sql).toContain("PROKIND = 'F'");
+    expect(sql).toContain("PRORETTYPE = 'EVENT_TRIGGER'::REGTYPE");
 
     // Verify guarded revoke targets public.rls_auto_enable() and all Data API roles
     expect(sql).toContain("REVOKE EXECUTE ON FUNCTION PUBLIC.RLS_AUTO_ENABLE()");
@@ -102,11 +104,20 @@ describe("Database Migration 0007 Default Function Execution Hardening Test", ()
     expect(sql).not.toContain("GRANT EXECUTE");
     expect(sql).not.toContain("ALTER ROLE");
 
-    // DML and table statements
+    // DML, DDL table, schema, and policy statements
+    expect(sql).not.toContain("CREATE TABLE");
+    expect(sql).not.toContain("ALTER TABLE");
+    expect(sql).not.toContain("DROP TABLE");
+    expect(sql).not.toContain("UPDATE");
+    expect(sql).not.toContain("MERGE");
+    expect(sql).not.toContain("CREATE SCHEMA");
+    expect(sql).not.toContain("DROP SCHEMA");
+    expect(sql).not.toContain("CREATE POLICY");
+    expect(sql).not.toContain("ALTER POLICY");
+    expect(sql).not.toContain("DROP POLICY");
     expect(sql).not.toContain("INSERT INTO");
     expect(sql).not.toContain("DELETE FROM");
     expect(sql).not.toContain("TRUNCATE");
-    expect(sql).not.toContain("DROP TABLE");
 
     // Auth & storage schemas
     expect(sql).not.toContain("AUTH.");
