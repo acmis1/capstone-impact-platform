@@ -20,9 +20,17 @@ The `npm run check:admin-auth` script is strictly SELECT-only and performs zero 
 ## Phase A: Read-Only Preflight
 
 1. **Staging Target Identity & Environment Confirmation**: Set required target variables before running read-only checks:
+
+   **Bash:**
    ```bash
    export CAPSTONE_RUNTIME_ENV=staging
    export CAPSTONE_EXPECTED_SUPABASE_HOST=app-staging.supabase.co
+   ```
+
+   **PowerShell:**
+   ```powershell
+   $env:CAPSTONE_RUNTIME_ENV = "staging"
+   $env:CAPSTONE_EXPECTED_SUPABASE_HOST = "app-staging.supabase.co"
    ```
 2. **Data Isolation & Privacy**: Ensure that no real RMIT student records or stakeholder directories are loaded. One authorized administrator identity exists for controlled staging authentication. Identity values must never be printed, logged, or committed.
 3. **Execution Checklist**: Run the read-only check script from the repository root:
@@ -69,15 +77,29 @@ This test verifies that a valid Supabase Auth account that is **not** linked to 
 
 To link an authenticated Supabase Auth user to the administrative schema in a new setup:
 
-1. Privately set temporary process variables:
+1. Privately set temporary process environment variables. Note that **two independent acknowledgements** are required:
+   - Environment variable `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN` is required by the script input validator.
+   - Target environment variable `CAPSTONE_RUNTIME_ENV=staging` (exact value `staging`) and `CAPSTONE_EXPECTED_SUPABASE_HOST` are required by the execution guard.
+
+   **Bash:**
    ```bash
    export CAPSTONE_RUNTIME_ENV=staging
    export CAPSTONE_EXPECTED_SUPABASE_HOST=app-staging.supabase.co
    export CAPSTONE_BOOTSTRAP_ADMIN_EMAIL="admin@example.com"
    export CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME="Initial Admin"
-   export CAPSTONE_BOOTSTRAP_CONFIRM="capstone-admin-cms-staging-2026"
+   export CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN
    ```
-2. Execute `npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026` only after explicit operator approval.
+
+   **PowerShell:**
+   ```powershell
+   $env:CAPSTONE_RUNTIME_ENV = "staging"
+   $env:CAPSTONE_EXPECTED_SUPABASE_HOST = "app-staging.supabase.co"
+   $env:CAPSTONE_BOOTSTRAP_ADMIN_EMAIL = "admin@example.com"
+   $env:CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME = "Initial Admin"
+   $env:CAPSTONE_BOOTSTRAP_CONFIRM = "LINK_EXISTING_STAGING_ADMIN"
+   ```
+
+2. Execute `npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026` passing CLI guard flags only after explicit operator approval.
 3. Clear temporary process variables immediately.
 4. Run `npm run check:admin-auth` to confirm readiness status `READY_FOR_MANUAL_LOGIN_TEST`.
 5. **Security Invariant:** Never paste Auth UUIDs into SQL queries or manually modify administrator/role rows directly in the database.
@@ -106,7 +128,7 @@ Testing is divided between automated unauthenticated HTTP checks and manual auth
    * Confirm `GET /api/projects` returns HTTP 200 with JSON response and `count: 0`.
    * *Project-Detail Route Test:* **Skipped** because zero project records currently exist in the staging database.
    * Click **Log Out**: Confirm browser redirects to `/login`.
-   * Post-logout re-verification: Confirm `/admin` redirects to `/login?redirectTo=/admin` and `GET /api/projects` returns HTTP 401.
+   * Post-logout re-verification: Confirm `/admin` redirected to `/login?redirectTo=/admin` and `GET /api/projects` returned HTTP 401.
 
 ---
 

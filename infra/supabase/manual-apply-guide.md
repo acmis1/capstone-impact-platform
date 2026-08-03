@@ -149,7 +149,7 @@ Follow this exact safe sequence to provision the initial administrator in a fres
    export CAPSTONE_EXPECTED_SUPABASE_HOST=app-staging.supabase.co
    export CAPSTONE_BOOTSTRAP_ADMIN_EMAIL=admin@school.edu
    export CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME="Initial Admin"
-   export CAPSTONE_BOOTSTRAP_CONFIRM=capstone-admin-cms-staging-2026
+   export CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN
    ```
 4. **Run the guarded linking script with double-acknowledgment flags:**
    ```bash

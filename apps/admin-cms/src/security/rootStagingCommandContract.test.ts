@@ -67,4 +67,46 @@ describe('Root Staging Command Contract & Argument Forwarding Tests', () => {
     expect(rawContent).not.toContain('.supabase.co');
     expect(rawContent).not.toContain('password');
   });
+
+  it('6. Executable source and documentation contracts correctly distinguish CAPSTONE_BOOTSTRAP_CONFIRM from CLI guard flags', () => {
+    // 1. Executable source check
+    const bootstrapSourcePath = path.resolve(repoRoot, 'apps/admin-cms/src/auth/stagingAdminBootstrap.ts');
+    const sourceContent = fs.readFileSync(bootstrapSourcePath, 'utf8');
+    expect(sourceContent).toContain('LINK_EXISTING_STAGING_ADMIN');
+
+    // 2. Current bootstrap runbooks check
+    const runbookPaths = [
+      'infra/supabase/staging-admin-bootstrap.md',
+      'infra/supabase/staging-auth-verification.md',
+      'infra/supabase/auth-invitation-setup.md',
+    ];
+
+    runbookPaths.forEach((relPath) => {
+      const fullPath = path.resolve(repoRoot, relPath);
+      const docContent = fs.readFileSync(fullPath, 'utf8');
+
+      // Must contain CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN
+      expect(docContent).toContain('LINK_EXISTING_STAGING_ADMIN');
+      // Must contain CLI flags --apply and --confirm-staging=capstone-admin-cms-staging-2026
+      expect(docContent).toContain('--apply');
+      expect(docContent).toContain('--confirm-staging=capstone-admin-cms-staging-2026');
+
+      // No runbook must assign capstone-admin-cms-staging-2026 to CAPSTONE_BOOTSTRAP_CONFIRM
+      expect(docContent).not.toContain('CAPSTONE_BOOTSTRAP_CONFIRM="capstone-admin-cms-staging-2026"');
+      expect(docContent).not.toContain('CAPSTONE_BOOTSTRAP_CONFIRM=capstone-admin-cms-staging-2026');
+    });
+
+    // 3. Historical activation evidence check
+    const evidencePath = path.resolve(repoRoot, 'infra/supabase/staging-auth-activation-evidence.md');
+    const evidenceContent = fs.readFileSync(evidencePath, 'utf8');
+    expect(evidenceContent).toContain('npm run link:admin-staging');
+    expect(evidenceContent).not.toContain('npm run link:admin-staging -- --apply');
+
+    // 4. CAPSTONE_RUNTIME_ENV documentation contract check in apps/admin-cms/README.md
+    const appReadmePath = path.resolve(repoRoot, 'apps/admin-cms/README.md');
+    const appReadmeContent = fs.readFileSync(appReadmePath, 'utf8');
+    expect(appReadmeContent).toContain('CAPSTONE_RUNTIME_ENV');
+    expect(appReadmeContent).toContain('staging');
+    expect(appReadmeContent).not.toContain('(e.g. staging or local)');
+  });
 });

@@ -112,7 +112,7 @@ Offline tests and the sample-feed check do not require private dashboard access.
 
 | Variable | Classification | Purpose |
 | --- | --- | --- |
-| `CAPSTONE_RUNTIME_ENV` | Target Guard | Target environment identifier (e.g. `staging` or `local`). Required for staging execution guard. |
+| `CAPSTONE_RUNTIME_ENV` | Target Guard | Target environment identifier. Staging-capable commands require the exact value `staging`. Local Supabase workflows do not use this shared-staging identity guard (local workflows are protected separately by loopback-only validation). |
 | `CAPSTONE_EXPECTED_SUPABASE_HOST` | Target Guard | Expected Supabase host domain (e.g. `app-staging.supabase.co`). Required for staging target matching. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser-safe | Supabase endpoint used by public client configuration. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser-safe | Modern publishable client key (preferred over legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY`). |
@@ -157,7 +157,8 @@ Read-only staging checks require validated staging runtime identity (`CAPSTONE_R
 
 > [!WARNING]
 > DO NOT RUN UNTIL THE PROJECT OWNER APPROVES THE SPECIFIC OPERATION.
-> State-changing operations require explicit operator authorization, target environment identity validation, and double-acknowledgment flags (`--apply` and `--confirm-staging=capstone-admin-cms-staging-2026`). Missing acknowledgment flags cause a dry-run refusal with ZERO Supabase admin client creation.
+> State-changing operations require explicit operator authorization, target environment identity validation (`CAPSTONE_RUNTIME_ENV=staging`), and double-acknowledgment flags (`--apply` and `--confirm-staging=capstone-admin-cms-staging-2026`). Missing acknowledgment flags cause a dry-run refusal with ZERO Supabase admin client creation.
+> Administrator linking additionally requires process environment variable `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN`.
 
 | Purpose | Complete Root Command | App Command | Classification |
 | --- | --- | --- | --- |
@@ -165,7 +166,7 @@ Read-only staging checks require validated staging runtime identity (`CAPSTONE_R
 | Seed/promote fake media | `npm run seed:admin-media -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run seed:staging-media -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; synthetic data only |
 | Import local package | `npm run import:admin-package -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run import:staging-package -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; authorized fixture operation |
 | Publish staging feed | `npm run publish:admin-feed -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run publish:staging-feed -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; authorized staging operation |
-| Link initial administrator | `npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run link:staging-admin -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; use the auth runbook |
+| Link initial administrator | `npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run link:staging-admin -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; requires `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN` |
 
 Do not blindly reinitialize an already-applied environment. Use the [Supabase migration guide](../../infra/supabase/manual-apply-guide.md) for a genuinely new authorized isolated environment and never target `Prototype/` or a recovery environment.
 
@@ -215,7 +216,7 @@ There is no implemented student project-confirmation workflow or route, metadata
 
 | Method | Route | Authorization | Purpose | Mutation |
 | --- | --- | --- | --- | --- |
-| `GET` | `/api/health` | Public | Returns safe configuration classifications and staging flags. | No |
+| `GET` | `/api/health` | Public | Returns safe configuration status classifications only. | No |
 | `GET` | `/api/projects` | `requireAdmin` plus `projects.read` | Returns the protected project collection. | No |
 | `POST` | `/api/projects/[publicId]/review-action` | Same-origin check, `requireAdmin`, then review/archive permission | Validates and applies `request_changes`, `approve` or `archive`. | Yes |
 
