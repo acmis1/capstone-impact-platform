@@ -16,7 +16,7 @@ This guide documents the canonical, local-only Supabase development workflow for
   - Bootstrap function positive (`service_role`) and negative (`PUBLIC`, `anon`, `authenticated`) execution grants were verified, and trigger-helper execution privileges were verified as unexposed.
   - Live policy roles, commands, and expressions were verified (`select_*_authenticated` = true; `admin_all_*` = false).
   - Validation was performed on one Windows Docker Desktop environment; another teammate must still confirm cross-platform onboarding.
-  - No hosted service was contacted in this final run.
+  - No hosted service was contacted in this local setup.
   - `supabase:seed:buckets` is a dedicated local-only script (`seedLocalSupabaseFixtures.ts`).
   - Hosted staging migration history remains separate and is not altered by local setup.
 
@@ -83,11 +83,38 @@ Start the Next.js development server:
 ```bash
 npm run dev:admin
 ```
-Open [http://localhost:3000](http://localhost:3000) and sign in using the synthetic credentials in `apps/admin-cms/.local-users.json`.
+Open [http://localhost:3000/login](http://localhost:3000/login) and sign in using the synthetic credentials in `apps/admin-cms/.local-users.json`.
+
+### Step 10: Clean Up Local Stack
+Stop the local containers when finished:
+```bash
+npm run supabase:stop
+```
 
 ---
 
-## 3. Storage & Bucket Boundaries
+## 3. Second-Developer Fresh-Clone Acceptance Checklist
+
+When onboarding a new developer or testing on a fresh machine:
+
+- [ ] Node.js & npm installed with workspace support.
+- [ ] Docker Desktop running (`docker ps` returns active daemon status).
+- [ ] Fresh clone created: `git clone https://github.com/acmis1/capstone-impact-platform.git`.
+- [ ] `npm install` completes without workspace errors.
+- [ ] `npm run supabase:start` launches local container suite.
+- [ ] `npm run supabase:reset` replays all 6 migrations cleanly.
+- [ ] `npm run supabase:seed:buckets` provisions local buckets and poster fixtures.
+- [ ] `npm run supabase:env:local` creates `apps/admin-cms/.env.local`.
+- [ ] `npm run supabase:users:local` provisions synthetic `admin`, `reviewer`, and `editor` accounts.
+- [ ] `npm run supabase:verify:local` outputs 100% PASS for all local checks.
+- [ ] `npm run dev:admin` opens [http://localhost:3000/login](http://localhost:3000/login) and logs in cleanly.
+- [ ] Zero hosted keys, organization access, or hosted Supabase dashboard actions were required.
+
+*Note: Environment validation was confirmed on Windows Docker Desktop. Linux and macOS verification remains open until confirmed by another teammate.*
+
+---
+
+## 4. Storage & Bucket Boundaries
 
 | Bucket Name | Visibility | Purpose | Allowed Types | Max File Size |
 |---|---|---|---|---|
@@ -97,7 +124,7 @@ Open [http://localhost:3000](http://localhost:3000) and sign in using the synthe
 
 ---
 
-## 4. Mailpit Local Email Capture
+## 5. Mailpit Local Email Capture
 
 Local authentication emails (e.g. password reset, invitation links) are captured by Mailpit at:
 👉 **Mailpit Web UI:** [http://localhost:54324](http://localhost:54324)
@@ -106,7 +133,7 @@ No emails leave your machine during local development.
 
 ---
 
-## 5. Security & Prohibited Operations
+## 6. Security & Prohibited Operations
 
 - **DO NOT** run `supabase login`, `supabase link`, `supabase db push`, `supabase db pull`, or `supabase migration repair` against hosted staging/production without maintainer authorization.
 - **DO NOT** commit credentials, secrets, tokens, or `.env.local` files.

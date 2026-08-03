@@ -22,9 +22,10 @@ The target workflow needs structured submissions, validation, review, archival a
 | Review | Project inspection and controlled `approve`, `request_changes` and `archive` actions are implemented; atomic transaction hardening remains pending. |
 | Ingestion | Package parsing, metadata/file validation, import-batch tracking and import-review foundations are implemented. |
 | Media and feed | Private draft storage, validated promotion foundations and public-eligible JSON feed compilation are implemented. |
-| Data layer | Supabase schema, RLS and explicit grant migrations are versioned; broader production verification remains pending. |
-| Quality | Offline automated tests cover domain, auth helpers, validation, feed, import, media, repository and UI-token behavior. |
-| Not yet complete | Metadata editor, student confirmation, integrated preview, publishing/history and rollback UI, full manual accessibility QA, production hardening and controlled Duda cutover. |
+| Local Supabase | Pinned CLI 2.109.1, timestamped migrations, 3 local storage buckets, synthetic staff provisioning and automated verifier implemented. |
+| Staging Guardrails | Target environment identity checks, hostname matching, loopback rejection and double-acknowledgement CLI flags implemented. |
+| Quality | Offline automated tests cover domain, auth helpers, validation, feed, import, media, repository, staging guardrails and UI tokens. |
+| Pending | Hosted migration reconciliation, hosted staff lifecycle, interactive browser UAT matrix, second-developer onboarding verification and production cutover. |
 
 ## Architecture
 
@@ -37,7 +38,7 @@ flowchart LR
     E -. pending controlled cutover .-> F[Duda public showcase]
 ```
 
-Staff use the protected Next.js application. Server-side authentication and authorization mediate access to Supabase. The feed compiler removes internal fields and includes public-eligible `approved` and `published` records; all other workflow states are excluded. The architecture supports Duda as the public consumer, but staging feed output remains isolated from the live showcase until a controlled cutover.
+Staff use the protected Next.js application. Server-side authentication and authorization mediate access to Supabase using modern server key preference (`SUPABASE_SECRET_KEY` preferred with `SUPABASE_SERVICE_ROLE_KEY` fallback). Browser clients use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. The feed compiler removes internal fields and includes public-eligible `approved` and `published` records; all other workflow states are excluded. The architecture supports Duda as the public consumer, but staging feed output remains isolated from the live showcase until a controlled cutover.
 
 ## Repository structure
 
@@ -51,9 +52,9 @@ Staff use the protected Next.js application. Server-side authentication and auth
 
 ## Quick start
 
-From a fresh checkout:
+From a fresh checkout (no hosted keys or organization access needed for local development):
 
-1. Install dependencies.
+1. Install dependencies:
 
    ```bash
    npm install
@@ -64,6 +65,7 @@ From a fresh checkout:
    ```bash
    npm run supabase:start
    npm run supabase:reset
+   npm run supabase:seed:buckets
    npm run supabase:env:local
    npm run supabase:users:local
    npm run supabase:verify:local
@@ -75,9 +77,15 @@ From a fresh checkout:
    npm run dev:admin
    ```
 
-4. Open [http://localhost:3000/login](http://localhost:3000/login) and log in using synthetic credentials from `apps/admin-cms/.local-users.json`.
+4. Open [http://localhost:3000/login](http://localhost:3000/login) and log in using synthetic credentials from `apps/admin-cms/.local-users.json` (verifies `admin`, `reviewer`, and `editor` synthetic staff accounts via local GoTrue password login).
 
-For detailed local onboarding guidance, see the [Local Development Guide](./infra/supabase/local-development.md). Offline tests and the sample-feed check do not require private dashboard access or hosted database connections.
+5. Clean up local stack when finished:
+
+   ```bash
+   npm run supabase:stop
+   ```
+
+For detailed local onboarding guidance, see the [Local Development Guide](./infra/supabase/local-development.md). Offline unit tests and the sample-feed check (`npm run check:feed`) do not require private dashboard access or hosted database connections.
 
 ## Validation commands
 
@@ -96,26 +104,31 @@ Run from the repository root:
 | Document | Role |
 | --- | --- |
 | [`apps/admin-cms/README.md`](./apps/admin-cms/README.md) | Authoritative developer and staging-operator guide. |
+| [`infra/supabase/local-development.md`](./infra/supabase/local-development.md) | Local Supabase environment setup and onboarding guide. |
+| [`infra/supabase/staging-reconciliation-runbook.md`](./infra/supabase/staging-reconciliation-runbook.md) | 7-gate hosted database migration reconciliation runbook. |
+| [`infra/supabase/key-migration-governance.md`](./infra/supabase/key-migration-governance.md) | Supabase key rotation and server key preference standards. |
+| [`infra/supabase/staff-lifecycle-design.md`](./infra/supabase/staff-lifecycle-design.md) | Staff lifecycle governance and offboarding design. |
+| [`infra/supabase/staging-auth-verification.md`](./infra/supabase/staging-auth-verification.md) | Controlled authentication and authorization verification runbook. |
+| [`docs/README.md`](./docs/README.md) | Operational and planning documentation index. |
 | [`docs/admin-cms-ui-system.md`](./docs/admin-cms-ui-system.md) | Current UI and information-architecture contract. |
 | [`docs/duda-integration-plan.md`](./docs/duda-integration-plan.md) | Public-feed and Duda integration design/plan. |
-| [`docs/prototype-notes.md`](./docs/prototype-notes.md) | Historical prototype notes; not the current application contract. |
-| [`infra/supabase/README.md`](./infra/supabase/README.md) | Supabase migration and policy orientation. |
-| [`infra/supabase/manual-apply-guide.md`](./infra/supabase/manual-apply-guide.md) | Authorized migration and staging operations runbook. |
-| [`infra/supabase/staging-auth-verification.md`](./infra/supabase/staging-auth-verification.md) | Controlled authentication and authorization verification runbook. |
+| [`infra/supabase/README.md`](./infra/supabase/README.md) | Supabase infrastructure and governance index. |
+| [`infra/supabase/manual-apply-guide.md`](./infra/supabase/manual-apply-guide.md) | Operational staging command reference. |
 
 ## Security and data handling
 
 - Never commit `.env` or `.env.local` files.
+- Modern server key preference (`SUPABASE_SECRET_KEY`) is preferred over legacy service-role key fallback for server administration.
 - Keep server-only credentials out of browser code and Client Components.
 - Autonomous agents must not access private administrative dashboards.
 - Use synthetic fixtures only; real student, staff or stakeholder personal data is prohibited in staging.
 - Keep `Prototype/` and staging environments isolated.
-- State-changing commands, migrations, bootstrap operations and publishing require explicit authorization.
+- Hosted state-changing commands remain strictly prohibited without explicit project-owner approval.
 
 ## Roadmap
 
-Implemented foundations include the authenticated Admin/CMS shell, project index, validation, import and media workflows, Supabase migration set and public-eligible feed compiler.
+Implemented foundations include the authenticated Admin/CMS shell, project index, validation, import and media workflows, reproducible local Supabase stack, shared-staging execution guardrails, key preference model and public-eligible feed compiler.
 
-Remaining work includes a metadata editor, student confirmation, preview and publication-history workflows, transaction-backed review updates, reviewer/editor UAT, accessibility and visual QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
+Remaining work includes hosted migration history reconciliation, controlled hosted staff lifecycle tooling, interactive browser UAT matrix validation, metadata editor, student confirmation, preview and publication-history workflows, transaction-backed review updates, accessibility QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
 
 This repository supports a university capstone project. No license, contribution policy or security policy is asserted here because those governance files are not currently present.

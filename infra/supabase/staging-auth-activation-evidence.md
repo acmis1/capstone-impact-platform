@@ -48,6 +48,11 @@ This document records the sanitized operational verification evidence for the in
     *   Process Exit Code: `0`
     *   Environment Variable Cleanup: Temporary process variables cleared immediately after execution.
 
+> [!NOTE]
+> **HISTORICAL EVIDENCE VS CURRENT REQUIRED PROCEDURE:**
+> - **Historical Evidence (2026-07-21):** The historical activation recorded above occurred prior to the introduction of PR B1 shared-staging execution guardrails.
+> - **Current Required Procedure:** All future executions require target environment identity (`CAPSTONE_RUNTIME_ENV=staging`, `CAPSTONE_EXPECTED_SUPABASE_HOST`), double-acknowledgment CLI guard flags (`--apply --confirm-staging=capstone-admin-cms-staging-2026`), and process environment variable `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN`.
+
 ---
 
 ## 4. SELECT-Only Readiness Checker Audit

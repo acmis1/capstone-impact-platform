@@ -78,7 +78,7 @@ GET requests from automated link scanners, prefetchers, or email servers do not 
 2. **explicit acceptance page (/auth/confirm/accept):**
    * Renders a generic "Confirm Invitation" page with an explicit **Accept invitation** form button.
    * Rendering does not initialize a Supabase client or verify the token.
-   * The user must explicitly press **Accept invitation** to submit a POST request back to a Server Action.
+   * The user must explicitly press **Accept invitation** to submit a POST form.
 
 3. **acceptance server action:**
    * Reads the `capstone_invitation_token_hash` from the secure HttpOnly cookie.
@@ -109,9 +109,18 @@ GET requests from automated link scanners, prefetchers, or email servers do not 
 Always run canonical root-level commands from the repository root:
 
 * **Link Initial Administrator:**
+  Requires target environment identity variables (`CAPSTONE_RUNTIME_ENV=staging`, `CAPSTONE_EXPECTED_SUPABASE_HOST`), input confirmation variable (`CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN`), and CLI guard flags (`--apply --confirm-staging=capstone-admin-cms-staging-2026`).
+
   ```bash
-  npm run link:admin-staging
+  export CAPSTONE_RUNTIME_ENV=staging
+  export CAPSTONE_EXPECTED_SUPABASE_HOST=app-staging.supabase.co
+  export CAPSTONE_BOOTSTRAP_ADMIN_EMAIL="admin@example.com"
+  export CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME="Initial Admin"
+  export CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN
+
+  npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026
   ```
+
 * **Verify Staging Readiness:**
   ```bash
   npm run check:admin-auth
@@ -121,6 +130,6 @@ Always run canonical root-level commands from the repository root:
 Only when run inside the `apps/admin-cms` directory context:
 ```bash
 cd apps/admin-cms
-npm run link:staging-admin
+npm run link:staging-admin -- --apply --confirm-staging=capstone-admin-cms-staging-2026
 npm run check:staging-auth
 ```
