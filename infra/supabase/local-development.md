@@ -1,71 +1,154 @@
-# Local Supabase Development & Testing Guide
+# Reproducible Local Supabase Development & Onboarding Guide
 
-This document defines the canonical local database setup, seed fixtures, synthetic staff authentication workflow, and verification log for the Capstone Impact Platform.
+This guide documents the canonical, local-only Supabase development workflow for the Capstone Impact Platform (`acmis1/capstone-impact-platform`).
+
+## 1. Architectural Principles
+
+- **Zero Remote Dependencies:** Local development runs entirely inside local Docker containers via the repository-pinned Supabase CLI (`supabase@2.109.1`).
+- **No Supabase Organization Membership Required:** Developers do not need access to hosted Supabase, Duda, Render, or Vercel dashboards to build, test, and run the application locally.
+- **Isolated Local State:** All database tables, authentication identities, storage buckets, and Mailpit email captures run on `http://127.0.0.1`.
+- **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real student or stakeholder PII or credentials are used or committed.
+- **Deterministic Migration Replay:** Running `npm run supabase:reset` replays all 7 timestamped migrations from `infra/supabase/migrations/` in strict ascending order, ending with `20260803174000_harden_function_execute_defaults.sql` *(migration 0007 is repository/local-only and not applied to hosted staging)*.
+- **Verification Strategy & Scope:**
+  - Static migration tests inspect committed SQL contracts.
+  - Runtime verification inspects the actual local database reset, live schema, policy semantics, exact table-grant matrix, function execution privileges, storage buckets, and real password logins for all three synthetic accounts.
+  - Real password sign-in was verified for all three synthetic accounts (`local.admin@capstone.test`, `local.reviewer@capstone.test`, `local.editor@capstone.test`).
+  - The exact live table-grant matrix was verified across all 13 tables (anon 0 privileges; authenticated lookup SELECT only; service_role full CRUD).
+  - Bootstrap function positive (`service_role`) and negative (`PUBLIC`, `anon`, `authenticated`) execution grants were verified, and trigger-helper execution privileges were verified as unexposed.
+  - `supabase:seed:buckets` is a dedicated local-only script (`seedLocalSupabaseFixtures.ts`).
+  - Hosted staging migration history remains separate and is not altered by local setup.
 
 ---
 
-## 1. Local Architecture & Environment Guarantees
+## 2. Professional Daily Developer Workflow
 
-Local development is powered by Docker Desktop/Engine and the repository-pinned Supabase CLI (`2.109.1`).
+Prerequisites:
+- **Node.js**: `>= 24.14.1 < 25` (Pinned via `.nvmrc` to `24.14.1`)
+- **npm**: `>= 11.11.0 < 12` (Declared in `packageManager` as `npm@11.11.0`)
+- **Docker Desktop / Engine**: Active locally.
 
-### Guarantees
-1. **Loopback Isolation**: Local database (`127.0.0.1:54322`) and API services (`127.0.0.1:54321`) run entirely on loopback.
-2. **Zero Cloud Account Dependency**: Local development requires **no** Supabase cloud account or organization membership.
-3. **No Hosted Staging Impact**: Local reset, seeding, and user provisioning perform zero network calls to hosted Supabase infrastructure.
-4. **Deterministic Migration Replay**: Running `npm run supabase:reset` replays all 7 timestamped migrations from `infra/supabase/migrations/` in strict ascending order.
+Follow these steps when onboarding or starting daily work:
 
----
-
-## 2. Canonical Local Setup Instructions
-
+### Step 1: Clone & Clean Install Dependencies
 ```bash
-# 1. Clean install dependencies
+git clone https://github.com/acmis1/capstone-impact-platform.git
+cd capstone-impact-platform
 npm ci
+```
 
-# 2. Run automated onboarding precheck (12 checks)
+### Step 2: Run Automated Onboarding Precheck
+Run the automated toolchain, Docker, Git, migration, and dependency precheck (12 checks):
+```bash
 npm run onboarding:check
+```
 
-# 3. Start local Supabase containers
+### Step 3: Ensure Docker Desktop is Running
+Start Docker Desktop on your operating system. Verify container runtime status:
+```bash
+docker ps
+```
+
+### Step 4: Start Local Supabase Stack
+Start the local Supabase containers (PostgreSQL, Auth, Storage, Studio, Mailpit):
+```bash
 npm run supabase:start
+```
 
-# 4. Replay all 7 migrations and seed database
+### Step 5: Reset Local Database & Replay Migrations
+Replay all 7 timestamped migrations (`20260601035138_...` through `20260803174000_...`) and load `seed.sql`:
+```bash
 npm run supabase:reset
+```
 
-# 5. Seed local storage buckets and synthetic media fixtures
+### Step 6: Seed Local Storage Buckets & Synthetic Fixtures
+Ensure storage buckets exist with exact local policies and synthetic poster fixtures:
+```bash
 npm run supabase:seed:buckets
+```
+*Note: `supabase:seed:buckets` is strictly local-only (`seedLocalSupabaseFixtures.ts`) and does not invoke staging scripts.*
 
-# 6. Generate apps/admin-cms/.env.local with loopback credentials
+### Step 7: Generate Local Environment Configuration
+Write validated loopback environment settings to `apps/admin-cms/.env.local`:
+```bash
 npm run supabase:env:local
+```
+*Note: Existing hosted environment files must never be overwritten by local setup.*
 
-# 7. Provision local synthetic staff accounts into Auth & DB
+### Step 8: Provision Local Synthetic Staff Accounts
+Create reproducible synthetic accounts for `admin`, `reviewer`, and `editor`:
+```bash
 npm run supabase:users:local
+```
+This writes random per-developer passwords into the ignored file `apps/admin-cms/.local-users.json`.
 
-# 8. Run comprehensive local Supabase verification
+### Step 9: Verify Local Stack Integrity
+Run the automated verification suite:
+```bash
 npm run supabase:verify:local
+```
+
+### Step 10: Launch Admin/CMS Application
+Start the Next.js development server:
+```bash
+npm run dev:admin
+```
+Open [http://localhost:3000/login](http://localhost:3000/login) and sign in using the synthetic credentials in `apps/admin-cms/.local-users.json`.
+
+### Step 11: Clean Up Local Stack
+Stop the local containers when finished:
+```bash
+npm run supabase:stop
 ```
 
 ---
 
-## 3. Synthetic Staff Credentials
+## 3. Second-Developer Fresh-Clone Acceptance Checklist
 
-Synthetic staff accounts are created locally with predictable test passwords. Credentials are saved to `apps/admin-cms/.local-users.json` (git-ignored):
+When onboarding a new developer or testing on a fresh machine:
 
-* **Admin Role**: `local.admin@capstone.test`
-* **Reviewer Role**: `local.reviewer@capstone.test`
-* **Editor Role**: `local.editor@capstone.test`
-
-Password format: `TestPassword123!`
+- [ ] Node.js (`>=24.14.1 <25`) & npm (`>=11.11.0 <12`) installed.
+- [ ] Docker Desktop running (`docker ps` returns active daemon status).
+- [ ] Fresh clone created: `git clone https://github.com/acmis1/capstone-impact-platform.git`.
+- [ ] `npm ci` completes without workspace errors.
+- [ ] `npm run onboarding:check` passes all 12 prechecks.
+- [ ] `npm run supabase:start` launches local container suite.
+- [ ] `npm run supabase:reset` replays all 7 migrations cleanly.
+- [ ] `npm run supabase:seed:buckets` provisions local buckets and poster fixtures.
+- [ ] `npm run supabase:env:local` creates `apps/admin-cms/.env.local`.
+- [ ] `npm run supabase:users:local` provisions synthetic `admin`, `reviewer`, and `editor` accounts.
+- [ ] `npm run supabase:verify:local` outputs PASS for all local checks.
+- [ ] `npm run dev:admin` opens [http://localhost:3000/login](http://localhost:3000/login) and logs in cleanly.
+- [ ] Zero hosted keys, organization access, or hosted Supabase dashboard actions were required.
 
 ---
 
-## 4. Empirical Fresh-Clone Verification Log
+## 4. Storage & Bucket Boundaries
+
+| Bucket Name | Visibility | Purpose | Allowed Types | Max File Size |
+|---|---|---|---|---|
+| `project-drafts-private` | Private | Local synthetic draft media & private uploads | PNG, JPEG, WEBP, PDF | 20 MB |
+| `project-public-assets` | Public | Local synthetic showcase images & posters | PNG, JPEG, WEBP, PDF | 20 MB |
+| `public-feeds` | Public | Exported JSON showcase feeds (`capstones-latest.json`) | JSON | 10 MB |
+
+---
+
+## 5. Mailpit Local Email Capture
+
+Local authentication emails (e.g. password reset, invitation links) are captured by Mailpit at:
+👉 **Mailpit Web UI:** [http://localhost:54324](http://localhost:54324)
+
+No emails leave your machine during local development.
+
+---
+
+## 6. Empirical Remote Fresh-Clone Verification Log
 
 ### Verification Metadata
 - **Verified Branch**: `infra/second-developer-onboarding`
-- **Toolchain Used**: Node `v24.14.1`, npm `11.11.0` (Satisfies Node 24 maintained LTS range `>= 24.14.1 < 25` and `npm >= 11.11.0 < 12`)
+- **Toolchain Used**: Node `v24.14.1`, npm `11.11.0` (Satisfies Node 24 range `>= 24.14.1 < 25` and `npm >= 11.11.0 < 12`)
 - **Docker Engine**: Docker Desktop on Windows 11
-- **Tested Operating System**: Windows (x64)
-- **Unverified Operating Systems**: macOS, Linux (require independent human developer verification)
+- **Environment Tested**: Verified in a clean Windows remote-clone run
+- **Unverified Platforms**: macOS, Linux and independent human onboarding remain unverified
 
 ### Verification Sequence & Outcomes
 1. `node -v` & `npm -v`: Verified Node `v24.14.1` and npm `11.11.0`.
@@ -83,7 +166,15 @@ Password format: `TestPassword123!`
 13. `http://localhost:3000/login`: Returned `HTTP 200 OK`.
 14. `npm run check:feed`: **PASS** (2 public feed records compiled, schema compliant).
 15. `npm run lint --workspace=apps/admin-cms`: **PASS** (0 errors, 0 warnings).
-16. `npm run test:admin`: **PASS** (36 test files, 366 tests passed).
+16. `npm run test:admin`: **PASS** (36 test files, 376 tests passed).
 17. `npm run typecheck:admin`: **PASS** (`tsc --noEmit` code 0).
 18. `npm run build:admin`: **PASS** (`next build` completed in 2.7s).
 19. `npm run supabase:stop`: Stopped local container stack cleanly.
+
+---
+
+## 7. Security & Prohibited Operations
+
+- **DO NOT** run `supabase login`, `supabase link`, `supabase db push`, `supabase db pull`, or `supabase migration repair` against hosted staging/production without maintainer authorization.
+- **DO NOT** commit credentials, secrets, tokens, or `.env.local` files.
+- **DO NOT** seed real user emails, passwords, or personal identity data.

@@ -13,6 +13,16 @@ export interface OnboardingCheckResult {
   items: OnboardingCheckItem[];
 }
 
+export const EXPECTED_MIGRATION_FILENAMES = [
+  '20260601035138_staging_schema.sql',
+  '20260601035139_staging_rls_policies.sql',
+  '20260715102956_admin_auth_identity.sql',
+  '20260719003407_explicit_data_api_grants.sql',
+  '20260719165118_initial_admin_bootstrap.sql',
+  '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
+  '20260803174000_harden_function_execute_defaults.sql',
+] as const;
+
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {
   const clean = versionStr.trim().replace(/^v/, '');
   const match = clean.match(/^(\d+)\.(\d+)\.(\d+)/);
@@ -72,20 +82,23 @@ export function validateMigrationsList(filenames: string[]): { passed: boolean; 
     }
   }
 
-  const expectedFinal = '20260803174000_harden_function_execute_defaults.sql';
-  const actualFinal = sortedFiles[sortedFiles.length - 1];
-  if (actualFinal !== expectedFinal) {
-    return { passed: false, message: `FAIL: Expected final migration "${expectedFinal}", found "${actualFinal}"` };
+  for (let i = 0; i < EXPECTED_MIGRATION_FILENAMES.length; i++) {
+    if (sortedFiles[i] !== EXPECTED_MIGRATION_FILENAMES[i]) {
+      return {
+        passed: false,
+        message: `FAIL: Migration file at index ${i} does not match expected identity "${EXPECTED_MIGRATION_FILENAMES[i]}" (found "${sortedFiles[i]}")`,
+      };
+    }
   }
 
-  return { passed: true, message: 'PASS: Exactly 7 timestamped migrations exist in strict ascending order ending with 0007' };
+  return { passed: true, message: 'PASS: Exactly 7 timestamped migrations exist with exact expected filenames in ascending order' };
 }
 
 export function sanitizePublicSafeMessage(msg: string): string {
   return msg
-    .replace(/[A-Za-z]:\\[^\s:]+/g, '<relative-path>')
-    .replace(/\/Users\/[^\s:]+/g, '<relative-path>')
-    .replace(/\/home\/[^\s:]+/g, '<relative-path>');
+    .replace(/[A-Za-z]:\\[^\r\n:"]+/g, '<relative-path>')
+    .replace(/\/Users\/[^\r\n:"]+/g, '<relative-path>')
+    .replace(/\/home\/[^\r\n:"]+/g, '<relative-path>');
 }
 
 export function performOnboardingCheck(options?: {
@@ -171,9 +184,10 @@ export function performOnboardingCheck(options?: {
   let gitOk = false;
   let trackedFiles: string[] = [];
   try {
-    const gitVer = exec('git --version').trim();
-    if (gitVer.length > 0) {
-      const gitLsOutput = exec('git ls-files');
+    const quotedRepoRoot = repoRoot.replace(/"/g, '\\"');
+    const isInsideWorkTree = exec(`git -C "${quotedRepoRoot}" rev-parse --is-inside-work-tree`).trim();
+    if (isInsideWorkTree === 'true') {
+      const gitLsOutput = exec(`git -C "${quotedRepoRoot}" ls-files`);
       trackedFiles = gitLsOutput.split(/\r?\n/).map((f) => f.trim()).filter(Boolean);
       gitOk = trackedFiles.length > 0;
     }
@@ -192,7 +206,8 @@ export function performOnboardingCheck(options?: {
 
   let supabaseDepOk = false;
   let supabaseInstalledOk = false;
-  let supabaseBinaryOk = false;
+  let supabaseDeclaredBinTargetOk = false;
+  let supabaseShimOk = false;
 
   if (existsSync(rootPkgPath)) {
     try {
@@ -207,27 +222,37 @@ export function performOnboardingCheck(options?: {
     try {
       const supaPkg = JSON.parse(readFileSync(installedSupaPkgPath, 'utf8'));
       supabaseInstalledOk = supaPkg.version === '2.109.1';
+
+      let relBinPath: string | null = null;
+      if (typeof supaPkg.bin === 'string') {
+        relBinPath = supaPkg.bin;
+      } else if (typeof supaPkg.bin === 'object' && supaPkg.bin !== null && typeof supaPkg.bin.supabase === 'string') {
+        relBinPath = supaPkg.bin.supabase;
+      }
+
+      if (relBinPath) {
+        const declaredTarget = path.join(repoRoot, 'node_modules/supabase', relBinPath);
+        supabaseDeclaredBinTargetOk = existsSync(declaredTarget);
+      }
     } catch {
       supabaseInstalledOk = false;
+      supabaseDeclaredBinTargetOk = false;
     }
   }
 
-  const localBinaryPathWin = path.join(repoRoot, 'node_modules/supabase/bin/supabase.exe');
-  const localBinaryPathNix = path.join(repoRoot, 'node_modules/supabase/bin/supabase');
-  const localBinCmdPathWin = path.join(repoRoot, 'node_modules/.bin/supabase.cmd');
-  const localBinCmdPathNix = path.join(repoRoot, 'node_modules/.bin/supabase');
+  const shimWinCmd = path.join(repoRoot, 'node_modules/.bin/supabase.cmd');
+  const shimWinPs1 = path.join(repoRoot, 'node_modules/.bin/supabase.ps1');
+  const shimWinExe = path.join(repoRoot, 'node_modules/.bin/supabase.exe');
+  const shimNix = path.join(repoRoot, 'node_modules/.bin/supabase');
 
-  supabaseBinaryOk =
-    existsSync(localBinaryPathWin) ||
-    existsSync(localBinaryPathNix) ||
-    existsSync(localBinCmdPathWin) ||
-    existsSync(localBinCmdPathNix);
+  supabaseShimOk = existsSync(shimWinCmd) || existsSync(shimWinPs1) || existsSync(shimWinExe) || existsSync(shimNix);
 
-  const supabaseOverallOk = supabaseDepOk && supabaseInstalledOk && supabaseBinaryOk;
-  let supaMsg = 'PASS: Supabase CLI 2.109.1 declared, installed locally, and binary binary exists';
+  const supabaseOverallOk = supabaseDepOk && supabaseInstalledOk && supabaseDeclaredBinTargetOk && supabaseShimOk;
+  let supaMsg = 'PASS: Supabase CLI 2.109.1 declared, installed locally, declared bin target exists, and npm shim is present';
   if (!supabaseDepOk) supaMsg = 'FAIL: root package.json devDependencies does not declare supabase 2.109.1';
   else if (!supabaseInstalledOk) supaMsg = 'FAIL: Installed node_modules/supabase/package.json is missing or version is not 2.109.1';
-  else if (!supabaseBinaryOk) supaMsg = 'FAIL: Local Supabase binary executable is missing from node_modules';
+  else if (!supabaseDeclaredBinTargetOk) supaMsg = 'FAIL: Installed node_modules/supabase/package.json does not declare a valid target or declared bin target does not exist';
+  else if (!supabaseShimOk) supaMsg = 'FAIL: Local npm .bin shim for Supabase CLI is missing';
 
   items.push({
     name: 'Installed Supabase CLI (2.109.1)',

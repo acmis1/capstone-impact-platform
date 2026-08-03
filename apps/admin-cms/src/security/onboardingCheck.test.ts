@@ -27,6 +27,8 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     if (cmd === 'docker --version') return 'Docker version 27.0.3';
     if (cmd === 'docker info') return 'Server running';
     if (cmd === 'git --version') return 'git version 2.45.0';
+    if (cmd.includes('git -C') && cmd.includes('rev-parse --is-inside-work-tree')) return 'true';
+    if (cmd.includes('git -C') && cmd.includes('ls-files')) return 'README.md\npackage.json\ninfra/supabase/config.toml';
     if (cmd === 'git ls-files') return 'README.md\npackage.json\ninfra/supabase/config.toml';
     return '';
   };
@@ -50,7 +52,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     readFileSync: (p: string, _enc?: string) => {
       const norm = p.replace(/\\/g, '/');
       if (norm.endsWith('node_modules/supabase/package.json')) {
-        return JSON.stringify({ version: '2.109.1' });
+        return JSON.stringify({ version: '2.109.1', bin: { supabase: 'bin/supabase' } });
       }
       if (norm.endsWith('package.json')) {
         return JSON.stringify({ devDependencies: { supabase: '2.109.1' } });
@@ -137,7 +139,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
 
   it('5. Git CLI unavailable fails', () => {
     const mockExecNoGit = (cmd: string) => {
-      if (cmd.startsWith('git')) throw new Error('git not found');
+      if (cmd.includes('git')) throw new Error('git not found');
       return defaultMockExec(cmd);
     };
 
@@ -155,7 +157,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
 
   it('6. git ls-files failure fails rather than passing', () => {
     const mockExecGitLsFail = (cmd: string) => {
-      if (cmd === 'git ls-files') throw new Error('fatal: not a git repository');
+      if (cmd.includes('ls-files')) throw new Error('fatal: not a git repository');
       return defaultMockExec(cmd);
     };
 
@@ -174,7 +176,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
 
   it('7. A tracked .env.local fails', () => {
     const mockExecTrackedEnv = (cmd: string) => {
-      if (cmd === 'git ls-files') return 'README.md\napps/admin-cms/.env.local';
+      if (cmd.includes('ls-files')) return 'README.md\napps/admin-cms/.env.local';
       return defaultMockExec(cmd);
     };
 
@@ -193,7 +195,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
 
   it('8. A tracked .local-users.json fails', () => {
     const mockExecTrackedUsers = (cmd: string) => {
-      if (cmd === 'git ls-files') return 'README.md\napps/admin-cms/.local-users.json';
+      if (cmd.includes('ls-files')) return 'README.md\napps/admin-cms/.local-users.json';
       return defaultMockExec(cmd);
     };
 
@@ -243,7 +245,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     ];
     const result = validateMigrationsList(missing0007);
     expect(result.passed).toBe(false);
-    expect(result.message).toContain('Expected final migration "20260803174000_harden_function_execute_defaults.sql"');
+    expect(result.message).toContain('Migration file at index 6 does not match expected identity');
   });
 
   it('12. Installed Supabase package missing fails', () => {
@@ -275,7 +277,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       readFileSync: (p: string, _enc?: string) => {
         const norm = p.replace(/\\/g, '/');
         if (norm.endsWith('node_modules/supabase/package.json')) {
-          return JSON.stringify({ version: '2.100.0' });
+          return JSON.stringify({ version: '2.100.0', bin: { supabase: 'bin/supabase' } });
         }
         return defaultFsOverride.readFileSync(p, _enc);
       },
@@ -321,13 +323,182 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     expect(result.passed).toBe(false);
     const item = result.items.find((i) => i.name.includes('Installed Supabase CLI'));
     expect(item?.passed).toBe(false);
-    expect(item?.message).toContain('binary executable is missing');
   });
 
-  it('15. Failure messages contain no absolute repository path', () => {
-    const rawFailMessage = 'FAIL: Path C:\\Users\\Developer\\Project\\secret failed';
-    const sanitized = sanitizePublicSafeMessage(rawFailMessage);
-    expect(sanitized).not.toContain('C:\\Users\\Developer\\Project\\secret');
+  it('15. Git commands are anchored using repoRoot with safe quoting for paths with spaces', () => {
+    const executedCmds: string[] = [];
+    const repoWithSpaces = 'D:\\IT RMIT\\Capstone Impact Platform';
+
+    const customExec = (cmd: string): string => {
+      executedCmds.push(cmd);
+      if (cmd.includes('git -C') && cmd.includes('rev-parse --is-inside-work-tree')) return 'true';
+      if (cmd.includes('git -C') && cmd.includes('ls-files')) return 'README.md\npackage.json';
+      return defaultMockExec(cmd);
+    };
+
+    const result = performOnboardingCheck({
+      repoRoot: repoWithSpaces,
+      execRunner: customExec,
+      nodeVersion: 'v24.14.1',
+      fsOverride: defaultFsOverride,
+    });
+
+    expect(result.passed).toBe(true);
+    const gitCmds = executedCmds.filter((c) => c.includes('git -C'));
+    expect(gitCmds.length).toBeGreaterThanOrEqual(2);
+    expect(gitCmds[0]).toContain(`git -C "D:\\IT RMIT\\Capstone Impact Platform"`);
+  });
+
+  it('16. Installed Supabase package supports string bin form', () => {
+    const fsStringBin = {
+      ...defaultFsOverride,
+      readFileSync: (p: string, _enc?: string) => {
+        const norm = p.replace(/\\/g, '/');
+        if (norm.endsWith('node_modules/supabase/package.json')) {
+          return JSON.stringify({ version: '2.109.1', bin: 'bin/supabase' });
+        }
+        return defaultFsOverride.readFileSync(p, _enc);
+      },
+    };
+
+    const result = performOnboardingCheck({
+      repoRoot: realRepoRoot,
+      execRunner: defaultMockExec,
+      nodeVersion: 'v24.14.1',
+      fsOverride: fsStringBin,
+    });
+
+    expect(result.passed).toBe(true);
+  });
+
+  it('17. Installed Supabase package supports object bin form', () => {
+    const fsObjectBin = {
+      ...defaultFsOverride,
+      readFileSync: (p: string, _enc?: string) => {
+        const norm = p.replace(/\\/g, '/');
+        if (norm.endsWith('node_modules/supabase/package.json')) {
+          return JSON.stringify({ version: '2.109.1', bin: { supabase: 'bin/supabase' } });
+        }
+        return defaultFsOverride.readFileSync(p, _enc);
+      },
+    };
+
+    const result = performOnboardingCheck({
+      repoRoot: realRepoRoot,
+      execRunner: defaultMockExec,
+      nodeVersion: 'v24.14.1',
+      fsOverride: fsObjectBin,
+    });
+
+    expect(result.passed).toBe(true);
+  });
+
+  it('18. Missing declared bin entry in Supabase package.json fails', () => {
+    const fsNoBinEntry = {
+      ...defaultFsOverride,
+      readFileSync: (p: string, _enc?: string) => {
+        const norm = p.replace(/\\/g, '/');
+        if (norm.endsWith('node_modules/supabase/package.json')) {
+          return JSON.stringify({ version: '2.109.1' }); // no bin key
+        }
+        return defaultFsOverride.readFileSync(p, _enc);
+      },
+    };
+
+    const result = performOnboardingCheck({
+      repoRoot: realRepoRoot,
+      execRunner: defaultMockExec,
+      nodeVersion: 'v24.14.1',
+      fsOverride: fsNoBinEntry,
+    });
+
+    expect(result.passed).toBe(false);
+    const item = result.items.find((i) => i.name.includes('Installed Supabase CLI'));
+    expect(item?.passed).toBe(false);
+    expect(item?.message).toContain('does not declare a valid target');
+  });
+
+  it('19. Missing declared bin target file fails', () => {
+    const fsMissingDeclaredTarget = {
+      ...defaultFsOverride,
+      existsSync: (p: string) => {
+        const norm = p.replace(/\\/g, '/');
+        if (norm.endsWith('node_modules/supabase/bin/supabase')) return false;
+        if (norm.endsWith('node_modules/supabase/bin/supabase.exe')) return false;
+        return defaultFsOverride.existsSync(p);
+      },
+      readFileSync: (p: string, _enc?: string) => {
+        const norm = p.replace(/\\/g, '/');
+        if (norm.endsWith('node_modules/supabase/package.json')) {
+          return JSON.stringify({ version: '2.109.1', bin: { supabase: 'bin/supabase' } });
+        }
+        return defaultFsOverride.readFileSync(p, _enc);
+      },
+    };
+
+    const result = performOnboardingCheck({
+      repoRoot: realRepoRoot,
+      execRunner: defaultMockExec,
+      nodeVersion: 'v24.14.1',
+      fsOverride: fsMissingDeclaredTarget,
+    });
+
+    expect(result.passed).toBe(false);
+    const item = result.items.find((i) => i.name.includes('Installed Supabase CLI'));
+    expect(item?.passed).toBe(false);
+  });
+
+  it('20. Missing npm .bin shim fails', () => {
+    const fsMissingShim = {
+      ...defaultFsOverride,
+      existsSync: (p: string) => {
+        const norm = p.replace(/\\/g, '/');
+        if (norm.endsWith('node_modules/.bin/supabase.cmd') || norm.endsWith('node_modules/.bin/supabase')) {
+          return false;
+        }
+        return defaultFsOverride.existsSync(p);
+      },
+    };
+
+    const result = performOnboardingCheck({
+      repoRoot: realRepoRoot,
+      execRunner: defaultMockExec,
+      nodeVersion: 'v24.14.1',
+      fsOverride: fsMissingShim,
+    });
+
+    expect(result.passed).toBe(false);
+    const item = result.items.find((i) => i.name.includes('Installed Supabase CLI'));
+    expect(item?.passed).toBe(false);
+    expect(item?.message).toContain('Local npm .bin shim for Supabase CLI is missing');
+  });
+
+  it('21. Exact seven expected migration filenames are required', () => {
+    const invalidMigrationNames = [
+      '20260601035138_staging_schema.sql',
+      '20260601035139_staging_rls_policies.sql',
+      '20260715102956_admin_auth_identity.sql',
+      '20260719003407_explicit_data_api_grants.sql',
+      '20260719165118_initial_admin_bootstrap.sql',
+      '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
+      '20260803174000_different_migration_name.sql',
+    ];
+    const result = validateMigrationsList(invalidMigrationNames);
+    expect(result.passed).toBe(false);
+    expect(result.message).toContain('Migration file at index 6 does not match expected identity');
+  });
+
+  it('22. Windows path with spaces is sanitized', () => {
+    const winPathWithSpaces = 'FAIL: Error in C:\\Users\\John Doe\\My Projects\\capstone\\config.toml';
+    const sanitized = sanitizePublicSafeMessage(winPathWithSpaces);
+    expect(sanitized).not.toContain('C:\\Users\\John Doe\\My Projects\\capstone\\config.toml');
+    expect(sanitized).toContain('<relative-path>');
+  });
+
+  it('23. Unix home path with spaces is sanitized', () => {
+    const unixPathWithSpaces = 'FAIL: Path /home/john doe/projects/capstone/config.toml failed';
+    const sanitized = sanitizePublicSafeMessage(unixPathWithSpaces);
+    expect(sanitized).not.toContain('/home/john doe/projects/capstone/config.toml');
     expect(sanitized).toContain('<relative-path>');
   });
 });
