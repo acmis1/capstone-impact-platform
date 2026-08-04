@@ -1,0 +1,24 @@
+name: General Task / Refactor
+description: Propose a chore, documentation update, refactor, or quality enhancement
+title: "chore: "
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for maintenance, refactoring, documentation, or local automation tasks.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Task Goal & Scope
+      description: Describe what needs to be done.
+      placeholder: "Describe the task objectives..."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Specific verifiable criteria to declare this task done.
+    validations:
+      required: true

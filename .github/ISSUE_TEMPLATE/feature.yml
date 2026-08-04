@@ -1,0 +1,38 @@
+name: Feature Request
+description: Propose a new feature, UI enhancement, or workflow capability
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Propose a new feature or improvement for the Capstone Impact Platform.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Use Case
+      description: Is your feature request related to a problem or user need?
+      placeholder: "Describe the user problem or operational goal..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see implemented.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or features considered.
+    validations:
+      required: false
+  - type: textarea
+    id: impact
+    attributes:
+      label: Security & Scope Impact
+      description: Will this touch database schemas, RLS, auth, or storage?
+    validations:
+      required: false

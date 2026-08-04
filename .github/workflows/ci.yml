@@ -1,0 +1,81 @@
+name: CI Quality Gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  static-quality:
+    name: Static Quality & Build Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24.14.1 & npm 11.11.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Onboarding Toolchain Precheck
+        run: npm run onboarding:check
+
+      - name: Public Feed Contract Check
+        run: npm run check:feed
+
+      - name: ESLint Quality Check
+        run: npm run lint --workspace=apps/admin-cms
+
+      - name: Vitest Unit & Security Tests
+        run: npm run test:admin
+
+      - name: TypeScript Typecheck
+        run: npm run typecheck:admin
+
+      - name: Next.js Production Build
+        run: npm run build:admin
+
+      - name: Git Diff & Syntax Check
+        run: git diff --check
+
+  local-integration:
+    name: Disposable Local Supabase Integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24.14.1 & npm 11.11.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start Local Supabase Stack
+        run: npm run supabase:start
+
+      - name: Reset Local Database & Replay Migrations
+        run: npm run supabase:reset
+
+      - name: Seed Storage Buckets & Fixtures
+        run: npm run supabase:seed:buckets
+
+      - name: Generate Local Environment Configuration
+        run: npm run supabase:env:local
+
+      - name: Provision Synthetic Staff Accounts
+        run: npm run supabase:users:local
+
+      - name: Verify Local Supabase Stack Integrity
+        run: npm run supabase:verify:local
+
+      - name: Stop Local Supabase Stack (Cleanup)
+        if: always()
+        run: npm run supabase:stop

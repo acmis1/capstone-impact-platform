@@ -1,0 +1,51 @@
+name: Bug Report
+description: Report a bug, broken test, setup error, or application failure
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please provide detailed information to help reproduce and fix the bug.
+  - type: input
+    id: environment
+    attributes:
+      label: Operating System & Toolchain
+      description: OS version, Node version, npm version, Docker status
+      placeholder: "e.g. Windows 11, Node v24.14.1, npm 11.11.0, Docker Desktop active"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: "Describe what went wrong..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the behavior.
+      placeholder: |
+        1. Run command '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs or Command Output
+      description: Paste relevant terminal output or sanitized error logs. Do NOT include secrets or credentials.
+      render: shell
+    validations:
+      required: false
