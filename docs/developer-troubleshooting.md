@@ -158,6 +158,8 @@ Try these steps **in order**. Do not skip ahead.
   ```
   This is safe to rerun at any time. It checks your existing environment file before any overwrite.
 
+  Normal setup does not delete or recreate local database data. Use `npm run supabase:reset` only when an intentional clean database reconstruction is required.
+
 - **Safe Stack Shutdown:**
   ```bash
   npm run supabase:stop

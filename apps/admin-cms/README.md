@@ -95,7 +95,6 @@ Run from the repository root:
 
    ```bash
    npm run supabase:start
-   npm run supabase:reset
    npm run supabase:seed:buckets
    npm run supabase:env:local
    npm run supabase:users:local

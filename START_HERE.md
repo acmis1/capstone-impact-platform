@@ -54,11 +54,12 @@ npm run setup:local
 ### What `npm run setup:local` Does:
 1. Runs `npm run onboarding:check` (verifies Node, npm, Docker, and repository configuration).
 2. Runs `npm run supabase:start` (launches local Supabase Docker containers).
-3. Runs `npm run supabase:reset` (replays all 8 database migrations from scratch).
-4. Runs `npm run supabase:seed:buckets` (provisions local private & public storage buckets and mock poster fixtures).
-5. Runs `npm run supabase:env:local` (generates `apps/admin-cms/.env.local`).
-6. Runs `npm run supabase:users:local` (provisions synthetic `admin`, `reviewer`, and `editor` accounts in local Auth).
-7. Runs `npm run supabase:verify:local` (verifies database grants, RLS, functions, buckets, and synthetic sign-in).
+3. Runs `npm run supabase:seed:buckets` (reconciles local private & public storage buckets and mock poster fixtures).
+4. Runs `npm run supabase:env:local` (generates `apps/admin-cms/.env.local`).
+5. Runs `npm run supabase:users:local` (reconciles synthetic local Auth accounts).
+6. Runs `npm run supabase:verify:local` (verifies database grants, RLS, functions, buckets, and synthetic sign-in).
+
+`setup:local` is safe to rerun and does not rebuild the database. Use `npm run supabase:reset` separately when you intentionally need to replay all eight migrations and seed data from scratch.
 
 ---
 

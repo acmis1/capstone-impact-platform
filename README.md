@@ -76,13 +76,10 @@ Prerequisites:
 3. Start local Supabase development stack:
 
    ```bash
-   npm run supabase:start
-   npm run supabase:reset
-   npm run supabase:seed:buckets
-   npm run supabase:env:local
-   npm run supabase:users:local
-   npm run supabase:verify:local
+   npm run setup:local
    ```
+
+   This command is safe to rerun and does not rebuild the local database. Run `npm run supabase:reset` separately only for an intentional clean reconstruction.
 
 4. Start the Next.js development server:
 

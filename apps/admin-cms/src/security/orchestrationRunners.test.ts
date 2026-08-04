@@ -38,59 +38,6 @@ describe('classifyEnvLocal', () => {
 // setupLocal Runner
 // ---------------------------------------------------------------------------
 describe('setupLocal.ts Runner', () => {
-  it.each([true, false])('0c. Final reset failure cleans up safely (cleanup success=%s)', async (cleanupSucceeds) => {
-    const commands: string[] = [];
-    let resetCount = 0;
-    const logs: string[] = [];
-    const result = await runSetupLocalSteps({
-      commandRunner: (command) => {
-        commands.push(command);
-        if (command === 'npm run supabase:reset') { resetCount++; throw new Error('noisy reset failure'); }
-        if (command === 'npm run supabase:stop' && !cleanupSucceeds) throw new Error('noisy cleanup failure');
-      },
-      log: (message) => logs.push(message),
-      envLocalPath: '/nonexistent/__no__.env.local',
-      databaseReadiness: () => 'READY',
-      resetFailureCategory: () => 'DATABASE_CONNECTION_BUSY',
-    });
-    expect(result.success).toBe(false);
-    expect(resetCount).toBe(4);
-    expect(commands.filter((command) => command === 'npm run supabase:stop')).toHaveLength(1);
-    expect(commands.some((command) => command.includes('supabase:seed'))).toBe(false);
-    expect(logs.join('\n')).not.toMatch(/noisy|\.env\.local|apps\/admin-cms/);
-    expect(result.failedStep).toBe('supabase:reset');
-  });
-
-  it('0a. Retries a transient reset once after readiness is confirmed', async () => {
-    const commands: string[] = [];
-    let resets = 0;
-    const result = await runSetupLocalSteps({
-      commandRunner: (command) => {
-        commands.push(command);
-        if (command === 'npm run supabase:reset' && resets++ === 0) throw new Error('internal only');
-      },
-      log: () => undefined,
-      envLocalPath: '/nonexistent/__no__.env.local',
-      databaseReadiness: () => 'READY',
-      resetFailureCategory: () => 'DATABASE_CONNECTION_BUSY',
-    });
-    expect(result.success).toBe(true);
-    expect(commands.filter((command) => command === 'npm run supabase:reset')).toHaveLength(2);
-  });
-
-  it.each(['MIGRATION_FAILURE', 'SEED_FAILURE', 'UNKNOWN_RESET_FAILURE'] as const)('0b. Does not retry %s', async (category) => {
-    const commands: string[] = [];
-    const result = await runSetupLocalSteps({
-      commandRunner: (command) => { commands.push(command); if (command === 'npm run supabase:reset') throw new Error('internal only'); },
-      log: () => undefined,
-      envLocalPath: '/nonexistent/__no__.env.local',
-      databaseReadiness: () => 'READY',
-      resetFailureCategory: () => category,
-    });
-    expect(result.success).toBe(false);
-    expect(commands.filter((command) => command === 'npm run supabase:reset')).toHaveLength(1);
-  });
-
   it('0. Public configuration messages are destination-label free', async () => {
     const logs: string[] = [];
     const result = await runSetupLocalSteps({
@@ -106,22 +53,21 @@ describe('setupLocal.ts Runner', () => {
     });
   });
 
-  it('1. Contains exactly 7 local setup steps in expected order', () => {
-    expect(SETUP_STEPS).toHaveLength(7);
+  it('1. Contains exactly 6 non-destructive local setup steps in expected order', () => {
+    expect(SETUP_STEPS).toHaveLength(6);
     expect(SETUP_STEPS.map((s) => s.name)).toEqual([
       'onboarding:check',
       'supabase:start',
-      'supabase:reset',
       'supabase:seed:buckets',
       'supabase:env:local',
       'supabase:users:local',
       'supabase:verify:local',
     ]);
     expect(SUPABASE_START_STEP_INDEX).toBe(1);
-    expect(ENV_LOCAL_STEP_INDEX).toBe(4);
+    expect(ENV_LOCAL_STEP_INDEX).toBe(3);
   });
 
-  it('2. Fresh setup: executes all 7 steps when env.local is absent and all steps succeed', async () => {
+  it('2. Fresh setup: executes all 6 steps when env.local is absent and all steps succeed', async () => {
     const executedCommands: string[] = [];
     const mockRunner = (cmd: string) => { executedCommands.push(cmd); };
     const mockLog = vi.fn();
@@ -134,12 +80,11 @@ describe('setupLocal.ts Runner', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.stepCount).toBe(7);
+    expect(result.stepCount).toBe(6);
     // env:local step generates normally (no --force-local) because env is absent
     expect(executedCommands).toEqual([
       'npm run onboarding:check',
       'npm run supabase:start',
-      'npm run supabase:reset',
       'npm run supabase:seed:buckets',
       'npm run supabase:env:local',
       'npm run supabase:users:local',
@@ -176,9 +121,7 @@ describe('setupLocal.ts Runner', () => {
       expect(result.success).toBe(true);
       // The env:local step uses force-local variant
       expect(executedCommands).toContain('npm run supabase:env:local -- --force-local');
-      // Executed exactly 8 commands: 6 normal + 1 env:local force + 0 (env:local normal skipped)
-      // Actually: steps 0,1,2,3 normal, step 4 force-local (continue skips normal runner), steps 5,6 normal
-      expect(executedCommands).toHaveLength(7); // 4 before env + 1 force-local + 2 after
+      expect(executedCommands).toHaveLength(6);
       expect(mockLog.mock.calls.flat().join('\n')).not.toContain('.env.local');
       expect(mockLog.mock.calls.flat().join('\n')).toContain('safe local refresh');
     } finally {
@@ -274,8 +217,8 @@ describe('setupLocal.ts Runner', () => {
     const executedCommands: string[] = [];
     const mockRunner = (cmd: string) => {
       executedCommands.push(cmd);
-      if (cmd === 'npm run supabase:reset') {
-        throw new Error('Database reset container error');
+      if (cmd === 'npm run supabase:seed:buckets') {
+        throw new Error('Fixture seed error');
       }
     };
     const logs: string[] = [];
@@ -289,13 +232,13 @@ describe('setupLocal.ts Runner', () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.failedStep).toBe('supabase:reset');
+    expect(result.failedStep).toBe('supabase:seed:buckets');
     expect(result.cleanupAttempted).toBe(true);
     expect(result.cleanupPassed).toBe(true);
     expect(executedCommands).toEqual([
       'npm run onboarding:check',
       'npm run supabase:start',
-      'npm run supabase:reset',
+      'npm run supabase:seed:buckets',
       'npm run supabase:stop',
     ]);
     expect(logs.some((l) => l.includes('[CLEANUP]'))).toBe(true);
@@ -306,8 +249,8 @@ describe('setupLocal.ts Runner', () => {
     const executedCommands: string[] = [];
     const mockRunner = (cmd: string) => {
       executedCommands.push(cmd);
-      if (cmd === 'npm run supabase:reset') {
-        throw new Error('Reset failed');
+      if (cmd === 'npm run supabase:seed:buckets') {
+        throw new Error('Seed failed');
       }
       if (cmd === 'npm run supabase:stop') {
         throw new Error('Stop failed');
@@ -324,7 +267,7 @@ describe('setupLocal.ts Runner', () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.failedStep).toBe('supabase:reset');
+    expect(result.failedStep).toBe('supabase:seed:buckets');
     expect(result.cleanupAttempted).toBe(true);
     expect(result.cleanupPassed).toBe(false);
     expect(logs.some((l) => l.includes('[CLEANUP] Stack stop failed'))).toBe(true);

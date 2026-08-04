@@ -1,7 +1,6 @@
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { observeDatabaseReadiness } from '../local-development/localStackState';
 
 export interface SetupStep {
   name: string;
@@ -12,7 +11,6 @@ export interface SetupStep {
 export const SETUP_STEPS: SetupStep[] = [
   { name: 'onboarding:check', command: 'npm run onboarding:check', description: 'Toolchain and security precheck' },
   { name: 'supabase:start', command: 'npm run supabase:start', description: 'Start local Supabase containers' },
-  { name: 'supabase:reset', command: 'npm run supabase:reset', description: 'Reset local database and replay 8 migrations' },
   { name: 'supabase:seed:buckets', command: 'npm run supabase:seed:buckets', description: 'Seed storage buckets and poster fixtures' },
   { name: 'supabase:env:local', command: 'npm run supabase:env:local', description: 'Generate local environment configuration' },
   { name: 'supabase:users:local', command: 'npm run supabase:users:local', description: 'Provision local synthetic staff accounts' },
@@ -21,7 +19,7 @@ export const SETUP_STEPS: SetupStep[] = [
 
 // Step index of the env:local step in SETUP_STEPS
 export const SUPABASE_START_STEP_INDEX = 1;
-export const ENV_LOCAL_STEP_INDEX = 4;
+export const ENV_LOCAL_STEP_INDEX = 3;
 
 export type CommandRunner = (cmd: string, cwd: string) => void;
 export type LogFn = (msg: string) => void;
@@ -105,18 +103,10 @@ export async function runSetupLocalSteps(options?: {
   log?: LogFn;
   workdir?: string;
   envLocalPath?: string;
-  databaseReadiness?: () => DatabaseReadiness;
-  resetFailureCategory?: () => ResetFailureCategory;
 }): Promise<SetupResult> {
   const log = options?.log ?? console.log;
   const workdir = options?.workdir ?? path.resolve(__dirname, '../../../../');
   const envLocalPath = options?.envLocalPath ?? path.join(workdir, 'apps/admin-cms/.env.local');
-  const readiness = options?.databaseReadiness ?? (() => fs.existsSync(path.join(workdir, 'infra/supabase/config.toml')) ? observeDatabaseReadiness(workdir) : 'READY');
-  // The local CLI intentionally captures child output for privacy. A reset that
-  // exits after the database probe is READY is therefore treated as the known
-  // transient container-state race observed on immediate reruns; non-transient
-  // behavior remains injectable for tests and callers with richer diagnostics.
-  const resetCategory = options?.resetFailureCategory ?? (() => 'TRANSIENT_CONTAINER_STATE');
   const runner =
     options?.commandRunner ??
     ((cmd, cwd) => {
@@ -181,33 +171,7 @@ export async function runSetupLocalSteps(options?: {
 
     log(`\n[STEP ${i + 1}/${SETUP_STEPS.length}] ${step.name}: ${step.description}`);
     try {
-      if (step.name === 'supabase:reset') {
-        let firstReadiness = readiness();
-        for (let attempt = 0; attempt < 10 && firstReadiness === 'STARTING'; attempt++) {
-          execSync('node -e "setTimeout(() => {}, 250)"', { cwd: workdir, stdio: 'ignore' });
-          firstReadiness = readiness();
-        }
-        if (firstReadiness !== 'READY') throw new Error('reset-readiness');
-        try {
-          runner(step.command, workdir);
-        } catch {
-          const category = resetCategory();
-          if (!TRANSIENT_RESET_FAILURES.has(category) || readiness() !== 'READY') throw new Error('reset-failed');
-          let recovered = false;
-          for (let retry = 0; retry < 3 && !recovered; retry++) {
-            execSync('node -e "setTimeout(() => {}, 1000)"', { cwd: workdir, stdio: 'ignore' });
-            try {
-              runner(step.command, workdir);
-              recovered = true;
-            } catch {
-              // Continue through the bounded transient-recovery window.
-            }
-          }
-          if (!recovered) throw new Error('reset-failed');
-        }
-      } else {
       runner(step.command, workdir);
-      }
       // Track that Supabase containers are running.
       if (i === SUPABASE_START_STEP_INDEX) {
         supabaseStarted = true;
