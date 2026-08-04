@@ -21,7 +21,7 @@ describe('safe local process results', () => {
   });
 
   it('keeps signal and spawn failures category-only', () => {
-    expect(safeProcessResult({ ok: false, signal: 'SIGTERM' })).toEqual({ ok: false, exitCode: null, signal: 'SIGTERM', failureCategory: 'SPAWN_FAILED' });
+    expect(safeProcessResult({ ok: false, signal: 'SIGTERM' })).toEqual({ ok: false, exitCode: null, signal: 'SIGTERM', failureCategory: 'COMMAND_TERMINATED' });
     expect(safeProcessResult({ ok: false })).toEqual({ ok: false, exitCode: null, signal: null, failureCategory: 'SPAWN_FAILED' });
   });
 });
