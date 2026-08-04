@@ -6,18 +6,41 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   static-quality:
     name: Static Quality & Build Gates
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (full history)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1 & npm 11.11.0
+      - name: Setup Node.js 24.14.1
         uses: actions/setup-node@v4
         with:
           node-version: '24.14.1'
+
+      - name: Install npm 11.11.0 (pinned)
+        run: npm install -g npm@11.11.0
+
+      - name: Verify exact Node.js and npm versions
+        run: |
+          ACTUAL_NODE=$(node --version)
+          ACTUAL_NPM=$(npm --version)
+          if [ "$ACTUAL_NODE" != "v24.14.1" ]; then
+            echo "ERROR: Node version mismatch: expected v24.14.1 got $ACTUAL_NODE"
+            exit 1
+          fi
+          if [ "$ACTUAL_NPM" != "11.11.0" ]; then
+            echo "ERROR: npm version mismatch: expected 11.11.0 got $ACTUAL_NPM"
+            exit 1
+          fi
+          echo "Node $ACTUAL_NODE and npm $ACTUAL_NPM verified."
 
       - name: Install dependencies
         run: npm ci
@@ -40,23 +63,62 @@ jobs:
       - name: Next.js Production Build
         run: npm run build:admin
 
-      - name: Git Diff & Syntax Check
-        run: git diff --check
+      - name: Committed diff whitespace check
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+            echo "Checking PR diff: $BASE...$HEAD"
+            git diff --check "$BASE"..."$HEAD"
+          else
+            BEFORE="${{ github.event.before }}"
+            CURRENT="${{ github.sha }}"
+            if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+              echo "Checking push diff: $BEFORE...$CURRENT"
+              git diff --check "$BEFORE"..."$CURRENT"
+            else
+              echo "Initial push or shallow history — checking working tree only."
+              git diff --check
+            fi
+          fi
 
   local-integration:
     name: Disposable Local Supabase Integration
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (full history)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Setup Node.js 24.14.1 & npm 11.11.0
+      - name: Setup Node.js 24.14.1
         uses: actions/setup-node@v4
         with:
           node-version: '24.14.1'
 
+      - name: Install npm 11.11.0 (pinned)
+        run: npm install -g npm@11.11.0
+
+      - name: Verify exact Node.js and npm versions
+        run: |
+          ACTUAL_NODE=$(node --version)
+          ACTUAL_NPM=$(npm --version)
+          if [ "$ACTUAL_NODE" != "v24.14.1" ]; then
+            echo "ERROR: Node version mismatch: expected v24.14.1 got $ACTUAL_NODE"
+            exit 1
+          fi
+          if [ "$ACTUAL_NPM" != "11.11.0" ]; then
+            echo "ERROR: npm version mismatch: expected 11.11.0 got $ACTUAL_NPM"
+            exit 1
+          fi
+          echo "Node $ACTUAL_NODE and npm $ACTUAL_NPM verified."
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Onboarding Toolchain Precheck
+        run: npm run onboarding:check
 
       - name: Start Local Supabase Stack
         run: npm run supabase:start
@@ -78,4 +140,6 @@ jobs:
 
       - name: Stop Local Supabase Stack (Cleanup)
         if: always()
-        run: npm run supabase:stop
+        run: |
+          npm run supabase:stop
+          echo "Supabase stack stopped."

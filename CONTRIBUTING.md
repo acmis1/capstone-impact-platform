@@ -66,11 +66,17 @@ npm run supabase:stop
 ## C. Repository Branching & Workflow Rules
 
 1. **Never Commit Directly to Main**: All development must occur on narrow feature branches (`feat/*`, `fix/*`, `infra/*`, `docs/*`, `security/*`).
-2. **Sync Before Branching**: Always fetch `origin` and update `main` (`git checkout main && git pull origin main`) before creating a new branch.
+2. **Sync Before Branching**: Always fetch `origin` and update `main` before creating a new branch:
+   ```bash
+   git checkout main
+   git pull --ff-only origin main
+   ```
 3. **Target Main**: Feature branches must branch from and target `main`.
 4. **No Auto-Merge**: PRs require explicit review and manual merge. Auto-merge is prohibited.
 5. **Stage Explicit Files Only**: Never use broad staging commands like `git add .` or `git add -A`. Stage explicit file paths (`git add path/to/file1 path/to/file2`).
 6. **Clean Diff Gate**: Run `git diff --check` before committing to ensure no trailing whitespace or git diff syntax errors exist.
+7. **No Force-Push**: Never force-push any branch. Never force-push `main`.
+8. **No Rebase of Pushed Branches**: Do not rebase a pushed branch unless a maintainer explicitly directs it.
 
 ---
 
@@ -137,16 +143,21 @@ A contribution is complete when:
    - Limit work to **one issue per branch**. Do not bundle multiple unrelated tasks into one branch.
 
 3. **Branch Creation & Naming**:
-   - Sync `main` first: `git checkout main && git pull origin main`
+   - Sync `main` first:
+     ```bash
+     git checkout main
+     git pull --ff-only origin main
+     ```
    - Create your feature branch using approved prefixes (`docs/*`, `feat/*`, `fix/*`, `infra/*`, `security/*`):
      - Example: `git checkout -b feat/project-filter-ui`
      - Example: `git checkout -b fix/table-sorting-order`
 
 4. **Synchronizing Your Branch**:
-   - Keep your branch synchronized with `main` by rebasing or merging `main` periodically:
+   - Keep your branch synchronized with `main` using merge — do not rebase a pushed branch:
      ```bash
+     git fetch origin
      git checkout main
-     git pull origin main
+     git pull --ff-only origin main
      git checkout your-feature-branch
      git merge main
      ```
@@ -160,7 +171,8 @@ A contribution is complete when:
 
 6. **Resolving Merge Conflicts Safely**:
    - If merge conflicts occur against `main`, resolve them locally in your feature branch.
-   - Never force-push (`git push --force`) to `main`.
+   - **Never force-push (`git push --force`) any branch. Never force-push `main`.**
+   - Do not resolve migration conflicts by editing merged migrations — ask a maintainer.
    - Re-run `npm run verify:all` after resolving conflicts to ensure all quality gates pass.
 
 7. **Review Expectations & Self-Merging Prohibition**:
@@ -170,6 +182,22 @@ A contribution is complete when:
 
 8. **Branch Cleanup After Squash Merge**:
    - Pull requests are squash-merged into `main`.
-   - After your PR is merged, delete the remote branch (`git push origin --delete your-feature-branch`).
-   - Switch locally to `main` and update: `git checkout main && git pull origin main`.
-   - Delete your local branch pointer: `git branch -d your-feature-branch` (if Git refuses due to squash merge ancestry, verify `git diff main..your-feature-branch` is empty before using `git branch -D`).
+   - After your PR is merged, delete the remote branch:
+     ```bash
+     git push origin --delete your-feature-branch
+     ```
+   - Switch locally to `main` and update:
+     ```bash
+     git checkout main
+     git pull --ff-only origin main
+     ```
+   - Try to delete your local branch pointer:
+     ```bash
+     git branch -d your-feature-branch
+     ```
+   - If Git refuses (because squash-merge history is not directly in your branch), verify the diff is empty:
+     ```bash
+     git diff main..your-feature-branch
+     ```
+   - If the diff is empty, the branch is safe to leave as a harmless local pointer, or ask a maintainer to confirm before deleting.
+   - **Do not use `git branch -D` unless a maintainer has confirmed it is safe.**

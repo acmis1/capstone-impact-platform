@@ -1,6 +1,9 @@
 # Student Developer Start Guide (`START_HERE.md`)
 
-Welcome to the Capstone Impact Platform repository (`acmis1/capstone-impact-platform`). This guide provides a zero-instruction onboarding path for student developers.
+Welcome to the Capstone Impact Platform repository (`acmis1/capstone-impact-platform`). This guide provides a self-service onboarding path intended to minimize maintainer assistance for student developers.
+
+> [!NOTE]
+> **Verification status**: Automated setup has been verified on Windows with Docker Desktop. macOS, Linux, and independent human student onboarding remain unverified. CI validation on GitHub Actions is pending until the first PR run. Do not claim independent onboarding is complete.
 
 ---
 
@@ -8,8 +11,10 @@ Welcome to the Capstone Impact Platform repository (`acmis1/capstone-impact-plat
 
 The Capstone Impact Platform is a school-owned administrative CMS and publication pipeline. It collects student project submissions, validates project metadata and poster assets, provides staff review workflows, and compiles approved project records into a stable public JSON showcase feed.
 
-- **Active Application Path**: [`apps/admin-cms/`](./apps/admin-cms/) — The modern Next.js 16 application containing the admin dashboard, review APIs, schema validators, and public feed compiler.
-- **Historical Prototype Warning**: The [`Prototype/`](./Prototype/) folder at the root contains legacy feasibility code and demo pages. **Do not modify files in `Prototype/` or add new features there.** All active development occurs strictly in `apps/admin-cms/` and `infra/supabase/`.
+- **Active Application Code**: [`apps/admin-cms/`](./apps/admin-cms/) — The modern Next.js 16 application containing the admin dashboard, review APIs, schema validators, and public feed compiler.
+- **Active Database Infrastructure**: [`infra/supabase/`](./infra/supabase/) — PostgreSQL migrations, seed SQL, and local development runbooks.
+- **Active Documentation & Contributor Automation**: Root files (`README.md`, `CONTRIBUTING.md`, `AGENTS.md`, `START_HERE.md`), [`docs/`](./docs/), and [`.github/`](./.github/) may also change during active development.
+- **Historical Prototype Warning**: The [`Prototype/`](./Prototype/) folder at the root contains legacy feasibility code and demo pages. **Do not modify files in `Prototype/` or add new features there.**
 
 ---
 
@@ -144,11 +149,30 @@ All work must occur on narrow feature branches created from `main`:
 - `security/*` — Auth, RLS, & security updates (e.g. `security/rpc-hardening`)
 
 ### Commit Workflow
-1. Sync `main` before starting: `git checkout main && git pull origin main`
+1. Sync `main` before starting:
+   ```bash
+   git checkout main
+   git pull --ff-only origin main
+   ```
 2. Create your branch: `git checkout -b feat/my-feature-name`
 3. Stage explicit files only: **Never run `git add .` or `git add -A`**. Use `git add path/to/file1 path/to/file2`.
 4. Check whitespace & diff syntax: `git diff --check`
 5. Commit with descriptive messages: `git commit -m "feat(review): add filter for archived projects"`
+
+### Keeping Your Branch Up to Date
+If `main` has new commits while you are working on your branch, merge — do not rebase:
+```bash
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+git checkout feat/my-feature-name
+git merge main
+```
+
+> [!WARNING]
+> **Do not rebase a pushed branch unless a maintainer explicitly directs it.**
+> **Do not force-push (`git push --force`) any branch. Never force-push `main`.**
+> **Do not resolve migration conflicts by editing merged migrations — ask a maintainer.**
 
 ### Pull Request Workflow
 1. Select an assigned GitHub Issue (1 issue per branch).
@@ -174,7 +198,8 @@ npm run verify:all
 4. `npm run test:admin` — Vitest unit and security test suite
 5. `npm run typecheck:admin` — TypeScript typecheck (`tsc --noEmit`)
 6. `npm run build:admin` — Next.js production build (`next build`)
-7. `git diff --check` — Trailing whitespace & diff check
+7. `git diff --check` — Uncommitted working-tree whitespace check
+8. `git diff --check origin/main...HEAD` — Committed branch diff whitespace check
 
 ---
 

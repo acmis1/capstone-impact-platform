@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 
 export interface SetupStep {
@@ -17,16 +18,79 @@ export const SETUP_STEPS: SetupStep[] = [
   { name: 'supabase:verify:local', command: 'npm run supabase:verify:local', description: 'Verify local database & auth integrity' },
 ];
 
+// Step index of the env:local step in SETUP_STEPS
+export const SUPABASE_START_STEP_INDEX = 1;
+export const ENV_LOCAL_STEP_INDEX = 4;
+
 export type CommandRunner = (cmd: string, cwd: string) => void;
 export type LogFn = (msg: string) => void;
+
+/** URL loopback classification — returns true only for unambiguous loopback hostnames */
+export function isLoopbackUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    // URL.hostname for IPv6 includes brackets, e.g. '[::1]' — strip them.
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check an existing .env.local file to classify whether it points to a loopback
+ * Supabase URL. Returns:
+ *   'loopback'   — URL present and is localhost/127.0.0.1/::1
+ *   'hosted'     — URL present but resolves to a non-loopback host
+ *   'malformed'  — file exists but URL is missing or unparseable
+ *   'absent'     — file does not exist
+ *
+ * Deliberately does NOT read the full file contents to avoid logging secrets.
+ */
+export function classifyEnvLocal(envPath: string): 'loopback' | 'hosted' | 'malformed' | 'absent' {
+  if (!fs.existsSync(envPath)) {
+    return 'absent';
+  }
+
+  let supabaseUrl: string | undefined;
+  try {
+    const lines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('NEXT_PUBLIC_SUPABASE_URL=') || trimmed.startsWith('SUPABASE_URL=')) {
+        const eqIdx = trimmed.indexOf('=');
+        supabaseUrl = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+        break;
+      }
+    }
+  } catch {
+    return 'malformed';
+  }
+
+  if (!supabaseUrl) {
+    return 'malformed';
+  }
+
+  return isLoopbackUrl(supabaseUrl) ? 'loopback' : 'hosted';
+}
+
+export interface SetupResult {
+  success: boolean;
+  stepCount: number;
+  failedStep?: string;
+  cleanupAttempted: boolean;
+  cleanupPassed: boolean;
+}
 
 export async function runSetupLocalSteps(options?: {
   commandRunner?: CommandRunner;
   log?: LogFn;
   workdir?: string;
-}): Promise<{ success: boolean; stepCount: number; failedStep?: string }> {
+  envLocalPath?: string;
+}): Promise<SetupResult> {
   const log = options?.log ?? console.log;
   const workdir = options?.workdir ?? path.resolve(__dirname, '../../../../');
+  const envLocalPath = options?.envLocalPath ?? path.join(workdir, 'apps/admin-cms/.env.local');
   const runner =
     options?.commandRunner ??
     ((cmd, cwd) => {
@@ -37,11 +101,65 @@ export async function runSetupLocalSteps(options?: {
   log('STARTING ONE-COMMAND LOCAL DEVELOPER SETUP');
   log('====================================================');
 
+  let supabaseStarted = false;
+
   for (let i = 0; i < SETUP_STEPS.length; i++) {
     const step = SETUP_STEPS[i];
+
+    // --- Environment-file safety gate (step ENV_LOCAL_STEP_INDEX) ---
+    if (i === ENV_LOCAL_STEP_INDEX) {
+      const classification = classifyEnvLocal(envLocalPath);
+      log(`[ENV-CHECK] apps/admin-cms/.env.local: ${classification}`);
+
+      if (classification === 'absent') {
+        // Fresh setup — generate normally (fall through to runner below).
+        log('[ENV-CHECK] No existing .env.local — generating fresh loopback environment file.');
+      } else if (classification === 'loopback') {
+        // Rerun after successful setup — regenerate safely (uses force-local option).
+        log('[ENV-CHECK] Existing loopback .env.local detected — regenerating with force-local option.');
+        try {
+          runner(`${step.command} -- --force-local`, workdir);
+          log(`[PASS] Step ${i + 1} (${step.name}) completed cleanly (force-local).`);
+        } catch {
+          log('\n====================================================');
+          log(`[FAIL] Step ${i + 1} (${step.name}) failed during loopback force-local regeneration!`);
+          log('\nSafe Recovery Guidance:');
+          log('Consult docs/student-troubleshooting.md for step-by-step resolution.');
+          log('====================================================');
+          const cleanupResult = supabaseStarted ? attemptCleanup(runner, workdir, log) : { attempted: false, passed: false };
+          return { success: false, stepCount: i, failedStep: step.name, cleanupAttempted: cleanupResult.attempted, cleanupPassed: cleanupResult.passed };
+        }
+        continue; // Skip the normal runner call for this step.
+      } else if (classification === 'hosted') {
+        // Safety refusal — never overwrite a hosted configuration.
+        log('\n====================================================');
+        log('[REFUSE] Existing apps/admin-cms/.env.local appears to point to a hosted (non-loopback) Supabase URL.');
+        log('[REFUSE] This file will NOT be overwritten to protect hosted credentials.');
+        log('[REFUSE] Remove the file manually only if you are certain it does not contain hosted secrets,');
+        log('[REFUSE] then re-run npm run setup:local.');
+        log('====================================================');
+        const cleanupResult = supabaseStarted ? attemptCleanup(runner, workdir, log) : { attempted: false, passed: false };
+        return { success: false, stepCount: i, failedStep: step.name + ':hosted-env-refused', cleanupAttempted: cleanupResult.attempted, cleanupPassed: cleanupResult.passed };
+      } else {
+        // Malformed — cannot classify safely.
+        log('\n====================================================');
+        log('[REFUSE] Existing apps/admin-cms/.env.local is present but could not be safely classified.');
+        log('[REFUSE] The NEXT_PUBLIC_SUPABASE_URL is missing or malformed.');
+        log('[REFUSE] Inspect the file manually and remove it if it does not contain hosted secrets,');
+        log('[REFUSE] then re-run npm run setup:local.');
+        log('====================================================');
+        const cleanupResult = supabaseStarted ? attemptCleanup(runner, workdir, log) : { attempted: false, passed: false };
+        return { success: false, stepCount: i, failedStep: step.name + ':malformed-env-refused', cleanupAttempted: cleanupResult.attempted, cleanupPassed: cleanupResult.passed };
+      }
+    }
+
     log(`\n[STEP ${i + 1}/${SETUP_STEPS.length}] ${step.name}: ${step.description}`);
     try {
       runner(step.command, workdir);
+      // Track that Supabase containers are running.
+      if (i === SUPABASE_START_STEP_INDEX) {
+        supabaseStarted = true;
+      }
       log(`[PASS] Step ${i + 1} (${step.name}) completed cleanly.`);
     } catch {
       log('\n====================================================');
@@ -51,7 +169,8 @@ export async function runSetupLocalSteps(options?: {
       log('\nSafe Recovery Guidance:');
       log('Consult docs/student-troubleshooting.md for step-by-step resolution.');
       log('====================================================');
-      return { success: false, stepCount: i, failedStep: step.name };
+      const cleanupResult = supabaseStarted ? attemptCleanup(runner, workdir, log) : { attempted: false, passed: false };
+      return { success: false, stepCount: i, failedStep: step.name, cleanupAttempted: cleanupResult.attempted, cleanupPassed: cleanupResult.passed };
     }
   }
 
@@ -61,7 +180,25 @@ export async function runSetupLocalSteps(options?: {
   log('Start UI server with: npm run dev:admin');
   log('====================================================');
 
-  return { success: true, stepCount: SETUP_STEPS.length };
+  // Leave the stack running — the next documented action is starting the dev server.
+  return { success: true, stepCount: SETUP_STEPS.length, cleanupAttempted: false, cleanupPassed: false };
+}
+
+function attemptCleanup(
+  runner: CommandRunner,
+  workdir: string,
+  log: LogFn,
+): { attempted: boolean; passed: boolean } {
+  log('\n[CLEANUP] Attempting to stop local Supabase stack after failure...');
+  try {
+    runner('npm run supabase:stop', workdir);
+    log('[CLEANUP] Stack stopped cleanly.');
+    return { attempted: true, passed: true };
+  } catch {
+    log('[CLEANUP] Stack stop failed — containers may still be running.');
+    log('[CLEANUP] Run: npm run supabase:stop  manually to clean up.');
+    return { attempted: true, passed: false };
+  }
 }
 
 if (typeof require !== 'undefined' && require.main === module) {
