@@ -33,7 +33,9 @@
     "supabase:seed:buckets": "npm run seed:buckets:local --workspace=apps/admin-cms --",
     "supabase:env:local": "npm run env:local --workspace=apps/admin-cms --",
     "supabase:users:local": "npm run users:local --workspace=apps/admin-cms --",
-    "supabase:verify:local": "npm run verify:local --workspace=apps/admin-cms --"
+    "supabase:verify:local": "npm run verify:local --workspace=apps/admin-cms --",
+    "setup:local": "npm run setup:local --workspace=apps/admin-cms",
+    "verify:all": "npm run verify:all --workspace=apps/admin-cms"
   },
   "devDependencies": {
     "server-only": "^0.0.1",
