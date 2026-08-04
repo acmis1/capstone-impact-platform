@@ -20,6 +20,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     '20260719165118_initial_admin_bootstrap.sql',
     '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
     '20260803174000_harden_function_execute_defaults.sql',
+    '20260803180000_transactional_review_actions.sql',
   ];
 
   const defaultMockExec = (cmd: string): string => {
@@ -50,6 +51,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       return false;
     },
     readFileSync: (p: string, _enc?: string) => {
+      void _enc;
       const norm = p.replace(/\\/g, '/');
       if (norm.endsWith('node_modules/supabase/package.json')) {
         return JSON.stringify({ version: '2.109.1', bin: { supabase: 'bin/supabase' } });
@@ -215,7 +217,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const shuffled = [...validMigrations].reverse();
     const result = validateMigrationsList(shuffled);
     expect(result.passed).toBe(true);
-    expect(result.message).toContain('7 timestamped migrations');
+    expect(result.message).toContain('8 timestamped migrations');
   });
 
   it('10. Duplicate migration timestamps fail', () => {
@@ -227,25 +229,27 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260719165118_initial_admin_bootstrap.sql',
       '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
       '20260803174000_harden_function_execute_defaults.sql',
+      '20260803180000_transactional_review_actions.sql',
     ];
     const result = validateMigrationsList(duplicateMigrations);
     expect(result.passed).toBe(false);
     expect(result.message).toContain('Duplicate migration timestamps detected');
   });
 
-  it('11. Missing migration 0007 fails', () => {
-    const missing0007 = [
+  it('11. Missing migration 0008 fails', () => {
+    const missing0008 = [
       '20260601035138_staging_schema.sql',
       '20260601035139_staging_rls_policies.sql',
       '20260715102956_admin_auth_identity.sql',
       '20260719003407_explicit_data_api_grants.sql',
       '20260719165118_initial_admin_bootstrap.sql',
       '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
-      '20260803174000_wrong_name.sql',
+      '20260803174000_harden_function_execute_defaults.sql',
+      '20260803180000_wrong_name.sql',
     ];
-    const result = validateMigrationsList(missing0007);
+    const result = validateMigrationsList(missing0008);
     expect(result.passed).toBe(false);
-    expect(result.message).toContain('Migration file at index 6 does not match expected identity');
+    expect(result.message).toContain('Migration file at index 7 does not match expected identity');
   });
 
   it('12. Installed Supabase package missing fails', () => {
@@ -473,7 +477,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     expect(item?.message).toContain('Local npm .bin shim for Supabase CLI is missing');
   });
 
-  it('21. Exact seven expected migration filenames are required', () => {
+  it('21. Exact eight expected migration filenames are required', () => {
     const invalidMigrationNames = [
       '20260601035138_staging_schema.sql',
       '20260601035139_staging_rls_policies.sql',
@@ -481,11 +485,12 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260719003407_explicit_data_api_grants.sql',
       '20260719165118_initial_admin_bootstrap.sql',
       '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
-      '20260803174000_different_migration_name.sql',
+      '20260803174000_harden_function_execute_defaults.sql',
+      '20260803180000_different_migration_name.sql',
     ];
     const result = validateMigrationsList(invalidMigrationNames);
     expect(result.passed).toBe(false);
-    expect(result.message).toContain('Migration file at index 6 does not match expected identity');
+    expect(result.message).toContain('Migration file at index 7 does not match expected identity');
   });
 
   it('22. Windows path with spaces is sanitized', () => {

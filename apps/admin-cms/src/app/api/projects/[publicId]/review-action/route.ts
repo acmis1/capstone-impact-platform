@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SupabaseProjectRepository } from '../../../../../repositories/SupabaseProjectRepository';
+import { ReviewActionExecutionError } from '../../../../../repositories/ProjectRepository';
 import { requireAdmin } from '../../../../../auth/requireAdmin';
 import { canPerformReviewAction } from '../../../../../auth/permissions';
 import { validateSameOrigin } from '../../../../../auth/csrf';
@@ -58,29 +59,20 @@ export async function POST(
 
     const repository = new SupabaseProjectRepository();
 
-    // Verify project exists
-    const project = await repository.getProjectByPublicId(validPublicId);
-    if (!project) {
-      return NextResponse.json(
-        { success: false, error: 'Project not found.' },
-        { status: 404 }
-      );
-    }
-
-    // 6. Execute Action using authenticated admin user ID
-    const updatedProject = await repository.performReviewAction({
+    // 6. Execute Action atomically via PostgreSQL RPC using authenticated admin user ID
+    const result = await repository.performReviewAction({
       publicId: validPublicId,
       action,
       comments,
-      adminId: adminContext.adminUserId
+      adminId: adminContext.adminUserId,
     });
 
     return NextResponse.json({
       success: true,
-      publicId: updatedProject.publicId,
-      status: updatedProject.status,
+      publicId: result.publicId,
+      status: result.status,
       action,
-      auditRecorded: true
+      auditRecorded: true,
     });
   } catch (error: unknown) {
     if (error instanceof AdminAuthError) {
@@ -92,7 +84,47 @@ export async function POST(
       );
     }
 
-    console.error('[Workflow Action API Error]:', error instanceof Error ? error.message : String(error));
+    if (error instanceof ReviewActionExecutionError) {
+      console.error('[Workflow Action API Error]:', error.code);
+
+      switch (error.code) {
+        case 'PROJECT_NOT_FOUND':
+          return NextResponse.json(
+            { success: false, error: 'Project not found.' },
+            { status: 404 }
+          );
+        case 'TRANSITION_INVALID':
+          return NextResponse.json(
+            { success: false, error: 'Invalid workflow transition for project state.' },
+            { status: 400 }
+          );
+        case 'PERMISSION_DENIED': {
+          const status = getAuthErrorHttpStatus('PERMISSION_DENIED');
+          const errMessage = getPublicAuthErrorMessage('PERMISSION_DENIED');
+          return NextResponse.json(
+            { success: false, error: errMessage },
+            { status }
+          );
+        }
+        case 'INPUT_INVALID':
+          return NextResponse.json(
+            { success: false, error: 'Validation failed.' },
+            { status: 400 }
+          );
+        case 'RESPONSE_INVALID':
+        case 'INTERNAL_FAILURE':
+        default: {
+          const status = getAuthErrorHttpStatus('UNKNOWN');
+          const errMessage = getPublicAuthErrorMessage('UNKNOWN');
+          return NextResponse.json(
+            { success: false, error: errMessage },
+            { status }
+          );
+        }
+      }
+    }
+
+    console.error('[Workflow Action API Error]: INTERNAL_FAILURE');
 
     const status = getAuthErrorHttpStatus('UNKNOWN');
     const errMessage = getPublicAuthErrorMessage('UNKNOWN');

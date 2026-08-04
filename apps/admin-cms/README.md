@@ -24,12 +24,12 @@ It does not yet provide a completed metadata editor, student portal or final con
 | Protected Admin routes | Yes | Auth guard and route behavior covered by source/tests | Authenticated browser and screen-reader testing pending |
 | Project dashboard and server-side index | Yes | Query helpers and repository behavior covered by tests | Manual responsive QA remains pending |
 | Import workflow | Foundations | Import validation and batch views implemented | Browser intake UX and spreadsheet upload are not complete |
-| Review transitions | Yes | Workflow tests and protected mutation route implemented | Update plus audit insert is not transaction-backed |
+| Review transitions | Yes | Workflow tests, static contract tests, and atomic RPC performReviewAction route implemented | Full reviewer/editor UAT pending |
 | Project metadata editing | No | Repository supports update operations, but no editor route/UI exists | Planned |
 | Media validation/storage | Foundations | Offline media validation tests; private-to-public storage functions exist | End-to-end staging and production verification pending |
 | Public-eligible feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled public cutover pending |
 | Duda integration | Design boundary | Stable-feed consumer is documented | Live Duda connection remains isolated |
-| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (7 timestamped migrations; migration 0007 repository/local-only) | Full production RLS verification pending |
+| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (8 timestamped migrations; migrations 0007 and 0008 repository/local-only) | Full production RLS verification pending |
 | Automated testing | Yes | Vitest offline suite and onboarding precheck | No hosted CI evidence is asserted here |
 | Production deployment | No | Not production-verified | Hardening and controlled cutover pending |
 
@@ -188,6 +188,7 @@ The migration set is manually governed for authorized isolated environments. It 
 - [`20260719165118_initial_admin_bootstrap.sql`](../../infra/supabase/migrations/20260719165118_initial_admin_bootstrap.sql) adds the guarded initial-admin bootstrap function.
 - [`20260719165119_fix_initial_admin_bootstrap_runtime.sql`](../../infra/supabase/migrations/20260719165119_fix_initial_admin_bootstrap_runtime.sql) corrects the bootstrap runtime migration.
 - [`20260803174000_harden_function_execute_defaults.sql`](../../infra/supabase/migrations/20260803174000_harden_function_execute_defaults.sql) establishes function execution default privilege revokes and RLS helper guard. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
+- [`20260803180000_transactional_review_actions.sql`](../../infra/supabase/migrations/20260803180000_transactional_review_actions.sql) establishes atomic `public.perform_project_review_action` PostgreSQL RPC function for transaction-backed project review status updates and audit logging. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
 
 See the [Supabase migration overview](../../infra/supabase/README.md), [manual apply guide](../../infra/supabase/manual-apply-guide.md), [staging reconciliation runbook](../../infra/supabase/staging-reconciliation-runbook.md) and [staging authentication verification runbook](../../infra/supabase/staging-auth-verification.md) before authorized operations.
 
@@ -244,9 +245,7 @@ The domain represents `draft`, `submitted`, `in_review`, `changes_requested`, `a
 | `approved` | `archive` | `archived` |
 | `published` | `archive` | `archived` |
 
-`draft`, `archived` and `deleted` have no review actions in the current workflow helper. Student confirmation, automatic publishing and Duda synchronization are future concepts, not current behavior.
-
-The current mutation updates the project and then inserts an approval record. Because those operations are not yet transaction-backed, production hardening is required before real operational use.
+The review action mutation invokes PostgreSQL RPC `public.perform_project_review_action`, which row-locks the project (`FOR UPDATE`), validates workflow transition targets and RBAC role permissions, updates project status and side effects, and inserts an audit row into `approval_records` in a single atomic transaction.
 
 ## Project dashboard and index
 
@@ -300,7 +299,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - No completed metadata editor.
 - Reviewer/editor permission-matrix UAT remains pending.
 - Project detail is the next major UI modernization area.
-- Review update and audit insertion are not transaction-backed.
+- PostgreSQL RPC migration 0008 is committed locally and verified on Windows with Docker Desktop; hosted staging reconciliation remains pending.
 - Student confirmation, integrated preview, publishing history and rollback UI are pending.
 - Live Duda cutover is pending.
 - Authenticated browser, responsive, accessibility and screen-reader validation remain incomplete.

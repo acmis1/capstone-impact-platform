@@ -33,7 +33,7 @@ npm run onboarding:check
 # 4. Start local Supabase container stack
 npm run supabase:start
 
-# 5. Reset local database and replay all 7 migrations
+# 5. Reset local database and replay all 8 migrations
 npm run supabase:reset
 
 # 6. Seed local storage buckets and synthetic media fixtures
@@ -84,7 +84,7 @@ npm run supabase:stop
 
 ## E. Database & Migration Governance
 
-1. **Append-Only Migrations**: Migrations are append-only after merge. Never edit, rename, or delete existing migrations `0001` through `0007`.
+1. **Append-Only Migrations**: Migrations are append-only after merge. Never edit, rename, or delete existing migrations `0001` through `0008`.
 2. **New Schema Changes**: Any schema, policy, or grant change requires a new 14-digit timestamped migration file in `infra/supabase/migrations/` (`YYYYMMDDHHMMSS_description.sql`).
 3. **Local Replay & Reset Verification**: Verify all schema changes locally by running `npm run supabase:reset` to replay migrations from zero in strict timestamp order.
 4. **Static Contract Tests**: Add static contract tests in `apps/admin-cms/src/security/` for any new database migration file.
@@ -94,7 +94,7 @@ npm run supabase:stop
    - New postgres-owned functions are private by default; execution privileges must be explicitly revoked from `PUBLIC`, `anon`, and `authenticated`, and granted only to intended roles (e.g. `service_role`).
    - Do not alter `supabase_admin` default privileges.
 
-### Migration Inventory (7 Timestamped Migrations)
+### Migration Inventory (8 Timestamped Migrations)
 
 1. `20260601035138_staging_schema.sql` — Schema baseline and constraints
 2. `20260601035139_staging_rls_policies.sql` — Row-Level Security policies
@@ -103,6 +103,7 @@ npm run supabase:stop
 5. `20260719165118_initial_admin_bootstrap.sql` — Guarded admin bootstrap function
 6. `20260719165119_fix_initial_admin_bootstrap_runtime.sql` — Bootstrap runtime correction
 7. `20260803174000_harden_function_execute_defaults.sql` — Function default execute ACL revokes and RLS helper guard *(Committed in repository; local/repository-only; not yet applied to hosted staging)*
+8. `20260803180000_transactional_review_actions.sql` — Atomic project review action PostgreSQL RPC and audit logging *(Committed in repository; local/repository-only; not yet applied to hosted staging)*
 
 ---
 
@@ -111,7 +112,7 @@ npm run supabase:stop
 A contribution is complete when:
 - The work requires zero hosted resource or dashboard access for local execution.
 - `npm run onboarding:check` passes (12/12 automated checks).
-- All 7 database migrations replay cleanly via `npm run supabase:reset`.
+- All 8 database migrations replay cleanly via `npm run supabase:reset`.
 - `npm run check:feed` passes schema validation.
 - `npm run lint --workspace=apps/admin-cms` reports 0 errors and 0 warnings.
 - `npm run test:admin` passes all unit and security tests.

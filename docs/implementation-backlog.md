@@ -8,8 +8,9 @@ This document maps out the completed project baseline, foundations present, and 
 *   **Prototype Recovery**: Successful database recovery (10 project records, 6 public-feed records) and poster repairs completed.
 *   **Render Deployment**: Prototype web service successfully deployed from `main` branch to Render and confirmed Live.
 *   **Duda Test-Site Verification**: Client-side listing and detail rendering manually verified on the Duda test-site.
-*   **Admin CMS Foundation**: Modular Next.js app structure, TypeScript domain models, database migrations (`0001` - `0006`), feed compiler, public schema validator, mock fixtures, and unit tests have been successfully built and verified in `main`.
+*   **Admin CMS Foundation**: Modular Next.js app structure, TypeScript domain models, database migrations (`0001` - `0007`) on `main`, migration `0008` implemented and locally verified on feature branch `security/transactional-review-actions` (unmerged; migrations `0007` and `0008` remain unapplied to hosted staging; no production-readiness claim is made).
 *   **Initial Admin Authentication Activation (Staging)**: Initial administrator authentication operationally verified in isolated staging (`capstone-admin-cms-staging-2026`).
+*   **Transactional Review Actions**: Atomic PostgreSQL RPC function `public.perform_project_review_action` (Migration 0008), repository integration, API route handler, static contract tests, and comprehensive local atomicity/rollback verifications implemented on feature branch `security/transactional-review-actions` (verified locally on Windows with Docker Desktop; unmerged; migrations `0007` and `0008` remain unapplied to hosted staging; macOS, Linux, and independent human verification remain pending).
 
 ---
 

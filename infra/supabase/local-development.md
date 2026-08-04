@@ -8,7 +8,7 @@ This guide documents the canonical, local-only Supabase development workflow for
 - **No Supabase Organization Membership Required:** Developers do not need access to hosted Supabase, Duda, Render, or Vercel dashboards to build, test, and run the application locally.
 - **Isolated Local State:** All database tables, authentication identities, storage buckets, and Mailpit email captures run on `http://127.0.0.1`.
 - **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real student or stakeholder PII or credentials are used or committed.
-- **Deterministic Migration Replay:** Running `npm run supabase:reset` replays all 7 timestamped migrations from `infra/supabase/migrations/` in strict ascending order, ending with `20260803174000_harden_function_execute_defaults.sql` *(migration 0007 is repository/local-only and not applied to hosted staging)*.
+- **Deterministic Migration Replay:** Running `npm run supabase:reset` replays all 8 timestamped migrations from `infra/supabase/migrations/` in strict ascending order, ending with `20260803180000_transactional_review_actions.sql` *(migrations 0007 and 0008 are repository/local-only and not applied to hosted staging)*.
 - **Verification Strategy & Scope:**
   - Static migration tests inspect committed SQL contracts.
   - Runtime verification inspects the actual local database reset, live schema, policy semantics, exact table-grant matrix, function execution privileges, storage buckets, and real password logins for all three synthetic accounts.
@@ -55,7 +55,7 @@ npm run supabase:start
 ```
 
 ### Step 5: Reset Local Database & Replay Migrations
-Replay all 7 timestamped migrations (`20260601035138_...` through `20260803174000_...`) and load `seed.sql`:
+Replay all 8 timestamped migrations (`20260601035138_...` through `20260803180000_...`) and load `seed.sql`:
 ```bash
 npm run supabase:reset
 ```
@@ -112,7 +112,7 @@ When onboarding a new developer or testing on a fresh machine:
 - [ ] `npm ci` completes without workspace errors.
 - [ ] `npm run onboarding:check` passes all 12 prechecks.
 - [ ] `npm run supabase:start` launches local container suite.
-- [ ] `npm run supabase:reset` replays all 7 migrations cleanly.
+- [ ] `npm run supabase:reset` replays all 8 migrations cleanly.
 - [ ] `npm run supabase:seed:buckets` provisions local buckets and poster fixtures.
 - [ ] `npm run supabase:env:local` creates `apps/admin-cms/.env.local`.
 - [ ] `npm run supabase:users:local` provisions synthetic `admin`, `reviewer`, and `editor` accounts.
