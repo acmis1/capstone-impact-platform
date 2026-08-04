@@ -54,7 +54,7 @@ describe('setupLocal.ts Runner', () => {
       resetFailureCategory: () => 'DATABASE_CONNECTION_BUSY',
     });
     expect(result.success).toBe(false);
-    expect(resetCount).toBe(2);
+    expect(resetCount).toBe(4);
     expect(commands.filter((command) => command === 'npm run supabase:stop')).toHaveLength(1);
     expect(commands.some((command) => command.includes('supabase:seed'))).toBe(false);
     expect(logs.join('\n')).not.toMatch(/noisy|\.env\.local|apps\/admin-cms/);
@@ -295,7 +295,6 @@ describe('setupLocal.ts Runner', () => {
     expect(executedCommands).toEqual([
       'npm run onboarding:check',
       'npm run supabase:start',
-      'npm run supabase:reset',
       'npm run supabase:reset',
       'npm run supabase:stop',
     ]);

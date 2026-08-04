@@ -141,13 +141,16 @@ function mapDbRowToProject(row: Record<string, unknown>): Project {
   };
 }
 
+const CHILD_PROCESS_TIMEOUT_MS = 30_000;
+const NETWORK_REQUEST_TIMEOUT_MS = 15_000;
+
 function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, unknown>> {
   const workdir = path.resolve(repoRoot, 'infra');
   const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
   const cmd = `"${cliPath}" db query --local --workdir "${workdir}" -o json "${sql.replace(/"/g, '\\"')}"`;
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
-      const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot, stdio: 'pipe' });
+      const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot, stdio: 'pipe', timeout: CHILD_PROCESS_TIMEOUT_MS, killSignal: 'SIGTERM' });
       const firstBrace = raw.indexOf('{');
       const lastBrace = raw.lastIndexOf('}');
       if (firstBrace !== -1 && lastBrace !== -1) {
@@ -160,6 +163,17 @@ function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, un
   }
   throw new Error('Local database schema query failed.');
 }
+
+export function createDeadlineFetch(timeoutMs = NETWORK_REQUEST_TIMEOUT_MS, fetchImpl: typeof fetch = fetch) {
+  return (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
+  const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const signal = init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
+    return fetchImpl(input, { ...init, signal }).finally(() => clearTimeout(timer));
+  };
+}
+
+const deadlineFetch = createDeadlineFetch();
 
 export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promise<boolean> {
   const repoRoot = path.resolve(__dirname, '../../../..');
@@ -174,7 +188,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
   let rawEnv = '';
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
-      rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot, stdio: 'pipe' });
+    rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot, stdio: 'pipe', timeout: CHILD_PROCESS_TIMEOUT_MS, killSignal: 'SIGTERM' });
       if (rawEnv.includes('API_URL')) break;
     } catch {
       // Retry
@@ -206,11 +220,13 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
 
   const adminClient = createClient(apiUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: deadlineFetch },
   });
 
   const createAnonClient = () =>
     createClient(apiUrl, anonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: deadlineFetch },
     });
 
   // 3. Live local schema verification via local CLI db query

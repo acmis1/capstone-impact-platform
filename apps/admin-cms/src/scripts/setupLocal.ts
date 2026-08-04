@@ -193,7 +193,17 @@ export async function runSetupLocalSteps(options?: {
         } catch {
           const category = resetCategory();
           if (!TRANSIENT_RESET_FAILURES.has(category) || readiness() !== 'READY') throw new Error('reset-failed');
-          runner(step.command, workdir);
+          let recovered = false;
+          for (let retry = 0; retry < 3 && !recovered; retry++) {
+            execSync('node -e "setTimeout(() => {}, 1000)"', { cwd: workdir, stdio: 'ignore' });
+            try {
+              runner(step.command, workdir);
+              recovered = true;
+            } catch {
+              // Continue through the bounded transient-recovery window.
+            }
+          }
+          if (!recovered) throw new Error('reset-failed');
         }
       } else {
       runner(step.command, workdir);
