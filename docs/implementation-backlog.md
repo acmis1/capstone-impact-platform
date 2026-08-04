@@ -10,7 +10,7 @@ This document maps out the completed project baseline, foundations present, and 
 *   **Duda Test-Site Verification**: Client-side listing and detail rendering manually verified on the Duda test-site.
 *   **Admin CMS Foundation**: Modular Next.js app structure, TypeScript domain models, database migrations (`0001` - `0008`), feed compiler, public schema validator, mock fixtures, and unit tests have been successfully built and verified in `main`.
 *   **Initial Admin Authentication Activation (Staging)**: Initial administrator authentication operationally verified in isolated staging (`capstone-admin-cms-staging-2026`).
-*   **Transactional Review Actions**: Atomic PostgreSQL RPC function `public.perform_project_review_action` (Migration 0008), repository integration, API route handler, static contract tests, and comprehensive local atomicity and rollback verifications implemented.
+*   **Transactional Review Actions**: Atomic PostgreSQL RPC function `public.perform_project_review_action` (Migration 0008), repository integration, API route handler, static contract tests, and comprehensive local atomicity/rollback verifications implemented (verified locally on Windows with Docker Desktop; migrations 0007 and 0008 remain unapplied to hosted staging; macOS, Linux, and independent human verification remain pending).
 
 ---
 

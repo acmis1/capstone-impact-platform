@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SupabaseProjectRepository } from '../../../../../repositories/SupabaseProjectRepository';
+import { ReviewActionExecutionError } from '../../../../../repositories/ProjectRepository';
 import { requireAdmin } from '../../../../../auth/requireAdmin';
 import { canPerformReviewAction } from '../../../../../auth/permissions';
 import { validateSameOrigin } from '../../../../../auth/csrf';
@@ -83,32 +84,47 @@ export async function POST(
       );
     }
 
-    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (error instanceof ReviewActionExecutionError) {
+      console.error('[Workflow Action API Error]:', error.code);
 
-    if (errorMsg.includes('REVIEW_PROJECT_NOT_FOUND')) {
-      return NextResponse.json(
-        { success: false, error: 'Project not found.' },
-        { status: 404 }
-      );
+      switch (error.code) {
+        case 'PROJECT_NOT_FOUND':
+          return NextResponse.json(
+            { success: false, error: 'Project not found.' },
+            { status: 404 }
+          );
+        case 'TRANSITION_INVALID':
+          return NextResponse.json(
+            { success: false, error: 'Invalid workflow transition for project state.' },
+            { status: 400 }
+          );
+        case 'PERMISSION_DENIED': {
+          const status = getAuthErrorHttpStatus('PERMISSION_DENIED');
+          const errMessage = getPublicAuthErrorMessage('PERMISSION_DENIED');
+          return NextResponse.json(
+            { success: false, error: errMessage },
+            { status }
+          );
+        }
+        case 'INPUT_INVALID':
+          return NextResponse.json(
+            { success: false, error: 'Validation failed.' },
+            { status: 400 }
+          );
+        case 'RESPONSE_INVALID':
+        case 'INTERNAL_FAILURE':
+        default: {
+          const status = getAuthErrorHttpStatus('UNKNOWN');
+          const errMessage = getPublicAuthErrorMessage('UNKNOWN');
+          return NextResponse.json(
+            { success: false, error: errMessage },
+            { status }
+          );
+        }
+      }
     }
 
-    if (errorMsg.includes('REVIEW_TRANSITION_INVALID')) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid workflow transition for project state.' },
-        { status: 400 }
-      );
-    }
-
-    if (errorMsg.includes('REVIEW_PERMISSION_DENIED')) {
-      const status = getAuthErrorHttpStatus('PERMISSION_DENIED');
-      const errMessage = getPublicAuthErrorMessage('PERMISSION_DENIED');
-      return NextResponse.json(
-        { success: false, error: errMessage },
-        { status }
-      );
-    }
-
-    console.error('[Workflow Action API Error]:', errorMsg);
+    console.error('[Workflow Action API Error]: INTERNAL_FAILURE');
 
     const status = getAuthErrorHttpStatus('UNKNOWN');
     const errMessage = getPublicAuthErrorMessage('UNKNOWN');

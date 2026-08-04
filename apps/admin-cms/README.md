@@ -299,7 +299,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - No completed metadata editor.
 - Reviewer/editor permission-matrix UAT remains pending.
 - Project detail is the next major UI modernization area.
-- Review update and audit insertion are not transaction-backed.
+- PostgreSQL RPC migration 0008 is committed locally and verified on Windows with Docker Desktop; hosted staging reconciliation remains pending.
 - Student confirmation, integrated preview, publishing history and rollback UI are pending.
 - Live Duda cutover is pending.
 - Authenticated browser, responsive, accessibility and screen-reader validation remain incomplete.

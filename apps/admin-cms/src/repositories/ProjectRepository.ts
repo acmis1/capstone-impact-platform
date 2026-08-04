@@ -6,6 +6,25 @@ import {
   ProjectFilterOptions,
 } from '../domain/projectQuery';
 
+export type ReviewActionExecutionErrorCode =
+  | 'PROJECT_NOT_FOUND'
+  | 'TRANSITION_INVALID'
+  | 'PERMISSION_DENIED'
+  | 'INPUT_INVALID'
+  | 'RESPONSE_INVALID'
+  | 'INTERNAL_FAILURE';
+
+export class ReviewActionExecutionError extends Error {
+  readonly code: ReviewActionExecutionErrorCode;
+
+  constructor(code: ReviewActionExecutionErrorCode) {
+    super(`Review action execution failed: ${code}`);
+    this.name = 'ReviewActionExecutionError';
+    this.code = code;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
 export interface ReviewActionExecutionResult {
   publicId: string;
   status: Project['status'];

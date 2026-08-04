@@ -7,7 +7,11 @@ import {
   ProjectFilterOptions,
   normalizeSearchInput,
 } from '../domain/projectQuery';
-import { ProjectRepository } from './ProjectRepository';
+import {
+  ProjectRepository,
+  ReviewActionExecutionError,
+  ReviewActionExecutionErrorCode,
+} from './ProjectRepository';
 
 /** Maximum number of lightweight filter-option rows fetched per database round-trip. */
 const PROJECT_FILTER_OPTION_CHUNK_SIZE = 500;
@@ -473,8 +477,8 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
   }): Promise<{ publicId: string; status: Project['status']; auditRecordId: string }> {
     const { publicId, action, comments, adminId } = params;
 
-    if (!adminId || typeof adminId !== 'string') {
-      throw new Error('Admin ID is required to execute a project review action.');
+    if (!adminId || typeof adminId !== 'string' || !publicId || typeof publicId !== 'string' || !action) {
+      throw new ReviewActionExecutionError('INPUT_INVALID');
     }
 
     const { data, error } = await this.supabase.rpc('perform_project_review_action', {
@@ -485,11 +489,30 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     });
 
     if (error) {
-      throw new Error(`Failed to execute review action: ${error.message}`);
+      const rawMsg = error.message || '';
+      let code: ReviewActionExecutionErrorCode = 'INTERNAL_FAILURE';
+
+      if (rawMsg.includes('REVIEW_PROJECT_NOT_FOUND')) {
+        code = 'PROJECT_NOT_FOUND';
+      } else if (rawMsg.includes('REVIEW_TRANSITION_INVALID')) {
+        code = 'TRANSITION_INVALID';
+      } else if (rawMsg.includes('REVIEW_PERMISSION_DENIED')) {
+        code = 'PERMISSION_DENIED';
+      } else if (
+        rawMsg.includes('REVIEW_PUBLIC_ID_REQUIRED') ||
+        rawMsg.includes('REVIEW_PUBLIC_ID_INVALID') ||
+        rawMsg.includes('REVIEW_ACTION_INVALID') ||
+        rawMsg.includes('REVIEW_COMMENTS_TOO_LONG') ||
+        rawMsg.includes('REVIEW_ADMIN_ID_REQUIRED')
+      ) {
+        code = 'INPUT_INVALID';
+      }
+
+      throw new ReviewActionExecutionError(code);
     }
 
     if (!data || typeof data !== 'object') {
-      throw new Error('Failed to execute review action: Invalid RPC response format');
+      throw new ReviewActionExecutionError('RESPONSE_INVALID');
     }
 
     const res = data as Record<string, unknown>;
@@ -518,7 +541,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       typeof resAuditRecordId !== 'string' ||
       !uuidRegex.test(resAuditRecordId)
     ) {
-      throw new Error('Failed to execute review action: RPC response schema validation failed');
+      throw new ReviewActionExecutionError('RESPONSE_INVALID');
     }
 
     return {

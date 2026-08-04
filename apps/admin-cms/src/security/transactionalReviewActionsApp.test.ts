@@ -5,7 +5,9 @@ import { canPerformReviewAction, getPermissionsForRoles } from '../auth/permissi
 import { POST } from '../app/api/projects/[publicId]/review-action/route';
 import { NextRequest } from 'next/server';
 import { AdminAuthError } from '../auth/authTypes';
+import { getPublicAuthErrorMessage } from '../auth/authHttp';
 import { SupabaseProjectRepository } from '../repositories/SupabaseProjectRepository';
+import { ReviewActionExecutionError } from '../repositories/ProjectRepository';
 
 // Mock server-only and supabase admin client before imports
 vi.mock('server-only', () => ({}));
@@ -26,7 +28,7 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
   // Repository Atomic RPC Contract Tests
   // ============================================================
 
-  it('1. performReviewAction requires non-empty adminId parameter', async () => {
+  it('1. performReviewAction requires non-empty adminId, publicId, and action parameters', async () => {
     const mockSupabase = { rpc: vi.fn() } as unknown as import('@supabase/supabase-js').SupabaseClient;
     const repo = new SupabaseProjectRepositoryCore(mockSupabase);
 
@@ -36,7 +38,7 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
         action: 'approve',
         adminId: '',
       })
-    ).rejects.toThrow('Admin ID is required to execute a project review action.');
+    ).rejects.toThrow('Review action execution failed: INPUT_INVALID');
   });
 
   it('2. performReviewAction invokes exactly one RPC with expected normalized parameters', async () => {
@@ -81,7 +83,7 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 
-  it('3. performReviewAction rejects malformed or un-validated RPC response payloads', async () => {
+  it('3. performReviewAction maps malformed or un-validated RPC response payloads to RESPONSE_INVALID', async () => {
     const mockRpc = vi.fn().mockResolvedValue({
       data: {
         publicId: '',
@@ -100,10 +102,10 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
         action: 'approve',
         adminId: '11111111-2222-3333-4444-555555555555',
       })
-    ).rejects.toThrow('RPC response schema validation failed');
+    ).rejects.toThrow('Review action execution failed: RESPONSE_INVALID');
   });
 
-  it('4. performReviewAction converts database RPC errors to safe internal errors', async () => {
+  it('4. performReviewAction converts database RPC errors to safe typed internal errors', async () => {
     const mockRpc = vi.fn().mockResolvedValue({
       data: null,
       error: { message: 'REVIEW_TRANSITION_INVALID: Staging transition not allowed' },
@@ -118,7 +120,7 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
         action: 'approve',
         adminId: '11111111-2222-3333-4444-555555555555',
       })
-    ).rejects.toThrow('Failed to execute review action: REVIEW_TRANSITION_INVALID: Staging transition not allowed');
+    ).rejects.toThrow('Review action execution failed: TRANSITION_INVALID');
   });
 
   // ============================================================
@@ -211,7 +213,7 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     mockAction.mockRestore();
   });
 
-  it('8. API route maps REVIEW_PROJECT_NOT_FOUND to HTTP 404', async () => {
+  it('8. API route maps PROJECT_NOT_FOUND to HTTP 404', async () => {
     const { requireAdmin } = await import('../auth/requireAdmin');
     vi.mocked(requireAdmin).mockResolvedValueOnce({
       authUserId: 'auth-uuid-1',
@@ -223,7 +225,7 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     });
 
     const mockAction = vi.spyOn(SupabaseProjectRepository.prototype, 'performReviewAction').mockRejectedValueOnce(
-      new Error('Failed to execute review action: REVIEW_PROJECT_NOT_FOUND')
+      new ReviewActionExecutionError('PROJECT_NOT_FOUND')
     );
 
     const req = new NextRequest('http://localhost:3000/api/projects/2026-missing/review-action', {
@@ -241,7 +243,7 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     mockAction.mockRestore();
   });
 
-  it('9. API route maps REVIEW_TRANSITION_INVALID to HTTP 400', async () => {
+  it('9. API route maps TRANSITION_INVALID to HTTP 400', async () => {
     const { requireAdmin } = await import('../auth/requireAdmin');
     vi.mocked(requireAdmin).mockResolvedValueOnce({
       authUserId: 'auth-uuid-1',
@@ -253,7 +255,7 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     });
 
     const mockAction = vi.spyOn(SupabaseProjectRepository.prototype, 'performReviewAction').mockRejectedValueOnce(
-      new Error('Failed to execute review action: REVIEW_TRANSITION_INVALID')
+      new ReviewActionExecutionError('TRANSITION_INVALID')
     );
 
     const req = new NextRequest('http://localhost:3000/api/projects/2026-draft/review-action', {
@@ -282,8 +284,9 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
       permissions: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit'],
     });
 
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const mockAction = vi.spyOn(SupabaseProjectRepository.prototype, 'performReviewAction').mockRejectedValueOnce(
-      new Error('FATAL: connection reset by peer in PostgreSQL query SELECT * FROM projects FOR UPDATE')
+      new ReviewActionExecutionError('INTERNAL_FAILURE')
     );
 
     const req = new NextRequest('http://localhost:3000/api/projects/2026-proj1/review-action', {
@@ -297,10 +300,83 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
 
     expect(res.status).toBe(500);
     expect(json.success).toBe(false);
-    expect(json.error).not.toContain('FATAL');
-    expect(json.error).not.toContain('PostgreSQL');
-    expect(json.error).not.toContain('SELECT');
+    expect(json.error).toBe(getPublicAuthErrorMessage('UNKNOWN'));
 
+    consoleSpy.mockRestore();
+    mockAction.mockRestore();
+  });
+
+  // ============================================================
+  // Safe Error Boundary & Secret Exclusion Verification Tests
+  // ============================================================
+
+  it('13. Safe Error Boundary: SECRET_SQL_DETAIL_SHOULD_NOT_ESCAPE appears nowhere in repository error, HTTP body, or console log', async () => {
+    const rawBackendMessage = 'REVIEW_TRANSITION_INVALID: SECRET_SQL_DETAIL_SHOULD_NOT_ESCAPE in table pg_proc';
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: rawBackendMessage },
+    });
+
+    const mockSupabase = { rpc: mockRpc } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseProjectRepositoryCore(mockSupabase);
+
+    let caughtRepoError: ReviewActionExecutionError | null = null;
+    try {
+      await repo.performReviewAction({
+        publicId: '2026-proj1',
+        action: 'approve',
+        adminId: '11111111-2222-3333-4444-555555555555',
+      });
+    } catch (err) {
+      if (err instanceof ReviewActionExecutionError) {
+        caughtRepoError = err;
+      }
+    }
+
+    expect(caughtRepoError).not.toBeNull();
+    expect(caughtRepoError?.code).toBe('TRANSITION_INVALID');
+    expect(caughtRepoError?.message).not.toContain('SECRET_SQL_DETAIL_SHOULD_NOT_ESCAPE');
+    expect(caughtRepoError?.message).not.toContain('pg_proc');
+
+    // Route test
+    const { requireAdmin } = await import('../auth/requireAdmin');
+    vi.mocked(requireAdmin).mockResolvedValueOnce({
+      authUserId: 'auth-uuid-1',
+      adminUserId: 'admin-uuid-1',
+      email: 'admin@capstone.test',
+      fullName: 'Admin User',
+      roles: ['admin'],
+      permissions: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit'],
+    });
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mockAction = vi.spyOn(SupabaseProjectRepository.prototype, 'performReviewAction').mockRejectedValueOnce(
+      caughtRepoError!
+    );
+
+    const req = new NextRequest('http://localhost:3000/api/projects/2026-proj1/review-action', {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000' },
+      body: JSON.stringify({ action: 'approve' }),
+    });
+
+    const res = await POST(req, { params: Promise.resolve({ publicId: '2026-proj1' }) });
+    const json = await res.json();
+    const jsonStr = JSON.stringify(json);
+
+    expect(jsonStr).not.toContain('SECRET_SQL_DETAIL_SHOULD_NOT_ESCAPE');
+    expect(jsonStr).not.toContain('pg_proc');
+
+    // Verify console log arguments contain no raw SQL or secret details
+    for (const call of consoleSpy.mock.calls) {
+      for (const arg of call) {
+        const argStr = typeof arg === 'object' ? JSON.stringify(arg) : String(arg);
+        expect(argStr).not.toContain('SECRET_SQL_DETAIL_SHOULD_NOT_ESCAPE');
+        expect(argStr).not.toContain('pg_proc');
+      }
+    }
+
+    consoleSpy.mockRestore();
     mockAction.mockRestore();
   });
 
