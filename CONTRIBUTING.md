@@ -2,6 +2,9 @@
 
 This guide outlines the contributor workflow, repository branching rules, database migration standards, security boundaries, and definition of done for the Capstone Impact Platform (`acmis1/capstone-impact-platform`).
 
+> [!TIP]
+> **STUDENT DEVELOPERS / NEW CONTRIBUTORS**: Please read **[`START_HERE.md`](./START_HERE.md)** first for a step-by-step onboarding walkthrough, prerequisite checks, and synthetic login details.
+
 ---
 
 ## A. Prerequisites & Toolchain Contract
@@ -120,3 +123,53 @@ A contribution is complete when:
 - `npm run build:admin` builds Next.js without errors.
 - `git diff --check` passes cleanly.
 - Documentation accurately reflects all code and schema changes.
+
+---
+
+## G. Student Contribution Lifecycle
+
+1. **Repository Access & Forks**:
+   - Students with direct repository write access create branches directly on `acmis1/capstone-impact-platform`.
+   - External student contributors fork the repository and open Pull Requests from their fork to `acmis1/capstone-impact-platform:main`.
+
+2. **Issue Selection & Assignment**:
+   - Always pick an assigned issue from GitHub Issues before starting work.
+   - Limit work to **one issue per branch**. Do not bundle multiple unrelated tasks into one branch.
+
+3. **Branch Creation & Naming**:
+   - Sync `main` first: `git checkout main && git pull origin main`
+   - Create your feature branch using approved prefixes (`docs/*`, `feat/*`, `fix/*`, `infra/*`, `security/*`):
+     - Example: `git checkout -b feat/project-filter-ui`
+     - Example: `git checkout -b fix/table-sorting-order`
+
+4. **Synchronizing Your Branch**:
+   - Keep your branch synchronized with `main` by rebasing or merging `main` periodically:
+     ```bash
+     git checkout main
+     git pull origin main
+     git checkout your-feature-branch
+     git merge main
+     ```
+
+5. **Commit Message Conventions**:
+   - Use clear, action-oriented commit messages formatted as `type(scope): message`:
+     - `feat(review): implement atomic review transition RPC`
+     - `fix(auth): correct synthetic password generator boundary`
+     - `docs(readme): add student onboarding guide`
+     - `chore(deps): update local devDependencies`
+
+6. **Resolving Merge Conflicts Safely**:
+   - If merge conflicts occur against `main`, resolve them locally in your feature branch.
+   - Never force-push (`git push --force`) to `main`.
+   - Re-run `npm run verify:all` after resolving conflicts to ensure all quality gates pass.
+
+7. **Review Expectations & Self-Merging Prohibition**:
+   - Self-merging without maintainer review is strictly prohibited.
+   - Request review from a maintainer (`@acmis1`).
+   - If changes are requested during review, make corrective commits on your feature branch and push to update the open PR.
+
+8. **Branch Cleanup After Squash Merge**:
+   - Pull requests are squash-merged into `main`.
+   - After your PR is merged, delete the remote branch (`git push origin --delete your-feature-branch`).
+   - Switch locally to `main` and update: `git checkout main && git pull origin main`.
+   - Delete your local branch pointer: `git branch -d your-feature-branch` (if Git refuses due to squash merge ancestry, verify `git diff main..your-feature-branch` is empty before using `git branch -D`).

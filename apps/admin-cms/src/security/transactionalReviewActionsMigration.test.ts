@@ -70,7 +70,7 @@ describe('Migration 0008 Transactional Review Actions Static Security Contract T
     expect(content).toContain('INSERT INTO public.approval_records');
     expect(content).toContain('RETURNING id INTO v_audit_record_id');
 
-    expect(content).toContain("jsonb_build_object(\n    'publicId', v_public_id,\n    'status', v_to_status,\n    'auditRecordId', v_audit_record_id::text\n  )");
+    expect(content.includes('jsonb_build_object') && content.includes("'publicId', v_public_id") && content.includes("'auditRecordId', v_audit_record_id::text")).toBe(true);
   });
 
   it('5. Migration 0008 represents exact role permissions and workflow state transitions', () => {

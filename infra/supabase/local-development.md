@@ -155,12 +155,12 @@ No emails leave your machine during local development.
 2. `npm ci`: Added 532 packages cleanly.
 3. `npm run onboarding:check`: **PASS** (12/12 automated prechecks passed).
 4. `npm run supabase:start`: Container stack started cleanly.
-5. `npm run supabase:reset`: Replayed all 7 database migrations (`0001` through `0007`) in strict timestamp order.
+5. `npm run supabase:reset`: Replayed all 7 database migrations (`0001` through `0007`) in strict timestamp order *(historical recorded log from initial 7-migration onboarding run; current baseline replays all 8 migrations `0001` through `0008`)*.
 6. `npm run supabase:seed:buckets`: Created 3 local storage buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) and seeded 2 poster fixtures.
 7. `npm run supabase:env:local`: Wrote loopback configuration to `apps/admin-cms/.env.local`.
 8. `npm run supabase:users:local`: Provisioned 3 synthetic staff accounts (`local.admin`, `local.reviewer`, `local.editor`).
 9. `npm run supabase:verify:local`: **PASS** (Verified loopback connectivity, 13 tables, RLS enablement, indexes/triggers, policy semantics, 13-table grant matrix, function execution ACLs, storage bucket policies, public feed compiler, and password sign-in for all 3 synthetic roles).
-10. `migration_count`: Verified exactly 7 migration-history rows in `supabase_migrations.schema_migrations`.
+10. `migration_count`: Verified 7 migration-history rows in historical run (8 in current baseline).
 11. `npm run dev:admin`: Next.js 16 server started on port 3000.
 12. `http://localhost:3000/api/health`: Returned `HTTP 200 OK`.
 13. `http://localhost:3000/login`: Returned `HTTP 200 OK`.

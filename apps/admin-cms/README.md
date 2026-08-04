@@ -196,7 +196,7 @@ See the [Supabase migration overview](../../infra/supabase/README.md), [manual a
 
 Authentication uses a Supabase Auth session. The server-only `requireAdmin` helper reads claims, resolves the linked `admin_users` record, loads recognized roles from `user_roles`, derives permissions and returns generic public errors for unauthenticated, unprovisioned or denied access. The `/admin` layout protects the page tree; the project collection API and review mutation authorize independently.
 
-Review mutations also require a same-origin `Origin` header. Audit attribution is derived from the authenticated server-side admin context rather than a trusted browser identity. Raw backend errors are logged for developers but sanitized before staff-facing responses.
+Review mutations also require a same-origin `Origin` header. Audit attribution is derived from the authenticated server-side admin context rather than a trusted browser identity. Application code catches database exceptions and logs controlled internal error codes (e.g. `REVIEW_PERMISSION_DENIED`, `REVIEW_TRANSITION_INVALID`); raw database messages do not escape the repository boundary or reach HTTP responses.
 
 ### Role-based access control
 
