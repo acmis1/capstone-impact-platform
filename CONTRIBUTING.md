@@ -3,7 +3,7 @@
 This guide outlines the contributor workflow, repository branching rules, database migration standards, security boundaries, and definition of done for the Capstone Impact Platform (`acmis1/capstone-impact-platform`).
 
 > [!TIP]
-> **STUDENT DEVELOPERS / NEW CONTRIBUTORS**: Please read **[`START_HERE.md`](./START_HERE.md)** first for a step-by-step onboarding walkthrough, prerequisite checks, and synthetic login details.
+> **DEVELOPERS / NEW CONTRIBUTORS**: Please read **[`START_HERE.md`](./START_HERE.md)** first for a step-by-step onboarding walkthrough, prerequisite checks, and synthetic login details.
 
 ---
 
@@ -82,7 +82,7 @@ npm run supabase:stop
 
 ## D. Security & Data Handling Boundaries
 
-1. **Synthetic Data Only**: Never load or test with real student, staff, or supervisor personal data. Use synthetic mock data only.
+1. **Synthetic Data Only**: Never load or test with real project participant, staff, or supervisor personal data. Use synthetic mock data only.
 2. **Never Use Production/Recovery Environments**: Local development must target loopback (`127.0.0.1`). Never use production or recovery environments.
 3. **No Credentials in Code or Docs**: Secrets, API keys, private tokens, passwords, and database connection strings must never appear in code, logs, screenshots, issues, or pull requests.
 4. **Local Credentials Ignored**: Local environment files (`apps/admin-cms/.env.local`) and user credential stores (`apps/admin-cms/.local-users.json`) remain strictly git-ignored.
@@ -132,11 +132,11 @@ A contribution is complete when:
 
 ---
 
-## G. Student Contribution Lifecycle
+## G. Developer Contribution Lifecycle
 
 1. **Repository Access & Forks**:
-   - Students with direct repository write access create branches directly on `acmis1/capstone-impact-platform`.
-   - External student contributors fork the repository and open Pull Requests from their fork to `acmis1/capstone-impact-platform:main`.
+   - Developers with direct repository write access create branches directly on `acmis1/capstone-impact-platform`.
+   - External developers fork the repository and open Pull Requests from their fork to `acmis1/capstone-impact-platform:main`.
 
 2. **Issue Selection & Assignment**:
    - Always pick an assigned issue from GitHub Issues before starting work.
@@ -166,7 +166,7 @@ A contribution is complete when:
    - Use clear, action-oriented commit messages formatted as `type(scope): message`:
      - `feat(review): implement atomic review transition RPC`
      - `fix(auth): correct synthetic password generator boundary`
-     - `docs(readme): add student onboarding guide`
+     - `docs(readme): add developer onboarding guide`
      - `chore(deps): update local devDependencies`
 
 6. **Resolving Merge Conflicts Safely**:

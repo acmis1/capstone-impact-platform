@@ -182,7 +182,7 @@ Do not claim WCAG certification before empirical test evidence exists.
 3. **Operational Dashboard & Project Index**: Build project grid with TanStack Table, search, and filters.
 4. **Project Editor**: Build form layout, contextual validation right rail, and unsaved-change protection.
 5. **Import & XLSX Reconciliation**: Multi-step folder/spreadsheet import and validation workflow.
-6. **Confirmation & Preview**: Student confirmation tracking and layout preview workspace.
+6. **Confirmation & Preview**: Participant confirmation tracking and layout preview workspace.
 7. **Publishing & Controlled Rollback**: Feed publishing trigger, snapshot history, and governed rollback.
 8. **Accessibility & Visual QA**: Automated axe/Lighthouse sweeps, keyboard testing, visual regression.
 

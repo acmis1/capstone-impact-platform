@@ -32,7 +32,7 @@ The `npm run check:admin-auth` script is strictly SELECT-only and performs zero 
    $env:CAPSTONE_RUNTIME_ENV = "staging"
    $env:CAPSTONE_EXPECTED_SUPABASE_HOST = "app-staging.supabase.co"
    ```
-2. **Data Isolation & Privacy**: Ensure that no real RMIT student records or stakeholder directories are loaded. One authorized administrator identity exists for controlled staging authentication. Identity values must never be printed, logged, or committed.
+2. **Data Isolation & Privacy**: Ensure that no real RMIT participant records or stakeholder directories are loaded. One authorized administrator identity exists for controlled staging authentication. Identity values must never be printed, logged, or committed.
 3. **Execution Checklist**: Run the read-only check script from the repository root:
    ```bash
    npm run check:admin-auth

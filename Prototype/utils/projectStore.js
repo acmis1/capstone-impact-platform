@@ -237,7 +237,7 @@ export async function generatePublicProjects() {
       missingItems, 
       previewUrl, 
       previewSentAt, 
-      studentConfirmedAt, 
+      participantConfirmedAt,
       publishedAt, 
       archivedAt, 
       archiveReason,

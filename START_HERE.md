@@ -1,15 +1,15 @@
-# Student Developer Start Guide (`START_HERE.md`)
+# Developer Start Guide (`START_HERE.md`)
 
-Welcome to the Capstone Impact Platform repository (`acmis1/capstone-impact-platform`). This guide provides a self-service onboarding path intended to minimize maintainer assistance for student developers.
+Welcome to the Capstone Impact Platform repository (`acmis1/capstone-impact-platform`). This guide provides a self-service onboarding path intended to minimize maintainer assistance for developers.
 
 > [!NOTE]
-> **Verification status**: Automated setup has been verified on Windows with Docker Desktop. macOS, Linux, and independent human student onboarding remain unverified. CI validation on GitHub Actions is pending until the first PR run. Do not claim independent onboarding is complete.
+> **Verification status**: Windows automation has existing evidence. macOS, Linux, and independent human developer onboarding remain unverified. GitHub CI remains unverified until a pull-request-triggered run occurs.
 
 ---
 
 ## 1. Project Purpose
 
-The Capstone Impact Platform is a school-owned administrative CMS and publication pipeline. It collects student project submissions, validates project metadata and poster assets, provides staff review workflows, and compiles approved project records into a stable public JSON showcase feed.
+The Capstone Impact Platform is a school-owned administrative CMS and publication pipeline. It collects project participant submissions, validates project metadata and poster assets, provides staff review workflows, and compiles approved project records into a stable public JSON showcase feed.
 
 - **Active Application Code**: [`apps/admin-cms/`](./apps/admin-cms/) — The modern Next.js 16 application containing the admin dashboard, review APIs, schema validators, and public feed compiler.
 - **Active Database Infrastructure**: [`infra/supabase/`](./infra/supabase/) — PostgreSQL migrations, seed SQL, and local development runbooks.
@@ -25,7 +25,7 @@ The Capstone Impact Platform is a school-owned administrative CMS and publicatio
 3. **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** — Repository workflow rules, safety boundaries, and definition of done.
 4. **[`apps/admin-cms/README.md`](./apps/admin-cms/README.md)** — Developer guide for the Next.js application, routes, and components.
 5. **[`infra/supabase/local-development.md`](./infra/supabase/local-development.md)** — Local database architecture, migrations, and local verification details.
-6. **[`docs/student-troubleshooting.md`](./docs/student-troubleshooting.md)** — Fixes for common setup errors.
+6. **[`docs/developer-troubleshooting.md`](./docs/developer-troubleshooting.md)** — Fixes for common setup errors.
 
 ---
 
@@ -109,7 +109,7 @@ capstone-impact-platform/
 │       │   └── security/     # Security tests & validation suites
 │       └── README.md         # Admin/CMS technical documentation
 ├── docs/                     # Technical specifications & runbooks
-│   └── student-troubleshooting.md # Student setup troubleshooting guide
+│   └── participant-troubleshooting.md # Participant setup troubleshooting guide
 ├── infra/
 │   └── supabase/             # Database migrations, seed SQL, runbooks
 │       └── migrations/       # 8 timestamped PostgreSQL migration files
@@ -117,7 +117,7 @@ capstone-impact-platform/
 ├── AGENTS.md                 # Agent governance & repository rules
 ├── CONTRIBUTING.md           # Contributor workflow & safety rules
 ├── README.md                 # Primary repository overview
-└── START_HERE.md             # This student onboarding guide
+└── START_HERE.md             # This participant onboarding guide
 ```
 
 ---
@@ -142,7 +142,7 @@ capstone-impact-platform/
 
 ### Branch Naming
 All work must occur on narrow feature branches created from `main`:
-- `docs/*` — Documentation updates (e.g. `docs/student-developer-self-service`)
+- `docs/*` — Documentation updates (e.g. `docs/developer-self-service`)
 - `feat/*` — New application features (e.g. `feat/project-editor-ui`)
 - `fix/*` — Bug fixes (e.g. `fix/table-pagination-order`)
 - `infra/*` — Local tooling & configuration (e.g. `infra/local-runner`)
@@ -220,7 +220,7 @@ npm run verify:all
 |---|---|---|---|
 | **Local** | `http://127.0.0.1` | Synthetic credentials in `.local-users.json` | Fully controlled via `npm run setup:local` |
 | **Staging** | `capstone-admin-cms-staging-2026` | Isolated staging secrets (maintained by project owner) | Requires double-acknowledgement CLI flags (`--apply --confirm-staging=...`) |
-| **Production** | Live public showcase (Duda) | Isolated production credentials | Strictly restricted; no student direct access |
+| **Production** | Live public showcase (Duda) | Isolated production credentials | Strictly restricted; no project participant direct access |
 
 ---
 
@@ -229,7 +229,7 @@ npm run verify:all
 - ❌ **DO NOT** run `supabase login`, `supabase link`, `supabase db push`, `supabase db pull`, or `supabase migration repair`.
 - ❌ **DO NOT** access hosted Supabase, Render, Vercel, or Duda dashboards.
 - ❌ **DO NOT** hardcode or commit API keys, secrets, credentials, passwords, or connection strings.
-- ❌ **DO NOT** use real student, staff, or supervisor personal identity data (use synthetic data only).
+- ❌ **DO NOT** use real participant, staff, or supervisor personal identity data (use synthetic data only).
 - ❌ **DO NOT** modify files in `Prototype/`.
 - ❌ **DO NOT** edit merged migrations `0001` through `0008`.
 - ❌ **DO NOT** self-merge Pull Requests without maintainer sign-off.
@@ -239,7 +239,7 @@ npm run verify:all
 ## 13. Common Troubleshooting & Escalation
 
 If you encounter issues during setup or development:
-- Consult the **[Student Troubleshooting Guide](./docs/student-troubleshooting.md)** for step-by-step solutions to Docker, Node, port conflict, database reset, or build errors.
+- Consult the **[Developer Troubleshooting Guide](./docs/developer-troubleshooting.md)** for step-by-step solutions to Docker, Node, port conflict, database reset, or build errors.
 
 ### Stop and Escalate Immediately If:
 - Secret, credential, or API key exposure is detected.

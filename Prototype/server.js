@@ -372,8 +372,8 @@ const sanitizeMetadataObject = (rawObj) => {
     teammembers: 'teamMembers',
     teammember: 'teamMembers',
     team: 'teamMembers',
-    studentnames: 'teamMembers',
-    students: 'teamMembers',
+    participantnames: 'teamMembers',
+    participants: 'teamMembers',
     groupname: 'groupName',
     group: 'groupName',
     supervisor: 'supervisor',
@@ -749,7 +749,7 @@ const uploadPreparedAssets = async (batchId, projectSlug, prepared) => {
 const buildImportedProjectRecord = (id, batchId, projectFolder, prepared, uploadedAssets) => {
   const metadata = prepared.metadata;
   const status = prepared.warnings.length > 0 ? 'warning' : 'valid';
-  const students = Array.isArray(metadata.teamMembers) ? metadata.teamMembers : (Array.isArray(metadata.students) ? metadata.students : []);
+  const participants = Array.isArray(metadata.teamMembers) ? metadata.teamMembers : (Array.isArray(metadata.participants) ? metadata.participants : []);
   const externalLinks = Array.isArray(metadata.externalLinks) ? metadata.externalLinks : [];
   const uploadedVideoUrl = uploadedAssets.media['demo-video.mp4'];
 
@@ -769,8 +769,8 @@ const buildImportedProjectRecord = (id, batchId, projectFolder, prepared, upload
     academicSupervisor: metadata.supervisor || '',
     industryPartner: metadata.industryPartner || '',
     groupName: metadata.groupName || '',
-    students,
-    teamMembers: students,
+    participants,
+    teamMembers: participants,
     poster: uploadedAssets.poster,
     posterPdf: uploadedAssets.posterPdf,
     snapshots: uploadedAssets.snapshots,
@@ -1030,7 +1030,7 @@ const generatePublicFeed = async () => {
       missingItems, 
       previewUrl, 
       previewSentAt, 
-      studentConfirmedAt, 
+      participantConfirmedAt,
       publishedAt, 
       archivedAt, 
       archiveReason,

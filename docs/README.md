@@ -20,7 +20,7 @@ When verifying system behavior or planning extensions, information must be refer
 *   **[Project Architecture & Constraints](project-architecture-and-constraints.md)**: Overall system blueprint, data publication flows, and immutable platform boundaries (e.g., Duda upgrade limitations and environment isolation).
 *   **[Public Feed Contract](public-feed-contract.md)**: Formal schema definition, validator fields, compiler defaults, and visual layout config definitions for the public JSON payload (`capstones-latest.json`).
 *   **[Security & Maintainability Plan](security-and-maintainability-plan.md)**: Trust boundaries, authentication foundations, media file isolation, and long-term project maintainability principles.
-*   **[Implementation Backlog](implementation-backlog.md)**: Priority-ranked backlog of planned functional modules, student confirmation workflows, AI/OCR assist integrations, and handover criteria.
+*   **[Implementation Backlog](implementation-backlog.md)**: Priority-ranked backlog of planned functional modules, participant confirmation workflows, AI/OCR assist integrations, and handover criteria.
 
 ---
 

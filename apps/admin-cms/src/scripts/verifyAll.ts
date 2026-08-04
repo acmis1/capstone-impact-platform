@@ -9,6 +9,9 @@ export interface VerifyStep {
 
 export const VERIFY_STEPS: VerifyStep[] = [
   { name: 'onboarding:check', command: 'npm run onboarding:check', description: 'Automated onboarding precheck' },
+  { name: 'check:terminology', command: 'npm run check:terminology', description: 'Tracked current-tree terminology check' },
+  { name: 'check:yaml', command: 'npm run check:yaml', description: 'GitHub workflow and template YAML parse check' },
+  { name: 'check:markdown-links', command: 'npm run check:markdown-links', description: 'Tracked Markdown relative-link check' },
   { name: 'check:feed', command: 'npm run check:feed', description: 'Public feed contract verification' },
   { name: 'lint', command: 'npm run lint --workspace=apps/admin-cms', description: 'ESLint workspace quality check' },
   { name: 'test:admin', command: 'npm run test:admin', description: 'Vitest unit and security test suite' },

@@ -7,7 +7,7 @@ This guide documents the canonical, local-only Supabase development workflow for
 - **Zero Remote Dependencies:** Local development runs entirely inside local Docker containers via the repository-pinned Supabase CLI (`supabase@2.109.1`).
 - **No Supabase Organization Membership Required:** Developers do not need access to hosted Supabase, Duda, Render, or Vercel dashboards to build, test, and run the application locally.
 - **Isolated Local State:** All database tables, authentication identities, storage buckets, and Mailpit email captures run on `http://127.0.0.1`.
-- **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real student or stakeholder PII or credentials are used or committed.
+- **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real participant or stakeholder PII or credentials are used or committed.
 - **Deterministic Migration Replay:** Running `npm run supabase:reset` replays all 8 timestamped migrations from `infra/supabase/migrations/` in strict ascending order, ending with `20260803180000_transactional_review_actions.sql` *(migrations 0007 and 0008 are repository/local-only and not applied to hosted staging)*.
 - **Verification Strategy & Scope:**
   - Static migration tests inspect committed SQL contracts.

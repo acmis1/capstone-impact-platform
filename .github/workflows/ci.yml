@@ -48,6 +48,15 @@ jobs:
       - name: Onboarding Toolchain Precheck
         run: npm run onboarding:check
 
+      - name: Repository terminology check
+        run: npm run check:terminology
+
+      - name: GitHub YAML parse check
+        run: npm run check:yaml
+
+      - name: Tracked Markdown link check
+        run: npm run check:markdown-links
+
       - name: Public Feed Contract Check
         run: npm run check:feed
 
@@ -120,26 +129,30 @@ jobs:
       - name: Onboarding Toolchain Precheck
         run: npm run onboarding:check
 
-      - name: Start Local Supabase Stack
-        run: npm run supabase:start
+      - name: Run local developer setup
+        run: npm run setup:local
 
-      - name: Reset Local Database & Replay Migrations
-        run: npm run supabase:reset
+      - name: Confirm Local Supabase Stack Running
+        run: npm run supabase:assert-running
 
-      - name: Seed Storage Buckets & Fixtures
-        run: npm run supabase:seed:buckets
+      - name: Verify eight migrations and local integrity
+        run: |
+          npm run supabase:verify:local
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 8
 
-      - name: Generate Local Environment Configuration
-        run: npm run supabase:env:local
+      - name: Safely rerun local developer setup
+        run: npm run setup:local
 
-      - name: Provision Synthetic Staff Accounts
-        run: npm run supabase:users:local
+      - name: Confirm Local Supabase Stack Still Running
+        run: npm run supabase:assert-running
 
-      - name: Verify Local Supabase Stack Integrity
-        run: npm run supabase:verify:local
+      - name: Repository terminology check
+        run: npm run check:terminology
 
       - name: Stop Local Supabase Stack (Cleanup)
         if: always()
-        run: |
-          npm run supabase:stop
-          echo "Supabase stack stopped."
+        run: npm run supabase:stop
+
+      - name: Confirm Local Supabase Stack Stopped
+        if: always()
+        run: npm run supabase:assert-stopped

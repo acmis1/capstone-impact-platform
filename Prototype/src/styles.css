@@ -254,7 +254,7 @@ tr:last-child td {
 .status-pill.in_review { background: #eff6ff; color: #1d4ed8; }
 .status-pill.changes_requested { background: #fef2f2; color: #dc2626; }
 .status-pill.preview_sent { background: #faf5ff; color: #7e22ce; }
-.status-pill.student_confirmed { background: #f0fdf4; color: #15803d; }
+.status-pill.participant_confirmed { background: #f0fdf4; color: #15803d; }
 .status-pill.approved { background: #dcfce7; color: #166534; }
 .status-pill.published { background: #003566; color: #ffffff; }
 .status-pill.archived { background: #94a3b8; color: #ffffff; }
@@ -1231,13 +1231,13 @@ button {
   color: #6b21a8;
 }
 
-.btn-student-confirmed {
+.btn-participant-confirmed {
   border-color: #bbf7d0;
   background: #f0fdf4;
   color: #166534;
 }
 
-.btn-student-confirmed:hover {
+.btn-participant-confirmed:hover {
   background: #dcfce7;
   color: #14532d;
 }

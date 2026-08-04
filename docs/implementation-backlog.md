@@ -22,18 +22,18 @@ This document maps out the completed project baseline, foundations present, and 
 
 ---
 
-## 3. Priority 1 — Submission, Cross-Check, Preview, and Student Confirmation
+## 3. Priority 1 — Submission, Cross-Check, Preview, and Participant Confirmation
 *   **Folder Ingestion**: Bulk folder uploads reading project structure and asset packages.
 *   **Excel Cross-Check**: Build the administrative parser matching column headers in `project-details.xlsx` against database fields.
-*   **Student Preview Link**: Generate token-based, private, secure preview URLs for student groups, with preview-token expiry and revocation rules.
-*   **Email Notification**: Send automated preview emails containing preview links to student group contact addresses.
+*   **Participant Preview Link**: Generate token-based, private, secure preview URLs for participant groups, with preview-token expiry and revocation rules.
+*   **Email Notification**: Send automated preview emails containing preview links to participant group contact addresses.
 *   **Reminder Scheduling**: Schedule automated email reminders to groups if confirmation is pending, tracking reminder history.
 *   **Review Workflows**: Bulk review and cross-check metadata manually before preview generation.
-*   **Student Response Handling**:
-    *   *Student Confirmation*: Record an explicit student confirmation and timestamp (auditable final sign-off).
+*   **Participant Response Handling**:
+    *   *Participant Confirmation*: Record an explicit participant confirmation and timestamp (auditable final sign-off).
     *   *Correction Requests*: Record correction-request comments, status, and timestamps.
-    *   *Admin Resolution*: Admin resolution of student corrections, triggering regenerated/reissued previews and student re-notification.
-*   **Admin Audit Trail**: Record administrative changes and student confirmations in logs.
+    *   *Admin Resolution*: Admin resolution of participant corrections, triggering regenerated/reissued previews and participant re-notification.
+*   **Admin Audit Trail**: Record administrative changes and participant confirmations in logs.
 
 ---
 
@@ -81,7 +81,7 @@ This document maps out the completed project baseline, foundations present, and 
 ---
 
 ## 7. Optional Enhancements
-*   **Community Voting**: Embed optional student and visitor voting widgets on Duda pages (must not block the core publishing path).
+*   **Community Voting**: Embed optional participant and visitor voting widgets on Duda pages (must not block the core publishing path).
 
 ---
 

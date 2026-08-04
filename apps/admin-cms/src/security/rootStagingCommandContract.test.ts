@@ -45,13 +45,16 @@ describe('Root Staging Command Contract & Argument Forwarding Tests', () => {
     expect(scripts['check:feed']).toBe('npm run check:sample-feed --workspace=apps/admin-cms');
   });
 
-  it('4. Local loopback Supabase commands remain defined and unchanged', () => {
+  it('4. Local loopback Supabase commands use safe repository wrappers', () => {
     const pkg = JSON.parse(fs.readFileSync(rootPackageJsonPath, 'utf8'));
     const scripts = pkg.scripts;
 
-    expect(scripts['supabase:start']).toBe('supabase start --workdir infra');
-    expect(scripts['supabase:stop']).toBe('supabase stop --workdir infra');
-    expect(scripts['supabase:reset']).toBe('supabase db reset --local --workdir infra');
+    expect(scripts['supabase:start']).toBe('tsx apps/admin-cms/src/scripts/runLocalSupabase.ts start');
+    expect(scripts['supabase:stop']).toBe('tsx apps/admin-cms/src/scripts/runLocalSupabase.ts stop');
+    expect(scripts['supabase:reset']).toBe('tsx apps/admin-cms/src/scripts/runLocalSupabase.ts reset');
+    expect(scripts['supabase:status']).toBeUndefined();
+    expect(scripts['supabase:assert-running']).toBe('tsx apps/admin-cms/src/scripts/assertSupabaseRunning.ts');
+    expect(scripts['supabase:assert-stopped']).toBe('tsx apps/admin-cms/src/scripts/assertSupabaseStopped.ts');
     expect(scripts['supabase:seed:buckets']).toBe('npm run seed:buckets:local --workspace=apps/admin-cms --');
     expect(scripts['supabase:env:local']).toBe('npm run env:local --workspace=apps/admin-cms --');
     expect(scripts['supabase:users:local']).toBe('npm run users:local --workspace=apps/admin-cms --');

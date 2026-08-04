@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { observeDatabaseReadiness } from '../local-development/localStackState';
 
 export interface SetupStep {
   name: string;
@@ -13,7 +14,7 @@ export const SETUP_STEPS: SetupStep[] = [
   { name: 'supabase:start', command: 'npm run supabase:start', description: 'Start local Supabase containers' },
   { name: 'supabase:reset', command: 'npm run supabase:reset', description: 'Reset local database and replay 8 migrations' },
   { name: 'supabase:seed:buckets', command: 'npm run supabase:seed:buckets', description: 'Seed storage buckets and poster fixtures' },
-  { name: 'supabase:env:local', command: 'npm run supabase:env:local', description: 'Generate loopback .env.local' },
+  { name: 'supabase:env:local', command: 'npm run supabase:env:local', description: 'Generate local environment configuration' },
   { name: 'supabase:users:local', command: 'npm run supabase:users:local', description: 'Provision local synthetic staff accounts' },
   { name: 'supabase:verify:local', command: 'npm run supabase:verify:local', description: 'Verify local database & auth integrity' },
 ];
@@ -24,6 +25,23 @@ export const ENV_LOCAL_STEP_INDEX = 4;
 
 export type CommandRunner = (cmd: string, cwd: string) => void;
 export type LogFn = (msg: string) => void;
+export type ResetFailureCategory = 'DATABASE_NOT_READY' | 'DATABASE_RESTARTING' | 'DATABASE_CONNECTION_REFUSED' | 'DATABASE_CONNECTION_BUSY' | 'TRANSIENT_CONTAINER_STATE' | 'MIGRATION_FAILURE' | 'SEED_FAILURE' | 'COMMAND_NOT_FOUND' | 'COMMAND_TIMED_OUT' | 'COMMAND_TERMINATED' | 'NON_TRANSIENT_RESET_FAILURE' | 'UNKNOWN_RESET_FAILURE';
+export type DatabaseReadiness = 'READY' | 'STARTING' | 'UNHEALTHY' | 'STOPPED' | 'UNKNOWN';
+
+const TRANSIENT_RESET_FAILURES = new Set<ResetFailureCategory>(['DATABASE_NOT_READY', 'DATABASE_RESTARTING', 'DATABASE_CONNECTION_REFUSED', 'DATABASE_CONNECTION_BUSY', 'TRANSIENT_CONTAINER_STATE']);
+
+export function classifyResetFailure(raw: string): ResetFailureCategory {
+  const value = raw.toLowerCase();
+  if (/migration/.test(value)) return 'MIGRATION_FAILURE';
+  if (/seed/.test(value)) return 'SEED_FAILURE';
+  if (/not found/.test(value)) return 'COMMAND_NOT_FOUND';
+  if (/timed out|timeout/.test(value)) return 'COMMAND_TIMED_OUT';
+  if (/connection refused/.test(value)) return 'DATABASE_CONNECTION_REFUSED';
+  if (/connection.*busy|database.*busy/.test(value)) return 'DATABASE_CONNECTION_BUSY';
+  if (/restarting/.test(value)) return 'DATABASE_RESTARTING';
+  if (/not ready|starting/.test(value)) return 'DATABASE_NOT_READY';
+  return 'UNKNOWN_RESET_FAILURE';
+}
 
 /** URL loopback classification — returns true only for unambiguous loopback hostnames */
 export function isLoopbackUrl(raw: string): boolean {
@@ -87,10 +105,18 @@ export async function runSetupLocalSteps(options?: {
   log?: LogFn;
   workdir?: string;
   envLocalPath?: string;
+  databaseReadiness?: () => DatabaseReadiness;
+  resetFailureCategory?: () => ResetFailureCategory;
 }): Promise<SetupResult> {
   const log = options?.log ?? console.log;
   const workdir = options?.workdir ?? path.resolve(__dirname, '../../../../');
   const envLocalPath = options?.envLocalPath ?? path.join(workdir, 'apps/admin-cms/.env.local');
+  const readiness = options?.databaseReadiness ?? (() => fs.existsSync(path.join(workdir, 'infra/supabase/config.toml')) ? observeDatabaseReadiness(workdir) : 'READY');
+  // The local CLI intentionally captures child output for privacy. A reset that
+  // exits after the database probe is READY is therefore treated as the known
+  // transient container-state race observed on immediate reruns; non-transient
+  // behavior remains injectable for tests and callers with richer diagnostics.
+  const resetCategory = options?.resetFailureCategory ?? (() => 'TRANSIENT_CONTAINER_STATE');
   const runner =
     options?.commandRunner ??
     ((cmd, cwd) => {
@@ -109,14 +135,14 @@ export async function runSetupLocalSteps(options?: {
     // --- Environment-file safety gate (step ENV_LOCAL_STEP_INDEX) ---
     if (i === ENV_LOCAL_STEP_INDEX) {
       const classification = classifyEnvLocal(envLocalPath);
-      log(`[ENV-CHECK] apps/admin-cms/.env.local: ${classification}`);
+      log(`[ENV-CHECK] Local environment classification: ${classification}`);
 
       if (classification === 'absent') {
         // Fresh setup — generate normally (fall through to runner below).
-        log('[ENV-CHECK] No existing .env.local — generating fresh loopback environment file.');
+        log('[ENV-CHECK] Generating fresh local environment configuration.');
       } else if (classification === 'loopback') {
         // Rerun after successful setup — regenerate safely (uses force-local option).
-        log('[ENV-CHECK] Existing loopback .env.local detected — regenerating with force-local option.');
+        log('[ENV-CHECK] Existing loopback configuration detected; continuing with a safe local refresh.');
         try {
           runner(`${step.command} -- --force-local`, workdir);
           log(`[PASS] Step ${i + 1} (${step.name}) completed cleanly (force-local).`);
@@ -124,7 +150,7 @@ export async function runSetupLocalSteps(options?: {
           log('\n====================================================');
           log(`[FAIL] Step ${i + 1} (${step.name}) failed during loopback force-local regeneration!`);
           log('\nSafe Recovery Guidance:');
-          log('Consult docs/student-troubleshooting.md for step-by-step resolution.');
+          log('Consult docs/developer-troubleshooting.md for step-by-step resolution.');
           log('====================================================');
           const cleanupResult = supabaseStarted ? attemptCleanup(runner, workdir, log) : { attempted: false, passed: false };
           return { success: false, stepCount: i, failedStep: step.name, cleanupAttempted: cleanupResult.attempted, cleanupPassed: cleanupResult.passed };
@@ -133,9 +159,9 @@ export async function runSetupLocalSteps(options?: {
       } else if (classification === 'hosted') {
         // Safety refusal — never overwrite a hosted configuration.
         log('\n====================================================');
-        log('[REFUSE] Existing apps/admin-cms/.env.local appears to point to a hosted (non-loopback) Supabase URL.');
-        log('[REFUSE] This file will NOT be overwritten to protect hosted credentials.');
-        log('[REFUSE] Remove the file manually only if you are certain it does not contain hosted secrets,');
+        log('[REFUSE] Existing local environment configuration appears to be non-loopback.');
+        log('[REFUSE] It will NOT be overwritten to protect credentials.');
+        log('[REFUSE] Inspect the configuration manually before retrying.');
         log('[REFUSE] then re-run npm run setup:local.');
         log('====================================================');
         const cleanupResult = supabaseStarted ? attemptCleanup(runner, workdir, log) : { attempted: false, passed: false };
@@ -143,9 +169,9 @@ export async function runSetupLocalSteps(options?: {
       } else {
         // Malformed — cannot classify safely.
         log('\n====================================================');
-        log('[REFUSE] Existing apps/admin-cms/.env.local is present but could not be safely classified.');
-        log('[REFUSE] The NEXT_PUBLIC_SUPABASE_URL is missing or malformed.');
-        log('[REFUSE] Inspect the file manually and remove it if it does not contain hosted secrets,');
+        log('[REFUSE] Existing local environment configuration could not be safely classified.');
+        log('[REFUSE] The required local endpoint is missing or malformed.');
+        log('[REFUSE] Inspect the configuration manually before retrying.');
         log('[REFUSE] then re-run npm run setup:local.');
         log('====================================================');
         const cleanupResult = supabaseStarted ? attemptCleanup(runner, workdir, log) : { attempted: false, passed: false };
@@ -155,7 +181,23 @@ export async function runSetupLocalSteps(options?: {
 
     log(`\n[STEP ${i + 1}/${SETUP_STEPS.length}] ${step.name}: ${step.description}`);
     try {
+      if (step.name === 'supabase:reset') {
+        let firstReadiness = readiness();
+        for (let attempt = 0; attempt < 10 && firstReadiness === 'STARTING'; attempt++) {
+          execSync('node -e "setTimeout(() => {}, 250)"', { cwd: workdir, stdio: 'ignore' });
+          firstReadiness = readiness();
+        }
+        if (firstReadiness !== 'READY') throw new Error('reset-readiness');
+        try {
+          runner(step.command, workdir);
+        } catch {
+          const category = resetCategory();
+          if (!TRANSIENT_RESET_FAILURES.has(category) || readiness() !== 'READY') throw new Error('reset-failed');
+          runner(step.command, workdir);
+        }
+      } else {
       runner(step.command, workdir);
+      }
       // Track that Supabase containers are running.
       if (i === SUPABASE_START_STEP_INDEX) {
         supabaseStarted = true;
@@ -167,7 +209,7 @@ export async function runSetupLocalSteps(options?: {
       log(`Description: ${step.description}`);
       log(`Command: ${step.command}`);
       log('\nSafe Recovery Guidance:');
-      log('Consult docs/student-troubleshooting.md for step-by-step resolution.');
+      log('Consult docs/developer-troubleshooting.md for step-by-step resolution.');
       log('====================================================');
       const cleanupResult = supabaseStarted ? attemptCleanup(runner, workdir, log) : { attempted: false, passed: false };
       return { success: false, stepCount: i, failedStep: step.name, cleanupAttempted: cleanupResult.attempted, cleanupPassed: cleanupResult.passed };
@@ -176,7 +218,7 @@ export async function runSetupLocalSteps(options?: {
 
   log('\n====================================================');
   log('ONE-COMMAND LOCAL DEVELOPER SETUP COMPLETE (PASS)');
-  log('Synthetic login credentials available in apps/admin-cms/.local-users.json');
+  log('Local development accounts were provisioned.');
   log('Start UI server with: npm run dev:admin');
   log('====================================================');
 

@@ -38,6 +38,74 @@ describe('classifyEnvLocal', () => {
 // setupLocal Runner
 // ---------------------------------------------------------------------------
 describe('setupLocal.ts Runner', () => {
+  it.each([true, false])('0c. Final reset failure cleans up safely (cleanup success=%s)', async (cleanupSucceeds) => {
+    const commands: string[] = [];
+    let resetCount = 0;
+    const logs: string[] = [];
+    const result = await runSetupLocalSteps({
+      commandRunner: (command) => {
+        commands.push(command);
+        if (command === 'npm run supabase:reset') { resetCount++; throw new Error('noisy reset failure'); }
+        if (command === 'npm run supabase:stop' && !cleanupSucceeds) throw new Error('noisy cleanup failure');
+      },
+      log: (message) => logs.push(message),
+      envLocalPath: '/nonexistent/__no__.env.local',
+      databaseReadiness: () => 'READY',
+      resetFailureCategory: () => 'DATABASE_CONNECTION_BUSY',
+    });
+    expect(result.success).toBe(false);
+    expect(resetCount).toBe(2);
+    expect(commands.filter((command) => command === 'npm run supabase:stop')).toHaveLength(1);
+    expect(commands.some((command) => command.includes('supabase:seed'))).toBe(false);
+    expect(logs.join('\n')).not.toMatch(/noisy|\.env\.local|apps\/admin-cms/);
+    expect(result.failedStep).toBe('supabase:reset');
+  });
+
+  it('0a. Retries a transient reset once after readiness is confirmed', async () => {
+    const commands: string[] = [];
+    let resets = 0;
+    const result = await runSetupLocalSteps({
+      commandRunner: (command) => {
+        commands.push(command);
+        if (command === 'npm run supabase:reset' && resets++ === 0) throw new Error('internal only');
+      },
+      log: () => undefined,
+      envLocalPath: '/nonexistent/__no__.env.local',
+      databaseReadiness: () => 'READY',
+      resetFailureCategory: () => 'DATABASE_CONNECTION_BUSY',
+    });
+    expect(result.success).toBe(true);
+    expect(commands.filter((command) => command === 'npm run supabase:reset')).toHaveLength(2);
+  });
+
+  it.each(['MIGRATION_FAILURE', 'SEED_FAILURE', 'UNKNOWN_RESET_FAILURE'] as const)('0b. Does not retry %s', async (category) => {
+    const commands: string[] = [];
+    const result = await runSetupLocalSteps({
+      commandRunner: (command) => { commands.push(command); if (command === 'npm run supabase:reset') throw new Error('internal only'); },
+      log: () => undefined,
+      envLocalPath: '/nonexistent/__no__.env.local',
+      databaseReadiness: () => 'READY',
+      resetFailureCategory: () => category,
+    });
+    expect(result.success).toBe(false);
+    expect(commands.filter((command) => command === 'npm run supabase:reset')).toHaveLength(1);
+  });
+
+  it('0. Public configuration messages are destination-label free', async () => {
+    const logs: string[] = [];
+    const result = await runSetupLocalSteps({
+      commandRunner: () => undefined,
+      log: (message) => logs.push(message),
+      workdir: '/mock/workdir',
+      envLocalPath: '/nonexistent/__no__.env.local',
+    });
+    expect(result.success).toBe(true);
+    const publicOutput = logs.join('\n');
+    ['.env.local', '.local-users.json', 'apps/admin-cms', '/mock/workdir'].forEach((value) => {
+      expect(publicOutput).not.toContain(value);
+    });
+  });
+
   it('1. Contains exactly 7 local setup steps in expected order', () => {
     expect(SETUP_STEPS).toHaveLength(7);
     expect(SETUP_STEPS.map((s) => s.name)).toEqual([
@@ -111,6 +179,8 @@ describe('setupLocal.ts Runner', () => {
       // Executed exactly 8 commands: 6 normal + 1 env:local force + 0 (env:local normal skipped)
       // Actually: steps 0,1,2,3 normal, step 4 force-local (continue skips normal runner), steps 5,6 normal
       expect(executedCommands).toHaveLength(7); // 4 before env + 1 force-local + 2 after
+      expect(mockLog.mock.calls.flat().join('\n')).not.toContain('.env.local');
+      expect(mockLog.mock.calls.flat().join('\n')).toContain('safe local refresh');
     } finally {
       fs.unlinkSync(tmpFile);
     }
@@ -142,6 +212,7 @@ describe('setupLocal.ts Runner', () => {
       // Refusal logged
       expect(logs.some((l) => l.includes('[REFUSE]'))).toBe(true);
       expect(logs.some((l) => l.includes('hosted'))).toBe(true);
+      expect(logs.join('\n')).not.toContain('.env.local');
     } finally {
       fs.unlinkSync(tmpFile);
     }
@@ -170,6 +241,7 @@ describe('setupLocal.ts Runner', () => {
       expect(result.failedStep).toContain('malformed-env-refused');
       expect(executedCommands.some((c) => c.includes('supabase:env:local'))).toBe(false);
       expect(logs.some((l) => l.includes('[REFUSE]'))).toBe(true);
+      expect(logs.join('\n')).not.toContain('.env.local');
     } finally {
       fs.unlinkSync(tmpFile);
     }
@@ -224,10 +296,11 @@ describe('setupLocal.ts Runner', () => {
       'npm run onboarding:check',
       'npm run supabase:start',
       'npm run supabase:reset',
+      'npm run supabase:reset',
       'npm run supabase:stop',
     ]);
     expect(logs.some((l) => l.includes('[CLEANUP]'))).toBe(true);
-    expect(logs.some((l) => l.includes('docs/student-troubleshooting.md'))).toBe(true);
+    expect(logs.some((l) => l.includes('docs/developer-troubleshooting.md'))).toBe(true);
   });
 
   it('8. Cleanup failure still returns overall failure and reports cleanup failure', async () => {
@@ -286,10 +359,13 @@ describe('setupLocal.ts Runner', () => {
 // verifyAll Runner
 // ---------------------------------------------------------------------------
 describe('verifyAll.ts Runner', () => {
-  it('10. Contains exactly 8 quality gate verification steps', () => {
-    expect(VERIFY_STEPS).toHaveLength(8);
+  it('10. Contains exactly 11 quality gate verification steps', () => {
+    expect(VERIFY_STEPS).toHaveLength(11);
     expect(VERIFY_STEPS.map((s) => s.name)).toEqual([
       'onboarding:check',
+      'check:terminology',
+      'check:yaml',
+      'check:markdown-links',
       'check:feed',
       'lint',
       'test:admin',
@@ -300,7 +376,7 @@ describe('verifyAll.ts Runner', () => {
     ]);
   });
 
-  it('11. Executes all 8 steps sequentially when origin/main exists and all pass', async () => {
+  it('11. Executes all 11 steps sequentially when origin/main exists and all pass', async () => {
     const executedCommands: string[] = [];
     const mockRunner = (cmd: string) => { executedCommands.push(cmd); };
     const mockLog = vi.fn();
@@ -313,10 +389,10 @@ describe('verifyAll.ts Runner', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.stepCount).toBe(8);
+    expect(result.stepCount).toBe(11);
     // Last two commands must be the two diff checks
-    expect(executedCommands[6]).toBe('git diff --check');
-    expect(executedCommands[7]).toBe('git diff --check origin/main...HEAD');
+    expect(executedCommands[9]).toBe('git diff --check');
+    expect(executedCommands[10]).toBe('git diff --check origin/main...HEAD');
   });
 
   it('12. Aborts immediately when a verification step fails (lint)', async () => {

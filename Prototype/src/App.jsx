@@ -728,7 +728,7 @@ function App() {
       validation: validateProjectPackage(pkg)
     }));
     setImportPackages(validated);
-    setMessage("Loaded 5 simulated student packages with validation results.");
+    setMessage("Loaded 5 simulated participant packages with validation results.");
     setTimeout(() => setMessage(null), 2000);
   };
 
@@ -1070,7 +1070,7 @@ function App() {
           </div>
           <div className="stat-card border-approved">
             <label>Approved</label>
-            <div className="stat-val">{getStatusCount('approved') + getStatusCount('preview_sent') + getStatusCount('student_confirmed')}</div>
+            <div className="stat-val">{getStatusCount('approved') + getStatusCount('preview_sent') + getStatusCount('participant_confirmed')}</div>
           </div>
           <div className="stat-card border-published">
             <label>Live on Duda</label>
@@ -1096,12 +1096,12 @@ function App() {
             marginTop: '1.5rem'
           }}>
             {[
-              { n: 1, t: 'Submission', d: 'Student/Group uploads files and metadata.' },
+              { n: 1, t: 'Submission', d: 'Participant/Group uploads files and metadata.' },
               { n: 2, t: 'OCR Assist', d: 'Conceptual AI extracts and validates data.' },
               { n: 3, t: 'Staff Review', d: 'Admin verifies accuracy and formatting.' },
               { n: 4, t: 'Clarifications', d: 'Staff requests changes if data is missing.' },
-              { n: 5, t: 'Student Proof', d: 'Send private preview to student group.' },
-              { n: 6, t: 'Confirmation', d: 'Student confirms the proof is correct.' },
+              { n: 5, t: 'Participant Proof', d: 'Send private preview to participant group.' },
+              { n: 6, t: 'Confirmation', d: 'Participant confirms the proof is correct.' },
               { n: 7, t: 'Approval', d: 'Staff marks project ready for publication.' },
               { n: 8, t: 'Publishing', d: 'One-click sync to Duda stable feed.' }
             ].map(s => (
@@ -1140,7 +1140,7 @@ function App() {
             <span style={{ fontSize: '1.5rem' }}>[AI]</span>
             <div style={{ fontSize: '0.85rem', color: '#0369a1' }}>
               <strong>Conceptual AI/OCR Assist:</strong> In the production version, the system will automatically scan uploaded posters
-              and documents to pre-fill metadata fields and flag potential inconsistencies (e.g., student name mismatches or missing logos).
+              and documents to pre-fill metadata fields and flag potential inconsistencies (e.g., participant name mismatches or missing logos).
               Admin review remains the mandatory final gate before publication.
             </div>
           </div>
@@ -1603,10 +1603,10 @@ function App() {
         text: (layoutConfig.templateId && ['poster_showcase', 'technical_detail', 'media_rich'].includes(layoutConfig.templateId)) ? `Template Preset: ${layoutConfig.templateId.replace('_', ' ')}` : 'Invalid layout template ID'
       },
       {
-        id: 'student_confirm',
-        label: 'Student confirmation logged',
-        status: (currentProject.status === 'student_confirmed' || currentProject.status === 'approved' || currentProject.status === 'published') ? 'Complete' : 'Warning',
-        text: (currentProject.status === 'student_confirmed' || currentProject.status === 'approved' || currentProject.status === 'published') ? 'Student proof is confirmed' : 'Awaiting student proof approval'
+        id: 'participant_confirm',
+        label: 'Participant confirmation logged',
+        status: (currentProject.status === 'participant_confirmed' || currentProject.status === 'approved' || currentProject.status === 'published') ? 'Complete' : 'Warning',
+        text: (currentProject.status === 'participant_confirmed' || currentProject.status === 'approved' || currentProject.status === 'published') ? 'Participant proof is confirmed' : 'Awaiting participant proof approval'
       },
       {
         id: 'eligibility',
@@ -1627,7 +1627,7 @@ function App() {
           return 2;
         case 'preview_sent':
           return 3;
-        case 'student_confirmed':
+        case 'participant_confirmed':
           return 4;
         case 'approved':
           return 5;
@@ -1644,7 +1644,7 @@ function App() {
       { label: 'Imported', index: 1 },
       { label: 'In Review', index: 2 },
       { label: 'Proof Sent', index: 3 },
-      { label: 'Student Confirmed', index: 4 },
+      { label: 'Participant Confirmed', index: 4 },
       { label: 'Approved', index: 5 },
       { label: 'Published', index: 6 }
     ];
@@ -2271,18 +2271,18 @@ function App() {
                           <option value="in_review">In Review</option>
                           <option value="changes_requested">Changes Requested</option>
                           <option value="preview_sent">Preview Sent</option>
-                          <option value="student_confirmed">Student Confirmed</option>
+                          <option value="participant_confirmed">Participant Confirmed</option>
                           <option value="approved">Approved (Queue for Publish)</option>
                           <option value="published">Published (Live)</option>
                           <option value="archived">Archived</option>
                         </select>
                       </div>
                       <div className="form-group full-width">
-                        <label>Review Notes (Shared with Student Group)</label>
+                        <label>Review Notes (Shared with Participant Group)</label>
                         <textarea value={currentProject.reviewNotes || ''} onChange={e => setCurrentProject({...currentProject, reviewNotes: e.target.value})} rows="2" />
                       </div>
                       <div className="form-group full-width">
-                        <label>Internal Staff Notes (Private - Not for Students/Public)</label>
+                        <label>Internal Staff Notes (Private - Not for Participants/Public)</label>
                         <textarea value={currentProject.internalNotes || ''} onChange={e => setCurrentProject({...currentProject, internalNotes: e.target.value})} rows="2" />
                       </div>
                     </div>
@@ -2313,7 +2313,7 @@ function App() {
                         <option value="in_review">In Review</option>
                         <option value="changes_requested">Changes Requested</option>
                         <option value="preview_sent">Preview Sent</option>
-                        <option value="student_confirmed">Student Confirmed</option>
+                        <option value="participant_confirmed">Participant Confirmed</option>
                         <option value="approved">Approved (Queue for Publish)</option>
                         <option value="published">Published (Live)</option>
                         <option value="archived">Archived</option>
@@ -2540,7 +2540,7 @@ function App() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
                       <button type="button" className="btn-action btn-mark-in-review" style={{ padding: '0.4rem', fontSize: '0.75rem' }} onClick={() => setProjectStatus('in_review')}>In Review</button>
                       <button type="button" className="btn-action btn-request-changes" style={{ padding: '0.4rem', fontSize: '0.75rem' }} onClick={() => {
-                        const note = prompt("Enter specific changes required (sent to student group):");
+                        const note = prompt("Enter specific changes required (sent to participant group):");
                         if (note) {
                           setCurrentProject({ ...currentProject, status: 'changes_requested', reviewNotes: note });
                           setMessage("Project marked as Changes Requested.");
@@ -2551,9 +2551,9 @@ function App() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
                       <button type="button" className="btn-action btn-send-proof" style={{ padding: '0.4rem', fontSize: '0.75rem' }} onClick={() => {
                         setProjectStatus('preview_sent');
-                        alert("STAKEHOLDER DEMO:\n\nIn the production system, this sends a secure one-time preview link to the student group: \n\nhttps://showcase.rmit.edu.vn/preview/" + (currentProject.id || 'temp-id'));
+                        alert("STAKEHOLDER DEMO:\n\nIn the production system, this sends a secure one-time preview link to the participant group: \n\nhttps://showcase.rmit.edu.vn/preview/" + (currentProject.id || 'temp-id'));
                       }}>Send Proof</button>
-                      <button type="button" className="btn-action btn-student-confirmed" style={{ padding: '0.4rem', fontSize: '0.75rem' }} onClick={() => setProjectStatus('student_confirmed')}>Student Ok</button>
+                      <button type="button" className="btn-action btn-participant-confirmed" style={{ padding: '0.4rem', fontSize: '0.75rem' }} onClick={() => setProjectStatus('participant_confirmed')}>Participant Ok</button>
                     </div>
 
                     <button type="button" className="btn-success btn-action btn-approve" style={{ width: '100%', background: 'var(--success)', color: 'white', padding: '0.5rem', fontSize: '0.8rem', fontWeight: 'bold' }} onClick={() => setProjectStatus('approved')}>Approve for Publish</button>
@@ -3041,7 +3041,7 @@ function App() {
       <section className="public-preview">
         <div className="duda-header">
           <h1>Capstone Impact Showcase</h1>
-          <p>Explore the innovative projects from our graduating students.</p>
+          <p>Explore the innovative projects from our graduating participants.</p>
         </div>
 
         {years.map(year => (

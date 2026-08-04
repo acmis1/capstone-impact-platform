@@ -1,6 +1,6 @@
-# Student Developer Troubleshooting Guide
+# Developer Troubleshooting Guide
 
-This guide provides solutions for common issues student developers may encounter when setting up or developing on the Capstone Impact Platform.
+This guide provides solutions for common issues developers may encounter when setting up or developing on the Capstone Impact Platform.
 
 > [!NOTE]
 > `npm run setup:local` is safely rerunnable. It checks an existing `.env.local` before overwriting it: loopback configurations are safely regenerated, hosted-looking files are refused, and no keys or tokens are ever printed. If it failed mid-way, run it again after fixing the specific step.

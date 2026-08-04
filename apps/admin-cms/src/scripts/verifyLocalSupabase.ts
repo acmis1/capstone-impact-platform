@@ -119,7 +119,7 @@ function mapDbRowToProject(row: Record<string, unknown>): Project {
     industryPartner: String(row.industry_partner || ''),
     academicSupervisor: String(row.academic_supervisor || ''),
     groupName: String(row.group_name || 'Capstone Team 1'),
-    teamMembers: Array.isArray(row.team_members) ? (row.team_members as string[]) : ['Student One', 'Student Two'],
+    teamMembers: Array.isArray(row.team_members) ? (row.team_members as string[]) : ['Participant One', 'Participant Two'],
     poster: String(row.poster_url || ''),
     posterPdf: String(row.poster_pdf_url || ''),
     posterText: String(row.poster_text_public || ''),
@@ -147,7 +147,7 @@ function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, un
   const cmd = `"${cliPath}" db query --local --workdir "${workdir}" -o json "${sql.replace(/"/g, '\\"')}"`;
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
-      const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+      const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot, stdio: 'pipe' });
       const firstBrace = raw.indexOf('{');
       const lastBrace = raw.lastIndexOf('}');
       if (firstBrace !== -1 && lastBrace !== -1) {
@@ -174,7 +174,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
   let rawEnv = '';
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
-      rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+      rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot, stdio: 'pipe' });
       if (rawEnv.includes('API_URL')) break;
     } catch {
       // Retry

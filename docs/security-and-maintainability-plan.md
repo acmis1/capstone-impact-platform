@@ -5,18 +5,18 @@ This document establishes the security guidelines, trust boundaries, and maintai
 ---
 
 ## 1. Purpose and Scope
-Ensure that administrative workflows, student project data, and public showcase assets are protected against unauthorized modification, credential leakage, and data loss.
+Ensure that administrative workflows, participant project data, and public showcase assets are protected against unauthorized modification, credential leakage, and data loss.
 
 ---
 
 ## 2. Target Production Trust Boundaries
 
 ```
-[Student Packages] ─► [HTTPS Upload (Target)] ─► [CMS Admin UI] ── (Server-side auth and permission guards) ──► [PostgreSQL & Storage]
+[Participant Packages] ─► [HTTPS Upload (Target)] ─► [CMS Admin UI] ── (Server-side auth and permission guards) ──► [PostgreSQL & Storage]
                                                                                            │
 [Duda Shell (Public UI)] ◄── (HTTPS GET) ◄── [Stable Public JSON Feed] ◄── [Approved Public Feed Storage]
 ```
-*(Note: The complete HTTPS student-upload workflow is a target design and is not currently operational. Current Duda test-site verification used the recovered Prototype public feed. Future Admin/CMS-to-Duda connection requires a separately approved and verified cutover; the Admin/CMS staging feed must not be connected accidentally during auth activation. The current authorization implementation uses the server-only requireAdmin helper, the protected admin layout, protected API routes, and permission checks).*
+*(Note: The complete HTTPS participant-upload workflow is a target design and is not currently operational. Current Duda test-site verification used the recovered Prototype public feed. Future Admin/CMS-to-Duda connection requires a separately approved and verified cutover; the Admin/CMS staging feed must not be connected accidentally during auth activation. The current authorization implementation uses the server-only requireAdmin helper, the protected admin layout, protected API routes, and permission checks).*
 
 ---
 
@@ -52,12 +52,12 @@ Ensure that administrative workflows, student project data, and public showcase 
 ---
 
 ## 6. Data and Media Protection
-*   **Media Folder Isolation**: Student folder uploads containing draft Excel sheets, personal documents, and raw source materials must reside in private buckets. The default configurable bucket names are:
+*   **Media Folder Isolation**: Participant folder uploads containing draft Excel sheets, personal documents, and raw source materials must reside in private buckets. The default configurable bucket names are:
     *   Private drafts: `project-drafts-private`
     *   Public assets: `project-public-assets`
     *   Public feeds: `public-feeds`
 *   **Public Assets**: Only approved project media (posters, snapshot images, and PDFs) may be copied to the public approved asset storage. Current video handling is strictly metadata-driven (external video link URL); video binary files are not copied to public storage.
-*   **No Real Data Seeding**: No real student or stakeholder data may be checked into Git or loaded into staging without authorization. All test configurations must use fictional mock data.
+*   **No Real Data Seeding**: No real participant or stakeholder data may be checked into Git or loaded into staging without authorization. All test configurations must use fictional mock data.
 *   **Row-Level Security**: Policies are defined in migrations, but effective staging-environment verification is required before operational acceptance.
 
 ---
@@ -66,7 +66,7 @@ Ensure that administrative workflows, student project data, and public showcase 
 *   **Feed Validation Gate**: The feed validation script (`validatePublicFeed.ts`) operates as a security boundary, rejecting any payload containing administrative metadata or unexpected properties.
 *   **Output Sanitization**: The Duda dynamic script (`bodyend.html`) escapes many text values before inserting them. However, it does not sanitize every URL or value; some snapshot URLs currently enter image src attributes directly. Strict URL validation, approved-host checks, and safe DOM construction remain required hardening work.
 *   **Workflow Integrity**:
-    *   Student preview rendering should be isolated from the administrative UI where practical.
+    *   Participant preview rendering should be isolated from the administrative UI where practical.
     *   Feed publication needs snapshot history and tested rollback.
     *   Administrative state changes plus audit attribution should become atomic.
 
@@ -85,7 +85,7 @@ Ensure that administrative workflows, student project data, and public showcase 
 ---
 
 ## 10. Backup, Recovery, and Ownership
-*   **Institutional Handover**: RMIT/School staff must have full ownership of Render hosting billing, Supabase cloud billing, and GitHub repository admin rights. Student groups must not own active production keys. Institutional incident-response and recovery ownership is mandatory.
+*   **Institutional Handover**: RMIT/School staff must have full ownership of Render hosting billing, Supabase cloud billing, and GitHub repository admin rights. Participant groups must not own active production keys. Institutional incident-response and recovery ownership is mandatory.
 *   **Backups**: An institutionally approved backup cadence, documented retention policy, and periodic restore testing must be aligned with the selected Supabase/service plan.
 
 ---

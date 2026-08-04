@@ -12,7 +12,7 @@
   "industryPartner": "RMIT School of Science",
   "academicSupervisor": "Dr. Staging Import Validator",
   "groupName": "Team Staging Import",
-  "teamMembers": ["Student Import One", "Student Import Two"],
+  "teamMembers": ["Participant Import One", "Participant Import Two"],
   "posterText": "This is OCR poster text captured for searchindexing.",
   "accessibilityText": "A diagram demonstrating local folder parsing and file buffer stream uploads.",
   "layoutConfig": {

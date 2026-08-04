@@ -97,7 +97,7 @@ visibleSections.forEach(sectionId => {
 
 ## 6. Developer Guide for Extending Block Types
 
-To add a new block type (e.g., "Student Bios" or "Interactive Mockup Widget"), follow this standard workflow:
+To add a new block type (e.g., "Participant Bios" or "Interactive Mockup Widget"), follow this standard workflow:
 
 ### Step A: Update the Schema and CMS UI
 1. Add the new block ID (e.g., `bios`) to the default section order array in `src/App.jsx` (`handleEdit` and `prepareProjectForSave` functions):

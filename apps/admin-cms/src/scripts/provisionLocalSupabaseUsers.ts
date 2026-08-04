@@ -12,15 +12,11 @@ async function main() {
   }
 
   try {
-    const result = await provisionLocalStaffUsers({ credentialsOutputPath });
+    await provisionLocalStaffUsers({ credentialsOutputPath });
     console.log('✅ Local synthetic staff users successfully provisioned.');
-    console.log(`Credentials file: ${result.credentialsPath}`);
-    console.log('Roles assigned:');
-    for (const r of result.provisionedRoles) {
-      console.log(`  - ${r}`);
-    }
+    console.log('Local development accounts provisioned.');
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = 'Local account provisioning failed.';
     console.error(`❌ Local staff user provisioning failed: ${msg}`);
     process.exit(1);
   }

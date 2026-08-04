@@ -13,7 +13,7 @@ The application currently owns:
 - private draft media and public-asset storage foundations;
 - public-eligible stable JSON feed compilation.
 
-It does not yet provide a completed metadata editor, student portal or final confirmation workflow, integrated preview workspace, publishing/history or rollback UI, production Duda cutover, or production-readiness certification.
+It does not yet provide a completed metadata editor, participant portal or final confirmation workflow, integrated preview workspace, publishing/history or rollback UI, production Duda cutover, or production-readiness certification.
 
 ## Current capability and verification
 
@@ -219,7 +219,7 @@ Review mutations also require a same-origin `Origin` header. Audit attribution i
 | `/admin/imports` | Authenticated provisioned Admin/CMS staff | List import batches and validation summaries. | Implemented |
 | `/admin/imports/[batchId]` | Authenticated provisioned Admin/CMS staff | Inspect a batch, linked project and validation flags. | Implemented |
 
-There is no implemented student project-confirmation workflow or route, metadata editor, publishing-history route, or settings route.
+There is no implemented participant project-confirmation workflow or route, metadata editor, publishing-history route, or settings route.
 
 ## API routes
 
@@ -287,7 +287,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - Never commit `.env` or `.env.local`; do not copy values into issues, logs or documentation.
 - Public environment variables are browser-safe; database administration keys and optional assistive-extraction keys are server-only.
 - Client Components never receive a service-role or secret-key client.
-- Use synthetic fixtures only. Real student, staff and stakeholder personal data is prohibited in staging.
+- Use synthetic fixtures only. Real participant, staff and stakeholder personal data is prohibited in staging.
 - Keep `Prototype/`, recovery environments and the active staging environment isolated.
 - Migrations, seed/import/promotion/publication scripts and admin linking are state-changing and require explicit authorization.
 - Actor identity and audit attribution come from the server-side authenticated context.
@@ -300,7 +300,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - Reviewer/editor permission-matrix UAT remains pending.
 - Project detail is the next major UI modernization area.
 - PostgreSQL RPC migration 0008 is committed locally and verified on Windows with Docker Desktop; hosted staging reconciliation remains pending.
-- Student confirmation, integrated preview, publishing history and rollback UI are pending.
+- Participant confirmation, integrated preview, publishing history and rollback UI are pending.
 - Live Duda cutover is pending.
 - Authenticated browser, responsive, accessibility and screen-reader validation remain incomplete.
 - Production deployment hardening and readiness certification remain pending.

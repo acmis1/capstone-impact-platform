@@ -16,7 +16,7 @@ Please verify all applicable checkboxes before requesting review:
 - [ ] **No Direct Main Work**: Did not commit directly to `main` branch.
 - [ ] **Migrations Added or Unchanged**: New schema changes use a 14-digit timestamped SQL file in `infra/supabase/migrations/`.
 - [ ] **Migrations 0001–0008 Not Edited**: Merged migrations `0001` through `0008` remain completely unchanged.
-- [ ] **Synthetic Data Only**: Used synthetic mock data only. Zero real student, staff, or supervisor identity data.
+- [ ] **Synthetic Data Only**: Used synthetic mock data only. Zero real project participant, staff, or supervisor identity data.
 - [ ] **No Hosted Resources Touched**: Local development ran entirely on loopback (`127.0.0.1`). Zero hosted dashboards or services were accessed.
 - [ ] **Onboarding Check**: `npm run onboarding:check` passed all 12 checks.
 - [ ] **Feed Check**: `npm run check:feed` passed public feed contract validation.

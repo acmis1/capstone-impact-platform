@@ -3,7 +3,7 @@ import { Project } from '../domain/project';
 /**
  * Static mock fixture dataset representing standard Capstone submissions.
  * 
- * Strict Constraint: Under no circumstances should real student or stakeholder names, 
+ * Strict Constraint: Under no circumstances should real project participant or stakeholder names,
  * details, or assets be committed during staging. All items are 100% fictional.
  */
 export const SAMPLE_PROJECTS: Project[] = [

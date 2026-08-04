@@ -154,7 +154,7 @@ Required fields:
   "year": "2026",
   "supervisor": "Dr Example Supervisor",
   "groupName": "Solar Optimizer Team",
-  "students": ["Student One", "Student Two"],
+  "participants": ["Participant One", "Participant Two"],
   "templateId": "poster_showcase",
   "featuredMedia": "poster"
 }
@@ -178,7 +178,7 @@ Schema rules:
 
 - Required string fields must be present and non-empty after trimming.
 - `year` may be a number or string, but should be stored as a string in CMS data for consistency with current records.
-- `students` must be a non-empty array of strings.
+- `participants` must be a non-empty array of strings.
 - `externalLinks`, when present, must be an array of `{ label, url }` objects.
 - `templateId` should match a supported CMS layout preset. Unknown values should warn and fall back to `poster_showcase`.
 - `featuredMedia` should match a supported featured media option. Unknown values should warn and fall back to `poster`.
@@ -372,7 +372,7 @@ Imported records should be compatible with current CMS fields:
 | `supervisor` | `project.json.supervisor` |
 | `industryPartner` | `project.json.industryPartner` or empty string |
 | `groupName` | `project.json.groupName` |
-| `students` | `project.json.students` |
+| `participants` | `project.json.participants` |
 | `poster` | Storage URL for `poster.{ext}` |
 | `posterPdf` | Storage URL for `poster.pdf` |
 | `snapshots` | Storage URLs for supported files in `snapshots/` |
@@ -391,7 +391,7 @@ Imported records should be compatible with current CMS fields:
 
 Compatibility note:
 
-- Current app code often uses `teamMembers` and `academicSupervisor`, while this import schema names `students` and `supervisor`. The implementation phase should either map both pairs or standardize form handling so imported records render correctly in the current edit and preview screens.
+- Current app code often uses `teamMembers` and `academicSupervisor`, while this import schema names `participants` and `supervisor`. The implementation phase should either map both pairs or standardize form handling so imported records render correctly in the current edit and preview screens.
 - Imported records are not live immediately.
 - Duda sync fields such as `lastPublishedPublicHash`, `lastPublishedTemplateId`, `lastPublishedAt`, and Duda/public feed markers should be empty or absent for imported records.
 - Duda/public feed must not update during import.
@@ -457,8 +457,8 @@ Out of scope for Phase 1:
 - ZIP parsing
 - OCR or AI extraction from poster files
 - Spreadsheet reconciliation
-- Student submission portal
-- Student preview/approval emails
+- Participant submission portal
+- Participant preview/approval emails
 - Production authentication or role-based access control
 
 Future work:

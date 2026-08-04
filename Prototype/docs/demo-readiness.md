@@ -46,7 +46,7 @@ Use the following step-by-step script during live demonstrations.
 
 ### Simulated Demo Batch Workflow (New in v2)
 9. Click **"Import Projects"** in the sidebar.
-10. Scroll to the bottom and click **"Load Demo Example"** to simulate scanning 5 incoming student submissions:
+10. Scroll to the bottom and click **"Load Demo Example"** to simulate scanning 5 incoming participant submissions:
     - Point out that 3 packages are identified as **Valid** (all required fields present, layout preset selected, valid URLs).
     - Point out 1 package flagged as **Warning** (missing accessibility text warning, and contains unsupported file types in package assets: `.exe` and `.zip` which are flagged).
     - Point out 1 package marked as **Error** (missing both poster image and poster PDF, has invalid video/GitHub URLs, and selects an invalid layout preset).
@@ -127,9 +127,9 @@ Use the following step-by-step script during live demonstrations.
 These features are **out of scope** for the prototype and are planned for production:
 
 - ❌ Real OCR/AI extraction from poster files.
-- ❌ Real student submission form (intake from students).
-- ❌ Real preview email sent to student groups.
-- ❌ Real student confirmation link.
+- ❌ Real participant submission form (intake from participants).
+- ❌ Real preview email sent to participant groups.
+- ❌ Real participant confirmation link.
 - ❌ Production authentication and role management (RMIT SSO, RBAC).
 - ❌ Production media upload automation (direct resumable client-to-cloud storage upload). Simple multipart uploads are used for prototype demo safety with a 100 MB limit.
 - ❌ Real ZIP file upload, extraction, and validation.
@@ -149,7 +149,7 @@ These features are **out of scope** for the prototype and are planned for produc
 To prevent confusion between administrative actions inside the CMS workspace and live public showcase updates, Prototype v2.1 introduces a **two-tier status architecture**:
 
 1. **CMS Lifecycle Status** (Internal administrative gates):
-   - `Draft` / `Submitted` / `In Review` / `Changes Requested` / `Preview Sent` / `Student Confirmed` / `Approved` / `Published` / `Archived`
+   - `Draft` / `Submitted` / `In Review` / `Changes Requested` / `Preview Sent` / `Participant Confirmed` / `Approved` / `Published` / `Archived`
 2. **Duda Sync / Showcase Status** (Shows whether changes are live publicly):
    - **Synced / Up to date**: Project is live on Duda and matches the current CMS record.
    - **Unpublished CMS changes**: Project is live on Duda, but staff have made saves in the CMS (e.g. edited text or changed layout templates) that are not yet visible to the public.

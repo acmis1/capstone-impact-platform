@@ -11,7 +11,7 @@ This document defines the core architecture, data flows, and immutable technical
 ---
 
 ## 2. System Context
-The platform is designed to support at least **100 projects per year** and remain operational for **5–10 years**. The primary administrative users are non-technical school staff. Account and recovery ownership must remain institutional rather than tied to any individual student.
+The platform is designed to support at least **100 projects per year** and remain operational for **5–10 years**. The primary administrative users are non-technical school staff. Account and recovery ownership must remain institutional rather than tied to any individual participant.
 
 ---
 
@@ -32,9 +32,9 @@ Standard Project Package / Excel
    └── Rules-First Deterministic Validation
    └── Assistive OCR and AI Metadata Extraction
    └── Admin Excel Cross-Check & Review (CMS Dashboard)
-   └── Generate Student Preview & Send Preview Email
+   └── Generate Participant Preview & Send Preview Email
    └── Email Reminder Scheduling
-   └── Student Confirmation / Correction Request (Student Preview)
+   └── Participant Confirmation / Correction Request (Participant Preview)
    └── Human Administrative Review & Approval (Staging status update)
    └── Compilation (Administrative data stripped)
    └── Approved-Only Public Feed JSON Publish
@@ -57,7 +57,7 @@ Standard Project Package / Excel
 ---
 
 ## 7. Data Privacy and Accessibility Constraints
-*   **Media Separation**: Intermediate student drafts and Excel templates containing sensitive student contact details must be stored in secure, private storage buckets with restricted access.
+*   **Media Separation**: Intermediate participant drafts and Excel templates containing sensitive participant contact details must be stored in secure, private storage buckets with restricted access.
 *   **Public Assets**: Only fully validated, approved project assets (posters, snapshot images, PDFs) may be written to public storage buckets and made available through approved public URLs.
 *   **Administrative Stripping**: The public JSON feed must strictly omit validation logs, internal comments, draft status flags, or raw folder structures.
 
@@ -73,7 +73,7 @@ Standard Project Package / Excel
 
 ## 9. Operational Ownership and Handover
 *   **Institutional Control**: System credentials, API tokens, Supabase database access, and Render hosting accounts must belong to institutional email aliases managed by RMIT/School staff.
-*   **Handover Criteria**: Graduation or transition of student development groups must not impact system availability or administrative access.
+*   **Handover Criteria**: Graduation or transition of participant development groups must not impact system availability or administrative access.
 
 ---
 
@@ -92,8 +92,8 @@ Standard Project Package / Excel
 *   **Rules-First Validation**: Automated validation checks on image dimensions, file size limits, and required fields.
 *   **Admin Excel Cross-Check**: Matching Excel metadata columns against structured PostgreSQL tables.
 *   **OCR-Assisted Extraction**: Extracting poster text automatically to create reviewed text alternatives.
-*   **Student Final-Preview Confirmation**: Providing students a preview link, sending notification emails, and scheduling reminders.
-*   **Student Correction Requests**: Allowing students to submit specific feedback if data is wrong.
+*   **Participant Final-Preview Confirmation**: Providing participants a preview link, sending notification emails, and scheduling reminders.
+*   **Participant Correction Requests**: Allowing participants to submit specific feedback if data is wrong.
 *   **Human Administrative Approval**: A school staff member must review and approve records before publishing.
 *   **Approved-Only Public Feed**: Stripping administrative metadata and updating the stable JSON feed.
 *   **Search & Dynamic Filters**: Custom frontend search and metadata filtering (Year, Program, Discipline, Industry).
@@ -101,12 +101,12 @@ Standard Project Package / Excel
 *   **Measurement Metrics**: Demonstrating at least a **50% publishing time or manpower reduction** compared to manual Duda page creation.
 
 ### B. Optional Capabilities
-*   **Community Voting**: Public student voting or feedback modules (Voting must remain optional and outside the critical publishing path).
+*   **Community Voting**: Public participant voting or feedback modules (Voting must remain optional and outside the critical publishing path).
 
 ---
 
 ## 12. Remaining Open Institutional Decisions
 *   **AI/OCR API Vendor & Privacy Terms**: Approval of the third-party LLM/OCR endpoint.
 *   **Retention Period**: Policy regarding how many semesters of data are kept in storage before archiving.
-*   **Institutional SMTP Arrangement**: SMTP server credentials for sending student preview emails.
+*   **Institutional SMTP Arrangement**: SMTP server credentials for sending participant preview emails.
 *   **Handover Owner**: The designated school administrator who will own repository and cloud credentials post-handover.

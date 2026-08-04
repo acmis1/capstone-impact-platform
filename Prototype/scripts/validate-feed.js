@@ -26,7 +26,7 @@ try {
   const forbidden = [
     'status', 'internalNotes', 'lastUpdated', 'adminId', 'validationErrors',
     'validationWarnings', 'staffNotes', 'privateNotes', 'reviewNotes',
-    'missingItems', 'previewUrl', 'previewSentAt', 'studentConfirmedAt',
+    'missingItems', 'previewUrl', 'previewSentAt', 'participantConfirmedAt',
     'publishedAt', 'archivedAt', 'archiveReason', 'validationFlags', 'ocrStatus',
     'importBatchId', 'sourceFolder', 'sampleImportId', 'packageValidation'
   ];
