@@ -3,7 +3,35 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
 
-function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, unknown>> {
+export interface ProjectStateSnapshot {
+  status: string | null;
+  archived_at: string | null;
+  archived_from_status: string | null;
+  archive_reason: string | null;
+  pending_removal_from_public: boolean | null;
+}
+
+export function captureProjectSnapshot(proj: Record<string, unknown>): ProjectStateSnapshot {
+  return {
+    status: (proj.status as string) ?? null,
+    archived_at: (proj.archived_at as string) ?? null,
+    archived_from_status: (proj.archived_from_status as string) ?? null,
+    archive_reason: (proj.archive_reason as string) ?? null,
+    pending_removal_from_public: (proj.pending_removal_from_public as boolean) ?? null,
+  };
+}
+
+export function areProjectSnapshotsEqual(a: ProjectStateSnapshot, b: ProjectStateSnapshot): boolean {
+  return (
+    a.status === b.status &&
+    a.archived_at === b.archived_at &&
+    a.archived_from_status === b.archived_from_status &&
+    a.archive_reason === b.archive_reason &&
+    a.pending_removal_from_public === b.pending_removal_from_public
+  );
+}
+
+export function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, unknown>> {
   const workdir = path.resolve(repoRoot, 'infra');
   const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
   const cmd = `"${cliPath}" db query --local --workdir "${workdir}" -o json "${sql.replace(/"/g, '\\"')}"`;
@@ -17,23 +45,35 @@ function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, un
   return [];
 }
 
-function runLocalDbExec(sql: string, repoRoot: string): void {
+export function runLocalDbExec(sql: string, repoRoot: string): void {
   const workdir = path.resolve(repoRoot, 'infra');
   const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
   const cmd = `"${cliPath}" db query --local --workdir "${workdir}" "${sql.replace(/"/g, '\\"')}"`;
   execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
 }
 
-export async function runReviewActionsRuntimeVerification(): Promise<boolean> {
+export interface RuntimeVerificationOptions {
+  repoRoot?: string;
+  queryRunner?: typeof runLocalDbQuery;
+  execRunner?: typeof runLocalDbExec;
+  skipFullDatabaseRun?: boolean;
+  simulateCleanupFailure?: boolean;
+}
+
+export async function runReviewActionsRuntimeVerification(options?: RuntimeVerificationOptions): Promise<boolean> {
   console.log('=== Local Supabase Transactional Review Actions Runtime Verification ===\n');
-  const repoRoot = path.resolve(__dirname, '../../../..');
+  const repoRoot = options?.repoRoot || path.resolve(__dirname, '../../../..');
+  const queryDb = options?.queryRunner || runLocalDbQuery;
+  const execDb = options?.execRunner || runLocalDbExec;
+
   const runId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const testProjectPrefix = `test-proj-${runId}`;
 
   let success = true;
 
   try {
-    // 1. Query local Supabase CLI env
+    if (!options?.skipFullDatabaseRun) {
+      // 1. Query local Supabase CLI env
     const workdir = path.resolve(repoRoot, 'infra');
     const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
     const cmd = `"${cliPath}" status --workdir "${workdir}" -o env`;
@@ -48,7 +88,7 @@ export async function runReviewActionsRuntimeVerification(): Promise<boolean> {
     });
 
     // 2. Fetch admin_users with user_roles to retrieve UUIDs silently
-    const usersWithRoles = runLocalDbQuery(
+    const usersWithRoles = queryDb(
       "SELECT u.id, r.role FROM public.admin_users u JOIN public.user_roles r ON r.user_id = u.id",
       repoRoot
     );
@@ -180,6 +220,7 @@ export async function runReviewActionsRuntimeVerification(): Promise<boolean> {
     // ============================================================
     console.log('--- Test 3: Reviewer attempts archive action (Unauthorized) ---');
     const t3Proj = await createFixture('t3', 'in_review');
+    const snap3Before = captureProjectSnapshot(t3Proj);
 
     const { error: t3Err } = await adminClient.rpc('perform_project_review_action', {
       p_public_id: t3Proj.public_id,
@@ -191,17 +232,17 @@ export async function runReviewActionsRuntimeVerification(): Promise<boolean> {
     const { data: t3ProjDb } = await adminClient.from('projects').select('*').eq('id', t3Proj.id).single();
     const { data: t3Audits } = await adminClient.from('approval_records').select('*').eq('project_id', t3Proj.id);
 
+    const snap3After = captureProjectSnapshot(t3ProjDb || {});
+
     if (
       t3Err &&
       t3Err.message.includes('REVIEW_PERMISSION_DENIED') &&
-      t3ProjDb?.status === 'in_review' &&
-      t3ProjDb?.archived_at === null &&
-      t3ProjDb?.archive_reason === null &&
+      areProjectSnapshotsEqual(snap3Before, snap3After) &&
       t3Audits?.length === 0
     ) {
-      console.log('PASS: Test 3 - Reviewer archive attempt rejected by RBAC; project state unchanged.');
+      console.log('PASS: Test 3 - Reviewer archive attempt rejected by RBAC; complete project state snapshot unchanged.');
     } else {
-      console.error('FAIL: Test 3 - RBAC enforcement or state preservation failed.');
+      console.error('FAIL: Test 3 - RBAC enforcement or snapshot state preservation failed.');
       success = false;
     }
 
@@ -210,6 +251,7 @@ export async function runReviewActionsRuntimeVerification(): Promise<boolean> {
     // ============================================================
     console.log('--- Test 4: Editor attempts review action (Unauthorized) ---');
     const t4Proj = await createFixture('t4', 'in_review');
+    const snap4Before = captureProjectSnapshot(t4Proj);
 
     const { error: t4Err } = await adminClient.rpc('perform_project_review_action', {
       p_public_id: t4Proj.public_id,
@@ -221,15 +263,17 @@ export async function runReviewActionsRuntimeVerification(): Promise<boolean> {
     const { data: t4ProjDb } = await adminClient.from('projects').select('*').eq('id', t4Proj.id).single();
     const { data: t4Audits } = await adminClient.from('approval_records').select('*').eq('project_id', t4Proj.id);
 
+    const snap4After = captureProjectSnapshot(t4ProjDb || {});
+
     if (
       t4Err &&
       t4Err.message.includes('REVIEW_PERMISSION_DENIED') &&
-      t4ProjDb?.status === 'in_review' &&
+      areProjectSnapshotsEqual(snap4Before, snap4After) &&
       t4Audits?.length === 0
     ) {
-      console.log('PASS: Test 4 - Editor review action attempt rejected by RBAC; project state unchanged.');
+      console.log('PASS: Test 4 - Editor review action attempt rejected by RBAC; complete project state snapshot unchanged.');
     } else {
-      console.error('FAIL: Test 4 - Editor RBAC enforcement failed.');
+      console.error('FAIL: Test 4 - Editor RBAC enforcement or snapshot state preservation failed.');
       success = false;
     }
 
@@ -238,6 +282,7 @@ export async function runReviewActionsRuntimeVerification(): Promise<boolean> {
     // ============================================================
     console.log('--- Test 5: Invalid workflow state transition attempt ---');
     const t5Proj = await createFixture('t5', 'draft');
+    const snap5Before = captureProjectSnapshot(t5Proj);
 
     const { error: t5Err } = await adminClient.rpc('perform_project_review_action', {
       p_public_id: t5Proj.public_id,
@@ -249,15 +294,17 @@ export async function runReviewActionsRuntimeVerification(): Promise<boolean> {
     const { data: t5ProjDb } = await adminClient.from('projects').select('*').eq('id', t5Proj.id).single();
     const { data: t5Audits } = await adminClient.from('approval_records').select('*').eq('project_id', t5Proj.id);
 
+    const snap5After = captureProjectSnapshot(t5ProjDb || {});
+
     if (
       t5Err &&
       t5Err.message.includes('REVIEW_TRANSITION_INVALID') &&
-      t5ProjDb?.status === 'draft' &&
+      areProjectSnapshotsEqual(snap5Before, snap5After) &&
       t5Audits?.length === 0
     ) {
-      console.log('PASS: Test 5 - Invalid transition rejected by workflow engine; project state unchanged.');
+      console.log('PASS: Test 5 - Invalid transition rejected by workflow engine; complete project state snapshot unchanged.');
     } else {
-      console.error('FAIL: Test 5 - Invalid transition validation failed.');
+      console.error('FAIL: Test 5 - Invalid transition validation or snapshot state preservation failed.');
       success = false;
     }
 
@@ -266,24 +313,17 @@ export async function runReviewActionsRuntimeVerification(): Promise<boolean> {
     // ============================================================
     console.log('--- Test 6: Forced Audit Log Failure Rollback Test ---');
     const t6Proj = await createFixture('t6', 'in_review');
-
-    const initialCaptured = {
-      status: t6Proj.status,
-      archived_at: t6Proj.archived_at,
-      archived_from_status: t6Proj.archived_from_status,
-      archive_reason: t6Proj.archive_reason,
-      pending_removal_from_public: t6Proj.pending_removal_from_public,
-    };
+    const snap6Before = captureProjectSnapshot(t6Proj);
 
     let t6RpcErr: Error | null = null;
     try {
       // Install temporary trigger
-      runLocalDbExec(
+      execDb(
         "CREATE OR REPLACE FUNCTION public.temp_fail_audit() RETURNS TRIGGER AS $$ BEGIN RAISE EXCEPTION 'FORCED_AUDIT_FAILURE'; END; $$ LANGUAGE plpgsql;",
         repoRoot
       );
-      runLocalDbExec("DROP TRIGGER IF EXISTS trigger_temp_fail_audit ON public.approval_records;", repoRoot);
-      runLocalDbExec(
+      execDb("DROP TRIGGER IF EXISTS trigger_temp_fail_audit ON public.approval_records;", repoRoot);
+      execDb(
         "CREATE TRIGGER trigger_temp_fail_audit BEFORE INSERT ON public.approval_records FOR EACH ROW EXECUTE FUNCTION public.temp_fail_audit();",
         repoRoot
       );
@@ -301,8 +341,8 @@ export async function runReviewActionsRuntimeVerification(): Promise<boolean> {
     } finally {
       // Remove temporary trigger immediately in nested finally
       try {
-        runLocalDbExec("DROP TRIGGER IF EXISTS trigger_temp_fail_audit ON public.approval_records;", repoRoot);
-        runLocalDbExec("DROP FUNCTION IF EXISTS public.temp_fail_audit();", repoRoot);
+        execDb("DROP TRIGGER IF EXISTS trigger_temp_fail_audit ON public.approval_records;", repoRoot);
+        execDb("DROP FUNCTION IF EXISTS public.temp_fail_audit();", repoRoot);
       } catch {
         // Ignored
       }
@@ -311,17 +351,12 @@ export async function runReviewActionsRuntimeVerification(): Promise<boolean> {
     const { data: t6ProjDb } = await adminClient.from('projects').select('*').eq('id', t6Proj.id).single();
     const { data: t6Audits } = await adminClient.from('approval_records').select('*').eq('project_id', t6Proj.id);
 
-    const fieldsUnchanged =
-      t6ProjDb?.status === initialCaptured.status &&
-      t6ProjDb?.archived_at === initialCaptured.archived_at &&
-      t6ProjDb?.archived_from_status === initialCaptured.archived_from_status &&
-      t6ProjDb?.archive_reason === initialCaptured.archive_reason &&
-      t6ProjDb?.pending_removal_from_public === initialCaptured.pending_removal_from_public;
+    const snap6After = captureProjectSnapshot(t6ProjDb || {});
 
     if (
       t6RpcErr &&
       t6RpcErr.message.includes('FORCED_AUDIT_FAILURE') &&
-      fieldsUnchanged &&
+      areProjectSnapshotsEqual(snap6Before, snap6After) &&
       t6Audits?.length === 0
     ) {
       console.log('PASS: Test 6 - Complete transaction rollback verified on forced audit failure.');
@@ -359,43 +394,91 @@ export async function runReviewActionsRuntimeVerification(): Promise<boolean> {
     const { data: t7ProjDb } = await adminClient.from('projects').select('*').eq('id', t7Proj.id).single();
     const { data: t7Audits } = await adminClient.from('approval_records').select('*').eq('project_id', t7Proj.id);
 
-    const winningAction = resA.data ? 'request_changes' : resB.data ? 'archive' : null;
-    const expectedStatus = winningAction === 'request_changes' ? 'changes_requested' : winningAction === 'archive' ? 'archived' : null;
+    const winningOutcome = resA.data
+      ? { res: resA.data, action: 'request_changes', adminId: reviewerId, comments: 'Concurrent request_changes', expectedStatus: 'changes_requested' }
+      : resB.data
+      ? { res: resB.data, action: 'archive', adminId: adminId, comments: 'Concurrent archive', expectedStatus: 'archived' }
+      : null;
 
     const singleAudit = t7Audits && t7Audits.length === 1 ? t7Audits[0] : null;
 
+    const winnerValid =
+      winningOutcome !== null &&
+      winningOutcome.res.publicId === t7Proj.public_id &&
+      winningOutcome.res.status === winningOutcome.expectedStatus &&
+      uuidRegex.test(winningOutcome.res.auditRecordId);
+
     const auditMatchesWinner =
-      singleAudit &&
-      singleAudit.action_taken === winningAction &&
+      singleAudit !== null &&
+      winningOutcome !== null &&
+      singleAudit.id === winningOutcome.res.auditRecordId &&
+      singleAudit.action_taken === winningOutcome.action &&
       singleAudit.from_status === 'in_review' &&
-      singleAudit.to_status === expectedStatus;
+      singleAudit.to_status === winningOutcome.expectedStatus &&
+      singleAudit.admin_id === winningOutcome.adminId &&
+      singleAudit.comments === winningOutcome.comments;
+
+    const projectStatusMatchesWinner =
+      winningOutcome !== null &&
+      t7ProjDb?.status === winningOutcome.res.status;
 
     if (
       successes.length === 1 &&
       failures.length === 1 &&
       hasExpectedFailureCode &&
-      t7ProjDb?.status === expectedStatus &&
+      winnerValid &&
       t7Audits?.length === 1 &&
-      auditMatchesWinner
+      auditMatchesWinner &&
+      projectStatusMatchesWinner
     ) {
-      console.log('PASS: Test 7 - Row locking (FOR UPDATE) successfully serialized concurrent requests (1 succeeded, 1 failed with REVIEW_TRANSITION_INVALID).');
+      console.log('PASS: Test 7 - Row locking (FOR UPDATE) successfully serialized concurrent requests (1 succeeded, 1 failed with REVIEW_TRANSITION_INVALID). All winner and audit properties verified.');
     } else {
-      console.error('FAIL: Test 7 - Concurrent action serialization failed.');
+      console.error('FAIL: Test 7 - Concurrent action serialization assertion failed.');
       success = false;
+    }
     }
 
   } catch {
     console.error('FAIL: Unexpected runtime verification error.');
     success = false;
   } finally {
-    // Global Cleanup Block
+    // Fail-Closed Global Cleanup Block
+    let cleanupExecutionError = false;
+    if (options?.simulateCleanupFailure) {
+      cleanupExecutionError = true;
+    } else {
+      try {
+        execDb("DROP TRIGGER IF EXISTS trigger_temp_fail_audit ON public.approval_records;", repoRoot);
+        execDb("DROP FUNCTION IF EXISTS public.temp_fail_audit();", repoRoot);
+        execDb(`DELETE FROM public.approval_records WHERE project_id IN (SELECT id FROM public.projects WHERE public_id LIKE '${testProjectPrefix}-%');`, repoRoot);
+        execDb(`DELETE FROM public.projects WHERE public_id LIKE '${testProjectPrefix}-%';`, repoRoot);
+      } catch {
+        cleanupExecutionError = true;
+        console.error('FAIL: Global cleanup execution encountered an error.');
+      }
+    }
+
+    // Independent Post-Cleanup Query Validation
     try {
-      runLocalDbExec("DROP TRIGGER IF EXISTS trigger_temp_fail_audit ON public.approval_records;", repoRoot);
-      runLocalDbExec("DROP FUNCTION IF EXISTS public.temp_fail_audit();", repoRoot);
-      runLocalDbExec(`DELETE FROM public.approval_records WHERE project_id IN (SELECT id FROM public.projects WHERE public_id LIKE '${testProjectPrefix}-%');`, repoRoot);
-      runLocalDbExec(`DELETE FROM public.projects WHERE public_id LIKE '${testProjectPrefix}-%';`, repoRoot);
+      const projCountRows = queryDb(`SELECT count(*)::int as count FROM public.projects WHERE public_id LIKE '${testProjectPrefix}-%';`, repoRoot);
+      const auditCountRows = queryDb(`SELECT count(*)::int as count FROM public.approval_records WHERE project_id IN (SELECT id FROM public.projects WHERE public_id LIKE '${testProjectPrefix}-%');`, repoRoot);
+      const triggerCountRows = queryDb("SELECT count(*)::int as count FROM pg_trigger WHERE tgname = 'trigger_temp_fail_audit';", repoRoot);
+      const functionCountRows = queryDb("SELECT count(*)::int as count FROM pg_proc WHERE proname = 'temp_fail_audit';", repoRoot);
+
+      const projCount = Number(projCountRows[0]?.count ?? -1);
+      const auditCount = Number(auditCountRows[0]?.count ?? -1);
+      const triggerCount = Number(triggerCountRows[0]?.count ?? -1);
+      const functionCount = Number(functionCountRows[0]?.count ?? -1);
+
+      if (!cleanupExecutionError && projCount === 0 && auditCount === 0 && triggerCount === 0 && functionCount === 0) {
+        console.log('PASS: Independent post-cleanup verification confirmed zero leftover test projects, audit rows, triggers, and functions.');
+      } else {
+        console.error('FAIL: Post-cleanup count validation failed or cleanup error occurred.');
+        success = false;
+      }
     } catch {
-      // Ignored
+      console.error('FAIL: Independent post-cleanup query execution failed.');
+      success = false;
     }
   }
 

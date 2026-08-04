@@ -8,6 +8,11 @@ import { AdminAuthError } from '../auth/authTypes';
 import { getPublicAuthErrorMessage } from '../auth/authHttp';
 import { SupabaseProjectRepository } from '../repositories/SupabaseProjectRepository';
 import { ReviewActionExecutionError } from '../repositories/ProjectRepository';
+import {
+  captureProjectSnapshot,
+  areProjectSnapshotsEqual,
+  runReviewActionsRuntimeVerification,
+} from '../scripts/verifyReviewActionsRuntime';
 
 // Mock server-only and supabase admin client before imports
 vi.mock('server-only', () => ({}));
@@ -414,5 +419,71 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     expect(canPerformReviewAction(editorPerms, 'request_changes')).toBe(false);
     expect(canPerformReviewAction(editorPerms, 'approve')).toBe(false);
     expect(canPerformReviewAction(editorPerms, 'archive')).toBe(false);
+  });
+
+  // ============================================================
+  // Verifier Runtime & Cleanup Contract Unit Tests
+  // ============================================================
+
+  it('14. captureProjectSnapshot captures all 5 fields and areProjectSnapshotsEqual detects field changes', () => {
+    const projA = {
+      status: 'in_review',
+      archived_at: null,
+      archived_from_status: null,
+      archive_reason: null,
+      pending_removal_from_public: false,
+      title: 'Test Project',
+    };
+
+    const snapA = captureProjectSnapshot(projA);
+    expect(snapA).toEqual({
+      status: 'in_review',
+      archived_at: null,
+      archived_from_status: null,
+      archive_reason: null,
+      pending_removal_from_public: false,
+    });
+
+    const projB = { ...projA, archive_reason: 'Tampered' };
+    const snapB = captureProjectSnapshot(projB);
+
+    expect(areProjectSnapshotsEqual(snapA, snapA)).toBe(true);
+    expect(areProjectSnapshotsEqual(snapA, snapB)).toBe(false);
+  });
+
+  it('15. Verifier fails closed when global cleanup encounters an execution error', async () => {
+    const mockQueryRunner = vi.fn().mockImplementation(() => [{ count: 0 }]);
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await runReviewActionsRuntimeVerification({
+      queryRunner: mockQueryRunner,
+      execRunner: () => {},
+      skipFullDatabaseRun: true,
+      simulateCleanupFailure: true,
+    });
+
+    expect(result).toBe(false);
+    consoleSpy.mockRestore();
+  });
+
+  it('16. Verifier fails closed when post-cleanup queries detect leftover artifacts', async () => {
+    const mockQueryRunner = vi.fn().mockImplementation((sql: string) => {
+      if (sql.includes('public.projects')) {
+        return [{ count: 1 }]; // Leftover project detected!
+      }
+      return [{ count: 0 }];
+    });
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await runReviewActionsRuntimeVerification({
+      queryRunner: mockQueryRunner,
+      execRunner: () => {},
+      skipFullDatabaseRun: true,
+    });
+
+    expect(result).toBe(false);
+    consoleSpy.mockRestore();
   });
 });

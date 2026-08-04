@@ -51,6 +51,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       return false;
     },
     readFileSync: (p: string, _enc?: string) => {
+      void _enc;
       const norm = p.replace(/\\/g, '/');
       if (norm.endsWith('node_modules/supabase/package.json')) {
         return JSON.stringify({ version: '2.109.1', bin: { supabase: 'bin/supabase' } });
