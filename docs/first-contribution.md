@@ -52,7 +52,7 @@ To add a database migration:
 
 ## 5. Making a Small Change
 
-Edit only the specific file(s) required for your task. 
+Edit only the specific file(s) required for your task.
 
 *Example (Hypothetical UI update in `apps/admin-cms/src/components/admin-shell/Header.tsx`):*
 Modify a label or helper tooltip as requested in your assigned issue.

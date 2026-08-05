@@ -45,37 +45,37 @@ Follow `START_HERE.md` from top to bottom and mark each step:
 
 Verify your understanding of key repository conventions:
 
-1. **Active Application Directory**: Which folder contains the active Next.js application?  
-   - [ ] `apps/admin-cms/`  *(Correct)*  
-   - [ ] `Prototype/`  
+1. **Active Application Directory**: Which folder contains the active Next.js application?
+   - [ ] `apps/admin-cms/` *(Correct)*
+   - [ ] `Prototype/`
 
-2. **Historical Prototype Directory**: Which folder is historical feasibility evidence and must NOT be edited for new features?  
-   - [ ] `Prototype/`  *(Correct)*  
-   - [ ] `apps/admin-cms/`  
+2. **Historical Prototype Directory**: Which folder is historical feasibility evidence and must NOT be edited for new features?
+   - [ ] `Prototype/` *(Correct)*
+   - [ ] `apps/admin-cms/`
 
-3. **Database Migrations Location**: Where do version-controlled database migrations live?  
-   - [ ] `infra/supabase/migrations/`  *(Correct)*  
-   - [ ] `apps/admin-cms/src/db/`  
+3. **Database Migrations Location**: Where do version-controlled database migrations live?
+   - [ ] `infra/supabase/migrations/` *(Correct)*
+   - [ ] `apps/admin-cms/src/db/`
 
-4. **API Route Handlers Location**: Where do Next.js server API routes live?  
-   - [ ] `apps/admin-cms/src/app/api/`  *(Correct)*  
-   - [ ] `infra/supabase/api/`  
+4. **API Route Handlers Location**: Where do Next.js server API routes live?
+   - [ ] `apps/admin-cms/src/app/api/` *(Correct)*
+   - [ ] `infra/supabase/api/`
 
-5. **Repository / Database Layer**: Where are Supabase database queries and RPC calls implemented?  
-   - [ ] `apps/admin-cms/src/repositories/`  *(Correct)*  
-   - [ ] `apps/admin-cms/src/app/admin/`  
+5. **Repository / Database Layer**: Where are Supabase database queries and RPC calls implemented?
+   - [ ] `apps/admin-cms/src/repositories/` *(Correct)*
+   - [ ] `apps/admin-cms/src/app/admin/`
 
-6. **Unit & Security Tests Location**: Where do Vitest test files live?  
-   - [ ] Alongside components (`*.test.ts`) and in `apps/admin-cms/src/security/`  *(Correct)*  
-   - [ ] In `Prototype/tests/`  
+6. **Unit & Security Tests Location**: Where do Vitest test files live?
+   - [ ] Alongside components (`*.test.ts`) and in `apps/admin-cms/src/security/` *(Correct)*
+   - [ ] In `Prototype/tests/`
 
-7. **Destructive Database Command**: Which command destroys local database state to replay migrations from scratch?  
-   - [ ] `npm run supabase:reset`  *(Correct)*  
-   - [ ] `npm run setup:local`  
+7. **Destructive Database Command**: Which command destroys local database state to replay migrations from scratch?
+   - [ ] `npm run supabase:reset` *(Correct)*
+   - [ ] `npm run setup:local`
 
-8. **Maintainer Authorization Boundary**: Which actions require explicit maintainer authorization?  
-   - [ ] Hosted staging/production database mutations, cloud credentials, Duda changes, real user data  *(Correct)*  
-   - [ ] Local UI edits, local tests, running `npm run setup:local`  
+8. **Maintainer Authorization Boundary**: Which actions require explicit maintainer authorization?
+   - [ ] Hosted staging/production database mutations, cloud credentials, Duda changes, real user data *(Correct)*
+   - [ ] Local UI edits, local tests, running `npm run setup:local`
 
 ---
 
