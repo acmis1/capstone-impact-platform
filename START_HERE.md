@@ -3,7 +3,7 @@
 Welcome to the Capstone Impact Platform repository (`acmis1/capstone-impact-platform`). This guide provides a self-service onboarding path intended to minimize maintainer assistance for developers.
 
 > [!NOTE]
-> **Verification status**: Automated Windows clean-clone evidence exists. Ubuntu CI verification remains pending until the integration job completes. Independent human onboarding verification remains pending. macOS and Linux onboarding remain unverified.
+> **Verification status**: Automated Windows clean-clone acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). Ubuntu 24.04 GitHub Actions integration acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). Independent human onboarding verification remains pending (`READY_FOR_HUMAN_ONBOARDING`). Native macOS onboarding remains unverified. Native developer-machine Linux onboarding remains unverified beyond Ubuntu CI.
 
 ---
 
@@ -122,7 +122,7 @@ capstone-impact-platform/
 ├── AGENTS.md                 # Agent governance & repository rules
 ├── CONTRIBUTING.md           # Contributor workflow & safety rules
 ├── README.md                 # Primary repository overview
-└── START_HERE.md             # This participant onboarding guide
+└── START_HERE.md             # Developer onboarding and repository start guide
 ```
 
 ---

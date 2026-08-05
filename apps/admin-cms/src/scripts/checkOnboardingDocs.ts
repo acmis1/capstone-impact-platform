@@ -144,6 +144,18 @@ export function checkOnboardingDocs(repoRoot = path.resolve(__dirname, '../../..
     }
   }
 
+  // 10. START_HERE.md does not claim Ubuntu CI verification is pending
+  const startHereDocPath = path.join(repoRoot, 'START_HERE.md');
+  if (fs.existsSync(startHereDocPath)) {
+    const content = fs.readFileSync(startHereDocPath, 'utf8');
+    if (content.includes('Ubuntu CI verification remains pending')) {
+      failures.push(`START_HERE.md: Contains stale claim 'Ubuntu CI verification remains pending'`);
+    }
+    if (!content.includes('Ubuntu 24.04 GitHub Actions integration acceptance has passed')) {
+      failures.push(`START_HERE.md: Missing required assertion 'Ubuntu 24.04 GitHub Actions integration acceptance has passed'`);
+    }
+  }
+
   // Also include general terminology, YAML, and link checks
   failures.push(...checkTerminology(repoRoot));
   failures.push(...checkYaml(repoRoot));
