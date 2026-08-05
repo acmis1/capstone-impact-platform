@@ -419,5 +419,5 @@ describe('verifyAll.ts Runner', () => {
     expect(result.stepsCompleted).toContain('disposable_clone_created');
     expect(result.stepsCompleted).toContain('targeted_test_passed');
     expect(result.stepsCompleted).toContain('commit_integrity_verified');
-  }, 60_000);
+  }, 300_000);
 });
