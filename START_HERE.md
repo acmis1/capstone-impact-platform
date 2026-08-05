@@ -21,11 +21,13 @@ The Capstone Impact Platform is a school-owned administrative CMS and publicatio
 ## 2. Recommended Reading Order
 
 1. **[`START_HERE.md`](./START_HERE.md)** (This document) — Essential setup, daily commands, and guidelines.
-2. **[`README.md`](./README.md)** — Project overview and architecture summary.
-3. **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** — Repository workflow rules, safety boundaries, and definition of done.
-4. **[`apps/admin-cms/README.md`](./apps/admin-cms/README.md)** — Developer guide for the Next.js application, routes, and components.
-5. **[`infra/supabase/local-development.md`](./infra/supabase/local-development.md)** — Local database architecture, migrations, and local verification details.
-6. **[`docs/developer-troubleshooting.md`](./docs/developer-troubleshooting.md)** — Fixes for common setup errors.
+2. **[`first-contribution.md`](./docs/first-contribution.md)** — Step-by-step walkthrough for your first local contribution.
+3. **[`onboarding-acceptance-checklist.md`](./docs/onboarding-acceptance-checklist.md)** — Human onboarding checklist for validating repository setup.
+4. **[`README.md`](./README.md)** — Project overview and architecture summary.
+5. **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** — Repository workflow rules, safety boundaries, and definition of done.
+6. **[`apps/admin-cms/README.md`](./apps/admin-cms/README.md)** — Developer guide for the Next.js application, routes, and components.
+7. **[`infra/supabase/local-development.md`](./infra/supabase/local-development.md)** — Local database architecture, migrations, and local verification details.
+8. **[`docs/developer-troubleshooting.md`](./docs/developer-troubleshooting.md)** — Fixes for common setup errors.
 
 ---
 
@@ -215,7 +217,52 @@ npm run verify:all
 
 ---
 
-## 11. Environment Model: Local vs Staging vs Production
+## 11. What Can I Work On? Local vs Maintainer Boundaries
+
+A normal local contributor may work on:
+- Local UI components and layout enhancements in `apps/admin-cms/`;
+- Local Next.js API routes and server handlers;
+- Domain validation rules and schemas;
+- Repository logic and query callers;
+- New local database migrations through append-only timestamped `.sql` files;
+- Local authentication and role behavior;
+- Synthetic package ingestion and parsing workflows;
+- Local public feed compilation and schema validation;
+- Unit and integration tests;
+- Repository documentation and guides.
+
+Explicit maintainer authorization is required for:
+- Hosted database migration application;
+- Staging environment mutations;
+- Staff account provisioning outside local synthetic accounts;
+- Production publication or Duda live integration;
+- Duda site configuration changes;
+- SMTP server credentials or email delivery setup;
+- AI/OCR endpoint API keys or billing configuration;
+- Account ownership, repository admin access, or hosting billing changes;
+- Use of real participant or supervisor identity data;
+- Incident-response or destructive operations on hosted infrastructure.
+
+These boundaries protect institutional assets and privacy without restricting normal local feature development.
+
+---
+
+## 12. Starting Work from Assigned GitHub Issues
+
+Developers should always begin implementation from an assigned GitHub issue that specifies:
+- One primary outcome;
+- One feature branch (`feat/*`, `fix/*`, `infra/*`, `docs/*`, `security/*`);
+- Explicit acceptance criteria;
+- In-scope and out-of-scope boundaries;
+- Required tests and verification steps;
+- Security constraints;
+- Required documentation updates.
+
+Do not select broad roadmap topics directly from `docs/implementation-backlog.md` and independently interpret them as a single implementation task. Detailed implementation issues will be created and assigned separately by maintainers after onboarding.
+
+---
+
+## 13. Environment Model: Local vs Staging vs Production
 
 | Environment | Host / Location | Credentials Used | State Modifications |
 |---|---|---|---|

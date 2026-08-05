@@ -3,7 +3,7 @@
 This guide outlines the contributor workflow, repository branching rules, database migration standards, security boundaries, and definition of done for the Capstone Impact Platform (`acmis1/capstone-impact-platform`).
 
 > [!TIP]
-> **DEVELOPERS / NEW CONTRIBUTORS**: Please read **[`START_HERE.md`](./START_HERE.md)** first for a step-by-step onboarding walkthrough, prerequisite checks, and synthetic login details.
+> **DEVELOPERS / NEW CONTRIBUTORS**: Please read **[`START_HERE.md`](./START_HERE.md)** first for setup and guidelines. See **[`docs/first-contribution.md`](./docs/first-contribution.md)** for a beginner contribution guide and **[`docs/onboarding-acceptance-checklist.md`](./docs/onboarding-acceptance-checklist.md)** for human verification.
 
 ---
 

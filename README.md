@@ -115,6 +115,8 @@ Run from the repository root:
 | Document | Role |
 | --- | --- |
 | [`START_HERE.md`](./START_HERE.md) | Developer onboarding guide, daily workflow, and commands. |
+| [`docs/first-contribution.md`](./docs/first-contribution.md) | Beginner-safe step-by-step local contribution walkthrough. |
+| [`docs/onboarding-acceptance-checklist.md`](./docs/onboarding-acceptance-checklist.md) | Human onboarding acceptance checklist and comprehension checks. |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Contributor workflow, branch rules, and safety contract. |
 | [`apps/admin-cms/README.md`](./apps/admin-cms/README.md) | Authoritative developer and staging-operator guide. |
 | [`infra/supabase/local-development.md`](./infra/supabase/local-development.md) | Local Supabase environment setup and onboarding guide. |

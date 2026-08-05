@@ -17,6 +17,8 @@ When verifying system behavior or planning extensions, information must be refer
 
 ## Master Document Directory
 
+*   **[First Contribution Guide](first-contribution.md)**: Beginner-safe step-by-step local contribution walkthrough for an assigned task.
+*   **[Onboarding Acceptance Checklist](onboarding-acceptance-checklist.md)**: Human onboarding acceptance checklist and comprehension verification.
 *   **[Project Architecture & Constraints](project-architecture-and-constraints.md)**: Overall system blueprint, data publication flows, and immutable platform boundaries (e.g., Duda upgrade limitations and environment isolation).
 *   **[Public Feed Contract](public-feed-contract.md)**: Formal schema definition, validator fields, compiler defaults, and visual layout config definitions for the public JSON payload (`capstones-latest.json`).
 *   **[Security & Maintainability Plan](security-and-maintainability-plan.md)**: Trust boundaries, authentication foundations, media file isolation, and long-term project maintainability principles.
