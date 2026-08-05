@@ -152,11 +152,12 @@ function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, un
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
       const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot, stdio: 'pipe', timeout: CHILD_PROCESS_TIMEOUT_MS, killSignal: 'SIGTERM' });
-      const firstBrace = raw.indexOf('{');
-      const lastBrace = raw.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) {
-        const parsed = JSON.parse(raw.slice(firstBrace, lastBrace + 1)) as { rows?: Array<Record<string, unknown>> };
-        return parsed.rows || [];
+      // Find valid JSON substring (object starting with { or array starting with [)
+      const objMatch = raw.match(/\{[\s\S]*\}/);
+      if (objMatch) {
+        const parsed = JSON.parse(objMatch[0]) as { rows?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>;
+        if (Array.isArray(parsed)) return parsed;
+        if (parsed.rows && Array.isArray(parsed.rows)) return parsed.rows;
       }
     } catch (err: unknown) {
       lastError = err;
