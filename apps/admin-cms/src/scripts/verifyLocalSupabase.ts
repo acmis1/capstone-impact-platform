@@ -141,7 +141,7 @@ function mapDbRowToProject(row: Record<string, unknown>): Project {
   };
 }
 
-const CHILD_PROCESS_TIMEOUT_MS = 30_000;
+const CHILD_PROCESS_TIMEOUT_MS = 120_000;
 const NETWORK_REQUEST_TIMEOUT_MS = 15_000;
 
 function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, unknown>> {
