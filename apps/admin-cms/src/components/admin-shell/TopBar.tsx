@@ -126,17 +126,16 @@ export function TopBar({ displayName, email, roles = [], logoutAction }: UserSum
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <form action={logoutAction} className="w-full">
-              <DropdownMenuItem asChild>
-                <button
-                  type="submit"
-                  className="flex w-full items-center gap-2 text-destructive focus:text-destructive cursor-pointer min-h-[44px] px-2 py-1.5"
-                >
-                  <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span>Log out</span>
-                </button>
-              </DropdownMenuItem>
-            </form>
+            <DropdownMenuItem
+              onSelect={async (e) => {
+                e.preventDefault();
+                await logoutAction();
+              }}
+              className="flex w-full items-center gap-2 text-destructive focus:text-destructive cursor-pointer min-h-[44px] px-2 py-1.5"
+            >
+              <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>Log out</span>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

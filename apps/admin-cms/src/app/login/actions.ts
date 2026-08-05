@@ -49,6 +49,7 @@ export async function loginAction(prevState: unknown, formData: FormData) {
       await supabase.auth.signOut();
       return { error: 'Access denied. This account is not provisioned as an administrator.' };
     }
+
     // Sanitize redirect target path
     const target = sanitizeRedirectPath(redirectTo);
     redirect(target);
