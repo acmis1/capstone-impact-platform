@@ -4,28 +4,40 @@ This step-by-step guide walks a new developer through completing a hypothetical,
 
 ---
 
-## 1. Updating `main`
+## 1. Reading the Assigned Issue
 
-Before starting any new task, ensure your local `main` branch is synchronized with the remote repository:
+Before creating a branch or writing code:
+- Read your assigned GitHub Issue carefully.
+- Identify the single expected outcome, acceptance criteria, in-scope requirements, and out-of-scope boundaries.
+- Do not invent speculative requirements or features missing from the issue description.
+- If scope or security rules are unclear, stop and ask the project maintainer on the issue thread before writing code.
+
+---
+
+## 2. Updating `main`
+
+Ensure your local `main` branch is synchronized with the remote repository, dependencies are installed, and local environment is initialized via `npm run setup:local`:
 
 ```bash
 git checkout main
 git pull --ff-only origin main
+npm ci
+npm run setup:local
 ```
 
 ---
 
-## 2. Creating a Feature Branch
+## 3. Creating a Feature Branch
 
 Create a narrow feature branch from `main` using an appropriate prefix (`docs/*`, `feat/*`, `fix/*`, `infra/*`, `security/*`):
 
 ```bash
-git checkout -b fix/demo-local-notice
+git checkout -b fix/admin-nav-descriptor
 ```
 
 ---
 
-## 3. Confirming the Worktree is Clean
+## 4. Confirming the Worktree is Clean
 
 Check your working directory status to ensure no unexpected tracked or untracked modifications exist:
 
@@ -35,81 +47,80 @@ git status --short
 
 ---
 
-## 4. Identifying Relevant Files
+## 5. Identifying Relevant Files & Inspecting Existing Code
 
-Use the repository file map (in `START_HERE.md` or `apps/admin-cms/README.md`) to locate the files related to your assigned issue.
+Inspect nearby implementation files and tests first before making changes.
 
-For example, to update the admin header UI:
-- `apps/admin-cms/src/components/admin-shell/`
+For example, to update navigation route descriptors in the Admin shell:
+- Source: [`apps/admin-cms/src/components/admin-shell/navigation.ts`](../apps/admin-cms/src/components/admin-shell/navigation.ts)
+- Test: [`apps/admin-cms/src/components/admin-shell/navigation.test.ts`](../apps/admin-cms/src/components/admin-shell/navigation.test.ts)
 
 To update project review route handling:
-- `apps/admin-cms/src/app/api/projects/[publicId]/review-action/route.ts`
+- Source: [`apps/admin-cms/src/app/api/projects/[publicId]/review-action/route.ts`](../apps/admin-cms/src/app/api/projects/[publicId]/review-action/route.ts)
 
 To add a database migration:
-- `infra/supabase/migrations/` (new 14-digit timestamped `.sql` file)
+- Migrations directory: [`infra/supabase/migrations/`](../infra/supabase/migrations/) (new 14-digit timestamped `.sql` file)
 
 ---
 
-## 5. Making a Small Change
+## 6. Making a Small Change
 
-Edit only the specific file(s) required for your task.
+Edit only the specific file(s) required for your assigned issue.
 
-*Example (Hypothetical UI update in `apps/admin-cms/src/components/admin-shell/Header.tsx`):*
-Modify a label or helper tooltip as requested in your assigned issue.
+*Example (updating navigation route descriptors in `apps/admin-cms/src/components/admin-shell/navigation.ts`):*
+Modify or extend a route descriptor as specified by your issue.
 
-Do not edit unrelated files, formatting, or comments in surrounding code.
-
----
-
-## 6. Locating Nearby Tests
-
-Tests in `apps/admin-cms` are located alongside code files or inside `src/security/`:
-- UI / logic test files end with `.test.ts` or `.test.tsx` (e.g. `apps/admin-cms/src/domain/project.test.ts`).
+Do not edit unrelated files, surrounding formatting, or unrelated comments.
 
 ---
 
-## 7. Adding or Updating a Test
+## 7. Locating & Running Nearby Tests
 
-Add a targeted assertion to an existing `.test.ts` file or create a new test file alongside your code change.
+Tests in `apps/admin-cms` are located alongside component/logic files or inside `src/security/`:
+- UI and logic tests end with `.test.ts` or `.test.tsx`.
 
-Run your specific test file locally using Vitest:
+Run targeted tests while developing using Vitest from the repository root:
 
 ```bash
-npx vitest run apps/admin-cms/src/domain/project.test.ts
+npm run test:run --workspace=apps/admin-cms -- src/components/admin-shell/navigation.test.ts
 ```
 
 ---
 
-## 8. Running Targeted Validation
+## 8. Adding or Updating a Test
 
-Run individual validation checks relevant to your changes:
-
-- **ESLint**: `npm run lint --workspace=apps/admin-cms`
-- **TypeScript**: `npm run typecheck:admin`
-- **Unit Tests**: `npm run test:admin`
+Add a targeted assertion to an existing `.test.ts` file or create a new test alongside your code change. Re-run your targeted test command to verify it passes.
 
 ---
 
 ## 9. Running Full Repository Validation
 
-Before committing, run the full canonical verification suite:
+Before staging files or creating a commit, run the full canonical verification suite (note: Docker must remain running):
 
 ```bash
 npm run verify:all
 ```
 
-All quality gates (onboarding precheck, feed schema check, lint, tests, typecheck, Next.js build, and diff checks) must pass cleanly.
+All quality gates (onboarding precheck, feed schema check, lint, tests, typecheck, Next.js build, markdown links, terminology check, and diff checks) must pass cleanly.
 
 ---
 
-## 10. Inspecting the Diff
+## 10. Inspecting the Staged Diff & Checking for Credentials
 
-Inspect your uncommitted changes to ensure no extraneous modifications or whitespace issues were introduced:
+Inspect your uncommitted diff and staged diff:
 
 ```bash
 git diff
 git diff --check
 ```
+
+After staging explicit files, verify your staged diff:
+
+```bash
+git diff --cached
+```
+
+Ensure no local credential files (`.env.local`, `.local-users.json`) or real user identity values are staged.
 
 ---
 
@@ -118,7 +129,7 @@ git diff --check
 **NEVER use `git add .` or `git add -A`.** Always stage explicit file paths:
 
 ```bash
-git add apps/admin-cms/src/components/admin-shell/Header.tsx
+git add apps/admin-cms/src/components/admin-shell/navigation.ts apps/admin-cms/src/components/admin-shell/navigation.test.ts
 ```
 
 Verify staged files:
@@ -134,45 +145,40 @@ git status --short
 Commit using a clear, conventional message (`type(scope): description`):
 
 ```bash
-git commit -m "fix(shell): update admin header tooltip guidance"
+git commit -m "fix(nav): update route descriptor for admin settings"
 ```
 
 ---
 
-## 13. Pushing Your Branch
+## 13. Pushing Your Branch & Waiting for CI
 
 Push your feature branch to GitHub:
 
 ```bash
-git push origin fix/demo-local-notice
+git push origin fix/admin-nav-descriptor
 ```
 
 **Do not use `--force` or force-push.**
 
----
-
-## 14. Opening a Pull Request
-
-1. Go to the repository on GitHub (`https://github.com/acmis1/capstone-impact-platform`).
-2. Click **Compare & pull request** for your pushed branch (`fix/demo-local-notice`).
-3. Set the base branch to `main`.
-4. Fill out all sections of `.github/PULL_REQUEST_TEMPLATE.md`.
-5. Link your assigned issue number (e.g., `Closes #123`).
-6. Request a review from `@acmis1`. **Self-merging is prohibited.**
+After pushing:
+1. Open a Pull Request targeting `main`.
+2. Fill out all sections of `.github/PULL_REQUEST_TEMPLATE.md`.
+3. Wait for GitHub Actions PR CI checks (`Static Quality & Build Gates` and `Disposable Local Supabase Integration`) to complete.
+4. **Do not merge the PR yourself.** Request review from a maintainer (`@acmis1`).
 
 ---
 
-## 15. Responding to Review Comments
+## 14. Responding to Review Comments
 
 If a reviewer requests changes:
 1. Make the requested edits on your feature branch.
 2. Re-run `npm run verify:all`.
-3. Stage explicit files and commit: `git commit -m "fix(shell): address reviewer feedback"`
-4. Push to origin: `git push origin fix/demo-local-notice`. The PR updates automatically.
+3. Stage explicit files and commit: `git commit -m "fix(nav): address reviewer feedback"`
+4. Push to origin: `git push origin fix/admin-nav-descriptor`. The PR updates automatically.
 
 ---
 
-## 16. Stopping Local Services
+## 15. Stopping Local Services
 
 When finished with development, cleanly stop local Supabase containers:
 
@@ -182,7 +188,7 @@ npm run supabase:stop
 
 ---
 
-## 17. What Must NEVER Be Included
+## 16. What Must NEVER Be Included
 
 - ❌ Real participant, staff, or supervisor personal data (PII).
 - ❌ Hardcoded API keys, passwords, secrets, or connection strings.

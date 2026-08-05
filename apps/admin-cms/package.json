@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "eslint",
     "check:onboarding": "tsx src/scripts/onboardingCheck.ts",
+    "check:onboarding-docs": "tsx src/scripts/checkOnboardingDocs.ts",
     "check:sample-feed": "tsx src/scripts/checkSampleFeed.ts",
     "seed:staging": "tsx src/scripts/seedStagingProjects.ts",
     "check:staging-projects": "tsx src/scripts/checkStagingProjects.ts",

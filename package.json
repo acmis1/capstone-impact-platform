@@ -35,6 +35,7 @@
     "supabase:verify:local": "npm run verify:local --workspace=apps/admin-cms --",
     "setup:local": "npm run setup:local --workspace=apps/admin-cms",
     "verify:all": "npm run verify:all --workspace=apps/admin-cms",
+    "check:onboarding-docs": "npm run check:onboarding-docs --workspace=apps/admin-cms",
     "check:terminology": "tsx apps/admin-cms/src/scripts/repositoryChecks.ts terminology",
     "check:yaml": "tsx apps/admin-cms/src/scripts/repositoryChecks.ts yaml",
     "check:markdown-links": "tsx apps/admin-cms/src/scripts/repositoryChecks.ts markdown-links",

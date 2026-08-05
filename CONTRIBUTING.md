@@ -30,36 +30,17 @@ cd capstone-impact-platform
 # 2. Clean install dependencies
 npm ci
 
-# 3. Run automated onboarding precheck (12 checks)
-npm run onboarding:check
+# 3. One-command local developer setup
+npm run setup:local
 
-# 4. Start local Supabase container stack
-npm run supabase:start
-
-# 5. Reset local database and replay all 8 migrations
-npm run supabase:reset
-
-# 6. Seed local storage buckets and synthetic media fixtures
-npm run supabase:seed:buckets
-
-# 7. Generate loopback local environment file (apps/admin-cms/.env.local)
-npm run supabase:env:local
-
-# 8. Provision synthetic staff accounts (apps/admin-cms/.local-users.json)
-npm run supabase:users:local
-
-# 9. Run comprehensive local Supabase verification suite
-npm run supabase:verify:local
-
-# 10. Start Next.js Admin/CMS development server
+# 4. Start Next.js Admin/CMS development server
 npm run dev:admin
 
-# 11. Run public feed compliance check
-npm run check:feed
-
-# 12. Stop local stack when finished
+# 5. Clean up local stack when finished
 npm run supabase:stop
 ```
+
+*(Note: Ordinary UI, API, documentation, and test contributions do not require a database reset. `npm run setup:local` is safe and idempotent. Run `npm run supabase:reset` separately only when verifying new database migrations or performing an intentional clean reconstruction from scratch.)*
 
 ---
 

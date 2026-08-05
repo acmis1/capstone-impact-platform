@@ -48,6 +48,9 @@ jobs:
       - name: Onboarding Toolchain Precheck
         run: npm run onboarding:check
 
+      - name: Onboarding Documentation Contract Check
+        run: npm run check:onboarding-docs
+
       - name: Repository terminology check
         run: npm run check:terminology
 
@@ -131,6 +134,8 @@ jobs:
 
       - name: Run local developer setup
         run: npm run setup:local
+        env:
+          SUPABASE_START_TIMEOUT_MS: '600000'
 
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running

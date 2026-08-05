@@ -3,7 +3,7 @@
 Welcome to the Capstone Impact Platform repository (`acmis1/capstone-impact-platform`). This guide provides a self-service onboarding path intended to minimize maintainer assistance for developers.
 
 > [!NOTE]
-> **Verification status**: Windows automation has existing evidence. macOS, Linux, and independent human developer onboarding remain unverified. GitHub CI remains unverified until a pull-request-triggered run occurs.
+> **Verification status**: Automated Windows clean-clone evidence exists. Ubuntu CI verification remains pending until the integration job completes. Independent human onboarding verification remains pending. macOS and Linux onboarding remain unverified.
 
 ---
 
@@ -31,14 +31,15 @@ The Capstone Impact Platform is a school-owned administrative CMS and publicatio
 
 ---
 
-## 3. Prerequisite Installation
+## 3. Prerequisite Installation & Toolchain Guidance
 
-Before running the application, install the following required software:
+Before running the application, verify your toolchain:
 
-1. **Node.js**: `Node >= 24.14.1 < 25` (Pinned to `24.14.1` via `.nvmrc`). Verify with `node -v`.
-2. **npm**: `npm >= 11.11.0 < 12` (Declared in `packageManager` as `npm@11.11.0`). Verify with `npm -v`.
-3. **Docker**: Docker Desktop (Windows/macOS) or Docker Engine (Linux). Verify Docker is active with `docker ps`.
-4. **Supabase CLI**: Pre-installed as a repository devDependency (`supabase@2.109.1`). You do **not** need to install `supabase` globally.
+1. **Node.js**: Requires `Node >= 24.14.1 < 25`. Pinned to `24.14.1` in `.nvmrc`. Verify with `node -v`. Use `nvm` or `nvm-windows` to switch versions if needed.
+2. **npm**: Requires `npm >= 11.11.0 < 12`. Pinned in `packageManager` to `npm@11.11.0`. Verify with `npm -v`.
+3. **Docker**: Docker Desktop (Windows/macOS) or Docker Engine (Linux) must be launched **before** setup. Verify Docker daemon is active with `docker ps`. Initial setup will automatically download required Supabase Docker images, which may take several minutes on first run. Docker must remain running while executing local commands or `npm run verify:all`.
+4. **Supabase CLI**: Installed locally as a repository devDependency (`supabase@2.109.1`) via `npm ci`. You do **not** need to install `supabase` globally or run `supabase login`.
+5. **Port & Credentials Handling**: Local Supabase uses ports `54321`–`54324` and Next.js uses port `3000`. If a port is occupied, see [`docs/developer-troubleshooting.md`](./docs/developer-troubleshooting.md). Generated local synthetic credentials are stored in `apps/admin-cms/.local-users.json` (git-ignored) and must never be committed.
 
 ---
 
@@ -51,6 +52,7 @@ git clone https://github.com/acmis1/capstone-impact-platform.git
 cd capstone-impact-platform
 npm ci
 npm run setup:local
+npm run dev:admin
 ```
 
 ### What `npm run setup:local` Does:
@@ -61,7 +63,7 @@ npm run setup:local
 5. Runs `npm run supabase:users:local` (reconciles synthetic local Auth accounts).
 6. Runs `npm run supabase:verify:local` (verifies database grants, RLS, functions, buckets, and synthetic sign-in).
 
-`setup:local` is safe to rerun and does not rebuild the database. Use `npm run supabase:reset` separately when you intentionally need to replay all eight migrations and seed data from scratch.
+`setup:local` is safe and idempotent to rerun, and does not destroy existing database state. Use `npm run supabase:reset` separately only when intentionally rebuilding from migrations and seed data.
 
 ---
 
@@ -69,8 +71,8 @@ npm run setup:local
 
 ### Starting Daily Work
 ```bash
-# 1. Start local Supabase containers (if not already running)
-npm run supabase:start
+# 1. Start local stack and verify environment state
+npm run setup:local
 
 # 2. Launch Next.js dev server
 npm run dev:admin
@@ -112,7 +114,7 @@ capstone-impact-platform/
 │       │   └── security/     # Security tests & validation suites
 │       └── README.md         # Admin/CMS technical documentation
 ├── docs/                     # Technical specifications & runbooks
-│   └── participant-troubleshooting.md # Participant setup troubleshooting guide
+│   └── developer-troubleshooting.md # Developer setup troubleshooting guide
 ├── infra/
 │   └── supabase/             # Database migrations, seed SQL, runbooks
 │       └── migrations/       # 8 timestamped PostgreSQL migration files
@@ -272,7 +274,7 @@ Do not select broad roadmap topics directly from `docs/implementation-backlog.md
 
 ---
 
-## 12. Prohibited Operations
+## 14. Prohibited Operations
 
 - ❌ **DO NOT** run `supabase login`, `supabase link`, `supabase db push`, `supabase db pull`, or `supabase migration repair`.
 - ❌ **DO NOT** access hosted Supabase, Render, Vercel, or Duda dashboards.
@@ -284,7 +286,7 @@ Do not select broad roadmap topics directly from `docs/implementation-backlog.md
 
 ---
 
-## 13. Common Troubleshooting & Escalation
+## 15. Common Troubleshooting & Escalation
 
 If you encounter issues during setup or development:
 - Consult the **[Developer Troubleshooting Guide](./docs/developer-troubleshooting.md)** for step-by-step solutions to Docker, Node, port conflict, database reset, or build errors.
@@ -297,7 +299,7 @@ If you encounter issues during setup or development:
 
 ---
 
-## 14. Glossary
+## 16. Glossary
 
 - **Next.js 16 (App Router)**: The React framework used for server-side rendering, routing, layouts, and API endpoints in `apps/admin-cms/`.
 - **Supabase**: Open-source backend suite providing PostgreSQL database, Auth (GoTrue), and Storage (S3-compatible API).

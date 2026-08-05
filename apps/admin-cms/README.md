@@ -85,33 +85,27 @@ Run from the repository root:
    npm ci
    ```
 
-2. Run automated onboarding precheck:
+2. One-command local developer setup:
 
    ```bash
-   npm run onboarding:check
+   npm run setup:local
    ```
 
-3. For local development, generate the local loopback environment file (the normal local workflow):
-
-   ```bash
-   npm run supabase:start
-   npm run supabase:seed:buckets
-   npm run supabase:env:local
-   npm run supabase:users:local
-   npm run supabase:verify:local
-   ```
-
-   *(Note: The template file `.env.example` is an authorized staging template contract for shared staging infrastructure, not for local development.)*
-
-4. Start the development server:
+3. Start the development server:
 
    ```bash
    npm run dev:admin
    ```
 
-5. Open [`/login`](http://localhost:3000/login) locally.
+4. Open [`/login`](http://localhost:3000/login) locally.
 
-Offline tests and the sample-feed check do not require private dashboard access.
+5. Clean up when finished:
+
+   ```bash
+   npm run supabase:stop
+   ```
+
+*(Note: Advanced diagnostic or manual setup subcommands `supabase:start`, `supabase:seed:buckets`, `supabase:env:local`, `supabase:users:local`, and `supabase:verify:local` are described in the [Local Development Guide](../../infra/supabase/local-development.md). Offline tests and the sample-feed check do not require private dashboard access.)*
 
 ## Environment reference
 

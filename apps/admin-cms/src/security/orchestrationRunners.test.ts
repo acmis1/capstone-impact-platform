@@ -301,10 +301,11 @@ describe('setupLocal.ts Runner', () => {
 // verifyAll Runner
 // ---------------------------------------------------------------------------
 describe('verifyAll.ts Runner', () => {
-  it('10. Contains exactly 11 quality gate verification steps', () => {
-    expect(VERIFY_STEPS).toHaveLength(11);
+  it('10. Contains exactly 12 quality gate verification steps', () => {
+    expect(VERIFY_STEPS).toHaveLength(12);
     expect(VERIFY_STEPS.map((s) => s.name)).toEqual([
       'onboarding:check',
+      'check:onboarding-docs',
       'check:terminology',
       'check:yaml',
       'check:markdown-links',
@@ -318,7 +319,7 @@ describe('verifyAll.ts Runner', () => {
     ]);
   });
 
-  it('11. Executes all 11 steps sequentially when origin/main exists and all pass', async () => {
+  it('11. Executes all 12 steps sequentially when origin/main exists and all pass', async () => {
     const executedCommands: string[] = [];
     const mockRunner = (cmd: string) => { executedCommands.push(cmd); };
     const mockLog = vi.fn();
@@ -331,10 +332,10 @@ describe('verifyAll.ts Runner', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.stepCount).toBe(11);
+    expect(result.stepCount).toBe(12);
     // Last two commands must be the two diff checks
-    expect(executedCommands[9]).toBe('git diff --check');
-    expect(executedCommands[10]).toBe('git diff --check origin/main...HEAD');
+    expect(executedCommands[10]).toBe('git diff --check');
+    expect(executedCommands[11]).toBe('git diff --check origin/main...HEAD');
   });
 
   it('12. Aborts immediately when a verification step fails (lint)', async () => {

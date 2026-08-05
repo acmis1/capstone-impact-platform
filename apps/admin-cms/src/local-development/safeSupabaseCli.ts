@@ -28,7 +28,14 @@ const commandArguments: Record<LocalSupabaseCommand, string[]> = {
   status: ['status', '--workdir', 'infra'],
 };
 
-export const commandTimeoutMs: Record<LocalSupabaseCommand, number> = { start: 120_000, stop: 60_000, reset: 180_000, status: 15_000 };
+const envStartTimeout = process.env.SUPABASE_START_TIMEOUT_MS ? parseInt(process.env.SUPABASE_START_TIMEOUT_MS, 10) : undefined;
+
+export const commandTimeoutMs: Record<LocalSupabaseCommand, number> = {
+  start: envStartTimeout && !isNaN(envStartTimeout) ? envStartTimeout : 120_000,
+  stop: 60_000,
+  reset: 180_000,
+  status: 15_000,
+};
 
 export function runLocalSupabaseCli(command: LocalSupabaseCommand, repoRoot: string): LocalSupabaseResult {
   try {
