@@ -6,9 +6,9 @@ import { runAdminAppSmokeTest } from './runAppSmokeTest';
 function createMockChildProcess(): ChildProcess {
   const proc = new EventEmitter() as unknown as ChildProcess;
   Object.defineProperty(proc, 'pid', { value: 12345, writable: true });
-  proc.stdout = new EventEmitter() as any;
-  proc.stderr = new EventEmitter() as any;
-  proc.kill = vi.fn().mockReturnValue(true) as any;
+  proc.stdout = new EventEmitter() as unknown as ChildProcess['stdout'];
+  proc.stderr = new EventEmitter() as unknown as ChildProcess['stderr'];
+  proc.kill = vi.fn().mockReturnValue(true) as unknown as ChildProcess['kill'];
   return proc;
 }
 
