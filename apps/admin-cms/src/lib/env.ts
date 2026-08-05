@@ -15,14 +15,14 @@ const publicEnvSchema = z.object({
 
 // Private server-only environment variables validation schema
 const serverEnvSchema = z.object({
-  SUPABASE_SECRET_KEY: z.string().min(1).optional(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  SUPABASE_SECRET_KEY: z.string().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   SUPABASE_DRAFT_BUCKET: z.string().min(1).default('project-drafts-private'),
   SUPABASE_PUBLIC_ASSETS_BUCKET: z.string().min(1).default('project-public-assets'),
   SUPABASE_PUBLIC_FEEDS_BUCKET: z.string().min(1).default('public-feeds'),
   SUPABASE_PUBLIC_FEED_FILE: z.string().min(1).default('capstones-latest.json'),
 }).refine(
-  (data) => data.SUPABASE_SECRET_KEY || data.SUPABASE_SERVICE_ROLE_KEY,
+  (data) => (data.SUPABASE_SECRET_KEY && data.SUPABASE_SECRET_KEY.length > 0) || (data.SUPABASE_SERVICE_ROLE_KEY && data.SUPABASE_SERVICE_ROLE_KEY.length > 0),
   {
     message: 'Either SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY must be provided',
     path: ['SUPABASE_SECRET_KEY'],
