@@ -71,6 +71,7 @@ jobs:
         run: npm run build:admin
 
       - name: Committed diff whitespace check
+        shell: bash
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="${{ github.event.pull_request.base.sha }}"
