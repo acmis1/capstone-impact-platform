@@ -49,14 +49,16 @@ export async function loginAction(prevState: unknown, formData: FormData) {
       await supabase.auth.signOut();
       return { error: 'Access denied. This account is not provisioned as an administrator.' };
     }
-  } catch {
+
+    // Sanitize redirect target path
+    const target = sanitizeRedirectPath(redirectTo);
+    redirect(target);
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'digest' in err && typeof err.digest === 'string' && err.digest.startsWith('NEXT_REDIRECT')) {
+      throw err;
+    }
     return { error: 'An unexpected authentication error occurred.' };
   }
-
-  // Sanitize redirect target path
-  const target = sanitizeRedirectPath(redirectTo);
-
-  redirect(target);
 }
 
 /**

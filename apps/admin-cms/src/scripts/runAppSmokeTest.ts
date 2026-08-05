@@ -43,6 +43,7 @@ export async function runAdminAppSmokeTest(options?: AppSmokeOptions): Promise<A
     childProc = spawnFn(npmCmd, ['run', 'dev'], {
       cwd: appDir,
       detached: !isWin,
+      shell: isWin,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, PORT: '3000' },
     });
