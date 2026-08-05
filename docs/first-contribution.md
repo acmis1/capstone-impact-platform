@@ -101,7 +101,7 @@ Before staging files or creating a commit, run the full canonical verification s
 npm run verify:all
 ```
 
-All quality gates (onboarding precheck, feed schema check, lint, tests, typecheck, Next.js build, markdown links, terminology check, and diff checks) must pass cleanly.
+All 12 quality gates (onboarding precheck, documentation contract check, terminology check, YAML check, markdown links check, feed schema check, lint, tests, typecheck, Next.js build, working-tree diff check, and branch diff check) must pass cleanly.
 
 ---
 

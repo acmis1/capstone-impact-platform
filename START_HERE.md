@@ -3,7 +3,7 @@
 Welcome to the Capstone Impact Platform repository (`acmis1/capstone-impact-platform`). This guide provides a self-service onboarding path intended to minimize maintainer assistance for developers.
 
 > [!NOTE]
-> **Verification status**: Automated Windows clean-clone acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). Ubuntu 24.04 GitHub Actions integration acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). Independent human onboarding verification remains pending (`READY_FOR_HUMAN_ONBOARDING`). Native macOS onboarding remains unverified. Native developer-machine Linux onboarding remains unverified beyond Ubuntu CI.
+> **Verification status**: Automated onboarding acceptance is complete (`AUTOMATED_ONBOARDING_COMPLETE`). Automated Windows clean-clone acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). Ubuntu 24.04 GitHub Actions integration acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). No independent human onboarding trial was performed (`HUMAN_ONBOARDING_NOT_PERFORMED`). Native macOS onboarding remains unverified beyond static CI contracts. Native developer-machine Linux onboarding remains unverified beyond Ubuntu CI. No hosted project credentials, private dashboards, or shared remote application environments are required for normal local development.
 
 ---
 
@@ -22,8 +22,9 @@ The Capstone Impact Platform is a school-owned administrative CMS and publicatio
 
 1. **[`START_HERE.md`](./START_HERE.md)** (This document) — Essential setup, daily commands, and guidelines.
 2. **[`first-contribution.md`](./docs/first-contribution.md)** — Step-by-step walkthrough for your first local contribution.
-3. **[`onboarding-acceptance-checklist.md`](./docs/onboarding-acceptance-checklist.md)** — Human onboarding checklist for validating repository setup.
-4. **[`README.md`](./README.md)** — Project overview and architecture summary.
+3. **[`onboarding-acceptance-checklist.md`](./docs/onboarding-acceptance-checklist.md)** — Human onboarding checklist for evaluating repository setup.
+4. **[`onboarding-verification-matrix.md`](./docs/onboarding-verification-matrix.md)** — Multi-platform verification coverage and automated status matrix.
+5. **[`README.md`](./README.md)** — Project overview and architecture summary.
 5. **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** — Repository workflow rules, safety boundaries, and definition of done.
 6. **[`apps/admin-cms/README.md`](./apps/admin-cms/README.md)** — Developer guide for the Next.js application, routes, and components.
 7. **[`infra/supabase/local-development.md`](./infra/supabase/local-development.md)** — Local database architecture, migrations, and local verification details.
@@ -197,14 +198,18 @@ npm run verify:all
 ```
 
 ### What `npm run verify:all` Checks:
-1. `npm run onboarding:check` — Toolchain & environment check
-2. `npm run check:feed` — Public feed schema validation
-3. `npm run lint --workspace=apps/admin-cms` — ESLint (must pass with 0 errors & 0 warnings)
-4. `npm run test:admin` — Vitest unit and security test suite
-5. `npm run typecheck:admin` — TypeScript typecheck (`tsc --noEmit`)
-6. `npm run build:admin` — Next.js production build (`next build`)
-7. `git diff --check` — Uncommitted working-tree whitespace check
-8. `git diff --check origin/main...HEAD` — Committed branch diff whitespace check
+1. `npm run onboarding:check` — Toolchain & environment precheck
+2. `npm run check:onboarding-docs` — Onboarding documentation contract check
+3. `npm run check:terminology` — Tracked current-tree terminology check
+4. `npm run check:yaml` — GitHub workflow and template YAML parse check
+5. `npm run check:markdown-links` — Tracked Markdown relative-link check
+6. `npm run check:feed` — Public feed contract verification
+7. `npm run lint --workspace=apps/admin-cms` — ESLint (must pass with 0 errors & 0 warnings)
+8. `npm run test:admin` — Vitest unit and security test suite
+9. `npm run typecheck:admin` — TypeScript typecheck (`tsc --noEmit`)
+10. `npm run build:admin` — Next.js production build (`next build`)
+11. `git diff --check` — Uncommitted working-tree whitespace check
+12. `git diff --check origin/main...HEAD` — Committed branch diff whitespace check
 
 ---
 

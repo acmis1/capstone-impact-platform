@@ -3,7 +3,7 @@
 This human onboarding acceptance checklist is designed for a new developer or external tester evaluating the self-service developer setup of the Capstone Impact Platform (`acmis1/capstone-impact-platform`).
 
 > [!NOTE]
-> **Verification Status**: Automated Windows acceptance has passed. Independent human onboarding verification and cross-platform verification (macOS / Linux) have not yet been completed. This checklist establishes the criteria for future human verification runs.
+> **Verification Status**: Automated onboarding acceptance is complete (`AUTOMATED_ONBOARDING_COMPLETE`). Automated Windows acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). Ubuntu 24.04 GitHub Actions integration has passed (`AUTOMATED_ONBOARDING_VERIFIED`). No independent human onboarding trial was performed (`HUMAN_ONBOARDING_NOT_PERFORMED`). Native macOS and developer Linux onboarding remain unverified beyond CI contracts. This checklist establishes the evaluation criteria if a human verification run is conducted.
 
 ---
 

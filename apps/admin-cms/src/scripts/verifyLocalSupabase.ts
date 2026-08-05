@@ -182,7 +182,7 @@ export function createDeadlineFetch(timeoutMs = NETWORK_REQUEST_TIMEOUT_MS, fetc
   };
 }
 
-const deadlineFetch = createDeadlineFetch();
+export const deadlineFetch = createDeadlineFetch();
 
 export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promise<boolean> {
   const repoRoot = path.resolve(__dirname, '../../../..');

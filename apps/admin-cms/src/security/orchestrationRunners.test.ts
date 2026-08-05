@@ -13,6 +13,7 @@ import {
 
 // --- verifyAll ---
 import { VERIFY_STEPS, originMainExists, runVerifyAllSteps } from '../scripts/verifyAll';
+import { runOnboardingWorkflowRehearsal } from '../scripts/rehearseOnboardingWorkflow';
 
 // ---------------------------------------------------------------------------
 // isLoopbackUrl
@@ -410,5 +411,13 @@ describe('verifyAll.ts Runner', () => {
   it('16. originMainExists returns true when git rev-parse succeeds', () => {
     const result = originMainExists('/mock', () => 'eda4bd874eb7fd38136f5a45e3ede0335602e342\n');
     expect(result).toBe(true);
+  });
+
+  it('17. runOnboardingWorkflowRehearsal completes all steps cleanly in disposable environment', () => {
+    const result = runOnboardingWorkflowRehearsal();
+    expect(result.success).toBe(true);
+    expect(result.stepsCompleted).toContain('disposable_clone_created');
+    expect(result.stepsCompleted).toContain('targeted_test_passed');
+    expect(result.stepsCompleted).toContain('commit_integrity_verified');
   });
 });

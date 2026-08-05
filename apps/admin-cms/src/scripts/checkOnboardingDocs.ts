@@ -155,6 +155,46 @@ export function checkOnboardingDocs(repoRoot = path.resolve(__dirname, '../../..
       failures.push(`START_HERE.md: Missing required assertion 'Ubuntu 24.04 GitHub Actions integration acceptance has passed'`);
     }
   }
+  // 11. START_HERE.md and local-development.md do not claim inaccurate 'zero remote dependencies'
+  const docsToCheckRemote = ['START_HERE.md', 'infra/supabase/local-development.md', 'CONTRIBUTING.md', 'README.md'];
+  for (const relativePath of docsToCheckRemote) {
+    const fullPath = path.join(repoRoot, relativePath);
+    if (fs.existsSync(fullPath)) {
+      const content = fs.readFileSync(fullPath, 'utf8');
+      if (/zero[- ]remote[- ]dependenc/i.test(content)) {
+        failures.push(`${relativePath}: Contains inaccurate claim 'zero-remote-dependency'`);
+      }
+    }
+  }
+
+  // 12. Documented verify:all step list in START_HERE.md matches exact steps count in verifyAll.ts
+  const verifyAllTsPath = path.join(repoRoot, 'apps/admin-cms/src/scripts/verifyAll.ts');
+  if (fs.existsSync(verifyAllTsPath) && fs.existsSync(startHereDocPath)) {
+    const tsContent = fs.readFileSync(verifyAllTsPath, 'utf8');
+    const stepMatches = tsContent.match(/name:\s*['"][^'"]+['"]/g) || [];
+    const expectedStepCount = stepMatches.length;
+
+    const startHereContent = fs.readFileSync(startHereDocPath, 'utf8');
+    const verifySection = startHereContent.split('## 9. Required Quality & Verification Commands')[1]?.split('---')[0] || '';
+    const docNumberedItems = verifySection.match(/^\d+\.\s+`[^`]+`/gm) || [];
+    if (docNumberedItems.length !== expectedStepCount) {
+      failures.push(`START_HERE.md: Documented verify:all list has ${docNumberedItems.length} steps, but verifyAll.ts executes ${expectedStepCount} steps`);
+    }
+  }
+
+  // 13. Canonical code blocks do not contain un-portable shell-specific constructs
+  for (const relativePath of entryPointDocs) {
+    const fullPath = path.join(repoRoot, relativePath);
+    if (fs.existsSync(fullPath)) {
+      const content = fs.readFileSync(fullPath, 'utf8');
+      const bashBlocks = content.match(/```bash[\s\S]*?```/g) || [];
+      for (const block of bashBlocks) {
+        if (block.includes(' export ') || block.includes(' grep ') || block.includes(' sed ')) {
+          failures.push(`${relativePath}: Canonical bash code block contains un-portable platform-specific shell construct`);
+        }
+      }
+    }
+  }
 
   // Also include general terminology, YAML, and link checks
   failures.push(...checkTerminology(repoRoot));

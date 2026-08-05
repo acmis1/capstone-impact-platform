@@ -4,7 +4,7 @@ This guide documents the canonical, local-only Supabase development workflow for
 
 ## 1. Architectural Principles
 
-- **Zero Remote Dependencies:** Local development runs entirely inside local Docker containers via the repository-pinned Supabase CLI (`supabase@2.109.1`).
+- **No Hosted Credentials or Dashboards Required:** No hosted project credentials, private dashboards, or shared remote application environments are required for normal local development. (Note: Standard internet access is still required for initial `git clone`, `npm ci`, and pulling Docker images).
 - **No Supabase Organization Membership Required:** Developers do not need access to hosted Supabase, Duda, Render, or Vercel dashboards to build, test, and run the application locally.
 - **Isolated Local State:** All database tables, authentication identities, storage buckets, and Mailpit email captures run on `http://127.0.0.1`.
 - **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real participant or stakeholder PII or credentials are used or committed.
