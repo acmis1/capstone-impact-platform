@@ -4,10 +4,10 @@ This guide documents the canonical, local-only Supabase development workflow for
 
 ## 1. Architectural Principles
 
-- **Zero Remote Dependencies:** Local development runs entirely inside local Docker containers via the repository-pinned Supabase CLI (`supabase@2.109.1`).
+- **No Hosted Credentials or Dashboards Required:** No hosted project credentials, private dashboards, or shared remote application environments are required for normal local development. (Note: Standard internet access is still required for initial `git clone`, `npm ci`, and pulling Docker images).
 - **No Supabase Organization Membership Required:** Developers do not need access to hosted Supabase, Duda, Render, or Vercel dashboards to build, test, and run the application locally.
 - **Isolated Local State:** All database tables, authentication identities, storage buckets, and Mailpit email captures run on `http://127.0.0.1`.
-- **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real student or stakeholder PII or credentials are used or committed.
+- **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real participant or stakeholder PII or credentials are used or committed.
 - **Deterministic Migration Replay:** Running `npm run supabase:reset` replays all 8 timestamped migrations from `infra/supabase/migrations/` in strict ascending order, ending with `20260803180000_transactional_review_actions.sql` *(migrations 0007 and 0008 are repository/local-only and not applied to hosted staging)*.
 - **Verification Strategy & Scope:**
   - Static migration tests inspect committed SQL contracts.
@@ -27,78 +27,30 @@ Prerequisites:
 - **npm**: `>= 11.11.0 < 12` (Declared in `packageManager` as `npm@11.11.0`)
 - **Docker Desktop / Engine**: Active locally.
 
-Follow these steps when onboarding or starting daily work:
-
-### Step 1: Clone & Clean Install Dependencies
+### Canonical Quick Start (One Command)
 ```bash
 git clone https://github.com/acmis1/capstone-impact-platform.git
 cd capstone-impact-platform
 npm ci
-```
-
-### Step 2: Run Automated Onboarding Precheck
-Run the automated toolchain, Docker, Git, migration, and dependency precheck (12 checks):
-```bash
-npm run onboarding:check
-```
-
-### Step 3: Ensure Docker Desktop is Running
-Start Docker Desktop on your operating system. Verify container runtime status:
-```bash
-docker ps
-```
-
-### Step 4: Start Local Supabase Stack
-Start the local Supabase containers (PostgreSQL, Auth, Storage, Studio, Mailpit):
-```bash
-npm run supabase:start
-```
-
-### Step 5: Reset Local Database & Replay Migrations
-Replay all 8 timestamped migrations (`20260601035138_...` through `20260803180000_...`) and load `seed.sql`:
-```bash
-npm run supabase:reset
-```
-
-### Step 6: Seed Local Storage Buckets & Synthetic Fixtures
-Ensure storage buckets exist with exact local policies and synthetic poster fixtures:
-```bash
-npm run supabase:seed:buckets
-```
-*Note: `supabase:seed:buckets` is strictly local-only (`seedLocalSupabaseFixtures.ts`) and does not invoke staging scripts.*
-
-### Step 7: Generate Local Environment Configuration
-Write validated loopback environment settings to `apps/admin-cms/.env.local`:
-```bash
-npm run supabase:env:local
-```
-*Note: Existing hosted environment files must never be overwritten by local setup.*
-
-### Step 8: Provision Local Synthetic Staff Accounts
-Create reproducible synthetic accounts for `admin`, `reviewer`, and `editor`:
-```bash
-npm run supabase:users:local
-```
-This writes random per-developer passwords into the ignored file `apps/admin-cms/.local-users.json`.
-
-### Step 9: Verify Local Stack Integrity
-Run the automated verification suite:
-```bash
-npm run supabase:verify:local
-```
-
-### Step 10: Launch Admin/CMS Application
-Start the Next.js development server:
-```bash
+npm run setup:local
 npm run dev:admin
 ```
-Open [http://localhost:3000/login](http://localhost:3000/login) and sign in using the synthetic credentials in `apps/admin-cms/.local-users.json`.
 
-### Step 11: Clean Up Local Stack
-Stop the local containers when finished:
+### Clean Stack Shutdown
 ```bash
 npm run supabase:stop
 ```
+
+### Diagnostic & Subcommand Reference
+The `npm run setup:local` runner automatically executes these diagnostic steps in sequence:
+1. `npm run onboarding:check` — Toolchain, Docker, Git, and migration precheck
+2. `npm run supabase:start` — Launch local Supabase containers (PostgreSQL, Auth, Storage, Studio, Mailpit)
+3. `npm run supabase:seed:buckets` — Reconcile private/public storage buckets and synthetic poster fixtures
+4. `npm run supabase:env:local` — Write loopback environment variables to `apps/admin-cms/.env.local`
+5. `npm run supabase:users:local` — Provision synthetic `admin`, `reviewer`, and `editor` staff accounts
+6. `npm run supabase:verify:local` — Verify loopback connectivity, schema, grants, RLS, storage, and password logins
+
+*(Note: `setup:local` is safe and idempotent to rerun. Use `npm run supabase:reset` separately only for an intentional clean database reconstruction that replays all 8 migrations from scratch.)*
 
 ---
 
@@ -155,12 +107,12 @@ No emails leave your machine during local development.
 2. `npm ci`: Added 532 packages cleanly.
 3. `npm run onboarding:check`: **PASS** (12/12 automated prechecks passed).
 4. `npm run supabase:start`: Container stack started cleanly.
-5. `npm run supabase:reset`: Replayed all 7 database migrations (`0001` through `0007`) in strict timestamp order.
+5. `npm run supabase:reset`: Replayed all 7 database migrations (`0001` through `0007`) in strict timestamp order *(historical recorded log from initial 7-migration onboarding run; current baseline replays all 8 migrations `0001` through `0008`)*.
 6. `npm run supabase:seed:buckets`: Created 3 local storage buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) and seeded 2 poster fixtures.
 7. `npm run supabase:env:local`: Wrote loopback configuration to `apps/admin-cms/.env.local`.
 8. `npm run supabase:users:local`: Provisioned 3 synthetic staff accounts (`local.admin`, `local.reviewer`, `local.editor`).
 9. `npm run supabase:verify:local`: **PASS** (Verified loopback connectivity, 13 tables, RLS enablement, indexes/triggers, policy semantics, 13-table grant matrix, function execution ACLs, storage bucket policies, public feed compiler, and password sign-in for all 3 synthetic roles).
-10. `migration_count`: Verified exactly 7 migration-history rows in `supabase_migrations.schema_migrations`.
+10. `migration_count`: Verified 7 migration-history rows in historical run (8 in current baseline).
 11. `npm run dev:admin`: Next.js 16 server started on port 3000.
 12. `http://localhost:3000/api/health`: Returned `HTTP 200 OK`.
 13. `http://localhost:3000/login`: Returned `HTTP 200 OK`.

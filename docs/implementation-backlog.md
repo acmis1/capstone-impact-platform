@@ -8,9 +8,9 @@ This document maps out the completed project baseline, foundations present, and 
 *   **Prototype Recovery**: Successful database recovery (10 project records, 6 public-feed records) and poster repairs completed.
 *   **Render Deployment**: Prototype web service successfully deployed from `main` branch to Render and confirmed Live.
 *   **Duda Test-Site Verification**: Client-side listing and detail rendering manually verified on the Duda test-site.
-*   **Admin CMS Foundation**: Modular Next.js app structure, TypeScript domain models, database migrations (`0001` - `0007`) on `main`, migration `0008` implemented and locally verified on feature branch `security/transactional-review-actions` (unmerged; migrations `0007` and `0008` remain unapplied to hosted staging; no production-readiness claim is made).
+*   **Admin CMS Foundation**: Modular Next.js app structure, TypeScript domain models, database migrations (`0001` - `0008`) on `main` (migration `0008` merged into `main` via PR #36; migrations `0007` and `0008` remain unapplied to hosted staging; no production-readiness claim is made).
 *   **Initial Admin Authentication Activation (Staging)**: Initial administrator authentication operationally verified in isolated staging (`capstone-admin-cms-staging-2026`).
-*   **Transactional Review Actions**: Atomic PostgreSQL RPC function `public.perform_project_review_action` (Migration 0008), repository integration, API route handler, static contract tests, and comprehensive local atomicity/rollback verifications implemented on feature branch `security/transactional-review-actions` (verified locally on Windows with Docker Desktop; unmerged; migrations `0007` and `0008` remain unapplied to hosted staging; macOS, Linux, and independent human verification remain pending).
+*   **Transactional Review Actions**: Atomic PostgreSQL RPC function `public.perform_project_review_action` (Migration 0008), repository integration, API route handler, static contract tests, and comprehensive local atomicity/rollback verifications implemented and merged into `main` via PR #36 (verified locally on Windows with Docker Desktop; migrations `0007` and `0008` remain unapplied to hosted staging; macOS, Linux, and independent human verification remain pending).
 
 ---
 
@@ -22,18 +22,18 @@ This document maps out the completed project baseline, foundations present, and 
 
 ---
 
-## 3. Priority 1 — Submission, Cross-Check, Preview, and Student Confirmation
+## 3. Priority 1 — Submission, Cross-Check, Preview, and Participant Confirmation
 *   **Folder Ingestion**: Bulk folder uploads reading project structure and asset packages.
 *   **Excel Cross-Check**: Build the administrative parser matching column headers in `project-details.xlsx` against database fields.
-*   **Student Preview Link**: Generate token-based, private, secure preview URLs for student groups, with preview-token expiry and revocation rules.
-*   **Email Notification**: Send automated preview emails containing preview links to student group contact addresses.
+*   **Participant Preview Link**: Generate token-based, private, secure preview URLs for participant groups, with preview-token expiry and revocation rules.
+*   **Email Notification**: Send automated preview emails containing preview links to participant group contact addresses.
 *   **Reminder Scheduling**: Schedule automated email reminders to groups if confirmation is pending, tracking reminder history.
 *   **Review Workflows**: Bulk review and cross-check metadata manually before preview generation.
-*   **Student Response Handling**:
-    *   *Student Confirmation*: Record an explicit student confirmation and timestamp (auditable final sign-off).
+*   **Participant Response Handling**:
+    *   *Participant Confirmation*: Record an explicit participant confirmation and timestamp (auditable final sign-off).
     *   *Correction Requests*: Record correction-request comments, status, and timestamps.
-    *   *Admin Resolution*: Admin resolution of student corrections, triggering regenerated/reissued previews and student re-notification.
-*   **Admin Audit Trail**: Record administrative changes and student confirmations in logs.
+    *   *Admin Resolution*: Admin resolution of participant corrections, triggering regenerated/reissued previews and participant re-notification.
+*   **Admin Audit Trail**: Record administrative changes and participant confirmations in logs.
 
 ---
 
@@ -81,7 +81,7 @@ This document maps out the completed project baseline, foundations present, and 
 ---
 
 ## 7. Optional Enhancements
-*   **Community Voting**: Embed optional student and visitor voting widgets on Duda pages (must not block the core publishing path).
+*   **Community Voting**: Embed optional participant and visitor voting widgets on Duda pages (must not block the core publishing path).
 
 ---
 

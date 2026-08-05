@@ -235,7 +235,7 @@ export async function provisionLocalStaffUsers(options: ProvisionUsersOptions = 
     if (!rawEnv) {
       for (let attempt = 1; attempt <= 5; attempt++) {
         try {
-          rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+          rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot, stdio: 'pipe' });
           if (rawEnv.includes('API_URL')) break;
         } catch {
           // retry

@@ -155,7 +155,7 @@ export function generateLocalEnvironmentFile(options: GenerateEnvOptions = {}): 
     const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
     const cmd = `"${cliPath}" status --workdir "${workdir}" -o env`;
     try {
-      rawOutput = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+      rawOutput = execSync(cmd, { encoding: 'utf8', cwd: repoRoot, stdio: 'pipe' });
     } catch {
       throw new Error('Local Supabase CLI status query failed.');
     }

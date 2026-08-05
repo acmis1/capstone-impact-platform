@@ -13,7 +13,7 @@
 
 ## 3. Workflow, Change Scope & Environment Integrity
 - **Environment Integrity**: Preserve all untracked files, local worktree configurations, and unrelated active git branches.
-- **Branching & Pull Requests**: Use narrow, isolated feature branches (`docs/*`, `feat/*`, `fix/*`) and submit clean, reviewable Pull Requests.
+- **Branching & Pull Requests**: Use narrow, isolated feature branches (`docs/*`, `feat/*`, `fix/*`, `infra/*`, `security/*`) and submit clean, reviewable Pull Requests.
 - **Minimal Diffs**: Avoid broad or unrelated refactors and broad formatting changes. Inspect named files before running broad workspace searches.
 
 ## 4. Execution & Stage-Gated Validation Strategy

@@ -7,7 +7,7 @@
  * and publishing rules governing the Capstone Impact Platform.
  * 
  * 1. DRAFT MEDIA & INGESTION STORAGE
- *    - All incoming student folder uploads, Excel metadata spreadsheets, and 
+ *    - All incoming participant folder uploads, Excel metadata spreadsheets, and
  *      raw asset buffers must be written strictly to the private bucket:
  *      👉 Bucket: 'project-drafts-private'
  *    - Row-level security (RLS) policies on this bucket restrict read and 
@@ -27,7 +27,7 @@
  *      private bucket directories.
  * 
  * 4. STAGING BOUNDARY RESTRICTION
- *    - **NO REAL STAKEHOLDER OR STUDENT DATA** may be committed, seeded, or 
+ *    - **NO REAL STAKEHOLDER OR PROJECT PARTICIPANT DATA** may be committed, seeded, or
  *      loaded into storage tables during the current break staging period. 
  *      All workflows must run exclusively on generated, mock data.
  * 

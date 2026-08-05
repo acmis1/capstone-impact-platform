@@ -7,6 +7,7 @@ Manual email, spreadsheet, poster and Duda publishing workflows are difficult to
 The current hybrid design is: staff operate the Admin/CMS, authenticated server-side services manage source data in Supabase, and public-eligible (`approved` and `published`) records are compiled into stable JSON for Duda. `Prototype/` is retained as historical feasibility evidence, not as the active application.
 
 > [!IMPORTANT]
+> **NEW DEVELOPERS / CONTRIBUTORS**: Start with [`START_HERE.md`](./START_HERE.md) for a zero-instruction setup guide, prerequisite installation, daily commands, and synthetic login steps.
 > Active development is in [`apps/admin-cms/`](./apps/admin-cms/). It is a production-oriented staging implementation. Staging operations are isolated from the live public showcase, synthetic data is required, and production cutover plus full reviewer/editor UAT remain pending.
 
 ## Why the project exists
@@ -75,13 +76,10 @@ Prerequisites:
 3. Start local Supabase development stack:
 
    ```bash
-   npm run supabase:start
-   npm run supabase:reset
-   npm run supabase:seed:buckets
-   npm run supabase:env:local
-   npm run supabase:users:local
-   npm run supabase:verify:local
+   npm run setup:local
    ```
+
+   This command is safe to rerun and does not rebuild the local database. Run `npm run supabase:reset` separately only for an intentional clean reconstruction.
 
 4. Start the Next.js development server:
 
@@ -116,6 +114,9 @@ Run from the repository root:
 
 | Document | Role |
 | --- | --- |
+| [`START_HERE.md`](./START_HERE.md) | Developer onboarding guide, daily workflow, and commands. |
+| [`docs/first-contribution.md`](./docs/first-contribution.md) | Beginner-safe step-by-step local contribution walkthrough. |
+| [`docs/onboarding-acceptance-checklist.md`](./docs/onboarding-acceptance-checklist.md) | Human onboarding acceptance checklist and comprehension checks. |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Contributor workflow, branch rules, and safety contract. |
 | [`apps/admin-cms/README.md`](./apps/admin-cms/README.md) | Authoritative developer and staging-operator guide. |
 | [`infra/supabase/local-development.md`](./infra/supabase/local-development.md) | Local Supabase environment setup and onboarding guide. |
@@ -135,7 +136,7 @@ Run from the repository root:
 - Modern server key preference (`SUPABASE_SECRET_KEY`) is preferred over legacy service-role key fallback for server administration.
 - Keep server-only credentials out of browser code and Client Components.
 - Autonomous agents must not access private administrative dashboards.
-- Use synthetic fixtures only; real student, staff or stakeholder personal data is prohibited in staging.
+- Use synthetic fixtures only; real project participant, staff or stakeholder personal data is prohibited in staging.
 - Keep `Prototype/` and staging environments isolated.
 - Hosted state-changing commands remain strictly prohibited without explicit project-owner approval.
 
@@ -143,6 +144,6 @@ Run from the repository root:
 
 Implemented foundations include the authenticated Admin/CMS shell, project index, validation, import and media workflows, reproducible local Supabase stack, shared-staging execution guardrails, key preference model and public-eligible feed compiler.
 
-Remaining work includes hosted migration history reconciliation, controlled hosted staff lifecycle tooling, interactive browser UAT matrix validation, metadata editor, student confirmation, preview and publication-history workflows, accessibility QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
+Remaining work includes hosted migration history reconciliation, controlled hosted staff lifecycle tooling, interactive browser UAT matrix validation, metadata editor, participant confirmation, preview and publication-history workflows, accessibility QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
 
 Developer contribution policies and security boundaries are defined in [`CONTRIBUTING.md`](./CONTRIBUTING.md).

@@ -17,16 +17,19 @@ When verifying system behavior or planning extensions, information must be refer
 
 ## Master Document Directory
 
+*   **[First Contribution Guide](first-contribution.md)**: Beginner-safe step-by-step local contribution walkthrough for an assigned task.
+*   **[Onboarding Acceptance Checklist](onboarding-acceptance-checklist.md)**: Human onboarding acceptance checklist and comprehension verification.
+*   **[Onboarding Verification Matrix](onboarding-verification-matrix.md)**: Empirical verification matrix across Windows local host, Ubuntu 24.04 CI, and macOS CI.
 *   **[Project Architecture & Constraints](project-architecture-and-constraints.md)**: Overall system blueprint, data publication flows, and immutable platform boundaries (e.g., Duda upgrade limitations and environment isolation).
 *   **[Public Feed Contract](public-feed-contract.md)**: Formal schema definition, validator fields, compiler defaults, and visual layout config definitions for the public JSON payload (`capstones-latest.json`).
 *   **[Security & Maintainability Plan](security-and-maintainability-plan.md)**: Trust boundaries, authentication foundations, media file isolation, and long-term project maintainability principles.
-*   **[Implementation Backlog](implementation-backlog.md)**: Priority-ranked backlog of planned functional modules, student confirmation workflows, AI/OCR assist integrations, and handover criteria.
+*   **[Implementation Backlog](implementation-backlog.md)**: Priority-ranked backlog of planned functional modules, participant confirmation workflows, AI/OCR assist integrations, and handover criteria.
 
 ---
 
 ## Infrastructure & Operational Runbooks
 
-*   **[Local Supabase Development Guide](../infra/supabase/local-development.md)**: 100% reproducible local Supabase setup via Docker and CLI 2.109.1.
+*   **[Local Supabase Development Guide](../infra/supabase/local-development.md)**: Reproducible local Supabase setup via Docker and CLI 2.109.1 (Windows with Docker Desktop verified; macOS, Linux, and independent human onboarding pending).
 *   **[Staging Migration Reconciliation Runbook](../infra/supabase/staging-reconciliation-runbook.md)**: 7-gate runbook for verifying, backing up, reconciling, and auditing hosted Supabase database migrations.
 *   **[Key Migration Governance](../infra/supabase/key-migration-governance.md)**: Standards for modern server secret key preference (`SUPABASE_SECRET_KEY`) and secret rotation policies.
 *   **[Staff Lifecycle Design](../infra/supabase/staff-lifecycle-design.md)**: Staff account provisioning, role updates, offboarding procedures, and audit attribution.

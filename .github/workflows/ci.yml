@@ -1,0 +1,166 @@
+name: CI Quality Gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static-quality:
+    name: Static Quality & Build Gates (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 24.14.1
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+
+      - name: Install npm 11.11.0 (pinned)
+        run: npm install -g npm@11.11.0
+
+      - name: Verify exact Node.js and npm versions
+        run: |
+          node -v
+          npm -v
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Onboarding Documentation Contract Check
+        run: npm run check:onboarding-docs
+
+      - name: Targeted First Contribution Test
+        run: npm run test:run --workspace=apps/admin-cms -- src/components/admin-shell/navigation.test.ts
+
+      - name: Repository terminology check
+        run: npm run check:terminology
+
+      - name: GitHub YAML parse check
+        run: npm run check:yaml
+
+      - name: Tracked Markdown link check
+        run: npm run check:markdown-links
+
+      - name: Public Feed Contract Check
+        run: npm run check:feed
+
+      - name: ESLint Quality Check
+        run: npm run lint --workspace=apps/admin-cms
+
+      - name: Vitest Unit & Security Tests
+        run: npm run test:admin
+
+      - name: TypeScript Typecheck
+        run: npm run typecheck:admin
+
+      - name: Next.js Production Build
+        run: npm run build:admin
+
+      - name: Portable Diff Whitespace Check
+        run: npm run check:diff
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_CURRENT_SHA: ${{ github.sha }}
+
+  contributor-rehearsal:
+    name: Disposable Contributor Workflow Rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 24.14.1
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+
+      - name: Install npm 11.11.0 (pinned)
+        run: npm install -g npm@11.11.0
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Onboarding Contributor Workflow Rehearsal
+        run: npm run verify:onboarding-workflow
+
+  local-integration:
+    name: Disposable Local Supabase Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 24.14.1
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+
+      - name: Install npm 11.11.0 (pinned)
+        run: npm install -g npm@11.11.0
+
+      - name: Verify exact Node.js and npm versions
+        run: |
+          node -v
+          npm -v
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Onboarding Toolchain Precheck
+        run: npm run onboarding:check
+
+      - name: Run local developer setup
+        run: npm run setup:local
+        env:
+          SUPABASE_START_TIMEOUT_MS: '600000'
+
+      - name: Confirm Local Supabase Stack Running
+        run: npm run supabase:assert-running
+
+      - name: Verify eight migrations and local integrity
+        run: |
+          npm run supabase:verify:local
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 8
+
+      - name: Admin Application Smoke Test (/api/health & /login 200 OK)
+        run: npm run check:app-smoke
+
+      - name: Safely rerun local developer setup
+        run: npm run setup:local
+
+      - name: Confirm Local Supabase Stack Still Running
+        run: npm run supabase:assert-running
+
+      - name: Repository terminology check
+        run: npm run check:terminology
+
+      - name: Stop Local Supabase Stack (Cleanup)
+        if: always()
+        run: npm run supabase:stop
+
+      - name: Confirm Local Supabase Stack Stopped
+        if: always()
+        run: npm run supabase:assert-stopped

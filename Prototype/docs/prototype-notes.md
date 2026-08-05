@@ -16,12 +16,12 @@ The Capstone database utilizes a flexible document model stored in Supabase unde
 | `program` | String | Academic program name. | **Public** | Required. |
 | `discipline` | String | Primary discipline name. | **Public** | Required. |
 | `disciplines` | Array of Strings | All related academic disciplines. | **Public** | Required. |
-| `teamMembers` | Array of Strings | Names of the student authors. | **Public** | Required. |
+| `teamMembers` | Array of Strings | Names of the participant authors. | **Public** | Required. |
 | `groupName` | String | Assigned capstone group name. | **Public** | Required. |
 | `academicSupervisor` | String | Supervisor faculty member. | **Public** | Required. |
 | `industryPartner` | String | Corporate sponsor / client. | **Public** | Required. |
 | `background` | String | Background problem statement. | **Public** | Required. |
-| `solution` | String | Details of the solution designed by students. | **Public** | Required. |
+| `solution` | String | Details of the solution designed by participants. | **Public** | Required. |
 | `poster` | String (URL) | URL path to the poster PNG/JPG file. | **Public** | Poster OR Poster PDF is required. Warning if only one exists. |
 | `posterPdf` | String (URL) | URL path to the poster PDF file. | **Public** | Poster OR Poster PDF is required. Warning if only one exists. |
 | `snapshots` | Array of Strings (URLs) | List of showcase gallery screenshot URLs. | **Public** | Required. |
@@ -32,12 +32,12 @@ The Capstone database utilizes a flexible document model stored in Supabase unde
 | `externalLinks` | Array of Objects | Custom external resources (contains `{ label, url }`). | **Public** | Optional. Validated for proper URL formats. |
 | `layoutConfig` | Object | Staff configuration for visual rendering preset. | **Public** | Optional. Validates preset IDs and structures. |
 | `importBatchId` | String | Identifier for batch intake. | **Forbidden** (Stripped) | Administrative field. Excluded in validator. |
-| `sourceFolder` | String | Folder containing student package assets. | **Forbidden** (Stripped) | Administrative field. Excluded in validator. |
+| `sourceFolder` | String | Folder containing participant package assets. | **Forbidden** (Stripped) | Administrative field. Excluded in validator. |
 | `sampleImportId` | String | Package code used for tracking. | **Forbidden** (Stripped) | Administrative field. Excluded in validator. |
 | `packageValidation` | Object | Import scanner results (status, errors, warnings). | **Forbidden** (Stripped) | Administrative field. Excluded in validator. |
 | `status` | String | Life-cycle status of the project record. | **Forbidden** (Stripped) | Internal state machine. |
 | `internalNotes` | String | Private comments for staff only. | **Forbidden** (Stripped) | Excluded. |
-| `reviewNotes` | String | Review feedback shared with the student team. | **Forbidden** (Stripped) | Excluded. |
+| `reviewNotes` | String | Review feedback shared with the participant team. | **Forbidden** (Stripped) | Excluded. |
 | `lastUpdated` | String (ISO Date) | Server timestamp of last edit. | **Forbidden** (Stripped) | Excluded. |
 | `lastPublishedPublicHash` | String | FNV-1a fingerprint hash of the last successfully published public payload. | **Forbidden** (Stripped) | Internal state tracking. Used to detect out-of-sync edits. |
 | `lastPublishedTemplateId` | String | Layout template ID in use when last published. | **Forbidden** (Stripped) | Internal state tracking. |

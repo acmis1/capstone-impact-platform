@@ -2,6 +2,9 @@
 
 This guide outlines the contributor workflow, repository branching rules, database migration standards, security boundaries, and definition of done for the Capstone Impact Platform (`acmis1/capstone-impact-platform`).
 
+> [!TIP]
+> **DEVELOPERS / NEW CONTRIBUTORS**: Please read **[`START_HERE.md`](./START_HERE.md)** first for setup and guidelines. See **[`docs/first-contribution.md`](./docs/first-contribution.md)** for a beginner contribution guide and **[`docs/onboarding-acceptance-checklist.md`](./docs/onboarding-acceptance-checklist.md)** for human verification.
+
 ---
 
 ## A. Prerequisites & Toolchain Contract
@@ -27,53 +30,40 @@ cd capstone-impact-platform
 # 2. Clean install dependencies
 npm ci
 
-# 3. Run automated onboarding precheck (12 checks)
-npm run onboarding:check
+# 3. One-command local developer setup
+npm run setup:local
 
-# 4. Start local Supabase container stack
-npm run supabase:start
-
-# 5. Reset local database and replay all 8 migrations
-npm run supabase:reset
-
-# 6. Seed local storage buckets and synthetic media fixtures
-npm run supabase:seed:buckets
-
-# 7. Generate loopback local environment file (apps/admin-cms/.env.local)
-npm run supabase:env:local
-
-# 8. Provision synthetic staff accounts (apps/admin-cms/.local-users.json)
-npm run supabase:users:local
-
-# 9. Run comprehensive local Supabase verification suite
-npm run supabase:verify:local
-
-# 10. Start Next.js Admin/CMS development server
+# 4. Start Next.js Admin/CMS development server
 npm run dev:admin
 
-# 11. Run public feed compliance check
-npm run check:feed
-
-# 12. Stop local stack when finished
+# 5. Clean up local stack when finished
 npm run supabase:stop
 ```
+
+*(Note: Ordinary UI, API, documentation, and test contributions do not require a database reset. `npm run setup:local` is safe and idempotent. Run `npm run supabase:reset` separately only when verifying new database migrations or performing an intentional clean reconstruction from scratch.)*
 
 ---
 
 ## C. Repository Branching & Workflow Rules
 
 1. **Never Commit Directly to Main**: All development must occur on narrow feature branches (`feat/*`, `fix/*`, `infra/*`, `docs/*`, `security/*`).
-2. **Sync Before Branching**: Always fetch `origin` and update `main` (`git checkout main && git pull origin main`) before creating a new branch.
+2. **Sync Before Branching**: Always fetch `origin` and update `main` before creating a new branch:
+   ```bash
+   git checkout main
+   git pull --ff-only origin main
+   ```
 3. **Target Main**: Feature branches must branch from and target `main`.
 4. **No Auto-Merge**: PRs require explicit review and manual merge. Auto-merge is prohibited.
 5. **Stage Explicit Files Only**: Never use broad staging commands like `git add .` or `git add -A`. Stage explicit file paths (`git add path/to/file1 path/to/file2`).
 6. **Clean Diff Gate**: Run `git diff --check` before committing to ensure no trailing whitespace or git diff syntax errors exist.
+7. **No Force-Push**: Never force-push any branch. Never force-push `main`.
+8. **No Rebase of Pushed Branches**: Do not rebase a pushed branch unless a maintainer explicitly directs it.
 
 ---
 
 ## D. Security & Data Handling Boundaries
 
-1. **Synthetic Data Only**: Never load or test with real student, staff, or supervisor personal data. Use synthetic mock data only.
+1. **Synthetic Data Only**: Never load or test with real project participant, staff, or supervisor personal data. Use synthetic mock data only.
 2. **Never Use Production/Recovery Environments**: Local development must target loopback (`127.0.0.1`). Never use production or recovery environments.
 3. **No Credentials in Code or Docs**: Secrets, API keys, private tokens, passwords, and database connection strings must never appear in code, logs, screenshots, issues, or pull requests.
 4. **Local Credentials Ignored**: Local environment files (`apps/admin-cms/.env.local`) and user credential stores (`apps/admin-cms/.local-users.json`) remain strictly git-ignored.
@@ -120,3 +110,75 @@ A contribution is complete when:
 - `npm run build:admin` builds Next.js without errors.
 - `git diff --check` passes cleanly.
 - Documentation accurately reflects all code and schema changes.
+
+---
+
+## G. Developer Contribution Lifecycle
+
+1. **Repository Access & Forks**:
+   - Developers with direct repository write access create branches directly on `acmis1/capstone-impact-platform`.
+   - External developers fork the repository and open Pull Requests from their fork to `acmis1/capstone-impact-platform:main`.
+
+2. **Issue Selection & Assignment**:
+   - Always pick an assigned issue from GitHub Issues before starting work.
+   - Limit work to **one issue per branch**. Do not bundle multiple unrelated tasks into one branch.
+
+3. **Branch Creation & Naming**:
+   - Sync `main` first:
+     ```bash
+     git checkout main
+     git pull --ff-only origin main
+     ```
+   - Create your feature branch using approved prefixes (`docs/*`, `feat/*`, `fix/*`, `infra/*`, `security/*`):
+     - Example: `git checkout -b feat/project-filter-ui`
+     - Example: `git checkout -b fix/table-sorting-order`
+
+4. **Synchronizing Your Branch**:
+   - Keep your branch synchronized with `main` using merge — do not rebase a pushed branch:
+     ```bash
+     git fetch origin
+     git checkout main
+     git pull --ff-only origin main
+     git checkout your-feature-branch
+     git merge main
+     ```
+
+5. **Commit Message Conventions**:
+   - Use clear, action-oriented commit messages formatted as `type(scope): message`:
+     - `feat(review): implement atomic review transition RPC`
+     - `fix(auth): correct synthetic password generator boundary`
+     - `docs(readme): add developer onboarding guide`
+     - `chore(deps): update local devDependencies`
+
+6. **Resolving Merge Conflicts Safely**:
+   - If merge conflicts occur against `main`, resolve them locally in your feature branch.
+   - **Never force-push (`git push --force`) any branch. Never force-push `main`.**
+   - Do not resolve migration conflicts by editing merged migrations — ask a maintainer.
+   - Re-run `npm run verify:all` after resolving conflicts to ensure all quality gates pass.
+
+7. **Review Expectations & Self-Merging Prohibition**:
+   - Self-merging without maintainer review is strictly prohibited.
+   - Request review from a maintainer (`@acmis1`).
+   - If changes are requested during review, make corrective commits on your feature branch and push to update the open PR.
+
+8. **Branch Cleanup After Squash Merge**:
+   - Pull requests are squash-merged into `main`.
+   - After your PR is merged, delete the remote branch:
+     ```bash
+     git push origin --delete your-feature-branch
+     ```
+   - Switch locally to `main` and update:
+     ```bash
+     git checkout main
+     git pull --ff-only origin main
+     ```
+   - Try to delete your local branch pointer:
+     ```bash
+     git branch -d your-feature-branch
+     ```
+   - If Git refuses (because squash-merge history is not directly in your branch), verify the diff is empty:
+     ```bash
+     git diff main..your-feature-branch
+     ```
+   - If the diff is empty, the branch is safe to leave as a harmless local pointer, or ask a maintainer to confirm before deleting.
+   - **Do not use `git branch -D` unless a maintainer has confirmed it is safe.**

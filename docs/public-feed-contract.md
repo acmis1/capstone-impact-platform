@@ -45,8 +45,8 @@ Every compiled project object must contain the following required fields to pass
 *   `program` — Study program name
 *   `studyProgram` — Fallback program string matching XLSX structure
 *   `discipline` — Primary technical discipline
-*   `groupName` — Student group code or identifier
-*   `teamMembers` — Roster of student names (array)
+*   `groupName` — Participant group code or identifier
+*   `teamMembers` — Roster of participant names (array)
 *   `poster` — Public poster image preview URL
 *   `posterPdf` — Public poster PDF file URL
 *   `layoutConfig` — Visual preset settings object containing `templateId`.
@@ -82,7 +82,7 @@ The `layoutConfig.templateId` property must map to one of the three verified lay
 ---
 
 ## 7. Internal-Field Handling
-To protect student privacy and staff workflows, the following administrative fields are strictly handled:
+To protect participant privacy and staff workflows, the following administrative fields are strictly handled:
 
 ### A. Compiler-Stripped Fields
 The compiler (`compilePublicFeed.ts`) automatically strips these fields:

@@ -119,7 +119,7 @@ function mapDbRowToProject(row: Record<string, unknown>): Project {
     industryPartner: String(row.industry_partner || ''),
     academicSupervisor: String(row.academic_supervisor || ''),
     groupName: String(row.group_name || 'Capstone Team 1'),
-    teamMembers: Array.isArray(row.team_members) ? (row.team_members as string[]) : ['Student One', 'Student Two'],
+    teamMembers: Array.isArray(row.team_members) ? (row.team_members as string[]) : ['Participant One', 'Participant Two'],
     poster: String(row.poster_url || ''),
     posterPdf: String(row.poster_pdf_url || ''),
     posterText: String(row.poster_text_public || ''),
@@ -141,25 +141,48 @@ function mapDbRowToProject(row: Record<string, unknown>): Project {
   };
 }
 
+const CHILD_PROCESS_TIMEOUT_MS = 120_000;
+const NETWORK_REQUEST_TIMEOUT_MS = 15_000;
+
 function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, unknown>> {
   const workdir = path.resolve(repoRoot, 'infra');
   const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
   const cmd = `"${cliPath}" db query --local --workdir "${workdir}" -o json "${sql.replace(/"/g, '\\"')}"`;
+  let lastError: unknown;
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
-      const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
-      const firstBrace = raw.indexOf('{');
-      const lastBrace = raw.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) {
-        const parsed = JSON.parse(raw.slice(firstBrace, lastBrace + 1)) as { rows?: Array<Record<string, unknown>> };
-        return parsed.rows || [];
+      const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot, stdio: 'pipe', timeout: CHILD_PROCESS_TIMEOUT_MS, killSignal: 'SIGTERM' });
+      // Find where JSON payload actually starts ([ or {)
+      const startIdx = raw.search(/\[|\{/);
+      if (startIdx !== -1) {
+        const jsonCandidate = raw.slice(startIdx).trim();
+        const endChar = jsonCandidate.startsWith('[') ? ']' : '}';
+        const endIdx = jsonCandidate.lastIndexOf(endChar);
+        if (endIdx !== -1) {
+          const cleanJson = jsonCandidate.slice(0, endIdx + 1);
+          const parsed = JSON.parse(cleanJson) as { rows?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>;
+          if (Array.isArray(parsed)) return parsed;
+          if (parsed.rows && Array.isArray(parsed.rows)) return parsed.rows;
+        }
       }
-    } catch {
-      // Retry for container readiness
+    } catch (err: unknown) {
+      lastError = err;
     }
   }
-  throw new Error('Local database schema query failed.');
+  const detail = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`Local database schema query failed: ${detail}`);
 }
+
+export function createDeadlineFetch(timeoutMs = NETWORK_REQUEST_TIMEOUT_MS, fetchImpl: typeof fetch = fetch) {
+  return (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
+  const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const signal = init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
+    return fetchImpl(input, { ...init, signal }).finally(() => clearTimeout(timer));
+  };
+}
+
+export const deadlineFetch = createDeadlineFetch();
 
 export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promise<boolean> {
   const repoRoot = path.resolve(__dirname, '../../../..');
@@ -174,7 +197,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
   let rawEnv = '';
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
-      rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+    rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot, stdio: 'pipe', timeout: CHILD_PROCESS_TIMEOUT_MS, killSignal: 'SIGTERM' });
       if (rawEnv.includes('API_URL')) break;
     } catch {
       // Retry
@@ -206,11 +229,13 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
 
   const adminClient = createClient(apiUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: deadlineFetch },
   });
 
   const createAnonClient = () =>
     createClient(apiUrl, anonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: deadlineFetch },
     });
 
   // 3. Live local schema verification via local CLI db query
@@ -469,8 +494,8 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       }
     }
     console.log('✔ Live perform_project_review_action RPC function definition & service_role-only execution grants verified.');
-  } catch {
-    console.error('❌ Live database schema verification failed.');
+  } catch (err: unknown) {
+    console.error('❌ Live database schema verification failed:', err instanceof Error ? err.message : String(err));
     return false;
   }
 

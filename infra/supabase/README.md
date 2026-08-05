@@ -63,7 +63,7 @@ npm run supabase:stop
 2. **Never Apply to Recovery/Demo Projects:** Under no circumstances should these files be executed on the Prototype recovery project or any previous demo baseline.
 3. **Manual Application:** In the current manual workflow, migrations are applied in order through the Supabase Dashboard **SQL Editor** or CLI migration repair.
 4. **No Duda Connection:** The public Duda showcase site remains disconnected from staging buckets and live feeds.
-5. **No Real Personal Data:** Real student, supervisor, or stakeholder personal data must never be loaded into staging.
+5. **No Real Personal Data:** Real participant, supervisor, or stakeholder personal data must never be loaded into staging.
 
 ---
 

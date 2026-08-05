@@ -40,8 +40,8 @@ export interface Project {
   industry: string; // Industry sector category
   industryPartner: string; // Partner company name
   academicSupervisor: string; // Supervisor name
-  groupName: string; // Student team group name
-  teamMembers: string[]; // List of student names
+  groupName: string; // Project participant team group name
+  teamMembers: string[]; // List of project participant names
   poster: string; // Public HTTPS URL to poster image preview
   posterPdf: string; // Public HTTPS URL to poster PDF file
   posterText: string; // Public-safe poster text content

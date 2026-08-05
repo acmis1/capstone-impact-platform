@@ -61,16 +61,38 @@ describe('Migration 0008 Transactional Review Actions Static Security Contract T
     expect(mig0008Content).toContain('FOR UPDATE');
   });
 
-  it('4. Migration 0008 performs project update and approval_records audit insert atomically in the same function', () => {
+  it('4. Migration 0008 performs project update and approval_records audit insert atomically, returning exactly the intended result structure', () => {
     const rawFiles = fs.readdirSync(migrationsDir);
     const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
-    const content = fs.readFileSync(path.join(migrationsDir, sqlFiles[7]), 'utf8');
+    const raw = fs.readFileSync(path.join(migrationsDir, sqlFiles[7]), 'utf8');
+
+    // Normalize CRLF → LF so assertions are line-ending independent
+    const content = raw.replace(/\r\n/g, '\n');
 
     expect(content).toContain('UPDATE public.projects');
     expect(content).toContain('INSERT INTO public.approval_records');
     expect(content).toContain('RETURNING id INTO v_audit_record_id');
 
-    expect(content).toContain("jsonb_build_object(\n    'publicId', v_public_id,\n    'status', v_to_status,\n    'auditRecordId', v_audit_record_id::text\n  )");
+    // Extract the jsonb_build_object(...) call from the RETURN statement.
+    // Matches pg_catalog.jsonb_build_object(...) or jsonb_build_object(...)
+    const returnMatch = content.match(/RETURN\s+(?:pg_catalog\.)?jsonb_build_object\s*\(([\s\S]*?)\)\s*;/);
+    expect(returnMatch).not.toBeNull();
+    const buildObjectArgs = returnMatch![1];
+
+    // Split on commas that separate key-value pairs (accounting for multi-line formatting).
+    // Each pair is: 'key', value  — so we look for quoted key strings.
+    const keyMatches = [...buildObjectArgs.matchAll(/'([^']+)'\s*,/g)].map((m) => m[1]);
+
+    // Must have exactly three result fields — no more, no fewer.
+    expect(keyMatches).toHaveLength(3);
+    expect(keyMatches).toContain('publicId');
+    expect(keyMatches).toContain('status');
+    expect(keyMatches).toContain('auditRecordId');
+
+    // Verify correct value bindings for each field.
+    expect(buildObjectArgs).toContain("'publicId', v_public_id");
+    expect(buildObjectArgs).toContain("'status', v_to_status");
+    expect(buildObjectArgs).toContain("'auditRecordId', v_audit_record_id::text");
   });
 
   it('5. Migration 0008 represents exact role permissions and workflow state transitions', () => {

@@ -10,12 +10,12 @@ The system uses a refined submission-review-publish lifecycle:
 | Status | Meaning |
 | :--- | :--- |
 | **Draft** | Internal staff draft or incomplete record. |
-| **Submitted** | Student/group submission received from portal (Conceptual). |
+| **Submitted** | Participant/group submission received from portal (Conceptual). |
 | **Awaiting OCR** | Files uploaded and waiting for AI/OCR extraction. |
 | **In Review** | Admin is checking extracted fields and validation flags. |
-| **Changes Requested** | Admin requested updates from the student group. |
-| **Preview Sent** | A simulated preview link has been sent to students. |
-| **Student Confirmed** | Student group confirmed the preview is acceptable. |
+| **Changes Requested** | Admin requested updates from the participant group. |
+| **Preview Sent** | A simulated preview link has been sent to participants. |
+| **Participant Confirmed** | Participant group confirmed the preview is acceptable. |
 | **Approved** | Admin approved for publishing (Pending Duda sync). |
 | **Published** | Record is live in the official public Duda feed. |
 | **Archived** | Historical or hidden record. |
@@ -39,7 +39,7 @@ The current prototype uses **manual URL-based media** to demonstrate the feed ar
 
 1. **Integrated File Storage**: Direct uploads to RMIT-approved cloud buckets.
 2. **Assistive AI/OCR**: Automatic metadata suggestion from posters (Conceptual flags shown in form).
-3. **Student Portal**: Secure interface for groups to submit, view review notes, and confirm previews.
+3. **Participant Portal**: Secure interface for groups to submit, view review notes, and confirm previews.
 4. **Automated Messaging**: Real email/notifications for "Changes Requested" and "Preview Sent".
 
 ## Stakeholder Demo Script

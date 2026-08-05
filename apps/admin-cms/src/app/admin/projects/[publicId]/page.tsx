@@ -211,7 +211,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             ⚠️ ADMINISTRATIVE REVIEW STAGING SANDBOX
           </h4>
           <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: '1.5', color: '#D1D5DB' }}>
-            This detail review operates purely on <strong>Staging Data</strong>. No active coordinator or student personal folders are parsed. Live public feed showcase mirrors (Duda presentation layers) remain disconnected. Editing, publishing, and archiving actions are locked during this summer semester development.
+            This detail review operates purely on <strong>Staging Data</strong>. No active coordinator or participant personal folders are parsed. Live public feed showcase mirrors (Duda presentation layers) remain disconnected. Editing, publishing, and archiving actions are locked during this summer semester development.
           </p>
         </div>
 

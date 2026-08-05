@@ -15,12 +15,11 @@ function main() {
   }
 
   try {
-    const result = generateLocalEnvironmentFile({ outputPath, force });
+    generateLocalEnvironmentFile({ outputPath, force });
     console.log('✅ Local environment file successfully written.');
-    console.log(`Destination: ${result.targetPath}`);
-    console.log(`Keys configured: ${result.keysWritten.join(', ')}`);
+    console.log('Local environment configuration completed.');
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = 'Local environment configuration failed.';
     console.error(`❌ Local environment generation failed: ${msg}`);
     process.exit(1);
   }

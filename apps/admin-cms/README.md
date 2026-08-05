@@ -13,7 +13,7 @@ The application currently owns:
 - private draft media and public-asset storage foundations;
 - public-eligible stable JSON feed compilation.
 
-It does not yet provide a completed metadata editor, student portal or final confirmation workflow, integrated preview workspace, publishing/history or rollback UI, production Duda cutover, or production-readiness certification.
+It does not yet provide a completed metadata editor, participant portal or final confirmation workflow, integrated preview workspace, publishing/history or rollback UI, production Duda cutover, or production-readiness certification.
 
 ## Current capability and verification
 
@@ -85,34 +85,27 @@ Run from the repository root:
    npm ci
    ```
 
-2. Run automated onboarding precheck:
+2. One-command local developer setup:
 
    ```bash
-   npm run onboarding:check
+   npm run setup:local
    ```
 
-3. For local development, generate the local loopback environment file (the normal local workflow):
-
-   ```bash
-   npm run supabase:start
-   npm run supabase:reset
-   npm run supabase:seed:buckets
-   npm run supabase:env:local
-   npm run supabase:users:local
-   npm run supabase:verify:local
-   ```
-
-   *(Note: The template file `.env.example` is an authorized staging template contract for shared staging infrastructure, not for local development.)*
-
-4. Start the development server:
+3. Start the development server:
 
    ```bash
    npm run dev:admin
    ```
 
-5. Open [`/login`](http://localhost:3000/login) locally.
+4. Open [`/login`](http://localhost:3000/login) locally.
 
-Offline tests and the sample-feed check do not require private dashboard access.
+5. Clean up when finished:
+
+   ```bash
+   npm run supabase:stop
+   ```
+
+*(Note: Advanced diagnostic or manual setup subcommands `supabase:start`, `supabase:seed:buckets`, `supabase:env:local`, `supabase:users:local`, and `supabase:verify:local` are described in the [Local Development Guide](../../infra/supabase/local-development.md). Offline tests and the sample-feed check do not require private dashboard access.)*
 
 ## Environment reference
 
@@ -196,7 +189,7 @@ See the [Supabase migration overview](../../infra/supabase/README.md), [manual a
 
 Authentication uses a Supabase Auth session. The server-only `requireAdmin` helper reads claims, resolves the linked `admin_users` record, loads recognized roles from `user_roles`, derives permissions and returns generic public errors for unauthenticated, unprovisioned or denied access. The `/admin` layout protects the page tree; the project collection API and review mutation authorize independently.
 
-Review mutations also require a same-origin `Origin` header. Audit attribution is derived from the authenticated server-side admin context rather than a trusted browser identity. Raw backend errors are logged for developers but sanitized before staff-facing responses.
+Review mutations also require a same-origin `Origin` header. Audit attribution is derived from the authenticated server-side admin context rather than a trusted browser identity. Application code catches database exceptions and logs controlled internal error codes (e.g. `REVIEW_PERMISSION_DENIED`, `REVIEW_TRANSITION_INVALID`); raw database messages do not escape the repository boundary or reach HTTP responses.
 
 ### Role-based access control
 
@@ -219,7 +212,7 @@ Review mutations also require a same-origin `Origin` header. Audit attribution i
 | `/admin/imports` | Authenticated provisioned Admin/CMS staff | List import batches and validation summaries. | Implemented |
 | `/admin/imports/[batchId]` | Authenticated provisioned Admin/CMS staff | Inspect a batch, linked project and validation flags. | Implemented |
 
-There is no implemented student project-confirmation workflow or route, metadata editor, publishing-history route, or settings route.
+There is no implemented participant project-confirmation workflow or route, metadata editor, publishing-history route, or settings route.
 
 ## API routes
 
@@ -287,7 +280,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - Never commit `.env` or `.env.local`; do not copy values into issues, logs or documentation.
 - Public environment variables are browser-safe; database administration keys and optional assistive-extraction keys are server-only.
 - Client Components never receive a service-role or secret-key client.
-- Use synthetic fixtures only. Real student, staff and stakeholder personal data is prohibited in staging.
+- Use synthetic fixtures only. Real participant, staff and stakeholder personal data is prohibited in staging.
 - Keep `Prototype/`, recovery environments and the active staging environment isolated.
 - Migrations, seed/import/promotion/publication scripts and admin linking are state-changing and require explicit authorization.
 - Actor identity and audit attribution come from the server-side authenticated context.
@@ -300,7 +293,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - Reviewer/editor permission-matrix UAT remains pending.
 - Project detail is the next major UI modernization area.
 - PostgreSQL RPC migration 0008 is committed locally and verified on Windows with Docker Desktop; hosted staging reconciliation remains pending.
-- Student confirmation, integrated preview, publishing history and rollback UI are pending.
+- Participant confirmation, integrated preview, publishing history and rollback UI are pending.
 - Live Duda cutover is pending.
 - Authenticated browser, responsive, accessibility and screen-reader validation remain incomplete.
 - Production deployment hardening and readiness certification remain pending.
