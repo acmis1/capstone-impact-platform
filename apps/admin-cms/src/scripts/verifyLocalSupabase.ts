@@ -148,6 +148,7 @@ function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, un
   const workdir = path.resolve(repoRoot, 'infra');
   const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
   const cmd = `"${cliPath}" db query --local --workdir "${workdir}" -o json "${sql.replace(/"/g, '\\"')}"`;
+  let lastError: unknown;
   for (let attempt = 1; attempt <= 5; attempt++) {
     try {
       const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot, stdio: 'pipe', timeout: CHILD_PROCESS_TIMEOUT_MS, killSignal: 'SIGTERM' });
@@ -157,11 +158,12 @@ function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, un
         const parsed = JSON.parse(raw.slice(firstBrace, lastBrace + 1)) as { rows?: Array<Record<string, unknown>> };
         return parsed.rows || [];
       }
-    } catch {
-      // Retry for container readiness
+    } catch (err: unknown) {
+      lastError = err;
     }
   }
-  throw new Error('Local database schema query failed.');
+  const detail = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`Local database schema query failed: ${detail}`);
 }
 
 export function createDeadlineFetch(timeoutMs = NETWORK_REQUEST_TIMEOUT_MS, fetchImpl: typeof fetch = fetch) {
@@ -485,8 +487,8 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       }
     }
     console.log('✔ Live perform_project_review_action RPC function definition & service_role-only execution grants verified.');
-  } catch {
-    console.error('❌ Live database schema verification failed.');
+  } catch (err: unknown) {
+    console.error('❌ Live database schema verification failed:', err instanceof Error ? err.message : String(err));
     return false;
   }
 
