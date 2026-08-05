@@ -36,7 +36,7 @@ This matrix details the empirical verification coverage and status across suppor
 | **Admin Application `/api/health` 200 OK** | `PASS` | `PASS` | `NOT EXECUTED` | Application smoke runner |
 | **Admin Application `/login` 200 OK** | `PASS` | `PASS` | `NOT EXECUTED` | Application smoke runner |
 | **Clean Stack Shutdown (`supabase:stop`)** | `PASS` | `PASS` | `NOT EXECUTED` | Stack assertion scripts |
-| **Contributor Workflow Rehearsal** | `PASS` | `PASS` | `PASS` | `src/scripts/rehearseOnboardingWorkflow.ts` |
+| **Contributor Workflow Rehearsal** | `PASS` (Local Host) | `PASS` (Dedicated Ubuntu CI Job) | `LIMITED TO STATIC ACCEPTANCE` | `src/scripts/rehearseOnboardingWorkflow.ts` |
 | **Clean Tracked Working Tree (`git status`)** | `PASS` | `PASS` | `PASS` | `git status --short` |
 
 ---

@@ -15,6 +15,7 @@
     "check:onboarding-docs": "tsx src/scripts/checkOnboardingDocs.ts",
     "verify:onboarding-workflow": "tsx src/scripts/rehearseOnboardingWorkflow.ts",
     "check:app-smoke": "tsx src/scripts/runAppSmokeTest.ts",
+    "check:diff": "tsx src/scripts/checkDiffWhitespace.ts",
     "check:sample-feed": "tsx src/scripts/checkSampleFeed.ts",
     "seed:staging": "tsx src/scripts/seedStagingProjects.ts",
     "check:staging-projects": "tsx src/scripts/checkStagingProjects.ts",

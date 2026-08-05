@@ -15,30 +15,39 @@ export function runOnboardingWorkflowRehearsal(repoRoot = path.resolve(__dirname
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capstone-rehearsal-'));
   const cloneDir = path.join(tmpDir, 'capstone-impact-platform');
 
-  const exec = (cmd: string, cwd: string) => {
-    execSync(cmd, { cwd, stdio: 'pipe', encoding: 'utf8', timeout: 300_000 });
+  const runCmd = (cmd: string, cwd: string, timeoutMs: number, stepName: string) => {
+    try {
+      execSync(cmd, { cwd, stdio: 'pipe', encoding: 'utf8', timeout: timeoutMs });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const sanitizedMsg = msg
+        .replace(/[A-Za-z]:\\[^\r\n:"]+/g, '<relative-path>')
+        .replace(/\/Users\/[^\r\n:"]+/g, '<relative-path>')
+        .replace(/\/home\/[^\r\n:"]+/g, '<relative-path>');
+      throw new Error(`Step [${stepName}] failed (cmd: '${cmd}', timeout: ${timeoutMs}ms): ${sanitizedMsg}`);
+    }
   };
 
   try {
-    // 1. Create a clean disposable clone without shared hardlinks
-    exec(`git clone --no-hardlinks "${repoRoot}" "${cloneDir}"`, tmpDir);
+    // 1. Create a clean disposable clone without shared hardlinks (60s deadline)
+    runCmd(`git clone --no-hardlinks "${repoRoot}" "${cloneDir}"`, tmpDir, 60_000, 'disposable_clone_created');
     stepsCompleted.push('disposable_clone_created');
 
-    // 2. Verify clean initial checkout state
+    // 2. Verify clean initial checkout state (15s deadline)
     const branch = execSync('git branch --show-current', { cwd: cloneDir, encoding: 'utf8' }).trim();
     const headSha = execSync('git rev-parse HEAD', { cwd: cloneDir, encoding: 'utf8' }).trim();
     if (!branch && !headSha) throw new Error('Disposable clone has no active branch or HEAD SHA.');
     stepsCompleted.push('checkout_verified');
 
-    // 3. Install dependencies cleanly
-    exec('npm ci', cloneDir);
+    // 3. Install dependencies cleanly (180s deadline)
+    runCmd('npm ci', cloneDir, 180_000, 'npm_ci_completed');
     stepsCompleted.push('npm_ci_completed');
 
-    // 4. Run onboarding documentation contract check
-    exec('npm run check:onboarding-docs', cloneDir);
+    // 4. Run onboarding documentation contract check (30s deadline)
+    runCmd('npm run check:onboarding-docs', cloneDir, 30_000, 'onboarding_doc_check_passed');
     stepsCompleted.push('onboarding_doc_check_passed');
 
-    // 5. Verify documented example source and test paths exist
+    // 5. Verify documented example source and test paths exist (15s deadline)
     const docSourcePath = path.join(cloneDir, 'apps/admin-cms/src/components/admin-shell/navigation.ts');
     const docTestPath = path.join(cloneDir, 'apps/admin-cms/src/components/admin-shell/navigation.test.ts');
     if (!fs.existsSync(docSourcePath) || !fs.existsSync(docTestPath)) {
@@ -46,18 +55,18 @@ export function runOnboardingWorkflowRehearsal(repoRoot = path.resolve(__dirname
     }
     stepsCompleted.push('example_paths_verified');
 
-    // 6. Run targeted test command from docs/first-contribution.md
-    exec('npm run test:run --workspace=apps/admin-cms -- src/components/admin-shell/navigation.test.ts', cloneDir);
+    // 6. Run targeted test command from docs/first-contribution.md (60s deadline)
+    runCmd('npm run test:run --workspace=apps/admin-cms -- src/components/admin-shell/navigation.test.ts', cloneDir, 60_000, 'targeted_test_passed');
     stepsCompleted.push('targeted_test_passed');
 
-    // 7. Create a temporary feature branch with an approved prefix
+    // 7. Create a temporary feature branch with an approved prefix (15s deadline)
     const tempBranch = 'fix/rehearsal-temp-nav';
-    exec(`git checkout -b ${tempBranch}`, cloneDir);
+    runCmd(`git checkout -b ${tempBranch}`, cloneDir, 15_000, 'feature_branch_created');
     stepsCompleted.push('feature_branch_created');
 
-    // 8. Configure synthetic local-only Git identity for rehearsal
-    exec('git config user.name "Rehearsal Bot"', cloneDir);
-    exec('git config user.email "rehearsal@capstone.test"', cloneDir);
+    // 8. Configure synthetic local-only Git identity for rehearsal (15s deadline)
+    runCmd('git config user.name "Rehearsal Bot"', cloneDir, 15_000, 'git_identity_configured');
+    runCmd('git config user.email "rehearsal@capstone.test"', cloneDir, 15_000, 'git_identity_configured');
 
     // 9. Make a harmless, reversible modification to a documented onboarding file
     const startHerePath = path.join(cloneDir, 'START_HERE.md');
@@ -65,22 +74,22 @@ export function runOnboardingWorkflowRehearsal(repoRoot = path.resolve(__dirname
     fs.writeFileSync(startHerePath, `${startHereContent}\n<!-- Rehearsal Comment -->\n`);
     stepsCompleted.push('harmless_change_made');
 
-    // 10. Stage single explicit path (git add START_HERE.md)
-    exec('git add START_HERE.md', cloneDir);
+    // 10. Stage single explicit path (git add START_HERE.md) (15s deadline)
+    runCmd('git add START_HERE.md', cloneDir, 15_000, 'explicit_path_staged');
     stepsCompleted.push('explicit_path_staged');
 
-    // 11. Inspect git diff --cached and confirm unrelated files are not staged
+    // 11. Inspect git diff --cached and confirm unrelated files are not staged (15s deadline)
     const cachedDiff = execSync('git diff --cached --name-only', { cwd: cloneDir, encoding: 'utf8' }).trim();
     if (cachedDiff !== 'START_HERE.md') {
       throw new Error(`Unexpected files staged in rehearsal: ${cachedDiff}`);
     }
     stepsCompleted.push('cached_diff_verified');
 
-    // 12. Create local commit
-    exec('git commit -m "docs(rehearsal): verify explicit staging workflow"', cloneDir);
+    // 12. Create local commit (15s deadline)
+    runCmd('git commit -m "docs(rehearsal): verify explicit staging workflow"', cloneDir, 15_000, 'local_commit_created');
     stepsCompleted.push('local_commit_created');
 
-    // 13. Verify commit contains only intended path and migrations 0001-0008 are untouched
+    // 13. Verify commit contains only intended path and migrations 0001-0008 are untouched (15s deadline)
     const commitFiles = execSync('git show --stat --name-only --format="" HEAD', { cwd: cloneDir, encoding: 'utf8' }).trim();
     if (commitFiles !== 'START_HERE.md') {
       throw new Error(`Commit contained unexpected files: ${commitFiles}`);
@@ -91,7 +100,7 @@ export function runOnboardingWorkflowRehearsal(repoRoot = path.resolve(__dirname
     }
     stepsCompleted.push('commit_integrity_verified');
 
-    // 14. Verify local credentials / .env files are not tracked
+    // 14. Verify local credentials / .env files are not tracked (15s deadline)
     const trackedCreds = execSync('git ls-files apps/admin-cms/.env.local apps/admin-cms/.local-users.json', { cwd: cloneDir, encoding: 'utf8' }).trim();
     if (trackedCreds) {
       throw new Error(`Local credential files tracked in rehearsal: ${trackedCreds}`);
