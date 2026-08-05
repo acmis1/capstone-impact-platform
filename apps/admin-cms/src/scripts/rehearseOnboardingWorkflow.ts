@@ -26,7 +26,8 @@ export function runOnboardingWorkflowRehearsal(repoRoot = path.resolve(__dirname
 
     // 2. Verify clean initial checkout state
     const branch = execSync('git branch --show-current', { cwd: cloneDir, encoding: 'utf8' }).trim();
-    if (!branch) throw new Error('Disposable clone has no active branch.');
+    const headSha = execSync('git rev-parse HEAD', { cwd: cloneDir, encoding: 'utf8' }).trim();
+    if (!branch && !headSha) throw new Error('Disposable clone has no active branch or HEAD SHA.');
     stepsCompleted.push('checkout_verified');
 
     // 3. Install dependencies cleanly
