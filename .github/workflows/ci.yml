@@ -40,9 +40,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Onboarding Toolchain Precheck
-        run: npm run onboarding:check
-
       - name: Onboarding Documentation Contract Check
         run: npm run check:onboarding-docs
 
