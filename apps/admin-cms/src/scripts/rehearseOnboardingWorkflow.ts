@@ -33,9 +33,9 @@ export function runOnboardingWorkflowRehearsal(repoRoot = path.resolve(__dirname
     exec('npm ci', cloneDir);
     stepsCompleted.push('npm_ci_completed');
 
-    // 4. Run onboarding toolchain precheck
-    exec('npm run onboarding:check', cloneDir);
-    stepsCompleted.push('onboarding_precheck_passed');
+    // 4. Run onboarding documentation contract check
+    exec('npm run check:onboarding-docs', cloneDir);
+    stepsCompleted.push('onboarding_doc_check_passed');
 
     // 5. Verify documented example source and test paths exist
     const docSourcePath = path.join(cloneDir, 'apps/admin-cms/src/components/admin-shell/navigation.ts');
