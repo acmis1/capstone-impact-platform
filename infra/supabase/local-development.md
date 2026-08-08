@@ -8,7 +8,7 @@ This guide documents the canonical, local-only Supabase development workflow for
 - **No Supabase Organization Membership Required:** Developers do not need access to hosted Supabase, Duda, Render, or Vercel dashboards to build, test, and run the application locally.
 - **Isolated Local State:** All database tables, authentication identities, storage buckets, and Mailpit email captures run on `http://127.0.0.1`.
 - **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real participant or stakeholder PII or credentials are used or committed.
-- **Deterministic Migration Replay:** Running `npm run supabase:reset` replays all 8 timestamped migrations from `infra/supabase/migrations/` in strict ascending order, ending with `20260803180000_transactional_review_actions.sql` *(migrations 0007 and 0008 are repository/local-only and not applied to hosted staging)*.
+- **Deterministic Migration Replay:** Running `npm run supabase:reset` replays all 9 timestamped migrations from `infra/supabase/migrations/` in strict ascending order, ending with `20260808170000_transactional_project_metadata_update.sql` *(migrations 0007 through 0009 are repository/local-only and not applied to hosted staging; migration 0009 remains draft in PR #40)*.
 - **Verification Strategy & Scope:**
   - Static migration tests inspect committed SQL contracts.
   - Runtime verification inspects the actual local database reset, live schema, policy semantics, exact table-grant matrix, function execution privileges, storage buckets, and real password logins for all three synthetic accounts.
@@ -50,7 +50,7 @@ The `npm run setup:local` runner automatically executes these diagnostic steps i
 5. `npm run supabase:users:local` — Provision synthetic `admin`, `reviewer`, and `editor` staff accounts
 6. `npm run supabase:verify:local` — Verify loopback connectivity, schema, grants, RLS, storage, and password logins
 
-*(Note: `setup:local` is safe and idempotent to rerun. Use `npm run supabase:reset` separately only for an intentional clean database reconstruction that replays all 8 migrations from scratch.)*
+*(Note: `setup:local` is safe and idempotent to rerun. Use `npm run supabase:reset` separately only for an intentional clean database reconstruction that replays all 9 migrations from scratch.)*
 
 ---
 
@@ -64,7 +64,7 @@ When onboarding a new developer or testing on a fresh machine:
 - [ ] `npm ci` completes without workspace errors.
 - [ ] `npm run onboarding:check` passes all 12 prechecks.
 - [ ] `npm run supabase:start` launches local container suite.
-- [ ] `npm run supabase:reset` replays all 8 migrations cleanly.
+- [ ] `npm run supabase:reset` replays all 9 migrations cleanly.
 - [ ] `npm run supabase:seed:buckets` provisions local buckets and poster fixtures.
 - [ ] `npm run supabase:env:local` creates `apps/admin-cms/.env.local`.
 - [ ] `npm run supabase:users:local` provisions synthetic `admin`, `reviewer`, and `editor` accounts.
@@ -107,7 +107,7 @@ No emails leave your machine during local development.
 2. `npm ci`: Added 532 packages cleanly.
 3. `npm run onboarding:check`: **PASS** (12/12 automated prechecks passed).
 4. `npm run supabase:start`: Container stack started cleanly.
-5. `npm run supabase:reset`: Replayed all 7 database migrations (`0001` through `0007`) in strict timestamp order *(historical recorded log from initial 7-migration onboarding run; current baseline replays all 8 migrations `0001` through `0008`)*.
+5. `npm run supabase:reset`: Replayed all 7 database migrations (`0001` through `0007`) in strict timestamp order *(historical recorded log from initial 7-migration onboarding run; current baseline replays all 9 migrations `0001` through `0009`)*.
 6. `npm run supabase:seed:buckets`: Created 3 local storage buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) and seeded 2 poster fixtures.
 7. `npm run supabase:env:local`: Wrote loopback configuration to `apps/admin-cms/.env.local`.
 8. `npm run supabase:users:local`: Provisioned 3 synthetic staff accounts (`local.admin`, `local.reviewer`, `local.editor`).

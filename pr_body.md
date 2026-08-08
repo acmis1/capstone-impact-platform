@@ -19,7 +19,7 @@ Cross-platform and runtime acceptance is being rerun after CI lifecycle correcti
 - **Engineering Target Status**: `AUTOMATED_ONBOARDING_COMPLETE`
 - **Verified Automated Gates**:
   - **Automated Windows Acceptance**: **PASSED** (`AUTOMATED_ONBOARDING_VERIFIED`) — Clean clone, toolchain precheck, Docker container launch, migration replay, synthetic user generation, and live RLS/grant verification passed locally.
-  - **Ubuntu 24.04 GitHub Actions Integration Acceptance**: **PASSED** (`AUTOMATED_ONBOARDING_VERIFIED`) — Disposable Supabase stack startup, 8-migration replay, Next.js app smoke test (`/api/health` & `/login` HTTP 200 OK), and full verification suite passed on CI runners.
+  - **Ubuntu 24.04 GitHub Actions Integration Acceptance**: **PASSED** (`AUTOMATED_ONBOARDING_VERIFIED`) — Disposable Supabase stack startup, 9-migration replay, Next.js app smoke test (`/api/health` & `/login` HTTP 200 OK), and full verification suite passed on CI runners.
   - **Cross-Platform Static Acceptance Matrix**: **PASSED** (`ubuntu-latest`, `windows-latest`, `macos-latest`) — Toolchain precheck, onboarding doc contracts, contributor workflow rehearsal, terminology check, YAML check, markdown links check, public feed schema check, unit & security tests, TypeScript typecheck, Next.js build, working-tree diff check, and branch diff check.
 - **Verification Boundaries**:
   - **Human Onboarding**: No independent human onboarding trial was performed (`HUMAN_ONBOARDING_NOT_PERFORMED`). Human trials are informational and not blocking release criteria.
@@ -47,6 +47,6 @@ Cross-platform and runtime acceptance is being rerun after CI lifecycle correcti
 
 ## Safety & Governance Assertions
 
-- [x] **Database Migrations Unchanged**: Timestamped migrations `0001` through `0008` in `infra/supabase/migrations/` remain strictly untouched.
+- [x] **Database Migrations Unchanged**: Timestamped migrations `0001` through `0009` in `infra/supabase/migrations/` remain strictly untouched.
 - [x] **Hosted Systems Untouched**: Zero private credentials, API keys, or hosted Supabase/Duda/Render/Vercel resources were accessed or modified.
 - [x] **No Auto-Merge / Maintainer Review Required**: The PR remains OPEN targeting `main` for maintainer review.
