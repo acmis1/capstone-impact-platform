@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ProjectMetadataInput, ProjectMetadataView } from './projectMetadata';
-import { ProjectMetadataGateway, SupabaseProjectMetadataGateway, resolveUniqueLookupId, saveProjectMetadata } from './projectMetadataService';
+import { ProjectMetadataGateway, SupabaseProjectMetadataGateway, loadProjectMetadataEditorData, resolveUniqueLookupId, saveProjectMetadata } from './projectMetadataService';
 
 const ids = { program: 'a0000000-0000-4000-8000-000000000001', discipline: 'b0000000-0000-4000-8000-000000000001', category: 'c0000000-0000-4000-8000-000000000001' };
 const input: ProjectMetadataInput = { publicId: 'synthetic-project', title: 'Updated title', summary: 'Updated summary', background: 'Updated background', solution: 'Updated solution', year: 2026, programId: ids.program, disciplineIds: [ids.discipline], industryCategoryIds: [ids.category], expectedUpdatedAt: '2026-01-01T00:00:00.000Z' };
@@ -20,6 +20,29 @@ describe('project metadata atomic persistence workflow', () => {
     const gateway = new FakeGateway();
     expect(await saveProjectMetadata(gateway, metadata)).toEqual({ ok: true, metadata });
     expect(gateway.calls).toEqual(['lookups', 'rpc']);
+  });
+  it('accepts a successful RPC response containing PostgreSQL UUID-shaped lookup IDs', async () => {
+    const zeroVersion = 'a0000000-0000-0000-0000-000000000001';
+    const gateway = new FakeGateway();
+    const zeroVersionMetadata = {
+      ...metadata,
+      programId: zeroVersion,
+      disciplineIds: [zeroVersion],
+      industryCategoryIds: [zeroVersion],
+    };
+    gateway.options = {
+      programs: [{ id: zeroVersion, name: 'Program' }],
+      disciplines: [{ id: zeroVersion, name: 'Discipline' }],
+      industryCategories: [{ id: zeroVersion, name: 'Industry' }],
+    };
+    gateway.response = { resultCode: 'SUCCESS', metadata: zeroVersionMetadata };
+    expect(await saveProjectMetadata(gateway, zeroVersionMetadata)).toEqual({ ok: true, metadata: zeroVersionMetadata });
+  });
+  it('does not expose the database-only project id to the strict editor mutation payload', async () => {
+    const gateway = new FakeGateway();
+    const editorData = await loadProjectMetadataEditorData(gateway, metadata.publicId);
+    expect(editorData).toEqual({ metadata, ...gateway.options });
+    expect(editorData?.metadata).not.toHaveProperty('id');
   });
   it.each([
     ['programId', { programId: 'a0000000-0000-4000-8000-000000000002' }],

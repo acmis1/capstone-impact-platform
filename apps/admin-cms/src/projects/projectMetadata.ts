@@ -12,7 +12,11 @@ export const PROJECT_METADATA_LIMITS = {
   maximumYear: 2100,
 } as const;
 
-const UUID = z.string().uuid();
+/** PostgreSQL accepts canonical UUID text regardless of RFC version/variant bits. */
+export const postgresUuidSchema = z.string().regex(
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  'Enter a valid UUID.',
+);
 const normalisedText = (maximum: number, required: boolean) => z.string()
   .transform((value) => value.trim())
   .refine((value) => !required || value.length > 0, 'This field is required.')
@@ -28,10 +32,10 @@ export const projectMetadataInputSchema = z.object({
     .transform((value) => Number(value))
     .refine((value) => value >= PROJECT_METADATA_LIMITS.minimumYear && value <= PROJECT_METADATA_LIMITS.maximumYear,
       `Year must be between ${PROJECT_METADATA_LIMITS.minimumYear} and ${PROJECT_METADATA_LIMITS.maximumYear}.`),
-  programId: UUID,
-  disciplineIds: z.array(UUID).min(1, 'Select at least one discipline.')
+  programId: postgresUuidSchema,
+  disciplineIds: z.array(postgresUuidSchema).min(1, 'Select at least one discipline.')
     .refine((ids) => new Set(ids).size === ids.length, 'Discipline selections must be unique.'),
-  industryCategoryIds: z.array(UUID).min(1, 'Select at least one industry category.')
+  industryCategoryIds: z.array(postgresUuidSchema).min(1, 'Select at least one industry category.')
     .refine((ids) => new Set(ids).size === ids.length, 'Industry-category selections must be unique.'),
   expectedUpdatedAt: z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'Expected version must be a timestamp.'),
 }).strict();

@@ -18,6 +18,16 @@ describe('project metadata contract', () => {
     expect(result.year).toBe(2026);
   });
 
+  it('accepts PostgreSQL UUID-shaped lookup IDs with a zero version nibble', () => {
+    const zeroVersion = 'a0000000-0000-0000-0000-000000000001';
+    expect(projectMetadataInputSchema.safeParse({
+      ...validInput(),
+      programId: zeroVersion,
+      disciplineIds: [zeroVersion],
+      industryCategoryIds: [zeroVersion],
+    }).success).toBe(true);
+  });
+
   it.each([
     ['title', { title: '   ' }], ['summary', { summary: '   ' }], ['year', { year: '20x6' }], ['program UUID', { programId: 'not-a-uuid' }],
     ['duplicate discipline', { disciplineIds: [ids.discipline, ids.discipline] }], ['duplicate category', { industryCategoryIds: [ids.category, ids.category] }],

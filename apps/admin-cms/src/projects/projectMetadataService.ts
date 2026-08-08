@@ -8,15 +8,16 @@ import {
   ProjectMetadataView,
   metadataResultMessage,
   projectMetadataInputSchema,
+  postgresUuidSchema,
 } from './projectMetadata';
 
 type ProjectSnapshot = ProjectMetadataView & { id: string };
 type MetadataOptions = { programs: MetadataOption[]; disciplines: MetadataOption[]; industryCategories: MetadataOption[] };
 
-const uuidArray = z.array(z.string().uuid());
+const uuidArray = z.array(postgresUuidSchema);
 const metadataResponseSchema = z.object({
   publicId: z.string().min(1), title: z.string(), summary: z.string(), background: z.string(), solution: z.string(),
-  year: z.string().regex(/^\d{4}$/), programId: z.string().uuid(), disciplineIds: uuidArray, industryCategoryIds: uuidArray,
+  year: z.string().regex(/^\d{4}$/), programId: postgresUuidSchema, disciplineIds: uuidArray, industryCategoryIds: uuidArray,
   expectedUpdatedAt: z.string().refine((value) => !Number.isNaN(Date.parse(value))),
 }).strict();
 const rpcResponseSchema = z.object({
@@ -47,8 +48,23 @@ function lookupFieldErrors(input: ProjectMetadataInput, options: MetadataOptions
 
 export async function loadProjectMetadataEditorData(gateway: ProjectMetadataGateway, publicId: string): Promise<ProjectMetadataEditorData | null> {
   const options = await gateway.loadOptions();
-  const metadata = await gateway.loadProject(publicId, options);
-  return metadata ? { metadata, ...options } : null;
+  const snapshot = await gateway.loadProject(publicId, options);
+  if (!snapshot) return null;
+
+  // The database-only primary key must not cross into the strict mutation payload.
+  const metadata: ProjectMetadataView = {
+    publicId: snapshot.publicId,
+    title: snapshot.title,
+    summary: snapshot.summary,
+    background: snapshot.background,
+    solution: snapshot.solution,
+    year: snapshot.year,
+    programId: snapshot.programId,
+    disciplineIds: snapshot.disciplineIds,
+    industryCategoryIds: snapshot.industryCategoryIds,
+    expectedUpdatedAt: snapshot.expectedUpdatedAt,
+  };
+  return { metadata, ...options };
 }
 
 export async function saveProjectMetadata(gateway: ProjectMetadataGateway, rawInput: unknown): Promise<ProjectMetadataActionResult> {
