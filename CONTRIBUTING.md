@@ -97,9 +97,9 @@ npm run supabase:stop
 
 ---
 
-9. `20260808170000_transactional_project_metadata_update.sql` — Atomic, service-role-only project metadata update RPC *(PR #40 draft; local/repository-only; not applied to hosted staging)*
+9. `20260808170000_transactional_project_metadata_update.sql` — Atomic, service-role-only project metadata update RPC *(repository/local-only; not applied to hosted staging)*
 
-Migrations `0001` through `0008` remain unchanged. Migration `0009` is local/repository-only while PR #40 remains draft; it must not be represented as hosted-ready or deployed.
+Migrations `0001` through `0008` remain unchanged. Migration `0009` introduced the atomic, service-role-only project metadata transaction; it remains repository/local-only and must not be represented as hosted-ready or deployed.
 
 ## F. Definition of Done
 

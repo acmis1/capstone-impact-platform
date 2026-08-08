@@ -215,7 +215,7 @@ npm run verify:all
 
 ## 10. Database Migration Rules
 
-1. **Append-Only Policy**: Existing migrations `0001` through `0009` in `infra/supabase/migrations/` are merged and immutable. **Never modify, rename, or delete migrations `0001` through `0009`.** Migration `0009` is `20260808170000_transactional_project_metadata_update.sql`, the atomic project metadata RPC; it remains local/repository-only in draft PR #40 and is not applied to hosted staging.
+1. **Append-Only Policy**: Existing migrations `0001` through `0009` in `infra/supabase/migrations/` are merged and immutable. **Never modify, rename, or delete migrations `0001` through `0009`.** Migration `0009` is `20260808170000_transactional_project_metadata_update.sql`, the atomic project metadata RPC; it remains repository/local-only and is not applied to hosted staging.
 2. **New Migrations**: If your feature requires schema, index, RLS, or function changes:
    - Create a new 14-digit timestamped file: `infra/supabase/migrations/YYYYMMDDHHMMSS_description.sql`.
    - Replay locally using `npm run supabase:reset`.

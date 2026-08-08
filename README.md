@@ -21,7 +21,7 @@ The target workflow needs structured submissions, validation, review, archival a
 | Admin/CMS foundation | Authenticated internal shell, protected routes and operational project dashboard are implemented. |
 | Project index | Server-side search, filters, whitelisted sorting, exact-count pagination and deterministic ordering are implemented. |
 | Review | Project inspection and atomic, transaction-backed review actions (`approve`, `request_changes`, `archive`) via PostgreSQL RPC `perform_project_review_action` are implemented. |
-| Project metadata editor | Draft PR #40 adds a page-owned editor backed by one service-role-only PostgreSQL transaction; it remains unmerged, hosted-unapplied, and pending manual browser acceptance. Browser Back/Forward interception is not claimed. |
+| Project metadata editor | The Admin/CMS includes a page-owned editor backed by one atomic, service-role-only PostgreSQL transaction. Hosted deployment and broader staff acceptance remain separate activities. Browser Back/Forward interception is not claimed. |
 | Ingestion | Package parsing, metadata/file validation, import-batch tracking and import-review foundations are implemented. |
 | Media and feed | Private draft storage, validated promotion foundations and public-eligible JSON feed compilation are implemented. |
 | Local Supabase | Pinned CLI 2.109.1, 9 timestamped migrations, 3 local storage buckets, synthetic staff provisioning and automated verifiers implemented. *(Migrations 0007 through 0009 are repository/local only and not applied to hosted staging.)* |
@@ -145,6 +145,6 @@ Run from the repository root:
 
 Implemented foundations include the authenticated Admin/CMS shell, project index, validation, import and media workflows, reproducible local Supabase stack, shared-staging execution guardrails, key preference model and public-eligible feed compiler.
 
-Remaining work includes hosted migration history reconciliation, controlled hosted staff lifecycle tooling, interactive browser UAT matrix validation (including the draft PR #40 metadata editor), participant confirmation, preview and publication-history workflows, accessibility QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
+Remaining work includes hosted migration history reconciliation, controlled hosted staff lifecycle tooling, broader interactive browser UAT, participant confirmation, preview and publication-history workflows, accessibility QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
 
 Developer contribution policies and security boundaries are defined in [`CONTRIBUTING.md`](./CONTRIBUTING.md).

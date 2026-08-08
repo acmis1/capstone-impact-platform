@@ -13,7 +13,7 @@ The application currently owns:
 - private draft media and public-asset storage foundations;
 - public-eligible stable JSON feed compilation.
 
-It includes a draft PR #40 project metadata editor backed by one service-role-only database transaction, but that work remains unmerged, hosted-unapplied, and pending manual browser acceptance. Browser Back/Forward interception is not supported or claimed. It does not yet provide a participant portal or final confirmation workflow, integrated preview workspace, publishing/history or rollback UI, production Duda cutover, or production-readiness certification.
+It includes a project metadata editor backed by one atomic, service-role-only database transaction. Hosted deployment and broader staff acceptance remain separate activities. Browser Back/Forward interception is not supported or claimed. It does not yet provide a participant portal or final confirmation workflow, integrated preview workspace, publishing/history or rollback UI, production Duda cutover, or production-readiness certification.
 
 ## Current capability and verification
 
@@ -25,7 +25,7 @@ It includes a draft PR #40 project metadata editor backed by one service-role-on
 | Project dashboard and server-side index | Yes | Query helpers and repository behavior covered by tests | Manual responsive QA remains pending |
 | Import workflow | Foundations | Import validation and batch views implemented | Browser intake UX and spreadsheet upload are not complete |
 | Review transitions | Yes | Workflow tests, static contract tests, and atomic RPC performReviewAction route implemented | Full reviewer/editor UAT pending |
-| Project metadata editing | Draft PR #40 | Editor route/UI and one atomic metadata RPC are implemented locally | Manual browser acceptance and merge remain pending |
+| Project metadata editing | Yes | Editor route/UI and one atomic metadata RPC are implemented locally | Hosted deployment and broader staff acceptance remain separate |
 | Media validation/storage | Foundations | Offline media validation tests; private-to-public storage functions exist | End-to-end staging and production verification pending |
 | Public-eligible feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled public cutover pending |
 | Duda integration | Design boundary | Stable-feed consumer is documented | Live Duda connection remains isolated |
@@ -182,7 +182,7 @@ The migration set is manually governed for authorized isolated environments. It 
 - [`20260719165119_fix_initial_admin_bootstrap_runtime.sql`](../../infra/supabase/migrations/20260719165119_fix_initial_admin_bootstrap_runtime.sql) corrects the bootstrap runtime migration.
 - [`20260803174000_harden_function_execute_defaults.sql`](../../infra/supabase/migrations/20260803174000_harden_function_execute_defaults.sql) establishes function execution default privilege revokes and RLS helper guard. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
 - [`20260803180000_transactional_review_actions.sql`](../../infra/supabase/migrations/20260803180000_transactional_review_actions.sql) establishes atomic `public.perform_project_review_action` PostgreSQL RPC function for transaction-backed project review status updates and audit logging. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
-- [`20260808170000_transactional_project_metadata_update.sql`](../../infra/supabase/migrations/20260808170000_transactional_project_metadata_update.sql) establishes one atomic, service-role-only `public.update_project_metadata` transaction for metadata scalar and mapping writes. *(Draft PR #40; local/repository-only; not applied to hosted staging.)*
+- [`20260808170000_transactional_project_metadata_update.sql`](../../infra/supabase/migrations/20260808170000_transactional_project_metadata_update.sql) establishes one atomic, service-role-only `public.update_project_metadata` transaction for metadata scalar and mapping writes. *(Repository/local-only; not applied to hosted staging.)*
 
 See the [Supabase migration overview](../../infra/supabase/README.md), [manual apply guide](../../infra/supabase/manual-apply-guide.md), [staging reconciliation runbook](../../infra/supabase/staging-reconciliation-runbook.md) and [staging authentication verification runbook](../../infra/supabase/staging-auth-verification.md) before authorized operations.
 
@@ -209,11 +209,11 @@ Review mutations also require a same-origin `Origin` header. Audit attribution i
 | `/auth/confirm/accept` | Invitation session | Complete the invitation acceptance step. | Implemented |
 | `/auth/set-password` | Invitation session | Set a password, then terminate the invitation session. | Implemented |
 | `/admin` | Authenticated provisioned Admin/CMS staff | Dashboard metrics, filters, search, sorting and pagination. | Implemented; manual UI QA pending |
-| `/admin/projects/[publicId]` | Authenticated provisioned Admin/CMS staff | Inspect a project, edit metadata, and access controlled review actions. | Draft PR #40; manual browser acceptance pending |
+| `/admin/projects/[publicId]` | Authenticated provisioned Admin/CMS staff | Inspect a project, edit metadata, and access controlled review actions. | Implemented; hosted deployment and broader staff acceptance remain separate |
 | `/admin/imports` | Authenticated provisioned Admin/CMS staff | List import batches and validation summaries. | Implemented |
 | `/admin/imports/[batchId]` | Authenticated provisioned Admin/CMS staff | Inspect a batch, linked project and validation flags. | Implemented |
 
-There is no implemented participant project-confirmation workflow or route, publishing-history route, or settings route. The metadata editor remains draft in PR #40 pending manual browser acceptance.
+There is no implemented participant project-confirmation workflow or route, publishing-history route, or settings route. The metadata editor is implemented locally; hosted deployment and broader staff acceptance remain separate activities.
 
 ## API routes
 
@@ -290,10 +290,10 @@ The offline suite covers authentication and authorization helpers, workflow tran
 
 ## Known limitations and production gaps
 
-- The metadata editor remains draft in PR #40; browser Back/Forward interception is not supported or claimed, and manual browser acceptance remains pending.
+- The metadata editor is implemented locally; browser Back/Forward interception is not supported or claimed, and hosted deployment plus broader staff acceptance remain pending.
 - Reviewer/editor permission-matrix UAT remains pending.
 - Project detail is the next major UI modernization area.
-- PostgreSQL RPC migration 0009 is committed locally for the draft metadata editor; it has not been applied to hosted staging, and hosted reconciliation remains pending.
+- PostgreSQL RPC migration 0009 introduced the local metadata editor transaction; it has not been applied to hosted staging, and hosted reconciliation remains pending.
 - Participant confirmation, integrated preview, publishing history and rollback UI are pending.
 - Live Duda cutover is pending.
 - Authenticated browser, responsive, accessibility and screen-reader validation remain incomplete.
