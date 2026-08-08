@@ -145,6 +145,9 @@ jobs:
           npm run supabase:verify:local
           test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 9
 
+      - name: Verify atomic project metadata runtime behavior
+        run: npm run verify:metadata-runtime --workspace=apps/admin-cms
+
       - name: Admin Application Smoke Test (/api/health & /login 200 OK)
         run: npm run check:app-smoke
 
