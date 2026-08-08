@@ -12,6 +12,7 @@ import { Project } from '../../../../domain/project';
 import { requireAdmin } from '../../../../auth/requireAdmin';
 import { hasPermission } from '../../../../auth/permissions';
 import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetadataEditor';
+import { GuardedProjectBackLink, ProjectMetadataNavigationProvider } from '../../../../components/admin/ProjectMetadataNavigation';
 import { SupabaseProjectMetadataGateway, loadProjectMetadataEditorData } from '../../../../projects/projectMetadataService';
 import { saveProjectMetadataAction } from './actions';
 
@@ -158,6 +159,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   const allowedActions = getAllowedReviewActions(project.status);
 
   return (
+    <ProjectMetadataNavigationProvider>
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#0B0F19',
@@ -180,7 +182,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           paddingBottom: '1rem',
         }}>
           <div>
-            <Link href="/admin" style={{
+            <GuardedProjectBackLink href="/admin" style={{
               color: '#3B82F6',
               textDecoration: 'none',
               fontSize: '0.9rem',
@@ -190,7 +192,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               marginBottom: '0.5rem'
             }}>
               ← Back to Staging Dashboard
-            </Link>
+            </GuardedProjectBackLink>
             <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Project Ingestion Review</h1>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -543,5 +545,6 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
       </div>
     </div>
+    </ProjectMetadataNavigationProvider>
   );
 }

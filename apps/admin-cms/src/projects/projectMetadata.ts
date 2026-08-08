@@ -33,7 +33,7 @@ export const projectMetadataInputSchema = z.object({
     .refine((ids) => new Set(ids).size === ids.length, 'Discipline selections must be unique.'),
   industryCategoryIds: z.array(UUID).min(1, 'Select at least one industry category.')
     .refine((ids) => new Set(ids).size === ids.length, 'Industry-category selections must be unique.'),
-  expectedUpdatedAt: z.string().datetime(),
+  expectedUpdatedAt: z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'Expected version must be a timestamp.'),
 }).strict();
 
 export type ProjectMetadataInput = z.infer<typeof projectMetadataInputSchema>;
@@ -44,7 +44,6 @@ export type ProjectMetadataErrorCode =
   | 'PROJECT_NOT_FOUND'
   | 'STALE_VERSION'
   | 'PERSISTENCE_FAILED'
-  | 'ROLLBACK_FAILED'
   | 'INTERNAL_FAILURE';
 
 export type MetadataOption = { id: string; name: string };
