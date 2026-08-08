@@ -9,6 +9,11 @@ import { StagingReviewActions } from '../../../../components/admin/StagingReview
 import { getAllowedReviewActions } from '../../../../workflow/projectWorkflow';
 import { createSupabaseAdminClientCore } from '../../../../lib/supabase/adminCore';
 import { Project } from '../../../../domain/project';
+import { requireAdmin } from '../../../../auth/requireAdmin';
+import { hasPermission } from '../../../../auth/permissions';
+import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetadataEditor';
+import { SupabaseProjectMetadataGateway, loadProjectMetadataEditorData } from '../../../../projects/projectMetadataService';
+import { saveProjectMetadataAction } from './actions';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -24,12 +29,22 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let project: Project | null = null;
   let loadError: string | null = null;
   let auditRecords: Array<Record<string, unknown>> = [];
+  let metadataEditorData: Awaited<ReturnType<typeof loadProjectMetadataEditorData>> = null;
+  let canEditMetadata = false;
 
   try {
     const repository = new SupabaseProjectRepository();
     project = await repository.getProjectByPublicId(publicId);
 
     if (project) {
+      const [adminContext, editorData] = await Promise.all([
+        requireAdmin(),
+        loadProjectMetadataEditorData(new SupabaseProjectMetadataGateway(createSupabaseAdminClientCore()), publicId),
+      ]);
+      canEditMetadata = hasPermission(adminContext.permissions, 'projects.edit');
+      metadataEditorData = editorData;
+      if (!metadataEditorData) throw new Error('Project metadata editor data unavailable');
+
       // Fetch recent approval_records for this project
       const supabase = createSupabaseAdminClientCore();
       
@@ -53,9 +68,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       }
     }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[Staging Project Detail Failure]:`, message);
-    loadError = message;
+    console.error('[Project detail load failure]', error instanceof Error ? error.message : 'unknown');
+    loadError = 'Project details are temporarily unavailable.';
   }
 
   if (loadError) {
@@ -79,23 +93,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           border: '1px solid rgba(239, 68, 68, 0.2)',
           textAlign: 'center',
         }}>
-          <h3 style={{ margin: '0 0 1rem 0' }}>Staging Database Connection Offline</h3>
+          <h3 style={{ margin: '0 0 1rem 0' }}>Project Details Unavailable</h3>
           <p style={{ color: '#D1D5DB', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '2rem' }}>
-            Next.js admin route failed to query project details from the staging database. Ensure that the migrations are applied and credentials set inside apps/admin-cms/.env.local.
+            Project details could not be loaded. Please try again shortly.
           </p>
-          <div style={{
-            backgroundColor: '#0F172A',
-            padding: '1rem',
-            borderRadius: '8px',
-            fontFamily: 'Courier New, monospace',
-            fontSize: '0.85rem',
-            textAlign: 'left',
-            color: '#F87171',
-            overflowX: 'auto',
-            marginBottom: '2rem',
-          }}>
-            {loadError}
-          </div>
           <Link href="/admin" style={{
             color: '#FFFFFF',
             backgroundColor: '#3B82F6',
@@ -211,7 +212,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             ⚠️ ADMINISTRATIVE REVIEW STAGING SANDBOX
           </h4>
           <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: '1.5', color: '#D1D5DB' }}>
-            This detail review operates purely on <strong>Staging Data</strong>. No active coordinator or participant personal folders are parsed. Live public feed showcase mirrors (Duda presentation layers) remain disconnected. Editing, publishing, and archiving actions are locked during this summer semester development.
+            This detail review operates purely on <strong>Staging Data</strong>. No active coordinator or participant personal folders are parsed. Live public feed showcase mirrors (Duda presentation layers) remain disconnected. Publishing and archiving actions remain locked during this summer semester development.
           </p>
         </div>
 
@@ -222,6 +223,19 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             currentStatus={project.status}
             allowedActions={allowedActions}
           />
+        </ProjectDetailSection>
+
+        <ProjectDetailSection title="Project Metadata" borderColor="#3B82F6">
+          {metadataEditorData && (
+            <ProjectMetadataEditor
+              initialMetadata={metadataEditorData.metadata}
+              programs={metadataEditorData.programs}
+              disciplines={metadataEditorData.disciplines}
+              industryCategories={metadataEditorData.industryCategories}
+              canEdit={canEditMetadata}
+              saveAction={saveProjectMetadataAction}
+            />
+          )}
         </ProjectDetailSection>
 
         {/* B. Project Overview */}
