@@ -18,18 +18,21 @@ export interface ImportPackageManifest {
   layoutConfig: Record<string, unknown>;
 }
 
-export interface ImportPackageFile {
+export interface ImportPackageFileMetadata {
   fileName: string;
   fileSizeBytes: number;
   mimeType: string;
+}
+
+export interface ImportPackageFile extends ImportPackageFileMetadata {
   content: Buffer;
 }
 
-export interface ImportPackageParseResult {
+export interface ImportPackageParseResult<TFile extends ImportPackageFileMetadata = ImportPackageFile> {
   manifest: ImportPackageManifest;
-  posterImage: ImportPackageFile | null;
-  posterPdf: ImportPackageFile | null;
-  snapshot1: ImportPackageFile | null;
+  posterImage: TFile | null;
+  posterPdf: TFile | null;
+  snapshot1: TFile | null;
 }
 
 export interface ImportPackageValidationResult {

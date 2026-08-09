@@ -4,16 +4,18 @@ export interface ValidationResult {
   warnings: string[];
 }
 
+export const MEDIA_VALIDATION_LIMITS = {
+  MAX_IMAGE_SIZE_BYTES: 5 * 1024 * 1024,  // 5 MB
+  MAX_PDF_SIZE_BYTES: 20 * 1024 * 1024,   // 20 MB
+  DEFAULT_MAX_SIZE_BYTES: 5 * 1024 * 1024, // 5 MB
+} as const;
+
 const ALLOWED_MIME_TYPES = new Set([
   'image/png',
   'image/jpeg',
   'image/webp',
   'application/pdf'
 ]);
-
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
-const MAX_PDF_SIZE = 20 * 1024 * 1024;  // 20 MB
-const DEFAULT_MAX_SIZE = 5 * 1024 * 1024; // 5 MB
 
 /**
  * Validates a media asset file before staging upload.
@@ -50,15 +52,15 @@ export function validateMediaAsset(params: {
 
   // 5. Size limits
   if (mimeType === 'application/pdf') {
-    if (fileSizeBytes > MAX_PDF_SIZE) {
+    if (fileSizeBytes > MEDIA_VALIDATION_LIMITS.MAX_PDF_SIZE_BYTES) {
       errors.push(`PDF file size [${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB] exceeds the maximum limit of 20 MB.`);
     }
   } else if (mimeType.startsWith('image/')) {
-    if (fileSizeBytes > MAX_IMAGE_SIZE) {
+    if (fileSizeBytes > MEDIA_VALIDATION_LIMITS.MAX_IMAGE_SIZE_BYTES) {
       errors.push(`Image file size [${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB] exceeds the maximum limit of 5 MB.`);
     }
   } else {
-    if (fileSizeBytes > DEFAULT_MAX_SIZE) {
+    if (fileSizeBytes > MEDIA_VALIDATION_LIMITS.DEFAULT_MAX_SIZE_BYTES) {
       errors.push(`File size [${(fileSizeBytes / (1024 * 1024)).toFixed(2)} MB] exceeds the maximum limit of 5 MB.`);
     }
   }
