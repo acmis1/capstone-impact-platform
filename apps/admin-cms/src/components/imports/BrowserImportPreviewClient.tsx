@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { generateUploadKey, isIgnoredSystemFile, normalizeRelativePath } from '../../import/browserSelection';
 import {
-  BrowserImportPreviewResponse,
+  BrowserImportPreviewBatch,
   buildBrowserSelectionDescriptor,
   SelectedFileDescriptor,
   SelectionManifest,
@@ -32,21 +32,45 @@ export default function BrowserImportPreviewClient() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [previewResult, setPreviewResult] = useState<BrowserImportPreviewResponse['batch'] | null>(null);
+  const [previewResult, setPreviewResult] = useState<BrowserImportPreviewBatch | null>(null);
   const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
-
-  const [selectionState, setSelectionState] = useState<BrowserImportSelectionState>(resetSelectionState());
+  const [selectionState, setRawSelectionState] = useState<BrowserImportSelectionState>(resetSelectionState());
   const [manifestCache, setManifestCache] = useState<SelectionManifest | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const preparationLockRef = useRef(false);
+  const selectionStateRef = useRef<BrowserImportSelectionState>(selectionState);
+
+  selectionStateRef.current = selectionState;
+
+  const updateSelectionState = (
+    updater:
+      | BrowserImportSelectionState
+      | ((previous: BrowserImportSelectionState) => BrowserImportSelectionState)
+  ) => {
+    setRawSelectionState((previous) => {
+      const next = typeof updater === 'function' ? updater(previous) : updater;
+      selectionStateRef.current = next;
+      return next;
+    });
+  };
+
+  const isPreparingOrLocked = selectionState.isPreparing || preparationLockRef.current;
+
   const handleFolderSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (isPreparingOrLocked) return;
+
+    const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    setApiError(null);
+    setSelectedFiles([]);
+    setSelectedRootName(null);
+    setDeclaredTotalBytes(0);
+    setDetectedPackageCount(0);
     setPreviewResult(null);
-    setSelectionState(resetSelectionState());
+    setApiError(null);
+    updateSelectionState(resetSelectionState());
     setManifestCache(null);
 
     const descriptors: SelectedFileDescriptor[] = [];
@@ -70,7 +94,6 @@ export default function BrowserImportPreviewClient() {
       return;
     }
 
-    // Pure folder-shape classification matching server rules
     const rootMetadata = descriptors.filter((d) => {
       const norm = d.originalPath;
       const parts = norm.split('/');
@@ -116,12 +139,13 @@ export default function BrowserImportPreviewClient() {
   };
 
   const handleRequestPreview = async () => {
-    if (selectedFiles.length === 0 || !selectedRootName) return;
+    if (selectedFiles.length === 0 || !selectedRootName || isPreparingOrLocked) return;
 
     setIsLoading(true);
     setApiError(null);
-    setSelectionState(resetSelectionState());
+    setPreviewResult(null);
     setManifestCache(null);
+    updateSelectionState(resetSelectionState());
 
     try {
       const descriptors: SelectedFileDescriptor[] = [];
@@ -146,7 +170,6 @@ export default function BrowserImportPreviewClient() {
         if (!descriptor) continue;
         descriptors.push(descriptor);
 
-        // Browser preview rule: Media binary files STAY in browser! Only metadata attached.
         if (lowerName === 'project-details.xlsx' || lowerName === 'project.json') {
           metadataFilesToUpload.push(file);
         }
@@ -207,7 +230,6 @@ export default function BrowserImportPreviewClient() {
         return;
       }
 
-      // Step 13: Strict Client Runtime Response Guard
       const validatedResponse = validateBrowserImportPreviewResponse(json);
       if (!validatedResponse) {
         setApiError('The preview request could not be completed. Please try again.');
@@ -217,9 +239,8 @@ export default function BrowserImportPreviewClient() {
 
       setPreviewResult(validatedResponse.batch);
       setManifestCache(manifest);
-      setSelectionState(createInitialSelectionState(validatedResponse.batch));
+      updateSelectionState(createInitialSelectionState(validatedResponse.batch));
     } catch {
-      // Step 13: Safe client error handling without raw exception exposure
       setApiError('The preview request could not be completed. Please try again.');
     } finally {
       setIsLoading(false);
@@ -227,55 +248,44 @@ export default function BrowserImportPreviewClient() {
   };
 
   const handleClearSelection = () => {
+    if (isPreparingOrLocked) return;
+
     setSelectedFiles([]);
     setSelectedRootName(null);
     setDeclaredTotalBytes(0);
     setDetectedPackageCount(0);
     setPreviewResult(null);
     setApiError(null);
-    setSelectionState(resetSelectionState());
+    updateSelectionState(resetSelectionState());
     setManifestCache(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleToggleValid = (pkgPath: string) => {
-    if (!previewResult) return;
-    setSelectionState((prev) => toggleValidPackage(prev, pkgPath, previewResult.packages));
+    if (!previewResult || isPreparingOrLocked) return;
+    updateSelectionState((prev) => toggleValidPackage(prev, pkgPath, previewResult.packages));
   };
 
   const handleToggleWarningAck = (pkgPath: string) => {
-    if (!previewResult) return;
-    setSelectionState((prev) => toggleWarningAcknowledgement(prev, pkgPath, previewResult.packages));
+    if (!previewResult || isPreparingOrLocked) return;
+    updateSelectionState((prev) => toggleWarningAcknowledgement(prev, pkgPath, previewResult.packages));
   };
 
   const handleToggleWarningSelect = (pkgPath: string) => {
-    if (!previewResult) return;
-    setSelectionState((prev) => toggleWarningPackageSelection(prev, pkgPath, previewResult.packages));
+    if (!previewResult || isPreparingOrLocked) return;
+    updateSelectionState((prev) => toggleWarningPackageSelection(prev, pkgPath, previewResult.packages));
   };
 
-  const preparationLockRef = useRef(false);
-
   const handlePrepareImport = async () => {
-    if (!previewResult || !manifestCache) return;
-
-    let latestSelectionState = selectionState;
-    const trackingSetSelectionState = (
-      updater: (prev: BrowserImportSelectionState) => BrowserImportSelectionState
-    ) => {
-      setSelectionState((prev) => {
-        const next = updater(prev);
-        latestSelectionState = next;
-        return next;
-      });
-    };
+    if (!previewResult || !manifestCache || isPreparingOrLocked) return;
 
     await runBrowserImportPreparation({
       lock: preparationLockRef,
-      currentState: selectionState,
+      currentState: selectionStateRef.current,
       previewResult,
       manifestCache,
-      getCurrentState: () => latestSelectionState,
-      setSelectionState: trackingSetSelectionState,
+      getCurrentState: () => selectionStateRef.current,
+      setSelectionState: updateSelectionState,
     });
   };
 
@@ -344,7 +354,7 @@ export default function BrowserImportPreviewClient() {
             type="file"
             ref={fileInputRef}
             onChange={handleFolderSelection}
-            disabled={isLoading || !isSupported}
+            disabled={isLoading || !isSupported || isPreparingOrLocked}
             {...({ webkitdirectory: '', directory: '' } as unknown as React.InputHTMLAttributes<HTMLInputElement>)}
             style={{ display: 'none' }}
           />
@@ -352,7 +362,7 @@ export default function BrowserImportPreviewClient() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading || !isSupported}
+            disabled={isLoading || !isSupported || isPreparingOrLocked}
             style={{
               backgroundColor: '#3B82F6',
               color: '#FFFFFF',
@@ -361,8 +371,8 @@ export default function BrowserImportPreviewClient() {
               padding: '0.75rem 1.5rem',
               fontWeight: 600,
               fontSize: '0.95rem',
-              cursor: isLoading || !isSupported ? 'not-allowed' : 'pointer',
-              opacity: isLoading || !isSupported ? 0.6 : 1,
+              cursor: isLoading || !isSupported || isPreparingOrLocked ? 'not-allowed' : 'pointer',
+              opacity: isLoading || !isSupported || isPreparingOrLocked ? 0.6 : 1,
             }}
           >
             📁 Choose Project Folder
@@ -373,7 +383,7 @@ export default function BrowserImportPreviewClient() {
               <button
                 type="button"
                 onClick={handleRequestPreview}
-                disabled={isLoading}
+                disabled={isLoading || isPreparingOrLocked}
                 style={{
                   backgroundColor: '#10B981',
                   color: '#FFFFFF',
@@ -382,8 +392,8 @@ export default function BrowserImportPreviewClient() {
                   padding: '0.75rem 1.5rem',
                   fontWeight: 600,
                   fontSize: '0.95rem',
-                  cursor: isLoading ? 'not-allowed' : 'pointer',
-                  opacity: isLoading ? 0.6 : 1,
+                  cursor: isLoading || isPreparingOrLocked ? 'not-allowed' : 'pointer',
+                  opacity: isLoading || isPreparingOrLocked ? 0.6 : 1,
                 }}
               >
                 {isLoading ? '⏳ Generating Preview...' : '🔍 Generate Batch Preview'}
@@ -392,7 +402,7 @@ export default function BrowserImportPreviewClient() {
               <button
                 type="button"
                 onClick={handleClearSelection}
-                disabled={isLoading}
+                disabled={isLoading || isPreparingOrLocked}
                 style={{
                   backgroundColor: 'transparent',
                   color: '#9CA3AF',
@@ -400,7 +410,8 @@ export default function BrowserImportPreviewClient() {
                   borderRadius: '8px',
                   padding: '0.75rem 1.25rem',
                   fontSize: '0.9rem',
-                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  cursor: isLoading || isPreparingOrLocked ? 'not-allowed' : 'pointer',
+                  opacity: isLoading || isPreparingOrLocked ? 0.6 : 1,
                 }}
               >
                 Clear Selection
@@ -654,14 +665,14 @@ export default function BrowserImportPreviewClient() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       {/* Package Selection Controls */}
                       {pkg.status === 'valid' && (
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: selectionState.isPreparing ? 'not-allowed' : 'pointer', opacity: selectionState.isPreparing ? 0.5 : 1 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isPreparingOrLocked ? 'not-allowed' : 'pointer', opacity: isPreparingOrLocked ? 0.5 : 1 }}>
                           <input
                             type="checkbox"
                             checked={isSelected}
-                            disabled={selectionState.isPreparing}
+                            disabled={isPreparingOrLocked}
                             onChange={() => handleToggleValid(pkg.packagePath)}
                             aria-label={`Select package ${pkg.folderName} for import`}
-                            style={{ width: '1.1rem', height: '1.1rem', cursor: selectionState.isPreparing ? 'not-allowed' : 'pointer' }}
+                            style={{ width: '1.1rem', height: '1.1rem', cursor: isPreparingOrLocked ? 'not-allowed' : 'pointer' }}
                           />
                           <span style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>Select</span>
                         </label>
@@ -669,28 +680,28 @@ export default function BrowserImportPreviewClient() {
 
                       {pkg.status === 'warning' && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: selectionState.isPreparing ? 'not-allowed' : 'pointer', opacity: selectionState.isPreparing ? 0.5 : 1 }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: isPreparingOrLocked ? 'not-allowed' : 'pointer', opacity: isPreparingOrLocked ? 0.5 : 1 }}>
                             <input
                               type="checkbox"
                               checked={isAcked}
-                              disabled={selectionState.isPreparing}
+                              disabled={isPreparingOrLocked}
                               onChange={() => handleToggleWarningAck(pkg.packagePath)}
                               aria-label={`Acknowledge warnings for package ${pkg.folderName}`}
-                              style={{ width: '1rem', height: '1rem', cursor: selectionState.isPreparing ? 'not-allowed' : 'pointer' }}
+                              style={{ width: '1rem', height: '1rem', cursor: isPreparingOrLocked ? 'not-allowed' : 'pointer' }}
                             />
                             <span style={{ fontSize: '0.8rem', color: '#F59E0B' }}>Ack Warnings</span>
                           </label>
 
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: isAcked && !selectionState.isPreparing ? 'pointer' : 'not-allowed', opacity: isAcked && !selectionState.isPreparing ? 1 : 0.4 }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: isAcked && !isPreparingOrLocked ? 'pointer' : 'not-allowed', opacity: isAcked && !isPreparingOrLocked ? 1 : 0.4 }}>
                             <input
                               type="checkbox"
                               checked={isSelected}
-                              disabled={!isAcked || selectionState.isPreparing}
+                              disabled={!isAcked || isPreparingOrLocked}
                               onChange={() => handleToggleWarningSelect(pkg.packagePath)}
                               aria-label={`Select warning package ${pkg.folderName} for import after acknowledgement`}
-                              style={{ width: '1rem', height: '1rem', cursor: isAcked && !selectionState.isPreparing ? 'pointer' : 'not-allowed' }}
+                              style={{ width: '1rem', height: '1rem', cursor: isAcked && !isPreparingOrLocked ? 'pointer' : 'not-allowed' }}
                             />
-                            <span style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>Select</span>
+                            <span style={{ fontSize: '0.8rem', color: isAcked ? '#FFFFFF' : '#9CA3AF' }}>Select</span>
                           </label>
                         </div>
                       )}

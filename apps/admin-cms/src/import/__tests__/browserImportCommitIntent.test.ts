@@ -1020,10 +1020,48 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       expect(state.preparedIntent).toBeNull();
       expect(state.preparationErrorCode).toBe('PREVIEW_FINGERPRINT_MISMATCH');
     });
+    it('41. Atomic state-updater snapshot guard rejects intent when external getCurrentState is stale', async () => {
+      const lock: BrowserImportPreparationLock = { current: false };
+      const preview = makeMockPreviewBatch();
+      const manifest = makeMockManifest();
+      const stateA = createInitialSelectionState(preview);
+
+      // Folder selection or reset produces stateB with different fingerprint/paths
+      const stateB = resetSelectionState();
+
+      let actualState = stateA;
+      const setSelectionState = (u: (prev: BrowserImportSelectionState) => BrowserImportSelectionState) => {
+        actualState = u(actualState);
+      };
+
+      const deferred = createDeferred<void>();
+
+      const p = runBrowserImportPreparation({
+        lock,
+        currentState: stateA,
+        previewResult: preview,
+        manifestCache: manifest,
+        // Simulate broken/delayed external observer returning stale stateA
+        getCurrentState: () => stateA,
+        setSelectionState,
+        yieldControl: () => deferred.promise,
+      });
+
+      // External state change occurs during async yield boundary
+      actualState = stateB;
+
+      deferred.resolve();
+      await p;
+
+      // Assert old intent is not stored, stateB is not replaced by stateA, result rejected as stale
+      expect(actualState.preparedIntent).toBeNull();
+      expect(actualState.preparationErrorCode).toBe('PREVIEW_FINGERPRINT_MISMATCH');
+      expect(lock.current).toBe(false);
+    });
   });
 
   describe('Component Accessible Labels & Static Contract', () => {
-    it('41. Component source contains package-specific aria-labels and visible status badges', () => {
+    it('42. Component source contains package-specific aria-labels, visible status badges, and guarded controls', () => {
       const filePath = join(__dirname, '../../components/imports/BrowserImportPreviewClient.tsx');
       const source = readFileSync(filePath, 'utf8');
 
@@ -1032,7 +1070,10 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       expect(source).toContain('aria-label={`Select warning package ${pkg.folderName} for import after acknowledgement`}');
       expect(source).toContain('aria-label={`Package ${pkg.folderName} is invalid and cannot be selected`}');
       expect(source).toContain('{pkg.status.toUpperCase()}');
-      expect(source).toContain('disabled={selectionState.isPreparing}');
+      expect(source).toContain('disabled={isLoading || !isSupported || isPreparingOrLocked}');
+      expect(source).toContain('disabled={isLoading || isPreparingOrLocked}');
+      expect(source).toContain('if (isPreparingOrLocked) return;');
+      expect(source).toContain('updateSelectionState(');
     });
   });
 });

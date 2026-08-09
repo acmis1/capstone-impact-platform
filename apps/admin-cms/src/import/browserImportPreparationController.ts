@@ -121,14 +121,34 @@ export async function runBrowserImportPreparation(
     }
 
     if (result.success) {
-      setSelectionState((prev) => setPreparedSuccess(prev, result.intent));
+      setSelectionState((prev) => {
+        const currentSnapshot: BrowserImportPreparationSnapshot = {
+          previewFingerprint: prev.previewFingerprint,
+          selectedPackagePaths: prev.selectedPackagePaths,
+          acknowledgedWarningPackagePaths: prev.acknowledgedWarningPackagePaths,
+        };
+        if (!isSnapshotEqual(snapshot, currentSnapshot)) {
+          return setPreparedFailure(prev, 'PREVIEW_FINGERPRINT_MISMATCH');
+        }
+        return setPreparedSuccess(prev, result.intent);
+      });
     } else {
       const mapErrorCode = (code: string): BrowserImportPreparationErrorCode => {
         if (code === 'EMPTY_SELECTION') return 'EMPTY_SELECTION';
         if (code === 'PREVIEW_FINGERPRINT_MISMATCH') return 'PREVIEW_FINGERPRINT_MISMATCH';
         return 'INVALID_SELECTION';
       };
-      setSelectionState((prev) => setPreparedFailure(prev, mapErrorCode(result.code)));
+      setSelectionState((prev) => {
+        const currentSnapshot: BrowserImportPreparationSnapshot = {
+          previewFingerprint: prev.previewFingerprint,
+          selectedPackagePaths: prev.selectedPackagePaths,
+          acknowledgedWarningPackagePaths: prev.acknowledgedWarningPackagePaths,
+        };
+        if (!isSnapshotEqual(snapshot, currentSnapshot)) {
+          return setPreparedFailure(prev, 'PREVIEW_FINGERPRINT_MISMATCH');
+        }
+        return setPreparedFailure(prev, mapErrorCode(result.code));
+      });
     }
   } catch {
     setSelectionState((prev) => setPreparedFailure(prev, 'UNEXPECTED_PREPARATION_FAILURE'));
