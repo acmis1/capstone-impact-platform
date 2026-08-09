@@ -7,11 +7,12 @@ This directory contains the version-controlled database schema migrations, polic
 ## ⚠️ Current Environment & Staging Status
 
 > [!NOTE]
-> * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. Local migrations (`0001` through `0008`) replay cleanly and pass automated verifiers. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
+> * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. Local migrations (`0001` through `0009`) replay cleanly and pass automated verifiers. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
 > * **Hosted Staging Status:** Migrations `0001` through `0006` were manually applied to the isolated staging project (`capstone-admin-cms-staging-2026`). Local migration replay success is distinct from unknown hosted CLI migration history, which remains unverified until the 7-gate reconciliation runbook is executed.
 > * **Corrective Fix:** Migration `0006` corrected the initial administrator bootstrap runtime by replacing `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim`.
 > * **Default Execution Hardening:** Migration `0007` (`20260803174000_harden_function_execute_defaults.sql`) establishes global postgres-owned function default privilege revokes and conditionally revokes execution on the optional hosted RLS helper. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
 > * **Transactional Review Actions:** Migration `0008` (`20260803180000_transactional_review_actions.sql`) establishes atomic `public.perform_project_review_action` PostgreSQL RPC function for transaction-backed project review status updates and approval audit logging. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
+> * **Transactional Metadata Update:** Migration `0009` (`20260808170000_transactional_project_metadata_update.sql`) establishes the one-transaction, service-role-only `public.update_project_metadata` RPC for scalar metadata and join-table writes. *(Repository/local-only; not applied to hosted staging.)*
 > * **Identity Linkage:** Initial administrator linkage was verified in isolated staging (`READY_FOR_MANUAL_LOGIN_TEST`).
 > * **Do Not Rerun:** Do not rerun the migration sequence or initial bootstrap merely because these files exist.
 > * **Pending Scope:** Hosted migration reconciliation, hosted staff lifecycle provisioning, reviewer/editor UAT, and production deployment remain pending.
@@ -67,7 +68,7 @@ npm run supabase:stop
 
 ---
 
-## Migration Inventory (8 Migrations)
+## Migration Inventory (9 Migrations)
 
 * **[20260601035138_staging_schema.sql](./migrations/20260601035138_staging_schema.sql):** Creates core relational tables (`programs`, `disciplines`, `industry_categories`, `admin_users`, `user_roles`, `import_batches`, `projects`, `project_disciplines`, `project_industry_categories`, `media_assets`, `validation_flags`, `approval_records`, `published_snapshots`), check constraints, indexes, and `updated_at` triggers.
 * **[20260601035139_staging_rls_policies.sql](./migrations/20260601035139_staging_rls_policies.sql):** Enables Row-Level Security (RLS) across all tables with restrictive defaults.
@@ -77,3 +78,4 @@ npm run supabase:stop
 * **[20260719165119_fix_initial_admin_bootstrap_runtime.sql](./migrations/20260719165119_fix_initial_admin_bootstrap_runtime.sql):** Replaces `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim` as the corrective runtime fix for initial administrator linkage.
 * **[20260803174000_harden_function_execute_defaults.sql](./migrations/20260803174000_harden_function_execute_defaults.sql):** Establishes global postgres-owned function default privilege revokes and conditionally revokes execution on the optional hosted RLS helper. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
 * **[20260803180000_transactional_review_actions.sql](./migrations/20260803180000_transactional_review_actions.sql):** Establishes atomic `public.perform_project_review_action` PostgreSQL RPC function for transaction-backed project review status updates and approval audit logging. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
+* **[20260808170000_transactional_project_metadata_update.sql](./migrations/20260808170000_transactional_project_metadata_update.sql):** Establishes the atomic, service-role-only `public.update_project_metadata` transaction for metadata scalar and mapping writes. *(Repository/local-only; not applied to hosted staging.)*

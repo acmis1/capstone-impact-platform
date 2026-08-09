@@ -16,19 +16,18 @@ describe('Migration 0008 Transactional Review Actions Static Security Contract T
     '20260803174000_harden_function_execute_defaults.sql',
   ];
 
-  it('1. Migration 0008 is the eighth and latest timestamped migration in infra/supabase/migrations', () => {
+  it('1. Migration 0008 remains the eighth timestamped migration in infra/supabase/migrations', () => {
     const rawFiles = fs.readdirSync(migrationsDir);
     const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
 
-    expect(sqlFiles.length).toBe(8);
+    expect(sqlFiles.length).toBe(9);
 
     for (let i = 0; i < expectedPriorMigrations.length; i++) {
       expect(sqlFiles[i]).toBe(expectedPriorMigrations[i]);
     }
 
-    const latestMigration = sqlFiles[7];
-    expect(latestMigration).toContain('transactional_review_actions.sql');
-    expect(latestMigration > '20260803174000_harden_function_execute_defaults.sql').toBe(true);
+    expect(sqlFiles[7]).toContain('transactional_review_actions.sql');
+    expect(sqlFiles[8]).toContain('transactional_project_metadata_update.sql');
   });
 
   it('2. Existing migrations 0001 through 0007 remain byte-for-byte unmodified', () => {

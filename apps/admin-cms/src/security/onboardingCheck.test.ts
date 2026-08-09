@@ -21,6 +21,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
     '20260803174000_harden_function_execute_defaults.sql',
     '20260803180000_transactional_review_actions.sql',
+    '20260808170000_transactional_project_metadata_update.sql',
   ];
 
   const defaultMockExec = (cmd: string): string => {
@@ -217,7 +218,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const shuffled = [...validMigrations].reverse();
     const result = validateMigrationsList(shuffled);
     expect(result.passed).toBe(true);
-    expect(result.message).toContain('8 timestamped migrations');
+    expect(result.message).toContain('9 timestamped migrations');
   });
 
   it('10. Duplicate migration timestamps fail', () => {
@@ -230,6 +231,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
       '20260803174000_harden_function_execute_defaults.sql',
       '20260803180000_transactional_review_actions.sql',
+      '20260808170000_transactional_project_metadata_update.sql',
     ];
     const result = validateMigrationsList(duplicateMigrations);
     expect(result.passed).toBe(false);
@@ -246,6 +248,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
       '20260803174000_harden_function_execute_defaults.sql',
       '20260803180000_wrong_name.sql',
+      '20260808170000_transactional_project_metadata_update.sql',
     ];
     const result = validateMigrationsList(missing0008);
     expect(result.passed).toBe(false);
@@ -477,7 +480,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     expect(item?.message).toContain('Local npm .bin shim for Supabase CLI is missing');
   });
 
-  it('21. Exact eight expected migration filenames are required', () => {
+  it('21. Exact nine expected migration filenames are required', () => {
     const invalidMigrationNames = [
       '20260601035138_staging_schema.sql',
       '20260601035139_staging_rls_policies.sql',
@@ -487,6 +490,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
       '20260803174000_harden_function_execute_defaults.sql',
       '20260803180000_different_migration_name.sql',
+      '20260808170000_transactional_project_metadata_update.sql',
     ];
     const result = validateMigrationsList(invalidMigrationNames);
     expect(result.passed).toBe(false);

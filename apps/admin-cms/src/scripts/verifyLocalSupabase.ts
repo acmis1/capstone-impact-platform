@@ -494,6 +494,31 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       }
     }
     console.log('✔ Live perform_project_review_action RPC function definition & service_role-only execution grants verified.');
+    // 3i. Transactional project metadata RPC function & execution grants verification
+    const metadataRpcRows = runLocalDbQuery(
+      "SELECT p.prosecdef, pg_get_functiondef(p.oid) AS funcdef FROM pg_proc p WHERE p.proname = 'update_project_metadata' AND p.pronamespace = 'public'::regnamespace",
+      repoRoot
+    );
+    if (!metadataRpcRows || metadataRpcRows.length !== 1 || !metadataRpcRows[0].funcdef) {
+      console.error('Function verification failed: update_project_metadata missing or ambiguous.');
+      return false;
+    }
+    const metadataRpcDef = String(metadataRpcRows[0].funcdef);
+    if (!metadataRpcRows[0].prosecdef || !metadataRpcDef.includes('FOR UPDATE') || !metadataRpcDef.toLowerCase().includes('search_path')) {
+      console.error('Function verification failed: update_project_metadata security or locking contract missing.');
+      return false;
+    }
+    if (!funcGrantSet.has('SERVICE_ROLE|update_project_metadata')) {
+      console.error('Function grant verification failed: service_role missing EXECUTE on update_project_metadata.');
+      return false;
+    }
+    for (const forbiddenGrantee of ['PUBLIC', 'ANON', 'AUTHENTICATED']) {
+      if (funcGrantSet.has(`${forbiddenGrantee}|update_project_metadata`)) {
+        console.error(`Function grant security violation: ${forbiddenGrantee} has EXECUTE on update_project_metadata.`);
+        return false;
+      }
+    }
+    console.log('Live update_project_metadata RPC definition, row lock, and service_role-only execution grants verified.');
   } catch (err: unknown) {
     console.error('❌ Live database schema verification failed:', err instanceof Error ? err.message : String(err));
     return false;

@@ -29,6 +29,7 @@
     "env:local": "tsx src/scripts/writeLocalSupabaseEnv.ts",
     "users:local": "tsx src/scripts/provisionLocalSupabaseUsers.ts",
     "verify:local": "tsx src/scripts/verifyLocalSupabase.ts",
+    "verify:metadata-runtime": "tsx src/scripts/verifyProjectMetadataRuntime.ts",
     "seed:buckets:local": "tsx src/scripts/seedLocalSupabaseFixtures.ts",
     "setup:local": "tsx src/scripts/setupLocal.ts",
     "verify:all": "tsx src/scripts/verifyAll.ts",
