@@ -42,8 +42,6 @@ export default function BrowserImportPreviewClient() {
   const preparationLockRef = useRef(false);
   const selectionStateRef = useRef<BrowserImportSelectionState>(selectionState);
 
-  selectionStateRef.current = selectionState;
-
   const updateSelectionState = (
     updater:
       | BrowserImportSelectionState
@@ -56,10 +54,10 @@ export default function BrowserImportPreviewClient() {
     });
   };
 
-  const isPreparingOrLocked = selectionState.isPreparing || preparationLockRef.current;
+  const isPreparingOrLocked = selectionState.isPreparing;
 
   const handleFolderSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (isPreparingOrLocked) return;
+    if (preparationLockRef.current || selectionStateRef.current.isPreparing) return;
 
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -139,7 +137,7 @@ export default function BrowserImportPreviewClient() {
   };
 
   const handleRequestPreview = async () => {
-    if (selectedFiles.length === 0 || !selectedRootName || isPreparingOrLocked) return;
+    if (selectedFiles.length === 0 || !selectedRootName || preparationLockRef.current || selectionStateRef.current.isPreparing) return;
 
     setIsLoading(true);
     setApiError(null);
@@ -248,7 +246,7 @@ export default function BrowserImportPreviewClient() {
   };
 
   const handleClearSelection = () => {
-    if (isPreparingOrLocked) return;
+    if (preparationLockRef.current || selectionStateRef.current.isPreparing) return;
 
     setSelectedFiles([]);
     setSelectedRootName(null);
@@ -262,22 +260,22 @@ export default function BrowserImportPreviewClient() {
   };
 
   const handleToggleValid = (pkgPath: string) => {
-    if (!previewResult || isPreparingOrLocked) return;
+    if (!previewResult || preparationLockRef.current || selectionStateRef.current.isPreparing) return;
     updateSelectionState((prev) => toggleValidPackage(prev, pkgPath, previewResult.packages));
   };
 
   const handleToggleWarningAck = (pkgPath: string) => {
-    if (!previewResult || isPreparingOrLocked) return;
+    if (!previewResult || preparationLockRef.current || selectionStateRef.current.isPreparing) return;
     updateSelectionState((prev) => toggleWarningAcknowledgement(prev, pkgPath, previewResult.packages));
   };
 
   const handleToggleWarningSelect = (pkgPath: string) => {
-    if (!previewResult || isPreparingOrLocked) return;
+    if (!previewResult || preparationLockRef.current || selectionStateRef.current.isPreparing) return;
     updateSelectionState((prev) => toggleWarningPackageSelection(prev, pkgPath, previewResult.packages));
   };
 
   const handlePrepareImport = async () => {
-    if (!previewResult || !manifestCache || isPreparingOrLocked) return;
+    if (!previewResult || !manifestCache || preparationLockRef.current || selectionStateRef.current.isPreparing) return;
 
     await runBrowserImportPreparation({
       lock: preparationLockRef,
