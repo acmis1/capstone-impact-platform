@@ -28,7 +28,7 @@ export function deriveMimeType(fileName: string, rawMimeType: string): { mimeTyp
   if (rawLower && rawLower !== 'application/octet-stream' && expectedMime !== 'application/octet-stream' && rawLower !== expectedMime) {
     return {
       mimeType: expectedMime,
-      warning: `MIME type conflict detected for ${fileName}: Browser reported "${rawMimeType}", expected "${expectedMime}".`,
+      warning: 'The browser-reported MIME type did not match the canonical file type. The canonical type was used for preview validation.',
     };
   }
 
@@ -37,7 +37,7 @@ export function deriveMimeType(fileName: string, rawMimeType: string): { mimeTyp
 
 /**
  * Normalize relative path to POSIX standard.
- * Rejects path traversal (`.`, `..`), null bytes, control characters, and absolute paths.
+ * Rejects path traversal (`.`, `..`), null bytes, control characters, empty segments, and absolute paths.
  */
 export function normalizeRelativePath(rawPath: string): string | null {
   if (!rawPath || typeof rawPath !== 'string') return null;
@@ -56,21 +56,13 @@ export function normalizeRelativePath(rawPath: string): string | null {
   }
 
   const segments = path.split('/');
-  const cleanSegments: string[] = [];
-
   for (const seg of segments) {
-    const trimmed = seg.trim();
-    if (trimmed === '') continue;
-    if (trimmed === '.' || trimmed === '..') {
-      // Path traversal detected
+    if (seg === '' || seg === '.' || seg === '..') {
       return null;
     }
-    cleanSegments.push(trimmed);
   }
 
-  if (cleanSegments.length === 0) return null;
-
-  return cleanSegments.join('/');
+  return segments.join('/');
 }
 
 /**

@@ -15,8 +15,10 @@ import { validateImportPackage } from '../validateImportPackage';
 import {
   SelectionManifest,
   SelectedFileDescriptor,
+  selectionManifestSchema,
   validateBrowserImportPreviewResponse,
 } from '../browserImportPreviewContract';
+import { validateMediaAsset } from '../../storage/mediaValidation';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -39,22 +41,16 @@ vi.mock('../../auth/permissions', () => ({
 
 import { NextRequest } from 'next/server';
 import { AdminAuthError } from '../../auth/authTypes';
-import { POST as previewRouteHandler } from '../../app/api/imports/preview/route';
+import { POST as previewRouteHandler, parseContentLength } from '../../app/api/imports/preview/route';
 import { requireAdmin } from '../../auth/requireAdmin';
 import { generateUploadKey } from '../browserSelection';
 
 function makeDesc(normPath: string, sizeBytes = 500, mimeType = 'text/plain'): SelectedFileDescriptor {
-  const parts = normPath.split('/');
-  const fileName = parts[parts.length - 1];
-  const pkgPath = parts.length >= 2 ? (parts.length === 2 ? parts[0] : `${parts[0]}/${parts[1]}`) : parts[0];
   return {
     uploadKey: generateUploadKey(normPath),
     originalPath: normPath,
-    normalizedPath: normPath,
-    fileName,
     fileSizeBytes: sizeBytes,
     mimeType,
-    packagePath: pkgPath,
   };
 }
 
@@ -132,8 +128,8 @@ describe('Browser Import Preview Suite', () => {
       expect(normalizeRelativePath('root/./file.png')).toBeNull();
     });
 
-    it('6. Empty segment cleaning', () => {
-      expect(normalizeRelativePath('root//file.png')).toBe('root/file.png');
+    it('6. Empty segment rejection', () => {
+      expect(normalizeRelativePath('root//file.png')).toBeNull();
     });
 
     it('7. Null-byte rejection', () => {
@@ -149,21 +145,15 @@ describe('Browser Import Preview Suite', () => {
         descriptors: [
           {
             uploadKey: 'batch_p1_poster_png',
-            normalizedPath: 'batch/p1/poster.png',
             originalPath: 'batch/p1/poster.png',
-            fileName: 'poster.png',
             fileSizeBytes: 50,
             mimeType: 'image/png',
-            packagePath: 'batch/p1',
           },
           {
             uploadKey: 'batch_p1_poster_png',
-            normalizedPath: 'batch/p1/poster.png',
             originalPath: 'batch/p1/poster.png',
-            fileName: 'poster.png',
             fileSizeBytes: 50,
             mimeType: 'image/png',
-            packagePath: 'batch/p1',
           },
         ],
       };
@@ -628,21 +618,15 @@ describe('Browser Import Preview Suite', () => {
         descriptors: [
           {
             uploadKey: 'root_file_txt',
-            normalizedPath: 'root/file.txt',
             originalPath: 'root/file.txt',
-            fileName: 'file.txt',
             fileSizeBytes: 50,
             mimeType: 'text/plain',
-            packagePath: 'root',
           },
           {
             uploadKey: 'root_file_txt',
-            normalizedPath: 'root/file.txt',
             originalPath: 'root/file.txt',
-            fileName: 'file.txt',
             fileSizeBytes: 50,
             mimeType: 'text/plain',
-            packagePath: 'root',
           },
         ],
       };
@@ -1213,30 +1197,21 @@ describe('Browser Import Preview Suite', () => {
         descriptors: [
           {
             uploadKey: xlsxKey,
-            normalizedPath: '2026-project-alpha/project-details.xlsx',
             originalPath: '2026-project-alpha/project-details.xlsx',
-            fileName: 'project-details.xlsx',
             fileSizeBytes: xlsxBuf.length,
             mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            packagePath: '2026-project-alpha',
           },
           {
             uploadKey: pngKey,
-            normalizedPath: '2026-project-alpha/poster.png',
             originalPath: '2026-project-alpha/poster.png',
-            fileName: 'poster.png',
             fileSizeBytes: 500,
             mimeType: 'image/png',
-            packagePath: '2026-project-alpha',
           },
           {
             uploadKey: pdfKey,
-            normalizedPath: '2026-project-alpha/poster.pdf',
             originalPath: '2026-project-alpha/poster.pdf',
-            fileName: 'poster.pdf',
             fileSizeBytes: 500,
             mimeType: 'application/pdf',
-            packagePath: '2026-project-alpha',
           },
         ],
       };
@@ -1252,6 +1227,7 @@ describe('Browser Import Preview Suite', () => {
 
       const req = new NextRequest('http://localhost:3000/api/imports/preview', {
         method: 'POST',
+        headers: { 'content-length': '1000' },
         body: formData,
       });
 
@@ -1270,12 +1246,9 @@ describe('Browser Import Preview Suite', () => {
         descriptors: [
           {
             uploadKey: pngKey,
-            normalizedPath: 'solar-monitor/poster.png',
             originalPath: 'solar-monitor/poster.png',
-            fileName: 'poster.png',
             fileSizeBytes: 500,
             mimeType: 'image/png',
-            packagePath: 'solar-monitor',
           },
         ],
       };
@@ -1285,6 +1258,7 @@ describe('Browser Import Preview Suite', () => {
 
       const req = new NextRequest('http://localhost:3000/api/imports/preview', {
         method: 'POST',
+        headers: { 'content-length': '500' },
         body: formData,
       });
 
@@ -1303,12 +1277,9 @@ describe('Browser Import Preview Suite', () => {
         descriptors: [
           {
             uploadKey: 'invalid_key_causes_400',
-            normalizedPath: 'solar-monitor/poster.png',
             originalPath: 'solar-monitor/poster.png',
-            fileName: 'poster.png',
             fileSizeBytes: 500,
             mimeType: 'image/png',
-            packagePath: 'solar-monitor',
           },
         ],
       };
@@ -1318,6 +1289,7 @@ describe('Browser Import Preview Suite', () => {
 
       const req = new NextRequest('http://localhost:3000/api/imports/preview', {
         method: 'POST',
+        headers: { 'content-length': '500' },
         body: formData,
       });
 
@@ -1328,7 +1300,10 @@ describe('Browser Import Preview Suite', () => {
     });
 
     it('58. Every API response includes Cache-Control: no-store', async () => {
-      const req = new NextRequest('http://localhost:3000/api/imports/preview', { method: 'POST' });
+      const req = new NextRequest('http://localhost:3000/api/imports/preview', {
+        method: 'POST',
+        headers: { 'content-length': '10' },
+      });
       const res = await previewRouteHandler(req);
       expect(res.headers.get('Cache-Control')).toBe('no-store');
     });
@@ -1414,12 +1389,9 @@ describe('Browser Import Preview Suite', () => {
         descriptors: [
           {
             uploadKey: 'actual-root_file_txt',
-            normalizedPath: 'actual-root/file.txt',
             originalPath: 'actual-root/file.txt',
-            fileName: 'file.txt',
             fileSizeBytes: 50,
             mimeType: 'text/plain',
-            packagePath: 'actual-root',
           },
         ],
       };
@@ -1436,21 +1408,15 @@ describe('Browser Import Preview Suite', () => {
         descriptors: [
           {
             uploadKey: 'root1_file_txt',
-            normalizedPath: 'root1/file.txt',
             originalPath: 'root1/file.txt',
-            fileName: 'file.txt',
             fileSizeBytes: 50,
             mimeType: 'text/plain',
-            packagePath: 'root1',
           },
           {
             uploadKey: 'root2_file_txt',
-            normalizedPath: 'root2/file.txt',
             originalPath: 'root2/file.txt',
-            fileName: 'file.txt',
             fileSizeBytes: 50,
             mimeType: 'text/plain',
-            packagePath: 'root2',
           },
         ],
       };
@@ -1460,6 +1426,13 @@ describe('Browser Import Preview Suite', () => {
   });
 
   describe('Static Dependency & Safety Boundary', () => {
+    it('28. Route explicitly declares Node runtime', () => {
+      const baseDir = process.cwd().endsWith('admin-cms') ? process.cwd() : join(process.cwd(), 'apps/admin-cms');
+      const routeCode = readFileSync(join(baseDir, 'src/app/api/imports/preview/route.ts'), 'utf-8');
+      expect(routeCode).toContain("export const runtime = 'nodejs';");
+      expect(routeCode).toContain("export const dynamic = 'force-dynamic';");
+    });
+
     it('Static boundary check: route and parser do not import prohibited modules', () => {
       const baseDir = process.cwd().endsWith('admin-cms') ? process.cwd() : join(process.cwd(), 'apps/admin-cms');
       const previewParserCode = readFileSync(
@@ -1485,6 +1458,166 @@ describe('Browser Import Preview Suite', () => {
         expect(previewParserCode).not.toContain(term);
         expect(routeCode).not.toContain(term);
       }
+    });
+  });
+
+  describe('Comprehensive Section 18 Boundary & Security Regression Suite', () => {
+    it('Content-Length parsing accepts only a complete safe decimal value', () => {
+      expect(parseContentLength(null)).toEqual({ code: 'MISSING_CONTENT_LENGTH' });
+      for (const header of ['', '123abc', '12.5', '-1', '+100', '0x100', 'Infinity', '999999999999999999999999']) {
+        expect(parseContentLength(header)).toEqual({ code: header === '' ? 'MISSING_CONTENT_LENGTH' : 'INVALID_CONTENT_LENGTH' });
+      }
+      expect(parseContentLength('0')).toEqual({ bytes: 0 });
+      expect(parseContentLength('30000000')).toEqual({ code: 'REQUEST_TOO_LARGE' });
+    });
+
+    it('rejects the Content-Length boundary before calling formData', async () => {
+      const req = new NextRequest('http://localhost:3000/api/imports/preview', {
+        method: 'POST',
+        headers: { 'content-length': '123abc' },
+      });
+      const formData = vi.fn();
+      Object.defineProperty(req, 'formData', { value: formData });
+      const response = await previewRouteHandler(req);
+      expect(response.status).toBe(400);
+      expect(formData).not.toHaveBeenCalled();
+    });
+
+    it('1–5. Content-Length header validation variants', async () => {
+      // 1. Missing header
+      const req1 = new NextRequest('http://localhost:3000/api/imports/preview', { method: 'POST' });
+      const res1 = await previewRouteHandler(req1);
+      expect(res1.status).toBe(400);
+      expect((await res1.json()).code).toBe('MISSING_CONTENT_LENGTH');
+
+      // 2. Empty header
+      const req2 = new NextRequest('http://localhost:3000/api/imports/preview', {
+        method: 'POST',
+        headers: { 'content-length': '' },
+      });
+      const res2 = await previewRouteHandler(req2);
+      expect(res2.status).toBe(400);
+      expect((await res2.json()).code).toBe('MISSING_CONTENT_LENGTH');
+
+      // 3. Alphanumeric malformed header
+      const req3 = new NextRequest('http://localhost:3000/api/imports/preview', {
+        method: 'POST',
+        headers: { 'content-length': '123abc' },
+      });
+      const res3 = await previewRouteHandler(req3);
+      expect(res3.status).toBe(400);
+      expect((await res3.json()).code).toBe('INVALID_CONTENT_LENGTH');
+
+      // 4. Fractional header
+      const req4 = new NextRequest('http://localhost:3000/api/imports/preview', {
+        method: 'POST',
+        headers: { 'content-length': '12.5' },
+      });
+      const res4 = await previewRouteHandler(req4);
+      expect(res4.status).toBe(400);
+      expect((await res4.json()).code).toBe('INVALID_CONTENT_LENGTH');
+
+      // 5. Negative / formatted headers
+      for (const invalidVal of ['-1', '+100', '0x100', 'Infinity']) {
+        const req = new NextRequest('http://localhost:3000/api/imports/preview', {
+          method: 'POST',
+          headers: { 'content-length': invalidVal },
+        });
+        const res = await previewRouteHandler(req);
+        expect(res.status).toBe(400);
+        expect((await res.json()).code).toBe('INVALID_CONTENT_LENGTH');
+      }
+    });
+
+    it('6–7. Oversized Content-Length rejected before formData processing', async () => {
+      const req = new NextRequest('http://localhost:3000/api/imports/preview', {
+        method: 'POST',
+        headers: { 'content-length': '30000000' }, // 30 MB
+      });
+      const res = await previewRouteHandler(req);
+      expect(res.status).toBe(413);
+      expect((await res.json()).code).toBe('REQUEST_TOO_LARGE');
+    });
+
+    it('9–10. Leading/trailing space in folder name is preserved by normalizer and fails public-ID validator', () => {
+      const normLeading = normalizeRelativePath(' project-alpha/poster.png');
+      expect(normLeading).toBe(' project-alpha/poster.png');
+
+      const normTrailing = normalizeRelativePath('project-alpha /poster.png');
+      expect(normTrailing).toBe('project-alpha /poster.png');
+
+      expect(validateFolderDerivedPublicId(' project-alpha').valid).toBe(false);
+      expect(validateFolderDerivedPublicId('project-alpha ').valid).toBe(false);
+      expect(validateFolderDerivedPublicId(' project-alpha ').valid).toBe(false);
+    });
+
+    it('11. Strict Zod schemas reject unknown request properties', () => {
+      const invalidDesc = {
+        uploadKey: 'key1',
+        originalPath: 'root/file.txt',
+        fileSizeBytes: 10,
+        mimeType: 'text/plain',
+        extraProperty: 'forbidden',
+      };
+      const res = selectionManifestSchema.safeParse({
+        selectedRootName: 'root',
+        fileCount: 1,
+        declaredTotalBytes: 10,
+        ignoredSystemFilesCount: 0,
+        descriptors: [invalidDesc],
+      });
+      expect(res.success).toBe(false);
+    });
+
+    it('16–18. Error responses do not echo submitted upload keys, filenames, or raw MIME strings', async () => {
+      const req = new NextRequest('http://localhost:3000/api/imports/preview', {
+        method: 'POST',
+        headers: { 'content-length': 'abc' },
+      });
+      const res = await previewRouteHandler(req);
+      const json = await res.json();
+      expect(json.error).toBe('The preview request was invalid.');
+      expect(JSON.stringify(json)).not.toContain('secret-filename.png');
+      expect(JSON.stringify(json)).not.toContain('raw/custom-mime');
+    });
+
+    it('22–23. Image limit is exactly 5 MB and PDF limit is exactly 20 MB', () => {
+      // 5 MB image boundary
+      expect(validateMediaAsset({ fileName: 'poster.png', fileSizeBytes: 5 * 1024 * 1024, mimeType: 'image/png' }).valid).toBe(true);
+      expect(validateMediaAsset({ fileName: 'poster.png', fileSizeBytes: 5 * 1024 * 1024 + 1, mimeType: 'image/png' }).valid).toBe(false);
+
+      // 20 MB PDF boundary
+      expect(validateMediaAsset({ fileName: 'poster.pdf', fileSizeBytes: 20 * 1024 * 1024, mimeType: 'application/pdf' }).valid).toBe(true);
+      expect(validateMediaAsset({ fileName: 'poster.pdf', fileSizeBytes: 20 * 1024 * 1024 + 1, mimeType: 'application/pdf' }).valid).toBe(false);
+    });
+
+    it('24–26. API route handles unauthenticated and permission-denied cases cleanly', async () => {
+      const { requireAdmin } = await import('../../auth/requireAdmin');
+      const mockRequireAdmin = requireAdmin as ReturnType<typeof vi.fn>;
+
+      // Unauthenticated
+      mockRequireAdmin.mockImplementationOnce(async () => {
+        throw new AdminAuthError('UNAUTHENTICATED', 'Missing auth token');
+      });
+      const req1 = new NextRequest('http://localhost:3000/api/imports/preview', {
+        method: 'POST',
+        headers: { 'content-length': '100' },
+      });
+      const res1 = await previewRouteHandler(req1);
+      expect(res1.status).toBe(401);
+      expect((await res1.json()).code).toBe('UNAUTHENTICATED');
+
+      // Permission denied
+      mockRequireAdmin.mockImplementationOnce(async () => {
+        throw new AdminAuthError('PERMISSION_DENIED', 'Lacks projects.edit');
+      });
+      const req2 = new NextRequest('http://localhost:3000/api/imports/preview', {
+        method: 'POST',
+        headers: { 'content-length': '100' },
+      });
+      const res2 = await previewRouteHandler(req2);
+      expect(res2.status).toBe(403);
+      expect((await res2.json()).code).toBe('PERMISSION_DENIED');
     });
   });
 });

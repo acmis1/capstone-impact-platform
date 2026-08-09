@@ -41,32 +41,23 @@ export default function BrowserImportPreviewClient() {
 
     const descriptors: SelectedFileDescriptor[] = [];
     let totalBytes = 0;
-    const packagePaths = new Set<string>();
 
     for (const file of files) {
       const relPath = file.webkitRelativePath || file.name;
       const norm = normalizeRelativePath(relPath);
 
-      if (!norm) continue;
-      if (isIgnoredSystemFile(norm)) {
-        continue;
-      }
+      if (!norm || isIgnoredSystemFile(norm)) continue;
 
       totalBytes += file.size;
       const parts = norm.split('/');
       const fileName = parts[parts.length - 1];
       const mime = deriveMimeType(fileName, file.type).mimeType;
-      const pkgPath = parts.length >= 2 ? (parts.length === 2 ? parts[0] : `${parts[0]}/${parts[1]}`) : parts[0];
-      packagePaths.add(pkgPath);
 
       descriptors.push({
         uploadKey: generateUploadKey(norm),
         originalPath: relPath,
-        normalizedPath: norm,
-        fileName,
         fileSizeBytes: file.size,
         mimeType: mime,
-        packagePath: pkgPath,
       });
     }
 
@@ -77,11 +68,49 @@ export default function BrowserImportPreviewClient() {
       return;
     }
 
-    const rootName = descriptors[0].normalizedPath.split('/')[0];
+    // Pure folder-shape classification matching server rules
+    const rootMetadata = descriptors.filter((d) => {
+      const norm = d.originalPath;
+      const parts = norm.split('/');
+      const lower = parts[parts.length - 1].toLowerCase();
+      return parts.length === 2 && (lower === 'project-details.xlsx' || lower === 'project.json');
+    });
+    const childMetadata = descriptors.filter((d) => {
+      const norm = d.originalPath;
+      const parts = norm.split('/');
+      const lower = parts[parts.length - 1].toLowerCase();
+      return parts.length === 3 && (lower === 'project-details.xlsx' || lower === 'project.json');
+    });
+
+    let mode: 'single' | 'batch' = 'single';
+    if (childMetadata.length > 0) {
+      mode = 'batch';
+    } else if (rootMetadata.length > 0) {
+      mode = 'single';
+    } else {
+      const maxDepth = Math.max(...descriptors.map((d) => d.originalPath.split('/').length));
+      mode = maxDepth >= 3 ? 'batch' : 'single';
+    }
+
+    const calculatedPackagePaths = new Set<string>();
+    for (const desc of descriptors) {
+      const norm = desc.originalPath;
+      const parts = norm.split('/');
+      if (mode === 'single') {
+        calculatedPackagePaths.add(parts[0]);
+      } else {
+        if (parts.length > 2) {
+          calculatedPackagePaths.add(`${parts[0]}/${parts[1]}`);
+        }
+      }
+    }
+
+    const firstNorm = descriptors[0].originalPath;
+    const rootName = firstNorm.split('/')[0];
     setSelectedFiles(files);
     setSelectedRootName(rootName);
     setDeclaredTotalBytes(totalBytes);
-    setDetectedPackageCount(packagePaths.size);
+    setDetectedPackageCount(calculatedPackagePaths.size);
   };
 
   const handleRequestPreview = async () => {
@@ -111,16 +140,11 @@ export default function BrowserImportPreviewClient() {
         const lowerName = fileName.toLowerCase();
         const mime = deriveMimeType(fileName, file.type).mimeType;
         const uploadKey = generateUploadKey(norm);
-        const pkgPath = parts.length >= 2 ? (parts.length === 2 ? parts[0] : `${parts[0]}/${parts[1]}`) : parts[0];
-
         descriptors.push({
           uploadKey,
           originalPath: relPath,
-          normalizedPath: norm,
-          fileName,
           fileSizeBytes: file.size,
           mimeType: mime,
-          packagePath: pkgPath,
         });
 
         // Browser preview rule: Media binary files STAY in browser! Only metadata attached.
@@ -160,8 +184,25 @@ export default function BrowserImportPreviewClient() {
       }
 
       if (!res.ok) {
-        const errObj = json as { error?: string };
-        setApiError(errObj.error || 'The preview request could not be completed. Please try again.');
+        const errObj = json as { code?: string; error?: string };
+        const knownErrorMap: Record<string, string> = {
+          UNAUTHENTICATED: 'Authentication required. Please log in with staff credentials.',
+          PERMISSION_DENIED: 'Access denied: You do not have permission to preview imports.',
+          CROSS_ORIGIN_REJECTED: 'Cross-origin requests are forbidden.',
+          MISSING_CONTENT_LENGTH: 'A valid Content-Length header is required for this request.',
+          INVALID_CONTENT_LENGTH: 'The request Content-Length header is invalid.',
+          REQUEST_TOO_LARGE: 'The request size exceeds the maximum limit.',
+          INVALID_MANIFEST: 'Selection manifest is invalid or malformed.',
+          DUPLICATE_MANIFEST: 'Duplicate manifest field is forbidden.',
+          UNEXPECTED_UPLOAD_FIELD: 'Form contains unrecognized upload fields.',
+          DUPLICATE_UPLOAD_FIELD: 'Form contains duplicate upload fields.',
+          MISSING_METADATA_UPLOAD: 'Missing expected metadata file upload.',
+          METADATA_SIZE_MISMATCH: 'Uploaded metadata file size mismatch.',
+          METADATA_LIMIT_EXCEEDED: 'Uploaded metadata size or count exceeds maximum limits.',
+          UNEXPECTED_INTERNAL_ERROR: 'The preview request could not be completed. Please try again.',
+        };
+        const msg = (errObj.code && knownErrorMap[errObj.code]) || 'The preview request could not be completed. Please try again.';
+        setApiError(msg);
         setIsLoading(false);
         return;
       }
@@ -169,7 +210,7 @@ export default function BrowserImportPreviewClient() {
       // Step 13: Strict Client Runtime Response Guard
       const validatedResponse = validateBrowserImportPreviewResponse(json);
       if (!validatedResponse) {
-        setApiError('The server returned an invalid or malformed preview response.');
+        setApiError('The preview request could not be completed. Please try again.');
         setIsLoading(false);
         return;
       }

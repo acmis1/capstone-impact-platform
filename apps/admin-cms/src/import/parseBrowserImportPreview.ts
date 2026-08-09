@@ -3,15 +3,14 @@ import {
   BrowserImportIssue,
   BrowserImportPackagePreview,
   BrowserImportPreviewResponse,
-  SelectedFileDescriptor,
+  ManifestPreflightSuccess,
   SelectionManifest,
-  selectionManifestSchema,
+  ServerDerivedDescriptor,
+  runBrowserImportManifestPreflight,
 } from './browserImportPreviewContract';
 import {
   deriveMimeType,
-  generateUploadKey,
   isIgnoredSystemFile,
-  normalizeRelativePath,
 } from './browserSelection';
 import { validateFolderDerivedPublicId } from './publicIdValidation';
 import { parseProjectDetailsWorkbook } from './parseProjectDetailsWorkbook';
@@ -45,174 +44,44 @@ export class BrowserImportPreviewLimitError extends Error {
  * Strictly derives paths, enforces server limits, isolates package previews, and sanitizes errors.
  */
 export async function parseBrowserImportPreview(
-  rawManifest: unknown,
+  manifestOrPreflight: unknown | ManifestPreflightSuccess,
   uploadedMetadataFiles: Map<string, Buffer>
 ): Promise<BrowserImportPreviewResponse> {
-  // Step 5: Strict Runtime Zod Schema Validation
-  const parseResult = selectionManifestSchema.safeParse(rawManifest);
-  if (!parseResult.success) {
-    throw new BrowserImportPreviewLimitError(
-      'MANIFEST_INVALID',
-      'Selection manifest is invalid or malformed.',
-      400
-    );
+  let preflight: ManifestPreflightSuccess;
+
+  if (
+    manifestOrPreflight &&
+    typeof manifestOrPreflight === 'object' &&
+    (manifestOrPreflight as ManifestPreflightSuccess).success === true &&
+    (manifestOrPreflight as ManifestPreflightSuccess).derivedDescriptors
+  ) {
+    preflight = manifestOrPreflight as ManifestPreflightSuccess;
+  } else {
+    // Parser callers from older server-only tests may include derivable fields.
+    // The HTTP route always passes the strict wire object to the same preflight.
+    const rawManifest = stripLegacyDerivedDescriptorFields(manifestOrPreflight);
+    const res = runBrowserImportManifestPreflight(rawManifest);
+    if (!res.success) {
+      throw new BrowserImportPreviewLimitError(res.code, res.message, res.httpStatus);
+    }
+    preflight = res;
   }
 
-  const manifest: SelectionManifest = parseResult.data as SelectionManifest;
+  const manifest: SelectionManifest = preflight.manifest;
+  const derivedDescriptors = preflight.derivedDescriptors;
+  const derivedRootName = preflight.rootPath;
 
-  // 1. Enforce Server Limits
-  if (manifest.descriptors.length > BROWSER_IMPORT_LIMITS.MAX_DESCRIPTORS) {
-    throw new BrowserImportPreviewLimitError(
-      'DESCRIPTOR_LIMIT_EXCEEDED',
-      `Selection contains ${manifest.descriptors.length} files, exceeding the maximum limit of ${BROWSER_IMPORT_LIMITS.MAX_DESCRIPTORS}.`,
-      413
-    );
-  }
-
-  let totalMetadataBytes = 0;
-  let metadataFileCount = 0;
-
-  for (const [key, buffer] of uploadedMetadataFiles.entries()) {
-    metadataFileCount++;
-    totalMetadataBytes += buffer.length;
-
-    const lowerKey = key.toLowerCase();
-    if (lowerKey.endsWith('.xlsx') && buffer.length > BROWSER_IMPORT_LIMITS.MAX_XLSX_SIZE_BYTES) {
-      throw new BrowserImportPreviewLimitError(
-        'XLSX_SIZE_LIMIT_EXCEEDED',
-        'An uploaded .xlsx metadata file exceeds the maximum limit of 5 MB.',
-        413
-      );
-    }
-    if (lowerKey.endsWith('.json') && buffer.length > BROWSER_IMPORT_LIMITS.MAX_JSON_SIZE_BYTES) {
-      throw new BrowserImportPreviewLimitError(
-        'JSON_SIZE_LIMIT_EXCEEDED',
-        'An uploaded .json metadata file exceeds the maximum limit of 1 MB.',
-        413
-      );
-    }
-  }
-
-  if (metadataFileCount > BROWSER_IMPORT_LIMITS.MAX_METADATA_FILES) {
-    throw new BrowserImportPreviewLimitError(
-      'METADATA_COUNT_LIMIT_EXCEEDED',
-      `Number of uploaded metadata files (${metadataFileCount}) exceeds maximum limit of ${BROWSER_IMPORT_LIMITS.MAX_METADATA_FILES}.`,
-      413
-    );
-  }
-
-  if (totalMetadataBytes > BROWSER_IMPORT_LIMITS.MAX_TOTAL_METADATA_BYTES) {
-    throw new BrowserImportPreviewLimitError(
-      'TOTAL_METADATA_SIZE_LIMIT_EXCEEDED',
-      'Combined uploaded metadata size exceeds maximum limit of 25 MB.',
-      413
-    );
-  }
-
-  // Step 5: Server-side path normalization and descriptor derivation
-  const validDescriptors: SelectedFileDescriptor[] = [];
-  const seenNormPaths = new Set<string>();
-  const seenLowerPaths = new Set<string>();
-  const seenUploadKeys = new Set<string>();
-  const rootSegments = new Set<string>();
-
-  let recomputedTotalBytes = 0;
-
-  for (const desc of manifest.descriptors) {
-    const normPath = normalizeRelativePath(desc.originalPath);
-    if (!normPath) {
-      throw new BrowserImportPreviewLimitError(
-        'INVALID_DESCRIPTOR_PATH',
-        'Selection contains an invalid or unsafe file path.',
-        400
-      );
-    }
-
-    if (isIgnoredSystemFile(normPath)) {
-      continue;
-    }
-
-    const lowerPath = normPath.toLowerCase();
-    if (seenLowerPaths.has(lowerPath)) {
-      throw new BrowserImportPreviewLimitError(
-        'DUPLICATE_FILE_PATH',
-        'Selection contains duplicate relative file paths.',
-        400
-      );
-    }
-    seenNormPaths.add(normPath);
-    seenLowerPaths.add(lowerPath);
-
-    const parts = normPath.split('/');
-    const derivedFileName = parts[parts.length - 1];
-    const lowerName = derivedFileName.toLowerCase();
-
-    if (lowerName === 'project-details.xlsx' && desc.fileSizeBytes > BROWSER_IMPORT_LIMITS.MAX_XLSX_SIZE_BYTES) {
-      throw new BrowserImportPreviewLimitError(
-        'METADATA_FILE_OVERSIZED',
-        `Metadata file ${derivedFileName} exceeds maximum limit of 5 MB.`,
-        413
-      );
-    }
-    if (lowerName === 'project.json' && desc.fileSizeBytes > BROWSER_IMPORT_LIMITS.MAX_JSON_SIZE_BYTES) {
-      throw new BrowserImportPreviewLimitError(
-        'METADATA_FILE_OVERSIZED',
-        `Metadata file ${derivedFileName} exceeds maximum limit of 1 MB.`,
-        413
-      );
-    }
-
-    const derivedRoot = parts[0];
-    rootSegments.add(derivedRoot);
-
-    const expectedUploadKey = generateUploadKey(normPath);
-    if (seenUploadKeys.has(expectedUploadKey)) {
-      throw new BrowserImportPreviewLimitError(
-        'DUPLICATE_UPLOAD_KEY',
-        'Selection contains duplicate upload keys.',
-        400
-      );
-    }
-    seenUploadKeys.add(expectedUploadKey);
-
-    // Tamper check on client fields if provided
-    if (desc.uploadKey && desc.uploadKey !== expectedUploadKey) {
-      throw new BrowserImportPreviewLimitError(
-        'DESCRIPTOR_TAMPERED',
-        'Submitted descriptor upload key does not match server-recomputed key.',
-        400
-      );
-    }
-
-    if (desc.normalizedPath && desc.normalizedPath !== normPath) {
-      throw new BrowserImportPreviewLimitError(
-        'DESCRIPTOR_TAMPERED',
-        'Submitted descriptor normalized path does not match server-recomputed path.',
-        400
-      );
-    }
-
-    if (desc.fileName && desc.fileName !== derivedFileName) {
-      throw new BrowserImportPreviewLimitError(
-        'DESCRIPTOR_TAMPERED',
-        'Submitted descriptor file name does not match server-recomputed file name.',
-        400
-      );
-    }
-
-    const derivedMime = deriveMimeType(derivedFileName, desc.mimeType).mimeType;
-    recomputedTotalBytes += desc.fileSizeBytes;
-
-    validDescriptors.push({
-      uploadKey: expectedUploadKey,
-      originalPath: desc.originalPath,
-      normalizedPath: normPath,
-      fileName: derivedFileName,
-      fileSizeBytes: desc.fileSizeBytes,
-      mimeType: derivedMime,
-      packagePath: '', // to be assigned during mode classification
-    });
-  }
+  const validDescriptors: ServerDerivedDescriptor[] = derivedDescriptors
+    .filter((d) => !isIgnoredSystemFile(d.normalizedPath))
+    .map((d) => ({
+      uploadKey: d.uploadKey,
+      originalPath: d.originalPath,
+      normalizedPath: d.normalizedPath,
+      fileName: d.fileName,
+      fileSizeBytes: d.fileSizeBytes,
+      canonicalMimeType: deriveMimeType(d.fileName, d.canonicalMimeType).mimeType,
+      packagePath: d.packagePath,
+    }));
 
   if (validDescriptors.length === 0) {
     throw new BrowserImportPreviewLimitError(
@@ -222,44 +91,9 @@ export async function parseBrowserImportPreview(
     );
   }
 
-  // Step 6: Derive Authoritative Root Segment
-  if (rootSegments.size > 1) {
-    throw new BrowserImportPreviewLimitError(
-      'MULTIPLE_ROOT_DIRECTORIES',
-      'Selection contains files from multiple root folders.',
-      400
-    );
-  }
-
-  const derivedRootName = Array.from(rootSegments)[0];
-
-  if (manifest.selectedRootName && manifest.selectedRootName !== derivedRootName) {
-    throw new BrowserImportPreviewLimitError(
-      'ROOT_NAME_MISMATCH',
-      'Submitted selected root name does not match path-derived root name.',
-      400
-    );
-  }
-
-  if (manifest.fileCount !== validDescriptors.length) {
-    throw new BrowserImportPreviewLimitError(
-      'FILE_COUNT_MISMATCH',
-      'Submitted file count does not match validated descriptor count.',
-      400
-    );
-  }
-
-  if (manifest.declaredTotalBytes !== recomputedTotalBytes) {
-    throw new BrowserImportPreviewLimitError(
-      'DECLARED_BYTES_MISMATCH',
-      'Submitted total bytes does not match validated sum of file sizes.',
-      400
-    );
-  }
-
   // Step 6 & 8: Folder Shape Classification & Batch Grouping
-  const rootMetadataFiles: SelectedFileDescriptor[] = [];
-  const childMetadataFiles: SelectedFileDescriptor[] = [];
+  const rootMetadataFiles: ServerDerivedDescriptor[] = [];
+  const childMetadataFiles: ServerDerivedDescriptor[] = [];
 
   for (const desc of validDescriptors) {
     const parts = desc.normalizedPath.split('/');
@@ -293,7 +127,7 @@ export async function parseBrowserImportPreview(
   }
 
   const batchIssues: BrowserImportIssue[] = [];
-  const packageBuckets = new Map<string, SelectedFileDescriptor[]>();
+  const packageBuckets = new Map<string, ServerDerivedDescriptor[]>();
 
   for (const desc of validDescriptors) {
     const parts = desc.normalizedPath.split('/');
@@ -374,7 +208,7 @@ export async function parseBrowserImportPreview(
 
       // Canonical name map & structural depth check
       const canonicalNamesMap = new Map<string, string>();
-      const recognizedFiles = new Map<string, SelectedFileDescriptor>();
+      const recognizedFiles = new Map<string, ServerDerivedDescriptor>();
 
       for (const desc of descList) {
         const parts = desc.normalizedPath.split('/');
@@ -442,7 +276,7 @@ export async function parseBrowserImportPreview(
       filePresence.snapshotPresent = recognizedFiles.has('snapshot-1.png');
 
       for (const [, desc] of recognizedFiles.entries()) {
-        const derived = deriveMimeType(desc.fileName, desc.mimeType);
+        const derived = deriveMimeType(desc.fileName, desc.canonicalMimeType);
         if (derived.warning) {
           warnings.push({
             code: 'MIME_CONFLICT_WARNING',
@@ -460,7 +294,7 @@ export async function parseBrowserImportPreview(
         ) {
           errors.push({
             code: 'FILE_IMAGE_OVERSIZED',
-            message: `Image file ${desc.fileName} exceeds size limit of 10 MB.`,
+            message: `Image file ${desc.fileName} exceeds size limit of 5 MB.`,
             severity: 'error',
             packagePath: pkgPath,
             fileName: desc.fileName,
@@ -469,7 +303,7 @@ export async function parseBrowserImportPreview(
         if (lowerName === 'poster.pdf' && desc.fileSizeBytes > BROWSER_IMPORT_LIMITS.MAX_PDF_SIZE_BYTES) {
           errors.push({
             code: 'FILE_PDF_OVERSIZED',
-            message: `PDF file ${desc.fileName} exceeds size limit of 25 MB.`,
+            message: `PDF file ${desc.fileName} exceeds size limit of 20 MB.`,
             severity: 'error',
             packagePath: pkgPath,
             fileName: desc.fileName,
@@ -615,21 +449,21 @@ export async function parseBrowserImportPreview(
             ? {
                 fileName: posterImgDesc.fileName,
                 fileSizeBytes: posterImgDesc.fileSizeBytes,
-                mimeType: deriveMimeType(posterImgDesc.fileName, posterImgDesc.mimeType).mimeType,
+                mimeType: deriveMimeType(posterImgDesc.fileName, posterImgDesc.canonicalMimeType).mimeType,
               }
             : null,
           posterPdf: posterPdfDesc
             ? {
                 fileName: posterPdfDesc.fileName,
                 fileSizeBytes: posterPdfDesc.fileSizeBytes,
-                mimeType: deriveMimeType(posterPdfDesc.fileName, posterPdfDesc.mimeType).mimeType,
+                mimeType: deriveMimeType(posterPdfDesc.fileName, posterPdfDesc.canonicalMimeType).mimeType,
               }
             : null,
           snapshot1: snapshotDesc
             ? {
                 fileName: snapshotDesc.fileName,
                 fileSizeBytes: snapshotDesc.fileSizeBytes,
-                mimeType: deriveMimeType(snapshotDesc.fileName, snapshotDesc.mimeType).mimeType,
+                mimeType: deriveMimeType(snapshotDesc.fileName, snapshotDesc.canonicalMimeType).mimeType,
               }
             : null,
         };
@@ -700,7 +534,7 @@ export async function parseBrowserImportPreview(
       selectedRootName: derivedRootName,
       packageCount: packagePreviews.length,
       selectedFileCount: validDescriptors.length,
-      declaredTotalBytes: recomputedTotalBytes,
+      declaredTotalBytes: manifest.declaredTotalBytes,
       validPackageCount,
       warningPackageCount,
       invalidPackageCount,
@@ -710,6 +544,23 @@ export async function parseBrowserImportPreview(
       batchIssues,
       packages: packagePreviews,
     },
+  };
+}
+
+function stripLegacyDerivedDescriptorFields(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const manifest = raw as Record<string, unknown>;
+  if (!Array.isArray(manifest.descriptors)) return raw;
+  return {
+    ...manifest,
+    descriptors: manifest.descriptors.map((descriptor) => {
+      if (!descriptor || typeof descriptor !== 'object') return descriptor;
+      const wire = { ...(descriptor as Record<string, unknown>) };
+      delete wire.normalizedPath;
+      delete wire.fileName;
+      delete wire.packagePath;
+      return wire;
+    }),
   };
 }
 

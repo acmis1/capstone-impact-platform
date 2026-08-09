@@ -1,21 +1,44 @@
 import React from 'react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { requireAdmin } from '../../../../auth/requireAdmin';
 import { hasPermission } from '../../../../auth/permissions';
+import { AdminAuthError, AuthenticatedAdminContext } from '../../../../auth/authTypes';
 import BrowserImportPreviewClient from '../../../../components/imports/BrowserImportPreviewClient';
 
 export const dynamic = 'force-dynamic';
 
 export default async function NewImportPreviewPage() {
-  let authContext;
+  let authContext: AuthenticatedAdminContext;
   try {
     authContext = await requireAdmin();
-  } catch {
+  } catch (err: unknown) {
+    if (err instanceof AdminAuthError) {
+      if (err.type === 'UNAUTHENTICATED') {
+        redirect('/login');
+      }
+      if (err.type === 'CONFIGURATION_FAILURE') {
+        return (
+          <div style={{ padding: '3rem', textAlign: 'center', color: '#EF4444', backgroundColor: '#0B0F19', minHeight: '100vh' }}>
+            <h2>System Error</h2>
+            <p>Authentication service is temporarily unavailable. Please try again.</p>
+            <Link href="/admin/imports" style={{ color: '#3B82F6', textDecoration: 'underline' }}>Return to Staging Imports</Link>
+          </div>
+        );
+      }
+      return (
+        <div style={{ padding: '3rem', textAlign: 'center', color: '#EF4444', backgroundColor: '#0B0F19', minHeight: '100vh' }}>
+          <h2>Access Denied</h2>
+          <p>You do not have permission to access project import previews.</p>
+          <Link href="/admin/imports" style={{ color: '#3B82F6', textDecoration: 'underline' }}>Return to Staging Imports</Link>
+        </div>
+      );
+    }
     return (
       <div style={{ padding: '3rem', textAlign: 'center', color: '#EF4444', backgroundColor: '#0B0F19', minHeight: '100vh' }}>
-        <h2>Authentication Required</h2>
-        <p>Please log in with staff credentials to access project import preview.</p>
-        <Link href="/login" style={{ color: '#3B82F6', textDecoration: 'underline' }}>Return to Login</Link>
+        <h2>System Error</h2>
+        <p>An unexpected system error occurred while verifying credentials. Please try again.</p>
+        <Link href="/admin/imports" style={{ color: '#3B82F6', textDecoration: 'underline' }}>Return to Staging Imports</Link>
       </div>
     );
   }
@@ -26,7 +49,7 @@ export default async function NewImportPreviewPage() {
     return (
       <div style={{ padding: '3rem', textAlign: 'center', color: '#EF4444', backgroundColor: '#0B0F19', minHeight: '100vh' }}>
         <h2>Access Denied</h2>
-        <p>Your user role ({authContext.roles.join(', ')}) does not have permission to access project import previews.</p>
+        <p>You do not have permission to access project import previews.</p>
         <Link href="/admin/imports" style={{ color: '#3B82F6', textDecoration: 'underline' }}>Return to Import Batches</Link>
       </div>
     );

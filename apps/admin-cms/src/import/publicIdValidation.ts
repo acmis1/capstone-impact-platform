@@ -20,19 +20,17 @@ export function validateFolderDerivedPublicId(publicId: string): PublicIdValidat
     };
   }
 
-  const trimmed = publicId.trim();
-
-  if (trimmed.length < 1 || trimmed.length > 100) {
+  if (publicId.length < 1 || publicId.length > 100) {
     return {
       valid: false,
-      message: `Folder-derived public ID length must be between 1 and 100 characters (received ${trimmed.length}).`,
+      message: 'Folder-derived public ID length must be between 1 and 100 characters.',
     };
   }
 
-  if (!PUBLIC_ID_REGEX.test(trimmed)) {
+  if (!PUBLIC_ID_REGEX.test(publicId)) {
     return {
       valid: false,
-      message: `Folder-derived public ID "${trimmed}" is invalid. Public ID must contain only lowercase alphanumeric characters and single hyphens.`,
+      message: 'Folder-derived public ID is invalid. Public ID must contain only lowercase alphanumeric characters and single hyphens.',
     };
   }
 
