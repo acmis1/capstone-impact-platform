@@ -7,6 +7,8 @@ import { Button } from '../ui/button';
 import { ProjectListQuery } from '../../domain/projectQuery';
 
 import { buildQueryString } from './filterQueryHelpers';
+import { useDashboardPreferences } from './useDashboardPreferences';
+
 
 export interface ProjectFilterBarProps {
   query: ProjectListQuery;
@@ -24,6 +26,12 @@ export function ProjectFilterBar({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const {
+  preferences,
+  updatePreferences,
+  resetPreferences,
+  isLoaded,
+} = useDashboardPreferences();
 
   const [searchInput, setSearchInput] = React.useState(query.search || '');
   const [prevQuerySearch, setPrevQuerySearch] = React.useState(query.search);
@@ -40,14 +48,116 @@ export function ProjectFilterBar({
   };
 
   const handleFilterChange = (key: string, value: string) => {
-    const queryString = buildQueryString(searchParams?.toString() || '', { [key]: value || null });
-    router.push(`${pathname}?${queryString}`);
+    // const queryString = buildQueryString(searchParams?.toString() || '', { [key]: value || null });
+    // router.push(`${pathname}?${queryString}`);
+    const queryString = buildQueryString(
+      searchParams?.toString() || '',
+      { [key]: value || null },
+    );
+
+  // const preferences = loadDashboardPreferences();
+
+  if (key === 'status') {
+    // preferences.status = value as typeof preferences.status;
+    updatePreferences({
+      status: value,
+    });
+  }
+
+  if (key === 'year') {
+    // preferences.year = value;
+    updatePreferences({
+      year: value,
+    });
+  }
+
+  if (key === 'program') {
+    // preferences.program = value;
+    updatePreferences({
+      program: value,
+    });
+  }
+
+  if (key === 'discipline') {
+    // preferences.discipline = value;
+    updatePreferences({
+      discipline: value,
+    });
+  }
+
+  if (key === 'pageSize') {
+    const parsedPageSize = Number(value);
+
+    if (parsedPageSize === 10 || parsedPageSize === 25 || parsedPageSize === 50) {
+      // preferences.pageSize = parsed;
+      updatePreferences({
+        pageSize: parsedPageSize,
+      });
+    }
+  }
+
+  // saveDashboardPreferences(preferences);
+
+  router.push(`${pathname}?${queryString}`);
   };
 
   const handleClearFilters = () => {
     setSearchInput('');
     router.push(pathname);
   };
+
+  React.useEffect(() => {
+  if (!isLoaded) {
+    return;
+  }
+
+  const updates: Record<string, string | number | null> = {};
+
+  if (!query.status && preferences.status) {
+    updates.status = preferences.status;
+  }
+
+  if (!query.program && preferences.program) {
+    updates.program = preferences.program;
+  }
+
+  if (!query.discipline && preferences.discipline) {
+    updates.discipline = preferences.discipline;
+  }
+
+  if (!query.year && preferences.year) {
+    updates.year = preferences.year;
+  }
+
+  if (
+    preferences.pageSize !== undefined &&
+    query.pageSize !== preferences.pageSize
+  ) {
+    updates.pageSize = preferences.pageSize;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return;
+  }
+
+  const queryString = buildQueryString(
+    searchParams?.toString() || '',
+    updates,
+  );
+
+  router.replace(`${pathname}?${queryString}`);
+}, [
+  isLoaded,
+  preferences,
+  query.status,
+  query.program,
+  query.discipline,
+  query.year,
+  query.pageSize,
+  searchParams,
+  pathname,
+  router,
+]);
 
   const hasActiveFilters = Boolean(
     query.search ||
@@ -86,6 +196,17 @@ export function ProjectFilterBar({
               <span>Clear</span>
             </Button>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              resetPreferences();
+              setSearchInput('');
+              router.push(pathname);
+            }}
+          >
+            Reset preferences
+        </Button>
         </div>
       </form>
 

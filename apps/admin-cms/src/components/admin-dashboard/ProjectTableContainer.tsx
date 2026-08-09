@@ -10,17 +10,17 @@ import {
   createColumnHelper,
 } from '@tanstack/react-table';
 import { ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
-import { ProjectListQuery } from '../../domain/projectQuery';
+import { AllowedSortField, ProjectListQuery } from '../../domain/projectQuery';
 import { ProjectStatusBadge } from '../admin/ProjectStatusBadge';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-
 import {
   getProjectDetailHref,
   getProjectColumnSortField,
   ProjectIndexRow,
   ProjectIndexResult,
 } from './projectDashboardHelpers';
+import { useDashboardPreferences } from './useDashboardPreferences';
 
 export interface ProjectTableContainerProps {
   query: ProjectListQuery;
@@ -44,6 +44,7 @@ function formatDate(dateStr?: string) {
   }
 }
 
+
 export function ProjectTableContainer({ query, result }: ProjectTableContainerProps) {
   // Opt out of React Compiler memoization because useReactTable is an incompatible library boundary
   "use no memo";
@@ -51,9 +52,26 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { preferences, updatePreferences } = useDashboardPreferences();
 
   const handleSort = React.useCallback(
     (field: string) => {
+      // Validate sort field before updating the URL
+      const sortableFields = [
+        'created_at',
+        'updated_at',
+        'title',
+        'year',
+        'status',
+      ] as const;
+
+      if (!sortableFields.includes(field as typeof sortableFields[number])) {
+        return;
+      }
+      updatePreferences({
+        sort: field as AllowedSortField,
+      });
+
       const currentSort = query.sort || 'created_at';
       const currentDirection = query.direction || 'desc';
 
@@ -67,7 +85,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
       params.set('direction', nextDirection);
       params.delete('page'); // Reset to page 1
 
-      router.push(`${pathname}?${params.toString()}`);
+      router.push(`${pathname}?${params.toString()}`)
     },
     [query.sort, query.direction, searchParams, pathname, router]
   );
