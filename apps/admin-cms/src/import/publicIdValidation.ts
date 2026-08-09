@@ -1,36 +1,38 @@
 /**
- * Centralized provisional validator for folder-derived public IDs.
- * 
- * Rules:
- * - Must be lowercase alphanumeric characters and single hyphens.
- * - Format regex: ^[a-z0-9]+(?:-[a-z0-9]+)*$
- * - Length between 1 and 100 characters.
- * 
- * Note: This is a provisional technical safety rule for folder-derived public IDs
- * and may be adjusted after formal stakeholder confirmation.
+ * Validation result for folder-derived public ID.
  */
-export function validateFolderDerivedPublicId(folderName: string): { valid: boolean; message?: string } {
-  if (!folderName || typeof folderName !== 'string') {
+export interface PublicIdValidationResult {
+  valid: boolean;
+  message?: string;
+}
+
+const PUBLIC_ID_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * Validate provisional public ID derived from folder name.
+ * Rule: Lowercase alphanumeric with hyphens, 1-100 characters.
+ */
+export function validateFolderDerivedPublicId(publicId: string): PublicIdValidationResult {
+  if (!publicId || typeof publicId !== 'string') {
     return {
       valid: false,
-      message: 'Folder name is empty or invalid.',
+      message: 'Folder-derived public ID is required and cannot be empty.',
     };
   }
 
-  const trimmed = folderName.trim();
+  const trimmed = publicId.trim();
 
   if (trimmed.length < 1 || trimmed.length > 100) {
     return {
       valid: false,
-      message: 'Folder name length must be between 1 and 100 characters.',
+      message: `Folder-derived public ID length must be between 1 and 100 characters (received ${trimmed.length}).`,
     };
   }
 
-  const validFormat = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-  if (!validFormat.test(trimmed)) {
+  if (!PUBLIC_ID_REGEX.test(trimmed)) {
     return {
       valid: false,
-      message: 'Folder-derived public ID must consist of lowercase letters, numbers, and hyphens (e.g. "2026-project-alpha").',
+      message: `Folder-derived public ID "${trimmed}" is invalid. Public ID must contain only lowercase alphanumeric characters and single hyphens.`,
     };
   }
 

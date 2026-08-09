@@ -6,10 +6,13 @@ import {
   generateUploadKey,
   isIgnoredSystemFile,
   normalizeRelativePath,
+} from '../../import/browserSelection';
+import {
+  BrowserImportPreviewResponse,
   SelectedFileDescriptor,
   SelectionManifest,
-} from '../../import/browserSelection';
-import { BrowserImportPreviewResponse } from '../../import/parseBrowserImportPreview';
+  validateBrowserImportPreviewResponse,
+} from '../../import/browserImportPreviewContract';
 
 export default function BrowserImportPreviewClient() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -35,38 +38,149 @@ export default function BrowserImportPreviewClient() {
 
     setApiError(null);
     setPreviewResult(null);
-    setExpandedPackages({});
 
-    const validFileList: File[] = [];
+    const descriptors: SelectedFileDescriptor[] = [];
     let totalBytes = 0;
-    const packageSet = new Set<string>();
-    let rootName = '';
+    const packagePaths = new Set<string>();
 
-    for (const f of files) {
-      const rawPath = f.webkitRelativePath || f.name;
-      const norm = normalizeRelativePath(rawPath);
-      if (!norm || isIgnoredSystemFile(norm)) continue;
+    for (const file of files) {
+      const relPath = file.webkitRelativePath || file.name;
+      const norm = normalizeRelativePath(relPath);
 
+      if (!norm) continue;
+      if (isIgnoredSystemFile(norm)) {
+        continue;
+      }
+
+      totalBytes += file.size;
       const parts = norm.split('/');
-      if (!rootName && parts.length > 0) {
-        rootName = parts[0];
-      }
+      const fileName = parts[parts.length - 1];
+      const mime = deriveMimeType(fileName, file.type).mimeType;
+      const pkgPath = parts.length >= 2 ? (parts.length === 2 ? parts[0] : `${parts[0]}/${parts[1]}`) : parts[0];
+      packagePaths.add(pkgPath);
 
-      totalBytes += f.size;
-      validFileList.push(f);
-
-      // Package folder path
-      if (parts.length >= 3) {
-        packageSet.add(`${parts[0]}/${parts[1]}`);
-      } else if (parts.length >= 2) {
-        packageSet.add(parts[0]);
-      }
+      descriptors.push({
+        uploadKey: generateUploadKey(norm),
+        originalPath: relPath,
+        normalizedPath: norm,
+        fileName,
+        fileSizeBytes: file.size,
+        mimeType: mime,
+        packagePath: pkgPath,
+      });
     }
 
-    setSelectedFiles(validFileList);
-    setSelectedRootName(rootName || 'Selected Folder');
+    if (descriptors.length === 0) {
+      setApiError('The selected folder contains no valid project package files.');
+      setSelectedFiles([]);
+      setSelectedRootName(null);
+      return;
+    }
+
+    const rootName = descriptors[0].normalizedPath.split('/')[0];
+    setSelectedFiles(files);
+    setSelectedRootName(rootName);
     setDeclaredTotalBytes(totalBytes);
-    setDetectedPackageCount(packageSet.size || 1);
+    setDetectedPackageCount(packagePaths.size);
+  };
+
+  const handleRequestPreview = async () => {
+    if (selectedFiles.length === 0 || !selectedRootName) return;
+
+    setIsLoading(true);
+    setApiError(null);
+
+    try {
+      const descriptors: SelectedFileDescriptor[] = [];
+      const metadataFilesToUpload: File[] = [];
+      let totalBytes = 0;
+      let ignoredCount = 0;
+
+      for (const file of selectedFiles) {
+        const relPath = file.webkitRelativePath || file.name;
+        const norm = normalizeRelativePath(relPath);
+
+        if (!norm || isIgnoredSystemFile(norm)) {
+          if (norm && isIgnoredSystemFile(norm)) ignoredCount++;
+          continue;
+        }
+
+        totalBytes += file.size;
+        const parts = norm.split('/');
+        const fileName = parts[parts.length - 1];
+        const lowerName = fileName.toLowerCase();
+        const mime = deriveMimeType(fileName, file.type).mimeType;
+        const uploadKey = generateUploadKey(norm);
+        const pkgPath = parts.length >= 2 ? (parts.length === 2 ? parts[0] : `${parts[0]}/${parts[1]}`) : parts[0];
+
+        descriptors.push({
+          uploadKey,
+          originalPath: relPath,
+          normalizedPath: norm,
+          fileName,
+          fileSizeBytes: file.size,
+          mimeType: mime,
+          packagePath: pkgPath,
+        });
+
+        // Browser preview rule: Media binary files STAY in browser! Only metadata attached.
+        if (lowerName === 'project-details.xlsx' || lowerName === 'project.json') {
+          metadataFilesToUpload.push(file);
+        }
+      }
+
+      const manifest: SelectionManifest = {
+        selectedRootName,
+        fileCount: descriptors.length,
+        declaredTotalBytes: totalBytes,
+        ignoredSystemFilesCount: ignoredCount,
+        descriptors,
+      };
+
+      const formData = new FormData();
+      formData.append('manifest', JSON.stringify(manifest));
+
+      for (const metaFile of metadataFilesToUpload) {
+        const relPath = metaFile.webkitRelativePath || metaFile.name;
+        const norm = normalizeRelativePath(relPath)!;
+        const key = generateUploadKey(norm);
+        formData.append(key, metaFile);
+      }
+
+      const res = await fetch('/api/imports/preview', {
+        method: 'POST',
+        body: formData,
+      });
+
+      let json: unknown = null;
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error('SERVER_NON_JSON');
+      }
+
+      if (!res.ok) {
+        const errObj = json as { error?: string };
+        setApiError(errObj.error || 'The preview request could not be completed. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Step 13: Strict Client Runtime Response Guard
+      const validatedResponse = validateBrowserImportPreviewResponse(json);
+      if (!validatedResponse) {
+        setApiError('The server returned an invalid or malformed preview response.');
+        setIsLoading(false);
+        return;
+      }
+
+      setPreviewResult(validatedResponse.batch);
+    } catch {
+      // Step 13: Safe client error handling without raw exception exposure
+      setApiError('The preview request could not be completed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleClearSelection = () => {
@@ -74,131 +188,42 @@ export default function BrowserImportPreviewClient() {
     setSelectedRootName(null);
     setDeclaredTotalBytes(0);
     setDetectedPackageCount(0);
-    setApiError(null);
     setPreviewResult(null);
-    setExpandedPackages({});
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const handleRequestPreview = async () => {
-    if (selectedFiles.length === 0 || isLoading) return;
-
-    setIsLoading(true);
     setApiError(null);
-
-    try {
-      const descriptors: SelectedFileDescriptor[] = [];
-      const formData = new FormData();
-
-      for (const f of selectedFiles) {
-        const rawPath = f.webkitRelativePath || f.name;
-        const norm = normalizeRelativePath(rawPath);
-        if (!norm || isIgnoredSystemFile(norm)) continue;
-
-        const parts = norm.split('/');
-        const fileName = parts[parts.length - 1];
-        const lowerName = fileName.toLowerCase();
-
-        const uploadKey = generateUploadKey(norm, f.size);
-        const derived = deriveMimeType(fileName, f.type);
-
-        let pkgPath = parts[0];
-        if (parts.length >= 3) {
-          pkgPath = `${parts[0]}/${parts[1]}`;
-        }
-
-        descriptors.push({
-          uploadKey,
-          normalizedPath: norm,
-          originalPath: rawPath,
-          fileName,
-          fileSizeBytes: f.size,
-          mimeType: derived.mimeType,
-          packagePath: pkgPath,
-        });
-
-        // CRITICAL: Attach ONLY metadata files (.xlsx and .json) to FormData
-        // NEVER attach media binaries (PNG, PDF, snapshots) to FormData!
-        if (lowerName === 'project-details.xlsx' || lowerName === 'project.json') {
-          formData.append(uploadKey, f, fileName);
-        }
-      }
-
-      const manifest: SelectionManifest = {
-        selectedRootName: selectedRootName || 'Selected Folder',
-        fileCount: descriptors.length,
-        declaredTotalBytes,
-        descriptors,
-        ignoredSystemFilesCount: selectedFiles.length - descriptors.length,
-      };
-
-      formData.append('manifest', JSON.stringify(manifest));
-
-      const res = await fetch('/api/imports/preview', {
-        method: 'POST',
-        headers: {
-          'Cache-Control': 'no-store',
-        },
-        body: formData,
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        const errMsg = data.error || 'Server-side preview request failed.';
-        setApiError(errMsg);
-      } else if (data.success && data.batch) {
-        setPreviewResult(data.batch);
-      } else {
-        setApiError('Received invalid response structure from preview service.');
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Network error during preview request.';
-      setApiError(message);
-    } finally {
-      setIsLoading(false);
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const togglePackageExpand = (pkgPath: string) => {
-    setExpandedPackages((prev) => ({
-      ...prev,
-      [pkgPath]: !prev[pkgPath],
-    }));
+    setExpandedPackages((prev) => ({ ...prev, [pkgPath]: !prev[pkgPath] }));
   };
 
   const formatMB = (bytes: number) => (bytes / (1024 * 1024)).toFixed(2);
 
   return (
-    <div style={{ color: '#F3F4F6', fontFamily: 'Inter, system-ui, sans-serif' }}>
-      {/* ⚠️ Permanent Visual Notice */}
+    <div style={{ maxWidth: '1100px', margin: '0 auto', color: '#F3F4F6', fontFamily: 'system-ui, sans-serif' }}>
+      {/* Permanent Preview Banners */}
       <div style={{
-        backgroundColor: 'rgba(245, 158, 11, 0.15)',
-        border: '1px solid rgba(245, 158, 11, 0.3)',
+        backgroundColor: '#1E293B',
         borderRadius: '12px',
-        padding: '1rem 1.25rem',
+        padding: '1.25rem 1.5rem',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
         marginBottom: '1.5rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        color: '#FBBF24',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontWeight: 700, fontSize: '0.95rem' }}>
-          <span>🔒 Preview only — nothing has been saved</span>
+        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#60A5FA', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          🔒 Preview only — nothing has been saved
         </div>
-        <span style={{ fontSize: '0.8rem', color: '#D1D5DB' }}>
-          Media files stay in the browser during this step.
-        </span>
+        <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: '#9CA3AF', lineHeight: 1.5 }}>
+          Selecting a project folder or batch directory parses metadata and validates layout specs entirely in memory.
+          Zero database rows are written, zero storage objects are uploaded, and zero public feed records are published.
+        </p>
       </div>
 
       {!isSupported && (
         <div style={{
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
+          backgroundColor: 'rgba(239, 68, 68, 0.15)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
           borderRadius: '12px',
-          padding: '1.25rem',
+          padding: '1rem 1.25rem',
           marginBottom: '1.5rem',
           color: '#EF4444',
         }}>
@@ -375,6 +400,24 @@ export default function BrowserImportPreviewClient() {
               <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#EF4444', marginTop: '0.25rem' }}>{previewResult.invalidPackageCount}</div>
             </div>
           </div>
+
+          {/* Batch-Level Issues */}
+          {previewResult.batchIssues && previewResult.batchIssues.length > 0 && (
+            <div style={{
+              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              border: '1px solid rgba(245, 158, 11, 0.2)',
+              borderRadius: '12px',
+              padding: '1rem 1.25rem',
+              marginBottom: '1.5rem',
+            }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', color: '#F59E0B', fontWeight: 700 }}>Batch Root Folder Warnings</h4>
+              {previewResult.batchIssues.map((issue, idx) => (
+                <div key={`batch-issue-${idx}`} style={{ fontSize: '0.85rem', color: '#D1D5DB' }}>
+                  ⚠️ <strong>[{issue.code}]</strong> {issue.message} {issue.fileName && `(file: ${issue.fileName})`}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Package Preview List */}
           <h3 style={{ fontSize: '1.2rem', margin: '0 0 1rem 0', color: '#FFFFFF' }}>2. Isolated Package Previews</h3>

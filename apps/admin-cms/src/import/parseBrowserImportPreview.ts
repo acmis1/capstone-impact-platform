@@ -1,76 +1,32 @@
 import {
+  BROWSER_IMPORT_LIMITS,
+  BrowserImportIssue,
+  BrowserImportPackagePreview,
+  BrowserImportPreviewResponse,
   SelectedFileDescriptor,
   SelectionManifest,
+  selectionManifestSchema,
+} from './browserImportPreviewContract';
+import {
   deriveMimeType,
+  generateUploadKey,
   isIgnoredSystemFile,
   normalizeRelativePath,
 } from './browserSelection';
 import { validateFolderDerivedPublicId } from './publicIdValidation';
 import { parseProjectDetailsWorkbook } from './parseProjectDetailsWorkbook';
+import { ProjectDetailsWorkbookError } from './projectDetailsWorkbookContract';
 import { buildImportPackageManifestFromWorkbook } from './workbookManifestAdapter';
-import { parseProjectDetailsJson } from './parseProjectDetailsJson';
+import {
+  parseProjectDetailsJson,
+  ProjectDetailsJsonError,
+} from './parseProjectDetailsJson';
 import { validateImportPackage } from './validateImportPackage';
 import {
   ImportPackageFileMetadata,
   ImportPackageManifest,
   ImportPackageParseResult,
 } from './importTypes';
-
-export interface BrowserImportIssue {
-  code: string;
-  message: string;
-  severity: 'error' | 'warning';
-  packagePath?: string;
-  fileName?: string;
-  fieldName?: string;
-  columnName?: string;
-  rowNumber?: number;
-}
-
-export interface BrowserImportPackagePreview {
-  packagePath: string;
-  folderName: string;
-  proposedPublicId: string;
-  metadataSource: 'xlsx' | 'json' | null;
-  status: 'valid' | 'warning' | 'invalid';
-  previewMetadata: {
-    title: string;
-    year: string;
-    program: string;
-    discipline: string;
-    groupName: string;
-    teamMemberCount: number;
-    layoutTemplate: string;
-    featuredMedia: string;
-  } | null;
-  filePresence: {
-    xlsxPresent: boolean;
-    jsonPresent: boolean;
-    posterImagePresent: boolean;
-    posterPdfPresent: boolean;
-    snapshotPresent: boolean;
-  };
-  errors: BrowserImportIssue[];
-  warnings: BrowserImportIssue[];
-}
-
-export interface BrowserImportPreviewResponse {
-  success: true;
-  batch: {
-    mode: 'single' | 'batch';
-    selectedRootName: string;
-    packageCount: number;
-    selectedFileCount: number;
-    declaredTotalBytes: number;
-    validPackageCount: number;
-    warningPackageCount: number;
-    invalidPackageCount: number;
-    totalWarnings: number;
-    totalErrors: number;
-    mediaValidationMode: 'descriptor_only';
-    packages: BrowserImportPackagePreview[];
-  };
-}
 
 export class BrowserImportPreviewLimitError extends Error {
   readonly code: string;
@@ -84,37 +40,31 @@ export class BrowserImportPreviewLimitError extends Error {
   }
 }
 
-// Server limits
-const MAX_PACKAGES = 25;
-const MAX_DESCRIPTORS = 500;
-const MAX_METADATA_FILES = 25;
-const MAX_XLSX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
-const MAX_JSON_SIZE_BYTES = 1 * 1024 * 1024; // 1 MB
-const MAX_TOTAL_METADATA_BYTES = 25 * 1024 * 1024; // 25 MB
-
-function extractIssuesFromError(err: unknown): BrowserImportIssue[] | null {
-  if (err && typeof err === 'object' && 'issues' in err && Array.isArray((err as { issues: unknown }).issues)) {
-    return (err as { issues: BrowserImportIssue[] }).issues;
-  }
-  return null;
-}
-
 /**
  * Server-side parser and batch validator for browser-selected folder previews.
+ * Strictly derives paths, enforces server limits, isolates package previews, and sanitizes errors.
  */
 export async function parseBrowserImportPreview(
-  manifest: SelectionManifest,
+  rawManifest: unknown,
   uploadedMetadataFiles: Map<string, Buffer>
 ): Promise<BrowserImportPreviewResponse> {
-  if (!manifest || !Array.isArray(manifest.descriptors)) {
-    throw new BrowserImportPreviewLimitError('MANIFEST_INVALID', 'Selection manifest is invalid or malformed.', 400);
+  // Step 5: Strict Runtime Zod Schema Validation
+  const parseResult = selectionManifestSchema.safeParse(rawManifest);
+  if (!parseResult.success) {
+    throw new BrowserImportPreviewLimitError(
+      'MANIFEST_INVALID',
+      'Selection manifest is invalid or malformed.',
+      400
+    );
   }
 
+  const manifest: SelectionManifest = parseResult.data as SelectionManifest;
+
   // 1. Enforce Server Limits
-  if (manifest.descriptors.length > MAX_DESCRIPTORS) {
+  if (manifest.descriptors.length > BROWSER_IMPORT_LIMITS.MAX_DESCRIPTORS) {
     throw new BrowserImportPreviewLimitError(
       'DESCRIPTOR_LIMIT_EXCEEDED',
-      `Selection contains ${manifest.descriptors.length} files, exceeding the maximum limit of ${MAX_DESCRIPTORS}.`,
+      `Selection contains ${manifest.descriptors.length} files, exceeding the maximum limit of ${BROWSER_IMPORT_LIMITS.MAX_DESCRIPTORS}.`,
       413
     );
   }
@@ -127,57 +77,141 @@ export async function parseBrowserImportPreview(
     totalMetadataBytes += buffer.length;
 
     const lowerKey = key.toLowerCase();
-    if (lowerKey.includes('.xlsx') && buffer.length > MAX_XLSX_SIZE_BYTES) {
+    if (lowerKey.endsWith('.xlsx') && buffer.length > BROWSER_IMPORT_LIMITS.MAX_XLSX_SIZE_BYTES) {
       throw new BrowserImportPreviewLimitError(
         'XLSX_SIZE_LIMIT_EXCEEDED',
-        `An uploaded .xlsx metadata file exceeds the maximum limit of 5 MB.`,
+        'An uploaded .xlsx metadata file exceeds the maximum limit of 5 MB.',
         413
       );
     }
-    if (lowerKey.includes('.json') && buffer.length > MAX_JSON_SIZE_BYTES) {
+    if (lowerKey.endsWith('.json') && buffer.length > BROWSER_IMPORT_LIMITS.MAX_JSON_SIZE_BYTES) {
       throw new BrowserImportPreviewLimitError(
         'JSON_SIZE_LIMIT_EXCEEDED',
-        `An uploaded .json metadata file exceeds the maximum limit of 1 MB.`,
+        'An uploaded .json metadata file exceeds the maximum limit of 1 MB.',
         413
       );
     }
   }
 
-  if (metadataFileCount > MAX_METADATA_FILES) {
+  if (metadataFileCount > BROWSER_IMPORT_LIMITS.MAX_METADATA_FILES) {
     throw new BrowserImportPreviewLimitError(
       'METADATA_COUNT_LIMIT_EXCEEDED',
-      `Number of uploaded metadata files (${metadataFileCount}) exceeds maximum limit of ${MAX_METADATA_FILES}.`,
+      `Number of uploaded metadata files (${metadataFileCount}) exceeds maximum limit of ${BROWSER_IMPORT_LIMITS.MAX_METADATA_FILES}.`,
       413
     );
   }
 
-  if (totalMetadataBytes > MAX_TOTAL_METADATA_BYTES) {
+  if (totalMetadataBytes > BROWSER_IMPORT_LIMITS.MAX_TOTAL_METADATA_BYTES) {
     throw new BrowserImportPreviewLimitError(
       'TOTAL_METADATA_SIZE_LIMIT_EXCEEDED',
-      `Combined uploaded metadata size exceeds maximum limit of 25 MB.`,
+      'Combined uploaded metadata size exceeds maximum limit of 25 MB.',
       413
     );
   }
 
-  // Filter out system files & normalize
+  // Step 5: Server-side path normalization and descriptor derivation
   const validDescriptors: SelectedFileDescriptor[] = [];
-  const seenPaths = new Set<string>();
+  const seenNormPaths = new Set<string>();
+  const seenLowerPaths = new Set<string>();
+  const seenUploadKeys = new Set<string>();
+  const rootSegments = new Set<string>();
+
+  let recomputedTotalBytes = 0;
 
   for (const desc of manifest.descriptors) {
-    const norm = normalizeRelativePath(desc.originalPath);
-    if (!norm) continue;
-    if (isIgnoredSystemFile(norm)) continue;
+    const normPath = normalizeRelativePath(desc.originalPath);
+    if (!normPath) {
+      throw new BrowserImportPreviewLimitError(
+        'INVALID_DESCRIPTOR_PATH',
+        'Selection contains an invalid or unsafe file path.',
+        400
+      );
+    }
 
-    // Duplicate exact path check
-    if (seenPaths.has(norm)) {
+    if (isIgnoredSystemFile(normPath)) {
+      continue;
+    }
+
+    const lowerPath = normPath.toLowerCase();
+    if (seenLowerPaths.has(lowerPath)) {
       throw new BrowserImportPreviewLimitError(
         'DUPLICATE_FILE_PATH',
         'Selection contains duplicate relative file paths.',
         400
       );
     }
-    seenPaths.add(norm);
-    validDescriptors.push({ ...desc, normalizedPath: norm });
+    seenNormPaths.add(normPath);
+    seenLowerPaths.add(lowerPath);
+
+    const parts = normPath.split('/');
+    const derivedFileName = parts[parts.length - 1];
+    const lowerName = derivedFileName.toLowerCase();
+
+    if (lowerName === 'project-details.xlsx' && desc.fileSizeBytes > BROWSER_IMPORT_LIMITS.MAX_XLSX_SIZE_BYTES) {
+      throw new BrowserImportPreviewLimitError(
+        'METADATA_FILE_OVERSIZED',
+        `Metadata file ${derivedFileName} exceeds maximum limit of 5 MB.`,
+        413
+      );
+    }
+    if (lowerName === 'project.json' && desc.fileSizeBytes > BROWSER_IMPORT_LIMITS.MAX_JSON_SIZE_BYTES) {
+      throw new BrowserImportPreviewLimitError(
+        'METADATA_FILE_OVERSIZED',
+        `Metadata file ${derivedFileName} exceeds maximum limit of 1 MB.`,
+        413
+      );
+    }
+
+    const derivedRoot = parts[0];
+    rootSegments.add(derivedRoot);
+
+    const expectedUploadKey = generateUploadKey(normPath);
+    if (seenUploadKeys.has(expectedUploadKey)) {
+      throw new BrowserImportPreviewLimitError(
+        'DUPLICATE_UPLOAD_KEY',
+        'Selection contains duplicate upload keys.',
+        400
+      );
+    }
+    seenUploadKeys.add(expectedUploadKey);
+
+    // Tamper check on client fields if provided
+    if (desc.uploadKey && desc.uploadKey !== expectedUploadKey) {
+      throw new BrowserImportPreviewLimitError(
+        'DESCRIPTOR_TAMPERED',
+        'Submitted descriptor upload key does not match server-recomputed key.',
+        400
+      );
+    }
+
+    if (desc.normalizedPath && desc.normalizedPath !== normPath) {
+      throw new BrowserImportPreviewLimitError(
+        'DESCRIPTOR_TAMPERED',
+        'Submitted descriptor normalized path does not match server-recomputed path.',
+        400
+      );
+    }
+
+    if (desc.fileName && desc.fileName !== derivedFileName) {
+      throw new BrowserImportPreviewLimitError(
+        'DESCRIPTOR_TAMPERED',
+        'Submitted descriptor file name does not match server-recomputed file name.',
+        400
+      );
+    }
+
+    const derivedMime = deriveMimeType(derivedFileName, desc.mimeType).mimeType;
+    recomputedTotalBytes += desc.fileSizeBytes;
+
+    validDescriptors.push({
+      uploadKey: expectedUploadKey,
+      originalPath: desc.originalPath,
+      normalizedPath: normPath,
+      fileName: derivedFileName,
+      fileSizeBytes: desc.fileSizeBytes,
+      mimeType: derivedMime,
+      packagePath: '', // to be assigned during mode classification
+    });
   }
 
   if (validDescriptors.length === 0) {
@@ -188,16 +222,49 @@ export async function parseBrowserImportPreview(
     );
   }
 
-  const selectedRootName = manifest.selectedRootName || validDescriptors[0].normalizedPath.split('/')[0];
+  // Step 6: Derive Authoritative Root Segment
+  if (rootSegments.size > 1) {
+    throw new BrowserImportPreviewLimitError(
+      'MULTIPLE_ROOT_DIRECTORIES',
+      'Selection contains files from multiple root folders.',
+      400
+    );
+  }
 
-  // Group descriptors by package folder
+  const derivedRootName = Array.from(rootSegments)[0];
+
+  if (manifest.selectedRootName && manifest.selectedRootName !== derivedRootName) {
+    throw new BrowserImportPreviewLimitError(
+      'ROOT_NAME_MISMATCH',
+      'Submitted selected root name does not match path-derived root name.',
+      400
+    );
+  }
+
+  if (manifest.fileCount !== validDescriptors.length) {
+    throw new BrowserImportPreviewLimitError(
+      'FILE_COUNT_MISMATCH',
+      'Submitted file count does not match validated descriptor count.',
+      400
+    );
+  }
+
+  if (manifest.declaredTotalBytes !== recomputedTotalBytes) {
+    throw new BrowserImportPreviewLimitError(
+      'DECLARED_BYTES_MISMATCH',
+      'Submitted total bytes does not match validated sum of file sizes.',
+      400
+    );
+  }
+
+  // Step 6 & 8: Folder Shape Classification & Batch Grouping
   const rootMetadataFiles: SelectedFileDescriptor[] = [];
   const childMetadataFiles: SelectedFileDescriptor[] = [];
 
   for (const desc of validDescriptors) {
     const parts = desc.normalizedPath.split('/');
-    const fileName = parts[parts.length - 1].toLowerCase();
-    if (fileName === 'project-details.xlsx' || fileName === 'project.json') {
+    const lowerName = desc.fileName.toLowerCase();
+    if (lowerName === 'project-details.xlsx' || lowerName === 'project.json') {
       if (parts.length === 2) {
         rootMetadataFiles.push(desc);
       } else if (parts.length === 3) {
@@ -206,7 +273,6 @@ export async function parseBrowserImportPreview(
     }
   }
 
-  // Detect mode & global layout ambiguity
   let mode: 'single' | 'batch' = 'single';
 
   if (rootMetadataFiles.length > 0 && childMetadataFiles.length > 0) {
@@ -222,44 +288,44 @@ export async function parseBrowserImportPreview(
   } else if (rootMetadataFiles.length > 0) {
     mode = 'single';
   } else {
-    // Check general depth
     const maxDepth = Math.max(...validDescriptors.map((d) => d.normalizedPath.split('/').length));
-    if (maxDepth >= 3) {
-      mode = 'batch';
-    } else {
-      mode = 'single';
-    }
+    mode = maxDepth >= 3 ? 'batch' : 'single';
   }
 
-  // Partition descriptors into package buckets
+  const batchIssues: BrowserImportIssue[] = [];
   const packageBuckets = new Map<string, SelectedFileDescriptor[]>();
 
   for (const desc of validDescriptors) {
     const parts = desc.normalizedPath.split('/');
-    let pkgPath = '';
 
     if (mode === 'single') {
-      pkgPath = selectedRootName;
+      const pkgPath = derivedRootName;
+      desc.packagePath = pkgPath;
+      if (!packageBuckets.has(pkgPath)) packageBuckets.set(pkgPath, []);
+      packageBuckets.get(pkgPath)!.push(desc);
     } else {
-      // In batch mode, immediate child under root is package folder
-      if (parts.length >= 2) {
-        pkgPath = `${parts[0]}/${parts[1]}`;
+      // Batch Mode
+      if (parts.length === 2) {
+        // Step 8: Loose files directly under batch root do NOT create package buckets
+        batchIssues.push({
+          code: 'BATCH_ROOT_LOOSE_FILE',
+          message: 'Unrecognized file in batch root folder will be ignored.',
+          severity: 'warning',
+          fileName: desc.fileName,
+        });
       } else {
-        pkgPath = selectedRootName; // root loose file
+        const pkgPath = `${parts[0]}/${parts[1]}`;
+        desc.packagePath = pkgPath;
+        if (!packageBuckets.has(pkgPath)) packageBuckets.set(pkgPath, []);
+        packageBuckets.get(pkgPath)!.push(desc);
       }
     }
-
-    if (!packageBuckets.has(pkgPath)) {
-      packageBuckets.set(pkgPath, []);
-    }
-    packageBuckets.get(pkgPath)!.push(desc);
   }
 
-  // Check package count limit
-  if (packageBuckets.size > MAX_PACKAGES) {
+  if (packageBuckets.size > BROWSER_IMPORT_LIMITS.MAX_PACKAGES) {
     throw new BrowserImportPreviewLimitError(
       'PACKAGE_LIMIT_EXCEEDED',
-      `Selected folder contains ${packageBuckets.size} packages, exceeding maximum limit of ${MAX_PACKAGES}.`,
+      `Selected folder contains ${packageBuckets.size} packages, exceeding maximum limit of ${BROWSER_IMPORT_LIMITS.MAX_PACKAGES}.`,
       413
     );
   }
@@ -271,11 +337,11 @@ export async function parseBrowserImportPreview(
   let totalWarnings = 0;
   let totalErrors = 0;
 
-  // Process each package bucket in deterministic order
+  // Process packages deterministically sorted by packagePath
   const sortedPackagePaths = Array.from(packageBuckets.keys()).sort((a, b) => a.localeCompare(b));
 
   for (const pkgPath of sortedPackagePaths) {
-    const descList = packageBuckets.get(pkgPath)!;
+    const descList = packageBuckets.get(pkgPath)!.sort((a, b) => a.normalizedPath.localeCompare(b.normalizedPath));
     const folderName = pkgPath.includes('/') ? pkgPath.split('/')[1] : pkgPath;
 
     const errors: BrowserImportIssue[] = [];
@@ -295,7 +361,7 @@ export async function parseBrowserImportPreview(
     let currentManifest: ImportPackageManifest | null = null;
 
     try {
-      // Validate proposed public ID
+      // Step 6: Validate proposed public ID derived strictly from folder name
       const publicIdValidation = validateFolderDerivedPublicId(folderName);
       if (!publicIdValidation.valid) {
         errors.push({
@@ -306,17 +372,31 @@ export async function parseBrowserImportPreview(
         });
       }
 
-      // Check case-insensitive duplicate filenames in package
+      // Canonical name map & structural depth check
       const canonicalNamesMap = new Map<string, string>();
       const recognizedFiles = new Map<string, SelectedFileDescriptor>();
 
       for (const desc of descList) {
         const parts = desc.normalizedPath.split('/');
         const relativeDepth = parts.length - (mode === 'single' ? 1 : 2);
-        const fileName = parts[parts.length - 1];
+        const fileName = desc.fileName;
         const lowerName = fileName.toLowerCase();
 
-        // Check nested files
+        // Structural check: recognized files at depth > 1 inside package emit structure error
+        if (
+          relativeDepth > 1 &&
+          ['project-details.xlsx', 'project.json', 'poster.png', 'poster.pdf', 'snapshot-1.png'].includes(lowerName)
+        ) {
+          errors.push({
+            code: 'PACKAGE_STRUCTURE_INVALID',
+            message: 'Recognized package files must be placed directly in the project package folder.',
+            severity: 'error',
+            packagePath: pkgPath,
+            fileName,
+          });
+          continue;
+        }
+
         if (relativeDepth > 1) {
           warnings.push({
             code: 'PACKAGE_NESTED_FILE',
@@ -340,13 +420,11 @@ export async function parseBrowserImportPreview(
         }
         canonicalNamesMap.set(lowerName, fileName);
 
-        // Recognized files
         if (
           ['project-details.xlsx', 'project.json', 'poster.png', 'poster.pdf', 'snapshot-1.png'].includes(lowerName)
         ) {
           recognizedFiles.set(lowerName, desc);
         } else {
-          // Unknown package file warning (fileName strictly in context field)
           warnings.push({
             code: 'PACKAGE_UNKNOWN_FILE',
             message: 'Unrecognized file in package root will be ignored.',
@@ -357,14 +435,12 @@ export async function parseBrowserImportPreview(
         }
       }
 
-      // Track file presence
       filePresence.xlsxPresent = recognizedFiles.has('project-details.xlsx');
       filePresence.jsonPresent = recognizedFiles.has('project.json');
       filePresence.posterImagePresent = recognizedFiles.has('poster.png');
       filePresence.posterPdfPresent = recognizedFiles.has('poster.pdf');
       filePresence.snapshotPresent = recognizedFiles.has('snapshot-1.png');
 
-      // Check MIME conflicts on descriptors
       for (const [, desc] of recognizedFiles.entries()) {
         const derived = deriveMimeType(desc.fileName, desc.mimeType);
         if (derived.warning) {
@@ -376,9 +452,31 @@ export async function parseBrowserImportPreview(
             fileName: desc.fileName,
           });
         }
+
+        const lowerName = desc.fileName.toLowerCase();
+        if (
+          (lowerName === 'poster.png' || lowerName === 'snapshot-1.png') &&
+          desc.fileSizeBytes > BROWSER_IMPORT_LIMITS.MAX_IMAGE_SIZE_BYTES
+        ) {
+          errors.push({
+            code: 'FILE_IMAGE_OVERSIZED',
+            message: `Image file ${desc.fileName} exceeds size limit of 10 MB.`,
+            severity: 'error',
+            packagePath: pkgPath,
+            fileName: desc.fileName,
+          });
+        }
+        if (lowerName === 'poster.pdf' && desc.fileSizeBytes > BROWSER_IMPORT_LIMITS.MAX_PDF_SIZE_BYTES) {
+          errors.push({
+            code: 'FILE_PDF_OVERSIZED',
+            message: `PDF file ${desc.fileName} exceeds size limit of 25 MB.`,
+            severity: 'error',
+            packagePath: pkgPath,
+            fileName: desc.fileName,
+          });
+        }
       }
 
-      // Metadata source selection
       if (filePresence.xlsxPresent && filePresence.jsonPresent) {
         errors.push({
           code: 'PACKAGE_MULTIPLE_METADATA_SOURCES',
@@ -409,7 +507,6 @@ export async function parseBrowserImportPreview(
             currentManifest = manifestObj;
             previewMetadata = extractPreviewMetadata(manifestObj);
 
-            // Collect workbook warnings & errors
             if (parsedWb.warnings) {
               parsedWb.warnings.forEach((w) =>
                 warnings.push({
@@ -424,10 +521,10 @@ export async function parseBrowserImportPreview(
               );
             }
           } catch (wbErr: unknown) {
-            const extractedIssues = extractIssuesFromError(wbErr);
-            if (extractedIssues) {
-              extractedIssues.forEach((issue) => {
-                const targetList = issue.severity === 'warning' ? warnings : errors;
+            // Step 11: Explicit known error class handling
+            if (wbErr instanceof ProjectDetailsWorkbookError && Array.isArray(wbErr.issues)) {
+              wbErr.issues.forEach((issue) => {
+                const targetList = (issue.severity as string) === 'warning' ? warnings : errors;
                 targetList.push({
                   code: issue.code,
                   message: issue.message,
@@ -476,10 +573,10 @@ export async function parseBrowserImportPreview(
               })
             );
           } catch (jsonErr: unknown) {
-            const extractedIssues = extractIssuesFromError(jsonErr);
-            if (extractedIssues) {
-              extractedIssues.forEach((issue) => {
-                const targetList = issue.severity === 'warning' ? warnings : errors;
+            // Step 11: Explicit known error class handling
+            if (jsonErr instanceof ProjectDetailsJsonError && Array.isArray(jsonErr.issues)) {
+              jsonErr.issues.forEach((issue) => {
+                const targetList = (issue.severity as string) === 'warning' ? warnings : errors;
                 targetList.push({
                   code: issue.code,
                   message: issue.message,
@@ -507,7 +604,6 @@ export async function parseBrowserImportPreview(
         });
       }
 
-      // Package Validation via validateImportPackage
       if (currentManifest) {
         const posterImgDesc = recognizedFiles.get('poster.png');
         const posterPdfDesc = recognizedFiles.get('poster.pdf');
@@ -560,8 +656,12 @@ export async function parseBrowserImportPreview(
           })
         );
       }
-    } catch {
-      // Safe fallback for unexpected package exception
+    } catch (err: unknown) {
+      // Step 10: Safe internal logging without raw exceptions or stack traces
+      const errCode = err instanceof Error ? err.name : 'UNKNOWN';
+      // Log controlled internal code only
+      process.stdout.write(`[Browser Import Preview] Package preview failed cleanly: ${errCode}\n`);
+
       errors.push({
         code: 'PACKAGE_PREVIEW_FAILED',
         message: 'The project package could not be previewed.',
@@ -597,16 +697,17 @@ export async function parseBrowserImportPreview(
     success: true,
     batch: {
       mode,
-      selectedRootName,
+      selectedRootName: derivedRootName,
       packageCount: packagePreviews.length,
       selectedFileCount: validDescriptors.length,
-      declaredTotalBytes: manifest.declaredTotalBytes || 0,
+      declaredTotalBytes: recomputedTotalBytes,
       validPackageCount,
       warningPackageCount,
       invalidPackageCount,
-      totalWarnings,
-      totalErrors,
+      totalWarnings: totalWarnings + batchIssues.filter((i) => i.severity === 'warning').length,
+      totalErrors: totalErrors + batchIssues.filter((i) => i.severity === 'error').length,
       mediaValidationMode: 'descriptor_only',
+      batchIssues,
       packages: packagePreviews,
     },
   };

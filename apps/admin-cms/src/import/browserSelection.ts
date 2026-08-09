@@ -1,56 +1,49 @@
 /**
- * Client-safe browser folder selection and path normalization contract.
- * 
- * IMPORTANT: This module MUST remain 100% client-safe and pure.
- * Do NOT import Node fs, path, Buffer, ExcelJS, Supabase, or server-only modules here.
+ * System noise filenames automatically ignored across operating systems.
  */
-
-export interface SelectedFileDescriptor {
-  uploadKey: string;
-  normalizedPath: string;
-  originalPath: string;
-  fileName: string;
-  fileSizeBytes: number;
-  mimeType: string;
-  packagePath: string;
-}
-
-export interface SelectionManifest {
-  selectedRootName: string;
-  fileCount: number;
-  declaredTotalBytes: number;
-  descriptors: SelectedFileDescriptor[];
-  ignoredSystemFilesCount: number;
-}
-
-const CANONICAL_MIME_MAP: Record<string, string> = {
-  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  '.json': 'application/json',
-  '.png': 'image/png',
-  '.pdf': 'application/pdf',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-};
+export const IGNORED_SYSTEM_FILENAMES = new Set([
+  '.ds_store',
+  'thumbs.db',
+  'desktop.ini',
+]);
 
 /**
- * Normalizes a browser relative path (e.g. webkitRelativePath).
- * 
- * Rules:
- * - Converts backslashes \ to /.
- * - Rejects null bytes \0 and control characters.
- * - Rejects absolute paths (starting with / or drive letters like C:).
- * - Rejects empty segments (e.g. foo//bar).
- * - Rejects . and .. path traversal segments.
- * - Returns normalized path string or null if invalid.
+ * Derive normalized MIME type and conflict warning from filename and browser mimeType.
  */
-export function normalizeRelativePath(rawPath: string): string | null {
-  if (!rawPath || typeof rawPath !== 'string') {
-    return null;
+export function deriveMimeType(fileName: string, rawMimeType: string): { mimeType: string; warning?: string } {
+  const lowerName = fileName.toLowerCase();
+  const rawLower = (rawMimeType || '').toLowerCase().trim();
+
+  let expectedMime = 'application/octet-stream';
+  if (lowerName.endsWith('.xlsx')) {
+    expectedMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  } else if (lowerName.endsWith('.json')) {
+    expectedMime = 'application/json';
+  } else if (lowerName.endsWith('.png')) {
+    expectedMime = 'image/png';
+  } else if (lowerName.endsWith('.pdf')) {
+    expectedMime = 'application/pdf';
   }
 
+  if (rawLower && rawLower !== 'application/octet-stream' && expectedMime !== 'application/octet-stream' && rawLower !== expectedMime) {
+    return {
+      mimeType: expectedMime,
+      warning: `MIME type conflict detected for ${fileName}: Browser reported "${rawMimeType}", expected "${expectedMime}".`,
+    };
+  }
+
+  return { mimeType: expectedMime };
+}
+
+/**
+ * Normalize relative path to POSIX standard.
+ * Rejects path traversal (`.`, `..`), null bytes, control characters, and absolute paths.
+ */
+export function normalizeRelativePath(rawPath: string): string | null {
+  if (!rawPath || typeof rawPath !== 'string') return null;
+
   // Reject null bytes and control characters
-  if (/[\x00-\x1F\x7F]/.test(rawPath)) {
+  if (/[\0\x00-\x1F\x7F]/.test(rawPath)) {
     return null;
   }
 
@@ -63,75 +56,40 @@ export function normalizeRelativePath(rawPath: string): string | null {
   }
 
   const segments = path.split('/');
+  const cleanSegments: string[] = [];
 
-  // Reject empty segments, . or ..
   for (const seg of segments) {
-    if (seg === '' || seg === '.' || seg === '..') {
+    const trimmed = seg.trim();
+    if (trimmed === '') continue;
+    if (trimmed === '.' || trimmed === '..') {
+      // Path traversal detected
       return null;
     }
+    cleanSegments.push(trimmed);
   }
 
-  return segments.join('/');
+  if (cleanSegments.length === 0) return null;
+
+  return cleanSegments.join('/');
 }
 
 /**
- * Checks if a normalized path represents an operating-system noise file.
- * Ignored files: .DS_Store, Thumbs.db, desktop.ini, or anything beneath __MACOSX
+ * Check whether normalized relative path belongs to OS noise files.
  */
 export function isIgnoredSystemFile(normalizedPath: string): boolean {
   if (!normalizedPath) return false;
-  const segments = normalizedPath.split('/');
-  const fileName = segments[segments.length - 1].toLowerCase();
+  const parts = normalizedPath.split('/');
+  const fileName = parts[parts.length - 1].toLowerCase();
 
-  if (fileName === '.ds_store' || fileName === 'thumbs.db' || fileName === 'desktop.ini') {
-    return true;
-  }
-
-  for (const seg of segments) {
-    if (seg === '__MACOSX') {
-      return true;
-    }
-  }
+  if (IGNORED_SYSTEM_FILENAMES.has(fileName)) return true;
+  if (parts.some((p) => p.toLowerCase() === '__macosx')) return true;
 
   return false;
 }
 
 /**
- * Derives and validates MIME type for canonical package files.
+ * Generate stable upload key for metadata file descriptor.
  */
-export function deriveMimeType(fileName: string, browserMime?: string): { mimeType: string; warning?: string } {
-  const lower = fileName.toLowerCase();
-  let ext = '';
-
-  for (const key of Object.keys(CANONICAL_MIME_MAP)) {
-    if (lower.endsWith(key)) {
-      ext = key;
-      break;
-    }
-  }
-
-  const expectedMime = ext ? CANONICAL_MIME_MAP[ext] : undefined;
-  const cleanedBrowserMime = browserMime ? browserMime.trim().toLowerCase() : '';
-
-  if (!cleanedBrowserMime && expectedMime) {
-    return { mimeType: expectedMime };
-  }
-
-  if (expectedMime && cleanedBrowserMime && cleanedBrowserMime !== expectedMime) {
-    return {
-      mimeType: expectedMime,
-      warning: 'File MIME type conflict detected. Using canonical MIME type for validation.',
-    };
-  }
-
-  return {
-    mimeType: cleanedBrowserMime || expectedMime || 'application/octet-stream',
-  };
-}
-
-/**
- * Generates a stable upload key for a file descriptor.
- */
-export function generateUploadKey(normalizedPath: string, fileSizeBytes: number): string {
-  return `${normalizedPath.toLowerCase()}::${fileSizeBytes}`;
+export function generateUploadKey(normalizedPath: string): string {
+  return normalizedPath.toLowerCase().replace(/[^a-z0-9._-]/g, '_');
 }

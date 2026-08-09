@@ -1,122 +1,119 @@
 import { ImportPackageManifest } from './importTypes';
 
-export interface ProjectDetailsJsonIssue {
+export interface ProjectDetailsJsonWarning {
   code: string;
   message: string;
-  severity: 'error' | 'warning';
   fieldName?: string;
 }
 
-export class ProjectDetailsJsonError extends Error {
-  readonly issues: ProjectDetailsJsonIssue[];
-  readonly errors: ProjectDetailsJsonIssue[];
-  readonly warnings: ProjectDetailsJsonIssue[];
+export interface ProjectDetailsJsonParseResult {
+  manifest: ImportPackageManifest;
+  warnings: ProjectDetailsJsonWarning[];
+}
 
-  constructor(issues: ProjectDetailsJsonIssue[]) {
-    const errorCount = issues.filter((i) => i.severity === 'error').length;
-    super(`JSON metadata parsing failed with ${errorCount} error(s).`);
+export class ProjectDetailsJsonError extends Error {
+  readonly issues: Array<{ code: string; message: string; severity: 'error'; fieldName?: string }>;
+
+  constructor(issues: Array<{ code: string; message: string; severity: 'error'; fieldName?: string }>) {
+    super('The metadata JSON file could not be parsed.');
     this.name = 'ProjectDetailsJsonError';
     this.issues = issues;
-    this.errors = issues.filter((i) => i.severity === 'error');
-    this.warnings = issues.filter((i) => i.severity === 'warning');
   }
 }
 
 /**
  * Pure in-memory parser for legacy developer/testing project.json metadata files.
- * 
- * Safe Messaging Rule:
- * Does NOT leak raw JSON parser exceptions, stack traces, or raw uploaded content in error messages.
+ * Folder-derived public ID is strictly authoritative; any publicId field in JSON is ignored.
  */
 export function parseProjectDetailsJson(
-  input: string | Buffer | Uint8Array,
+  jsonBuffer: Buffer | string,
   fallbackPublicId: string
-): { manifest: ImportPackageManifest; warnings: ProjectDetailsJsonIssue[] } {
-  const issues: ProjectDetailsJsonIssue[] = [];
+): ProjectDetailsJsonParseResult {
+  const warnings: ProjectDetailsJsonWarning[] = [];
+  const errors: Array<{ code: string; message: string; severity: 'error'; fieldName?: string }> = [];
 
-  let text = '';
-  if (typeof input === 'string') {
-    text = input;
+  let jsonStr = '';
+  if (Buffer.isBuffer(jsonBuffer)) {
+    jsonStr = jsonBuffer.toString('utf-8');
+  } else if (typeof jsonBuffer === 'string') {
+    jsonStr = jsonBuffer;
   } else {
-    text = Buffer.from(input).toString('utf-8');
+    throw new ProjectDetailsJsonError([
+      { code: 'JSON_MALFORMED', message: 'The metadata JSON file content was invalid.', severity: 'error' },
+    ]);
   }
 
-  let rawObj: Record<string, unknown>;
+  let obj: Record<string, unknown> = {};
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(jsonStr);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      issues.push({
-        code: 'PACKAGE_MALFORMED_JSON',
-        message: 'The metadata JSON content is not a valid JSON object.',
-        severity: 'error',
-      });
-      throw new ProjectDetailsJsonError(issues);
+      throw new Error();
     }
-    rawObj = parsed as Record<string, unknown>;
-  } catch (err: unknown) {
-    if (err instanceof ProjectDetailsJsonError) throw err;
-    issues.push({
-      code: 'PACKAGE_MALFORMED_JSON',
-      message: 'The metadata JSON file could not be parsed.',
-      severity: 'error',
-    });
-    throw new ProjectDetailsJsonError(issues);
+    obj = parsed as Record<string, unknown>;
+  } catch {
+    throw new ProjectDetailsJsonError([
+      { code: 'JSON_MALFORMED', message: 'The metadata JSON file could not be parsed as valid JSON.', severity: 'error' },
+    ]);
   }
 
-  const getString = (key: string, defaultVal = ''): string => {
-    const val = rawObj[key];
+  // Step 7: Folder-derived public ID is strictly authoritative. Ignore any publicId in JSON.
+  if ('publicId' in obj && obj.publicId !== undefined) {
+    warnings.push({
+      code: 'JSON_PUBLIC_ID_IGNORED',
+      message: 'The publicId property in project.json was ignored in favor of the folder name.',
+      fieldName: 'publicId',
+    });
+  }
+
+  const getString = (key: string, defaultValue = ''): string => {
+    const val = obj[key];
     if (typeof val === 'string') return val.trim();
     if (typeof val === 'number') return String(val);
-    return defaultVal;
+    return defaultValue;
+  };
+
+  const getArrayStrings = (key: string): string[] => {
+    const val = obj[key];
+    if (!Array.isArray(val)) return [];
+    return val
+      .filter((item: unknown) => typeof item === 'string' || typeof item === 'number')
+      .map((item: unknown) => String(item).trim())
+      .filter((item: string) => item.length > 0);
   };
 
   const title = getString('title');
   const summary = getString('summary');
   const background = getString('background');
   const solution = getString('solution');
-  const yearRaw = getString('year');
-  const program = getString('program', getString('studyProgram'));
-  const studyProgram = getString('studyProgram', program);
+  const year = getString('year');
+  const program = getString('program') || getString('studyProgram');
+  const studyProgram = getString('studyProgram') || program;
   const discipline = getString('discipline');
   const industry = getString('industry');
   const industryPartner = getString('industryPartner');
-  const academicSupervisor = getString('academicSupervisor', getString('supervisor'));
+  const academicSupervisor = getString('academicSupervisor');
   const groupName = getString('groupName');
   const posterText = getString('posterText');
   const accessibilityText = getString('accessibilityText');
+  const teamMembers = getArrayStrings('teamMembers');
 
-  let teamMembers: string[] = [];
-  if (Array.isArray(rawObj.teamMembers)) {
-    teamMembers = rawObj.teamMembers
-      .map((m) => (typeof m === 'string' ? m.trim() : ''))
-      .filter((m) => m !== '');
-  } else if (Array.isArray(rawObj.participants)) {
-    teamMembers = rawObj.participants
-      .map((m) => (typeof m === 'string' ? m.trim() : ''))
-      .filter((m) => m !== '');
-  }
-
-  let layoutConfig: Record<string, unknown> = {};
-  if (rawObj.layoutConfig && typeof rawObj.layoutConfig === 'object' && !Array.isArray(rawObj.layoutConfig)) {
-    layoutConfig = { ...(rawObj.layoutConfig as Record<string, unknown>) };
-  } else {
-    layoutConfig = {
-      templateId: 'poster_showcase',
-      featuredMedia: 'poster',
-      sectionOrder: ['poster', 'summary', 'background', 'solution', 'snapshots'],
-      hiddenSections: [],
-    };
-  }
-
-  const publicId = getString('publicId', fallbackPublicId);
+  const rawLayout = obj.layoutConfig && typeof obj.layoutConfig === 'object' ? (obj.layoutConfig as Record<string, unknown>) : {};
+  const templateId = typeof rawLayout.templateId === 'string' ? rawLayout.templateId.trim() : 'poster_showcase';
+  const featuredMedia = typeof rawLayout.featuredMedia === 'string' ? rawLayout.featuredMedia.trim() : 'poster';
+  const sectionOrder = Array.isArray(rawLayout.sectionOrder)
+    ? rawLayout.sectionOrder.filter((s: unknown): s is string => typeof s === 'string')
+    : [];
+  const hiddenSections = Array.isArray(rawLayout.hiddenSections)
+    ? rawLayout.hiddenSections.filter((s: unknown): s is string => typeof s === 'string')
+    : [];
 
   const manifest: ImportPackageManifest = {
-    publicId,
+    publicId: fallbackPublicId.trim(),
     title,
     summary,
     background,
     solution,
-    year: yearRaw,
+    year,
     program,
     studyProgram,
     discipline,
@@ -125,10 +122,19 @@ export function parseProjectDetailsJson(
     academicSupervisor,
     groupName,
     teamMembers,
-    posterText: posterText || undefined,
-    accessibilityText: accessibilityText || undefined,
-    layoutConfig,
+    ...(posterText ? { posterText } : {}),
+    ...(accessibilityText ? { accessibilityText } : {}),
+    layoutConfig: {
+      templateId,
+      featuredMedia,
+      sectionOrder,
+      hiddenSections,
+    },
   };
 
-  return { manifest, warnings: issues.filter((i) => i.severity === 'warning') };
+  if (errors.length > 0) {
+    throw new ProjectDetailsJsonError(errors);
+  }
+
+  return { manifest, warnings };
 }
