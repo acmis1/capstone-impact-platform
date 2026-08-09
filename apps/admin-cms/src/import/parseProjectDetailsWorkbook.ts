@@ -8,8 +8,18 @@ import {
   DEFAULT_LAYOUT_CONFIG,
   COLUMN_DEFINITIONS,
   findColumnDefinitionForHeader,
-  ColumnDefinition
+  ColumnDefinition,
+  normalizeShowcaseLayout,
+  normalizeFeaturedMedia
 } from './projectDetailsWorkbookContract';
+
+interface CellExtractionResult {
+  rawString: string;
+  rawPrimitive: unknown;
+  isFormula: boolean;
+  hasUsableResult: boolean;
+  colInfo?: { colNumber: number; colDef: ColumnDefinition; rawHeader: string };
+}
 
 function getPrimitiveCellValue(cell: ExcelJS.Cell): { value: unknown; isFormula: boolean; hasUsableResult: boolean } {
   const val = cell.value;
@@ -70,21 +80,22 @@ export async function parseProjectDetailsWorkbook(
     workbook = new ExcelJS.Workbook();
     const bufferInput = Buffer.isBuffer(input) ? input : Buffer.from(input);
     await workbook.xlsx.load(bufferInput as unknown as Parameters<ExcelJS.Workbook['xlsx']['load']>[0]);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Invalid or corrupt Excel file';
-    throw new ProjectDetailsWorkbookError(`Failed to load Excel workbook: ${msg}`, [
-      {
-        code: 'WORKBOOK_MALFORMED',
-        message: `Failed to load Excel workbook: ${msg}`,
-        severity: 'error'
-      }
-    ]);
+  } catch {
+    throw new ProjectDetailsWorkbookError(
+      'The uploaded file could not be read as a valid .xlsx workbook.',
+      [
+        {
+          code: 'WORKBOOK_MALFORMED',
+          message: 'The uploaded file could not be read as a valid .xlsx workbook.',
+          severity: 'error'
+        }
+      ]
+    );
   }
 
   // 1. Identify non-empty worksheets
   const nonEmpWorksheets: { sheet: ExcelJS.Worksheet; name: string }[] = [];
   workbook.eachSheet(sheet => {
-    // Verify sheet has at least one cell with content
     let hasContent = false;
     sheet.eachRow({ includeEmpty: false }, row => {
       row.eachCell({ includeEmpty: false }, cell => {
@@ -101,13 +112,16 @@ export async function parseProjectDetailsWorkbook(
   });
 
   if (nonEmpWorksheets.length === 0) {
-    throw new ProjectDetailsWorkbookError('Workbook contains no readable worksheets or data.', [
-      {
-        code: 'WORKBOOK_NO_DATA',
-        message: 'Workbook contains no readable worksheets or data.',
-        severity: 'error'
-      }
-    ]);
+    throw new ProjectDetailsWorkbookError(
+      'Workbook contains no readable worksheets or data.',
+      [
+        {
+          code: 'WORKBOOK_NO_DATA',
+          message: 'Workbook contains no readable worksheets or data.',
+          severity: 'error'
+        }
+      ]
+    );
   }
 
   // Preferred worksheet selection
@@ -124,7 +138,7 @@ export async function parseProjectDetailsWorkbook(
     usedSheetName = selectedSheetObj.sheet.name;
     warnings.push({
       code: 'WORKBOOK_UNEXPECTED_SHEET_NAME',
-      message: `Preferred worksheet "${PREFERRED_WORKSHEET_NAME}" was not found. Using worksheet "${usedSheetName}".`,
+      message: 'Preferred worksheet "Project details" was not found. Using default worksheet.',
       severity: 'warning'
     });
   }
@@ -134,7 +148,7 @@ export async function parseProjectDetailsWorkbook(
     if (sheetObj.sheet !== selectedSheetObj.sheet) {
       warnings.push({
         code: 'WORKBOOK_EXTRA_SHEET',
-        message: `Additional worksheet "${sheetObj.sheet.name}" found. Extra worksheets are ignored for project metadata.`,
+        message: 'Additional non-empty worksheet detected and ignored.',
         severity: 'warning'
       });
     }
@@ -159,41 +173,56 @@ export async function parseProjectDetailsWorkbook(
   });
 
   if (nonEmpRows.length === 0) {
-    throw new ProjectDetailsWorkbookError('Worksheet contains no readable rows.', [
-      {
-        code: 'WORKBOOK_NO_DATA',
-        message: 'Worksheet contains no readable rows.',
-        severity: 'error'
-      }
-    ]);
+    throw new ProjectDetailsWorkbookError(
+      'Worksheet contains no readable rows.',
+      [
+        ...warnings,
+        {
+          code: 'WORKBOOK_NO_DATA',
+          message: 'Worksheet contains no readable rows.',
+          severity: 'error'
+        }
+      ]
+    );
   }
 
   if (nonEmpRows.length === 1) {
-    throw new ProjectDetailsWorkbookError('Workbook does not contain a valid project data row.', [
-      {
-        code: 'WORKBOOK_MISSING_PROJECT_ROW',
-        message: 'Workbook contains a header row but no project data row.',
-        severity: 'error',
-        rowNumber: nonEmpRows[0].rowNumber
-      }
-    ]);
+    throw new ProjectDetailsWorkbookError(
+      'Workbook contains a header row but no project data row.',
+      [
+        ...warnings,
+        {
+          code: 'WORKBOOK_MISSING_PROJECT_ROW',
+          message: 'Workbook contains a header row but no project data row.',
+          severity: 'error',
+          rowNumber: nonEmpRows[0].rowNumber
+        }
+      ]
+    );
   }
 
   if (nonEmpRows.length > 2) {
-    throw new ProjectDetailsWorkbookError('Workbook contains multiple project data rows.', [
-      {
-        code: 'WORKBOOK_MULTIPLE_PROJECT_ROWS',
-        message: 'Workbook contains multiple project data rows. Each workbook must contain exactly one project row.',
-        severity: 'error'
-      }
-    ]);
+    throw new ProjectDetailsWorkbookError(
+      'Workbook contains multiple project data rows.',
+      [
+        ...warnings,
+        {
+          code: 'WORKBOOK_MULTIPLE_PROJECT_ROWS',
+          message: 'Workbook contains multiple project data rows. Each workbook must contain exactly one project row.',
+          severity: 'error'
+        }
+      ]
+    );
   }
 
   const headerRowObj = nonEmpRows[0];
   const projectRowObj = nonEmpRows[1];
 
   // 3. Process Header Row
-  const columnMap = new Map<keyof ProjectDetailsWorkbookMetadata | 'templateId' | 'featuredMedia', { colNumber: number; colDef: ColumnDefinition; rawHeader: string }>();
+  const columnMap = new Map<
+    keyof ProjectDetailsWorkbookMetadata | 'templateId' | 'featuredMedia',
+    { colNumber: number; colDef: ColumnDefinition; rawHeader: string }
+  >();
   const mappedFieldNames = new Set<string>();
 
   headerRowObj.row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
@@ -204,7 +233,7 @@ export async function parseProjectDetailsWorkbook(
     if (!colDef) {
       warnings.push({
         code: 'WORKBOOK_UNKNOWN_COLUMN',
-        message: `Unknown column "${headerStr}" ignored.`,
+        message: 'Unknown column header ignored.',
         severity: 'warning',
         columnName: headerStr,
         rowNumber: headerRowObj.rowNumber
@@ -215,7 +244,7 @@ export async function parseProjectDetailsWorkbook(
     if (mappedFieldNames.has(colDef.internalField)) {
       errors.push({
         code: 'WORKBOOK_DUPLICATE_COLUMN',
-        message: `Duplicate column mapping detected for field "${colDef.internalField}". Column "${headerStr}" maps to the same field as an earlier column.`,
+        message: 'Duplicate column header mapping detected.',
         severity: 'error',
         columnName: headerStr,
         fieldName: colDef.internalField,
@@ -233,7 +262,7 @@ export async function parseProjectDetailsWorkbook(
     if (colDef.required && !columnMap.has(colDef.internalField)) {
       errors.push({
         code: 'WORKBOOK_MISSING_REQUIRED_COLUMN',
-        message: `Required column "${colDef.canonicalName}" is missing from header.`,
+        message: 'Required column is missing from header.',
         severity: 'error',
         fieldName: colDef.internalField,
         rowNumber: headerRowObj.rowNumber
@@ -241,53 +270,66 @@ export async function parseProjectDetailsWorkbook(
     }
   }
 
-  // If header has blocking errors, stop now
+  // If header has blocking errors, stop now, preserving warnings
   if (errors.length > 0) {
-    throw new ProjectDetailsWorkbookError('Workbook header validation failed.', errors);
+    throw new ProjectDetailsWorkbookError(
+      'Workbook header validation failed.',
+      [...warnings, ...errors]
+    );
   }
 
   // 4. Extract Project Data Row Cells
-  const extractFieldValue = (field: keyof ProjectDetailsWorkbookMetadata | 'templateId' | 'featuredMedia'): { rawString: string; rawPrimitive: unknown; colInfo?: { colNumber: number; colDef: ColumnDefinition; rawHeader: string } } => {
+  const extractFieldValue = (
+    field: keyof ProjectDetailsWorkbookMetadata | 'templateId' | 'featuredMedia'
+  ): CellExtractionResult => {
     const colInfo = columnMap.get(field);
     if (!colInfo) {
-      return { rawString: '', rawPrimitive: null };
+      return { rawString: '', rawPrimitive: null, isFormula: false, hasUsableResult: true };
     }
 
     const cell = projectRowObj.row.getCell(colInfo.colNumber);
     const prim = getPrimitiveCellValue(cell);
 
-    if (prim.isFormula && !prim.hasUsableResult) {
-      // Check if this field is required or used
-      if (colInfo.colDef.required) {
-        errors.push({
-          code: 'WORKBOOK_UNUSABLE_FORMULA',
-          message: `Formula cell in column "${colInfo.rawHeader}" does not contain a usable cached result.`,
-          severity: 'error',
-          fieldName: field,
-          columnName: colInfo.rawHeader,
-          rowNumber: projectRowObj.rowNumber
-        });
-      }
-    }
-
-    const str = stringifyValue(prim.value);
-    return { rawString: str, rawPrimitive: prim.value, colInfo };
+    return {
+      rawString: stringifyValue(prim.value),
+      rawPrimitive: prim.value,
+      isFormula: prim.isFormula,
+      hasUsableResult: prim.hasUsableResult,
+      colInfo
+    };
   };
 
   // Helper for simple text fields
-  const processTextField = (field: keyof ProjectDetailsWorkbookMetadata, required: boolean): string => {
-    const { rawString, colInfo } = extractFieldValue(field);
-    if (required && !rawString) {
+  const processTextField = (
+    field: keyof ProjectDetailsWorkbookMetadata,
+    required: boolean
+  ): string => {
+    const cellExt = extractFieldValue(field);
+    if (cellExt.isFormula && !cellExt.hasUsableResult) {
+      if (required) {
+        errors.push({
+          code: 'WORKBOOK_UNUSABLE_FORMULA',
+          message: 'Formula cell does not contain a usable cached result.',
+          severity: 'error',
+          fieldName: field,
+          columnName: cellExt.colInfo?.rawHeader,
+          rowNumber: projectRowObj.rowNumber
+        });
+      }
+      return '';
+    }
+
+    if (required && !cellExt.rawString) {
       errors.push({
         code: 'WORKBOOK_MISSING_REQUIRED_VALUE',
-        message: `Required field "${colInfo?.colDef.canonicalName || field}" is empty.`,
+        message: 'Required field is empty.',
         severity: 'error',
         fieldName: field,
-        columnName: colInfo?.rawHeader,
+        columnName: cellExt.colInfo?.rawHeader,
         rowNumber: projectRowObj.rowNumber
       });
     }
-    return rawString;
+    return cellExt.rawString;
   };
 
   const title = processTextField('title', true);
@@ -299,48 +341,56 @@ export async function parseProjectDetailsWorkbook(
   const industryPartner = processTextField('industryPartner', false);
   const industry = processTextField('industry', false);
   const program = processTextField('program', true);
-  const studyProgram = program; // Always set to match program
+  const studyProgram = program;
   const discipline = processTextField('discipline', true);
   const accessibilityText = processTextField('accessibilityText', false);
 
   // Year validation
-  const { rawString: rawYearStr, rawPrimitive: rawYearPrim, colInfo: yearColInfo } = extractFieldValue('year');
+  const yearCell = extractFieldValue('year');
   let year = '';
-  if (!rawYearStr) {
+  if (yearCell.isFormula && !yearCell.hasUsableResult) {
     errors.push({
-      code: 'WORKBOOK_MISSING_REQUIRED_VALUE',
-      message: 'Required field "Project year" is empty.',
+      code: 'WORKBOOK_UNUSABLE_FORMULA',
+      message: 'Formula cell does not contain a usable cached result.',
       severity: 'error',
       fieldName: 'year',
-      columnName: yearColInfo?.rawHeader,
+      columnName: yearCell.colInfo?.rawHeader,
+      rowNumber: projectRowObj.rowNumber
+    });
+  } else if (!yearCell.rawString) {
+    errors.push({
+      code: 'WORKBOOK_MISSING_REQUIRED_VALUE',
+      message: 'Required field is empty.',
+      severity: 'error',
+      fieldName: 'year',
+      columnName: yearCell.colInfo?.rawHeader,
       rowNumber: projectRowObj.rowNumber
     });
   } else {
-    // Check if raw year is date
-    if (rawYearPrim instanceof Date) {
+    if (yearCell.rawPrimitive instanceof Date) {
       errors.push({
         code: 'WORKBOOK_INVALID_YEAR',
-        message: `Field "${yearColInfo?.rawHeader || 'Project year'}" value is a Date object, expected a 4-digit numeric year.`,
+        message: 'Project year must be a 4-digit numeric year between 1900 and 2100.',
         severity: 'error',
         fieldName: 'year',
-        columnName: yearColInfo?.rawHeader,
+        columnName: yearCell.colInfo?.rawHeader,
         rowNumber: projectRowObj.rowNumber
       });
     } else {
-      const yearNum = Number(rawYearStr);
+      const yearNum = Number(yearCell.rawString);
       if (
         isNaN(yearNum) ||
         !Number.isInteger(yearNum) ||
         yearNum < 1900 ||
         yearNum > 2100 ||
-        !/^\d{4}$/.test(rawYearStr)
+        !/^\d{4}$/.test(yearCell.rawString)
       ) {
         errors.push({
           code: 'WORKBOOK_INVALID_YEAR',
-          message: `Field "${yearColInfo?.rawHeader || 'Project year'}" must be a 4-digit numeric year between 1900 and 2100.`,
+          message: 'Project year must be a 4-digit numeric year between 1900 and 2100.',
           severity: 'error',
           fieldName: 'year',
-          columnName: yearColInfo?.rawHeader,
+          columnName: yearCell.colInfo?.rawHeader,
           rowNumber: projectRowObj.rowNumber
         });
       } else {
@@ -350,20 +400,31 @@ export async function parseProjectDetailsWorkbook(
   }
 
   // Team members validation
-  const { rawString: rawTeamStr, colInfo: teamColInfo } = extractFieldValue('teamMembers');
+  const teamCell = extractFieldValue('teamMembers');
   const teamMembers: string[] = [];
-  if (!rawTeamStr) {
+  if (teamCell.isFormula && !teamCell.hasUsableResult) {
     errors.push({
-      code: 'WORKBOOK_MISSING_REQUIRED_VALUE',
-      message: 'Required field "Team members" is empty.',
+      code: 'WORKBOOK_UNUSABLE_FORMULA',
+      message: 'Formula cell does not contain a usable cached result.',
       severity: 'error',
       fieldName: 'teamMembers',
-      columnName: teamColInfo?.rawHeader,
+      columnName: teamCell.colInfo?.rawHeader,
+      rowNumber: projectRowObj.rowNumber
+    });
+  } else if (!teamCell.rawString) {
+    errors.push({
+      code: 'WORKBOOK_MISSING_REQUIRED_VALUE',
+      message: 'Required field is empty.',
+      severity: 'error',
+      fieldName: 'teamMembers',
+      columnName: teamCell.colInfo?.rawHeader,
       rowNumber: projectRowObj.rowNumber
     });
   } else {
-    // Split by newline, semicolon, comma
-    const rawNames = rawTeamStr.split(/[\r\n;,]+/).map(n => n.trim()).filter(n => n !== '');
+    const rawNames = teamCell.rawString
+      .split(/[\r\n;,]+/)
+      .map(n => n.trim())
+      .filter(n => n !== '');
     const seenNames = new Set<string>();
 
     for (const name of rawNames) {
@@ -371,10 +432,10 @@ export async function parseProjectDetailsWorkbook(
       if (seenNames.has(norm)) {
         warnings.push({
           code: 'WORKBOOK_DUPLICATE_TEAM_MEMBER',
-          message: `Duplicate team member name "${name}" ignored.`,
+          message: 'A duplicate team member entry was removed.',
           severity: 'warning',
           fieldName: 'teamMembers',
-          columnName: teamColInfo?.rawHeader,
+          columnName: teamCell.colInfo?.rawHeader,
           rowNumber: projectRowObj.rowNumber
         });
       } else {
@@ -386,68 +447,61 @@ export async function parseProjectDetailsWorkbook(
     if (teamMembers.length === 0) {
       errors.push({
         code: 'WORKBOOK_MISSING_REQUIRED_VALUE',
-        message: 'Required field "Team members" contains no valid member names.',
+        message: 'Required field is empty.',
         severity: 'error',
         fieldName: 'teamMembers',
-        columnName: teamColInfo?.rawHeader,
+        columnName: teamCell.colInfo?.rawHeader,
         rowNumber: projectRowObj.rowNumber
       });
     }
   }
 
   // Layout Normalization (templateId)
-  const { rawString: rawLayoutStr, colInfo: layoutColInfo } = extractFieldValue('templateId');
+  const layoutCell = extractFieldValue('templateId');
   let templateId: string = DEFAULT_LAYOUT_CONFIG.templateId;
-  if (rawLayoutStr) {
-    const norm = rawLayoutStr.toLowerCase().replace(/[-_]/g, ' ');
-    if (norm === 'poster showcase' || norm === 'poster first showcase' || norm === 'poster' || norm === 'poster showcase') {
-      templateId = 'poster_showcase';
-    } else if (norm === 'technical report' || norm === 'report first layout' || norm === 'technical detail' || norm === 'technical detail') {
-      templateId = 'technical_detail';
-    } else if (norm === 'media rich showcase' || norm === 'media rich' || norm === 'video and gallery showcase' || norm === 'media rich') {
-      templateId = 'media_rich';
+  if (layoutCell.rawString) {
+    const norm = normalizeShowcaseLayout(layoutCell.rawString);
+    if (norm) {
+      templateId = norm;
     } else {
       warnings.push({
         code: 'WORKBOOK_UNKNOWN_LAYOUT',
-        message: `Unknown showcase layout "${rawLayoutStr}". Defaulting to "poster_showcase".`,
+        message: 'Unknown showcase layout specified. Defaulting to "poster_showcase".',
         severity: 'warning',
         fieldName: 'templateId',
-        columnName: layoutColInfo?.rawHeader,
+        columnName: layoutCell.colInfo?.rawHeader,
         rowNumber: projectRowObj.rowNumber
       });
-      templateId = 'poster_showcase';
+      templateId = DEFAULT_LAYOUT_CONFIG.templateId;
     }
   }
 
   // Featured Media Normalization
-  const { rawString: rawMediaStr, colInfo: mediaColInfo } = extractFieldValue('featuredMedia');
+  const mediaCell = extractFieldValue('featuredMedia');
   let featuredMedia: string = DEFAULT_LAYOUT_CONFIG.featuredMedia;
-  if (rawMediaStr) {
-    const norm = rawMediaStr.toLowerCase();
-    if (norm === 'auto') {
-      featuredMedia = 'auto';
-    } else if (norm === 'poster') {
-      featuredMedia = 'poster';
-    } else if (norm === 'gallery' || norm === 'snapshots') {
-      featuredMedia = 'snapshots';
-    } else if (norm === 'video') {
-      featuredMedia = 'video';
+  if (mediaCell.rawString) {
+    const norm = normalizeFeaturedMedia(mediaCell.rawString);
+    if (norm) {
+      featuredMedia = norm;
     } else {
       warnings.push({
         code: 'WORKBOOK_UNKNOWN_FEATURED_MEDIA',
-        message: `Unknown featured media option "${rawMediaStr}". Defaulting to "poster".`,
+        message: 'Unknown featured media option specified. Defaulting to "poster".',
         severity: 'warning',
         fieldName: 'featuredMedia',
-        columnName: mediaColInfo?.rawHeader,
+        columnName: mediaCell.colInfo?.rawHeader,
         rowNumber: projectRowObj.rowNumber
       });
-      featuredMedia = 'poster';
+      featuredMedia = DEFAULT_LAYOUT_CONFIG.featuredMedia;
     }
   }
 
-  // Throw if any blocking errors occurred
+  // Throw if any blocking errors occurred, preserving all warnings
   if (errors.length > 0) {
-    throw new ProjectDetailsWorkbookError('Workbook contains validation errors.', errors);
+    throw new ProjectDetailsWorkbookError(
+      'Workbook contains validation errors.',
+      [...warnings, ...errors]
+    );
   }
 
   const metadata: ProjectDetailsWorkbookMetadata = {

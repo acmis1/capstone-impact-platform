@@ -1,14 +1,17 @@
 # `project-details.xlsx` Workbook Contract and Parsing Specification
 
-This document defines the authoritative technical contract and deterministic normalization rules for the staff-facing `project-details.xlsx` workbook parsed by `apps/admin-cms`.
+This document defines the current provisional technical contract and deterministic normalization rules for the staff-facing `project-details.xlsx` workbook parsed by `apps/admin-cms`.
+
+> [!NOTE]
+> **Provisional Contract Notice**: This contract represents the technical parser foundation. Column definitions, aliases, defaults, and mappings are deliberately centralized in [`apps/admin-cms/src/import/projectDetailsWorkbookContract.ts`](file:///D:/IT%20RMIT/Capstone/apps/admin-cms/src/import/projectDetailsWorkbookContract.ts) so they can be adjusted safely after stakeholder consultation without rewriting the parser architecture. Stakeholder-dependent rules must not be treated as permanently authoritative.
 
 ---
 
 ## 1. Scope & Core Principles
 
 - **Single Project Cardinality**: Each `project-details.xlsx` workbook represents **exactly one** project.
-- **Pure Server-Side Parsing**: The parser (`parseProjectDetailsWorkbook`) is a pure, buffer-based function with zero database, storage, network, or browser side effects.
-- **Non-Publishing**: Parsing or importing a workbook creates zero public feed entries and does not trigger publication to Duda or public storage.
+- **Pure Server-Side Parsing**: The parser (`parseProjectDetailsWorkbook`) is a pure, buffer-based function with zero database, storage, network, email, or browser side effects.
+- **Non-Publishing**: Parsing or importing a workbook creates zero public feed entries and does not trigger publication to Duda, persistence, storage uploads, or public feed updates.
 - **Developer Fallback Preserved**: `project.json` remains fully supported as a developer and testing fallback format.
 
 ---
@@ -36,7 +39,7 @@ This document defines the authoritative technical contract and deterministic nor
 
 ## 4. Column Definitions & Header Matching
 
-Header matching is case-insensitive, order-independent, trims surrounding whitespace, and normalizes repeated internal spaces.
+Header matching is case-insensitive, order-independent, trims surrounding whitespace, and collapses repeated whitespace.
 
 ### Staff-Facing Columns & Internal Mappings
 
@@ -54,7 +57,7 @@ Header matching is case-insensitive, order-independent, trims surrounding whites
 | `Study program` | `program`, `studyProgram` | **Required** | `study program`, `studyprogram`, `program` |
 | `Primary discipline` | `discipline` | **Required** | `primary discipline`, `primarydiscipline`, `discipline` |
 | `Project year` | `year` | **Required** | `project year`, `projectyear`, `year` |
-| `Showcase layout` | `layoutConfig.templateId` | Optional | `showcase layout`, `showcaselayout`, `templateid`, `template id` |
+| `Showcase layout` | `templateId` | Optional | `showcase layout`, `showcaselayout`, `templateid`, `template id` |
 | `Main media to feature` | `layoutConfig.featuredMedia` | Optional | `main media to feature`, `mainmediatofeature`, `featuredmedia`, `featured media` |
 | `Accessibility text` | `accessibilityText` | Optional | `accessibility text`, `accessibilitytext` |
 
@@ -64,17 +67,20 @@ The `project-details.xlsx` workbook intentionally **does not** contain a public 
 
 ### Unknown & Duplicate Columns
 
-- **Unknown Columns**: Unknown non-empty headers do not block parsing. They trigger a `WORKBOOK_UNKNOWN_COLUMN` warning containing the column name.
+- **Unknown Columns**: Unknown non-empty headers do not block parsing. They trigger a `WORKBOOK_UNKNOWN_COLUMN` warning containing location metadata.
 - **Duplicate Columns**: If two columns map to the same internal field (e.g. both `Project title` and `title`), parsing fails with a `WORKBOOK_DUPLICATE_COLUMN` error.
 
 ---
 
-## 5. Value Normalization Rules
+## 5. Value Normalization & Safe Messaging Rules
+
+### Safe Issue Message Rule
+Parser issue messages (`message`) must **never** echo participant names, project titles, summaries, or raw workbook cell contents, nor expose raw dependency stack traces or internal XML/ZIP details. Structural field, column, and row context is communicated strictly through typed metadata properties (`fieldName`, `columnName`, `rowNumber`).
 
 ### General Text & Formulas
-- Text cells are trimmed. Empty or whitespace-only strings are normalized to `""`.
+- Text cells are trimmed. Empty or whitespace-only cells are normalized to `""`.
 - Objects are never formatted as `"[object Object]"`.
-- Excel formulas are evaluated using the cached primitive result. If a required cell contains a formula without a usable cached result, parsing fails with `WORKBOOK_UNUSABLE_FORMULA`.
+- Excel formulas are evaluated using the cached primitive result. If a required cell contains a formula without a usable cached result, parsing fails with `WORKBOOK_UNUSABLE_FORMULA` (and does **not** generate a duplicate `WORKBOOK_MISSING_REQUIRED_VALUE` error).
 
 ### Project Year (`year`)
 - Accepts 4-digit integers or numeric strings in the range `1900` through `2100` (e.g., `2026` or `"2026"`).
@@ -85,24 +91,24 @@ The `project-details.xlsx` workbook intentionally **does not** contain a public 
 - Accepts participant names separated by newlines (`\n`, `\r\n`), semicolons (`;`), or commas (`,`).
 - Names are trimmed, empty entries removed, and original order preserved.
 - Must contain at least one valid name.
-- Duplicate names (case-insensitive) preserve the first occurrence and emit a `WORKBOOK_DUPLICATE_TEAM_MEMBER` warning.
+- Duplicate names (case-insensitive) preserve the first occurrence and emit a generic `WORKBOOK_DUPLICATE_TEAM_MEMBER` warning (`"A duplicate team member entry was removed."`).
 
 ### Showcase Layout (`templateId`)
-Friendly values are normalized as follows:
-- `Poster showcase`, `Poster-first showcase`, `Poster`, `poster_showcase` → `poster_showcase`
+Friendly values are normalized via a shared helper that trims whitespace, converts to lowercase, converts hyphens/underscores to spaces, and collapses repeated whitespace:
+- `Poster showcase`, `Poster-first showcase`, `Poster`, `poster_showcase`, `POSTER   SHOWCASE` → `poster_showcase`
 - `Technical report`, `Report-first layout`, `Technical detail`, `technical_detail` → `technical_detail`
 - `Media-rich showcase`, `Media rich`, `Video and gallery showcase`, `media_rich` → `media_rich`
 
-Unrecognized non-empty values emit a `WORKBOOK_UNKNOWN_LAYOUT` warning and fall back to `poster_showcase`. Absent values default to `poster_showcase` without warning.
+Unrecognized non-empty values emit a generic `WORKBOOK_UNKNOWN_LAYOUT` warning and fall back to `poster_showcase`. Absent values default to `poster_showcase` without warning.
 
 ### Main Media to Feature (`featuredMedia`)
-Friendly values are normalized as follows:
+Friendly values are normalized via the shared helper:
 - `Auto`, `auto` → `auto`
 - `Poster`, `poster` → `poster`
 - `Gallery`, `Snapshots`, `snapshots` → `snapshots`
 - `Video`, `video` → `video`
 
-Unrecognized non-empty values emit a `WORKBOOK_UNKNOWN_FEATURED_MEDIA` warning and fall back to `poster`. Absent values default to `poster` without warning.
+Unrecognized non-empty values emit a generic `WORKBOOK_UNKNOWN_FEATURED_MEDIA` warning and fall back to `poster`. Absent values default to `poster` without warning.
 
 ---
 
@@ -116,7 +122,7 @@ Categorical fields (`industry`, `program`, `discipline`, `academicSupervisor`, `
 
 | Issue Code | Severity | Description |
 | :--- | :--- | :--- |
-| `WORKBOOK_MALFORMED` | `error` | Buffer could not be parsed as a valid XLSX workbook. |
+| `WORKBOOK_MALFORMED` | `error` | The uploaded file could not be read as a valid .xlsx workbook. |
 | `WORKBOOK_NO_DATA` | `error` | Workbook contains no readable worksheets or rows. |
 | `WORKBOOK_MISSING_PROJECT_ROW` | `error` | Header row found, but no project data row exists. |
 | `WORKBOOK_MULTIPLE_PROJECT_ROWS` | `error` | More than one project data row exists in the worksheet. |

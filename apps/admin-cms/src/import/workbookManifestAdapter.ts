@@ -36,7 +36,10 @@ export function buildImportPackageManifestFromWorkbook(
     ...(posterText ? { posterText: posterText.trim() } : {}),
     ...(metadata.accessibilityText ? { accessibilityText: metadata.accessibilityText } : {}),
     layoutConfig: {
-      ...metadata.layoutConfig
+      templateId: metadata.layoutConfig.templateId,
+      featuredMedia: metadata.layoutConfig.featuredMedia,
+      sectionOrder: [...metadata.layoutConfig.sectionOrder],
+      hiddenSections: [...metadata.layoutConfig.hiddenSections]
     }
   };
 }

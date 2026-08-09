@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import ExcelJS from 'exceljs';
 import { parseProjectDetailsWorkbook } from '../parseProjectDetailsWorkbook';
-import { ProjectDetailsWorkbookError } from '../projectDetailsWorkbookContract';
+import { ProjectDetailsWorkbookError, COLUMN_DEFINITIONS } from '../projectDetailsWorkbookContract';
 import { buildImportPackageManifestFromWorkbook } from '../workbookManifestAdapter';
 
 async function createWorkbookBuffer(options: {
@@ -196,7 +196,8 @@ describe('parseProjectDetailsWorkbook', () => {
     expect(result.source.sheetName).toBe('Sheet1');
     expect(result.warnings).toContainEqual(
       expect.objectContaining({
-        code: 'WORKBOOK_UNEXPECTED_SHEET_NAME'
+        code: 'WORKBOOK_UNEXPECTED_SHEET_NAME',
+        message: 'Preferred worksheet "Project details" was not found. Using default worksheet.'
       })
     );
   });
@@ -213,13 +214,14 @@ describe('parseProjectDetailsWorkbook', () => {
     const result = await parseProjectDetailsWorkbook(buf);
     expect(result.warnings).toContainEqual(
       expect.objectContaining({
-        code: 'WORKBOOK_EXTRA_SHEET'
+        code: 'WORKBOOK_EXTRA_SHEET',
+        message: 'Additional non-empty worksheet detected and ignored.'
       })
     );
   });
 
   // 8. Missing required column
-  it('8. rejects workbook missing a required column', async () => {
+  it('8. rejects workbook missing a required column with structured details', async () => {
     const incompleteHeaders = ['Project title', 'Short public summary'];
     const incompleteData = ['Title Only', 'Summary Only'];
 
@@ -228,12 +230,12 @@ describe('parseProjectDetailsWorkbook', () => {
       dataRows: [incompleteData]
     });
 
-    await expect(parseProjectDetailsWorkbook(buf)).rejects.toThrow(ProjectDetailsWorkbookError);
     try {
       await parseProjectDetailsWorkbook(buf);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
     } catch (err) {
       const pErr = err as ProjectDetailsWorkbookError;
-      expect(pErr.issues).toContainEqual(
+      expect(pErr.errors).toContainEqual(
         expect.objectContaining({
           code: 'WORKBOOK_MISSING_REQUIRED_COLUMN',
           fieldName: 'teamMembers'
@@ -252,12 +254,12 @@ describe('parseProjectDetailsWorkbook', () => {
       dataRows: [dupData]
     });
 
-    await expect(parseProjectDetailsWorkbook(buf)).rejects.toThrow(ProjectDetailsWorkbookError);
     try {
       await parseProjectDetailsWorkbook(buf);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
     } catch (err) {
       const pErr = err as ProjectDetailsWorkbookError;
-      expect(pErr.issues).toContainEqual(
+      expect(pErr.errors).toContainEqual(
         expect.objectContaining({
           code: 'WORKBOOK_DUPLICATE_COLUMN',
           fieldName: 'title'
@@ -267,7 +269,7 @@ describe('parseProjectDetailsWorkbook', () => {
   });
 
   // 10. Unknown column warning
-  it('10. produces a warning for unknown non-empty columns', async () => {
+  it('10. produces a warning for unknown non-empty columns without leaking content', async () => {
     const headers = [...defaultCanonicalHeaders, 'Internal ID'];
     const data = [...defaultCanonicalData, '12345'];
 
@@ -280,7 +282,8 @@ describe('parseProjectDetailsWorkbook', () => {
     expect(result.warnings).toContainEqual(
       expect.objectContaining({
         code: 'WORKBOOK_UNKNOWN_COLUMN',
-        columnName: 'Internal ID'
+        columnName: 'Internal ID',
+        message: 'Unknown column header ignored.'
       })
     );
   });
@@ -292,7 +295,17 @@ describe('parseProjectDetailsWorkbook', () => {
     const rawBuf = await wb.xlsx.writeBuffer();
     const buf = Buffer.from(rawBuf);
 
-    await expect(parseProjectDetailsWorkbook(buf)).rejects.toThrow(ProjectDetailsWorkbookError);
+    try {
+      await parseProjectDetailsWorkbook(buf);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
+    } catch (err) {
+      const pErr = err as ProjectDetailsWorkbookError;
+      expect(pErr.errors).toContainEqual(
+        expect.objectContaining({
+          code: 'WORKBOOK_NO_DATA'
+        })
+      );
+    }
   });
 
   // 12. Workbook with headers but no project-data row
@@ -302,12 +315,12 @@ describe('parseProjectDetailsWorkbook', () => {
       dataRows: []
     });
 
-    await expect(parseProjectDetailsWorkbook(buf)).rejects.toThrow(ProjectDetailsWorkbookError);
     try {
       await parseProjectDetailsWorkbook(buf);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
     } catch (err) {
       const pErr = err as ProjectDetailsWorkbookError;
-      expect(pErr.issues).toContainEqual(
+      expect(pErr.errors).toContainEqual(
         expect.objectContaining({
           code: 'WORKBOOK_MISSING_PROJECT_ROW'
         })
@@ -322,12 +335,12 @@ describe('parseProjectDetailsWorkbook', () => {
       dataRows: [defaultCanonicalData, defaultCanonicalData]
     });
 
-    await expect(parseProjectDetailsWorkbook(buf)).rejects.toThrow(ProjectDetailsWorkbookError);
     try {
       await parseProjectDetailsWorkbook(buf);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
     } catch (err) {
       const pErr = err as ProjectDetailsWorkbookError;
-      expect(pErr.issues).toContainEqual(
+      expect(pErr.errors).toContainEqual(
         expect.objectContaining({
           code: 'WORKBOOK_MULTIPLE_PROJECT_ROWS'
         })
@@ -338,19 +351,19 @@ describe('parseProjectDetailsWorkbook', () => {
   // 14. Empty required project title
   it('14. rejects empty required project title', async () => {
     const data = [...defaultCanonicalData];
-    data[0] = '   '; // empty title
+    data[0] = '   ';
 
     const buf = await createWorkbookBuffer({
       headers: defaultCanonicalHeaders,
       dataRows: [data]
     });
 
-    await expect(parseProjectDetailsWorkbook(buf)).rejects.toThrow(ProjectDetailsWorkbookError);
     try {
       await parseProjectDetailsWorkbook(buf);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
     } catch (err) {
       const pErr = err as ProjectDetailsWorkbookError;
-      expect(pErr.issues).toContainEqual(
+      expect(pErr.errors).toContainEqual(
         expect.objectContaining({
           code: 'WORKBOOK_MISSING_REQUIRED_VALUE',
           fieldName: 'title'
@@ -360,16 +373,27 @@ describe('parseProjectDetailsWorkbook', () => {
   });
 
   // 15. Empty team-members list
-  it('15. rejects empty team members list', async () => {
+  it('15. rejects empty team members list with structured field error', async () => {
     const data = [...defaultCanonicalData];
-    data[4] = ''; // empty team members
+    data[4] = '';
 
     const buf = await createWorkbookBuffer({
       headers: defaultCanonicalHeaders,
       dataRows: [data]
     });
 
-    await expect(parseProjectDetailsWorkbook(buf)).rejects.toThrow(ProjectDetailsWorkbookError);
+    try {
+      await parseProjectDetailsWorkbook(buf);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
+    } catch (err) {
+      const pErr = err as ProjectDetailsWorkbookError;
+      expect(pErr.errors).toContainEqual(
+        expect.objectContaining({
+          code: 'WORKBOOK_MISSING_REQUIRED_VALUE',
+          fieldName: 'teamMembers'
+        })
+      );
+    }
   });
 
   // 16. Team members separated by commas
@@ -415,7 +439,7 @@ describe('parseProjectDetailsWorkbook', () => {
   });
 
   // 19. Duplicate team-member warning
-  it('19. preserves first occurrence of duplicate team member name and issues warning', async () => {
+  it('19. preserves first occurrence of duplicate team member name without echoing participant name', async () => {
     const data = [...defaultCanonicalData];
     data[4] = 'Alice Smith, Bob Jones, alice smith';
 
@@ -429,9 +453,12 @@ describe('parseProjectDetailsWorkbook', () => {
     expect(result.warnings).toContainEqual(
       expect.objectContaining({
         code: 'WORKBOOK_DUPLICATE_TEAM_MEMBER',
+        message: 'A duplicate team member entry was removed.',
         fieldName: 'teamMembers'
       })
     );
+    expect(result.warnings[0].message).not.toContain('Alice');
+    expect(result.warnings[0].message).not.toContain('smith');
   });
 
   // 20. Numeric year normalized to a string
@@ -463,7 +490,7 @@ describe('parseProjectDetailsWorkbook', () => {
   });
 
   // 22. Decimal year rejected
-  it('22. rejects decimal year value', async () => {
+  it('22. rejects decimal year value with structured field error', async () => {
     const data: (string | number)[] = [...defaultCanonicalData];
     data[11] = 2026.5;
 
@@ -472,11 +499,22 @@ describe('parseProjectDetailsWorkbook', () => {
       dataRows: [data]
     });
 
-    await expect(parseProjectDetailsWorkbook(buf)).rejects.toThrow(ProjectDetailsWorkbookError);
+    try {
+      await parseProjectDetailsWorkbook(buf);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
+    } catch (err) {
+      const pErr = err as ProjectDetailsWorkbookError;
+      expect(pErr.errors).toContainEqual(
+        expect.objectContaining({
+          code: 'WORKBOOK_INVALID_YEAR',
+          fieldName: 'year'
+        })
+      );
+    }
   });
 
   // 23. Out-of-range year rejected
-  it('23. rejects out of range year e.g. 1899 or 2101', async () => {
+  it('23. rejects out of range year e.g. 1850 with structured field error', async () => {
     const data: (string | number)[] = [...defaultCanonicalData];
     data[11] = 1850;
 
@@ -485,7 +523,18 @@ describe('parseProjectDetailsWorkbook', () => {
       dataRows: [data]
     });
 
-    await expect(parseProjectDetailsWorkbook(buf)).rejects.toThrow(ProjectDetailsWorkbookError);
+    try {
+      await parseProjectDetailsWorkbook(buf);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
+    } catch (err) {
+      const pErr = err as ProjectDetailsWorkbookError;
+      expect(pErr.errors).toContainEqual(
+        expect.objectContaining({
+          code: 'WORKBOOK_INVALID_YEAR',
+          fieldName: 'year'
+        })
+      );
+    }
   });
 
   // 24. Layout friendly aliases normalized
@@ -534,7 +583,7 @@ describe('parseProjectDetailsWorkbook', () => {
   });
 
   // 26. Unknown layout fallback warning
-  it('26. warns on unknown layout value and falls back to poster_showcase', async () => {
+  it('26. warns on unknown layout value without leaking cell content', async () => {
     const data = [...defaultCanonicalData];
     data[12] = 'Super Hologram Showcase';
 
@@ -547,13 +596,15 @@ describe('parseProjectDetailsWorkbook', () => {
     expect(result.metadata.layoutConfig.templateId).toBe('poster_showcase');
     expect(result.warnings).toContainEqual(
       expect.objectContaining({
-        code: 'WORKBOOK_UNKNOWN_LAYOUT'
+        code: 'WORKBOOK_UNKNOWN_LAYOUT',
+        message: 'Unknown showcase layout specified. Defaulting to "poster_showcase".'
       })
     );
+    expect(result.warnings[0].message).not.toContain('Hologram');
   });
 
   // 27. Unknown featured-media fallback warning
-  it('27. warns on unknown featured media value and falls back to poster', async () => {
+  it('27. warns on unknown featured media value without leaking cell content', async () => {
     const data = [...defaultCanonicalData];
     data[13] = 'VR Headset Stream';
 
@@ -566,15 +617,16 @@ describe('parseProjectDetailsWorkbook', () => {
     expect(result.metadata.layoutConfig.featuredMedia).toBe('poster');
     expect(result.warnings).toContainEqual(
       expect.objectContaining({
-        code: 'WORKBOOK_UNKNOWN_FEATURED_MEDIA'
+        code: 'WORKBOOK_UNKNOWN_FEATURED_MEDIA',
+        message: 'Unknown featured media option specified. Defaulting to "poster".'
       })
     );
+    expect(result.warnings[0].message).not.toContain('VR');
   });
 
   // 28. Formula cell with a usable cached result
   it('28. accepts formula cell with a usable cached result', async () => {
     const dataWithFormula = [...defaultCanonicalData];
-    // Replace title with formula object
     (dataWithFormula as (string | number | boolean | null | undefined | { formula: string; result?: unknown })[])[0] = {
       formula: 'CONCAT("Solar ", "Power")',
       result: 'Solar Power'
@@ -590,7 +642,7 @@ describe('parseProjectDetailsWorkbook', () => {
   });
 
   // 29. Formula cell without a usable result
-  it('29. rejects required formula cell without a usable cached result', async () => {
+  it('29. rejects required formula cell without a usable cached result with structured code', async () => {
     const dataWithUnusableFormula = [...defaultCanonicalData];
     (dataWithUnusableFormula as (string | number | boolean | null | undefined | { formula: string; result?: unknown })[])[0] = {
       formula: 'CONCAT("Solar ", "Power")',
@@ -602,13 +654,32 @@ describe('parseProjectDetailsWorkbook', () => {
       dataRows: [dataWithUnusableFormula]
     });
 
-    await expect(parseProjectDetailsWorkbook(buf)).rejects.toThrow(ProjectDetailsWorkbookError);
+    try {
+      await parseProjectDetailsWorkbook(buf);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
+    } catch (err) {
+      const pErr = err as ProjectDetailsWorkbookError;
+      expect(pErr.errors).toContainEqual(
+        expect.objectContaining({
+          code: 'WORKBOOK_UNUSABLE_FORMULA',
+          fieldName: 'title'
+        })
+      );
+    }
   });
 
   // 30. Malformed or non-XLSX buffer
-  it('30. rejects malformed or non-XLSX buffer', async () => {
+  it('30. rejects malformed buffer with safe generic message without dependency details', async () => {
     const badBuf = Buffer.from('This is totally not an excel file!');
-    await expect(parseProjectDetailsWorkbook(badBuf as unknown as Buffer)).rejects.toThrow(ProjectDetailsWorkbookError);
+    try {
+      await parseProjectDetailsWorkbook(badBuf as unknown as Buffer);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
+    } catch (err) {
+      const pErr = err as ProjectDetailsWorkbookError;
+      expect(pErr.message).toBe('The uploaded file could not be read as a valid .xlsx workbook.');
+      expect(pErr.errors[0].code).toBe('WORKBOOK_MALFORMED');
+      expect(pErr.errors[0].message).toBe('The uploaded file could not be read as a valid .xlsx workbook.');
+    }
   });
 
   // 31. Adapter requires a caller-provided publicId
@@ -649,19 +720,174 @@ describe('parseProjectDetailsWorkbook', () => {
     expect(manifest.layoutConfig.templateId).toBe('poster_showcase');
   });
 
-  // 33. Parser performs no database or storage operations
-  it('33. parser operates as a pure buffer function without external side effects', async () => {
+  // 33. Deterministic pure buffer parsing test
+  it('33. operates purely in-memory on buffer inputs without external dependencies', async () => {
     const buf = await createWorkbookBuffer({
       headers: defaultCanonicalHeaders,
       dataRows: [defaultCanonicalData]
     });
 
-    // Verify it resolves purely from memory buffer without hanging or making network/DB calls
-    const startTime = Date.now();
     const result = await parseProjectDetailsWorkbook(buf);
-    const duration = Date.now() - startTime;
+    expect(result.metadata.title).toBe('Solar Power Optimizer');
+    expect(result.source.headerRowNumber).toBe(1);
+    expect(result.source.projectRowNumber).toBe(2);
+  });
 
-    expect(result.metadata.title).toBeDefined();
-    expect(duration).toBeLessThan(1000);
+  // --- NEW REVIEW REGRESSION TESTS ---
+
+  // 34. Layout aliases with repeated internal spaces
+  it('34. normalizes layout aliases with repeated internal spaces', async () => {
+    const data = [...defaultCanonicalData];
+    data[12] = 'POSTER   SHOWCASE';
+
+    const buf = await createWorkbookBuffer({
+      headers: defaultCanonicalHeaders,
+      dataRows: [data]
+    });
+
+    const result = await parseProjectDetailsWorkbook(buf);
+    expect(result.metadata.layoutConfig.templateId).toBe('poster_showcase');
+  });
+
+  // 35. Layout aliases with mixed case
+  it('35. normalizes layout aliases with mixed case', async () => {
+    const data = [...defaultCanonicalData];
+    data[12] = 'Technical Report';
+
+    const buf = await createWorkbookBuffer({
+      headers: defaultCanonicalHeaders,
+      dataRows: [data]
+    });
+
+    const result = await parseProjectDetailsWorkbook(buf);
+    expect(result.metadata.layoutConfig.templateId).toBe('technical_detail');
+  });
+
+  // 36. Canonical underscore values
+  it('36. accepts canonical underscore values directly', async () => {
+    const canonicalValues = [
+      { fieldIdx: 12, val: 'poster_showcase', field: 'templateId', expected: 'poster_showcase' },
+      { fieldIdx: 12, val: 'technical_detail', field: 'templateId', expected: 'technical_detail' },
+      { fieldIdx: 12, val: 'media_rich', field: 'templateId', expected: 'media_rich' },
+      { fieldIdx: 13, val: 'snapshots', field: 'featuredMedia', expected: 'snapshots' }
+    ];
+
+    for (const item of canonicalValues) {
+      const data = [...defaultCanonicalData];
+      data[item.fieldIdx] = item.val;
+
+      const buf = await createWorkbookBuffer({
+        headers: defaultCanonicalHeaders,
+        dataRows: [data]
+      });
+
+      const result = await parseProjectDetailsWorkbook(buf);
+      if (item.field === 'templateId') {
+        expect(result.metadata.layoutConfig.templateId).toBe(item.expected);
+      } else {
+        expect(result.metadata.layoutConfig.featuredMedia).toBe(item.expected);
+      }
+    }
+  });
+
+  // 37. Warnings preserved when blocking errors exist
+  it('37. preserves warnings when blocking errors exist', async () => {
+    const incompleteHeaders = ['Project title', 'Short public summary'];
+    const incompleteData = ['Title', 'Summary'];
+
+    const buf = await createWorkbookBuffer({
+      sheetName: 'CustomSheetName',
+      headers: incompleteHeaders,
+      dataRows: [incompleteData]
+    });
+
+    try {
+      await parseProjectDetailsWorkbook(buf);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
+    } catch (err) {
+      const pErr = err as ProjectDetailsWorkbookError;
+      expect(pErr.warnings).toContainEqual(
+        expect.objectContaining({
+          code: 'WORKBOOK_UNEXPECTED_SHEET_NAME'
+        })
+      );
+      expect(pErr.errors).toContainEqual(
+        expect.objectContaining({
+          code: 'WORKBOOK_MISSING_REQUIRED_COLUMN'
+        })
+      );
+      expect(pErr.issues).toHaveLength(pErr.warnings.length + pErr.errors.length);
+    }
+  });
+
+  // 38. Required unusable formula generates no duplicate missing-value issue
+  it('38. required unusable formula generates WORKBOOK_UNUSABLE_FORMULA without duplicate WORKBOOK_MISSING_REQUIRED_VALUE', async () => {
+    const dataWithFormula = [...defaultCanonicalData];
+    (dataWithFormula as (string | number | boolean | null | undefined | { formula: string; result?: unknown })[])[0] = {
+      formula: 'SUM(A1:A5)',
+      result: undefined
+    };
+
+    const buf = await createWorkbookBuffer({
+      headers: defaultCanonicalHeaders,
+      dataRows: [dataWithFormula]
+    });
+
+    try {
+      await parseProjectDetailsWorkbook(buf);
+      expect.unreachable('Should have thrown ProjectDetailsWorkbookError');
+    } catch (err) {
+      const pErr = err as ProjectDetailsWorkbookError;
+      const titleIssues = pErr.errors.filter(i => i.fieldName === 'title');
+      expect(titleIssues).toHaveLength(1);
+      expect(titleIssues[0].code).toBe('WORKBOOK_UNUSABLE_FORMULA');
+    }
+  });
+
+  // 39. Declared technical header aliases test
+  it('39. supports all declared technical header aliases', async () => {
+    for (const colDef of COLUMN_DEFINITIONS) {
+      for (const alias of colDef.aliases) {
+        const headers = defaultCanonicalHeaders.map(h => {
+          const matched = COLUMN_DEFINITIONS.find(c => c.canonicalName === h);
+          if (matched && matched.internalField === colDef.internalField) {
+            return alias;
+          }
+          return h;
+        });
+
+        const buf = await createWorkbookBuffer({
+          headers,
+          dataRows: [defaultCanonicalData]
+        });
+
+        const result = await parseProjectDetailsWorkbook(buf);
+        expect(result.metadata).toBeDefined();
+      }
+    }
+  });
+
+  // 40. Adapter defensively clones nested arrays
+  it('40. adapter defensively clones sectionOrder and hiddenSections nested arrays', async () => {
+    const buf = await createWorkbookBuffer({
+      headers: defaultCanonicalHeaders,
+      dataRows: [defaultCanonicalData]
+    });
+    const parsed = await parseProjectDetailsWorkbook(buf);
+
+    const manifest = buildImportPackageManifestFromWorkbook({
+      parsedWorkbook: parsed,
+      publicId: '2026-solar-power-optimizer'
+    });
+
+    const manifestLayout = manifest.layoutConfig as { sectionOrder: string[]; hiddenSections: string[] };
+
+    // Mutate returned manifest arrays
+    manifestLayout.sectionOrder.push('extra_section');
+    manifestLayout.hiddenSections.push('hidden_test');
+
+    // Confirm parsed metadata arrays remain unmutated
+    expect(parsed.metadata.layoutConfig.sectionOrder).not.toContain('extra_section');
+    expect(parsed.metadata.layoutConfig.hiddenSections).not.toContain('hidden_test');
   });
 });

@@ -42,11 +42,15 @@ export interface ProjectDetailsWorkbookParseResult {
 
 export class ProjectDetailsWorkbookError extends Error {
   public readonly issues: ProjectDetailsWorkbookIssue[];
+  public readonly errors: ProjectDetailsWorkbookIssue[];
+  public readonly warnings: ProjectDetailsWorkbookIssue[];
 
   constructor(message: string, issues: ProjectDetailsWorkbookIssue[]) {
     super(message);
     this.name = 'ProjectDetailsWorkbookError';
     this.issues = issues;
+    this.errors = issues.filter(i => i.severity === 'error');
+    this.warnings = issues.filter(i => i.severity === 'warning');
   }
 }
 
@@ -58,6 +62,45 @@ export const DEFAULT_LAYOUT_CONFIG = {
   sectionOrder: ['background', 'solution', 'snapshots', 'video', 'links'],
   hiddenSections: []
 } as const;
+
+export function normalizeOptionString(str: string): string {
+  return str
+    .trim()
+    .toLowerCase()
+    .replace(/[-_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export const SHOWCASE_LAYOUT_MAPPINGS: Record<string, string> = {
+  'poster showcase': 'poster_showcase',
+  'poster first showcase': 'poster_showcase',
+  'poster': 'poster_showcase',
+  'technical report': 'technical_detail',
+  'report first layout': 'technical_detail',
+  'technical detail': 'technical_detail',
+  'media rich showcase': 'media_rich',
+  'media rich': 'media_rich',
+  'video and gallery showcase': 'media_rich'
+};
+
+export const FEATURED_MEDIA_MAPPINGS: Record<string, string> = {
+  'auto': 'auto',
+  'poster': 'poster',
+  'gallery': 'snapshots',
+  'snapshots': 'snapshots',
+  'video': 'video'
+};
+
+export function normalizeShowcaseLayout(input: string): string | null {
+  const norm = normalizeOptionString(input);
+  return SHOWCASE_LAYOUT_MAPPINGS[norm] ?? null;
+}
+
+export function normalizeFeaturedMedia(input: string): string | null {
+  const norm = normalizeOptionString(input);
+  return FEATURED_MEDIA_MAPPINGS[norm] ?? null;
+}
 
 export interface ColumnDefinition {
   canonicalName: string;
@@ -160,7 +203,7 @@ export const COLUMN_DEFINITIONS: ColumnDefinition[] = [
 ];
 
 export function normalizeHeaderString(header: string): string {
-  return header.trim().toLowerCase().replace(/\s+/g, ' ');
+  return normalizeOptionString(header);
 }
 
 export function findColumnDefinitionForHeader(header: string): ColumnDefinition | null {
