@@ -9,6 +9,7 @@ import {
   SelectionManifest,
 } from '../browserImportPreviewContract';
 import {
+  BrowserImportSelectionState,
   createInitialSelectionState,
   toggleValidPackage,
   toggleWarningAcknowledgement,
@@ -19,6 +20,10 @@ import {
   resetSelectionState,
   browserImportCommitIntentSchema,
 } from '../browserImportCommitIntentContract';
+import {
+  BrowserImportPreparationLock,
+  runBrowserImportPreparation,
+} from '../browserImportPreparationController';
 import { generateUploadKey } from '../browserSelection';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -831,8 +836,194 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
     });
   });
 
+  describe('Executable Preparation Controller Lifecycle Suite', () => {
+    function createDeferred<T>() {
+      let resolve!: (value: T | PromiseLike<T>) => void;
+      let reject!: (reason?: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    it('37. First request acquires lock synchronously, second request while locked is ignored', async () => {
+      const lock: BrowserImportPreparationLock = { current: false };
+      const preview = makeMockPreviewBatch();
+      const manifest = makeMockManifest();
+      const initial = createInitialSelectionState(preview);
+
+      let currentState = initial;
+      const stateUpdates: BrowserImportSelectionState[] = [];
+      const setSelectionState = (updater: (prev: BrowserImportSelectionState) => BrowserImportSelectionState) => {
+        currentState = updater(currentState);
+        stateUpdates.push(currentState);
+      };
+
+      const deferred = createDeferred<void>();
+      let plannerCallCount = 0;
+
+      const p1 = runBrowserImportPreparation({
+        lock,
+        currentState,
+        previewResult: preview,
+        manifestCache: manifest,
+        getCurrentState: () => currentState,
+        setSelectionState,
+        yieldControl: () => deferred.promise,
+        prepareOverride: (params) => {
+          plannerCallCount++;
+          return prepareBrowserImportCommitIntent(params);
+        },
+      });
+
+      // Verify lock acquired synchronously
+      expect(lock.current).toBe(true);
+      expect(currentState.isPreparing).toBe(true);
+
+      // Attempt second call while locked
+      const p2 = runBrowserImportPreparation({
+        lock,
+        currentState,
+        previewResult: preview,
+        manifestCache: manifest,
+        getCurrentState: () => currentState,
+        setSelectionState,
+        yieldControl: () => Promise.resolve(),
+        prepareOverride: (params) => {
+          plannerCallCount++;
+          return prepareBrowserImportCommitIntent(params);
+        },
+      });
+
+      await p2;
+
+      // Resolve first call
+      deferred.resolve();
+      await p1;
+
+      expect(plannerCallCount).toBe(1);
+      expect(lock.current).toBe(false);
+      expect(currentState.preparedIntent).not.toBeNull();
+    });
+
+    it('38. Pending state is entered before async boundary resolves', async () => {
+      const lock: BrowserImportPreparationLock = { current: false };
+      const preview = makeMockPreviewBatch();
+      const manifest = makeMockManifest();
+      const initial = createInitialSelectionState(preview);
+
+      let currentState = initial;
+      const setSelectionState = (updater: (prev: BrowserImportSelectionState) => BrowserImportSelectionState) => {
+        currentState = updater(currentState);
+      };
+
+      const deferred = createDeferred<void>();
+      let isPreparingBeforeYield = false;
+
+      const p = runBrowserImportPreparation({
+        lock,
+        currentState,
+        previewResult: preview,
+        manifestCache: manifest,
+        getCurrentState: () => currentState,
+        setSelectionState,
+        yieldControl: async () => {
+          isPreparingBeforeYield = currentState.isPreparing;
+          await deferred.promise;
+        },
+      });
+
+      expect(isPreparingBeforeYield).toBe(true);
+      deferred.resolve();
+      await p;
+    });
+
+    it('39. Lock is released after success, failure, and unexpected exception', async () => {
+      const lock: BrowserImportPreparationLock = { current: false };
+      const preview = makeMockPreviewBatch();
+      const manifest = makeMockManifest();
+
+      let state = createInitialSelectionState(preview);
+      const setSelectionState = (u: (prev: BrowserImportSelectionState) => BrowserImportSelectionState) => { state = u(state); };
+
+      // Success case
+      await runBrowserImportPreparation({
+        lock,
+        currentState: state,
+        previewResult: preview,
+        manifestCache: manifest,
+        getCurrentState: () => state,
+        setSelectionState,
+        yieldControl: () => Promise.resolve(),
+      });
+      expect(lock.current).toBe(false);
+      expect(state.preparedIntent).not.toBeNull();
+
+      // Failure case (empty selection)
+      state = { ...state, selectedPackagePaths: [] };
+      await runBrowserImportPreparation({
+        lock,
+        currentState: state,
+        previewResult: preview,
+        manifestCache: manifest,
+        getCurrentState: () => state,
+        setSelectionState,
+        yieldControl: () => Promise.resolve(),
+      });
+      expect(lock.current).toBe(false);
+      expect(state.preparationErrorCode).toBe('EMPTY_SELECTION');
+
+      // Unexpected exception case
+      state = createInitialSelectionState(preview);
+      await runBrowserImportPreparation({
+        lock,
+        currentState: state,
+        previewResult: preview,
+        manifestCache: manifest,
+        getCurrentState: () => state,
+        setSelectionState,
+        yieldControl: () => Promise.resolve(),
+        prepareOverride: () => { throw new Error('Uncaught low-level crash'); },
+      });
+      expect(lock.current).toBe(false);
+      expect(state.preparationErrorCode).toBe('UNEXPECTED_PREPARATION_FAILURE');
+    });
+
+    it('40. Selection or warning acknowledgement changing during async boundary discards result', async () => {
+      const lock: BrowserImportPreparationLock = { current: false };
+      const preview = makeMockPreviewBatch();
+      const manifest = makeMockManifest();
+      const initial = createInitialSelectionState(preview);
+
+      let state = initial;
+      const setSelectionState = (u: (prev: BrowserImportSelectionState) => BrowserImportSelectionState) => { state = u(state); };
+
+      const deferred = createDeferred<void>();
+
+      const p = runBrowserImportPreparation({
+        lock,
+        currentState: state,
+        previewResult: preview,
+        manifestCache: manifest,
+        getCurrentState: () => state,
+        setSelectionState,
+        yieldControl: () => deferred.promise,
+      });
+
+      // Mutate selection state during yield boundary
+      state = toggleValidPackage(state, 'root/p1', preview.packages);
+
+      deferred.resolve();
+      await p;
+
+      expect(state.preparedIntent).toBeNull();
+      expect(state.preparationErrorCode).toBe('PREVIEW_FINGERPRINT_MISMATCH');
+    });
+  });
+
   describe('Component Accessible Labels & Static Contract', () => {
-    it('36. Component source contains package-specific aria-labels and visible status badges', () => {
+    it('41. Component source contains package-specific aria-labels and visible status badges', () => {
       const filePath = join(__dirname, '../../components/imports/BrowserImportPreviewClient.tsx');
       const source = readFileSync(filePath, 'utf8');
 

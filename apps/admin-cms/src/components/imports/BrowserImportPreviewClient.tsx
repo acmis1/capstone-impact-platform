@@ -10,18 +10,14 @@ import {
   validateBrowserImportPreviewResponse,
 } from '../../import/browserImportPreviewContract';
 import {
-  BrowserImportPreparationErrorCode,
   BrowserImportSelectionState,
   createInitialSelectionState,
   resetSelectionState,
-  setPreparedFailure,
-  setPreparedSuccess,
-  setPreparing,
   toggleValidPackage,
   toggleWarningAcknowledgement,
   toggleWarningPackageSelection,
 } from '../../import/browserImportCommitIntentContract';
-import { prepareBrowserImportCommitIntent } from '../../import/prepareBrowserImportCommitIntent';
+import { runBrowserImportPreparation } from '../../import/browserImportPreparationController';
 
 export default function BrowserImportPreviewClient() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -260,67 +256,27 @@ export default function BrowserImportPreviewClient() {
   const preparationLockRef = useRef(false);
 
   const handlePrepareImport = async () => {
-    if (!previewResult || !manifestCache || selectionState.isPreparing || preparationLockRef.current) return;
+    if (!previewResult || !manifestCache) return;
 
-    preparationLockRef.current = true;
-
-    try {
-      if (selectionState.selectedPackagePaths.length === 0) {
-        setSelectionState((prev) => setPreparedFailure(prev, 'EMPTY_SELECTION'));
-        return;
-      }
-
-      if (selectionState.previewFingerprint !== previewResult.previewFingerprint) {
-        setSelectionState((prev) => setPreparedFailure(prev, 'PREVIEW_FINGERPRINT_MISMATCH'));
-        return;
-      }
-
-      // Capture deterministic preparation snapshot
-      const snapshotFingerprint = selectionState.previewFingerprint;
-      const snapshotSelected = [...selectionState.selectedPackagePaths];
-      const snapshotAcked = [...selectionState.acknowledgedWarningPackagePaths];
-
-      setSelectionState((prev) => setPreparing(prev, true));
-
-      // Async boundary: yield at least one microtask
-      await Promise.resolve();
-
-      const result = prepareBrowserImportCommitIntent({
-        manifest: manifestCache,
-        preview: previewResult,
-        selectedPackagePaths: snapshotSelected,
-        acknowledgedWarningPackagePaths: snapshotAcked,
-        expectedPreviewFingerprint: snapshotFingerprint,
+    let latestSelectionState = selectionState;
+    const trackingSetSelectionState = (
+      updater: (prev: BrowserImportSelectionState) => BrowserImportSelectionState
+    ) => {
+      setSelectionState((prev) => {
+        const next = updater(prev);
+        latestSelectionState = next;
+        return next;
       });
+    };
 
-      setSelectionState((current) => {
-        // Snapshot safety check: discard result if selection/preview/ack changed during async boundary
-        if (
-          current.previewFingerprint !== snapshotFingerprint ||
-          current.selectedPackagePaths.length !== snapshotSelected.length ||
-          !current.selectedPackagePaths.every((p, i) => p === snapshotSelected[i]) ||
-          current.acknowledgedWarningPackagePaths.length !== snapshotAcked.length ||
-          !current.acknowledgedWarningPackagePaths.every((p, i) => p === snapshotAcked[i])
-        ) {
-          return setPreparedFailure(current, 'PREVIEW_FINGERPRINT_MISMATCH');
-        }
-
-        if (result.success) {
-          return setPreparedSuccess(current, result.intent);
-        } else {
-          const mapErrorCode = (code: string): BrowserImportPreparationErrorCode => {
-            if (code === 'EMPTY_SELECTION') return 'EMPTY_SELECTION';
-            if (code === 'PREVIEW_FINGERPRINT_MISMATCH') return 'PREVIEW_FINGERPRINT_MISMATCH';
-            return 'INVALID_SELECTION';
-          };
-          return setPreparedFailure(current, mapErrorCode(result.code));
-        }
-      });
-    } catch {
-      setSelectionState((prev) => setPreparedFailure(prev, 'UNEXPECTED_PREPARATION_FAILURE'));
-    } finally {
-      preparationLockRef.current = false;
-    }
+    await runBrowserImportPreparation({
+      lock: preparationLockRef,
+      currentState: selectionState,
+      previewResult,
+      manifestCache,
+      getCurrentState: () => latestSelectionState,
+      setSelectionState: trackingSetSelectionState,
+    });
   };
 
   const togglePackageExpand = (pkgPath: string) => {
