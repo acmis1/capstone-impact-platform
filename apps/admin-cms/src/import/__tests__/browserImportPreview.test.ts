@@ -14,6 +14,8 @@ import { parseProjectDetailsJson } from '../parseProjectDetailsJson';
 import { validateImportPackage } from '../validateImportPackage';
 import {
   SelectionManifest,
+  buildBrowserSelectionDescriptor,
+  runBrowserImportManifestPreflight,
   SelectedFileDescriptor,
   selectionManifestSchema,
   validateBrowserImportPreviewResponse,
@@ -45,12 +47,12 @@ import { POST as previewRouteHandler, parseContentLength } from '../../app/api/i
 import { requireAdmin } from '../../auth/requireAdmin';
 import { generateUploadKey } from '../browserSelection';
 
-function makeDesc(normPath: string, sizeBytes = 500, mimeType = 'text/plain'): SelectedFileDescriptor {
+function makeDesc(normPath: string, sizeBytes = 500, browserMimeType = 'text/plain'): SelectedFileDescriptor {
   return {
     uploadKey: generateUploadKey(normPath),
     originalPath: normPath,
     fileSizeBytes: sizeBytes,
-    mimeType,
+    browserMimeType,
   };
 }
 
@@ -147,13 +149,13 @@ describe('Browser Import Preview Suite', () => {
             uploadKey: 'batch_p1_poster_png',
             originalPath: 'batch/p1/poster.png',
             fileSizeBytes: 50,
-            mimeType: 'image/png',
+            browserMimeType: 'image/png',
           },
           {
             uploadKey: 'batch_p1_poster_png',
             originalPath: 'batch/p1/poster.png',
             fileSizeBytes: 50,
-            mimeType: 'image/png',
+            browserMimeType: 'image/png',
           },
         ],
       };
@@ -620,13 +622,13 @@ describe('Browser Import Preview Suite', () => {
             uploadKey: 'root_file_txt',
             originalPath: 'root/file.txt',
             fileSizeBytes: 50,
-            mimeType: 'text/plain',
+            browserMimeType: 'text/plain',
           },
           {
             uploadKey: 'root_file_txt',
             originalPath: 'root/file.txt',
             fileSizeBytes: 50,
-            mimeType: 'text/plain',
+            browserMimeType: 'text/plain',
           },
         ],
       };
@@ -1199,19 +1201,19 @@ describe('Browser Import Preview Suite', () => {
             uploadKey: xlsxKey,
             originalPath: '2026-project-alpha/project-details.xlsx',
             fileSizeBytes: xlsxBuf.length,
-            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            browserMimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           },
           {
             uploadKey: pngKey,
             originalPath: '2026-project-alpha/poster.png',
             fileSizeBytes: 500,
-            mimeType: 'image/png',
+            browserMimeType: 'image/png',
           },
           {
             uploadKey: pdfKey,
             originalPath: '2026-project-alpha/poster.pdf',
             fileSizeBytes: 500,
-            mimeType: 'application/pdf',
+            browserMimeType: 'application/pdf',
           },
         ],
       };
@@ -1248,7 +1250,7 @@ describe('Browser Import Preview Suite', () => {
             uploadKey: pngKey,
             originalPath: 'solar-monitor/poster.png',
             fileSizeBytes: 500,
-            mimeType: 'image/png',
+            browserMimeType: 'image/png',
           },
         ],
       };
@@ -1279,7 +1281,7 @@ describe('Browser Import Preview Suite', () => {
             uploadKey: 'invalid_key_causes_400',
             originalPath: 'solar-monitor/poster.png',
             fileSizeBytes: 500,
-            mimeType: 'image/png',
+            browserMimeType: 'image/png',
           },
         ],
       };
@@ -1391,7 +1393,7 @@ describe('Browser Import Preview Suite', () => {
             uploadKey: 'actual-root_file_txt',
             originalPath: 'actual-root/file.txt',
             fileSizeBytes: 50,
-            mimeType: 'text/plain',
+            browserMimeType: 'text/plain',
           },
         ],
       };
@@ -1410,13 +1412,13 @@ describe('Browser Import Preview Suite', () => {
             uploadKey: 'root1_file_txt',
             originalPath: 'root1/file.txt',
             fileSizeBytes: 50,
-            mimeType: 'text/plain',
+            browserMimeType: 'text/plain',
           },
           {
             uploadKey: 'root2_file_txt',
             originalPath: 'root2/file.txt',
             fileSizeBytes: 50,
-            mimeType: 'text/plain',
+            browserMimeType: 'text/plain',
           },
         ],
       };
@@ -1462,6 +1464,29 @@ describe('Browser Import Preview Suite', () => {
   });
 
   describe('Comprehensive Section 18 Boundary & Security Regression Suite', () => {
+    it('preserves raw browser MIME for server canonicalization', async () => {
+      const descriptor = buildBrowserSelectionDescriptor('root/poster.png', 10, 'text/plain');
+      expect(descriptor).toEqual({ uploadKey: 'root_poster.png', originalPath: 'root/poster.png', fileSizeBytes: 10, browserMimeType: 'text/plain' });
+      const preflight = runBrowserImportManifestPreflight({ selectedRootName: 'root', fileCount: 1, declaredTotalBytes: 10, ignoredSystemFilesCount: 0, descriptors: [descriptor] });
+      expect(preflight.success).toBe(true);
+      if (!preflight.success) return;
+      expect(preflight.derivedDescriptors[0].browserMimeType).toBe('text/plain');
+      expect(preflight.derivedDescriptors[0].canonicalMimeType).toBe('image/png');
+      expect(preflight.derivedDescriptors[0].mimeConflict).toBe(true);
+      const response = await parseBrowserImportPreview(preflight, new Map());
+      const warning = response.batch.packages[0].warnings.find((issue) => issue.code === 'MIME_CONFLICT_WARNING');
+      expect(warning?.message).not.toContain('text/plain');
+    });
+
+    it('does not create false MIME conflicts for matching or empty browser MIME', () => {
+      for (const browserMimeType of ['image/png', '']) {
+        const descriptor = buildBrowserSelectionDescriptor('root/poster.png', 10, browserMimeType)!;
+        const preflight = runBrowserImportManifestPreflight({ selectedRootName: 'root', fileCount: 1, declaredTotalBytes: 10, ignoredSystemFilesCount: 0, descriptors: [descriptor] });
+        expect(preflight.success).toBe(true);
+        if (preflight.success) expect(preflight.derivedDescriptors[0].mimeConflict).toBe(false);
+      }
+    });
+
     it('Content-Length parsing accepts only a complete safe decimal value', () => {
       expect(parseContentLength(null)).toEqual({ code: 'MISSING_CONTENT_LENGTH' });
       for (const header of ['', '123abc', '12.5', '-1', '+100', '0x100', 'Infinity', '999999999999999999999999']) {
@@ -1618,6 +1643,27 @@ describe('Browser Import Preview Suite', () => {
       const res2 = await previewRouteHandler(req2);
       expect(res2.status).toBe(403);
       expect((await res2.json()).code).toBe('PERMISSION_DENIED');
+    });
+
+    it.each([
+      ['UNAUTHENTICATED', 401, 'UNAUTHENTICATED'],
+      ['ADMIN_NOT_PROVISIONED', 403, 'PERMISSION_DENIED'],
+      ['PERMISSION_DENIED', 403, 'PERMISSION_DENIED'],
+      ['CONFIGURATION_FAILURE', 500, 'AUTH_SERVICE_UNAVAILABLE'],
+    ] as const)('classifies known auth error %s safely', async (type, status, code) => {
+      vi.mocked(requireAdmin).mockRejectedValueOnce(new AdminAuthError(type, 'private detail'));
+      const response = await previewRouteHandler(new NextRequest('http://localhost:3000/api/imports/preview', { method: 'POST' }));
+      const json = await response.json();
+      expect(response.status).toBe(status);
+      expect(json.code).toBe(code);
+      if (type === 'CONFIGURATION_FAILURE') expect(json.error).not.toMatch(/log in/i);
+    });
+
+    it('maps unknown authentication failures to a generic internal error', async () => {
+      vi.mocked(requireAdmin).mockRejectedValueOnce(new Error('private detail'));
+      const response = await previewRouteHandler(new NextRequest('http://localhost:3000/api/imports/preview', { method: 'POST' }));
+      expect(response.status).toBe(500);
+      expect((await response.json()).code).toBe('UNEXPECTED_INTERNAL_ERROR');
     });
   });
 });

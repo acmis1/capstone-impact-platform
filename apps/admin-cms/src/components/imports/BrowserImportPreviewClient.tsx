@@ -1,14 +1,10 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import {
-  deriveMimeType,
-  generateUploadKey,
-  isIgnoredSystemFile,
-  normalizeRelativePath,
-} from '../../import/browserSelection';
+import { generateUploadKey, isIgnoredSystemFile, normalizeRelativePath } from '../../import/browserSelection';
 import {
   BrowserImportPreviewResponse,
+  buildBrowserSelectionDescriptor,
   SelectedFileDescriptor,
   SelectionManifest,
   validateBrowserImportPreviewResponse,
@@ -49,16 +45,8 @@ export default function BrowserImportPreviewClient() {
       if (!norm || isIgnoredSystemFile(norm)) continue;
 
       totalBytes += file.size;
-      const parts = norm.split('/');
-      const fileName = parts[parts.length - 1];
-      const mime = deriveMimeType(fileName, file.type).mimeType;
-
-      descriptors.push({
-        uploadKey: generateUploadKey(norm),
-        originalPath: relPath,
-        fileSizeBytes: file.size,
-        mimeType: mime,
-      });
+      const descriptor = buildBrowserSelectionDescriptor(relPath, file.size, file.type);
+      if (descriptor) descriptors.push(descriptor);
     }
 
     if (descriptors.length === 0) {
@@ -138,14 +126,9 @@ export default function BrowserImportPreviewClient() {
         const parts = norm.split('/');
         const fileName = parts[parts.length - 1];
         const lowerName = fileName.toLowerCase();
-        const mime = deriveMimeType(fileName, file.type).mimeType;
-        const uploadKey = generateUploadKey(norm);
-        descriptors.push({
-          uploadKey,
-          originalPath: relPath,
-          fileSizeBytes: file.size,
-          mimeType: mime,
-        });
+        const descriptor = buildBrowserSelectionDescriptor(relPath, file.size, file.type);
+        if (!descriptor) continue;
+        descriptors.push(descriptor);
 
         // Browser preview rule: Media binary files STAY in browser! Only metadata attached.
         if (lowerName === 'project-details.xlsx' || lowerName === 'project.json') {
@@ -188,6 +171,7 @@ export default function BrowserImportPreviewClient() {
         const knownErrorMap: Record<string, string> = {
           UNAUTHENTICATED: 'Authentication required. Please log in with staff credentials.',
           PERMISSION_DENIED: 'Access denied: You do not have permission to preview imports.',
+          AUTH_SERVICE_UNAVAILABLE: 'Authentication service is temporarily unavailable. Please try again.',
           CROSS_ORIGIN_REJECTED: 'Cross-origin requests are forbidden.',
           MISSING_CONTENT_LENGTH: 'A valid Content-Length header is required for this request.',
           INVALID_CONTENT_LENGTH: 'The request Content-Length header is invalid.',

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { MEDIA_VALIDATION_LIMITS } from '../storage/mediaValidation';
 import {
+  deriveMimeType,
   generateUploadKey,
   normalizeRelativePath,
 } from './browserSelection';
@@ -50,7 +51,7 @@ export interface SelectedFileDescriptor {
   uploadKey: string;
   originalPath: string;
   fileSizeBytes: number;
-  mimeType: string;
+  browserMimeType: string;
 }
 
 /**
@@ -62,7 +63,9 @@ export interface ServerDerivedDescriptor {
   normalizedPath: string;
   fileName: string;
   fileSizeBytes: number;
+  browserMimeType: string;
   canonicalMimeType: string;
+  mimeConflict: boolean;
   packagePath: string;
 }
 
@@ -150,7 +153,7 @@ export const selectedFileDescriptorSchema = z
     uploadKey: z.string().min(1).max(BROWSER_IMPORT_LIMITS.MAX_STRING_KEY),
     originalPath: z.string().min(1).max(BROWSER_IMPORT_LIMITS.MAX_STRING_PATH),
     fileSizeBytes: z.number().int().nonnegative().finite(),
-    mimeType: z.string().max(BROWSER_IMPORT_LIMITS.MAX_STRING_MIME),
+    browserMimeType: z.string().max(BROWSER_IMPORT_LIMITS.MAX_STRING_MIME),
   })
   .strict();
 
@@ -165,6 +168,22 @@ export const selectionManifestSchema = z
       .max(BROWSER_IMPORT_LIMITS.MAX_DESCRIPTORS),
   })
   .strict();
+
+/** Builds the exact client wire descriptor without canonicalizing browser MIME. */
+export function buildBrowserSelectionDescriptor(
+  originalPath: string,
+  fileSizeBytes: number,
+  browserMimeType: string,
+): SelectedFileDescriptor | null {
+  const normalizedPath = normalizeRelativePath(originalPath);
+  if (!normalizedPath) return null;
+  return {
+    uploadKey: generateUploadKey(normalizedPath),
+    originalPath,
+    fileSizeBytes,
+    browserMimeType,
+  };
+}
 
 /**
  * Server-Side Manifest Preflight Evaluation Result
@@ -278,13 +297,16 @@ export function runBrowserImportManifestPreflight(rawManifest: unknown): Manifes
       packagePath = parts.slice(0, 2).join('/');
     }
 
+    const mimeResult = deriveMimeType(derivedFileName, desc.browserMimeType);
     derivedDescriptors.push({
       uploadKey: expectedUploadKey,
       originalPath: desc.originalPath,
       normalizedPath: normPath,
       fileName: derivedFileName,
       fileSizeBytes: desc.fileSizeBytes,
-      canonicalMimeType: desc.mimeType,
+      browserMimeType: desc.browserMimeType,
+      canonicalMimeType: mimeResult.mimeType,
+      mimeConflict: Boolean(mimeResult.warning),
       packagePath,
     });
   }

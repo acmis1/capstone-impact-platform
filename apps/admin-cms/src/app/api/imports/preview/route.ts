@@ -18,6 +18,7 @@ export const dynamic = 'force-dynamic';
 const ERROR_MESSAGES: Record<string, string> = {
   UNAUTHENTICATED: 'Authentication required.',
   PERMISSION_DENIED: 'Access denied.',
+  AUTH_SERVICE_UNAVAILABLE: 'Authentication service is temporarily unavailable. Please try again.',
   CROSS_ORIGIN_REJECTED: 'The preview request was not accepted.',
   MISSING_CONTENT_LENGTH: 'The preview request was invalid.',
   INVALID_CONTENT_LENGTH: 'The preview request was invalid.',
@@ -55,9 +56,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     authContext = await requireAdmin();
   } catch (err: unknown) {
     if (err instanceof AdminAuthError) {
-      const code = err.type === 'PERMISSION_DENIED' || err.type === 'ADMIN_NOT_PROVISIONED'
-        ? 'PERMISSION_DENIED'
-        : 'UNAUTHENTICATED';
+      const code = err.type === 'UNAUTHENTICATED'
+        ? 'UNAUTHENTICATED'
+        : err.type === 'CONFIGURATION_FAILURE'
+          ? 'AUTH_SERVICE_UNAVAILABLE'
+          : 'PERMISSION_DENIED';
       return previewError(code, getAuthErrorHttpStatus(err.type));
     }
     process.stdout.write('[Browser Import Preview API] unexpected_internal_error\n');

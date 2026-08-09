@@ -8,10 +8,7 @@ import {
   ServerDerivedDescriptor,
   runBrowserImportManifestPreflight,
 } from './browserImportPreviewContract';
-import {
-  deriveMimeType,
-  isIgnoredSystemFile,
-} from './browserSelection';
+import { isIgnoredSystemFile } from './browserSelection';
 import { validateFolderDerivedPublicId } from './publicIdValidation';
 import { parseProjectDetailsWorkbook } from './parseProjectDetailsWorkbook';
 import { ProjectDetailsWorkbookError } from './projectDetailsWorkbookContract';
@@ -79,7 +76,9 @@ export async function parseBrowserImportPreview(
       normalizedPath: d.normalizedPath,
       fileName: d.fileName,
       fileSizeBytes: d.fileSizeBytes,
-      canonicalMimeType: deriveMimeType(d.fileName, d.canonicalMimeType).mimeType,
+      browserMimeType: d.browserMimeType,
+      canonicalMimeType: d.canonicalMimeType,
+      mimeConflict: d.mimeConflict,
       packagePath: d.packagePath,
     }));
 
@@ -276,11 +275,10 @@ export async function parseBrowserImportPreview(
       filePresence.snapshotPresent = recognizedFiles.has('snapshot-1.png');
 
       for (const [, desc] of recognizedFiles.entries()) {
-        const derived = deriveMimeType(desc.fileName, desc.canonicalMimeType);
-        if (derived.warning) {
+        if (desc.mimeConflict) {
           warnings.push({
             code: 'MIME_CONFLICT_WARNING',
-            message: derived.warning,
+            message: 'The browser-reported MIME type did not match the canonical file type. The canonical type was used for preview validation.',
             severity: 'warning',
             packagePath: pkgPath,
             fileName: desc.fileName,
@@ -449,21 +447,21 @@ export async function parseBrowserImportPreview(
             ? {
                 fileName: posterImgDesc.fileName,
                 fileSizeBytes: posterImgDesc.fileSizeBytes,
-                mimeType: deriveMimeType(posterImgDesc.fileName, posterImgDesc.canonicalMimeType).mimeType,
+                mimeType: posterImgDesc.canonicalMimeType,
               }
             : null,
           posterPdf: posterPdfDesc
             ? {
                 fileName: posterPdfDesc.fileName,
                 fileSizeBytes: posterPdfDesc.fileSizeBytes,
-                mimeType: deriveMimeType(posterPdfDesc.fileName, posterPdfDesc.canonicalMimeType).mimeType,
+                mimeType: posterPdfDesc.canonicalMimeType,
               }
             : null,
           snapshot1: snapshotDesc
             ? {
                 fileName: snapshotDesc.fileName,
                 fileSizeBytes: snapshotDesc.fileSizeBytes,
-                mimeType: deriveMimeType(snapshotDesc.fileName, snapshotDesc.canonicalMimeType).mimeType,
+                mimeType: snapshotDesc.canonicalMimeType,
               }
             : null,
         };
