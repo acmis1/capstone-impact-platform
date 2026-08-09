@@ -320,6 +320,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - [Staff lifecycle design](../../infra/supabase/staff-lifecycle-design.md)
 - [Admin/CMS UI system](../../docs/admin-cms-ui-system.md)
 - [Duda integration plan](../../docs/duda-integration-plan.md)
+- [Project details workbook contract](../../docs/project-details-workbook-contract.md)
 - [Supabase migration overview](../../infra/supabase/README.md)
 - [Supabase manual apply guide](../../infra/supabase/manual-apply-guide.md)
 - [Staging authentication verification](../../infra/supabase/staging-auth-verification.md)
