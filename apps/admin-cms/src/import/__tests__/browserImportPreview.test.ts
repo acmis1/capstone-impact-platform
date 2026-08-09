@@ -1336,6 +1336,7 @@ describe('Browser Import Preview Suite', () => {
       const validResponse = {
         success: true,
         batch: {
+          previewFingerprint: 'a'.repeat(64),
           mode: 'single',
           selectedRootName: 'root',
           packageCount: 1,

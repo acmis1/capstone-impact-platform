@@ -18,6 +18,7 @@ import {
   ProjectDetailsJsonError,
 } from './parseProjectDetailsJson';
 import { validateImportPackage } from './validateImportPackage';
+import { generateBrowserPreviewFingerprint } from './prepareBrowserImportCommitIntent';
 import {
   ImportPackageFileMetadata,
   ImportPackageManifest,
@@ -525,9 +526,17 @@ export async function parseBrowserImportPreview(
     });
   }
 
+  const previewFingerprint = generateBrowserPreviewFingerprint({
+    selectedRootName: derivedRootName,
+    fileCount: validDescriptors.length,
+    declaredTotalBytes: manifest.declaredTotalBytes,
+    packages: packagePreviews,
+  });
+
   return {
     success: true,
     batch: {
+      previewFingerprint,
       mode,
       selectedRootName: derivedRootName,
       packageCount: packagePreviews.length,

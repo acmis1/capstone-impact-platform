@@ -249,10 +249,10 @@ The dashboard uses count-only metrics for total, public-eligible, in-review and 
 
 The application provides two import workflows:
 
-1. **Browser Folder & Batch Preview**: A client-side directory selector (`/admin/imports/new`) and server-side preview route (`POST /api/imports/preview`). Authorized staff (`projects.edit` permission) can select a single project folder or a batch parent folder containing multiple project packages. The preview parses `.xlsx` or `.json` metadata, validates file descriptors, checks package structure and folder-derived public IDs, and renders isolated package results without persisting any database records, uploading storage objects, or generating public feeds. Actual media binaries stay in the browser during preview.
+1. **Browser Folder & Batch Preview**: A client-side directory selector (`/admin/imports/new`) and server-side preview route (`POST /api/imports/preview`). Authorized staff (`projects.edit` permission) can select a single project folder or a batch parent folder containing multiple project packages. The preview parses `.xlsx` or `.json` metadata, validates file descriptors, checks package structure and folder-derived public IDs, and renders isolated package results. Staff can select eligible preview packages, acknowledge warnings per package (warning packages are unselected by default and require explicit acknowledgement before selection), and exclude invalid packages (which remain unselectable). Staff can prepare a deterministic, versioned `BrowserImportCommitIntent` contract verified against an authoritative SHA-256 preview fingerprint. The workflow remains strictly non-persisting: zero project rows, validation flags, storage files, import batches, public feeds, or emails are created, and actual atomic persistence and media upload remain separate future work. Actual media binaries stay in the browser during preview.
 2. **Local Package Importer**: A staging ingestion foundation reading local package fixtures requiring `project.json` metadata and assets (whereas browser preview supports either `.xlsx` or `.json`). It validates metadata, size bounds, and path safety, creates import batches, records validation flags, and stages private draft assets.
 
-Browser preview is a non-persisting validation foundation. Database persistence and storage upload remain future import steps.
+Browser preview and commit-intent preparation form a non-persisting validation boundary. Database persistence and storage upload remain future import steps.
 
 ## Media and storage lifecycle
 

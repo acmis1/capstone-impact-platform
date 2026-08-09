@@ -9,6 +9,18 @@ import {
   SelectionManifest,
   validateBrowserImportPreviewResponse,
 } from '../../import/browserImportPreviewContract';
+import {
+  BrowserImportSelectionState,
+  createInitialSelectionState,
+  resetSelectionState,
+  setPreparedFailure,
+  setPreparedSuccess,
+  setPreparing,
+  toggleValidPackage,
+  toggleWarningAcknowledgement,
+  toggleWarningPackageSelection,
+} from '../../import/browserImportCommitIntentContract';
+import { prepareBrowserImportCommitIntent } from '../../import/prepareBrowserImportCommitIntent';
 
 export default function BrowserImportPreviewClient() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -26,6 +38,9 @@ export default function BrowserImportPreviewClient() {
   const [previewResult, setPreviewResult] = useState<BrowserImportPreviewResponse['batch'] | null>(null);
   const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
 
+  const [selectionState, setSelectionState] = useState<BrowserImportSelectionState>(resetSelectionState());
+  const [manifestCache, setManifestCache] = useState<SelectionManifest | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFolderSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,6 +49,8 @@ export default function BrowserImportPreviewClient() {
 
     setApiError(null);
     setPreviewResult(null);
+    setSelectionState(resetSelectionState());
+    setManifestCache(null);
 
     const descriptors: SelectedFileDescriptor[] = [];
     let totalBytes = 0;
@@ -106,6 +123,8 @@ export default function BrowserImportPreviewClient() {
 
     setIsLoading(true);
     setApiError(null);
+    setSelectionState(resetSelectionState());
+    setManifestCache(null);
 
     try {
       const descriptors: SelectedFileDescriptor[] = [];
@@ -200,6 +219,8 @@ export default function BrowserImportPreviewClient() {
       }
 
       setPreviewResult(validatedResponse.batch);
+      setManifestCache(manifest);
+      setSelectionState(createInitialSelectionState(validatedResponse.batch));
     } catch {
       // Step 13: Safe client error handling without raw exception exposure
       setApiError('The preview request could not be completed. Please try again.');
@@ -215,7 +236,49 @@ export default function BrowserImportPreviewClient() {
     setDetectedPackageCount(0);
     setPreviewResult(null);
     setApiError(null);
+    setSelectionState(resetSelectionState());
+    setManifestCache(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleToggleValid = (pkgPath: string) => {
+    if (!previewResult) return;
+    setSelectionState((prev) => toggleValidPackage(prev, pkgPath, previewResult.packages));
+  };
+
+  const handleToggleWarningAck = (pkgPath: string) => {
+    if (!previewResult) return;
+    setSelectionState((prev) => toggleWarningAcknowledgement(prev, pkgPath, previewResult.packages));
+  };
+
+  const handleToggleWarningSelect = (pkgPath: string) => {
+    if (!previewResult) return;
+    setSelectionState((prev) => toggleWarningPackageSelection(prev, pkgPath, previewResult.packages));
+  };
+
+  const handlePrepareImport = () => {
+    if (!previewResult || !manifestCache || selectionState.isPreparing) return;
+
+    if (selectionState.selectedPackagePaths.length === 0) {
+      setSelectionState((prev) => setPreparedFailure(prev, 'EMPTY_SELECTION'));
+      return;
+    }
+
+    setSelectionState((prev) => setPreparing(prev, true));
+
+    const result = prepareBrowserImportCommitIntent({
+      manifest: manifestCache,
+      preview: previewResult,
+      selectedPackagePaths: selectionState.selectedPackagePaths,
+      acknowledgedWarningPackagePaths: selectionState.acknowledgedWarningPackagePaths,
+      expectedPreviewFingerprint: previewResult.previewFingerprint,
+    });
+
+    if (result.success) {
+      setSelectionState((prev) => setPreparedSuccess(prev, result.intent));
+    } else {
+      setSelectionState((prev) => setPreparedFailure(prev, result.code));
+    }
   };
 
   const togglePackageExpand = (pkgPath: string) => {
@@ -223,6 +286,18 @@ export default function BrowserImportPreviewClient() {
   };
 
   const formatMB = (bytes: number) => (bytes / (1024 * 1024)).toFixed(2);
+
+  // Derived counts for package selection header
+  const totalSelectedCount = selectionState.selectedPackagePaths.length;
+  const selectedValidCount = previewResult
+    ? previewResult.packages.filter((p) => p.status === 'valid' && selectionState.selectedPackagePaths.includes(p.packagePath)).length
+    : 0;
+  const selectedWarningCount = previewResult
+    ? previewResult.packages.filter((p) => p.status === 'warning' && selectionState.selectedPackagePaths.includes(p.packagePath)).length
+    : 0;
+  const unacknowledgedWarningCount = previewResult
+    ? previewResult.packages.filter((p) => p.status === 'warning' && !selectionState.acknowledgedWarningPackagePaths.includes(p.packagePath)).length
+    : 0;
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto', color: '#F3F4F6', fontFamily: 'system-ui, sans-serif' }}>
@@ -444,6 +519,111 @@ export default function BrowserImportPreviewClient() {
             </div>
           )}
 
+          {/* Package Selection Controls & Action Bar */}
+          <div style={{
+            backgroundColor: '#161F30',
+            borderRadius: '12px',
+            padding: '1.25rem 1.5rem',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            marginBottom: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}>
+            <div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#FFFFFF' }}>
+                Package Selection ({totalSelectedCount} selected: {selectedValidCount} valid, {selectedWarningCount} warning)
+              </div>
+              <div style={{ fontSize: '0.8rem', color: '#9CA3AF', marginTop: '0.25rem' }}>
+                {unacknowledgedWarningCount > 0
+                  ? `⚠️ ${unacknowledgedWarningCount} warning package(s) awaiting acknowledgement`
+                  : '✓ All warning packages acknowledged or excluded'}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: '0.8rem', color: '#9CA3AF', fontStyle: 'italic' }}>
+                Preparation only — no projects or files will be saved.
+              </div>
+
+              <button
+                type="button"
+                onClick={handlePrepareImport}
+                disabled={selectionState.isPreparing || totalSelectedCount === 0}
+                style={{
+                  backgroundColor: '#8B5CF6',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0.65rem 1.25rem',
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  cursor: selectionState.isPreparing || totalSelectedCount === 0 ? 'not-allowed' : 'pointer',
+                  opacity: selectionState.isPreparing || totalSelectedCount === 0 ? 0.5 : 1,
+                }}
+              >
+                {selectionState.isPreparing ? '⏳ Preparing...' : 'Prepare Import'}
+              </button>
+            </div>
+          </div>
+
+          {/* Preparation Error Feedback */}
+          {selectionState.preparationErrorCode && (
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              borderRadius: '10px',
+              padding: '1rem 1.25rem',
+              marginBottom: '1.5rem',
+              color: '#EF4444',
+              fontSize: '0.9rem',
+            }}>
+              ❌ <strong>Import preparation failed:</strong>{' '}
+              {selectionState.preparationErrorCode === 'EMPTY_SELECTION'
+                ? 'At least one package must be selected.'
+                : 'The selection could not be prepared as an import intent. Please check acknowledgements and try again.'}
+            </div>
+          )}
+
+          {/* Prepared Intent Summary Card */}
+          {selectionState.preparedIntent && (
+            <div style={{
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              borderRadius: '12px',
+              padding: '1.25rem 1.5rem',
+              marginBottom: '1.5rem',
+              color: '#10B981',
+            }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', fontWeight: 800, fontSize: '1rem', color: '#10B981' }}>
+                ✓ Import Intent Prepared Successfully
+              </h4>
+              <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: '#D1D5DB' }}>
+                A deterministic import intent contract has been constructed in memory for future persistence. No database or storage writes occurred.
+              </p>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '0.75rem',
+                fontSize: '0.85rem',
+                backgroundColor: '#161F30',
+                padding: '1rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+              }}>
+                <div><span style={{ color: '#9CA3AF' }}>Fingerprint:</span> <code style={{ color: '#60A5FA' }}>{selectionState.preparedIntent.previewFingerprint.slice(0, 12)}...</code></div>
+                <div><span style={{ color: '#9CA3AF' }}>Root Name:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.selectedRootName}</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Selected Packages:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.selectedPackagePaths.length}</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Acknowledged Warnings:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.acknowledgedWarningPackagePaths.length}</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Declared File Count:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.fileCount}</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Declared Total Size:</span> <strong style={{ color: '#F3F4F6' }}>{formatMB(selectionState.preparedIntent.declaredTotalBytes)} MB</strong></div>
+              </div>
+            </div>
+          )}
+
           {/* Package Preview List */}
           <h3 style={{ fontSize: '1.2rem', margin: '0 0 1rem 0', color: '#FFFFFF' }}>2. Isolated Package Previews</h3>
 
@@ -451,6 +631,9 @@ export default function BrowserImportPreviewClient() {
             {previewResult.packages.map((pkg) => {
               const isExpanded = expandedPackages[pkg.packagePath] || false;
               const statusColor = pkg.status === 'valid' ? '#10B981' : pkg.status === 'warning' ? '#F59E0B' : '#EF4444';
+
+              const isSelected = selectionState.selectedPackagePaths.includes(pkg.packagePath);
+              const isAcked = selectionState.acknowledgedWarningPackagePaths.includes(pkg.packagePath);
 
               return (
                 <div
@@ -464,23 +647,79 @@ export default function BrowserImportPreviewClient() {
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#FFFFFF' }}>{pkg.folderName}</span>
-                        <span style={{
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          padding: '0.2rem 0.6rem',
-                          borderRadius: '12px',
-                          backgroundColor: `${statusColor}20`,
-                          color: statusColor,
-                          border: `1px solid ${statusColor}40`,
-                        }}>
-                          {pkg.status.toUpperCase()}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: '#9CA3AF', marginTop: '0.25rem' }}>
-                        Public ID: <code style={{ color: '#60A5FA' }}>{pkg.proposedPublicId}</code> | Metadata Source: <strong>{pkg.metadataSource || 'None'}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      {/* Package Selection Controls */}
+                      {pkg.status === 'valid' && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleValid(pkg.packagePath)}
+                            aria-label={`Select package ${pkg.folderName} for import`}
+                            style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
+                          />
+                          <span style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>Select</span>
+                        </label>
+                      )}
+
+                      {pkg.status === 'warning' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={isAcked}
+                              onChange={() => handleToggleWarningAck(pkg.packagePath)}
+                              aria-label={`Acknowledge warnings for package ${pkg.folderName}`}
+                              style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
+                            />
+                            <span style={{ fontSize: '0.8rem', color: '#F59E0B' }}>Ack Warnings</span>
+                          </label>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: isAcked ? 'pointer' : 'not-allowed', opacity: isAcked ? 1 : 0.4 }}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              disabled={!isAcked}
+                              onChange={() => handleToggleWarningSelect(pkg.packagePath)}
+                              aria-label={`Select warning package ${pkg.folderName} for import after acknowledgement`}
+                              style={{ width: '1rem', height: '1rem', cursor: isAcked ? 'pointer' : 'not-allowed' }}
+                            />
+                            <span style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>Select</span>
+                          </label>
+                        </div>
+                      )}
+
+                      {pkg.status === 'invalid' && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.4, cursor: 'not-allowed' }}>
+                          <input
+                            type="checkbox"
+                            checked={false}
+                            disabled
+                            aria-label={`Package ${pkg.folderName} is invalid and cannot be selected`}
+                            style={{ width: '1.1rem', height: '1.1rem', cursor: 'not-allowed' }}
+                          />
+                          <span style={{ fontSize: '0.8rem', color: '#EF4444' }}>Invalid (Disabled)</span>
+                        </label>
+                      )}
+
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#FFFFFF' }}>{pkg.folderName}</span>
+                          <span style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            padding: '0.2rem 0.6rem',
+                            borderRadius: '12px',
+                            backgroundColor: `${statusColor}20`,
+                            color: statusColor,
+                            border: `1px solid ${statusColor}40`,
+                          }}>
+                            {pkg.status.toUpperCase()}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#9CA3AF', marginTop: '0.25rem' }}>
+                          Public ID: <code style={{ color: '#60A5FA' }}>{pkg.proposedPublicId}</code> | Metadata Source: <strong>{pkg.metadataSource || 'None'}</strong>
+                        </div>
                       </div>
                     </div>
 
