@@ -19,6 +19,9 @@ import {
   resetSelectionState,
   browserImportCommitIntentSchema,
 } from '../browserImportCommitIntentContract';
+import { generateUploadKey } from '../browserSelection';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 function makeMockPreviewBatch(overrides: Partial<BrowserImportPreviewBatch> = {}): BrowserImportPreviewBatch {
   const packages: BrowserImportPackagePreview[] = overrides.packages || [
@@ -77,8 +80,8 @@ function makeMockPreviewBatch(overrides: Partial<BrowserImportPreviewBatch> = {}
 
   const baseInput = {
     selectedRootName: overrides.selectedRootName || 'root',
-    fileCount: overrides.selectedFileCount ?? 5,
-    declaredTotalBytes: overrides.declaredTotalBytes ?? 1000,
+    fileCount: overrides.selectedFileCount ?? 6,
+    declaredTotalBytes: overrides.declaredTotalBytes ?? 1200,
     packages,
   };
 
@@ -102,8 +105,6 @@ function makeMockPreviewBatch(overrides: Partial<BrowserImportPreviewBatch> = {}
     ...overrides,
   };
 }
-
-import { generateUploadKey } from '../browserSelection';
 
 function makeMockManifest(overrides: Partial<SelectionManifest> = {}): SelectionManifest {
   const defaultPaths = [
@@ -142,7 +143,7 @@ function makeMockManifest(overrides: Partial<SelectionManifest> = {}): Selection
 }
 
 describe('Browser Import Commit Intent & Planner Suite', () => {
-  describe('Authoritative Fingerprint & Pure Planner', () => {
+  describe('Authoritative Fingerprint Integrity & Self-Consistency', () => {
     it('1. Deterministic fingerprint for equivalent input ordering', () => {
       const inputA = {
         selectedRootName: 'root',
@@ -192,7 +193,76 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       expect(fpCountChange).not.toBe(fpBase);
     });
 
-    it('3. Valid-only selection success', () => {
+    it('3. Altering a package status while retaining the old fingerprint fails', () => {
+      const preview = makeMockPreviewBatch();
+      const manifest = makeMockManifest();
+      const oldFingerprint = preview.previewFingerprint;
+
+      // Tamper status of p1 to invalid without recomputing fingerprint
+      preview.packages[0].status = 'invalid';
+      preview.packages[0].errors = [{ code: 'TAMPERED', message: 'tampered', severity: 'error' }];
+
+      const res = prepareBrowserImportCommitIntent({
+        manifest,
+        preview,
+        selectedPackagePaths: ['root/p1'],
+        acknowledgedWarningPackagePaths: [],
+        expectedPreviewFingerprint: oldFingerprint,
+      });
+
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.code).toBe('PREVIEW_FINGERPRINT_MISMATCH');
+      }
+    });
+
+    it('4. Altering a package path while retaining the old fingerprint fails', () => {
+      const preview = makeMockPreviewBatch();
+      const manifest = makeMockManifest();
+      const oldFingerprint = preview.previewFingerprint;
+
+      // Tamper packagePath of p1
+      preview.packages[0].packagePath = 'root/tampered-p1';
+
+      const res = prepareBrowserImportCommitIntent({
+        manifest,
+        preview,
+        selectedPackagePaths: ['root/tampered-p1'],
+        acknowledgedWarningPackagePaths: [],
+        expectedPreviewFingerprint: oldFingerprint,
+      });
+
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.code).toBe('PREVIEW_FINGERPRINT_MISMATCH');
+      }
+    });
+
+    it('5. Altering warning/error eligibility codes while retaining the old fingerprint fails', () => {
+      const preview = makeMockPreviewBatch();
+      const manifest = makeMockManifest();
+      const oldFingerprint = preview.previewFingerprint;
+
+      // Inject extra error code into package
+      preview.packages[1].warnings.push({ code: 'NEW_WARNING_CODE', message: 'msg', severity: 'warning' });
+
+      const res = prepareBrowserImportCommitIntent({
+        manifest,
+        preview,
+        selectedPackagePaths: ['root/p1', 'root/p2'],
+        acknowledgedWarningPackagePaths: ['root/p2'],
+        expectedPreviewFingerprint: oldFingerprint,
+      });
+
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.code).toBe('PREVIEW_FINGERPRINT_MISMATCH');
+      }
+    });
+  });
+
+  describe('Pure Planner Mismatch & Validation Branches', () => {
+    it('6. Valid-only selection success', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -213,7 +283,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('4. Warning package with explicit acknowledgement success', () => {
+    it('7. Warning package with explicit acknowledgement success', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -234,7 +304,102 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('5. Warning selected without acknowledgement fails', () => {
+    it('8. ROOT_NAME_MISMATCH branch is reached and returned when root names mismatch', () => {
+      const preview = makeMockPreviewBatch({ selectedRootName: 'preview-root' });
+
+      // Build manifest matching preview's root name 'preview-root' so preflight succeeds
+      const descriptors = [
+        { uploadKey: generateUploadKey('preview-root/p1/project-details.xlsx'), originalPath: 'preview-root/p1/project-details.xlsx', fileSizeBytes: 200, browserMimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+        { uploadKey: generateUploadKey('preview-root/p1/poster.png'), originalPath: 'preview-root/p1/poster.png', fileSizeBytes: 200, browserMimeType: 'image/png' },
+      ];
+      const manifest: SelectionManifest = {
+        selectedRootName: 'manifest-root-mismatched',
+        fileCount: 2,
+        declaredTotalBytes: 400,
+        ignoredSystemFilesCount: 0,
+        descriptors,
+      };
+
+      // Alter manifest descriptors root to manifest-root-mismatched so manifest preflight passes internally
+      manifest.descriptors = [
+        { uploadKey: generateUploadKey('manifest-root-mismatched/p1/project-details.xlsx'), originalPath: 'manifest-root-mismatched/p1/project-details.xlsx', fileSizeBytes: 200, browserMimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+        { uploadKey: generateUploadKey('manifest-root-mismatched/p1/poster.png'), originalPath: 'manifest-root-mismatched/p1/poster.png', fileSizeBytes: 200, browserMimeType: 'image/png' },
+      ];
+
+      const res = prepareBrowserImportCommitIntent({
+        manifest,
+        preview,
+        selectedPackagePaths: ['root/p1'],
+        acknowledgedWarningPackagePaths: [],
+        expectedPreviewFingerprint: preview.previewFingerprint,
+      });
+
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.code).toBe('ROOT_NAME_MISMATCH');
+      }
+    });
+
+    it('9. FILE_COUNT_MISMATCH branch is reached and returned when file counts mismatch', () => {
+      const preview = makeMockPreviewBatch({ selectedFileCount: 6 });
+
+      // Build valid manifest with fileCount 5
+      const descriptors = [
+        { uploadKey: generateUploadKey('root/p1/project-details.xlsx'), originalPath: 'root/p1/project-details.xlsx', fileSizeBytes: 200, browserMimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+        { uploadKey: generateUploadKey('root/p1/poster.png'), originalPath: 'root/p1/poster.png', fileSizeBytes: 200, browserMimeType: 'image/png' },
+      ];
+      const manifest: SelectionManifest = {
+        selectedRootName: 'root',
+        fileCount: 2,
+        declaredTotalBytes: 400,
+        ignoredSystemFilesCount: 0,
+        descriptors,
+      };
+
+      const res = prepareBrowserImportCommitIntent({
+        manifest,
+        preview,
+        selectedPackagePaths: ['root/p1'],
+        acknowledgedWarningPackagePaths: [],
+        expectedPreviewFingerprint: preview.previewFingerprint,
+      });
+
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.code).toBe('FILE_COUNT_MISMATCH');
+      }
+    });
+
+    it('10. DECLARED_BYTES_MISMATCH branch is reached and returned when byte totals mismatch', () => {
+      const preview = makeMockPreviewBatch({ declaredTotalBytes: 99999, selectedFileCount: 2 });
+
+      const descriptors = [
+        { uploadKey: generateUploadKey('root/p1/project-details.xlsx'), originalPath: 'root/p1/project-details.xlsx', fileSizeBytes: 200, browserMimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+        { uploadKey: generateUploadKey('root/p1/poster.png'), originalPath: 'root/p1/poster.png', fileSizeBytes: 200, browserMimeType: 'image/png' },
+      ];
+      const manifest: SelectionManifest = {
+        selectedRootName: 'root',
+        fileCount: 2,
+        declaredTotalBytes: 400,
+        ignoredSystemFilesCount: 0,
+        descriptors,
+      };
+
+      const res = prepareBrowserImportCommitIntent({
+        manifest,
+        preview,
+        selectedPackagePaths: ['root/p1'],
+        acknowledgedWarningPackagePaths: [],
+        expectedPreviewFingerprint: preview.previewFingerprint,
+      });
+
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect(res.code).toBe('DECLARED_BYTES_MISMATCH');
+      }
+    });
+
+    it('11. Warning selected without acknowledgement fails', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -252,7 +417,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('6. Invalid package selection fails', () => {
+    it('12. Invalid package selection fails', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -270,7 +435,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('7. Unknown selected path fails', () => {
+    it('13. Unknown selected path fails', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -288,7 +453,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('8. Unknown acknowledgement path fails', () => {
+    it('14. Unknown acknowledgement path fails', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -306,7 +471,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('9. Duplicate selected path fails', () => {
+    it('15. Duplicate selected path fails', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -324,7 +489,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('10. Duplicate acknowledgement path fails', () => {
+    it('16. Duplicate acknowledgement path fails', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -342,7 +507,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('11. Acknowledgement of a valid package fails', () => {
+    it('17. Acknowledgement of a valid package fails', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -360,7 +525,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('12. Acknowledgement of an invalid package fails', () => {
+    it('18. Acknowledgement of an invalid package fails', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -378,61 +543,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('13. Mismatched root fails', () => {
-      const preview = makeMockPreviewBatch();
-      const manifest = makeMockManifest({ selectedRootName: 'different-root' });
-
-      const res = prepareBrowserImportCommitIntent({
-        manifest,
-        preview,
-        selectedPackagePaths: ['root/p1'],
-        acknowledgedWarningPackagePaths: [],
-        expectedPreviewFingerprint: preview.previewFingerprint,
-      });
-
-      expect(res.success).toBe(false);
-      if (!res.success) {
-        expect(res.code).toBe('INVALID_MANIFEST');
-      }
-    });
-
-    it('14. Mismatched file count fails', () => {
-      const preview = makeMockPreviewBatch();
-      const manifest = makeMockManifest({ fileCount: 99 });
-
-      const res = prepareBrowserImportCommitIntent({
-        manifest,
-        preview,
-        selectedPackagePaths: ['root/p1'],
-        acknowledgedWarningPackagePaths: [],
-        expectedPreviewFingerprint: preview.previewFingerprint,
-      });
-
-      expect(res.success).toBe(false);
-      if (!res.success) {
-        expect(res.code).toBe('INVALID_MANIFEST');
-      }
-    });
-
-    it('15. Mismatched declared byte total fails', () => {
-      const preview = makeMockPreviewBatch();
-      const manifest = makeMockManifest({ declaredTotalBytes: 99999 });
-
-      const res = prepareBrowserImportCommitIntent({
-        manifest,
-        preview,
-        selectedPackagePaths: ['root/p1'],
-        acknowledgedWarningPackagePaths: [],
-        expectedPreviewFingerprint: preview.previewFingerprint,
-      });
-
-      expect(res.success).toBe(false);
-      if (!res.success) {
-        expect(res.code).toBe('INVALID_MANIFEST');
-      }
-    });
-
-    it('16. Stale fingerprint fails', () => {
+    it('19. Stale fingerprint fails', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -450,7 +561,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('17. Empty selection fails', () => {
+    it('20. Empty selection fails', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -468,7 +579,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('18. Output order is deterministic', () => {
+    it('21. Output order is deterministic', () => {
       const preview = makeMockPreviewBatch({
         selectedFileCount: 2,
         declaredTotalBytes: 1000,
@@ -520,7 +631,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
-    it('19. Unexpected contract fields fail schema validation', () => {
+    it('22. Unexpected contract fields fail schema validation', () => {
       const invalidIntent = {
         version: 1,
         previewFingerprint: 'a'.repeat(64),
@@ -536,7 +647,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       expect(parseRes.success).toBe(false);
     });
 
-    it('20. Unsafe values are not included in public errors', () => {
+    it('23. Unsafe values are not included in public errors', () => {
       const preview = makeMockPreviewBatch();
       const manifest = makeMockManifest();
 
@@ -556,8 +667,8 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
     });
   });
 
-  describe('Selection State Reducer Unit Tests', () => {
-    it('21. Valid packages selected by default, warnings unselected, invalid unselectable', () => {
+  describe('Selection State Reducer & Controller Unit Tests', () => {
+    it('24. Valid packages selected by default, warnings unselected, invalid unselectable', () => {
       const batch = makeMockPreviewBatch();
       const state = createInitialSelectionState(batch);
 
@@ -567,7 +678,18 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       expect(state.preparedIntent).toBeNull();
     });
 
-    it('22. Acknowledging a warning does not automatically select it', () => {
+    it('25. Valid toggle', () => {
+      const batch = makeMockPreviewBatch();
+      const initial = createInitialSelectionState(batch);
+
+      const stateDeselected = toggleValidPackage(initial, 'root/p1', batch.packages);
+      expect(stateDeselected.selectedPackagePaths).toEqual([]);
+
+      const stateReselected = toggleValidPackage(stateDeselected, 'root/p1', batch.packages);
+      expect(stateReselected.selectedPackagePaths).toEqual(['root/p1']);
+    });
+
+    it('26. Acknowledging a warning does not automatically select it', () => {
       const batch = makeMockPreviewBatch();
       const initial = createInitialSelectionState(batch);
 
@@ -576,7 +698,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       expect(stateAck.selectedPackagePaths).toEqual(['root/p1']); // Still not selected!
     });
 
-    it('23. Selecting an acknowledged warning succeeds', () => {
+    it('27. Selecting an acknowledged warning succeeds', () => {
       const batch = makeMockPreviewBatch();
       const initial = createInitialSelectionState(batch);
 
@@ -586,7 +708,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       expect(stateSel.selectedPackagePaths).toEqual(['root/p1', 'root/p2']);
     });
 
-    it('24. Selecting unacknowledged warning fails silently in state helper', () => {
+    it('28. Selecting unacknowledged warning fails silently in state helper', () => {
       const batch = makeMockPreviewBatch();
       const initial = createInitialSelectionState(batch);
 
@@ -594,7 +716,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       expect(stateSel.selectedPackagePaths).toEqual(['root/p1']);
     });
 
-    it('25. Removing acknowledgement deselects the warning package', () => {
+    it('29. Removing acknowledgement deselects the warning package', () => {
       const batch = makeMockPreviewBatch();
       const initial = createInitialSelectionState(batch);
 
@@ -607,7 +729,33 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       expect(stateUnAck.selectedPackagePaths).toEqual(['root/p1']);
     });
 
-    it('26. Selection changes invalidate prepared intent', () => {
+    it('30. Invalid-package toggle returns unchanged state', () => {
+      const batch = makeMockPreviewBatch();
+      const initial = createInitialSelectionState(batch);
+
+      const stateValid = toggleValidPackage(initial, 'root/p3', batch.packages);
+      const stateWarn = toggleWarningPackageSelection(initial, 'root/p3', batch.packages);
+      const stateAck = toggleWarningAcknowledgement(initial, 'root/p3', batch.packages);
+
+      expect(stateValid).toEqual(initial);
+      expect(stateWarn).toEqual(initial);
+      expect(stateAck).toEqual(initial);
+    });
+
+    it('31. Unknown-package toggle returns unchanged state', () => {
+      const batch = makeMockPreviewBatch();
+      const initial = createInitialSelectionState(batch);
+
+      const stateValid = toggleValidPackage(initial, 'root/unknown', batch.packages);
+      const stateWarn = toggleWarningPackageSelection(initial, 'root/unknown', batch.packages);
+      const stateAck = toggleWarningAcknowledgement(initial, 'root/unknown', batch.packages);
+
+      expect(stateValid).toEqual(initial);
+      expect(stateWarn).toEqual(initial);
+      expect(stateAck).toEqual(initial);
+    });
+
+    it('32. Selection changes invalidate prepared intent', () => {
       const batch = makeMockPreviewBatch();
       const initial = createInitialSelectionState(batch);
       const mockIntent = {
@@ -627,14 +775,73 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       expect(toggledState.preparedIntent).toBeNull();
     });
 
-    it('27. Preparation pending blocks duplicate actions', () => {
-      const initial = resetSelectionState();
-      const statePrep = setPreparing(initial, true);
+    it('33. Acknowledgement changes invalidate prepared intent', () => {
+      const batch = makeMockPreviewBatch();
+      const initial = createInitialSelectionState(batch);
+      const mockIntent = {
+        version: 1 as const,
+        previewFingerprint: batch.previewFingerprint,
+        selectedRootName: 'root',
+        fileCount: 5,
+        declaredTotalBytes: 1000,
+        selectedPackagePaths: ['root/p1'],
+        acknowledgedWarningPackagePaths: [],
+      };
+
+      const preparedState = setPreparedSuccess(initial, mockIntent);
+      const ackedState = toggleWarningAcknowledgement(preparedState, 'root/p2', batch.packages);
+      expect(ackedState.preparedIntent).toBeNull();
+    });
+
+    it('34. New preview or clear selection resets all state', () => {
+      const batch = makeMockPreviewBatch();
+      const initial = createInitialSelectionState(batch);
+      const stateAck = toggleWarningAcknowledgement(initial, 'root/p2', batch.packages);
+      const statePrep = setPreparing(stateAck, true);
       expect(statePrep.isPreparing).toBe(true);
 
-      const stateErr = setPreparedFailure(statePrep, 'ERROR');
-      expect(stateErr.isPreparing).toBe(false);
-      expect(stateErr.preparationErrorCode).toBe('ERROR');
+      const resetState = resetSelectionState();
+      expect(resetState.previewFingerprint).toBe('');
+      expect(resetState.selectedPackagePaths).toEqual([]);
+      expect(resetState.acknowledgedWarningPackagePaths).toEqual([]);
+      expect(resetState.isPreparing).toBe(false);
+      expect(resetState.preparedIntent).toBeNull();
+      expect(resetState.preparationErrorCode).toBeNull();
+    });
+
+    it('35. Successful preparation stores exact intent, failure stores bounded error code', () => {
+      const initial = resetSelectionState();
+      const mockIntent = {
+        version: 1 as const,
+        previewFingerprint: 'a'.repeat(64),
+        selectedRootName: 'root',
+        fileCount: 5,
+        declaredTotalBytes: 1000,
+        selectedPackagePaths: ['root/p1'],
+        acknowledgedWarningPackagePaths: [],
+      };
+
+      const stateSuccess = setPreparedSuccess(initial, mockIntent);
+      expect(stateSuccess.preparedIntent).toEqual(mockIntent);
+      expect(stateSuccess.preparationErrorCode).toBeNull();
+
+      const stateFail = setPreparedFailure(initial, 'PREVIEW_FINGERPRINT_MISMATCH');
+      expect(stateFail.preparedIntent).toBeNull();
+      expect(stateFail.preparationErrorCode).toBe('PREVIEW_FINGERPRINT_MISMATCH');
+    });
+  });
+
+  describe('Component Accessible Labels & Static Contract', () => {
+    it('36. Component source contains package-specific aria-labels and visible status badges', () => {
+      const filePath = join(__dirname, '../../components/imports/BrowserImportPreviewClient.tsx');
+      const source = readFileSync(filePath, 'utf8');
+
+      expect(source).toContain('aria-label={`Select package ${pkg.folderName} for import`}');
+      expect(source).toContain('aria-label={`Acknowledge warnings for package ${pkg.folderName}`}');
+      expect(source).toContain('aria-label={`Select warning package ${pkg.folderName} for import after acknowledgement`}');
+      expect(source).toContain('aria-label={`Package ${pkg.folderName} is invalid and cannot be selected`}');
+      expect(source).toContain('{pkg.status.toUpperCase()}');
+      expect(source).toContain('disabled={selectionState.isPreparing}');
     });
   });
 });

@@ -10,6 +10,7 @@ import {
   validateBrowserImportPreviewResponse,
 } from '../../import/browserImportPreviewContract';
 import {
+  BrowserImportPreparationErrorCode,
   BrowserImportSelectionState,
   createInitialSelectionState,
   resetSelectionState,
@@ -256,28 +257,69 @@ export default function BrowserImportPreviewClient() {
     setSelectionState((prev) => toggleWarningPackageSelection(prev, pkgPath, previewResult.packages));
   };
 
-  const handlePrepareImport = () => {
-    if (!previewResult || !manifestCache || selectionState.isPreparing) return;
+  const preparationLockRef = useRef(false);
 
-    if (selectionState.selectedPackagePaths.length === 0) {
-      setSelectionState((prev) => setPreparedFailure(prev, 'EMPTY_SELECTION'));
-      return;
-    }
+  const handlePrepareImport = async () => {
+    if (!previewResult || !manifestCache || selectionState.isPreparing || preparationLockRef.current) return;
 
-    setSelectionState((prev) => setPreparing(prev, true));
+    preparationLockRef.current = true;
 
-    const result = prepareBrowserImportCommitIntent({
-      manifest: manifestCache,
-      preview: previewResult,
-      selectedPackagePaths: selectionState.selectedPackagePaths,
-      acknowledgedWarningPackagePaths: selectionState.acknowledgedWarningPackagePaths,
-      expectedPreviewFingerprint: previewResult.previewFingerprint,
-    });
+    try {
+      if (selectionState.selectedPackagePaths.length === 0) {
+        setSelectionState((prev) => setPreparedFailure(prev, 'EMPTY_SELECTION'));
+        return;
+      }
 
-    if (result.success) {
-      setSelectionState((prev) => setPreparedSuccess(prev, result.intent));
-    } else {
-      setSelectionState((prev) => setPreparedFailure(prev, result.code));
+      if (selectionState.previewFingerprint !== previewResult.previewFingerprint) {
+        setSelectionState((prev) => setPreparedFailure(prev, 'PREVIEW_FINGERPRINT_MISMATCH'));
+        return;
+      }
+
+      // Capture deterministic preparation snapshot
+      const snapshotFingerprint = selectionState.previewFingerprint;
+      const snapshotSelected = [...selectionState.selectedPackagePaths];
+      const snapshotAcked = [...selectionState.acknowledgedWarningPackagePaths];
+
+      setSelectionState((prev) => setPreparing(prev, true));
+
+      // Async boundary: yield at least one microtask
+      await Promise.resolve();
+
+      const result = prepareBrowserImportCommitIntent({
+        manifest: manifestCache,
+        preview: previewResult,
+        selectedPackagePaths: snapshotSelected,
+        acknowledgedWarningPackagePaths: snapshotAcked,
+        expectedPreviewFingerprint: snapshotFingerprint,
+      });
+
+      setSelectionState((current) => {
+        // Snapshot safety check: discard result if selection/preview/ack changed during async boundary
+        if (
+          current.previewFingerprint !== snapshotFingerprint ||
+          current.selectedPackagePaths.length !== snapshotSelected.length ||
+          !current.selectedPackagePaths.every((p, i) => p === snapshotSelected[i]) ||
+          current.acknowledgedWarningPackagePaths.length !== snapshotAcked.length ||
+          !current.acknowledgedWarningPackagePaths.every((p, i) => p === snapshotAcked[i])
+        ) {
+          return setPreparedFailure(current, 'PREVIEW_FINGERPRINT_MISMATCH');
+        }
+
+        if (result.success) {
+          return setPreparedSuccess(current, result.intent);
+        } else {
+          const mapErrorCode = (code: string): BrowserImportPreparationErrorCode => {
+            if (code === 'EMPTY_SELECTION') return 'EMPTY_SELECTION';
+            if (code === 'PREVIEW_FINGERPRINT_MISMATCH') return 'PREVIEW_FINGERPRINT_MISMATCH';
+            return 'INVALID_SELECTION';
+          };
+          return setPreparedFailure(current, mapErrorCode(result.code));
+        }
+      });
+    } catch {
+      setSelectionState((prev) => setPreparedFailure(prev, 'UNEXPECTED_PREPARATION_FAILURE'));
+    } finally {
+      preparationLockRef.current = false;
     }
   };
 
@@ -583,7 +625,9 @@ export default function BrowserImportPreviewClient() {
               ❌ <strong>Import preparation failed:</strong>{' '}
               {selectionState.preparationErrorCode === 'EMPTY_SELECTION'
                 ? 'At least one package must be selected.'
-                : 'The selection could not be prepared as an import intent. Please check acknowledgements and try again.'}
+                : selectionState.preparationErrorCode === 'PREVIEW_FINGERPRINT_MISMATCH'
+                  ? 'Preview state has changed or fingerprint does not match.'
+                  : 'The selection could not be prepared as an import intent. Please check acknowledgements and try again.'}
             </div>
           )}
 
@@ -615,11 +659,15 @@ export default function BrowserImportPreviewClient() {
                 border: '1px solid rgba(255, 255, 255, 0.05)',
               }}>
                 <div><span style={{ color: '#9CA3AF' }}>Fingerprint:</span> <code style={{ color: '#60A5FA' }}>{selectionState.preparedIntent.previewFingerprint.slice(0, 12)}...</code></div>
-                <div><span style={{ color: '#9CA3AF' }}>Root Name:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.selectedRootName}</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Selected Packages:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.selectedPackagePaths.length}</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Acknowledged Warnings:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.acknowledgedWarningPackagePaths.length}</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Selected Root:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.selectedRootName}</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Selected Package Count:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.selectedPackagePaths.length}</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Selected Valid Count:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.selectedPackagePaths.filter((p) => previewResult.packages.find((pkg) => pkg.packagePath === p)?.status === 'valid').length}</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Selected Warning Count:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.selectedPackagePaths.filter((p) => previewResult.packages.find((pkg) => pkg.packagePath === p)?.status === 'warning').length}</strong></div>
                 <div><span style={{ color: '#9CA3AF' }}>Declared File Count:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.fileCount}</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Declared Total Size:</span> <strong style={{ color: '#F3F4F6' }}>{formatMB(selectionState.preparedIntent.declaredTotalBytes)} MB</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Declared Total Bytes:</span> <strong style={{ color: '#F3F4F6' }}>{formatMB(selectionState.preparedIntent.declaredTotalBytes)} MB</strong></div>
+                {selectionState.preparedIntent.acknowledgedWarningPackagePaths.length > selectionState.preparedIntent.selectedPackagePaths.filter((p) => previewResult.packages.find((pkg) => pkg.packagePath === p)?.status === 'warning').length && (
+                  <div><span style={{ color: '#9CA3AF' }}>Acknowledged Unselected Warnings:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.acknowledgedWarningPackagePaths.length - selectionState.preparedIntent.selectedPackagePaths.filter((p) => previewResult.packages.find((pkg) => pkg.packagePath === p)?.status === 'warning').length}</strong></div>
+                )}
               </div>
             </div>
           )}
@@ -650,13 +698,14 @@ export default function BrowserImportPreviewClient() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       {/* Package Selection Controls */}
                       {pkg.status === 'valid' && (
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: selectionState.isPreparing ? 'not-allowed' : 'pointer', opacity: selectionState.isPreparing ? 0.5 : 1 }}>
                           <input
                             type="checkbox"
                             checked={isSelected}
+                            disabled={selectionState.isPreparing}
                             onChange={() => handleToggleValid(pkg.packagePath)}
                             aria-label={`Select package ${pkg.folderName} for import`}
-                            style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
+                            style={{ width: '1.1rem', height: '1.1rem', cursor: selectionState.isPreparing ? 'not-allowed' : 'pointer' }}
                           />
                           <span style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>Select</span>
                         </label>
@@ -664,25 +713,26 @@ export default function BrowserImportPreviewClient() {
 
                       {pkg.status === 'warning' && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: selectionState.isPreparing ? 'not-allowed' : 'pointer', opacity: selectionState.isPreparing ? 0.5 : 1 }}>
                             <input
                               type="checkbox"
                               checked={isAcked}
+                              disabled={selectionState.isPreparing}
                               onChange={() => handleToggleWarningAck(pkg.packagePath)}
                               aria-label={`Acknowledge warnings for package ${pkg.folderName}`}
-                              style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
+                              style={{ width: '1rem', height: '1rem', cursor: selectionState.isPreparing ? 'not-allowed' : 'pointer' }}
                             />
                             <span style={{ fontSize: '0.8rem', color: '#F59E0B' }}>Ack Warnings</span>
                           </label>
 
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: isAcked ? 'pointer' : 'not-allowed', opacity: isAcked ? 1 : 0.4 }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: isAcked && !selectionState.isPreparing ? 'pointer' : 'not-allowed', opacity: isAcked && !selectionState.isPreparing ? 1 : 0.4 }}>
                             <input
                               type="checkbox"
                               checked={isSelected}
-                              disabled={!isAcked}
+                              disabled={!isAcked || selectionState.isPreparing}
                               onChange={() => handleToggleWarningSelect(pkg.packagePath)}
                               aria-label={`Select warning package ${pkg.folderName} for import after acknowledgement`}
-                              style={{ width: '1rem', height: '1rem', cursor: isAcked ? 'pointer' : 'not-allowed' }}
+                              style={{ width: '1rem', height: '1rem', cursor: isAcked && !selectionState.isPreparing ? 'pointer' : 'not-allowed' }}
                             />
                             <span style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>Select</span>
                           </label>

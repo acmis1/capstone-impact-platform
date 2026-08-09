@@ -9,8 +9,8 @@ export const browserImportCommitIntentSchema = z
     version: z.literal(1),
     previewFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
     selectedRootName: z.string().min(1).max(BROWSER_IMPORT_LIMITS.MAX_STRING_NAME),
-    fileCount: z.number().int().nonnegative().finite(),
-    declaredTotalBytes: z.number().int().nonnegative().finite(),
+    fileCount: z.number().int().nonnegative().finite().max(BROWSER_IMPORT_LIMITS.MAX_DESCRIPTORS),
+    declaredTotalBytes: z.number().int().nonnegative().finite().max(BROWSER_IMPORT_LIMITS.MAX_MULTIPART_REQUEST_BYTES),
     selectedPackagePaths: z
       .array(z.string().min(1).max(BROWSER_IMPORT_LIMITS.MAX_STRING_PATH))
       .min(1)
@@ -39,13 +39,20 @@ export const browserImportCommitIntentSchema = z
 
 export type BrowserImportCommitIntent = z.infer<typeof browserImportCommitIntentSchema>;
 
+export type BrowserImportPreparationErrorCode =
+  | 'EMPTY_SELECTION'
+  | 'PREVIEW_FINGERPRINT_MISMATCH'
+  | 'INVALID_SELECTION'
+  | 'PREPARATION_ALREADY_PENDING'
+  | 'UNEXPECTED_PREPARATION_FAILURE';
+
 export interface BrowserImportSelectionState {
   previewFingerprint: string;
   selectedPackagePaths: string[];
   acknowledgedWarningPackagePaths: string[];
   isPreparing: boolean;
   preparedIntent: BrowserImportCommitIntent | null;
-  preparationErrorCode: string | null;
+  preparationErrorCode: BrowserImportPreparationErrorCode | null;
 }
 
 /**
@@ -174,7 +181,7 @@ export function setPreparedSuccess(
 
 export function setPreparedFailure(
   state: BrowserImportSelectionState,
-  errorCode: string
+  errorCode: BrowserImportPreparationErrorCode
 ): BrowserImportSelectionState {
   return {
     ...state,

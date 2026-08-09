@@ -141,15 +141,26 @@ export function prepareBrowserImportCommitIntent(params: {
     };
   }
 
-  // 6. Expected preview fingerprint match
-  const authoritativeFingerprint = preview.previewFingerprint;
-  if (!expectedPreviewFingerprint || expectedPreviewFingerprint !== authoritativeFingerprint) {
+  // 6. Expected and authoritative preview fingerprint match & self-consistency check
+  const recomputedFingerprint = generateBrowserPreviewFingerprint({
+    selectedRootName: preview.selectedRootName,
+    fileCount: preview.selectedFileCount,
+    declaredTotalBytes: preview.declaredTotalBytes,
+    packages: preview.packages,
+  });
+
+  if (
+    !expectedPreviewFingerprint ||
+    preview.previewFingerprint !== recomputedFingerprint ||
+    expectedPreviewFingerprint !== recomputedFingerprint
+  ) {
     return {
       success: false,
       code: 'PREVIEW_FINGERPRINT_MISMATCH',
       message: 'Preview state has changed or fingerprint does not match.',
     };
   }
+  const authoritativeFingerprint = recomputedFingerprint;
 
   // 7. Preview package paths uniqueness check
   const previewPaths = preview.packages.map((p) => p.packagePath);
