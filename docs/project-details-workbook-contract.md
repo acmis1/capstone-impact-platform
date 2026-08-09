@@ -3,7 +3,7 @@
 This document defines the current provisional technical contract and deterministic normalization rules for the staff-facing `project-details.xlsx` workbook parsed by `apps/admin-cms`.
 
 > [!NOTE]
-> **Provisional Contract Notice**: This contract represents the technical parser foundation. Column definitions, aliases, defaults, and mappings are deliberately centralized in [`apps/admin-cms/src/import/projectDetailsWorkbookContract.ts`](file:///D:/IT%20RMIT/Capstone/apps/admin-cms/src/import/projectDetailsWorkbookContract.ts) so they can be adjusted safely after stakeholder consultation without rewriting the parser architecture. Stakeholder-dependent rules must not be treated as permanently authoritative.
+> **Provisional Contract Notice**: This contract represents the technical parser foundation. Column definitions, aliases, defaults, and mappings are deliberately centralized in [`projectDetailsWorkbookContract.ts`](../apps/admin-cms/src/import/projectDetailsWorkbookContract.ts) so they can be adjusted safely after stakeholder consultation without rewriting the parser architecture. Stakeholder-dependent rules must not be treated as permanently authoritative.
 
 ---
 
@@ -114,7 +114,10 @@ Unrecognized non-empty values emit a generic `WORKBOOK_UNKNOWN_FEATURED_MEDIA` w
 
 ## 6. Stakeholder Taxonomies Status
 
-Categorical fields (`industry`, `program`, `discipline`, `academicSupervisor`, `industryPartner`) are validated for required presence but remain **unrestricted free-text strings**. No hard-coded taxonomies are enforced until formal stakeholder confirmation.
+- `program` and `discipline` are currently required fields by the provisional workbook contract.
+- `industry`, `academicSupervisor`, and `industryPartner` are optional fields.
+- All five fields remain unrestricted free-text strings.
+- No stakeholder taxonomy or enum list is enforced yet.
 
 ---
 
