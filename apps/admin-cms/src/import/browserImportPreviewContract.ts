@@ -119,6 +119,7 @@ export interface BrowserImportPackagePreview {
  * Full Server Preview Response Batch Object
  */
 export interface BrowserImportPreviewBatch {
+  previewFingerprint: string;
   mode: 'single' | 'batch';
   selectedRootName: string;
   packageCount: number;
@@ -467,6 +468,7 @@ export function validateBrowserImportPreviewResponse(raw: unknown): BrowserImpor
 
   const batch = obj.batch as Record<string, unknown>;
 
+  if (typeof batch.previewFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(batch.previewFingerprint)) return null;
   if (batch.mode !== 'single' && batch.mode !== 'batch') return null;
   if (typeof batch.selectedRootName !== 'string') return null;
   if (typeof batch.packageCount !== 'number' || !Number.isInteger(batch.packageCount) || batch.packageCount < 0) return null;
@@ -594,6 +596,7 @@ export function validateBrowserImportPreviewResponse(raw: unknown): BrowserImpor
   return {
     success: true,
     batch: {
+      previewFingerprint: batch.previewFingerprint as string,
       mode: batch.mode,
       selectedRootName: batch.selectedRootName,
       packageCount: batch.packageCount,
