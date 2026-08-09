@@ -1,7 +1,7 @@
-import { ImportPackageParseResult, ImportPackageValidationResult } from './importTypes';
+import { ImportPackageFileMetadata, ImportPackageParseResult, ImportPackageValidationResult } from './importTypes';
 import { validateMediaAsset } from '../storage/mediaValidation';
 
-export function validateImportPackage(parsed: ImportPackageParseResult): ImportPackageValidationResult {
+export function validateImportPackage(parsed: ImportPackageParseResult<ImportPackageFileMetadata>): ImportPackageValidationResult {
   const errors: ImportPackageValidationResult['errors'] = [];
   const warnings: ImportPackageValidationResult['warnings'] = [];
 

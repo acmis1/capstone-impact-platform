@@ -3,12 +3,22 @@ import Link from 'next/link';
 import { ImportBatchRepository } from '../../../repositories/ImportBatchRepository';
 import ImportBatchTable from '../../../components/admin/ImportBatchTable';
 import { ImportBatchRow } from '../../../repositories/ImportBatchRepositoryCore';
+import { requireAdmin } from '../../../auth/requireAdmin';
+import { hasPermission } from '../../../auth/permissions';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ImportBatchesPage() {
   let batches: ImportBatchRow[] = [];
   let databaseError: string | null = null;
+  let canEdit = false;
+
+  try {
+    const authContext = await requireAdmin();
+    canEdit = hasPermission(authContext.permissions, 'projects.edit');
+  } catch {
+    // Non-blocking for audit log display if authenticated
+  }
 
   try {
     const repository = new ImportBatchRepository();
@@ -56,7 +66,21 @@ export default async function ImportBatchesPage() {
             <h1 style={{ margin: '0.5rem 0 0 0', fontSize: '1.75rem', fontWeight: 800 }}>Staging Import Batches</h1>
             <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: '#9CA3AF' }}>Audit Log & Local Package Ingestion Runs</p>
           </div>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {canEdit && (
+              <Link href="/admin/imports/new" style={{
+                color: '#FFFFFF',
+                textDecoration: 'none',
+                fontSize: '0.95rem',
+                fontWeight: 600,
+                backgroundColor: '#10B981',
+                padding: '0.5rem 1.25rem',
+                borderRadius: '6px',
+                border: 'none',
+              }}>
+                + Preview Project Folders
+              </Link>
+            )}
             <Link href="/admin" style={{
               color: '#3B82F6',
               textDecoration: 'none',
@@ -72,7 +96,7 @@ export default async function ImportBatchesPage() {
           </div>
         </header>
 
-        {/* ⚠️ Staging Ingestion Warning Banner */}
+        {/* 📦 Ingestion & Preview Audit Note */}
         <div style={{
           backgroundColor: 'rgba(59, 130, 246, 0.1)',
           border: '1px solid rgba(59, 130, 246, 0.2)',
@@ -82,10 +106,10 @@ export default async function ImportBatchesPage() {
           color: '#60A5FA',
         }}>
           <h4 style={{ margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', fontSize: '1rem', fontWeight: 'bold' }}>
-            📦 STAGING PACKAGE INGESTION AUDIT NOTE
+            📦 BROWSER FOLDER PREVIEW & INGESTION AUDIT NOTE
           </h4>
           <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: '1.5', color: '#D1D5DB' }}>
-            Staging import workflows operate exclusively on local fake package fixtures. Browser files upload layers and automated XLSX spreadsheet parsing are disconnected during this foundation build. Imported showcases do not promote media to public buckets automatically, keeping public presentation feed compiler counts safe from legacy or staging pollution.
+            Select one project folder or a parent folder containing multiple project packages. The browser preview validates metadata and file descriptors server-side without saving any database records or storage objects. Imported showcases do not promote media to public buckets automatically, keeping public presentation feed compiler counts safe from legacy or staging pollution.
           </p>
         </div>
 
@@ -144,19 +168,20 @@ export default async function ImportBatchesPage() {
               </h2>
               {batches.length === 0 ? (
                 <div style={{ padding: '3rem', textAlign: 'center' }}>
-                  <p style={{ margin: '0 0 1.5rem 0', color: '#9CA3AF' }}>No import batches found. Would you like to ingest a mock local package first?</p>
-                  <div style={{
-                    display: 'inline-block',
-                    backgroundColor: '#0B0F19',
-                    padding: '0.75rem 1.5rem',
-                    borderRadius: '8px',
-                    fontFamily: 'monospace',
-                    fontSize: '0.9rem',
-                    color: '#10B981',
-                    border: '1px solid rgba(16, 185, 129, 0.2)'
-                  }}>
-                    npm run import:staging-package
-                  </div>
+                  <p style={{ margin: '0 0 1.5rem 0', color: '#9CA3AF' }}>No import batches found. Select a project folder above to preview package validation.</p>
+                  {canEdit && (
+                    <Link href="/admin/imports/new" style={{
+                      display: 'inline-block',
+                      backgroundColor: '#10B981',
+                      color: '#FFFFFF',
+                      padding: '0.75rem 1.5rem',
+                      borderRadius: '8px',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                    }}>
+                      📁 Preview Project Folders
+                    </Link>
+                  )}
                 </div>
               ) : (
                 <ImportBatchTable batches={batches} />

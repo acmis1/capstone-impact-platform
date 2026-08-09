@@ -247,9 +247,12 @@ The dashboard uses count-only metrics for total, public-eligible, in-review and 
 
 ## Import workflow
 
-The current fixture-based importer reads a local package containing a `project.json` manifest and supported poster/snapshot assets. It validates required metadata, file names, MIME types, size bounds and path safety, creates or updates an import batch, records validation flags, creates the project in `in_review`, and uploads imported assets as private drafts. The import list and batch detail routes expose the resulting status, warnings, errors, linked project and staged media.
+The application provides two import workflows:
 
-This is an ingestion foundation, not a finished browser submission process. Browser file upload and automated spreadsheet intake are not implemented.
+1. **Browser Folder & Batch Preview**: A client-side directory selector (`/admin/imports/new`) and server-side preview route (`POST /api/imports/preview`). Authorized staff (`projects.edit` permission) can select a single project folder or a batch parent folder containing multiple project packages. The preview parses `.xlsx` or `.json` metadata, validates file descriptors, checks package structure and folder-derived public IDs, and renders isolated package results without persisting any database records, uploading storage objects, or generating public feeds. Actual media binaries stay in the browser during preview.
+2. **Local Package Importer**: A staging ingestion foundation reading local package fixtures (`project.json` or `project-details.xlsx` and assets). It validates metadata, size bounds, and path safety, creates import batches, records validation flags, and stages private draft assets.
+
+Browser preview is a non-persisting validation foundation. Database persistence and storage upload remain future import steps.
 
 ## Media and storage lifecycle
 
