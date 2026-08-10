@@ -397,7 +397,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       fileCount: 3,
       declaredTotalBytes: manifestBadProg.declaredTotalBytes,
       selectedPackagePaths: ['bad-prog-1'],
-      acknowledgedWarningPackagePaths: [],
+      acknowledgedWarningPackagePaths: ['bad-prog-1'],
     };
     const resFail2 = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysisBadProg, intent: intentBadProg });
     if (resFail2.success || resFail2.code !== 'LOOKUP_NOT_FOUND') {
