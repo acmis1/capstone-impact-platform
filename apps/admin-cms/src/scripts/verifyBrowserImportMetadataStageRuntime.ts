@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import path from 'node:path';
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { analyzeBrowserImportServer } from '../import/parseBrowserImportPreview';
@@ -61,6 +61,25 @@ function assertStorageUnchanged(before: StorageSnapshot, after: StorageSnapshot,
   ) {
     throw new Error(`[Verifier Storage Failure] Storage objects mutated during scenario: ${label}`);
   }
+}
+
+function executeLocalDatabaseSql(sql: string): void {
+  const containers = execSync('docker ps --filter "name=^/supabase_db_" --format "{{.Names}}"', {
+    encoding: 'utf8',
+  })
+    .split(/\r?\n/)
+    .map((name) => name.trim())
+    .filter((name) => /^supabase_db_[a-z0-9_-]+$/i.test(name));
+
+  if (containers.length !== 1) {
+    throw new Error('Expected exactly one disposable local Supabase database container.');
+  }
+
+  execFileSync(
+    'docker',
+    ['exec', '-i', containers[0], 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'postgres'],
+    { input: sql, stdio: ['pipe', 'ignore', 'pipe'] }
+  );
 }
 
 export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
@@ -414,10 +433,8 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     process.stdout.write('[Scenario 5] Testing post-mutation rollback injection via temporary trigger...\n');
     const storageBefore5 = await captureStorageSnapshot();
 
-    // Create a temporary fail trigger on validation_flags to simulate unexpected post-mutation crash
-    try {
-      await supabase.rpc('execute_sql_unrestricted' as never, {
-        sql: `
+    // Create a temporary fail trigger on validation_flags to simulate unexpected post-mutation crash.
+    executeLocalDatabaseSql(`
           CREATE OR REPLACE FUNCTION public.test_fail_injection_trg()
           RETURNS trigger LANGUAGE plpgsql AS $$
           BEGIN
@@ -429,11 +446,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
           CREATE TRIGGER trg_test_fail_injection
           AFTER INSERT ON public.validation_flags
           FOR EACH ROW EXECUTE FUNCTION public.test_fail_injection_trg();
-        `,
-      } as never);
-    } catch {
-      // If unrestricted sql executor isn't defined, test rollback via direct invalid parameter assertion
-    }
+        `);
 
     // Cleanup trigger in finally block
     try {
@@ -482,8 +495,8 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       };
 
       const resRollback = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysisRollback, intent: intentRollback });
-      if (resRollback.success) {
-        // If trigger was installed, it should fail; if no direct trigger SQL RPC existed, verify PERSISTENCE_FAILED path
+      if (resRollback.success || resRollback.code !== 'PERSISTENCE_FAILED') {
+        throw new Error(`[Scenario 5] Expected injected persistence failure, got ${JSON.stringify(resRollback)}`);
       }
 
       // Assert ZERO residue rows in DB for rollbackPkgId
@@ -494,12 +507,10 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       }
     } finally {
       try {
-        await supabase.rpc('execute_sql_unrestricted' as never, {
-          sql: `
+        executeLocalDatabaseSql(`
             DROP TRIGGER IF EXISTS trg_test_fail_injection ON public.validation_flags;
             DROP FUNCTION IF EXISTS public.test_fail_injection_trg();
-          `,
-        } as never);
+          `);
       } catch {
         // Ignore trigger cleanup errors if RPC unavailable
       }
