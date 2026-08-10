@@ -41,3 +41,11 @@ export function canPerformReviewAction(userPermissions: AdminPermission[], actio
       return false;
   }
 }
+
+/**
+ * Participant preview generation/revocation reuses the same permission as completing internal
+ * review (the 'approve' action) rather than introducing a new role or permission.
+ */
+export function canManageParticipantPreview(userPermissions: AdminPermission[]): boolean {
+  return hasPermission(userPermissions, 'projects.review');
+}

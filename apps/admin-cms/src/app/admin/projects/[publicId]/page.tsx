@@ -10,7 +10,9 @@ import { getAllowedReviewActions } from '../../../../workflow/projectWorkflow';
 import { createSupabaseAdminClientCore } from '../../../../lib/supabase/adminCore';
 import { Project } from '../../../../domain/project';
 import { requireAdmin } from '../../../../auth/requireAdmin';
-import { hasPermission } from '../../../../auth/permissions';
+import { hasPermission, canManageParticipantPreview } from '../../../../auth/permissions';
+import { ParticipantPreviewPanel } from '../../../../components/admin/ParticipantPreviewPanel';
+import { SupabaseParticipantPreviewRepository } from '../../../../repositories/SupabaseParticipantPreviewRepository';
 import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetadataEditor';
 import { GuardedProjectBackLink, ProjectMetadataNavigationProvider } from '../../../../components/admin/ProjectMetadataNavigation';
 import { SupabaseProjectMetadataGateway, loadProjectMetadataEditorData } from '../../../../projects/projectMetadataService';
@@ -36,6 +38,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let metadataEditorData: Awaited<ReturnType<typeof loadProjectMetadataEditorData>> = null;
   let canEditMetadata = false;
   let submitForReview: { ready: boolean; blockingReasons: string[] } | null = null;
+  let canManagePreview = false;
+  let activePreview: { createdAt: string; expiresAt: string } | null = null;
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -47,6 +51,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         loadProjectMetadataEditorData(new SupabaseProjectMetadataGateway(createSupabaseAdminClientCore()), publicId),
       ]);
       canEditMetadata = hasPermission(adminContext.permissions, 'projects.edit');
+      canManagePreview = canManageParticipantPreview(adminContext.permissions);
       metadataEditorData = editorData;
       if (!metadataEditorData) throw new Error('Project metadata editor data unavailable');
 
@@ -86,6 +91,12 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
         if (!recordsError && records) {
           auditRecords = records;
+        }
+
+        const previewRepository = new SupabaseParticipantPreviewRepository();
+        const preview = await previewRepository.getActivePreview(dbProj.id);
+        if (preview) {
+          activePreview = { createdAt: preview.createdAt, expiresAt: preview.expiresAt };
         }
       }
     }
@@ -266,6 +277,15 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             publicId={project.publicId || ''}
             currentStatus={project.status}
             allowedActions={allowedActions}
+          />
+        </ProjectDetailSection>
+
+        <ProjectDetailSection title="🔗 Participant Preview" borderColor="#3B82F6">
+          <ParticipantPreviewPanel
+            publicId={project.publicId || ''}
+            canManage={canManagePreview}
+            isApprovedEligible={project.status === 'approved'}
+            initialActivePreview={activePreview}
           />
         </ProjectDetailSection>
 
