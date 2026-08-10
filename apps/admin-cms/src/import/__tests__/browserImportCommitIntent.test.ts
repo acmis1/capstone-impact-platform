@@ -1072,7 +1072,7 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       expect(source).toContain('{pkg.status.toUpperCase()}');
       expect(source).toContain('disabled={isLoading || !isSupported || isPreparingOrLocked}');
       expect(source).toContain('disabled={isLoading || isPreparingOrLocked}');
-      expect(source).toContain('if (preparationLockRef.current || selectionStateRef.current.isPreparing) return;');
+      expect(source).toContain('if (preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;');
       expect(source).toContain('updateSelectionState(');
     });
   });

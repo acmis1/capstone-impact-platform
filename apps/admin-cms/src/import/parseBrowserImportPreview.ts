@@ -37,14 +37,33 @@ export class BrowserImportPreviewLimitError extends Error {
   }
 }
 
-/**
- * Server-side parser and batch validator for browser-selected folder previews.
- * Strictly derives paths, enforces server limits, isolates package previews, and sanitizes errors.
- */
-export async function parseBrowserImportPreview(
+export interface BrowserImportServerPackage {
+  packagePath: string;
+  folderName: string;
+  proposedPublicId: string;
+  status: 'valid' | 'warning' | 'invalid';
+  metadataSource: 'xlsx' | 'json' | null;
+  manifest: ImportPackageManifest | null;
+  filePresence: {
+    xlsxPresent: boolean;
+    jsonPresent: boolean;
+    posterImagePresent: boolean;
+    posterPdfPresent: boolean;
+    snapshotPresent: boolean;
+  };
+  errors: BrowserImportIssue[];
+  warnings: BrowserImportIssue[];
+}
+
+export interface BrowserImportServerAnalysis {
+  preview: BrowserImportPreviewResponse;
+  packages: BrowserImportServerPackage[];
+}
+
+export async function analyzeBrowserImportServer(
   manifestOrPreflight: unknown | ManifestPreflightSuccess,
   uploadedMetadataFiles: Map<string, Buffer>
-): Promise<BrowserImportPreviewResponse> {
+): Promise<BrowserImportServerAnalysis> {
   let preflight: ManifestPreflightSuccess;
 
   if (
@@ -165,6 +184,8 @@ export async function parseBrowserImportPreview(
   }
 
   const packagePreviews: BrowserImportPackagePreview[] = [];
+  const serverPackages: BrowserImportServerPackage[] = [];
+
   let validPackageCount = 0;
   let warningPackageCount = 0;
   let invalidPackageCount = 0;
@@ -269,11 +290,15 @@ export async function parseBrowserImportPreview(
         }
       }
 
-      filePresence.xlsxPresent = recognizedFiles.has('project-details.xlsx');
-      filePresence.jsonPresent = recognizedFiles.has('project.json');
       filePresence.posterImagePresent = recognizedFiles.has('poster.png');
       filePresence.posterPdfPresent = recognizedFiles.has('poster.pdf');
       filePresence.snapshotPresent = recognizedFiles.has('snapshot-1.png');
+
+      const xlsxPresent = recognizedFiles.has('project-details.xlsx');
+      const jsonPresent = recognizedFiles.has('project.json');
+
+      filePresence.xlsxPresent = xlsxPresent;
+      filePresence.jsonPresent = jsonPresent;
 
       for (const [, desc] of recognizedFiles.entries()) {
         if (desc.mimeConflict) {
@@ -310,14 +335,14 @@ export async function parseBrowserImportPreview(
         }
       }
 
-      if (filePresence.xlsxPresent && filePresence.jsonPresent) {
+      if (xlsxPresent && jsonPresent) {
         errors.push({
           code: 'PACKAGE_MULTIPLE_METADATA_SOURCES',
           message: 'Package contains both project-details.xlsx and project.json. Exactly one metadata source is required.',
           severity: 'error',
           packagePath: pkgPath,
         });
-      } else if (filePresence.xlsxPresent) {
+      } else if (xlsxPresent) {
         metadataSource = 'xlsx';
         const xlsxDesc = recognizedFiles.get('project-details.xlsx')!;
         const xlsxBuffer = uploadedMetadataFiles.get(xlsxDesc.uploadKey);
@@ -378,7 +403,7 @@ export async function parseBrowserImportPreview(
             }
           }
         }
-      } else if (filePresence.jsonPresent) {
+      } else if (jsonPresent) {
         metadataSource = 'json';
         const jsonDesc = recognizedFiles.get('project.json')!;
         const jsonBuffer = uploadedMetadataFiles.get(jsonDesc.uploadKey);
@@ -524,6 +549,18 @@ export async function parseBrowserImportPreview(
       errors,
       warnings,
     });
+
+    serverPackages.push({
+      packagePath: pkgPath,
+      folderName,
+      proposedPublicId: folderName,
+      status: packageStatus,
+      metadataSource,
+      manifest: currentManifest,
+      filePresence,
+      errors,
+      warnings,
+    });
   }
 
   const previewFingerprint = generateBrowserPreviewFingerprint({
@@ -533,7 +570,7 @@ export async function parseBrowserImportPreview(
     packages: packagePreviews,
   });
 
-  return {
+  const preview: BrowserImportPreviewResponse = {
     success: true,
     batch: {
       previewFingerprint,
@@ -552,6 +589,20 @@ export async function parseBrowserImportPreview(
       packages: packagePreviews,
     },
   };
+
+  return { preview, packages: serverPackages };
+}
+
+/**
+ * Server-side parser and batch validator for browser-selected folder previews.
+ * Strictly derives paths, enforces server limits, isolates package previews, and sanitizes errors.
+ */
+export async function parseBrowserImportPreview(
+  manifestOrPreflight: unknown | ManifestPreflightSuccess,
+  uploadedMetadataFiles: Map<string, Buffer>
+): Promise<BrowserImportPreviewResponse> {
+  const { preview } = await analyzeBrowserImportServer(manifestOrPreflight, uploadedMetadataFiles);
+  return preview;
 }
 
 function stripLegacyDerivedDescriptorFields(raw: unknown): unknown {

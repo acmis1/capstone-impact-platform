@@ -23,6 +23,7 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260803174000_harden_function_execute_defaults.sql',
   '20260803180000_transactional_review_actions.sql',
   '20260808170000_transactional_project_metadata_update.sql',
+  '20260810090000_atomic_browser_import_metadata_stage.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {
@@ -55,45 +56,34 @@ export function isVersionInNpm11Range(versionStr: string): boolean {
 
 export function validateMigrationsList(filenames: string[]): { passed: boolean; message: string } {
   const sqlFiles = filenames.filter((f) => f.endsWith('.sql'));
-  if (sqlFiles.length !== 9) {
-    return { passed: false, message: `FAIL: Expected exactly 9 migration files, found ${sqlFiles.length}` };
+  if (sqlFiles.length !== 10) {
+    return { passed: false, message: `FAIL: Expected exactly 10 migration files, found ${sqlFiles.length}` };
   }
 
   const timestampRegex = /^(\d{14})_.+\.sql$/;
-  const timestamps: string[] = [];
-
   for (const file of sqlFiles) {
-    const match = file.match(timestampRegex);
-    if (!match) {
-      return { passed: false, message: `FAIL: Migration filename "${file}" does not match 14-digit timestamp format` };
-    }
-    timestamps.push(match[1]);
-  }
-
-  const uniqueTimestamps = new Set(timestamps);
-  if (uniqueTimestamps.size !== timestamps.length) {
-    return { passed: false, message: `FAIL: Duplicate migration timestamps detected` };
-  }
-
-  const sortedFiles = [...sqlFiles].sort((a, b) => a.localeCompare(b));
-  const sortedTimestamps = sortedFiles.map((f) => f.match(timestampRegex)![1]);
-
-  for (let i = 1; i < sortedTimestamps.length; i++) {
-    if (sortedTimestamps[i] <= sortedTimestamps[i - 1]) {
-      return { passed: false, message: `FAIL: Migrations are not in strict ascending timestamp order` };
+    if (!timestampRegex.test(file)) {
+      return { passed: false, message: `FAIL: Invalid migration filename format '${file}'` };
     }
   }
 
+  const timestamps = sqlFiles.map((f) => f.match(timestampRegex)![1]);
+  const timestampSet = new Set(timestamps);
+  if (timestampSet.size !== timestamps.length) {
+    return { passed: false, message: 'FAIL: Duplicate migration timestamps detected' };
+  }
+
+  const sortedSqlFiles = [...sqlFiles].sort((a, b) => a.localeCompare(b));
   for (let i = 0; i < EXPECTED_MIGRATION_FILENAMES.length; i++) {
-    if (sortedFiles[i] !== EXPECTED_MIGRATION_FILENAMES[i]) {
+    if (sortedSqlFiles[i] !== EXPECTED_MIGRATION_FILENAMES[i]) {
       return {
         passed: false,
-        message: `FAIL: Migration file at index ${i} does not match expected identity "${EXPECTED_MIGRATION_FILENAMES[i]}" (found "${sortedFiles[i]}")`,
+        message: `FAIL: Migration file at index ${i} does not match expected identity "${EXPECTED_MIGRATION_FILENAMES[i]}" (found "${sortedSqlFiles[i]}")`,
       };
     }
   }
 
-  return { passed: true, message: 'PASS: Exactly 9 timestamped migrations exist with exact expected filenames in ascending order' };
+  return { passed: true, message: 'PASS: Exactly 10 timestamped migrations exist with exact expected filenames in ascending order' };
 }
 
 export function sanitizePublicSafeMessage(msg: string): string {
@@ -272,15 +262,15 @@ export function performOnboardingCheck(options?: {
   const migrationsDir = path.join(repoRoot, 'infra/supabase/migrations');
   if (existsSync(migrationsDir)) {
     const rawFiles = readdirSync(migrationsDir);
-    const migResult = validateMigrationsList(rawFiles);
+    const migrationsResult = validateMigrationsList(rawFiles);
     items.push({
-      name: 'Timestamped Database Migrations (9 ascending)',
-      passed: migResult.passed,
-      message: migResult.message,
+      name: 'Timestamped Database Migrations (10 ascending)',
+      passed: migrationsResult.passed,
+      message: migrationsResult.message,
     });
   } else {
     items.push({
-      name: 'Timestamped Database Migrations (9 ascending)',
+      name: 'Timestamped Database Migrations (10 ascending)',
       passed: false,
       message: 'FAIL: Migrations directory missing',
     });
