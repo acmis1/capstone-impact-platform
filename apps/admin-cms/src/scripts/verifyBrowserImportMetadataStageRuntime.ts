@@ -170,10 +170,10 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     const { count: indCount } = await supabase.from('project_industry_categories').select('*', { count: 'exact', head: true }).eq('project_id', projRow.id);
     if (indCount !== 1) throw new Error('[Scenario 1] Industry mapping count verification failed.');
 
-    const { data: commitRow } = await supabase.from('browser_import_commits').select('*').eq('batch_id', res1.batchId).maybeSingle();
+    const { data: commitRow, error: commitErr } = await supabase.from('browser_import_commits').select('*').eq('batch_id', res1.batchId).maybeSingle();
     if (!commitRow) {
-      const { data: allCommits } = await supabase.from('browser_import_commits').select('*');
-      throw new Error(`[Scenario 1] Idempotency ledger row missing for batch ${res1.batchId}. Existing ledger rows: ${JSON.stringify(allCommits)}`);
+      const { data: allCommits, error: allErr } = await supabase.from('browser_import_commits').select('*');
+      throw new Error(`[Scenario 1] Idempotency ledger row missing for batch ${res1.batchId}. commitErr=${JSON.stringify(commitErr)} | allErr=${JSON.stringify(allErr)} | Existing ledger rows: ${JSON.stringify(allCommits)}`);
     }
 
     const storageAfter1 = await captureStorageSnapshot();
