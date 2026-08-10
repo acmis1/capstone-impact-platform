@@ -143,7 +143,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       fileCount: 3,
       declaredTotalBytes: manifest1.declaredTotalBytes,
       selectedPackagePaths: [pkg1Id],
-      acknowledgedWarningPackagePaths: [],
+      acknowledgedWarningPackagePaths: [pkg1Id],
     };
 
     const res1 = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysis1, intent: intent1 });
@@ -248,7 +248,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       fileCount: 6,
       declaredTotalBytes: manifest2.declaredTotalBytes,
       selectedPackagePaths: [p1Path, p2Path].sort(),
-      acknowledgedWarningPackagePaths: [],
+      acknowledgedWarningPackagePaths: [p1Path, p2Path].sort(),
     };
 
     const res2a = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysis2, intent: intent2 });
@@ -305,7 +305,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       fileCount: 3,
       declaredTotalBytes: manifest3.declaredTotalBytes,
       selectedPackagePaths: [pkg3Id],
-      acknowledgedWarningPackagePaths: [],
+      acknowledgedWarningPackagePaths: [pkg3Id],
     };
 
     const [c3a, c3b] = await Promise.all([
