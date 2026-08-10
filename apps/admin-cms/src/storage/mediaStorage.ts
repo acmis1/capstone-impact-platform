@@ -3,6 +3,46 @@ import { getStagingBuckets } from '../lib/supabase/buckets';
 import { MediaAsset, MediaAssetType } from '../domain/mediaAsset';
 import { validateMediaAsset } from './mediaValidation';
 
+/** Short-lived signed URL TTL for participant preview media (5 minutes). */
+export const PREVIEW_SIGNED_URL_TTL_SECONDS = 300;
+
+/**
+ * Generates a short-lived signed URL for a private draft media object, for participant preview
+ * rendering only. Defense-in-depth: only ever signs objects that are still in the private draft
+ * bucket — a snapshotted reference pointing anywhere else (e.g. if an asset were later promoted
+ * to the public bucket, changing its bucket/path) is refused rather than silently resolved.
+ * Returns null on any failure so callers can fail safe instead of substituting unrelated media.
+ */
+export async function createSignedDraftMediaUrl(params: {
+  storageBucket: string;
+  storagePath: string;
+  ttlSeconds?: number;
+}): Promise<string | null> {
+  const { storageBucket, storagePath, ttlSeconds } = params;
+  const buckets = getStagingBuckets();
+
+  if (storageBucket !== buckets.DRAFT_PRIVATE) {
+    return null;
+  }
+
+  let data: { signedUrl?: string } | null = null;
+  let error: unknown = null;
+  try {
+    const supabase = createSupabaseAdminClientCore();
+    ({ data, error } = await supabase.storage
+      .from(storageBucket)
+      .createSignedUrl(storagePath, ttlSeconds ?? PREVIEW_SIGNED_URL_TTL_SECONDS));
+  } catch (err) {
+    error = err;
+  }
+
+  if (error || !data?.signedUrl) {
+    return null;
+  }
+
+  return data.signedUrl;
+}
+
 /**
  * Uploads a draft media asset to the private staging bucket and registers it in database.
  */
