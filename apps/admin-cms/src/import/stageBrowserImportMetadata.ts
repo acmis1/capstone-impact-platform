@@ -150,7 +150,7 @@ export async function stageBrowserImportMetadata(params: {
       solution: m.solution ? m.solution.trim() : '',
       year: Number(m.year),
       program: m.program.trim(),
-      studyProgram: m.studyProgram ? m.studyProgram.trim() : m.program.trim(),
+      studyProgram: m.studyProgram ? m.studyProgram.trim() : '',
       industryPartner: m.industryPartner ? m.industryPartner.trim() : '',
       academicSupervisor: m.academicSupervisor ? m.academicSupervisor.trim() : '',
       groupName: m.groupName.trim(),

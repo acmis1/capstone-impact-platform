@@ -518,4 +518,52 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
     const json = await res.json();
     expect(json.code).toBe('INVALID_SELECTION');
   });
+
+  it('12. validateBrowserImportMetadataStageResponse rejects unknown error codes like DATABASE_SECRET_ERROR', async () => {
+    const { validateBrowserImportMetadataStageResponse } = await import('../browserImportMetadataStageContract');
+
+    const unknownErrorCodeResponse = {
+      success: false,
+      code: 'DATABASE_SECRET_ERROR',
+      error: 'Secret database details exposed',
+    };
+
+    expect(validateBrowserImportMetadataStageResponse(unknownErrorCodeResponse)).toBeNull();
+  });
+
+  it('13. validateBrowserImportMetadataStageResponse rejects malformed success/failure shapes and unexpected fields', async () => {
+    const { validateBrowserImportMetadataStageResponse } = await import('../browserImportMetadataStageContract');
+
+    // Success with extra forbidden field
+    const extraFieldSuccess = {
+      success: true,
+      result: 'created',
+      batchId: '11111111-1111-1111-1111-111111111111',
+      projectCount: 1,
+      warningCount: 0,
+      batchStatus: 'metadata_staged',
+      unexpectedField: 'forbidden',
+    };
+    expect(validateBrowserImportMetadataStageResponse(extraFieldSuccess)).toBeNull();
+
+    // Failure with extra forbidden field
+    const extraFieldFailure = {
+      success: false,
+      code: 'INVALID_SELECTION',
+      error: 'Invalid selection',
+      leakDetail: 'secret',
+    };
+    expect(validateBrowserImportMetadataStageResponse(extraFieldFailure)).toBeNull();
+
+    // Malformed batchId UUID
+    const badUuidSuccess = {
+      success: true,
+      result: 'created',
+      batchId: 'not-a-uuid',
+      projectCount: 1,
+      warningCount: 0,
+      batchStatus: 'metadata_staged',
+    };
+    expect(validateBrowserImportMetadataStageResponse(badUuidSuccess)).toBeNull();
+  });
 });

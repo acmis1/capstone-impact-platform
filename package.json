@@ -43,7 +43,8 @@
     "check:yaml": "tsx apps/admin-cms/src/scripts/repositoryChecks.ts yaml",
     "check:markdown-links": "tsx apps/admin-cms/src/scripts/repositoryChecks.ts markdown-links",
     "supabase:assert-running": "tsx apps/admin-cms/src/scripts/assertSupabaseRunning.ts",
-    "supabase:assert-stopped": "tsx apps/admin-cms/src/scripts/assertSupabaseStopped.ts"
+    "supabase:assert-stopped": "tsx apps/admin-cms/src/scripts/assertSupabaseStopped.ts",
+    "verify:browser-metadata-stage-runtime": "npm run verify:browser-metadata-stage-runtime --workspace=apps/admin-cms"
   },
   "devDependencies": {
     "server-only": "^0.0.1",

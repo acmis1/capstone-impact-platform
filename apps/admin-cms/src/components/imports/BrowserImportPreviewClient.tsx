@@ -19,7 +19,7 @@ import {
   toggleWarningPackageSelection,
 } from '../../import/browserImportCommitIntentContract';
 import { runBrowserImportPreparation } from '../../import/browserImportPreparationController';
-import { validateBrowserImportMetadataStageResponse } from '../../import/browserImportMetadataStageContract';
+import { runBrowserImportMetadataStaging } from '../../import/browserImportStagingController';
 
 export default function BrowserImportPreviewClient() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -313,87 +313,16 @@ export default function BrowserImportPreviewClient() {
   };
 
   const handleStageMetadata = async () => {
-    if (!selectionStateRef.current.preparedIntent || !manifestCache || stagingLockRef.current || preparationLockRef.current || isStaging) return;
-
-    stagingLockRef.current = true;
-    setIsStaging(true);
-    setStagingError(null);
-
-    try {
-      const intent = selectionStateRef.current.preparedIntent;
-      const formData = new FormData();
-      formData.append('manifest', JSON.stringify(manifestCache));
-      formData.append('intent', JSON.stringify(intent));
-
-      // Attach only expected metadata files (xlsx or json)
-      for (const file of selectedFiles) {
-        const relPath = file.webkitRelativePath || file.name;
-        const norm = normalizeRelativePath(relPath);
-        if (!norm || isIgnoredSystemFile(norm)) continue;
-        const parts = norm.split('/');
-        const lowerName = parts[parts.length - 1].toLowerCase();
-        if (lowerName === 'project-details.xlsx' || lowerName === 'project.json') {
-          const key = generateUploadKey(norm);
-          formData.append(key, file);
-        }
-      }
-
-      const res = await fetch('/api/imports/stage-metadata', {
-        method: 'POST',
-        body: formData,
-      });
-
-      let json: unknown = null;
-      try {
-        json = await res.json();
-      } catch {
-        throw new Error('SERVER_NON_JSON');
-      }
-
-      const validatedResponse = validateBrowserImportMetadataStageResponse(json);
-
-      if (!res.ok || !validatedResponse || !validatedResponse.success) {
-        const errObj = json as { code?: string; error?: string };
-        const knownErrorMap: Record<string, string> = {
-          UNAUTHENTICATED: 'Authentication required. Please log in with staff credentials.',
-          PERMISSION_DENIED: 'Access denied: You do not have permission to stage imports.',
-          AUTH_SERVICE_UNAVAILABLE: 'Authentication service is temporarily unavailable.',
-          CROSS_ORIGIN_REJECTED: 'Cross-origin requests are forbidden.',
-          MISSING_CONTENT_LENGTH: 'Request Content-Length is missing or invalid.',
-          INVALID_CONTENT_LENGTH: 'Request Content-Length is invalid.',
-          REQUEST_TOO_LARGE: 'Request size exceeds maximum limit.',
-          INVALID_MANIFEST: 'Selection manifest is invalid or malformed.',
-          INVALID_INTENT: 'Prepared intent is invalid or malformed.',
-          DUPLICATE_MANIFEST: 'Duplicate manifest field is forbidden.',
-          DUPLICATE_INTENT: 'Duplicate intent field is forbidden.',
-          UNEXPECTED_UPLOAD_FIELD: 'Form contains unrecognized upload fields.',
-          DUPLICATE_UPLOAD_FIELD: 'Form contains duplicate upload fields.',
-          MISSING_METADATA_UPLOAD: 'Missing expected metadata file upload.',
-          METADATA_SIZE_MISMATCH: 'Uploaded metadata file size mismatch.',
-          PREVIEW_FINGERPRINT_MISMATCH: 'Preview state has changed or fingerprint does not match.',
-          INVALID_SELECTION: 'Selected packages are invalid or not allowed.',
-          LOOKUP_NOT_FOUND: 'Required program, discipline, or category lookup could not be found.',
-          PROJECT_ALREADY_EXISTS: 'One or more selected project public IDs already exist in the database.',
-          PERSISTENCE_FAILED: 'The metadata staging operation could not be saved.',
-          UNEXPECTED_INTERNAL_ERROR: 'The metadata staging operation could not be completed. Please try again.',
-        };
-        const msg = (errObj && errObj.code && knownErrorMap[errObj.code]) || 'The metadata staging operation could not be completed. Please try again.';
-        setStagingError(msg);
-        return;
-      }
-
-      setStagedResult({
-        batchId: validatedResponse.batchId,
-        projectCount: validatedResponse.projectCount,
-        warningCount: validatedResponse.warningCount,
-        result: validatedResponse.result,
-      });
-    } catch {
-      setStagingError('The metadata staging operation could not be completed. Please try again.');
-    } finally {
-      setIsStaging(false);
-      stagingLockRef.current = false;
-    }
+    await runBrowserImportMetadataStaging({
+      lock: stagingLockRef,
+      isStaging,
+      preparedIntent: selectionStateRef.current.preparedIntent,
+      manifestCache,
+      selectedFiles,
+      setIsStaging,
+      setStagingError,
+      setStagedResult,
+    });
   };
 
   const togglePackageExpand = (pkgPath: string) => {

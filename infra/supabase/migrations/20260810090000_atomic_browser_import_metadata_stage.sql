@@ -94,7 +94,7 @@ BEGIN
   -- 1. Top-level parameter validation
   v_intent_hash := pg_catalog.btrim(COALESCE(p_intent_hash, ''));
   v_preview_fingerprint := pg_catalog.btrim(COALESCE(p_preview_fingerprint, ''));
-  v_mode := pg_catalog.btrim(COALESCE(p_mode, 'unknown'));
+  v_mode := pg_catalog.btrim(COALESCE(p_mode, ''));
   v_source_folder := pg_catalog.btrim(COALESCE(p_source_folder, ''));
 
   IF v_intent_hash !~ '^[a-f0-9]{64}$' OR v_preview_fingerprint !~ '^[a-f0-9]{64}$' THEN
@@ -105,7 +105,7 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_INTENT');
   END IF;
 
-  IF v_mode NOT IN ('single', 'batch', 'manual', 'unknown') THEN
+  IF v_mode NOT IN ('single', 'batch') THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_INTENT');
   END IF;
 
@@ -166,6 +166,16 @@ BEGIN
     v_group_name := pg_catalog.btrim(COALESCE(v_pkg->>'groupName', ''));
 
     IF v_pkg_path = '' OR v_public_id = '' OR v_title = '' OR v_summary = '' OR v_program_name = '' OR v_group_name = '' THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
+    END IF;
+
+    -- Validate teamMembers array structure
+    IF NOT (v_pkg ? 'teamMembers') OR pg_catalog.jsonb_typeof(v_pkg->'teamMembers') <> 'array' OR pg_catalog.jsonb_array_length(v_pkg->'teamMembers') = 0 THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
+    END IF;
+
+    -- Validate layoutConfig object structure
+    IF NOT (v_pkg ? 'layoutConfig') OR pg_catalog.jsonb_typeof(v_pkg->'layoutConfig') <> 'object' THEN
       RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
     END IF;
 
