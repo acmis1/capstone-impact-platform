@@ -40,6 +40,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let submitForReview: { ready: boolean; blockingReasons: string[] } | null = null;
   let canManagePreview = false;
   let activePreview: { createdAt: string; expiresAt: string } | null = null;
+  let previewConfirmation: { confirmedAt: string } | null = null;
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -97,6 +98,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         const preview = await previewRepository.getActivePreview(dbProj.id);
         if (preview) {
           activePreview = { createdAt: preview.createdAt, expiresAt: preview.expiresAt };
+          previewConfirmation = await previewRepository.getConfirmationStatus(preview.previewId);
         }
       }
     }
@@ -286,6 +288,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             canManage={canManagePreview}
             isApprovedEligible={project.status === 'approved'}
             initialActivePreview={activePreview}
+            confirmation={previewConfirmation}
           />
         </ProjectDetailSection>
 

@@ -253,6 +253,90 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
     expect(result?.snapshot).toEqual({ title: 'Test Project' });
     expect(result?.mediaSnapshot).toHaveLength(1);
   });
+
+  it('confirmPreview sends only the token hash to the RPC and never a preview/project id, timestamp, or actor identity', async () => {
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: { resultCode: 'SUCCESS', confirmationId: 'c1', confirmedAt: '2026-08-11T00:00:00.000Z', alreadyConfirmed: false },
+      error: null,
+    });
+    const mockSupabase = { rpc: mockRpc } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
+
+    const tokenHash = 'a'.repeat(64);
+    const result = await repo.confirmPreview(tokenHash);
+
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledWith('confirm_participant_preview', { p_token_hash: tokenHash });
+    expect(result).toEqual({ confirmationId: 'c1', confirmedAt: '2026-08-11T00:00:00.000Z', alreadyConfirmed: false });
+  });
+
+  it('confirmPreview reports alreadyConfirmed on an idempotent repeat submission', async () => {
+    const mockSupabase = {
+      rpc: vi.fn().mockResolvedValue({
+        data: { resultCode: 'SUCCESS', confirmationId: 'c1', confirmedAt: '2026-08-11T00:00:00.000Z', alreadyConfirmed: true },
+        error: null,
+      }),
+    } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
+
+    const result = await repo.confirmPreview('a'.repeat(64));
+    expect(result?.alreadyConfirmed).toBe(true);
+  });
+
+  it('confirmPreview returns null for every non-SUCCESS or malformed RPC outcome (malformed/unknown/expired/revoked all collapse identically)', async () => {
+    const outcomes = [
+      { data: { resultCode: 'NOT_FOUND' }, error: null },
+      { data: null, error: { message: 'db error' } },
+      { data: { resultCode: 'SUCCESS' }, error: null }, // missing required fields
+      { data: {}, error: null },
+    ];
+
+    for (const outcome of outcomes) {
+      const mockSupabase = { rpc: vi.fn().mockResolvedValue(outcome) } as unknown as import('@supabase/supabase-js').SupabaseClient;
+      const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
+      const result = await repo.confirmPreview('a'.repeat(64));
+      expect(result).toBeNull();
+    }
+  });
+
+  it('confirmPreview requires a non-empty token hash before calling the RPC', async () => {
+    const mockSupabase = { rpc: vi.fn() } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
+
+    const result = await repo.confirmPreview('');
+    expect(result).toBeNull();
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it('getConfirmationStatus reads confirmed_at only, keyed by the already-resolved preview id, and returns null when unconfirmed', async () => {
+    const maybeSingleSpy = vi.fn().mockResolvedValue({ data: { confirmed_at: '2026-08-11T00:00:00.000Z' }, error: null });
+    const eqSpy = vi.fn().mockReturnValue({ maybeSingle: maybeSingleSpy });
+    const selectSpy = vi.fn().mockReturnValue({ eq: eqSpy });
+    const fromSpy = vi.fn().mockReturnValue({ select: selectSpy });
+    const mockSupabase = { from: fromSpy } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
+
+    const result = await repo.getConfirmationStatus('preview-uuid-1');
+
+    expect(fromSpy).toHaveBeenCalledWith('participant_preview_confirmations');
+    expect(selectSpy).toHaveBeenCalledWith('confirmed_at');
+    expect(eqSpy).toHaveBeenCalledWith('participant_preview_id', 'preview-uuid-1');
+    expect(result).toEqual({ confirmedAt: '2026-08-11T00:00:00.000Z' });
+  });
+
+  it('getConfirmationStatus returns null when no confirmation row exists or the query errors', async () => {
+    const notFoundSupabase = {
+      from: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }) }) }),
+    } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repoA = new SupabaseParticipantPreviewRepositoryCore(notFoundSupabase);
+    expect(await repoA.getConfirmationStatus('preview-uuid-1')).toBeNull();
+
+    const erroredSupabase = {
+      from: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: { message: 'db error' } }) }) }) }),
+    } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repoB = new SupabaseParticipantPreviewRepositoryCore(erroredSupabase);
+    expect(await repoB.getConfirmationStatus('preview-uuid-1')).toBeNull();
+  });
 });
 
 function makeAdminContext(overrides?: Partial<{ roles: AdminRole[]; permissions: AdminPermission[] }>): AuthenticatedAdminContext {

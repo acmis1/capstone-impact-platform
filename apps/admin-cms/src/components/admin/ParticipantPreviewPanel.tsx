@@ -8,11 +8,16 @@ interface ActivePreviewState {
   expiresAt: string;
 }
 
+interface ConfirmationState {
+  confirmedAt: string;
+}
+
 interface ParticipantPreviewPanelProps {
   publicId: string;
   canManage: boolean;
   isApprovedEligible: boolean;
   initialActivePreview: ActivePreviewState | null;
+  confirmation: ConfirmationState | null;
 }
 
 interface GenerateResponse {
@@ -30,11 +35,12 @@ interface RevokeResponse {
   revokedAt?: string;
 }
 
-export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligible, initialActivePreview }: ParticipantPreviewPanelProps) {
+export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligible, initialActivePreview, confirmation }: ParticipantPreviewPanelProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activePreview, setActivePreview] = useState<ActivePreviewState | null>(initialActivePreview);
+  const [previewConfirmation, setPreviewConfirmation] = useState<ConfirmationState | null>(confirmation);
   const [justGeneratedUrl, setJustGeneratedUrl] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const inFlightRef = useRef(false);
@@ -62,6 +68,7 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
 
       setJustGeneratedUrl(data.previewUrl || null);
       setActivePreview({ createdAt: data.createdAt || '', expiresAt: data.expiresAt || '' });
+      setPreviewConfirmation(null);
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred while generating the preview.');
@@ -92,6 +99,7 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
 
       setActivePreview(null);
       setJustGeneratedUrl(null);
+      setPreviewConfirmation(null);
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred while revoking the preview.');
@@ -171,6 +179,15 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
           <div style={{ color: '#D1D5DB', fontSize: '0.8rem' }}>
             <div>Created: {activePreview.createdAt ? new Date(activePreview.createdAt).toLocaleString() : 'N/A'}</div>
             <div>Expires: {activePreview.expiresAt ? new Date(activePreview.expiresAt).toLocaleString() : 'N/A'}</div>
+          </div>
+          <div className="mt-2 text-sm" role="status">
+            {previewConfirmation ? (
+              <span className="font-semibold text-emerald-500">
+                Participant confirmed on {new Date(previewConfirmation.confirmedAt).toLocaleString()}
+              </span>
+            ) : (
+              <span className="italic text-muted-foreground">Not yet confirmed by the participant.</span>
+            )}
           </div>
           <button
             type="button"

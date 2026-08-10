@@ -1,4 +1,4 @@
-import { ParticipantPreviewMediaViewRef, ParticipantPreviewSnapshot } from '../domain/participantPreview';
+import { ParticipantPreviewConfirmationStatus, ParticipantPreviewMediaViewRef, ParticipantPreviewSnapshot } from '../domain/participantPreview';
 
 export function escapeHtml(input: string): string {
   return input
@@ -78,6 +78,33 @@ function renderMedia(media: ParticipantPreviewMediaViewRef[]): string {
   `;
 }
 
+/**
+ * Explicit participant confirmation of this exact preview version. A plain same-origin POST
+ * form (no client-side JavaScript) — the token embedded in the current URL remains the sole
+ * authorization capability, so the form intentionally carries no hidden project/preview data.
+ * Once confirmed, the action is replaced with the recorded server-generated timestamp; a page
+ * refresh renders the same confirmed state rather than the form, so it can never resubmit.
+ */
+function renderConfirmationSection(confirmation: ParticipantPreviewConfirmationStatus | null): string {
+  if (confirmation) {
+    const confirmedAtDisplay = escapeHtml(new Date(confirmation.confirmedAt).toUTCString());
+    return `
+    <div class="field confirmation confirmation-done">
+      <h3>Confirmation</h3>
+      <p>You confirmed that the project information shown in this exact preview is correct, on ${confirmedAtDisplay}.</p>
+    </div>`;
+  }
+
+  return `
+    <div class="field confirmation">
+      <h3>Confirmation</h3>
+      <p>If the project information shown above is correct, you may confirm it. Confirmation applies only to this exact preview as currently shown.</p>
+      <form method="POST">
+        <button type="submit" class="confirm-button">Confirm project details</button>
+      </form>
+    </div>`;
+}
+
 const PAGE_STYLE = `
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
@@ -96,13 +123,19 @@ const PAGE_STYLE = `
   .doc-link { color: #60A5FA; text-decoration: none; font-weight: 600; font-size: 0.9rem; }
   .doc-link:hover { text-decoration: underline; }
   .unavailable { text-align: center; padding: 4rem 1.5rem; }
+  .confirmation { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1.5rem; margin-top: 2rem; }
+  .confirmation p { color: #D1D5DB; }
+  .confirm-button { background: #3B82F6; color: #FFFFFF; border: none; padding: 0.65rem 1.35rem; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 0.9rem; }
+  .confirm-button:hover { background: #2563EB; }
+  .confirmation-done p { color: #10B981; font-weight: 600; }
 `;
 
 export function renderParticipantPreviewPage(params: {
   snapshot: ParticipantPreviewSnapshot;
   media: ParticipantPreviewMediaViewRef[];
+  confirmation: ParticipantPreviewConfirmationStatus | null;
 }): string {
-  const { snapshot, media } = params;
+  const { snapshot, media, confirmation } = params;
 
   return `<!doctype html>
 <html lang="en">
@@ -150,6 +183,8 @@ export function renderParticipantPreviewPage(params: {
     <h3>External Links</h3>
     ${renderExternalLinks(snapshot.externalLinks)}
   </div>
+
+  ${renderConfirmationSection(confirmation)}
 </div>
 </body>
 </html>`;

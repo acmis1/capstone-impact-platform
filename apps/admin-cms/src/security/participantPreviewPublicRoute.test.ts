@@ -55,6 +55,7 @@ describe('participantPreviewHtml escaping', () => {
         industryCategories: [],
       },
       media: [],
+      confirmation: null,
     });
 
     expect(html).not.toContain('<img src=x onerror=alert(1)>');
@@ -141,6 +142,7 @@ describe('Public participant-preview route', () => {
     });
 
     const signSpy = vi.spyOn(mediaStorage, 'createSignedDraftMediaUrl');
+    const confirmationSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getConfirmationStatus').mockResolvedValue(null);
 
     const token = 'c'.repeat(64);
     const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`);
@@ -150,9 +152,11 @@ describe('Public participant-preview route', () => {
     expect(res.status).toBe(200);
     expect(html).toContain('Accessible Robotics Kit');
     expect(signSpy).toHaveBeenCalledTimes(1);
+    expect(confirmationSpy).toHaveBeenCalledWith('p1');
 
     resolveSpy.mockRestore();
     signSpy.mockRestore();
+    confirmationSpy.mockRestore();
   });
 
   it('fails closed to the generic unavailable page when any expected media asset cannot receive a valid private signed URL', async () => {
@@ -281,6 +285,7 @@ describe('Public participant-preview route', () => {
       mediaSnapshot: [],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });
+    const confirmationSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getConfirmationStatus').mockResolvedValue(null);
 
     const token = 'd'.repeat(64);
     const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`);
@@ -291,6 +296,173 @@ describe('Public participant-preview route', () => {
     expect(html).toContain('No Media Project');
 
     resolveSpy.mockRestore();
+    confirmationSpy.mockRestore();
+  });
+
+  it('renders the unconfirmed state with a confirmation form when no confirmation exists yet', async () => {
+    const { GET } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+
+    const resolveSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'resolveByTokenHash').mockResolvedValue({
+      previewId: 'p-unconfirmed',
+      snapshot: {
+        title: 'Unconfirmed Project', summary: null, background: null, solution: null, year: 2026,
+        program: null, studyProgram: null, discipline: null, disciplines: [], industry: null,
+        industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [],
+        posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [],
+      },
+      mediaSnapshot: [],
+      expiresAt: '2026-08-17T00:00:00.000Z',
+    });
+    const confirmationSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getConfirmationStatus').mockResolvedValue(null);
+
+    const token = 'e'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`);
+    const res = await GET(req, { params: Promise.resolve({ token }) });
+    const html = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(html).toContain('Confirm project details');
+    expect(html).toContain('<form method="POST">');
+    expect(html).not.toContain('You confirmed that');
+
+    resolveSpy.mockRestore();
+    confirmationSpy.mockRestore();
+  });
+
+  it('renders the confirmed state with the recorded timestamp and no confirmation form once already confirmed', async () => {
+    const { GET } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+
+    const resolveSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'resolveByTokenHash').mockResolvedValue({
+      previewId: 'p-confirmed',
+      snapshot: {
+        title: 'Confirmed Project', summary: null, background: null, solution: null, year: 2026,
+        program: null, studyProgram: null, discipline: null, disciplines: [], industry: null,
+        industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [],
+        posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [],
+      },
+      mediaSnapshot: [],
+      expiresAt: '2026-08-17T00:00:00.000Z',
+    });
+    const confirmationSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getConfirmationStatus').mockResolvedValue({
+      confirmedAt: '2026-08-11T12:00:00.000Z',
+    });
+
+    const token = 'f'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`);
+    const res = await GET(req, { params: Promise.resolve({ token }) });
+    const html = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(html).toContain('You confirmed that');
+    expect(html).not.toContain('<form method="POST">');
+    expect(html).not.toContain('Confirm project details');
+
+    resolveSpy.mockRestore();
+    confirmationSpy.mockRestore();
+  });
+});
+
+describe('Public participant-preview confirmation POST', () => {
+  it('rejects a cross-origin confirmation POST without ever calling confirmPreview', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const token = 'a'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      headers: { origin: 'http://malicious.test' },
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+    const html = await res.text();
+
+    expect(res.status).toBe(403);
+    expect(html).toContain('Preview Unavailable');
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+
+    confirmSpy.mockRestore();
+  });
+
+  it('rejects a same-origin confirmation POST for a malformed token without calling confirmPreview', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const req = new NextRequest('http://localhost:3000/participant-preview/not-a-valid-token', {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000' },
+    });
+    const res = await POST(req, { params: Promise.resolve({ token: 'not-a-valid-token' }) });
+
+    expect(res.status).toBe(404);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it('confirms via the token hash and redirects (303) back to the same token URL, carrying no mutable data', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview').mockResolvedValue({
+      confirmationId: 'c1',
+      confirmedAt: '2026-08-11T00:00:00.000Z',
+      alreadyConfirmed: false,
+    });
+
+    const token = 'b'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000' },
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('Location')).toBe(`http://localhost:3000/participant-preview/${token}`);
+    expect(confirmSpy).toHaveBeenCalledWith(hashPreviewToken(token));
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+
+    confirmSpy.mockRestore();
+  });
+
+  it('redirects identically (303, same Location) for an invalid/expired/revoked token, never leaking the reason', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview').mockResolvedValue(null);
+
+    const token = 'b'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000' },
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('Location')).toBe(`http://localhost:3000/participant-preview/${token}`);
+
+    confirmSpy.mockRestore();
+  });
+
+  it('renders the generic unavailable response (never a raw backend error) when confirmPreview throws', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview').mockRejectedValue(new Error('SECRET_SQL_DETAIL'));
+
+    const token = 'b'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000' },
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+    const html = await res.text();
+
+    expect(res.status).toBe(500);
+    expect(html).toContain('Preview Unavailable');
+    expect(html).not.toContain('SECRET_SQL_DETAIL');
+
+    confirmSpy.mockRestore();
   });
 });
 
@@ -336,6 +508,7 @@ describe('participantPreviewHtml external link URL scheme safety', () => {
         industryCategories: [],
       },
       media: [],
+      confirmation: null,
     });
 
     expect(html).toContain('href="https://example.test/safe"');

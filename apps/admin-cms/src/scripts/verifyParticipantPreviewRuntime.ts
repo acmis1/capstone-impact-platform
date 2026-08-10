@@ -117,6 +117,8 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
 
     const resolve = async (hash: string) => client.rpc('resolve_participant_preview', { p_token_hash: hash });
 
+    const confirm = async (hash: string) => client.rpc('confirm_participant_preview', { p_token_hash: hash });
+
     // ============================================================
     // Test 1: Generation on an approved project; DB stores a hash, never the raw token;
     // snapshot is authoritative and server-derived.
@@ -379,6 +381,234 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
       console.log('PASS: Test 10 - Anon-key table access and RPC execution are both refused.');
     } else {
       console.error('FAIL: Test 10 - Direct browser access boundary assertion failed.');
+      success = false;
+    }
+
+    // ============================================================
+    // Test 11: Valid confirmation — a valid token confirms its exact preview; exactly one
+    // confirmation row is persisted, referencing the exact participant_previews.id; confirmed_at
+    // is server-generated; the raw token appears nowhere in confirmation persistence.
+    // ============================================================
+    console.log('--- Test 11: Valid confirmation persists exactly one server-attributed record ---');
+    const t11Proj = await createProject('t11', 'approved');
+    const t11 = await generate(String(t11Proj.public_id), adminId);
+    const t11PreviewId = t11.res.data?.previewId;
+    const t11Confirm = await confirm(t11.hash);
+
+    const { data: t11ConfirmRows } = await client.from('participant_preview_confirmations').select('*').eq('participant_preview_id', t11PreviewId);
+    const t11ConfirmRowsJson = JSON.stringify(t11ConfirmRows || []);
+
+    if (
+      !t11Confirm.error &&
+      t11Confirm.data?.resultCode === 'SUCCESS' &&
+      t11Confirm.data?.alreadyConfirmed === false &&
+      typeof t11Confirm.data?.confirmedAt === 'string' && t11Confirm.data.confirmedAt.length > 0 &&
+      (t11ConfirmRows || []).length === 1 &&
+      t11ConfirmRows?.[0]?.participant_preview_id === t11PreviewId &&
+      !t11ConfirmRowsJson.includes(t11.raw)
+    ) {
+      console.log('PASS: Test 11 - Exactly one confirmation record persisted, exact-preview-attributed, raw token never present.');
+    } else {
+      console.error('FAIL: Test 11 - Valid confirmation assertion failed.', t11Confirm.data, t11ConfirmRows);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 12: Idempotency — submitting confirmation twice for the same valid preview leaves
+    // exactly one row and the original confirmed_at remains authoritative.
+    // ============================================================
+    console.log('--- Test 12: Idempotent repeat confirmation submission ---');
+    const t12Second = await confirm(t11.hash);
+    const { data: t12Rows } = await client.from('participant_preview_confirmations').select('confirmed_at').eq('participant_preview_id', t11PreviewId);
+
+    if (
+      !t12Second.error &&
+      t12Second.data?.resultCode === 'SUCCESS' &&
+      t12Second.data?.alreadyConfirmed === true &&
+      t12Second.data?.confirmedAt === t11Confirm.data?.confirmedAt &&
+      (t12Rows || []).length === 1
+    ) {
+      console.log('PASS: Test 12 - Repeat submission is idempotent; original confirmed_at remains authoritative.');
+    } else {
+      console.error('FAIL: Test 12 - Idempotency assertion failed.', t11Confirm.data, t12Second.data, t12Rows);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 13: Concurrency — two first-time confirmation attempts for the same preview converge
+    // to exactly one row, one authoritative timestamp, and no unhandled database error.
+    // ============================================================
+    console.log('--- Test 13: Concurrent first-time confirmation converges to exactly one record ---');
+    const t13Proj = await createProject('t13', 'approved');
+    const t13 = await generate(String(t13Proj.public_id), adminId);
+    const [t13A, t13B] = await Promise.all([confirm(t13.hash), confirm(t13.hash)]);
+    const { data: t13Rows } = await client.from('participant_preview_confirmations').select('confirmed_at').eq('participant_preview_id', t13.res.data?.previewId);
+    const t13Timestamps = new Set((t13Rows || []).map((r) => String(r.confirmed_at)));
+
+    if (
+      !t13A.error && !t13B.error &&
+      t13A.data?.resultCode === 'SUCCESS' && t13B.data?.resultCode === 'SUCCESS' &&
+      (t13Rows || []).length === 1 &&
+      t13Timestamps.size === 1 &&
+      t13A.data?.confirmedAt === t13B.data?.confirmedAt
+    ) {
+      console.log('PASS: Test 13 - Concurrent first-time confirmation converged to exactly one record with no unhandled error.');
+    } else {
+      console.error('FAIL: Test 13 - Concurrency assertion failed.', t13A.data, t13B.data, t13Rows);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 14: Invalid tokens — malformed and unknown tokens create no confirmation record.
+    // ============================================================
+    console.log('--- Test 14: Malformed and unknown tokens create no confirmation record ---');
+    const { count: t14ConfirmCountBefore } = await client.from('participant_preview_confirmations').select('id', { count: 'exact', head: true });
+    const t14Malformed = await confirm('not-a-valid-hash');
+    const t14Unknown = await confirm(hashToken(newRawToken()));
+    const { count: t14ConfirmCountAfter } = await client.from('participant_preview_confirmations').select('id', { count: 'exact', head: true });
+
+    if (
+      t14Malformed.data?.resultCode === 'NOT_FOUND' &&
+      t14Unknown.data?.resultCode === 'NOT_FOUND' &&
+      t14ConfirmCountAfter === t14ConfirmCountBefore
+    ) {
+      console.log('PASS: Test 14 - Malformed and unknown tokens both collapse to NOT_FOUND and create no confirmation.');
+    } else {
+      console.error('FAIL: Test 14 - Invalid-token assertion failed.', t14Malformed.data, t14Unknown.data);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 15: Expired preview cannot be newly confirmed.
+    // ============================================================
+    console.log('--- Test 15: Expired preview cannot be newly confirmed ---');
+    const t15Proj = await createProject('t15', 'approved');
+    const t15Raw = newRawToken();
+    const t15Hash = hashToken(t15Raw);
+    const t15PastExpiry = new Date(Date.now() - 60_000).toISOString();
+    await client.from('participant_previews').insert({
+      project_id: t15Proj.id,
+      token_hash: t15Hash,
+      snapshot: { title: t15Proj.title, summary: null, background: null, solution: null, year: 2026, program: null, studyProgram: null, discipline: null, disciplines: [], industry: null, industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [], posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [] },
+      media_snapshot: [],
+      status: 'active',
+      created_by: adminId,
+      expires_at: t15PastExpiry,
+    });
+    const t15Confirm = await confirm(t15Hash);
+    const { data: t15PreviewRow } = await client.from('participant_previews').select('id').eq('token_hash', t15Hash).single();
+    const { count: t15ConfirmCount } = await client.from('participant_preview_confirmations').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t15PreviewRow?.id);
+
+    if (t15Confirm.data?.resultCode === 'NOT_FOUND' && t15ConfirmCount === 0) {
+      console.log('PASS: Test 15 - Expired preview correctly refuses a new confirmation.');
+    } else {
+      console.error('FAIL: Test 15 - Expired-preview assertion failed.', t15Confirm.data, t15ConfirmCount);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 16: Revoked preview cannot be newly confirmed.
+    // ============================================================
+    console.log('--- Test 16: Revoked preview cannot be newly confirmed ---');
+    const t16Proj = await createProject('t16', 'approved');
+    const t16 = await generate(String(t16Proj.public_id), adminId);
+    await client.rpc('revoke_participant_preview', { p_public_id: t16Proj.public_id, p_admin_id: adminId });
+    const t16Confirm = await confirm(t16.hash);
+    const { count: t16ConfirmCount } = await client.from('participant_preview_confirmations').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t16.res.data?.previewId);
+
+    if (t16Confirm.data?.resultCode === 'NOT_FOUND' && t16ConfirmCount === 0) {
+      console.log('PASS: Test 16 - Revoked preview correctly refuses a new confirmation.');
+    } else {
+      console.error('FAIL: Test 16 - Revoked-preview assertion failed.', t16Confirm.data, t16ConfirmCount);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 17: Exact-version attribution — confirming Preview A, revoking it, and issuing
+    // Preview B leaves Preview A's confirmation untouched as independent historical evidence;
+    // Preview B starts unconfirmed and may receive its own separate confirmation.
+    // ============================================================
+    console.log('--- Test 17: Exact-version attribution survives revoke + reissue ---');
+    const t17Proj = await createProject('t17', 'approved');
+    const t17A = await generate(String(t17Proj.public_id), adminId);
+    const t17AConfirm = await confirm(t17A.hash);
+    await client.rpc('revoke_participant_preview', { p_public_id: t17Proj.public_id, p_admin_id: adminId });
+    const t17B = await generate(String(t17Proj.public_id), adminId);
+    const { count: t17BConfirmCountBefore } = await client.from('participant_preview_confirmations').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t17B.res.data?.previewId);
+    const t17BConfirm = await confirm(t17B.hash);
+    const { data: t17AConfirmRow } = await client.from('participant_preview_confirmations').select('confirmed_at').eq('participant_preview_id', t17A.res.data?.previewId).single();
+
+    if (
+      t17AConfirm.data?.resultCode === 'SUCCESS' &&
+      t17BConfirmCountBefore === 0 &&
+      t17BConfirm.data?.resultCode === 'SUCCESS' &&
+      t17AConfirmRow?.confirmed_at === t17AConfirm.data?.confirmedAt &&
+      t17A.res.data?.previewId !== t17B.res.data?.previewId
+    ) {
+      console.log('PASS: Test 17 - Preview A confirmation preserved untouched; Preview B started unconfirmed and received its own confirmation.');
+    } else {
+      console.error('FAIL: Test 17 - Exact-version attribution assertion failed.', t17AConfirm.data, t17BConfirm.data, t17AConfirmRow);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 18: Mutable-project independence — editing the project after Preview A's
+    // confirmation must not alter the confirmation's reference to Preview A.
+    // ============================================================
+    console.log('--- Test 18: Confirmation reference is independent of later mutable-project edits ---');
+    const t18Proj = await createProject('t18', 'approved');
+    const t18 = await generate(String(t18Proj.public_id), adminId);
+    const t18Confirm = await confirm(t18.hash);
+    await client.from('projects').update({ title: 'MUTATED TITLE — must not affect the confirmation reference' }).eq('id', t18Proj.id);
+    const { data: t18ConfirmRowAfter } = await client.from('participant_preview_confirmations').select('participant_preview_id, confirmed_at').eq('participant_preview_id', t18.res.data?.previewId).single();
+
+    if (
+      t18Confirm.data?.resultCode === 'SUCCESS' &&
+      t18ConfirmRowAfter?.participant_preview_id === t18.res.data?.previewId &&
+      t18ConfirmRowAfter?.confirmed_at === t18Confirm.data?.confirmedAt
+    ) {
+      console.log('PASS: Test 18 - Confirmation still references the exact preview id, unaffected by the later project edit.');
+    } else {
+      console.error('FAIL: Test 18 - Mutable-project independence assertion failed.', t18Confirm.data, t18ConfirmRowAfter);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 19: Direct browser access — anon key cannot read/write participant_preview_
+    // confirmations or execute confirm_participant_preview. (Authenticated-role denial is
+    // proven statically by Migration 0014's REVOKE ... FROM authenticated contract in
+    // participantPreviewConfirmationMigration.test.ts, mirroring how Migration 0013's
+    // authenticated boundary is verified for participant_previews.)
+    // ============================================================
+    console.log('--- Test 19: Direct anon-key access to participant_preview_confirmations and its RPC is refused ---');
+    const t19Select = await anonClient.from('participant_preview_confirmations').select('id').limit(1);
+    const t19Insert = await anonClient.from('participant_preview_confirmations').insert({ participant_preview_id: t11PreviewId });
+    const t19Confirm = await anonClient.rpc('confirm_participant_preview', { p_token_hash: t13.hash });
+
+    if (t19Select.error && t19Insert.error && t19Confirm.error) {
+      console.log('PASS: Test 19 - Anon-key table read/write and RPC execution are all refused.');
+    } else {
+      console.error('FAIL: Test 19 - Direct browser access boundary assertion failed.', t19Select.error, t19Insert.error, t19Confirm.error);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 20: No publication side effects — confirmation performs zero public bucket writes,
+    // zero public_url/is_public_approved changes, and zero project workflow-status transitions.
+    // ============================================================
+    console.log('--- Test 20: Confirmation performs zero publication side effects ---');
+    const t20Proj = await createProject('t20', 'approved');
+    await createMediaAsset(String(t20Proj.id), 'poster_image', 't20');
+    const t20 = await generate(String(t20Proj.public_id), adminId);
+    await confirm(t20.hash);
+    const { data: t20ProjAfter } = await client.from('projects').select('status').eq('id', t20Proj.id).single();
+    const { data: t20MediaAfter } = await client.from('media_assets').select('public_url, is_public_approved, storage_bucket').eq('project_id', t20Proj.id);
+    const t20MediaUntouched = (t20MediaAfter || []).every((m) => m.public_url === null && m.is_public_approved === false && m.storage_bucket === PRIVATE_DRAFT_BUCKET);
+
+    if (t20ProjAfter?.status === 'approved' && t20MediaUntouched) {
+      console.log('PASS: Test 20 - Confirmation left project status and media publication state completely untouched.');
+    } else {
+      console.error('FAIL: Test 20 - Publication side-effect assertion failed.', t20ProjAfter, t20MediaAfter);
       success = false;
     }
   } catch (err: unknown) {
