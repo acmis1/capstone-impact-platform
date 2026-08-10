@@ -125,12 +125,13 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     const key1 = generateUploadKey(`${pkg1Id}/project.json`);
     const manifest1 = {
       selectedRootName: pkg1Id,
-      fileCount: 2,
-      declaredTotalBytes: Buffer.from(json1).length + 300,
+      fileCount: 3,
+      declaredTotalBytes: Buffer.from(json1).length + 800,
       ignoredSystemFilesCount: 0,
       descriptors: [
         { uploadKey: key1, originalPath: `${pkg1Id}/project.json`, fileSizeBytes: Buffer.from(json1).length, browserMimeType: 'application/json' },
         { uploadKey: generateUploadKey(`${pkg1Id}/poster.png`), originalPath: `${pkg1Id}/poster.png`, fileSizeBytes: 300, browserMimeType: 'image/png' },
+        { uploadKey: generateUploadKey(`${pkg1Id}/poster.pdf`), originalPath: `${pkg1Id}/poster.pdf`, fileSizeBytes: 500, browserMimeType: 'application/pdf' },
       ],
     };
     const metaFiles1 = new Map<string, Buffer>([[key1, Buffer.from(json1, 'utf8')]]);
@@ -139,7 +140,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       version: 1 as const,
       previewFingerprint: analysis1.preview.batch.previewFingerprint,
       selectedRootName: pkg1Id,
-      fileCount: 2,
+      fileCount: 3,
       declaredTotalBytes: manifest1.declaredTotalBytes,
       selectedPackagePaths: [pkg1Id],
       acknowledgedWarningPackagePaths: [],
@@ -221,14 +222,16 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     const k2b = generateUploadKey(`${p2Path}/project.json`);
     const manifest2 = {
       selectedRootName: batchRoot2,
-      fileCount: 4,
-      declaredTotalBytes: Buffer.from(json2a).length + Buffer.from(json2b).length + 600,
+      fileCount: 6,
+      declaredTotalBytes: Buffer.from(json2a).length + Buffer.from(json2b).length + 1600,
       ignoredSystemFilesCount: 0,
       descriptors: [
         { uploadKey: k2a, originalPath: `${p1Path}/project.json`, fileSizeBytes: Buffer.from(json2a).length, browserMimeType: 'application/json' },
         { uploadKey: generateUploadKey(`${p1Path}/poster.png`), originalPath: `${p1Path}/poster.png`, fileSizeBytes: 300, browserMimeType: 'image/png' },
+        { uploadKey: generateUploadKey(`${p1Path}/poster.pdf`), originalPath: `${p1Path}/poster.pdf`, fileSizeBytes: 500, browserMimeType: 'application/pdf' },
         { uploadKey: k2b, originalPath: `${p2Path}/project.json`, fileSizeBytes: Buffer.from(json2b).length, browserMimeType: 'application/json' },
         { uploadKey: generateUploadKey(`${p2Path}/poster.png`), originalPath: `${p2Path}/poster.png`, fileSizeBytes: 300, browserMimeType: 'image/png' },
+        { uploadKey: generateUploadKey(`${p2Path}/poster.pdf`), originalPath: `${p2Path}/poster.pdf`, fileSizeBytes: 500, browserMimeType: 'application/pdf' },
       ],
     };
 
@@ -242,7 +245,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       version: 1 as const,
       previewFingerprint: analysis2.preview.batch.previewFingerprint,
       selectedRootName: batchRoot2,
-      fileCount: 4,
+      fileCount: 6,
       declaredTotalBytes: manifest2.declaredTotalBytes,
       selectedPackagePaths: [p1Path, p2Path].sort(),
       acknowledgedWarningPackagePaths: [],
@@ -284,10 +287,14 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     const k3 = generateUploadKey(`${pkg3Id}/project.json`);
     const manifest3 = {
       selectedRootName: pkg3Id,
-      fileCount: 1,
-      declaredTotalBytes: Buffer.from(json3).length,
+      fileCount: 3,
+      declaredTotalBytes: Buffer.from(json3).length + 800,
       ignoredSystemFilesCount: 0,
-      descriptors: [{ uploadKey: k3, originalPath: `${pkg3Id}/project.json`, fileSizeBytes: Buffer.from(json3).length, browserMimeType: 'application/json' }],
+      descriptors: [
+        { uploadKey: k3, originalPath: `${pkg3Id}/project.json`, fileSizeBytes: Buffer.from(json3).length, browserMimeType: 'application/json' },
+        { uploadKey: generateUploadKey(`${pkg3Id}/poster.png`), originalPath: `${pkg3Id}/poster.png`, fileSizeBytes: 300, browserMimeType: 'image/png' },
+        { uploadKey: generateUploadKey(`${pkg3Id}/poster.pdf`), originalPath: `${pkg3Id}/poster.pdf`, fileSizeBytes: 500, browserMimeType: 'application/pdf' },
+      ],
     };
     const metaFiles3 = new Map<string, Buffer>([[k3, Buffer.from(json3, 'utf8')]]);
     const analysis3 = await analyzeBrowserImportServer(manifest3, metaFiles3);
@@ -295,7 +302,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       version: 1 as const,
       previewFingerprint: analysis3.preview.batch.previewFingerprint,
       selectedRootName: pkg3Id,
-      fileCount: 1,
+      fileCount: 3,
       declaredTotalBytes: manifest3.declaredTotalBytes,
       selectedPackagePaths: [pkg3Id],
       acknowledgedWarningPackagePaths: [],
@@ -347,17 +354,21 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     const kBadProg = generateUploadKey('bad-prog-1/project.json');
     const manifestBadProg = {
       selectedRootName: 'bad-prog-1',
-      fileCount: 1,
-      declaredTotalBytes: Buffer.from(jsonBadProgram).length,
+      fileCount: 3,
+      declaredTotalBytes: Buffer.from(jsonBadProgram).length + 800,
       ignoredSystemFilesCount: 0,
-      descriptors: [{ uploadKey: kBadProg, originalPath: 'bad-prog-1/project.json', fileSizeBytes: Buffer.from(jsonBadProgram).length, browserMimeType: 'application/json' }],
+      descriptors: [
+        { uploadKey: kBadProg, originalPath: 'bad-prog-1/project.json', fileSizeBytes: Buffer.from(jsonBadProgram).length, browserMimeType: 'application/json' },
+        { uploadKey: generateUploadKey('bad-prog-1/poster.png'), originalPath: 'bad-prog-1/poster.png', fileSizeBytes: 300, browserMimeType: 'image/png' },
+        { uploadKey: generateUploadKey('bad-prog-1/poster.pdf'), originalPath: 'bad-prog-1/poster.pdf', fileSizeBytes: 500, browserMimeType: 'application/pdf' },
+      ],
     };
     const analysisBadProg = await analyzeBrowserImportServer(manifestBadProg, new Map([[kBadProg, Buffer.from(jsonBadProgram, 'utf8')]]));
     const intentBadProg = {
       version: 1 as const,
       previewFingerprint: analysisBadProg.preview.batch.previewFingerprint,
       selectedRootName: 'bad-prog-1',
-      fileCount: 1,
+      fileCount: 3,
       declaredTotalBytes: manifestBadProg.declaredTotalBytes,
       selectedPackagePaths: ['bad-prog-1'],
       acknowledgedWarningPackagePaths: [],
@@ -414,10 +425,14 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       const kRollback = generateUploadKey(`${rollbackPkgId}/project.json`);
       const manifestRollback = {
         selectedRootName: rollbackPkgId,
-        fileCount: 1,
-        declaredTotalBytes: Buffer.from(jsonRollback).length,
+        fileCount: 3,
+        declaredTotalBytes: Buffer.from(jsonRollback).length + 800,
         ignoredSystemFilesCount: 0,
-        descriptors: [{ uploadKey: kRollback, originalPath: `${rollbackPkgId}/project.json`, fileSizeBytes: Buffer.from(jsonRollback).length, browserMimeType: 'application/json' }],
+        descriptors: [
+          { uploadKey: kRollback, originalPath: `${rollbackPkgId}/project.json`, fileSizeBytes: Buffer.from(jsonRollback).length, browserMimeType: 'application/json' },
+          { uploadKey: generateUploadKey(`${rollbackPkgId}/poster.png`), originalPath: `${rollbackPkgId}/poster.png`, fileSizeBytes: 300, browserMimeType: 'image/png' },
+          { uploadKey: generateUploadKey(`${rollbackPkgId}/poster.pdf`), originalPath: `${rollbackPkgId}/poster.pdf`, fileSizeBytes: 500, browserMimeType: 'application/pdf' },
+        ],
       };
       const analysisRollback = await analyzeBrowserImportServer(manifestRollback, new Map([[kRollback, Buffer.from(jsonRollback, 'utf8')]]));
 
@@ -433,7 +448,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
         version: 1 as const,
         previewFingerprint: analysisRollback.preview.batch.previewFingerprint,
         selectedRootName: rollbackPkgId,
-        fileCount: 1,
+        fileCount: 3,
         declaredTotalBytes: manifestRollback.declaredTotalBytes,
         selectedPackagePaths: [rollbackPkgId],
         acknowledgedWarningPackagePaths: [rollbackPkgId],
