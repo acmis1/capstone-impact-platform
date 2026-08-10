@@ -66,6 +66,18 @@ async function listStorageObjects(
   return paths.sort();
 }
 
+async function downloadStorageObject(
+  supabase: ReturnType<typeof createSupabaseAdminClientCore>,
+  bucket: string,
+  storagePath: string
+): Promise<Buffer> {
+  const { data, error } = await supabase.storage.from(bucket).download(storagePath);
+  if (error || !data) {
+    throw new Error(`[Verifier Storage Failure] Could not download ${bucket}/${storagePath}: ${error?.message || 'no data'}`);
+  }
+  return Buffer.from(await data.arrayBuffer());
+}
+
 function assertArraysEqual(before: string[], after: string[], label: string): void {
   if (before.length !== after.length || !before.every((name, i) => name === after[i])) {
     throw new Error(`[Verifier Storage Failure] Public bucket objects mutated: ${label}`);
@@ -424,15 +436,147 @@ export async function verifyBrowserImportMediaStageRuntime(): Promise<void> {
     process.stdout.write('  ✓ Scenario 4 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
-    // Scenario 5: Database Finalization Rollback-Injection & Retry Convergence
+    // Scenario 4b: Storage Conflict Safety (same-size, different-content object)
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 5] Testing database finalization rollback-injection and retry convergence...\n');
-    const pkg5: FixturePackageSpec = { publicId: 'ms5-pkg-1', packagePath: 'ms5-pkg-1' };
-    const fixture5 = await stageFixtureMetadataBatch({
-      authContext, rootName: 'ms5-pkg-1', packages: [pkg5],
+    process.stdout.write('[Scenario 4b] Testing storage conflict safety against a same-size, different-content object...\n');
+    const pkg4b: FixturePackageSpec = { publicId: 'ms4b-pkg-1', packagePath: 'ms4b-pkg-1' };
+    const fixture4b = await stageFixtureMetadataBatch({
+      authContext, rootName: 'ms4b-pkg-1', packages: [pkg4b],
       program: program.name, discipline: discipline.name, industry: industry.name,
     });
-    createdBatchIds.push(fixture5.batchId);
+    createdBatchIds.push(fixture4b.batchId);
+
+    // Exactly the same byte length as PNG_BYTES and still begins with the real PNG file
+    // signature (first 8 bytes), so this specifically exercises content-identity verification
+    // rather than only a size check or only a signature check.
+    const sameSizeDifferentContent = Buffer.concat([
+      PNG_BYTES.slice(0, 8),
+      Buffer.from([0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x00]),
+    ]);
+    if (sameSizeDifferentContent.length !== PNG_BYTES.length) {
+      throw new Error('[Scenario 4b] Fixture construction error: byte lengths must match.');
+    }
+    if (sameSizeDifferentContent.equals(PNG_BYTES)) {
+      throw new Error('[Scenario 4b] Fixture construction error: content must differ from the expected media.');
+    }
+
+    const conflictPath4b = `drafts/${pkg4b.publicId}/poster_image/poster.png`;
+    const { error: preUploadErr4b } = await supabase.storage
+      .from(buckets.DRAFT_PRIVATE)
+      .upload(conflictPath4b, sameSizeDifferentContent, { contentType: 'image/png', upsert: false });
+    if (preUploadErr4b) throw new Error(`[Scenario 4b] Failed to seed conflicting object: ${preUploadErr4b.message}`);
+
+    const resConflict4b = await stageBrowserImportMedia({
+      authContext, batchId: fixture4b.batchId, metadataIntentHash: fixture4b.metadataIntentHash, files: buildMediaFiles([pkg4b]),
+    });
+    if (resConflict4b.success || resConflict4b.code !== 'STORAGE_CONFLICT') {
+      throw new Error(`[Scenario 4b] Expected STORAGE_CONFLICT for same-size different-content object, got ${JSON.stringify(resConflict4b)}`);
+    }
+
+    const { data: batchRow4b } = await supabase.from('import_batches').select('status').eq('id', fixture4b.batchId).single();
+    if (batchRow4b?.status !== 'metadata_staged') throw new Error('[Scenario 4b] Batch was falsely completed despite same-size content conflict.');
+
+    const { count: assetCount4b } = await supabase.from('media_assets').select('*', { count: 'exact', head: true })
+      .in('project_id', (await supabase.from('projects').select('id').eq('import_batch_id', fixture4b.batchId)).data!.map((p: { id: string }) => p.id));
+    if (assetCount4b !== 0) throw new Error('[Scenario 4b] A media_assets row was created despite same-size content conflict.');
+
+    const { data: ledgerRow4b } = await supabase.from('browser_import_media_commits').select('*').eq('batch_id', fixture4b.batchId).maybeSingle();
+    if (ledgerRow4b) throw new Error('[Scenario 4b] Idempotency ledger row was created despite same-size content conflict.');
+
+    // The pre-existing (unrelated, same-size, mismatched) object must remain completely
+    // untouched, byte-for-byte -- not just the same size.
+    const postConflictBytes4b = await downloadStorageObject(supabase, buckets.DRAFT_PRIVATE, conflictPath4b);
+    if (!postConflictBytes4b.equals(sameSizeDifferentContent)) {
+      throw new Error('[Scenario 4b] Pre-existing same-size mismatched object was altered.');
+    }
+
+    process.stdout.write('  ✓ Scenario 4b PASSED!\n\n');
+
+    // -------------------------------------------------------------------------
+    // Scenario 5: Concurrent FIRST-TIME Submissions (no prior completion)
+    // -------------------------------------------------------------------------
+    process.stdout.write('[Scenario 5] Testing concurrent first-time submissions for the same metadata_staged batch...\n');
+    const pkg5c: FixturePackageSpec = { publicId: 'ms5c-pkg-1', packagePath: 'ms5c-pkg-1' };
+    const fixture5c = await stageFixtureMetadataBatch({
+      authContext, rootName: 'ms5c-pkg-1', packages: [pkg5c],
+      program: program.name, discipline: discipline.name, industry: industry.name,
+    });
+    createdBatchIds.push(fixture5c.batchId);
+
+    const mediaFiles5c = buildMediaFiles([pkg5c]);
+    // Neither call has staged media for this batch yet. This exercises the real storage-upload
+    // race (both requests may upload before either reaches the database advisory lock inside
+    // the finalization RPC), not merely a retry of an already-completed batch.
+    const [conc5a, conc5b] = await Promise.all([
+      stageBrowserImportMedia({ authContext, batchId: fixture5c.batchId, metadataIntentHash: fixture5c.metadataIntentHash, files: mediaFiles5c }),
+      stageBrowserImportMedia({ authContext, batchId: fixture5c.batchId, metadataIntentHash: fixture5c.metadataIntentHash, files: mediaFiles5c }),
+    ]);
+
+    if (!conc5a.success || !conc5b.success) {
+      throw new Error(`[Scenario 5] Concurrent first submission did not converge safely: ${JSON.stringify(conc5a)} vs ${JSON.stringify(conc5b)}`);
+    }
+    if (conc5a.mediaAssetCount !== 3 || conc5b.mediaAssetCount !== 3) {
+      throw new Error(`[Scenario 5] Concurrent first submission produced inconsistent asset counts: ${JSON.stringify(conc5a)} vs ${JSON.stringify(conc5b)}`);
+    }
+    const resultPair5c = [conc5a.result, conc5b.result].sort();
+    if (resultPair5c[0] !== 'already_completed' || resultPair5c[1] !== 'completed') {
+      throw new Error(`[Scenario 5] Expected exactly one 'completed' and one 'already_completed' result, got ${JSON.stringify(resultPair5c)}`);
+    }
+
+    const { data: batchRow5c } = await supabase.from('import_batches').select('status').eq('id', fixture5c.batchId).single();
+    if (batchRow5c?.status !== 'completed') throw new Error('[Scenario 5] Batch did not converge to completed.');
+
+    const { data: proj5c } = await supabase.from('projects').select('id, status').eq('import_batch_id', fixture5c.batchId).single();
+    if (!proj5c || proj5c.status !== 'draft') throw new Error('[Scenario 5] Project did not remain draft.');
+
+    const { data: assetRows5c } = await supabase.from('media_assets').select('*').eq('project_id', proj5c.id);
+    if (!assetRows5c || assetRows5c.length !== 3) throw new Error(`[Scenario 5] Expected exactly 3 media_assets rows, found ${assetRows5c?.length}`);
+
+    const seenPaths5c = new Set<string>();
+    for (const row of assetRows5c) {
+      const key = `${row.storage_bucket}/${row.storage_path}`;
+      if (seenPaths5c.has(key)) throw new Error(`[Scenario 5] Duplicate media_assets row for the same storage object: ${key}`);
+      seenPaths5c.add(key);
+
+      const expectedFile = mediaFiles5c.find((f) => f.assetType === row.asset_type);
+      if (!expectedFile) throw new Error(`[Scenario 5] Unexpected asset_type registered: ${row.asset_type}`);
+
+      const objectBytes = await downloadStorageObject(supabase, row.storage_bucket, row.storage_path);
+      if (!objectBytes.equals(expectedFile.content)) {
+        throw new Error(`[Scenario 5] Registered storage object bytes do not match expected content for ${row.storage_path}`);
+      }
+    }
+
+    const { data: mediaCommitRow5c } = await supabase.from('browser_import_media_commits').select('*').eq('batch_id', fixture5c.batchId).maybeSingle();
+    if (!mediaCommitRow5c || mediaCommitRow5c.asset_count !== 3) {
+      throw new Error('[Scenario 5] Media idempotency ledger row missing or incorrect after concurrent first submission.');
+    }
+
+    process.stdout.write('  ✓ Scenario 5 PASSED!\n\n');
+
+    // -------------------------------------------------------------------------
+    // Scenario 6: Database Finalization Failure -> Deletion-Safety & Retry Convergence
+    // -------------------------------------------------------------------------
+    process.stdout.write('[Scenario 6] Testing database finalization failure, deletion-safety, and retry convergence...\n');
+    const pkg6: FixturePackageSpec = { publicId: 'ms6-pkg-1', packagePath: 'ms6-pkg-1' };
+    const fixture6 = await stageFixtureMetadataBatch({
+      authContext, rootName: 'ms6-pkg-1', packages: [pkg6],
+      program: program.name, discipline: discipline.name, industry: industry.name,
+    });
+    createdBatchIds.push(fixture6.batchId);
+
+    const mediaFiles6 = buildMediaFiles([pkg6]);
+
+    // Pre-seed ONE of the expected objects with the exact expected bytes, standing in for a
+    // concurrent attempt that already uploaded it and may be relying on it going into the
+    // failing attempt below. The about-to-fail attempt must observe it as an already-uploaded,
+    // content-verified match (never re-upload it) and, on failure, must not delete it.
+    const preSeededFile6 = mediaFiles6.find((f) => f.assetType === 'poster_image')!;
+    const preSeededPath6 = `drafts/${pkg6.publicId}/poster_image/poster.png`;
+    const { error: preSeedErr6 } = await supabase.storage
+      .from(buckets.DRAFT_PRIVATE)
+      .upload(preSeededPath6, preSeededFile6.content, { contentType: preSeededFile6.canonicalMimeType, upsert: false });
+    if (preSeedErr6) throw new Error(`[Scenario 6] Failed to pre-seed object simulating a concurrent attempt: ${preSeedErr6.message}`);
 
     const triggerName = 'trg_test_fail_media_assets_insert';
     const functionName = 'test_fail_media_assets_insert_trg';
@@ -447,7 +591,7 @@ export async function verifyBrowserImportMediaStageRuntime(): Promise<void> {
     let resFail: Awaited<ReturnType<typeof stageBrowserImportMedia>>;
     try {
       resFail = await stageBrowserImportMedia({
-        authContext, batchId: fixture5.batchId, metadataIntentHash: fixture5.metadataIntentHash, files: buildMediaFiles([pkg5]),
+        authContext, batchId: fixture6.batchId, metadataIntentHash: fixture6.metadataIntentHash, files: mediaFiles6,
       });
     } finally {
       executeLocalDatabaseSql(`
@@ -457,31 +601,48 @@ export async function verifyBrowserImportMediaStageRuntime(): Promise<void> {
     }
 
     if (resFail.success || resFail.code !== 'PERSISTENCE_FAILED') {
-      throw new Error(`[Scenario 5] Expected injected persistence failure, got ${JSON.stringify(resFail)}`);
+      throw new Error(`[Scenario 6] Expected injected persistence failure, got ${JSON.stringify(resFail)}`);
     }
 
-    const { data: batchRow5AfterFail } = await supabase.from('import_batches').select('status').eq('id', fixture5.batchId).single();
-    if (batchRow5AfterFail?.status !== 'metadata_staged') throw new Error('[Scenario 5] Batch was falsely completed despite injected DB failure.');
+    const { data: batchRow6AfterFail } = await supabase.from('import_batches').select('status').eq('id', fixture6.batchId).single();
+    if (batchRow6AfterFail?.status !== 'metadata_staged') throw new Error('[Scenario 6] Batch was falsely completed despite injected DB failure.');
 
-    const { data: proj5 } = await supabase.from('projects').select('id').eq('import_batch_id', fixture5.batchId).single();
-    const { count: assetCount5AfterFail } = await supabase.from('media_assets').select('*', { count: 'exact', head: true }).eq('project_id', proj5!.id);
-    if (assetCount5AfterFail !== 0) throw new Error('[Scenario 5] An orphaned media_assets row survived the injected failure.');
+    const { data: proj6 } = await supabase.from('projects').select('id').eq('import_batch_id', fixture6.batchId).single();
+    const { count: assetCount6AfterFail } = await supabase.from('media_assets').select('*', { count: 'exact', head: true }).eq('project_id', proj6!.id);
+    if (assetCount6AfterFail !== 0) throw new Error('[Scenario 6] An orphaned media_assets row survived the injected failure.');
 
-    const { data: ledgerRow5 } = await supabase.from('browser_import_media_commits').select('*').eq('batch_id', fixture5.batchId).maybeSingle();
-    if (ledgerRow5) throw new Error('[Scenario 5] Idempotency ledger row was created despite injected failure.');
+    const { data: ledgerRow6 } = await supabase.from('browser_import_media_commits').select('*').eq('batch_id', fixture6.batchId).maybeSingle();
+    if (ledgerRow6) throw new Error('[Scenario 6] Idempotency ledger row was created despite injected failure.');
 
-    // Exact retry after the injected failure is removed must converge to success.
+    // Deletion-safety proof: the pre-seeded object (standing in for a concurrent attempt's
+    // dependency) AND the objects this now-failed attempt itself uploaded must ALL survive the
+    // failure, byte-for-byte -- there is no safe way for this attempt to prove nobody else needs
+    // them, so nothing it touched is deleted.
+    for (const file of mediaFiles6) {
+      const expectedPath = `drafts/${pkg6.publicId}/${file.assetType}/${file.fileName}`;
+      const bytes = await downloadStorageObject(supabase, buckets.DRAFT_PRIVATE, expectedPath);
+      if (!bytes.equals(file.content)) {
+        throw new Error(`[Scenario 6] Deterministic private object at ${expectedPath} was altered or lost after the injected failure.`);
+      }
+    }
+
+    // Exact retry after the injected failure is removed must converge to success, reusing the
+    // surviving objects (including the one standing in for a concurrent attempt) rather than
+    // re-uploading or duplicating them.
     const resRetryAfterFail = await stageBrowserImportMedia({
-      authContext, batchId: fixture5.batchId, metadataIntentHash: fixture5.metadataIntentHash, files: buildMediaFiles([pkg5]),
+      authContext, batchId: fixture6.batchId, metadataIntentHash: fixture6.metadataIntentHash, files: mediaFiles6,
     });
     if (!resRetryAfterFail.success || resRetryAfterFail.result !== 'completed' || resRetryAfterFail.mediaAssetCount !== 3) {
-      throw new Error(`[Scenario 5] Retry after injected failure did not converge: ${JSON.stringify(resRetryAfterFail)}`);
+      throw new Error(`[Scenario 6] Retry after injected failure did not converge: ${JSON.stringify(resRetryAfterFail)}`);
     }
 
-    const { count: assetCount5AfterRetry } = await supabase.from('media_assets').select('*', { count: 'exact', head: true }).eq('project_id', proj5!.id);
-    if (assetCount5AfterRetry !== 3) throw new Error(`[Scenario 5] Retry produced unexpected asset row count: ${assetCount5AfterRetry}`);
+    const { count: assetCount6AfterRetry } = await supabase.from('media_assets').select('*', { count: 'exact', head: true }).eq('project_id', proj6!.id);
+    if (assetCount6AfterRetry !== 3) throw new Error(`[Scenario 6] Retry produced unexpected asset row count: ${assetCount6AfterRetry}`);
 
-    process.stdout.write('  ✓ Scenario 5 PASSED!\n\n');
+    const storageAfterRetry6 = await listStorageObjects(supabase, buckets.DRAFT_PRIVATE, `drafts/${pkg6.publicId}`);
+    if (storageAfterRetry6.length !== 3) throw new Error(`[Scenario 6] Retry left an unexpected number of storage objects: ${storageAfterRetry6.length}`);
+
+    process.stdout.write('  ✓ Scenario 6 PASSED!\n\n');
 
   } finally {
     for (const bId of createdBatchIds) {

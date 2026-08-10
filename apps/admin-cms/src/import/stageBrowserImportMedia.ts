@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { getStagingBuckets } from '../lib/supabase/buckets';
 import { AuthenticatedAdminContext } from '../auth/authTypes';
@@ -24,14 +25,49 @@ function buildStoragePath(projectPublicId: string, assetType: string, fileName: 
   return `drafts/${projectPublicId}/${assetType}/${fileName}`;
 }
 
+function sha256Hex(buf: Buffer): string {
+  return createHash('sha256').update(buf).digest('hex');
+}
+
+/**
+ * Downloads an existing object at `storagePath` and proves it is byte-for-byte identical to
+ * `expectedContent` (size + SHA-256 of the actual downloaded bytes, never just size or metadata).
+ * Any failure to read the object back is treated as unverifiable, not as a pass — matching size
+ * alone is never accepted as proof of identity, since a same-size different object must not be
+ * silently reused.
+ */
+async function existingObjectMatchesContent(
+  supabase: ReturnType<typeof createSupabaseAdminClientCore>,
+  bucket: string,
+  storagePath: string,
+  expectedContent: Buffer
+): Promise<boolean> {
+  const { data: existingBlob, error: downloadError } = await supabase.storage.from(bucket).download(storagePath);
+  if (downloadError || !existingBlob) {
+    return false;
+  }
+
+  const existingBytes = Buffer.from(await existingBlob.arrayBuffer());
+  if (existingBytes.length !== expectedContent.length) {
+    return false;
+  }
+
+  return sha256Hex(existingBytes) === sha256Hex(expectedContent);
+}
+
 /**
  * Uploads the validated media files for an already metadata-staged browser import batch into
  * private draft storage at deterministic, server-derived paths, then atomically registers the
  * corresponding media_assets rows and completes the batch via a hardened RPC.
  *
- * Storage and Postgres are not one distributed transaction: uploads happen first (idempotent-
- * safe, since paths are deterministic and existing objects are verified rather than overwritten),
- * and only objects created by THIS attempt are cleaned up if the database finalization fails.
+ * Storage and Postgres are not one distributed transaction: uploads happen first, before the
+ * database advisory lock inside the finalization RPC even exists. Because storage paths are
+ * deterministic (derived only from projectPublicId/assetType/fileName), two independent
+ * first-time attempts for the same batch can both observe and rely on the same uploaded object -
+ * there is no ownership record proving a given attempt is the only one that needs it. So a
+ * failed attempt never deletes objects it uploaded: an object left behind by a failed attempt is
+ * safe by construction (deterministic path, content-verified before ever being trusted), and an
+ * exact retry re-verifies its bytes rather than assuming a size match is proof of identity.
  */
 export async function stageBrowserImportMedia(params: {
   authContext: AuthenticatedAdminContext;
@@ -123,16 +159,16 @@ export async function stageBrowserImportMedia(params: {
   });
 
   // 2. Upload phase: deterministic, server-derived paths; never blindly overwrite.
+  //    Objects created by this attempt are NEVER deleted on a later failure in this function -
+  //    see the deletion-safety note in the docstring above. `newlyUploadedPaths` is retained
+  //    only for diagnostic logging, not for cleanup.
   const newlyUploadedPaths: string[] = [];
 
-  const cleanupNewlyUploaded = async (): Promise<void> => {
+  const logAbandonedUploads = (): void => {
     if (newlyUploadedPaths.length === 0) return;
-    try {
-      await supabase.storage.from(bucket).remove(newlyUploadedPaths);
-    } catch (cleanupErr: unknown) {
-      const msg = cleanupErr instanceof Error ? cleanupErr.message : 'unknown cleanup error';
-      process.stdout.write(`[Browser Import Media Stage] cleanup failure (objects remain recoverable by retry): ${msg}\n`);
-    }
+    process.stdout.write(
+      `[Browser Import Media Stage] leaving ${newlyUploadedPaths.length} newly uploaded object(s) in private draft storage after a failed attempt (safe: deterministic path, content-verified before reuse): ${newlyUploadedPaths.join(', ')}\n`
+    );
   };
 
   for (const file of files) {
@@ -151,7 +187,7 @@ export async function stageBrowserImportMedia(params: {
     const isDuplicate = /already exists|duplicate/i.test(uploadError.message || '');
     if (!isDuplicate) {
       process.stdout.write(`[Browser Import Media Stage] storage upload error: ${uploadError.message}\n`);
-      await cleanupNewlyUploaded();
+      logAbandonedUploads();
       return {
         success: false,
         code: 'STORAGE_UPLOAD_FAILED',
@@ -159,28 +195,21 @@ export async function stageBrowserImportMedia(params: {
       };
     }
 
-    // Object already exists at this deterministic path (from a prior attempt). Verify it is
-    // genuinely the same content before treating this as an idempotent no-op; never overwrite.
-    const dirPath = storagePath.slice(0, storagePath.lastIndexOf('/'));
-    const { data: listing, error: listError } = await supabase.storage
-      .from(bucket)
-      .list(dirPath, { limit: 100, search: file.fileName });
+    // Object already exists at this deterministic path (from a prior attempt, possibly a
+    // concurrent one). Matching size is not proof of identity: download it and verify it is
+    // genuinely byte-for-byte identical to the freshly server-validated incoming file before
+    // treating this as an idempotent no-op. Never overwrite it either way.
+    const matchesContent = await existingObjectMatchesContent(supabase, bucket, storagePath, file.content);
 
-    const existingEntry = listing?.find((entry) => entry.name === file.fileName);
-    const existingSize =
-      existingEntry && existingEntry.metadata && typeof existingEntry.metadata === 'object'
-        ? (existingEntry.metadata as Record<string, unknown>).size
-        : undefined;
-
-    if (listError || !existingEntry || existingSize !== file.content.length) {
-      await cleanupNewlyUploaded();
+    if (!matchesContent) {
+      logAbandonedUploads();
       return {
         success: false,
         code: 'STORAGE_CONFLICT',
         error: 'An existing private storage object could not be safely reconciled with this upload.',
       };
     }
-    // Sizes match: treat as already uploaded by a previous attempt; do not touch it.
+    // Bytes verified identical: treat as already uploaded by a previous attempt; do not touch it.
   }
 
   // 3. Atomic database finalization via hardened RPC.
@@ -205,12 +234,12 @@ export async function stageBrowserImportMedia(params: {
 
   if (error) {
     process.stdout.write(`[Browser Import Media Stage RPC Error] ${error.code || 'UNKNOWN'}\n`);
-    await cleanupNewlyUploaded();
+    logAbandonedUploads();
     return { success: false, code: 'PERSISTENCE_FAILED', error: 'The media staging operation could not be saved.' };
   }
 
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    await cleanupNewlyUploaded();
+    logAbandonedUploads();
     return {
       success: false,
       code: 'PERSISTENCE_FAILED',
@@ -220,7 +249,7 @@ export async function stageBrowserImportMedia(params: {
 
   const res = data as Record<string, unknown>;
   if (typeof res.resultCode !== 'string') {
-    await cleanupNewlyUploaded();
+    logAbandonedUploads();
     return {
       success: false,
       code: 'PERSISTENCE_FAILED',
@@ -229,7 +258,7 @@ export async function stageBrowserImportMedia(params: {
   }
 
   if (res.resultCode !== 'SUCCESS') {
-    await cleanupNewlyUploaded();
+    logAbandonedUploads();
     const codeStr = res.resultCode;
     const mapCode = (c: string): BrowserImportMediaStageErrorCode => {
       if (c === 'BATCH_NOT_FOUND') return 'BATCH_NOT_FOUND';
@@ -255,7 +284,7 @@ export async function stageBrowserImportMedia(params: {
     res.mediaAssetCount < 0 ||
     res.batchStatus !== 'completed'
   ) {
-    await cleanupNewlyUploaded();
+    logAbandonedUploads();
     return {
       success: false,
       code: 'PERSISTENCE_FAILED',
