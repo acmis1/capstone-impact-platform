@@ -20,6 +20,7 @@ import {
 } from '../../import/browserImportCommitIntentContract';
 import { runBrowserImportPreparation } from '../../import/browserImportPreparationController';
 import { runBrowserImportMetadataStaging } from '../../import/browserImportStagingController';
+import { runBrowserImportMediaStaging } from '../../import/browserImportMediaStagingController';
 
 export default function BrowserImportPreviewClient() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -50,7 +51,16 @@ export default function BrowserImportPreviewClient() {
     result: 'created' | 'already_staged';
   } | null>(null);
 
+  const [isCompletingMedia, setIsCompletingMedia] = useState(false);
+  const [mediaCompleteError, setMediaCompleteError] = useState<string | null>(null);
+  const [mediaCompleteResult, setMediaCompleteResult] = useState<{
+    batchId: string;
+    mediaAssetCount: number;
+    result: 'completed' | 'already_completed';
+  } | null>(null);
+
   const stagingLockRef = useRef(false);
+  const mediaCompleteLockRef = useRef(false);
   const preparationLockRef = useRef(false);
   const selectionStateRef = useRef<BrowserImportSelectionState>(selectionState);
 
@@ -69,13 +79,15 @@ export default function BrowserImportPreviewClient() {
   const invalidateStagingResult = () => {
     setStagedResult(null);
     setStagingError(null);
+    setMediaCompleteResult(null);
+    setMediaCompleteError(null);
   };
 
-  const isPreparingOrLocked = selectionState.isPreparing || isStaging;
+  const isPreparingOrLocked = selectionState.isPreparing || isStaging || isCompletingMedia;
 
 
   const handleFolderSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
+    if (preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
 
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -156,7 +168,7 @@ export default function BrowserImportPreviewClient() {
   };
 
   const handleRequestPreview = async () => {
-    if (selectedFiles.length === 0 || !selectedRootName || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
+    if (selectedFiles.length === 0 || !selectedRootName || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
 
     setIsLoading(true);
     setApiError(null);
@@ -266,7 +278,7 @@ export default function BrowserImportPreviewClient() {
   };
 
   const handleClearSelection = () => {
-    if (preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
+    if (preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
 
     setSelectedFiles([]);
     setSelectedRootName(null);
@@ -281,25 +293,25 @@ export default function BrowserImportPreviewClient() {
   };
 
   const handleToggleValid = (pkgPath: string) => {
-    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
+    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
     invalidateStagingResult();
     updateSelectionState((prev) => toggleValidPackage(prev, pkgPath, previewResult.packages));
   };
 
   const handleToggleWarningAck = (pkgPath: string) => {
-    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
+    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
     invalidateStagingResult();
     updateSelectionState((prev) => toggleWarningAcknowledgement(prev, pkgPath, previewResult.packages));
   };
 
   const handleToggleWarningSelect = (pkgPath: string) => {
-    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
+    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
     invalidateStagingResult();
     updateSelectionState((prev) => toggleWarningPackageSelection(prev, pkgPath, previewResult.packages));
   };
 
   const handlePrepareImport = async () => {
-    if (!previewResult || !manifestCache || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
+    if (!previewResult || !manifestCache || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
     invalidateStagingResult();
 
     await runBrowserImportPreparation({
@@ -322,6 +334,22 @@ export default function BrowserImportPreviewClient() {
       setIsStaging,
       setStagingError,
       setStagedResult,
+    });
+  };
+
+  const handleCompleteMedia = async () => {
+    if (!stagedResult) return;
+    await runBrowserImportMediaStaging({
+      lock: mediaCompleteLockRef,
+      isCompletingMedia,
+      batchId: stagedResult.batchId,
+      preparedIntent: selectionStateRef.current.preparedIntent,
+      manifestCache,
+      selectedPackagePaths: selectionStateRef.current.selectedPackagePaths,
+      selectedFiles,
+      setIsCompletingMedia,
+      setMediaCompleteError,
+      setMediaCompleteResult,
     });
   };
 
@@ -690,7 +718,7 @@ export default function BrowserImportPreviewClient() {
                 <button
                   type="button"
                   onClick={handleStageMetadata}
-                  disabled={isStaging || selectionState.isPreparing}
+                  disabled={isStaging || selectionState.isPreparing || isCompletingMedia}
                   style={{
                     backgroundColor: '#10B981',
                     color: '#FFFFFF',
@@ -699,8 +727,8 @@ export default function BrowserImportPreviewClient() {
                     padding: '0.65rem 1.25rem',
                     fontWeight: 700,
                     fontSize: '0.9rem',
-                    cursor: isStaging || selectionState.isPreparing ? 'not-allowed' : 'pointer',
-                    opacity: isStaging || selectionState.isPreparing ? 0.5 : 1,
+                    cursor: isStaging || selectionState.isPreparing || isCompletingMedia ? 'not-allowed' : 'pointer',
+                    opacity: isStaging || selectionState.isPreparing || isCompletingMedia ? 0.5 : 1,
                   }}
                 >
                   {isStaging ? '⏳ Staging Metadata...' : '💾 Stage Selected Metadata'}
@@ -738,7 +766,7 @@ export default function BrowserImportPreviewClient() {
                 🎉 {stagedResult.result === 'already_staged' ? 'Import Batch Already Staged (Idempotent Retry)' : 'Import Metadata Staged Successfully'}
               </h4>
               <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: '#D1D5DB' }}>
-                Draft project metadata and batch record have been atomically created in local Supabase. Media file uploads belong to a future step.
+                Draft project metadata and batch record have been atomically created in local Supabase. Upload the selected packages&apos; media below to complete the import.
               </p>
 
               <div style={{
@@ -773,6 +801,116 @@ export default function BrowserImportPreviewClient() {
                   }}
                 >
                   View Import Batch Detail Page →
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* Media Completion Action Card */}
+          {stagedResult && !mediaCompleteResult && (
+            <div style={{
+              backgroundColor: '#111827',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '12px',
+              padding: '1.25rem 1.5rem',
+              marginBottom: '1.5rem',
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '1rem',
+              }}>
+                <div style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>
+                  ℹ️ Uploads poster/PDF/snapshot media for the selected packages into private draft storage and completes the import batch. Nothing is made public.
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCompleteMedia}
+                  disabled={isCompletingMedia}
+                  style={{
+                    backgroundColor: '#3B82F6',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.65rem 1.25rem',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    cursor: isCompletingMedia ? 'not-allowed' : 'pointer',
+                    opacity: isCompletingMedia ? 0.5 : 1,
+                  }}
+                >
+                  {isCompletingMedia ? '⏳ Uploading Media...' : '📤 Upload Media & Complete Import'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Media Completion Failure Feedback */}
+          {mediaCompleteError && (
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              borderRadius: '10px',
+              padding: '1rem 1.25rem',
+              marginBottom: '1.5rem',
+              color: '#EF4444',
+              fontSize: '0.9rem',
+            }}>
+              ❌ <strong>Media Upload Failed:</strong> {mediaCompleteError} You can safely retry without re-staging metadata.
+            </div>
+          )}
+
+          {/* Media Completion Success Card */}
+          {mediaCompleteResult && (
+            <div style={{
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              borderRadius: '12px',
+              padding: '1.25rem 1.5rem',
+              marginBottom: '1.5rem',
+              color: '#10B981',
+            }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', fontWeight: 800, fontSize: '1rem', color: '#10B981' }}>
+                ✅ {mediaCompleteResult.result === 'already_completed' ? 'Import Already Completed (Idempotent Retry)' : 'Import Completed Successfully'}
+              </h4>
+              <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: '#D1D5DB' }}>
+                Media files were uploaded to private draft storage and registered. Projects remain in draft status.
+              </p>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '0.75rem',
+                fontSize: '0.85rem',
+                backgroundColor: '#161F30',
+                padding: '1rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                marginBottom: '1rem',
+              }}>
+                <div><span style={{ color: '#9CA3AF' }}>Batch Status:</span> <strong style={{ color: '#10B981' }}>completed</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Media Assets Registered:</span> <strong style={{ color: '#F3F4F6' }}>{mediaCompleteResult.mediaAssetCount}</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Batch UUID:</span> <code style={{ color: '#E5E7EB' }}>{mediaCompleteResult.batchId}</code></div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <Link
+                  href={`/admin/imports/${mediaCompleteResult.batchId}`}
+                  style={{
+                    color: '#FFFFFF',
+                    backgroundColor: '#10B981',
+                    textDecoration: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '6px',
+                    display: 'inline-block',
+                  }}
+                >
+                  View Completed Import Batch →
                 </Link>
               </div>
             </div>

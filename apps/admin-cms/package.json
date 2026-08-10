@@ -31,6 +31,7 @@
     "verify:local": "tsx src/scripts/verifyLocalSupabase.ts",
     "verify:metadata-runtime": "tsx src/scripts/verifyProjectMetadataRuntime.ts",
     "verify:browser-metadata-stage-runtime": "tsx src/scripts/verifyBrowserImportMetadataStageRuntime.ts",
+    "verify:browser-media-stage-runtime": "tsx src/scripts/verifyBrowserImportMediaStageRuntime.ts",
     "seed:buckets:local": "tsx src/scripts/seedLocalSupabaseFixtures.ts",
     "setup:local": "tsx src/scripts/setupLocal.ts",
     "verify:all": "tsx src/scripts/verifyAll.ts",

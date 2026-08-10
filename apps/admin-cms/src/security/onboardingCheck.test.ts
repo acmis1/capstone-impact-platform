@@ -23,6 +23,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     '20260803180000_transactional_review_actions.sql',
     '20260808170000_transactional_project_metadata_update.sql',
     '20260810090000_atomic_browser_import_metadata_stage.sql',
+    '20260810120000_atomic_browser_import_media_stage.sql',
   ];
 
   const defaultMockExec = (cmd: string): string => {
@@ -219,7 +220,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const shuffled = [...validMigrations].reverse();
     const result = validateMigrationsList(shuffled);
     expect(result.passed).toBe(true);
-    expect(result.message).toContain('10 timestamped migrations');
+    expect(result.message).toContain('11 timestamped migrations');
   });
 
   it('10. Duplicate migration timestamps fail', () => {
@@ -234,6 +235,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260803180000_transactional_review_actions.sql',
       '20260808170000_transactional_project_metadata_update.sql',
       '20260810090000_atomic_browser_import_metadata_stage.sql',
+      '20260810120000_atomic_browser_import_media_stage.sql',
     ];
     const result = validateMigrationsList(duplicateMigrations);
     expect(result.passed).toBe(false);
@@ -252,6 +254,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260803180000_wrong_name.sql',
       '20260808170000_transactional_project_metadata_update.sql',
       '20260810090000_atomic_browser_import_metadata_stage.sql',
+      '20260810120000_atomic_browser_import_media_stage.sql',
     ];
     const result = validateMigrationsList(missing0008);
     expect(result.passed).toBe(false);
@@ -495,6 +498,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260803180000_different_migration_name.sql',
       '20260808170000_transactional_project_metadata_update.sql',
       '20260810090000_atomic_browser_import_metadata_stage.sql',
+      '20260810120000_atomic_browser_import_media_stage.sql',
     ];
     const result = validateMigrationsList(invalidMigrationNames);
     expect(result.passed).toBe(false);

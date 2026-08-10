@@ -140,16 +140,19 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify ten migrations and local integrity
+      - name: Verify eleven migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 10
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 11
 
       - name: Verify atomic project metadata runtime behavior
         run: npm run verify:metadata-runtime --workspace=apps/admin-cms
 
       - name: Verify atomic browser import metadata stage runtime behavior
         run: npm run verify:browser-metadata-stage-runtime --workspace=apps/admin-cms
+
+      - name: Verify atomic browser import media stage runtime behavior
+        run: npm run verify:browser-media-stage-runtime --workspace=apps/admin-cms
 
       - name: Admin Application Smoke Test (/api/health & /login 200 OK)
         run: npm run check:app-smoke

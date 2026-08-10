@@ -24,6 +24,7 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260803180000_transactional_review_actions.sql',
   '20260808170000_transactional_project_metadata_update.sql',
   '20260810090000_atomic_browser_import_metadata_stage.sql',
+  '20260810120000_atomic_browser_import_media_stage.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {
@@ -56,8 +57,8 @@ export function isVersionInNpm11Range(versionStr: string): boolean {
 
 export function validateMigrationsList(filenames: string[]): { passed: boolean; message: string } {
   const sqlFiles = filenames.filter((f) => f.endsWith('.sql'));
-  if (sqlFiles.length !== 10) {
-    return { passed: false, message: `FAIL: Expected exactly 10 migration files, found ${sqlFiles.length}` };
+  if (sqlFiles.length !== 11) {
+    return { passed: false, message: `FAIL: Expected exactly 11 migration files, found ${sqlFiles.length}` };
   }
 
   const timestampRegex = /^(\d{14})_.+\.sql$/;
@@ -83,7 +84,7 @@ export function validateMigrationsList(filenames: string[]): { passed: boolean; 
     }
   }
 
-  return { passed: true, message: 'PASS: Exactly 10 timestamped migrations exist with exact expected filenames in ascending order' };
+  return { passed: true, message: 'PASS: Exactly 11 timestamped migrations exist with exact expected filenames in ascending order' };
 }
 
 export function sanitizePublicSafeMessage(msg: string): string {
@@ -264,13 +265,13 @@ export function performOnboardingCheck(options?: {
     const rawFiles = readdirSync(migrationsDir);
     const migrationsResult = validateMigrationsList(rawFiles);
     items.push({
-      name: 'Timestamped Database Migrations (10 ascending)',
+      name: 'Timestamped Database Migrations (11 ascending)',
       passed: migrationsResult.passed,
       message: migrationsResult.message,
     });
   } else {
     items.push({
-      name: 'Timestamped Database Migrations (10 ascending)',
+      name: 'Timestamped Database Migrations (11 ascending)',
       passed: false,
       message: 'FAIL: Migrations directory missing',
     });
