@@ -65,7 +65,8 @@ CREATE OR REPLACE FUNCTION public.generate_participant_preview(
   p_public_id text,
   p_admin_id uuid,
   p_token_hash text,
-  p_expires_in_seconds integer
+  p_expires_in_seconds integer,
+  p_private_bucket text
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -74,6 +75,7 @@ SET search_path = ''
 AS $$
 DECLARE
   v_public_id text;
+  v_private_bucket text;
   v_roles text[];
   v_project_id uuid;
   v_status text;
@@ -102,6 +104,14 @@ BEGIN
   IF p_token_hash IS NULL OR p_token_hash !~ '^[0-9a-f]{64}$' THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_TOKEN_HASH');
   END IF;
+
+  -- The private draft bucket name must come from the caller's own server-side configuration
+  -- (getStagingBuckets().DRAFT_PRIVATE), never a browser-supplied value — this is what scopes
+  -- the media snapshot below to authoritative private draft media only.
+  IF p_private_bucket IS NULL OR pg_catalog.btrim(p_private_bucket) = '' THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_PRIVATE_BUCKET');
+  END IF;
+  v_private_bucket := pg_catalog.btrim(p_private_bucket);
 
   -- Default 7-day expiry; bounded between 1 hour and 30 days.
   v_expires_in := COALESCE(p_expires_in_seconds, 604800);
@@ -192,8 +202,12 @@ BEGIN
    WHERE p.id = v_project_id;
 
   -- 7. Snapshot media references scoped strictly to this project's own rows (never another
-  --    project's media). Only bucket/path/type metadata is captured — actual signed URLs are
-  --    generated on demand, short-lived, at participant view time.
+  --    project's media) AND to media that is authoritatively still private draft media: it must
+  --    live in the caller-configured private draft bucket, must not yet be public-approved, and
+  --    must not already carry a public URL. This keeps the participant preview media boundary
+  --    private even if a row is mid-promotion or otherwise anomalous. Only bucket/path/type
+  --    metadata is captured — actual signed URLs are generated on demand, short-lived, at
+  --    participant view time.
   SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
       'mediaAssetId', ma.id,
       'assetType', ma.asset_type,
@@ -204,7 +218,10 @@ BEGIN
     )), '[]'::jsonb)
     INTO v_media_snapshot
     FROM public.media_assets ma
-   WHERE ma.project_id = v_project_id;
+   WHERE ma.project_id = v_project_id
+     AND ma.storage_bucket = v_private_bucket
+     AND ma.is_public_approved = false
+     AND ma.public_url IS NULL;
 
   v_now := pg_catalog.now();
   v_expires_at := v_now + pg_catalog.make_interval(secs => v_expires_in);
@@ -231,10 +248,10 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer) FROM anon;
-REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer) TO service_role;
+REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) TO service_role;
 
 -- 3. Service-role-only atomic preview revocation RPC. Keyed on public_id (like
 --    perform_project_review_action) rather than an opaque preview id, since staff act from the

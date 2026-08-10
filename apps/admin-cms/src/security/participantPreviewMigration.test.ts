@@ -24,6 +24,10 @@ describe('Migration 0013 Participant Preview Links Security Contract Tests', () 
     '20260810150000_atomic_import_batch_review_submit.sql',
   ];
 
+  function readMigrationNormalized(): string {
+    return fs.readFileSync(path.join(migrationsDir, migrationFile), 'utf8').replace(/\r\n/g, '\n');
+  }
+
   it('1. Migration 0013 is the thirteenth timestamped migration in infra/supabase/migrations', () => {
     const rawFiles = fs.readdirSync(migrationsDir);
     const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
@@ -55,7 +59,7 @@ describe('Migration 0013 Participant Preview Links Security Contract Tests', () 
   });
 
   it('3. Table, RLS, and single-active-preview invariant are present', () => {
-    const content = fs.readFileSync(path.join(migrationsDir, migrationFile), 'utf8');
+    const content = readMigrationNormalized();
 
     expect(content).toContain('BEGIN;');
     expect(content).toContain('COMMIT;');
@@ -79,7 +83,7 @@ describe('Migration 0013 Participant Preview Links Security Contract Tests', () 
   });
 
   it('4. generate_participant_preview enforces eligibility, authorization, locking, and never accepts a client-generated token', () => {
-    const content = fs.readFileSync(path.join(migrationsDir, migrationFile), 'utf8');
+    const content = readMigrationNormalized();
 
     expect(content).toContain('CREATE OR REPLACE FUNCTION public.generate_participant_preview(');
     expect(content).toContain('p_token_hash text');
@@ -108,25 +112,31 @@ describe('Migration 0013 Participant Preview Links Security Contract Tests', () 
     expect(content).not.toContain('p.private_review_comments');
     expect(content).not.toContain('p.validation_flags_cache');
 
-    // Media snapshot is scoped strictly to the target project's own rows.
-    expect(content).toContain('FROM public.media_assets ma\n   WHERE ma.project_id = v_project_id;');
+    // Media snapshot is scoped strictly to the target project's own rows AND to media that is
+    // authoritatively still private draft media (server-configured bucket, not yet
+    // public-approved, no public URL) — never a browser-supplied bucket value.
+    expect(content).toContain(
+      'FROM public.media_assets ma\n   WHERE ma.project_id = v_project_id\n     AND ma.storage_bucket = v_private_bucket\n     AND ma.is_public_approved = false\n     AND ma.public_url IS NULL;'
+    );
+    expect(content).toContain('p_private_bucket text');
+    expect(content).toContain("IF p_private_bucket IS NULL OR pg_catalog.btrim(p_private_bucket) = '' THEN");
 
     expect(content).toContain(
-      'REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer) FROM PUBLIC;'
+      'REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) FROM PUBLIC;'
     );
     expect(content).toContain(
-      'REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer) FROM anon;'
+      'REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) FROM anon;'
     );
     expect(content).toContain(
-      'REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer) FROM authenticated;'
+      'REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) FROM authenticated;'
     );
     expect(content).toContain(
-      'GRANT EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer) TO service_role;'
+      'GRANT EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) TO service_role;'
     );
   });
 
   it('5. revoke_participant_preview and resolve_participant_preview are locked to service_role only', () => {
-    const content = fs.readFileSync(path.join(migrationsDir, migrationFile), 'utf8');
+    const content = readMigrationNormalized();
 
     expect(content).toContain('CREATE OR REPLACE FUNCTION public.revoke_participant_preview(');
     expect(content).toContain(
@@ -156,7 +166,7 @@ describe('Migration 0013 Participant Preview Links Security Contract Tests', () 
   });
 
   it('6. Migration contains no destructive SQL, no dynamic SQL, no auth.users mutations, and no public/hosted operations', () => {
-    const content = fs.readFileSync(path.join(migrationsDir, migrationFile), 'utf8');
+    const content = readMigrationNormalized();
 
     expect(content).not.toMatch(/DROP\s+TABLE/i);
     expect(content).not.toMatch(/TRUNCATE/i);
@@ -165,7 +175,9 @@ describe('Migration 0013 Participant Preview Links Security Contract Tests', () 
     expect(content).not.toContain('auth.users');
     expect(content).not.toContain('supabase_admin');
     expect(content).not.toContain('project-public-assets');
-    expect(content).not.toContain('is_public_approved');
+    // This migration only ever reads is_public_approved (to scope the private media snapshot);
+    // it must never write/mutate media_assets at all.
+    expect(content).not.toMatch(/UPDATE\s+public\.media_assets/i);
     expect(content).not.toMatch(/publish/i);
   });
 });

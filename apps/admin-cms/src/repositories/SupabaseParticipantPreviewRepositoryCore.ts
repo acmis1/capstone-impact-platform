@@ -47,11 +47,17 @@ export class SupabaseParticipantPreviewRepositoryCore {
     publicId: string;
     adminId: string;
     tokenHash: string;
+    privateBucket: string;
     expiresInSeconds?: number;
   }): Promise<GeneratePreviewResult> {
-    const { publicId, adminId, tokenHash, expiresInSeconds } = params;
+    const { publicId, adminId, tokenHash, privateBucket, expiresInSeconds } = params;
 
-    if (!isNonEmptyString(publicId) || !isNonEmptyString(adminId) || !isNonEmptyString(tokenHash)) {
+    if (
+      !isNonEmptyString(publicId) ||
+      !isNonEmptyString(adminId) ||
+      !isNonEmptyString(tokenHash) ||
+      !isNonEmptyString(privateBucket)
+    ) {
       throw new ParticipantPreviewExecutionError('INPUT_INVALID');
     }
 
@@ -60,6 +66,7 @@ export class SupabaseParticipantPreviewRepositoryCore {
       p_admin_id: adminId,
       p_token_hash: tokenHash,
       p_expires_in_seconds: expiresInSeconds ?? DEFAULT_PREVIEW_EXPIRES_IN_SECONDS,
+      p_private_bucket: privateBucket,
     });
 
     if (error) {

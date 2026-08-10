@@ -9,6 +9,25 @@ export function escapeHtml(input: string): string {
     .replace(/'/g, '&#39;');
 }
 
+const SAFE_EXTERNAL_URL_SCHEMES = new Set(['http:', 'https:']);
+
+/**
+ * Only absolute http(s) URLs may become clickable participant-facing anchors. HTML-escaping a
+ * URL string does not make it safe to place in an href — javascript:/data:/file: and other
+ * schemes still execute or resolve as such regardless of escaping, so the scheme itself must be
+ * allow-listed before the value is ever used as a link target.
+ */
+export function isSafeExternalPreviewUrl(url: string): boolean {
+  if (typeof url !== 'string' || url.trim() === '') return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  return SAFE_EXTERNAL_URL_SCHEMES.has(parsed.protocol);
+}
+
 function renderList(items: string[]): string {
   if (items.length === 0) return '<p class="muted">None listed.</p>';
   return `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
@@ -25,6 +44,9 @@ function renderExternalLinks(links: ParticipantPreviewSnapshot['externalLinks'])
     .map((link) => {
       const url = typeof link.url === 'string' ? link.url : '';
       const label = link.label && link.label.trim() !== '' ? link.label : url;
+      if (!isSafeExternalPreviewUrl(url)) {
+        return `<li>${escapeHtml(label)}</li>`;
+      }
       return `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(label)}</a></li>`;
     })
     .join('')}</ul>`;

@@ -21,6 +21,10 @@ const RESPONSE_HEADERS = {
   'X-Robots-Tag': 'noindex, nofollow, noarchive',
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
+  // Defense-in-depth only — never a substitute for the explicit href scheme validation in
+  // participantPreviewHtml.ts. Blocks script execution and any non-declared external fetch.
+  'Content-Security-Policy':
+    "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
 } as const;
 
 function unavailableResponse(status: number): Response {
@@ -63,6 +67,14 @@ export async function GET(
       }),
     }))
   );
+
+  // Fail closed: if the immutable snapshot expected media and any expected asset could not
+  // receive a valid private signed URL, the participant must never see a partial/degraded page
+  // (silently missing media) — render the same generic unavailable response instead.
+  const hasUnsignableExpectedMedia = mediaViews.some((view) => !view.signedUrl);
+  if (hasUnsignableExpectedMedia) {
+    return unavailableResponse(404);
+  }
 
   const html = renderParticipantPreviewPage({ snapshot: resolved.snapshot, media: mediaViews });
   return new Response(html, { status: 200, headers: RESPONSE_HEADERS });

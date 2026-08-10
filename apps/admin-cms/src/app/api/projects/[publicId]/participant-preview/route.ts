@@ -9,6 +9,7 @@ import { AdminAuthError } from '../../../../../auth/authTypes';
 import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from '../../../../../auth/authHttp';
 import { validatePreviewPublicId } from '../../../../../auth/participantPreviewInput';
 import { generateRawPreviewToken, hashPreviewToken } from '../../../../../previews/participantPreviewToken';
+import { getStagingBuckets } from '../../../../../lib/supabase/buckets';
 
 const NO_STORE = { 'Cache-Control': 'no-store' } as const;
 
@@ -58,6 +59,7 @@ export async function POST(
       publicId: validation.publicId,
       adminId: adminContext.adminUserId,
       tokenHash,
+      privateBucket: getStagingBuckets().DRAFT_PRIVATE,
       expiresInSeconds: DEFAULT_PREVIEW_EXPIRES_IN_SECONDS,
     });
 

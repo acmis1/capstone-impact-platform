@@ -8,6 +8,8 @@ export interface RuntimeVerificationOptions {
   repoRoot?: string;
 }
 
+const PRIVATE_DRAFT_BUCKET = 'project-drafts-private';
+
 function newRawToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
@@ -74,7 +76,13 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
       return data as Record<string, unknown>;
     };
 
-    const createMediaAsset = async (projectId: string, assetType: string, suffix: string, bucket = 'project-drafts-private') => {
+    const createMediaAsset = async (
+      projectId: string,
+      assetType: string,
+      suffix: string,
+      overrides?: { bucket?: string; isPublicApproved?: boolean; publicUrl?: string | null }
+    ) => {
+      const bucket = overrides?.bucket ?? PRIVATE_DRAFT_BUCKET;
       const { data, error } = await client
         .from('media_assets')
         .insert({
@@ -85,8 +93,8 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
           storage_path: `drafts/${suffix}/${assetType}/${assetType}.bin`,
           mime_type: 'application/octet-stream',
           file_size_bytes: 10,
-          public_url: null,
-          is_public_approved: false,
+          public_url: overrides?.publicUrl ?? null,
+          is_public_approved: overrides?.isPublicApproved ?? false,
         })
         .select()
         .single();
@@ -102,6 +110,7 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
         p_admin_id: adminUserId,
         p_token_hash: hash,
         p_expires_in_seconds: null,
+        p_private_bucket: PRIVATE_DRAFT_BUCKET,
       });
       return { raw, hash, res };
     };
@@ -278,31 +287,49 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     }
 
     // ============================================================
-    // Test 8: Media — snapshotted media references belong strictly to the target project;
-    // never another project's media; underlying media_assets rows remain untouched/private.
+    // Test 8: Media — snapshotted media references belong strictly to the target project, are
+    // authoritatively still private draft media, and never include anomalous rows (already
+    // public-approved, carrying a public_url, or sitting in the public bucket) even when such a
+    // row exists for the same target project; underlying media_assets rows remain
+    // untouched/private for the legitimate rows.
     // ============================================================
-    console.log('--- Test 8: Snapshotted media belongs only to the target project and stays private ---');
+    console.log('--- Test 8: Snapshotted media is authoritative private draft media only ---');
     const t8ProjA = await createProject('t8a', 'approved');
     const t8ProjB = await createProject('t8b', 'approved');
     await createMediaAsset(String(t8ProjA.id), 'poster_image', 't8a');
     await createMediaAsset(String(t8ProjA.id), 'poster_pdf', 't8a');
     await createMediaAsset(String(t8ProjB.id), 'poster_image', 't8b');
+    // Anomalous rows for the SAME target project (t8a) that must NOT enter the snapshot.
+    // media_assets has a UNIQUE(project_id, asset_type) constraint, so each fixture (including
+    // the two legitimate ones above) needs its own distinct asset_type.
+    const t8PublicApproved = await createMediaAsset(String(t8ProjA.id), 'snapshot_image', 't8a-public-approved', {
+      isPublicApproved: true,
+      publicUrl: 'https://example.test/public/t8a-already-approved.png',
+    });
+    const t8PublicBucket = await createMediaAsset(String(t8ProjA.id), 'anomaly_public_bucket', 't8a-public-bucket', {
+      bucket: 'project-public-assets',
+    });
 
     const t8 = await generate(String(t8ProjA.public_id), adminId);
     const { data: t8Row } = await client.from('participant_previews').select('media_snapshot').eq('project_id', t8ProjA.id).single();
-    const t8MediaPaths: string[] = (t8Row?.media_snapshot || []).map((m: Record<string, unknown>) => String(m.storagePath));
+    const t8MediaSnapshot: Array<Record<string, unknown>> = t8Row?.media_snapshot || [];
+    const t8MediaPaths: string[] = t8MediaSnapshot.map((m) => String(m.storagePath));
+    const t8SnapshotAssetIds: string[] = t8MediaSnapshot.map((m) => String(m.mediaAssetId));
 
-    const { data: t8MediaAfter } = await client.from('media_assets').select('public_url, is_public_approved, storage_bucket').in('project_id', [t8ProjA.id, t8ProjB.id]);
-    const t8AllStillPrivate = (t8MediaAfter || []).every((m) => m.public_url === null && m.is_public_approved === false && m.storage_bucket === 'project-drafts-private');
+    const { data: t8MediaAfter } = await client.from('media_assets').select('id, public_url, is_public_approved, storage_bucket').in('project_id', [t8ProjA.id, t8ProjB.id]);
+    const t8LegitimateRows = (t8MediaAfter || []).filter((m) => m.id !== t8PublicApproved.id && m.id !== t8PublicBucket.id);
+    const t8AllLegitimateStillPrivate = t8LegitimateRows.every((m) => m.public_url === null && m.is_public_approved === false && m.storage_bucket === PRIVATE_DRAFT_BUCKET);
 
     if (
       t8.res.data?.resultCode === 'SUCCESS' &&
       t8MediaPaths.length === 2 &&
       t8MediaPaths.every((p) => p.includes('/t8a/')) &&
       !t8MediaPaths.some((p) => p.includes('/t8b/')) &&
-      t8AllStillPrivate
+      !t8SnapshotAssetIds.includes(String(t8PublicApproved.id)) &&
+      !t8SnapshotAssetIds.includes(String(t8PublicBucket.id)) &&
+      t8AllLegitimateStillPrivate
     ) {
-      console.log('PASS: Test 8 - Snapshotted media is project-scoped and remains private (no public_url, no is_public_approved).');
+      console.log('PASS: Test 8 - Snapshotted media is project-scoped, excludes anomalous public/approved rows, and remains private.');
     } else {
       console.error('FAIL: Test 8 - Media scoping/privacy assertion failed.', t8MediaPaths);
       success = false;
@@ -344,6 +371,7 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
       p_admin_id: adminId,
       p_token_hash: hashToken(newRawToken()),
       p_expires_in_seconds: null,
+      p_private_bucket: PRIVATE_DRAFT_BUCKET,
     });
     const t10Resolve = await anonClient.rpc('resolve_participant_preview', { p_token_hash: t1.hash });
 

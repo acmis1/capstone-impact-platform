@@ -21,6 +21,15 @@ vi.mock('../auth/requireAdmin', () => ({
   requireAdmin: vi.fn(),
 }));
 
+vi.mock('../lib/env', () => ({
+  getServerEnv: vi.fn(() => ({
+    SUPABASE_DRAFT_BUCKET: 'project-drafts-private',
+    SUPABASE_PUBLIC_ASSETS_BUCKET: 'project-public-assets',
+    SUPABASE_PUBLIC_FEEDS_BUCKET: 'public-feeds',
+    SUPABASE_PUBLIC_FEED_FILE: 'capstones-latest.json',
+  })),
+}));
+
 const ADMIN_ID = '11111111-2222-3333-4444-555555555555';
 
 describe('Participant Preview Token Utilities', () => {
@@ -80,7 +89,17 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
     const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
 
     await expect(
-      repo.generatePreview({ publicId: '', adminId: ADMIN_ID, tokenHash: 'a'.repeat(64) })
+      repo.generatePreview({ publicId: '', adminId: ADMIN_ID, tokenHash: 'a'.repeat(64), privateBucket: 'project-drafts-private' })
+    ).rejects.toThrow('Participant preview execution failed: INPUT_INVALID');
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it('generatePreview requires a non-empty privateBucket before calling the RPC', async () => {
+    const mockSupabase = { rpc: vi.fn() } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
+
+    await expect(
+      repo.generatePreview({ publicId: '2026-proj1', adminId: ADMIN_ID, tokenHash: 'a'.repeat(64), privateBucket: '' })
     ).rejects.toThrow('Participant preview execution failed: INPUT_INVALID');
     expect(mockSupabase.rpc).not.toHaveBeenCalled();
   });
@@ -100,7 +119,7 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
     const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
 
     const tokenHash = hashPreviewToken('raw-token-value-should-never-appear-in-rpc-args');
-    const result = await repo.generatePreview({ publicId: '2026-proj1', adminId: ADMIN_ID, tokenHash });
+    const result = await repo.generatePreview({ publicId: '2026-proj1', adminId: ADMIN_ID, tokenHash, privateBucket: 'project-drafts-private' });
 
     expect(mockRpc).toHaveBeenCalledTimes(1);
     const [, callArgs] = mockRpc.mock.calls[0];
@@ -109,6 +128,7 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
       p_admin_id: ADMIN_ID,
       p_token_hash: tokenHash,
       p_expires_in_seconds: 7 * 24 * 60 * 60,
+      p_private_bucket: 'project-drafts-private',
     });
     expect(JSON.stringify(callArgs)).not.toContain('raw-token-value-should-never-appear-in-rpc-args');
     expect(result).toEqual({ previewId: 'p1', publicId: '2026-proj1', createdAt: '2026-08-10T00:00:00.000Z', expiresAt: '2026-08-17T00:00:00.000Z' });
@@ -131,7 +151,7 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
 
       let caught: ParticipantPreviewExecutionError | null = null;
       try {
-        await repo.generatePreview({ publicId: '2026-proj1', adminId: ADMIN_ID, tokenHash: 'a'.repeat(64) });
+        await repo.generatePreview({ publicId: '2026-proj1', adminId: ADMIN_ID, tokenHash: 'a'.repeat(64), privateBucket: 'project-drafts-private' });
       } catch (err) {
         if (err instanceof ParticipantPreviewExecutionError) caught = err;
       }
@@ -147,7 +167,7 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
 
     let caught: ParticipantPreviewExecutionError | null = null;
     try {
-      await repo.generatePreview({ publicId: '2026-proj1', adminId: ADMIN_ID, tokenHash: 'a'.repeat(64) });
+      await repo.generatePreview({ publicId: '2026-proj1', adminId: ADMIN_ID, tokenHash: 'a'.repeat(64), privateBucket: 'project-drafts-private' });
     } catch (err) {
       if (err instanceof ParticipantPreviewExecutionError) caught = err;
     }
