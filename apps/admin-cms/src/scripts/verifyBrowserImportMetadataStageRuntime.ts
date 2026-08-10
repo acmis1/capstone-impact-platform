@@ -6,6 +6,7 @@ import { stageBrowserImportMetadata } from '../import/stageBrowserImportMetadata
 import { generateUploadKey } from '../import/browserSelection';
 import { AuthenticatedAdminContext } from '../auth/authTypes';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
+import { getStagingBuckets } from '../lib/supabase/buckets';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
 
@@ -43,13 +44,34 @@ interface StorageSnapshot {
 
 async function captureStorageSnapshot(): Promise<StorageSnapshot> {
   const supabase = createSupabaseAdminClientCore();
-  const { data: draftFiles } = await supabase.storage.from('capstone-draft-assets').list('', { limit: 100 });
-  const { data: publicFiles } = await supabase.storage.from('capstone-public-assets').list('', { limit: 100 });
+  const buckets = getStagingBuckets();
 
   return {
-    draftObjects: (draftFiles || []).map((f) => f.name).sort(),
-    publicObjects: (publicFiles || []).map((f) => f.name).sort(),
+    draftObjects: await listStorageObjects(supabase, buckets.DRAFT_PRIVATE),
+    publicObjects: await listStorageObjects(supabase, buckets.PUBLIC_ASSETS),
   };
+}
+
+async function listStorageObjects(
+  supabase: ReturnType<typeof createSupabaseAdminClientCore>,
+  bucket: string,
+  prefix = ''
+): Promise<string[]> {
+  const { data, error } = await supabase.storage.from(bucket).list(prefix, { limit: 1000 });
+  if (error || !data) {
+    throw new Error(`[Verifier Storage Failure] Could not list configured bucket ${bucket}.`);
+  }
+
+  const paths: string[] = [];
+  for (const entry of data) {
+    const fullPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.id === null) {
+      paths.push(...await listStorageObjects(supabase, bucket, fullPath));
+    } else {
+      paths.push(fullPath);
+    }
+  }
+  return paths.sort();
 }
 
 function assertStorageUnchanged(before: StorageSnapshot, after: StorageSnapshot, label: string): void {
@@ -80,6 +102,27 @@ function executeLocalDatabaseSql(sql: string): void {
     ['exec', '-i', containers[0], 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'postgres'],
     { input: sql, stdio: ['pipe', 'ignore', 'pipe'] }
   );
+}
+
+function assertRollbackResidueAbsent(packageId: string): void {
+  if (!/^[a-z0-9-]+$/i.test(packageId)) {
+    throw new Error('Rollback fixture package ID is invalid.');
+  }
+  executeLocalDatabaseSql(`
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM public.import_batches WHERE source_folder = '${packageId}')
+        OR EXISTS (SELECT 1 FROM public.projects WHERE public_id = '${packageId}')
+        OR EXISTS (SELECT 1 FROM public.project_disciplines pd JOIN public.projects p ON p.id = pd.project_id WHERE p.public_id = '${packageId}')
+        OR EXISTS (SELECT 1 FROM public.project_industry_categories pic JOIN public.projects p ON p.id = pic.project_id WHERE p.public_id = '${packageId}')
+        OR EXISTS (SELECT 1 FROM public.validation_flags vf JOIN public.projects p ON p.id = vf.project_id WHERE p.public_id = '${packageId}')
+        OR EXISTS (SELECT 1 FROM public.browser_import_commits bic JOIN public.import_batches ib ON ib.id = bic.batch_id WHERE ib.source_folder = '${packageId}')
+        OR EXISTS (SELECT 1 FROM public.media_assets ma JOIN public.projects p ON p.id = ma.project_id WHERE p.public_id = '${packageId}') THEN
+        RAISE EXCEPTION 'Rollback residue detected for ${packageId}';
+      END IF;
+    END;
+    $$;
+  `);
 }
 
 export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
@@ -430,27 +473,24 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     // -------------------------------------------------------------------------
     // Scenario 5: Database Rollback-Injection Tests
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 5] Testing post-mutation rollback injection via temporary trigger...\n');
-    const storageBefore5 = await captureStorageSnapshot();
-
-    // Create a temporary fail trigger on validation_flags to simulate unexpected post-mutation crash.
-    executeLocalDatabaseSql(`
-          CREATE OR REPLACE FUNCTION public.test_fail_injection_trg()
-          RETURNS trigger LANGUAGE plpgsql AS $$
-          BEGIN
-            RAISE EXCEPTION 'TEST_INJECTED_POST_MUTATION_FAILURE';
-          END;
-          $$;
-
-          DROP TRIGGER IF EXISTS trg_test_fail_injection ON public.validation_flags;
-          CREATE TRIGGER trg_test_fail_injection
-          AFTER INSERT ON public.validation_flags
-          FOR EACH ROW EXECUTE FUNCTION public.test_fail_injection_trg();
-        `);
-
-    // Cleanup trigger in finally block
-    try {
-      const rollbackPkgId = 'rollback-pkg-1';
+    process.stdout.write('[Scenario 5] Testing all post-mutation rollback boundaries...\n');
+    const rollbackBoundaries = [
+      ['batch', 'import_batches'], ['project', 'projects'], ['mapping', 'project_disciplines'],
+      ['warning', 'validation_flags'], ['idempotency', 'browser_import_commits'],
+    ] as const;
+    for (const [boundary, table] of rollbackBoundaries) {
+      const rollbackPkgId = `rollback-${boundary}-pkg-1`;
+      const storageBefore5 = await captureStorageSnapshot();
+      const triggerName = `trg_test_fail_${boundary}`;
+      const functionName = `test_fail_${boundary}_trg`;
+      executeLocalDatabaseSql(`
+        CREATE OR REPLACE FUNCTION public.${functionName}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'TEST_INJECTED_${boundary.toUpperCase()}_FAILURE'; END; $$;
+        DROP TRIGGER IF EXISTS ${triggerName} ON public.${table};
+        CREATE TRIGGER ${triggerName} AFTER INSERT ON public.${table}
+        FOR EACH ROW EXECUTE FUNCTION public.${functionName}();
+      `);
+      try {
       const jsonRollback = JSON.stringify({
         publicId: rollbackPkgId,
         title: 'Rollback Title',
@@ -494,30 +534,20 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
         acknowledgedWarningPackagePaths: [rollbackPkgId],
       };
 
-      const resRollback = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysisRollback, intent: intentRollback });
-      if (resRollback.success || resRollback.code !== 'PERSISTENCE_FAILED') {
-        throw new Error(`[Scenario 5] Expected injected persistence failure, got ${JSON.stringify(resRollback)}`);
-      }
-
-      // Assert ZERO residue rows in DB for rollbackPkgId
-      const { count: rollbackBatches } = await supabase.from('import_batches').select('*', { count: 'exact', head: true }).eq('source_folder', rollbackPkgId);
-      const { count: rollbackProjects } = await supabase.from('projects').select('*', { count: 'exact', head: true }).eq('public_id', rollbackPkgId);
-      if ((rollbackBatches || 0) !== 0 || (rollbackProjects || 0) !== 0) {
-        throw new Error('[Scenario 5] Transaction rollback failure! Residual database rows detected.');
-      }
-    } finally {
-      try {
+        const resRollback = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysisRollback, intent: intentRollback });
+        if (resRollback.success || resRollback.code !== 'PERSISTENCE_FAILED') {
+          throw new Error(`[Scenario 5:${boundary}] Expected injected persistence failure, got ${JSON.stringify(resRollback)}`);
+        }
+        assertRollbackResidueAbsent(rollbackPkgId);
+        assertStorageUnchanged(storageBefore5, await captureStorageSnapshot(), `Scenario 5 ${boundary}`);
+        process.stdout.write(`  ✓ Scenario 5 ${boundary} rollback PASSED!\n`);
+      } finally {
         executeLocalDatabaseSql(`
-            DROP TRIGGER IF EXISTS trg_test_fail_injection ON public.validation_flags;
-            DROP FUNCTION IF EXISTS public.test_fail_injection_trg();
-          `);
-      } catch {
-        // Ignore trigger cleanup errors if RPC unavailable
+          DROP TRIGGER IF EXISTS ${triggerName} ON public.${table};
+          DROP FUNCTION IF EXISTS public.${functionName}();
+        `);
       }
     }
-
-    const storageAfter5 = await captureStorageSnapshot();
-    assertStorageUnchanged(storageBefore5, storageAfter5, 'Scenario 5');
     process.stdout.write('  ✓ Scenario 5 PASSED!\n\n');
 
   } finally {
