@@ -468,4 +468,54 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
     const json = await res.json();
     expect(json.code).toBe('PROJECT_ALREADY_EXISTS');
   });
+
+  it('11. Regression: Package with unparseable manifest sets manifest: null and persistence is never called', async () => {
+    const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
+
+    const jsonContent = 'INVALID_JSON_CONTENT';
+    const jsonBytes = Buffer.from(jsonContent, 'utf8').length;
+
+    const manifest: SelectionManifest = {
+      selectedRootName: 'pkg1',
+      fileCount: 2,
+      declaredTotalBytes: jsonBytes + 400,
+      ignoredSystemFilesCount: 0,
+      descriptors: [
+        { uploadKey: generateUploadKey('pkg1/project.json'), originalPath: 'pkg1/project.json', fileSizeBytes: jsonBytes, browserMimeType: 'application/json' },
+        { uploadKey: generateUploadKey('pkg1/poster.png'), originalPath: 'pkg1/poster.png', fileSizeBytes: 400, browserMimeType: 'image/png' },
+      ],
+    };
+
+    const metadataFiles = new Map<string, Buffer>();
+    metadataFiles.set(generateUploadKey('pkg1/project.json'), Buffer.from(jsonContent, 'utf8'));
+
+    const analysis = await analyzeBrowserImportServer(manifest, metadataFiles);
+    expect(analysis.packages[0].manifest).toBeNull();
+    expect(analysis.packages[0].status).toBe('invalid');
+
+    // Verify that attempting to stage via route POST fails with INVALID_SELECTION and does NOT persist
+    const formData = new FormData();
+    formData.append('manifest', JSON.stringify(manifest));
+    formData.append('intent', JSON.stringify({
+      version: 1,
+      previewFingerprint: analysis.preview.batch.previewFingerprint,
+      selectedRootName: 'pkg1',
+      fileCount: 2,
+      declaredTotalBytes: jsonBytes + 400,
+      selectedPackagePaths: ['pkg1'],
+      acknowledgedWarningPackagePaths: [],
+    }));
+    formData.append(generateUploadKey('pkg1/project.json'), new File([jsonContent], 'project.json', { type: 'application/json' }));
+
+    const req = new NextRequest('http://localhost:3000/api/imports/stage-metadata', {
+      method: 'POST',
+      headers: { 'content-length': '2000' },
+      body: formData,
+    });
+
+    const res = await stagePOST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.code).toBe('INVALID_SELECTION');
+  });
 });

@@ -50,6 +50,7 @@ DECLARE
   v_warning_count_total integer := 0;
   v_batch_id uuid;
   v_pkg jsonb;
+  v_pkg_path text;
   v_public_id text;
   v_title text;
   v_summary text;
@@ -73,20 +74,24 @@ DECLARE
   v_project_id uuid;
   v_disc_name text;
   v_disc_id uuid;
-  v_first_disc_name text := NULL;
-  v_first_disc_id uuid := NULL;
+  v_first_disc_name text;
+  v_first_disc_id uuid;
   v_ind_name text;
   v_ind_id uuid;
-  v_first_ind_name text := NULL;
-  v_first_ind_id uuid := NULL;
+  v_first_ind_name text;
+  v_first_ind_id uuid;
   v_flag jsonb;
   v_flag_severity text;
   v_flag_rule_code text;
   v_flag_message text;
   v_flag_field_name text;
   v_existing_proj_count integer;
+  v_admin_count integer;
+  v_match_count integer;
+  v_path_array text[] := ARRAY[]::text[];
+  v_public_id_array text[] := ARRAY[]::text[];
 BEGIN
-  -- Validate inputs
+  -- 1. Top-level parameter validation
   v_intent_hash := pg_catalog.btrim(COALESCE(p_intent_hash, ''));
   v_preview_fingerprint := pg_catalog.btrim(COALESCE(p_preview_fingerprint, ''));
   v_mode := pg_catalog.btrim(COALESCE(p_mode, 'unknown'));
@@ -104,10 +109,9 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_INTENT');
   END IF;
 
-  -- Acquire transaction-scoped lock on intent hash to handle concurrent requests
+  -- 2. Transaction lock & Idempotency Check
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext(v_intent_hash));
 
-  -- Check idempotency ledger
   SELECT c.batch_id, b.total_projects, b.warning_count, b.status
     INTO v_existing_commit_record
     FROM public.browser_import_commits AS c
@@ -125,22 +129,68 @@ BEGIN
     );
   END IF;
 
+  -- 3. Package array & count validation (MAX 25)
   IF p_packages IS NULL OR pg_catalog.jsonb_typeof(p_packages) <> 'array' THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
   END IF;
 
   v_pkg_count := pg_catalog.jsonb_array_length(p_packages);
-  IF v_pkg_count = 0 OR v_pkg_count > 100 THEN
+  IF v_pkg_count = 0 OR v_pkg_count > 25 THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
   END IF;
 
-  -- Check existing projects conflict for ALL packages
+  -- 4. Validate acting administrator
+  IF p_imported_by_id IS NULL THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
+  END IF;
+
+  SELECT pg_catalog.count(*) INTO v_admin_count
+    FROM public.admin_users AS u
+   WHERE u.id = p_imported_by_id;
+
+  IF v_admin_count <> 1 THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
+  END IF;
+
+  -- 5. Pre-mutation validation loop over all packages & lookups
   FOR v_pkg IN SELECT * FROM pg_catalog.jsonb_array_elements(p_packages) LOOP
-    v_public_id := pg_catalog.btrim(COALESCE(v_pkg->>'publicId', ''));
-    IF v_public_id = '' THEN
+    IF pg_catalog.jsonb_typeof(v_pkg) <> 'object' THEN
       RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
     END IF;
 
+    v_pkg_path := pg_catalog.btrim(COALESCE(v_pkg->>'packagePath', ''));
+    v_public_id := pg_catalog.btrim(COALESCE(v_pkg->>'publicId', ''));
+    v_title := pg_catalog.btrim(COALESCE(v_pkg->>'title', ''));
+    v_summary := pg_catalog.btrim(COALESCE(v_pkg->>'summary', ''));
+    v_program_name := pg_catalog.btrim(COALESCE(v_pkg->>'program', ''));
+    v_group_name := pg_catalog.btrim(COALESCE(v_pkg->>'groupName', ''));
+
+    IF v_pkg_path = '' OR v_public_id = '' OR v_title = '' OR v_summary = '' OR v_program_name = '' OR v_group_name = '' THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
+    END IF;
+
+    -- Validate year range
+    IF (v_pkg->>'year') !~ '^\d{4}$' THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
+    END IF;
+    v_year := (v_pkg->>'year')::integer;
+    IF v_year < 2000 OR v_year > 2100 THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
+    END IF;
+
+    -- Check duplicate packagePath within request
+    IF v_pkg_path = ANY(v_path_array) THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
+    END IF;
+    v_path_array := pg_catalog.array_append(v_path_array, v_pkg_path);
+
+    -- Check duplicate publicId within request
+    IF v_public_id = ANY(v_public_id_array) THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
+    END IF;
+    v_public_id_array := pg_catalog.array_append(v_public_id_array, v_public_id);
+
+    -- Check existing publicId conflict in database (including soft-deleted rows)
     SELECT pg_catalog.count(*) INTO v_existing_proj_count
       FROM public.projects AS p
      WHERE p.public_id = v_public_id;
@@ -148,16 +198,68 @@ BEGIN
     IF v_existing_proj_count > 0 THEN
       RETURN pg_catalog.jsonb_build_object('resultCode', 'PROJECT_ALREADY_EXISTS');
     END IF;
-  END LOOP;
 
-  -- Compute total warning count across packages
-  FOR v_pkg IN SELECT * FROM pg_catalog.jsonb_array_elements(p_packages) LOOP
+    -- Strict taxonomy resolution: Program
+    SELECT pg_catalog.count(*) INTO v_match_count
+      FROM public.programs AS p
+     WHERE pg_catalog.lower(pg_catalog.btrim(p.name)) = pg_catalog.lower(v_program_name);
+
+    IF v_match_count <> 1 THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'LOOKUP_NOT_FOUND');
+    END IF;
+
+    -- Strict taxonomy resolution: Disciplines
+    IF v_pkg ? 'disciplines' AND pg_catalog.jsonb_typeof(v_pkg->'disciplines') = 'array' THEN
+      FOR v_disc_name IN SELECT pg_catalog.btrim(elem.value::text, '"') FROM pg_catalog.jsonb_array_elements(v_pkg->'disciplines') AS elem LOOP
+        IF v_disc_name <> '' THEN
+          SELECT pg_catalog.count(*) INTO v_match_count
+            FROM public.disciplines AS d
+           WHERE pg_catalog.lower(pg_catalog.btrim(d.name)) = pg_catalog.lower(v_disc_name);
+          IF v_match_count <> 1 THEN
+            RETURN pg_catalog.jsonb_build_object('resultCode', 'LOOKUP_NOT_FOUND');
+          END IF;
+        END IF;
+      END LOOP;
+    END IF;
+
+    -- Strict taxonomy resolution: Industry categories
+    IF v_pkg ? 'industryCategories' AND pg_catalog.jsonb_typeof(v_pkg->'industryCategories') = 'array' THEN
+      FOR v_ind_name IN SELECT pg_catalog.btrim(elem.value::text, '"') FROM pg_catalog.jsonb_array_elements(v_pkg->'industryCategories') AS elem LOOP
+        IF v_ind_name <> '' THEN
+          SELECT pg_catalog.count(*) INTO v_match_count
+            FROM public.industry_categories AS c
+           WHERE pg_catalog.lower(pg_catalog.btrim(c.name)) = pg_catalog.lower(v_ind_name);
+          IF v_match_count <> 1 THEN
+            RETURN pg_catalog.jsonb_build_object('resultCode', 'LOOKUP_NOT_FOUND');
+          END IF;
+        END IF;
+      END LOOP;
+    END IF;
+
+    -- Validate validationFlags shape & severity
     IF v_pkg ? 'validationFlags' AND pg_catalog.jsonb_typeof(v_pkg->'validationFlags') = 'array' THEN
-      v_warning_count_total := v_warning_count_total + pg_catalog.jsonb_array_length(v_pkg->'validationFlags');
+      FOR v_flag IN SELECT * FROM pg_catalog.jsonb_array_elements(v_pkg->'validationFlags') LOOP
+        IF pg_catalog.jsonb_typeof(v_flag) <> 'object' THEN
+          RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
+        END IF;
+        v_flag_severity := COALESCE(v_flag->>'severity', '');
+        IF v_flag_severity <> 'warning' THEN
+          RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
+        END IF;
+        IF pg_catalog.btrim(COALESCE(v_flag->>'ruleCode', '')) = '' OR pg_catalog.btrim(COALESCE(v_flag->>'message', '')) = '' THEN
+          RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_SELECTION');
+        END IF;
+        v_warning_count_total := v_warning_count_total + 1;
+      END LOOP;
     END IF;
   END LOOP;
 
-  -- Create import_batches row
+  --------------------------------------------------------------------------------
+  -- ALL VALIDATION PASSED BEFORE MUTATIONS BEGIN.
+  -- AFTER THIS POINT, ANY UNEXPECTED FAILURE MUST RAISE AN EXCEPTION TO ROLL BACK.
+  --------------------------------------------------------------------------------
+
+  -- 6. Insert import_batches row
   INSERT INTO public.import_batches (
     batch_name,
     mode,
@@ -178,19 +280,19 @@ BEGIN
     0
   ) RETURNING id INTO v_batch_id;
 
-  -- Insert project rows and relations
+  -- 7. Insert projects, mappings, and validation flags
   FOR v_pkg IN SELECT * FROM pg_catalog.jsonb_array_elements(p_packages) LOOP
-    v_public_id := pg_catalog.btrim(COALESCE(v_pkg->>'publicId', ''));
-    v_title := pg_catalog.btrim(COALESCE(v_pkg->>'title', ''));
-    v_summary := pg_catalog.btrim(COALESCE(v_pkg->>'summary', ''));
+    v_public_id := pg_catalog.btrim(v_pkg->>'publicId');
+    v_title := pg_catalog.btrim(v_pkg->>'title');
+    v_summary := pg_catalog.btrim(v_pkg->>'summary');
     v_background := pg_catalog.btrim(COALESCE(v_pkg->>'background', ''));
     v_solution := pg_catalog.btrim(COALESCE(v_pkg->>'solution', ''));
     v_year := (v_pkg->>'year')::integer;
-    v_program_name := pg_catalog.btrim(COALESCE(v_pkg->>'program', ''));
-    v_study_program := pg_catalog.btrim(COALESCE(v_pkg->>'studyProgram', ''));
+    v_program_name := pg_catalog.btrim(v_pkg->>'program');
+    v_study_program := pg_catalog.btrim(COALESCE(v_pkg->>'studyProgram', v_program_name));
     v_industry_partner := pg_catalog.btrim(COALESCE(v_pkg->>'industryPartner', ''));
     v_academic_supervisor := pg_catalog.btrim(COALESCE(v_pkg->>'academicSupervisor', ''));
-    v_group_name := pg_catalog.btrim(COALESCE(v_pkg->>'groupName', ''));
+    v_group_name := pg_catalog.btrim(v_pkg->>'groupName');
 
     v_team_members := ARRAY[]::text[];
     IF v_pkg ? 'teamMembers' AND pg_catalog.jsonb_typeof(v_pkg->'teamMembers') = 'array' THEN
@@ -211,27 +313,24 @@ BEGIN
        WHERE w.val <> '';
     END IF;
 
-    -- Resolve program
-    SELECT p.id, p.name INTO v_program_id, v_program_db_name
+    -- Fetch exact canonical program name and ID
+    SELECT p.id, p.name INTO STRICT v_program_id, v_program_db_name
       FROM public.programs AS p
-     WHERE pg_catalog.lower(p.name) = pg_catalog.lower(v_program_name);
+     WHERE pg_catalog.lower(pg_catalog.btrim(p.name)) = pg_catalog.lower(v_program_name);
 
-    IF v_program_id IS NULL THEN
-      RETURN pg_catalog.jsonb_build_object('resultCode', 'LOOKUP_NOT_FOUND');
-    END IF;
-
-    -- Resolve disciplines & industry categories first to populate scalar fields
+    -- Resolve disciplines & industry categories to populate scalar compatibility fields
     v_first_disc_name := NULL;
     v_first_disc_id := NULL;
     IF v_pkg ? 'disciplines' AND pg_catalog.jsonb_typeof(v_pkg->'disciplines') = 'array' THEN
       FOR v_disc_name IN SELECT pg_catalog.btrim(elem.value::text, '"') FROM pg_catalog.jsonb_array_elements(v_pkg->'disciplines') AS elem LOOP
-        SELECT d.id INTO v_disc_id FROM public.disciplines AS d WHERE pg_catalog.lower(d.name) = pg_catalog.lower(v_disc_name);
-        IF v_disc_id IS NULL THEN
-          RETURN pg_catalog.jsonb_build_object('resultCode', 'LOOKUP_NOT_FOUND');
-        END IF;
-        IF v_first_disc_id IS NULL THEN
-          v_first_disc_id := v_disc_id;
-          SELECT d.name INTO v_first_disc_name FROM public.disciplines AS d WHERE d.id = v_disc_id;
+        IF v_disc_name <> '' THEN
+          SELECT d.id, d.name INTO STRICT v_disc_id, v_disc_name
+            FROM public.disciplines AS d
+           WHERE pg_catalog.lower(pg_catalog.btrim(d.name)) = pg_catalog.lower(v_disc_name);
+          IF v_first_disc_id IS NULL THEN
+            v_first_disc_id := v_disc_id;
+            v_first_disc_name := v_disc_name;
+          END IF;
         END IF;
       END LOOP;
     END IF;
@@ -240,13 +339,14 @@ BEGIN
     v_first_ind_id := NULL;
     IF v_pkg ? 'industryCategories' AND pg_catalog.jsonb_typeof(v_pkg->'industryCategories') = 'array' THEN
       FOR v_ind_name IN SELECT pg_catalog.btrim(elem.value::text, '"') FROM pg_catalog.jsonb_array_elements(v_pkg->'industryCategories') AS elem LOOP
-        SELECT c.id INTO v_ind_id FROM public.industry_categories AS c WHERE pg_catalog.lower(c.name) = pg_catalog.lower(v_ind_name);
-        IF v_ind_id IS NULL THEN
-          RETURN pg_catalog.jsonb_build_object('resultCode', 'LOOKUP_NOT_FOUND');
-        END IF;
-        IF v_first_ind_id IS NULL THEN
-          v_first_ind_id := v_ind_id;
-          SELECT c.name INTO v_first_ind_name FROM public.industry_categories AS c WHERE c.id = v_ind_id;
+        IF v_ind_name <> '' THEN
+          SELECT c.id, c.name INTO STRICT v_ind_id, v_ind_name
+            FROM public.industry_categories AS c
+           WHERE pg_catalog.lower(pg_catalog.btrim(c.name)) = pg_catalog.lower(v_ind_name);
+          IF v_first_ind_id IS NULL THEN
+            v_first_ind_id := v_ind_id;
+            v_first_ind_name := v_ind_name;
+          END IF;
         END IF;
       END LOOP;
     END IF;
@@ -305,29 +405,39 @@ BEGIN
     -- Insert discipline mappings
     IF v_pkg ? 'disciplines' AND pg_catalog.jsonb_typeof(v_pkg->'disciplines') = 'array' THEN
       FOR v_disc_name IN SELECT pg_catalog.btrim(elem.value::text, '"') FROM pg_catalog.jsonb_array_elements(v_pkg->'disciplines') AS elem LOOP
-        SELECT d.id INTO v_disc_id FROM public.disciplines AS d WHERE pg_catalog.lower(d.name) = pg_catalog.lower(v_disc_name);
-        INSERT INTO public.project_disciplines (project_id, discipline_id)
-        VALUES (v_project_id, v_disc_id)
-        ON CONFLICT (project_id, discipline_id) DO NOTHING;
+        IF v_disc_name <> '' THEN
+          SELECT d.id INTO STRICT v_disc_id
+            FROM public.disciplines AS d
+           WHERE pg_catalog.lower(pg_catalog.btrim(d.name)) = pg_catalog.lower(v_disc_name);
+
+          INSERT INTO public.project_disciplines (project_id, discipline_id)
+          VALUES (v_project_id, v_disc_id)
+          ON CONFLICT (project_id, discipline_id) DO NOTHING;
+        END IF;
       END LOOP;
     END IF;
 
     -- Insert industry category mappings
     IF v_pkg ? 'industryCategories' AND pg_catalog.jsonb_typeof(v_pkg->'industryCategories') = 'array' THEN
       FOR v_ind_name IN SELECT pg_catalog.btrim(elem.value::text, '"') FROM pg_catalog.jsonb_array_elements(v_pkg->'industryCategories') AS elem LOOP
-        SELECT c.id INTO v_ind_id FROM public.industry_categories AS c WHERE pg_catalog.lower(c.name) = pg_catalog.lower(v_ind_name);
-        INSERT INTO public.project_industry_categories (project_id, industry_category_id)
-        VALUES (v_project_id, v_ind_id)
-        ON CONFLICT (project_id, industry_category_id) DO NOTHING;
+        IF v_ind_name <> '' THEN
+          SELECT c.id INTO STRICT v_ind_id
+            FROM public.industry_categories AS c
+           WHERE pg_catalog.lower(pg_catalog.btrim(c.name)) = pg_catalog.lower(v_ind_name);
+
+          INSERT INTO public.project_industry_categories (project_id, industry_category_id)
+          VALUES (v_project_id, v_ind_id)
+          ON CONFLICT (project_id, industry_category_id) DO NOTHING;
+        END IF;
       END LOOP;
     END IF;
 
     -- Insert validation flags
     IF v_pkg ? 'validationFlags' AND pg_catalog.jsonb_typeof(v_pkg->'validationFlags') = 'array' THEN
       FOR v_flag IN SELECT * FROM pg_catalog.jsonb_array_elements(v_pkg->'validationFlags') LOOP
-        v_flag_severity := COALESCE(v_flag->>'severity', 'warning');
-        v_flag_rule_code := COALESCE(v_flag->>'ruleCode', 'UNKNOWN_RULE');
-        v_flag_message := COALESCE(v_flag->>'message', '');
+        v_flag_severity := v_flag->>'severity';
+        v_flag_rule_code := v_flag->>'ruleCode';
+        v_flag_message := v_flag->>'message';
         v_flag_field_name := COALESCE(v_flag->>'fieldName', NULL);
 
         INSERT INTO public.validation_flags (
@@ -347,7 +457,7 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Create browser_import_commits idempotency ledger row
+  -- 8. Create browser_import_commits idempotency ledger row
   INSERT INTO public.browser_import_commits (
     intent_hash,
     preview_fingerprint,

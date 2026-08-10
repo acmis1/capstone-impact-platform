@@ -19,6 +19,7 @@ import {
   toggleWarningPackageSelection,
 } from '../../import/browserImportCommitIntentContract';
 import { runBrowserImportPreparation } from '../../import/browserImportPreparationController';
+import { validateBrowserImportMetadataStageResponse } from '../../import/browserImportMetadataStageContract';
 
 export default function BrowserImportPreviewClient() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -349,7 +350,9 @@ export default function BrowserImportPreviewClient() {
         throw new Error('SERVER_NON_JSON');
       }
 
-      if (!res.ok) {
+      const validatedResponse = validateBrowserImportMetadataStageResponse(json);
+
+      if (!res.ok || !validatedResponse || !validatedResponse.success) {
         const errObj = json as { code?: string; error?: string };
         const knownErrorMap: Record<string, string> = {
           UNAUTHENTICATED: 'Authentication required. Please log in with staff credentials.',
@@ -374,24 +377,16 @@ export default function BrowserImportPreviewClient() {
           PERSISTENCE_FAILED: 'The metadata staging operation could not be saved.',
           UNEXPECTED_INTERNAL_ERROR: 'The metadata staging operation could not be completed. Please try again.',
         };
-        const msg = (errObj.code && knownErrorMap[errObj.code]) || 'The metadata staging operation could not be completed. Please try again.';
+        const msg = (errObj && errObj.code && knownErrorMap[errObj.code]) || 'The metadata staging operation could not be completed. Please try again.';
         setStagingError(msg);
         return;
       }
 
-      const resObj = json as {
-        success: true;
-        result: 'created' | 'already_staged';
-        batchId: string;
-        projectCount: number;
-        warningCount: number;
-      };
-
       setStagedResult({
-        batchId: resObj.batchId,
-        projectCount: resObj.projectCount,
-        warningCount: resObj.warningCount,
-        result: resObj.result,
+        batchId: validatedResponse.batchId,
+        projectCount: validatedResponse.projectCount,
+        warningCount: validatedResponse.warningCount,
+        result: validatedResponse.result,
       });
     } catch {
       setStagingError('The metadata staging operation could not be completed. Please try again.');

@@ -43,6 +43,51 @@ export type BrowserImportMetadataStageResponse =
   | BrowserImportMetadataStageSuccess
   | BrowserImportMetadataStageFailure;
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function validateBrowserImportMetadataStageResponse(data: unknown): BrowserImportMetadataStageResponse | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const obj = data as Record<string, unknown>;
+
+  if (obj.success === true) {
+    if (
+      (obj.result === 'created' || obj.result === 'already_staged') &&
+      typeof obj.batchId === 'string' &&
+      UUID_REGEX.test(obj.batchId) &&
+      typeof obj.projectCount === 'number' &&
+      Number.isInteger(obj.projectCount) &&
+      obj.projectCount >= 0 &&
+      typeof obj.warningCount === 'number' &&
+      Number.isInteger(obj.warningCount) &&
+      obj.warningCount >= 0 &&
+      obj.batchStatus === 'metadata_staged'
+    ) {
+      return {
+        success: true,
+        result: obj.result,
+        batchId: obj.batchId,
+        projectCount: obj.projectCount,
+        warningCount: obj.warningCount,
+        batchStatus: 'metadata_staged',
+      };
+    }
+    return null;
+  }
+
+  if (obj.success === false) {
+    if (typeof obj.code === 'string' && typeof obj.error === 'string') {
+      return {
+        success: false,
+        code: obj.code as BrowserImportMetadataStageErrorCode,
+        error: obj.error,
+      };
+    }
+    return null;
+  }
+
+  return null;
+}
+
 /**
  * Computes a deterministic SHA-256 intent hash from the canonical BrowserImportCommitIntent.
  * Returns a lowercase 64-character hex string.
