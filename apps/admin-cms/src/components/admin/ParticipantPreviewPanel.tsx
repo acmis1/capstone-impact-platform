@@ -2,14 +2,11 @@
 
 import React, { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import type { ParticipantPreviewResponseState } from '../../domain/participantPreview';
 
 interface ActivePreviewState {
   createdAt: string;
   expiresAt: string;
-}
-
-interface ConfirmationState {
-  confirmedAt: string;
 }
 
 interface ParticipantPreviewPanelProps {
@@ -17,7 +14,7 @@ interface ParticipantPreviewPanelProps {
   canManage: boolean;
   isApprovedEligible: boolean;
   initialActivePreview: ActivePreviewState | null;
-  confirmation: ConfirmationState | null;
+  responseState: ParticipantPreviewResponseState;
 }
 
 interface GenerateResponse {
@@ -35,12 +32,12 @@ interface RevokeResponse {
   revokedAt?: string;
 }
 
-export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligible, initialActivePreview, confirmation }: ParticipantPreviewPanelProps) {
+export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligible, initialActivePreview, responseState }: ParticipantPreviewPanelProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activePreview, setActivePreview] = useState<ActivePreviewState | null>(initialActivePreview);
-  const [previewConfirmation, setPreviewConfirmation] = useState<ConfirmationState | null>(confirmation);
+  const [previewResponseState, setPreviewResponseState] = useState<ParticipantPreviewResponseState>(responseState);
   const [justGeneratedUrl, setJustGeneratedUrl] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const inFlightRef = useRef(false);
@@ -68,7 +65,7 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
 
       setJustGeneratedUrl(data.previewUrl || null);
       setActivePreview({ createdAt: data.createdAt || '', expiresAt: data.expiresAt || '' });
-      setPreviewConfirmation(null);
+      setPreviewResponseState({ type: 'unresponded' });
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred while generating the preview.');
@@ -99,7 +96,7 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
 
       setActivePreview(null);
       setJustGeneratedUrl(null);
-      setPreviewConfirmation(null);
+      setPreviewResponseState({ type: 'unresponded' });
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred while revoking the preview.');
@@ -181,12 +178,19 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
             <div>Expires: {activePreview.expiresAt ? new Date(activePreview.expiresAt).toLocaleString() : 'N/A'}</div>
           </div>
           <div className="mt-2 text-sm" role="status">
-            {previewConfirmation ? (
+            {previewResponseState.type === 'confirmed' ? (
               <span className="font-semibold text-emerald-500">
-                Participant confirmed on {new Date(previewConfirmation.confirmedAt).toLocaleString()}
+                Participant confirmed on {new Date(previewResponseState.confirmedAt).toLocaleString()}
               </span>
+            ) : previewResponseState.type === 'correction_requested' ? (
+              <div className="font-semibold text-amber-500">
+                <div>Correction requested on {new Date(previewResponseState.requestedAt).toLocaleString()}</div>
+                <div className="mt-1 font-normal text-foreground" style={{ whiteSpace: 'pre-wrap' }}>
+                  {previewResponseState.comment}
+                </div>
+              </div>
             ) : (
-              <span className="italic text-muted-foreground">Not yet confirmed by the participant.</span>
+              <span className="italic text-muted-foreground">Not yet responded by the participant.</span>
             )}
           </div>
           <button

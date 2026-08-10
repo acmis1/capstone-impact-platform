@@ -1,4 +1,5 @@
-import { ParticipantPreviewConfirmationStatus, ParticipantPreviewMediaViewRef, ParticipantPreviewSnapshot } from '../domain/participantPreview';
+import { ParticipantPreviewMediaViewRef, ParticipantPreviewResponseState, ParticipantPreviewSnapshot } from '../domain/participantPreview';
+import { MAX_CORRECTION_COMMENT_LENGTH } from './participantPreviewCorrectionComment';
 
 export function escapeHtml(input: string): string {
   return input
@@ -79,15 +80,17 @@ function renderMedia(media: ParticipantPreviewMediaViewRef[]): string {
 }
 
 /**
- * Explicit participant confirmation of this exact preview version. A plain same-origin POST
- * form (no client-side JavaScript) — the token embedded in the current URL remains the sole
- * authorization capability, so the form intentionally carries no hidden project/preview data.
- * Once confirmed, the action is replaced with the recorded server-generated timestamp; a page
- * refresh renders the same confirmed state rather than the form, so it can never resubmit.
+ * Explicit participant response to this exact preview version: either confirmation or a
+ * correction request, mutually exclusive and both via a plain same-origin POST form (no
+ * client-side JavaScript) — the token embedded in the current URL remains the sole authorization
+ * capability, so neither form carries hidden project/preview data beyond the action
+ * discriminator. Once a response is recorded, it is replaced with the recorded server-generated
+ * outcome; a page refresh renders the same recorded state rather than either form, so it can
+ * never resubmit.
  */
-function renderConfirmationSection(confirmation: ParticipantPreviewConfirmationStatus | null): string {
-  if (confirmation) {
-    const confirmedAtDisplay = escapeHtml(new Date(confirmation.confirmedAt).toUTCString());
+function renderResponseSection(responseState: ParticipantPreviewResponseState): string {
+  if (responseState.type === 'confirmed') {
+    const confirmedAtDisplay = escapeHtml(new Date(responseState.confirmedAt).toUTCString());
     return `
     <div class="field confirmation confirmation-done">
       <h3>Confirmation</h3>
@@ -95,12 +98,37 @@ function renderConfirmationSection(confirmation: ParticipantPreviewConfirmationS
     </div>`;
   }
 
+  if (responseState.type === 'correction_requested') {
+    const requestedAtDisplay = escapeHtml(new Date(responseState.requestedAt).toUTCString());
+    const commentHtml = escapeHtml(responseState.comment).replace(/\n/g, '<br/>');
+    return `
+    <div class="field confirmation correction-done">
+      <h3>Correction Request</h3>
+      <p>Correction request submitted on ${requestedAtDisplay}.</p>
+      <p>${commentHtml}</p>
+    </div>`;
+  }
+
   return `
     <div class="field confirmation">
-      <h3>Confirmation</h3>
-      <p>If the project information shown above is correct, you may confirm it. Confirmation applies only to this exact preview as currently shown.</p>
+      <h3>Your Response</h3>
+      <p>Please review the project information shown above.</p>
       <form method="POST">
+        <input type="hidden" name="action" value="confirm" />
         <button type="submit" class="confirm-button">Confirm project details</button>
+      </form>
+      <form method="POST" class="correction-form">
+        <input type="hidden" name="action" value="request_correction" />
+        <label for="correction-comment">Request corrections</label>
+        <textarea
+          id="correction-comment"
+          name="comment"
+          required
+          maxlength="${MAX_CORRECTION_COMMENT_LENGTH}"
+          aria-describedby="correction-comment-hint"
+        ></textarea>
+        <p id="correction-comment-hint" class="muted">Describe what needs to change. Up to ${MAX_CORRECTION_COMMENT_LENGTH} characters.</p>
+        <button type="submit" class="correction-button">Request corrections</button>
       </form>
     </div>`;
 }
@@ -128,14 +156,20 @@ const PAGE_STYLE = `
   .confirm-button { background: #3B82F6; color: #FFFFFF; border: none; padding: 0.65rem 1.35rem; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 0.9rem; }
   .confirm-button:hover { background: #2563EB; }
   .confirmation-done p { color: #10B981; font-weight: 600; }
+  .correction-done p { color: #F59E0B; }
+  .correction-form { margin-top: 1.25rem; }
+  .correction-form label { display: block; font-size: 0.8rem; font-weight: 600; color: #D1D5DB; margin-bottom: 0.35rem; }
+  .correction-form textarea { width: 100%; min-height: 6rem; padding: 0.6rem 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: #111827; color: #F3F4F6; font-family: inherit; font-size: 0.9rem; resize: vertical; }
+  .correction-button { margin-top: 0.6rem; background: transparent; color: #F59E0B; border: 1px solid #F59E0B; padding: 0.6rem 1.3rem; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 0.9rem; }
+  .correction-button:hover { background: rgba(245,158,11,0.1); }
 `;
 
 export function renderParticipantPreviewPage(params: {
   snapshot: ParticipantPreviewSnapshot;
   media: ParticipantPreviewMediaViewRef[];
-  confirmation: ParticipantPreviewConfirmationStatus | null;
+  responseState: ParticipantPreviewResponseState;
 }): string {
-  const { snapshot, media, confirmation } = params;
+  const { snapshot, media, responseState } = params;
 
   return `<!doctype html>
 <html lang="en">
@@ -184,7 +218,7 @@ export function renderParticipantPreviewPage(params: {
     ${renderExternalLinks(snapshot.externalLinks)}
   </div>
 
-  ${renderConfirmationSection(confirmation)}
+  ${renderResponseSection(responseState)}
 </div>
 </body>
 </html>`;

@@ -20,6 +20,7 @@ import { saveProjectMetadataAction } from './actions';
 import { ImportBatchRepository } from '../../../../repositories/ImportBatchRepository';
 import { computeReadinessForImportBatchRow } from '../../../../import/importBatchReviewReadiness';
 import { SubmitForReviewButton } from '../../../../components/admin/SubmitForReviewButton';
+import { ParticipantPreviewResponseState } from '../../../../domain/participantPreview';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -40,7 +41,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let submitForReview: { ready: boolean; blockingReasons: string[] } | null = null;
   let canManagePreview = false;
   let activePreview: { createdAt: string; expiresAt: string } | null = null;
-  let previewConfirmation: { confirmedAt: string } | null = null;
+  let previewResponseState: ParticipantPreviewResponseState = { type: 'unresponded' };
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -98,7 +99,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         const preview = await previewRepository.getActivePreview(dbProj.id);
         if (preview) {
           activePreview = { createdAt: preview.createdAt, expiresAt: preview.expiresAt };
-          previewConfirmation = await previewRepository.getConfirmationStatus(preview.previewId);
+          previewResponseState = await previewRepository.getResponseState(preview.previewId);
         }
       }
     }
@@ -288,7 +289,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             canManage={canManagePreview}
             isApprovedEligible={project.status === 'approved'}
             initialActivePreview={activePreview}
-            confirmation={previewConfirmation}
+            responseState={previewResponseState}
           />
         </ProjectDetailSection>
 

@@ -3,7 +3,10 @@ import { ParticipantPreviewExecutionError } from './ParticipantPreviewRepository
 import {
   ParticipantPreviewConfirmationResult,
   ParticipantPreviewConfirmationStatus,
+  ParticipantPreviewCorrectionRequestResult,
+  ParticipantPreviewCorrectionRequestStatus,
   ParticipantPreviewMediaRef,
+  ParticipantPreviewResponseState,
   ParticipantPreviewSnapshot,
 } from '../domain/participantPreview';
 
@@ -314,5 +317,112 @@ export class SupabaseParticipantPreviewRepositoryCore {
     }
 
     return { confirmedAt: data.confirmed_at };
+  }
+
+  /**
+   * Requests (or idempotently re-requests) a correction against the exact participant preview
+   * version identified by a token hash, via the service-role-only
+   * request_participant_preview_correction RPC. Deliberately returns null for every non-SUCCESS
+   * outcome (unknown/malformed/expired/revoked token, invalid comment, an existing confirmation
+   * already recorded for this preview, or an unexpected error) — identical in shape to
+   * confirmPreview — so the caller renders one generic outcome without ever distinguishing the
+   * reason. The comment is expected to already be trimmed/bounded by the caller (see
+   * validateCorrectionComment); the RPC independently re-validates at the database boundary.
+   */
+  async requestCorrection(tokenHash: string, comment: string): Promise<ParticipantPreviewCorrectionRequestResult | null> {
+    if (!isNonEmptyString(tokenHash) || !isNonEmptyString(comment)) {
+      return null;
+    }
+
+    const { data, error } = await this.supabase.rpc('request_participant_preview_correction', {
+      p_token_hash: tokenHash,
+      p_comment: comment,
+    });
+
+    if (error || !data || typeof data !== 'object') {
+      return null;
+    }
+
+    const res = data as Record<string, unknown>;
+    if (res.resultCode !== 'SUCCESS') {
+      return null;
+    }
+
+    if (
+      !isNonEmptyString(res.correctionRequestId) ||
+      !isNonEmptyString(res.requestedAt) ||
+      !isNonEmptyString(res.comment) ||
+      typeof res.alreadyRequested !== 'boolean'
+    ) {
+      return null;
+    }
+
+    return {
+      correctionRequestId: res.correctionRequestId,
+      requestedAt: res.requestedAt,
+      comment: res.comment,
+      alreadyRequested: res.alreadyRequested,
+    };
+  }
+
+  /**
+   * Direct read of a correction-request row for an already-resolved participant preview id
+   * (service-role client bypasses RLS, same convention as getConfirmationStatus). Fails closed on
+   * a genuine query failure rather than returning null: null is reserved for the one legitimate
+   * "no correction request exists yet" state.
+   */
+  async getCorrectionRequestStatus(participantPreviewId: string): Promise<ParticipantPreviewCorrectionRequestStatus | null> {
+    if (!isNonEmptyString(participantPreviewId)) {
+      return null;
+    }
+
+    const { data, error } = await this.supabase
+      .from('participant_preview_correction_requests')
+      .select('requested_at, correction_comment')
+      .eq('participant_preview_id', participantPreviewId)
+      .maybeSingle();
+
+    if (error) {
+      throw new ParticipantPreviewExecutionError('INTERNAL_FAILURE');
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    if (!isNonEmptyString(data.requested_at) || typeof data.correction_comment !== 'string') {
+      throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
+    }
+
+    return { requestedAt: data.requested_at, comment: data.correction_comment };
+  }
+
+  /**
+   * Resolves the authoritative participant-response state for an already-resolved participant
+   * preview id: exactly one of unresponded, confirmed, or correction_requested. Fails closed
+   * (throws RESPONSE_INVALID) if the underlying rows are ever contradictory (both a confirmation
+   * and a correction request exist for the same preview) rather than silently picking one —
+   * mirroring how getConfirmationStatus/getCorrectionRequestStatus already fail closed on a
+   * genuine query error instead of returning a falsely-unresponded state.
+   */
+  async getResponseState(participantPreviewId: string): Promise<ParticipantPreviewResponseState> {
+    const [confirmation, correctionRequest] = await Promise.all([
+      this.getConfirmationStatus(participantPreviewId),
+      this.getCorrectionRequestStatus(participantPreviewId),
+    ]);
+
+    if (confirmation && correctionRequest) {
+      throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
+    }
+
+    if (confirmation) {
+      return { type: 'confirmed', confirmedAt: confirmation.confirmedAt };
+    }
+
+    if (correctionRequest) {
+      return { type: 'correction_requested', requestedAt: correctionRequest.requestedAt, comment: correctionRequest.comment };
+    }
+
+    return { type: 'unresponded' };
   }
 }

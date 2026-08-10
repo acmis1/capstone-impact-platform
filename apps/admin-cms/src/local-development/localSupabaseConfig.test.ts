@@ -8,9 +8,9 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
   const configPath = path.resolve(repoRoot, 'infra/supabase/config.toml');
   const seedPath = path.resolve(repoRoot, 'infra/supabase/seed.sql');
 
-  it('1. Exactly 14 timestamped migration files exist in explicitly sorted ascending order', () => {
+  it('1. Exactly 15 timestamped migration files exist in explicitly sorted ascending order', () => {
     const rawFiles = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'));
-    expect(rawFiles.length).toBe(14);
+    expect(rawFiles.length).toBe(15);
 
     // Sort explicitly to not rely on OS directory enumeration order
     const files = [...rawFiles].sort((a, b) => a.localeCompare(b));

@@ -119,6 +119,9 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
 
     const confirm = async (hash: string) => client.rpc('confirm_participant_preview', { p_token_hash: hash });
 
+    const requestCorrection = async (hash: string, comment: string) =>
+      client.rpc('request_participant_preview_correction', { p_token_hash: hash, p_comment: comment });
+
     // ============================================================
     // Test 1: Generation on an approved project; DB stores a hash, never the raw token;
     // snapshot is authoritative and server-derived.
@@ -609,6 +612,347 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
       console.log('PASS: Test 20 - Confirmation left project status and media publication state completely untouched.');
     } else {
       console.error('FAIL: Test 20 - Publication side-effect assertion failed.', t20ProjAfter, t20MediaAfter);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 21: Valid correction request — a valid token records a correction against its exact
+    // preview; exactly one row is persisted, referencing the exact participant_previews.id;
+    // requested_at is server-generated; comment is stored as submitted; status starts 'open'.
+    // ============================================================
+    console.log('--- Test 21: Valid correction request persists exactly one server-attributed record ---');
+    const t21Proj = await createProject('t21', 'approved');
+    const t21 = await generate(String(t21Proj.public_id), adminId);
+    const t21PreviewId = t21.res.data?.previewId;
+    const t21Comment = 'Please update the group name spelling.';
+    const t21Correction = await requestCorrection(t21.hash, t21Comment);
+
+    const { data: t21Rows } = await client.from('participant_preview_correction_requests').select('*').eq('participant_preview_id', t21PreviewId);
+    const t21RowsJson = JSON.stringify(t21Rows || []);
+
+    if (
+      !t21Correction.error &&
+      t21Correction.data?.resultCode === 'SUCCESS' &&
+      t21Correction.data?.alreadyRequested === false &&
+      typeof t21Correction.data?.requestedAt === 'string' && t21Correction.data.requestedAt.length > 0 &&
+      t21Correction.data?.comment === t21Comment &&
+      (t21Rows || []).length === 1 &&
+      t21Rows?.[0]?.participant_preview_id === t21PreviewId &&
+      t21Rows?.[0]?.status === 'open' &&
+      !t21RowsJson.includes(t21.raw)
+    ) {
+      console.log('PASS: Test 21 - Exactly one correction request persisted, exact-preview-attributed, raw token never present, initial status open.');
+    } else {
+      console.error('FAIL: Test 21 - Valid correction request assertion failed.', t21Correction.data, t21Rows);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 22: Comment validation — empty, whitespace-only, and over-limit comments are all
+    // rejected and create no row.
+    // ============================================================
+    console.log('--- Test 22: Comment validation rejects empty/whitespace-only/over-limit input and creates no row ---');
+    const t22Proj = await createProject('t22', 'approved');
+    const t22 = await generate(String(t22Proj.public_id), adminId);
+    const t22Empty = await requestCorrection(t22.hash, '');
+    const t22Whitespace = await requestCorrection(t22.hash, '   \n\t  ');
+    const t22OverLimit = await requestCorrection(t22.hash, 'a'.repeat(2001));
+    const { count: t22Count } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t22.res.data?.previewId);
+
+    if (
+      t22Empty.data?.resultCode === 'INVALID_COMMENT' &&
+      t22Whitespace.data?.resultCode === 'INVALID_COMMENT' &&
+      t22OverLimit.data?.resultCode === 'INVALID_COMMENT' &&
+      t22Count === 0
+    ) {
+      console.log('PASS: Test 22 - Empty, whitespace-only, and over-limit comments are all rejected with no row created.');
+    } else {
+      console.error('FAIL: Test 22 - Comment validation assertion failed.', t22Empty.data, t22Whitespace.data, t22OverLimit.data, t22Count);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 23: Sequential idempotency — submitting a correction request twice for the same
+    // preview leaves exactly one row; the original requested_at and comment remain authoritative
+    // and are never overwritten by a later duplicate submission.
+    // ============================================================
+    console.log('--- Test 23: Idempotent repeat correction-request submission ---');
+    const t23Second = await requestCorrection(t21.hash, 'A different, later comment that must not overwrite the original.');
+    const { data: t23Rows } = await client.from('participant_preview_correction_requests').select('requested_at, correction_comment').eq('participant_preview_id', t21PreviewId);
+
+    if (
+      !t23Second.error &&
+      t23Second.data?.resultCode === 'SUCCESS' &&
+      t23Second.data?.alreadyRequested === true &&
+      t23Second.data?.requestedAt === t21Correction.data?.requestedAt &&
+      t23Second.data?.comment === t21Comment &&
+      (t23Rows || []).length === 1 &&
+      t23Rows?.[0]?.correction_comment === t21Comment
+    ) {
+      console.log('PASS: Test 23 - Repeat submission is idempotent; original requested_at and comment remain authoritative.');
+    } else {
+      console.error('FAIL: Test 23 - Idempotency assertion failed.', t21Correction.data, t23Second.data, t23Rows);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 24: Concurrency — two first-time correction-request attempts for the same preview
+    // converge to exactly one row, one authoritative timestamp/comment, and no unhandled error.
+    // ============================================================
+    console.log('--- Test 24: Concurrent first-time correction request converges to exactly one record ---');
+    const t24Proj = await createProject('t24', 'approved');
+    const t24 = await generate(String(t24Proj.public_id), adminId);
+    const [t24A, t24B] = await Promise.all([
+      requestCorrection(t24.hash, 'First concurrent comment.'),
+      requestCorrection(t24.hash, 'Second concurrent comment.'),
+    ]);
+    const { data: t24Rows } = await client.from('participant_preview_correction_requests').select('requested_at, correction_comment').eq('participant_preview_id', t24.res.data?.previewId);
+
+    if (
+      !t24A.error && !t24B.error &&
+      t24A.data?.resultCode === 'SUCCESS' && t24B.data?.resultCode === 'SUCCESS' &&
+      (t24Rows || []).length === 1 &&
+      t24A.data?.requestedAt === t24B.data?.requestedAt &&
+      t24A.data?.comment === t24B.data?.comment
+    ) {
+      console.log('PASS: Test 24 - Concurrent first-time correction request converged to exactly one record with no unhandled error.');
+    } else {
+      console.error('FAIL: Test 24 - Concurrency assertion failed.', t24A.data, t24B.data, t24Rows);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 25: Mutual exclusion — an existing correction request blocks a subsequent
+    // confirmation attempt for the same exact preview; no confirmation row is created.
+    // ============================================================
+    console.log('--- Test 25: An existing correction request blocks a subsequent confirmation ---');
+    const t25Proj = await createProject('t25', 'approved');
+    const t25 = await generate(String(t25Proj.public_id), adminId);
+    const t25Correction = await requestCorrection(t25.hash, 'Please fix the team member list.');
+    const t25Confirm = await confirm(t25.hash);
+    const { count: t25ConfirmCount } = await client.from('participant_preview_confirmations').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t25.res.data?.previewId);
+
+    if (
+      t25Correction.data?.resultCode === 'SUCCESS' &&
+      t25Confirm.data?.resultCode === 'CORRECTION_REQUESTED' &&
+      t25ConfirmCount === 0
+    ) {
+      console.log('PASS: Test 25 - Existing correction request blocked confirmation; no confirmation row created.');
+    } else {
+      console.error('FAIL: Test 25 - Correction-blocks-confirmation assertion failed.', t25Correction.data, t25Confirm.data, t25ConfirmCount);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 26: Mutual exclusion — an existing confirmation blocks a subsequent correction-request
+    // attempt for the same exact preview; no correction row is created.
+    // ============================================================
+    console.log('--- Test 26: An existing confirmation blocks a subsequent correction request ---');
+    const t26Proj = await createProject('t26', 'approved');
+    const t26 = await generate(String(t26Proj.public_id), adminId);
+    const t26Confirm = await confirm(t26.hash);
+    const t26Correction = await requestCorrection(t26.hash, 'Please fix the accessibility text.');
+    const { count: t26CorrectionCount } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t26.res.data?.previewId);
+
+    if (
+      t26Confirm.data?.resultCode === 'SUCCESS' &&
+      t26Correction.data?.resultCode === 'ALREADY_CONFIRMED' &&
+      t26CorrectionCount === 0
+    ) {
+      console.log('PASS: Test 26 - Existing confirmation blocked correction request; no correction row created.');
+    } else {
+      console.error('FAIL: Test 26 - Confirmation-blocks-correction assertion failed.', t26Confirm.data, t26Correction.data, t26CorrectionCount);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 27: Real confirmation-vs-correction race — both operations fired concurrently for the
+    // same unresponded preview. Exactly one response type must exist afterward, never both, and
+    // the losing request must receive a controlled bounded resultCode rather than an unhandled
+    // integrity error.
+    // ============================================================
+    console.log('--- Test 27: Real confirmation-vs-correction race converges to exactly one response type ---');
+    const t27Proj = await createProject('t27', 'approved');
+    const t27 = await generate(String(t27Proj.public_id), adminId);
+    const [t27Confirm, t27Correction] = await Promise.all([
+      confirm(t27.hash),
+      requestCorrection(t27.hash, 'Racing correction comment.'),
+    ]);
+    const { count: t27ConfirmCount } = await client.from('participant_preview_confirmations').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t27.res.data?.previewId);
+    const { count: t27CorrectionCount } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t27.res.data?.previewId);
+
+    const t27ConfirmWon = t27Confirm.data?.resultCode === 'SUCCESS' && t27Correction.data?.resultCode === 'ALREADY_CONFIRMED';
+    const t27CorrectionWon = t27Correction.data?.resultCode === 'SUCCESS' && t27Confirm.data?.resultCode === 'CORRECTION_REQUESTED';
+    const t27ExactlyOneWinner = (t27ConfirmWon && !t27CorrectionWon) || (!t27ConfirmWon && t27CorrectionWon);
+
+    if (
+      !t27Confirm.error && !t27Correction.error &&
+      t27ExactlyOneWinner &&
+      (t27ConfirmCount || 0) + (t27CorrectionCount || 0) === 1
+    ) {
+      console.log(`PASS: Test 27 - Confirmation/correction race converged to exactly one response type (${t27ConfirmWon ? 'confirmation won' : 'correction won'}) with no unhandled error.`);
+    } else {
+      console.error('FAIL: Test 27 - Confirmation-vs-correction race assertion failed.', t27Confirm.data, t27Correction.data, t27ConfirmCount, t27CorrectionCount);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 28: Invalid token — malformed and unknown tokens create no correction record.
+    // ============================================================
+    console.log('--- Test 28: Malformed and unknown tokens cannot request a correction ---');
+    const { count: t28CountBefore } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true });
+    const t28Malformed = await requestCorrection('not-a-valid-hash', 'Some comment.');
+    const t28Unknown = await requestCorrection(hashToken(newRawToken()), 'Some comment.');
+    const { count: t28CountAfter } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true });
+
+    if (
+      t28Malformed.data?.resultCode === 'NOT_FOUND' &&
+      t28Unknown.data?.resultCode === 'NOT_FOUND' &&
+      t28CountAfter === t28CountBefore
+    ) {
+      console.log('PASS: Test 28 - Malformed and unknown tokens both collapse to NOT_FOUND and create no correction request.');
+    } else {
+      console.error('FAIL: Test 28 - Invalid-token assertion failed.', t28Malformed.data, t28Unknown.data);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 29: Expired preview cannot receive a new correction request.
+    // ============================================================
+    console.log('--- Test 29: Expired preview cannot receive a new correction request ---');
+    const t29Proj = await createProject('t29', 'approved');
+    const t29Raw = newRawToken();
+    const t29Hash = hashToken(t29Raw);
+    const t29PastExpiry = new Date(Date.now() - 60_000).toISOString();
+    await client.from('participant_previews').insert({
+      project_id: t29Proj.id,
+      token_hash: t29Hash,
+      snapshot: { title: t29Proj.title, summary: null, background: null, solution: null, year: 2026, program: null, studyProgram: null, discipline: null, disciplines: [], industry: null, industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [], posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [] },
+      media_snapshot: [],
+      status: 'active',
+      created_by: adminId,
+      expires_at: t29PastExpiry,
+    });
+    const t29Correction = await requestCorrection(t29Hash, 'Comment on an expired preview.');
+    const { data: t29PreviewRow } = await client.from('participant_previews').select('id').eq('token_hash', t29Hash).single();
+    const { count: t29CorrectionCount } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t29PreviewRow?.id);
+
+    if (t29Correction.data?.resultCode === 'NOT_FOUND' && t29CorrectionCount === 0) {
+      console.log('PASS: Test 29 - Expired preview correctly refuses a new correction request.');
+    } else {
+      console.error('FAIL: Test 29 - Expired-preview assertion failed.', t29Correction.data, t29CorrectionCount);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 30: Revoked preview cannot receive a new correction request.
+    // ============================================================
+    console.log('--- Test 30: Revoked preview cannot receive a new correction request ---');
+    const t30Proj = await createProject('t30', 'approved');
+    const t30 = await generate(String(t30Proj.public_id), adminId);
+    await client.rpc('revoke_participant_preview', { p_public_id: t30Proj.public_id, p_admin_id: adminId });
+    const t30Correction = await requestCorrection(t30.hash, 'Comment on a revoked preview.');
+    const { count: t30CorrectionCount } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t30.res.data?.previewId);
+
+    if (t30Correction.data?.resultCode === 'NOT_FOUND' && t30CorrectionCount === 0) {
+      console.log('PASS: Test 30 - Revoked preview correctly refuses a new correction request.');
+    } else {
+      console.error('FAIL: Test 30 - Revoked-preview assertion failed.', t30Correction.data, t30CorrectionCount);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 31: Exact-version attribution — requesting a correction on Preview A, revoking it, and
+    // issuing Preview B leaves Preview A's correction request untouched as independent historical
+    // evidence; Preview B starts unresponded and may independently receive its own response.
+    // ============================================================
+    console.log('--- Test 31: Exact-version attribution survives revoke + reissue ---');
+    const t31Proj = await createProject('t31', 'approved');
+    const t31A = await generate(String(t31Proj.public_id), adminId);
+    const t31AComment = 'Correction against Preview A.';
+    const t31ACorrection = await requestCorrection(t31A.hash, t31AComment);
+    await client.rpc('revoke_participant_preview', { p_public_id: t31Proj.public_id, p_admin_id: adminId });
+    const t31B = await generate(String(t31Proj.public_id), adminId);
+    const { count: t31BCorrectionCountBefore } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t31B.res.data?.previewId);
+    const t31BConfirm = await confirm(t31B.hash);
+    const { data: t31ACorrectionRow } = await client.from('participant_preview_correction_requests').select('requested_at, correction_comment').eq('participant_preview_id', t31A.res.data?.previewId).single();
+
+    if (
+      t31ACorrection.data?.resultCode === 'SUCCESS' &&
+      t31BCorrectionCountBefore === 0 &&
+      t31BConfirm.data?.resultCode === 'SUCCESS' &&
+      t31ACorrectionRow?.requested_at === t31ACorrection.data?.requestedAt &&
+      t31ACorrectionRow?.correction_comment === t31AComment &&
+      t31A.res.data?.previewId !== t31B.res.data?.previewId
+    ) {
+      console.log('PASS: Test 31 - Preview A correction request preserved untouched; Preview B started unresponded and was independently confirmed.');
+    } else {
+      console.error('FAIL: Test 31 - Exact-version attribution assertion failed.', t31ACorrection.data, t31BConfirm.data, t31ACorrectionRow);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 32: Mutable-project independence — editing the project after Preview A's correction
+    // request must not alter the correction request's reference, timestamp, or stored comment.
+    // ============================================================
+    console.log('--- Test 32: Correction request reference is independent of later mutable-project edits ---');
+    const t32Proj = await createProject('t32', 'approved');
+    const t32 = await generate(String(t32Proj.public_id), adminId);
+    const t32Comment = 'Correction comment that must survive a later project edit.';
+    const t32Correction = await requestCorrection(t32.hash, t32Comment);
+    await client.from('projects').update({ title: 'MUTATED TITLE — must not affect the correction request reference' }).eq('id', t32Proj.id);
+    const { data: t32CorrectionRowAfter } = await client.from('participant_preview_correction_requests').select('participant_preview_id, requested_at, correction_comment').eq('participant_preview_id', t32.res.data?.previewId).single();
+
+    if (
+      t32Correction.data?.resultCode === 'SUCCESS' &&
+      t32CorrectionRowAfter?.participant_preview_id === t32.res.data?.previewId &&
+      t32CorrectionRowAfter?.requested_at === t32Correction.data?.requestedAt &&
+      t32CorrectionRowAfter?.correction_comment === t32Comment
+    ) {
+      console.log('PASS: Test 32 - Correction request still references the exact preview id and original comment, unaffected by the later project edit.');
+    } else {
+      console.error('FAIL: Test 32 - Mutable-project independence assertion failed.', t32Correction.data, t32CorrectionRowAfter);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 33: Direct browser access — anon key cannot read/write
+    // participant_preview_correction_requests or execute request_participant_preview_correction.
+    // (Authenticated-role denial is proven statically by Migration 0015's REVOKE ... FROM
+    // authenticated contract in participantPreviewCorrectionRequestMigration.test.ts, mirroring
+    // how Migration 0014's authenticated boundary is verified for participant_preview_
+    // confirmations.)
+    // ============================================================
+    console.log('--- Test 33: Direct anon-key access to participant_preview_correction_requests and its RPC is refused ---');
+    const t33Select = await anonClient.from('participant_preview_correction_requests').select('id').limit(1);
+    const t33Insert = await anonClient.from('participant_preview_correction_requests').insert({ participant_preview_id: t21PreviewId, correction_comment: 'anon attempt' });
+    const t33Request = await anonClient.rpc('request_participant_preview_correction', { p_token_hash: t24.hash, p_comment: 'anon attempt' });
+
+    if (t33Select.error && t33Insert.error && t33Request.error) {
+      console.log('PASS: Test 33 - Anon-key table read/write and RPC execution are all refused.');
+    } else {
+      console.error('FAIL: Test 33 - Direct browser access boundary assertion failed.', t33Select.error, t33Insert.error, t33Request.error);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 34: No publication side effects — a correction request performs zero public bucket
+    // writes, zero public_url/is_public_approved changes, and zero project workflow-status
+    // transitions.
+    // ============================================================
+    console.log('--- Test 34: Correction request performs zero publication side effects ---');
+    const t34Proj = await createProject('t34', 'approved');
+    await createMediaAsset(String(t34Proj.id), 'poster_image', 't34');
+    const t34 = await generate(String(t34Proj.public_id), adminId);
+    await requestCorrection(t34.hash, 'Comment that must not trigger any publication side effect.');
+    const { data: t34ProjAfter } = await client.from('projects').select('status').eq('id', t34Proj.id).single();
+    const { data: t34MediaAfter } = await client.from('media_assets').select('public_url, is_public_approved, storage_bucket').eq('project_id', t34Proj.id);
+    const t34MediaUntouched = (t34MediaAfter || []).every((m) => m.public_url === null && m.is_public_approved === false && m.storage_bucket === PRIVATE_DRAFT_BUCKET);
+
+    if (t34ProjAfter?.status === 'approved' && t34MediaUntouched) {
+      console.log('PASS: Test 34 - Correction request left project status and media publication state completely untouched.');
+    } else {
+      console.error('FAIL: Test 34 - Publication side-effect assertion failed.', t34ProjAfter, t34MediaAfter);
       success = false;
     }
   } catch (err: unknown) {

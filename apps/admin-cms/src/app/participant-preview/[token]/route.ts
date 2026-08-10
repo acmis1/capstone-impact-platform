@@ -3,8 +3,24 @@ import { SupabaseParticipantPreviewRepository } from '../../../repositories/Supa
 import { hashPreviewToken, isPlausibleRawPreviewToken } from '../../../previews/participantPreviewToken';
 import { createSignedDraftMediaUrl } from '../../../storage/mediaStorage';
 import { renderParticipantPreviewPage, renderParticipantPreviewUnavailablePage } from '../../../previews/participantPreviewHtml';
+import { validateCorrectionComment } from '../../../previews/participantPreviewCorrectionComment';
 import { ParticipantPreviewMediaViewRef } from '../../../domain/participantPreview';
 import { validateSameOrigin } from '../../../auth/csrf';
+
+// Generous bound for a same-origin urlencoded form carrying only an action discriminator and, at
+// most, a 2000-character correction comment (worst-case UTF-8 percent-encoding expansion), plus
+// field-name overhead. Not the authoritative comment-length check — that is
+// validateCorrectionComment plus the Migration 0015 RPC's own database-boundary validation.
+const MAX_RESPONSE_FORM_BODY_BYTES = 32_768;
+
+function parseContentLength(header: string | null): { bytes: number } | { code: 'MISSING' | 'INVALID' | 'TOO_LARGE' } {
+  if (header === null || header === '') return { code: 'MISSING' };
+  if (!/^(0|[1-9][0-9]*)$/.test(header)) return { code: 'INVALID' };
+  const bytes = Number(header);
+  if (!Number.isSafeInteger(bytes)) return { code: 'INVALID' };
+  if (bytes > MAX_RESPONSE_FORM_BODY_BYTES) return { code: 'TOO_LARGE' };
+  return { bytes };
+}
 
 /**
  * Public, unauthenticated participant preview route. Token is the sole authorization
@@ -80,30 +96,34 @@ export async function GET(
     return unavailableResponse(404);
   }
 
-  let confirmation;
+  let responseState;
   try {
-    confirmation = await repository.getConfirmationStatus(resolved.previewId);
+    responseState = await repository.getResponseState(resolved.previewId);
   } catch {
     return unavailableResponse(500);
   }
 
-  const html = renderParticipantPreviewPage({ snapshot: resolved.snapshot, media: mediaViews, confirmation });
+  const html = renderParticipantPreviewPage({ snapshot: resolved.snapshot, media: mediaViews, responseState });
   return new Response(html, { status: 200, headers: RESPONSE_HEADERS });
 }
 
 /**
- * Explicit participant confirmation of the exact preview version currently shown. The token
- * (from the URL, not the request body) remains the sole authorization capability — the POST
- * carries no mutable project/preview data. Same-origin is required since this is a
- * state-changing request despite the token capability.
+ * Explicit participant response to the exact preview version currently shown: either
+ * confirmation or a correction request, selected by a bounded `action` form field. The token
+ * (from the URL, not the request body) remains the sole authorization capability — neither
+ * response carries mutable project/preview data beyond the action discriminator and, for a
+ * correction request, the participant-authored comment text. Same-origin is required since this
+ * is a state-changing request despite the token capability.
  *
- * Every invalid-token condition (malformed, unknown, expired, revoked) and every backend
- * confirmation failure renders the identical generic unavailable response — the participant must
- * never be able to distinguish which condition occurred, nor learn whether a token hash exists.
- * Only an actual SUCCESS (including the idempotent already-confirmed case) follows a safe
- * POST/redirect/GET pattern: the subsequent GET resolves and renders the authoritative display
+ * Every invalid-token condition (malformed, unknown, expired, revoked), every mutual-exclusion
+ * loss (the other response type already recorded), and every backend failure renders the
+ * identical generic unavailable response — the participant must never be able to distinguish
+ * which condition occurred, nor learn whether a token hash exists. An invalid/oversized comment
+ * redirects back without creating any row, so a participant can simply correct and resubmit.
+ * Only an actual SUCCESS (including idempotent repeat submissions) follows a safe
+ * POST/redirect/GET pattern: the subsequent GET resolves and renders the authoritative response
  * state, and a page refresh after redirect only re-issues that same GET, never another
- * confirmation submission.
+ * submission.
  */
 export async function POST(
   request: NextRequest,
@@ -120,22 +140,73 @@ export async function POST(
     return unavailableResponse(404);
   }
 
+  const contentLength = parseContentLength(request.headers.get('content-length'));
+  if ('code' in contentLength) {
+    return unavailableResponse(400);
+  }
+
+  const contentType = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (contentType !== 'application/x-www-form-urlencoded') {
+    return unavailableResponse(400);
+  }
+
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return unavailableResponse(400);
+  }
+
+  const actionEntries = formData.getAll('action');
+  const action = actionEntries.length === 1 ? actionEntries[0] : null;
+
   const tokenHash = hashPreviewToken(token);
   const repository = new SupabaseParticipantPreviewRepository();
+  const redirectToPreview = () =>
+    NextResponse.redirect(new URL(`/participant-preview/${token}`, request.nextUrl.origin), {
+      status: 303,
+      headers: RESPONSE_HEADERS,
+    });
 
-  let confirmation;
-  try {
-    confirmation = await repository.confirmPreview(tokenHash);
-  } catch {
-    return unavailableResponse(500);
+  if (action === 'confirm') {
+    let confirmation;
+    try {
+      confirmation = await repository.confirmPreview(tokenHash);
+    } catch {
+      return unavailableResponse(500);
+    }
+
+    if (!confirmation) {
+      return unavailableResponse(404);
+    }
+
+    return redirectToPreview();
   }
 
-  if (!confirmation) {
-    return unavailableResponse(404);
+  if (action === 'request_correction') {
+    const commentEntries = formData.getAll('comment');
+    const rawComment = commentEntries.length === 1 ? commentEntries[0] : null;
+    const validation = validateCorrectionComment(rawComment);
+
+    if (!validation.valid) {
+      // Invalid/oversized comment: redirect back without ever calling the repository, so no row
+      // is created and the participant can simply correct and resubmit.
+      return redirectToPreview();
+    }
+
+    let correction;
+    try {
+      correction = await repository.requestCorrection(tokenHash, validation.comment);
+    } catch {
+      return unavailableResponse(500);
+    }
+
+    if (!correction) {
+      return unavailableResponse(404);
+    }
+
+    return redirectToPreview();
   }
 
-  return NextResponse.redirect(new URL(`/participant-preview/${token}`, request.nextUrl.origin), {
-    status: 303,
-    headers: RESPONSE_HEADERS,
-  });
+  return unavailableResponse(400);
 }

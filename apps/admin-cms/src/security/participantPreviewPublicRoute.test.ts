@@ -25,6 +25,21 @@ vi.mock('../lib/env', () => ({
   })),
 }));
 
+/** Builds a same-origin urlencoded form POST body/headers pair for the participant-preview route. */
+function formRequestInit(origin: string, fields: Record<string, string>): { headers: Record<string, string>; body: string } {
+  const body = Object.entries(fields)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join('&');
+  return {
+    body,
+    headers: {
+      origin,
+      'content-type': 'application/x-www-form-urlencoded',
+      'content-length': String(Buffer.byteLength(body, 'utf8')),
+    },
+  };
+}
+
 describe('participantPreviewHtml escaping', () => {
   it('escapeHtml neutralizes HTML-significant characters', () => {
     expect(escapeHtml('<script>alert(1)</script>')).toBe('&lt;script&gt;alert(1)&lt;/script&gt;');
@@ -55,7 +70,7 @@ describe('participantPreviewHtml escaping', () => {
         industryCategories: [],
       },
       media: [],
-      confirmation: null,
+      responseState: { type: 'unresponded' },
     });
 
     expect(html).not.toContain('<img src=x onerror=alert(1)>');
@@ -142,7 +157,7 @@ describe('Public participant-preview route', () => {
     });
 
     const signSpy = vi.spyOn(mediaStorage, 'createSignedDraftMediaUrl');
-    const confirmationSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getConfirmationStatus').mockResolvedValue(null);
+    const responseStateSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getResponseState').mockResolvedValue({ type: 'unresponded' });
 
     const token = 'c'.repeat(64);
     const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`);
@@ -152,11 +167,11 @@ describe('Public participant-preview route', () => {
     expect(res.status).toBe(200);
     expect(html).toContain('Accessible Robotics Kit');
     expect(signSpy).toHaveBeenCalledTimes(1);
-    expect(confirmationSpy).toHaveBeenCalledWith('p1');
+    expect(responseStateSpy).toHaveBeenCalledWith('p1');
 
     resolveSpy.mockRestore();
     signSpy.mockRestore();
-    confirmationSpy.mockRestore();
+    responseStateSpy.mockRestore();
   });
 
   it('fails closed to the generic unavailable page when any expected media asset cannot receive a valid private signed URL', async () => {
@@ -285,7 +300,7 @@ describe('Public participant-preview route', () => {
       mediaSnapshot: [],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });
-    const confirmationSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getConfirmationStatus').mockResolvedValue(null);
+    const responseStateSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getResponseState').mockResolvedValue({ type: 'unresponded' });
 
     const token = 'd'.repeat(64);
     const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`);
@@ -296,10 +311,10 @@ describe('Public participant-preview route', () => {
     expect(html).toContain('No Media Project');
 
     resolveSpy.mockRestore();
-    confirmationSpy.mockRestore();
+    responseStateSpy.mockRestore();
   });
 
-  it('renders the unconfirmed state with a confirmation form when no confirmation exists yet', async () => {
+  it('renders the unresponded state with both a confirmation form and a correction-request form when no response exists yet', async () => {
     const { GET } = await import('../app/participant-preview/[token]/route');
     const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
 
@@ -314,7 +329,7 @@ describe('Public participant-preview route', () => {
       mediaSnapshot: [],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });
-    const confirmationSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getConfirmationStatus').mockResolvedValue(null);
+    const responseStateSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getResponseState').mockResolvedValue({ type: 'unresponded' });
 
     const token = 'e'.repeat(64);
     const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`);
@@ -323,14 +338,18 @@ describe('Public participant-preview route', () => {
 
     expect(res.status).toBe(200);
     expect(html).toContain('Confirm project details');
+    expect(html).toContain('value="confirm"');
+    expect(html).toContain('value="request_correction"');
+    expect(html).toContain('name="comment"');
     expect(html).toContain('<form method="POST">');
     expect(html).not.toContain('You confirmed that');
+    expect(html).not.toContain('Correction request submitted');
 
     resolveSpy.mockRestore();
-    confirmationSpy.mockRestore();
+    responseStateSpy.mockRestore();
   });
 
-  it('renders the confirmed state with the recorded timestamp and no confirmation form once already confirmed', async () => {
+  it('renders the confirmed state with the recorded timestamp and no confirmation/correction form once already confirmed', async () => {
     const { GET } = await import('../app/participant-preview/[token]/route');
     const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
 
@@ -345,7 +364,8 @@ describe('Public participant-preview route', () => {
       mediaSnapshot: [],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });
-    const confirmationSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getConfirmationStatus').mockResolvedValue({
+    const responseStateSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getResponseState').mockResolvedValue({
+      type: 'confirmed',
       confirmedAt: '2026-08-11T12:00:00.000Z',
     });
 
@@ -358,12 +378,51 @@ describe('Public participant-preview route', () => {
     expect(html).toContain('You confirmed that');
     expect(html).not.toContain('<form method="POST">');
     expect(html).not.toContain('Confirm project details');
+    expect(html).not.toContain('Correction request submitted');
 
     resolveSpy.mockRestore();
-    confirmationSpy.mockRestore();
+    responseStateSpy.mockRestore();
   });
 
-  it('renders the generic unavailable response — never a falsely-unconfirmed form — when the confirmation-status lookup fails', async () => {
+  it('renders the correction-requested state with the recorded timestamp and escaped comment, and no confirmation/correction form', async () => {
+    const { GET } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+
+    const resolveSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'resolveByTokenHash').mockResolvedValue({
+      previewId: 'p-correction-requested',
+      snapshot: {
+        title: 'Correction Requested Project', summary: null, background: null, solution: null, year: 2026,
+        program: null, studyProgram: null, discipline: null, disciplines: [], industry: null,
+        industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [],
+        posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [],
+      },
+      mediaSnapshot: [],
+      expiresAt: '2026-08-17T00:00:00.000Z',
+    });
+    const responseStateSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getResponseState').mockResolvedValue({
+      type: 'correction_requested',
+      requestedAt: '2026-08-11T12:00:00.000Z',
+      comment: '<script>alert(1)</script> please fix the title',
+    });
+
+    const token = '3'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`);
+    const res = await GET(req, { params: Promise.resolve({ token }) });
+    const html = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(html).toContain('Correction request submitted');
+    expect(html).not.toContain('<form method="POST">');
+    expect(html).not.toContain('Confirm project details');
+    expect(html).not.toContain('You confirmed that');
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+
+    resolveSpy.mockRestore();
+    responseStateSpy.mockRestore();
+  });
+
+  it('renders the generic unavailable response — never a falsely-unresponded form — when the response-state lookup fails', async () => {
     const { GET } = await import('../app/participant-preview/[token]/route');
     const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
     const { ParticipantPreviewExecutionError } = await import('../repositories/ParticipantPreviewRepository');
@@ -379,7 +438,7 @@ describe('Public participant-preview route', () => {
       mediaSnapshot: [],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });
-    const confirmationSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getConfirmationStatus').mockRejectedValue(
+    const responseStateSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getResponseState').mockRejectedValue(
       new ParticipantPreviewExecutionError('INTERNAL_FAILURE')
     );
 
@@ -394,7 +453,44 @@ describe('Public participant-preview route', () => {
     expect(html).not.toContain('Status Lookup Failure Project');
 
     resolveSpy.mockRestore();
+    responseStateSpy.mockRestore();
+  });
+
+  it('renders the generic unavailable response when getResponseState rejects due to a contradictory confirmed-and-correction-requested state (fail closed)', async () => {
+    const { GET } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+
+    const resolveSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'resolveByTokenHash').mockResolvedValue({
+      previewId: 'p-contradictory',
+      snapshot: {
+        title: 'Contradictory State Project', summary: null, background: null, solution: null, year: 2026,
+        program: null, studyProgram: null, discipline: null, disciplines: [], industry: null,
+        industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [],
+        posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [],
+      },
+      mediaSnapshot: [],
+      expiresAt: '2026-08-17T00:00:00.000Z',
+    });
+    const confirmationSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getConfirmationStatus').mockResolvedValue({
+      confirmedAt: '2026-08-11T12:00:00.000Z',
+    });
+    const correctionSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getCorrectionRequestStatus').mockResolvedValue({
+      requestedAt: '2026-08-11T12:05:00.000Z',
+      comment: 'Contradictory correction request.',
+    });
+
+    const token = '2'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`);
+    const res = await GET(req, { params: Promise.resolve({ token }) });
+    const html = await res.text();
+
+    expect(res.status).toBe(500);
+    expect(html).toContain('Preview Unavailable');
+    expect(html).not.toContain('Contradictory State Project');
+
+    resolveSpy.mockRestore();
     confirmationSpy.mockRestore();
+    correctionSpy.mockRestore();
   });
 });
 
@@ -407,7 +503,7 @@ describe('Public participant-preview confirmation POST', () => {
     const token = 'a'.repeat(64);
     const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
       method: 'POST',
-      headers: { origin: 'http://malicious.test' },
+      ...formRequestInit('http://malicious.test', { action: 'confirm' }),
     });
     const res = await POST(req, { params: Promise.resolve({ token }) });
     const html = await res.text();
@@ -427,7 +523,7 @@ describe('Public participant-preview confirmation POST', () => {
 
     const req = new NextRequest('http://localhost:3000/participant-preview/not-a-valid-token', {
       method: 'POST',
-      headers: { origin: 'http://localhost:3000' },
+      ...formRequestInit('http://localhost:3000', { action: 'confirm' }),
     });
     const res = await POST(req, { params: Promise.resolve({ token: 'not-a-valid-token' }) });
 
@@ -435,6 +531,65 @@ describe('Public participant-preview confirmation POST', () => {
     expect(confirmSpy).not.toHaveBeenCalled();
 
     confirmSpy.mockRestore();
+  });
+
+  it('rejects a POST with a missing Content-Length header before ever parsing the body', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const token = 'b'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000' },
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(400);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it('rejects a POST with a non-form Content-Type', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const token = 'b'.repeat(64);
+    const body = JSON.stringify({ action: 'confirm' });
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000', 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(body)) },
+      body,
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(400);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it('rejects a POST with a missing/unrecognized action field without calling confirmPreview or requestCorrection', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+    const correctionSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'requestCorrection');
+
+    const token = 'b'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      ...formRequestInit('http://localhost:3000', { action: 'not_a_real_action' }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(400);
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(correctionSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+    correctionSpy.mockRestore();
   });
 
   it('confirms via the token hash and redirects (303) back to the same token URL, carrying no mutable data', async () => {
@@ -449,7 +604,7 @@ describe('Public participant-preview confirmation POST', () => {
     const token = 'b'.repeat(64);
     const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
       method: 'POST',
-      headers: { origin: 'http://localhost:3000' },
+      ...formRequestInit('http://localhost:3000', { action: 'confirm' }),
     });
     const res = await POST(req, { params: Promise.resolve({ token }) });
 
@@ -469,7 +624,7 @@ describe('Public participant-preview confirmation POST', () => {
     const token = 'b'.repeat(64);
     const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
       method: 'POST',
-      headers: { origin: 'http://localhost:3000' },
+      ...formRequestInit('http://localhost:3000', { action: 'confirm' }),
     });
     const res = await POST(req, { params: Promise.resolve({ token }) });
     const html = await res.text();
@@ -492,7 +647,7 @@ describe('Public participant-preview confirmation POST', () => {
 
     const malformedReq = new NextRequest('http://localhost:3000/participant-preview/not-a-valid-token', {
       method: 'POST',
-      headers: { origin: 'http://localhost:3000' },
+      ...formRequestInit('http://localhost:3000', { action: 'confirm' }),
     });
     const malformedRes = await POST(malformedReq, { params: Promise.resolve({ token: 'not-a-valid-token' }) });
     const malformedHtml = await malformedRes.text();
@@ -500,7 +655,7 @@ describe('Public participant-preview confirmation POST', () => {
     const token = 'b'.repeat(64);
     const invalidReq = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
       method: 'POST',
-      headers: { origin: 'http://localhost:3000' },
+      ...formRequestInit('http://localhost:3000', { action: 'confirm' }),
     });
     const invalidRes = await POST(invalidReq, { params: Promise.resolve({ token }) });
     const invalidHtml = await invalidRes.text();
@@ -523,7 +678,7 @@ describe('Public participant-preview confirmation POST', () => {
     const token = 'b'.repeat(64);
     const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
       method: 'POST',
-      headers: { origin: 'http://localhost:3000' },
+      ...formRequestInit('http://localhost:3000', { action: 'confirm' }),
     });
     const res = await POST(req, { params: Promise.resolve({ token }) });
 
@@ -541,7 +696,7 @@ describe('Public participant-preview confirmation POST', () => {
     const token = 'b'.repeat(64);
     const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
       method: 'POST',
-      headers: { origin: 'http://localhost:3000' },
+      ...formRequestInit('http://localhost:3000', { action: 'confirm' }),
     });
     const res = await POST(req, { params: Promise.resolve({ token }) });
     const html = await res.text();
@@ -551,6 +706,138 @@ describe('Public participant-preview confirmation POST', () => {
     expect(html).not.toContain('SECRET_SQL_DETAIL');
 
     confirmSpy.mockRestore();
+  });
+});
+
+describe('Public participant-preview correction-request POST', () => {
+  it('rejects a cross-origin correction-request POST without ever calling requestCorrection', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const correctionSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'requestCorrection');
+
+    const token = 'a'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      ...formRequestInit('http://malicious.test', { action: 'request_correction', comment: 'Please fix the title.' }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(403);
+    expect(correctionSpy).not.toHaveBeenCalled();
+
+    correctionSpy.mockRestore();
+  });
+
+  it('submits a correction request via the token hash and the trimmed comment, then redirects (303)', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const correctionSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'requestCorrection').mockResolvedValue({
+      correctionRequestId: 'cr1',
+      requestedAt: '2026-08-11T00:00:00.000Z',
+      comment: 'Please fix the title.',
+      alreadyRequested: false,
+    });
+
+    const token = 'b'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      ...formRequestInit('http://localhost:3000', { action: 'request_correction', comment: '  Please fix the title.  ' }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('Location')).toBe(`http://localhost:3000/participant-preview/${token}`);
+    expect(correctionSpy).toHaveBeenCalledWith(hashPreviewToken(token), 'Please fix the title.');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+
+    correctionSpy.mockRestore();
+  });
+
+  it('redirects without calling requestCorrection when the comment is empty, whitespace-only, or over the length bound', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const correctionSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'requestCorrection');
+
+    const token = 'b'.repeat(64);
+    const invalidComments = ['', '   \n\t  ', 'a'.repeat(2001)];
+
+    for (const comment of invalidComments) {
+      const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+        method: 'POST',
+        ...formRequestInit('http://localhost:3000', { action: 'request_correction', comment }),
+      });
+      const res = await POST(req, { params: Promise.resolve({ token }) });
+
+      expect(res.status).toBe(303);
+      expect(res.headers.get('Location')).toBe(`http://localhost:3000/participant-preview/${token}`);
+    }
+
+    expect(correctionSpy).not.toHaveBeenCalled();
+    correctionSpy.mockRestore();
+  });
+
+  it('renders the generic unavailable response for a plausible but unknown/expired/revoked/already-confirmed token', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const correctionSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'requestCorrection').mockResolvedValue(null);
+
+    const token = 'b'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      ...formRequestInit('http://localhost:3000', { action: 'request_correction', comment: 'Please fix the title.' }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+    const html = await res.text();
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get('Location')).toBeNull();
+    expect(html).toContain('Preview Unavailable');
+    expect(correctionSpy).toHaveBeenCalledWith(hashPreviewToken(token), 'Please fix the title.');
+
+    correctionSpy.mockRestore();
+  });
+
+  it('renders the generic unavailable response (never a raw backend error) when requestCorrection throws', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const correctionSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'requestCorrection').mockRejectedValue(new Error('SECRET_SQL_DETAIL'));
+
+    const token = 'b'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      ...formRequestInit('http://localhost:3000', { action: 'request_correction', comment: 'Please fix the title.' }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+    const html = await res.text();
+
+    expect(res.status).toBe(500);
+    expect(html).toContain('Preview Unavailable');
+    expect(html).not.toContain('SECRET_SQL_DETAIL');
+
+    correctionSpy.mockRestore();
+  });
+
+  it('an idempotent already-requested SUCCESS result still redirects (303), not just a first-time submission', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const correctionSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'requestCorrection').mockResolvedValue({
+      correctionRequestId: 'cr1',
+      requestedAt: '2026-08-11T00:00:00.000Z',
+      comment: 'Please fix the title.',
+      alreadyRequested: true,
+    });
+
+    const token = 'b'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      ...formRequestInit('http://localhost:3000', { action: 'request_correction', comment: 'A different resubmitted comment.' }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('Location')).toBe(`http://localhost:3000/participant-preview/${token}`);
+
+    correctionSpy.mockRestore();
   });
 });
 
@@ -596,7 +883,7 @@ describe('participantPreviewHtml external link URL scheme safety', () => {
         industryCategories: [],
       },
       media: [],
-      confirmation: null,
+      responseState: { type: 'unresponded' },
     });
 
     expect(html).toContain('href="https://example.test/safe"');

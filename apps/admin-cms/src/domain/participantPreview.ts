@@ -71,3 +71,38 @@ export interface ParticipantPreviewConfirmationResult {
 export interface ParticipantPreviewConfirmationStatus {
   confirmedAt: string;
 }
+
+/**
+ * Result of requesting (or idempotently re-requesting) a correction against an exact participant
+ * preview version. Means only "the participant requested changes to this exact immutable
+ * preview" — never that project metadata was changed, never that the correction was resolved,
+ * never a workflow status change, and never publication.
+ */
+export interface ParticipantPreviewCorrectionRequestResult {
+  correctionRequestId: string;
+  requestedAt: string;
+  comment: string;
+  alreadyRequested: boolean;
+}
+
+/**
+ * Correction-request status for an already-resolved participant preview, as read by either the
+ * participant-facing route (post-resolution) or Admin/CMS staff view. Never exposes the token
+ * hash or other internal-only identifiers beyond the request timestamp and comment.
+ */
+export interface ParticipantPreviewCorrectionRequestStatus {
+  requestedAt: string;
+  comment: string;
+}
+
+/**
+ * The participant-response state for one exact participant preview version is always exactly one
+ * of these three — never both confirmed and correction_requested (enforced transactionally at the
+ * Migration 0015 RPC layer, see request_participant_preview_correction and the extended
+ * confirm_participant_preview). Server rendering must resolve to this type and fail closed
+ * (throw) rather than construct it from contradictory underlying rows.
+ */
+export type ParticipantPreviewResponseState =
+  | { type: 'unresponded' }
+  | ({ type: 'confirmed' } & ParticipantPreviewConfirmationStatus)
+  | ({ type: 'correction_requested' } & ParticipantPreviewCorrectionRequestStatus);
