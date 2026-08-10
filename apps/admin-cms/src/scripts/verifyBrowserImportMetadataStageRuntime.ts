@@ -147,7 +147,8 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
 
     const res1 = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysis1, intent: intent1 });
     if (!res1.success || res1.result !== 'created') {
-      throw new Error(`[Scenario 1] Staging failed: ${JSON.stringify(res1)}`);
+      const pkgInfo = analysis1.packages[0];
+      throw new Error(`[Scenario 1] Staging failed: ${JSON.stringify(res1)} | PkgStatus=${pkgInfo?.status} | PkgErrors=${JSON.stringify(pkgInfo?.errors)} | PkgWarnings=${JSON.stringify(pkgInfo?.warnings)}`);
     }
     createdBatchIds.push(res1.batchId);
 
