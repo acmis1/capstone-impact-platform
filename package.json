@@ -45,7 +45,8 @@
     "supabase:assert-running": "tsx apps/admin-cms/src/scripts/assertSupabaseRunning.ts",
     "supabase:assert-stopped": "tsx apps/admin-cms/src/scripts/assertSupabaseStopped.ts",
     "verify:browser-metadata-stage-runtime": "npm run verify:browser-metadata-stage-runtime --workspace=apps/admin-cms",
-    "verify:browser-media-stage-runtime": "npm run verify:browser-media-stage-runtime --workspace=apps/admin-cms"
+    "verify:browser-media-stage-runtime": "npm run verify:browser-media-stage-runtime --workspace=apps/admin-cms",
+    "verify:import-batch-review-submit-runtime": "npm run verify:import-batch-review-submit-runtime --workspace=apps/admin-cms"
   },
   "devDependencies": {
     "server-only": "^0.0.1",

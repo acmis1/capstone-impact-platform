@@ -15,6 +15,9 @@ import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetad
 import { GuardedProjectBackLink, ProjectMetadataNavigationProvider } from '../../../../components/admin/ProjectMetadataNavigation';
 import { SupabaseProjectMetadataGateway, loadProjectMetadataEditorData } from '../../../../projects/projectMetadataService';
 import { saveProjectMetadataAction } from './actions';
+import { ImportBatchRepository } from '../../../../repositories/ImportBatchRepository';
+import { computeReadinessForImportBatchRow } from '../../../../import/importBatchReviewReadiness';
+import { SubmitForReviewButton } from '../../../../components/admin/SubmitForReviewButton';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -32,6 +35,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let auditRecords: Array<Record<string, unknown>> = [];
   let metadataEditorData: Awaited<ReturnType<typeof loadProjectMetadataEditorData>> = null;
   let canEditMetadata = false;
+  let submitForReview: { ready: boolean; blockingReasons: string[] } | null = null;
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -45,6 +49,23 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       canEditMetadata = hasPermission(adminContext.permissions, 'projects.edit');
       metadataEditorData = editorData;
       if (!metadataEditorData) throw new Error('Project metadata editor data unavailable');
+
+      // Submit-for-review eligibility is only relevant for imported projects still awaiting
+      // preparation (draft) or returned for corrections (changes_requested), from a completed batch.
+      if (
+        project.importBatchId &&
+        (project.status === 'draft' || project.status === 'changes_requested')
+      ) {
+        const importBatchRepository = new ImportBatchRepository();
+        const [importBatch, reviewRow] = await Promise.all([
+          importBatchRepository.getImportBatchById(project.importBatchId),
+          importBatchRepository.getProjectReviewDataByPublicId(publicId),
+        ]);
+        if (importBatch && importBatch.status === 'completed' && reviewRow) {
+          const readiness = computeReadinessForImportBatchRow(reviewRow);
+          submitForReview = { ready: readiness.ready, blockingReasons: readiness.blockingReasons };
+        }
+      }
 
       // Fetch recent approval_records for this project
       const supabase = createSupabaseAdminClientCore();
@@ -220,6 +241,27 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
         {/* Dynamic Action Trigger Panel */}
         <ProjectDetailSection title="⚡ Staging Review Actions" borderColor="#EC4899">
+          {submitForReview && canEditMetadata && (
+            <div style={{ marginBottom: allowedActions.length > 0 ? '1.25rem' : 0 }}>
+              {submitForReview.ready ? (
+                <SubmitForReviewButton
+                  batchId={project.importBatchId || ''}
+                  publicId={project.publicId || ''}
+                  currentStatus={project.status}
+                />
+              ) : (
+                <div style={{
+                  fontSize: '0.8rem', color: '#F59E0B', backgroundColor: 'rgba(245, 158, 11, 0.05)',
+                  border: '1px solid rgba(245, 158, 11, 0.15)', borderRadius: '6px', padding: '0.5rem 0.75rem',
+                }}>
+                  <strong>Not ready to submit for review:</strong>
+                  <ul style={{ margin: '0.25rem 0 0 0', paddingLeft: '1.1rem' }}>
+                    {submitForReview.blockingReasons.map((reason) => <li key={reason}>{reason}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
           <StagingReviewActions
             publicId={project.publicId || ''}
             currentStatus={project.status}
