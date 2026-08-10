@@ -10,7 +10,7 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
 
   it('1. Exactly 9 timestamped migration files exist in explicitly sorted ascending order', () => {
     const rawFiles = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'));
-    expect(rawFiles.length).toBe(9);
+    expect(rawFiles.length).toBe(10);
 
     // Sort explicitly to not rely on OS directory enumeration order
     const files = [...rawFiles].sort((a, b) => a.localeCompare(b));

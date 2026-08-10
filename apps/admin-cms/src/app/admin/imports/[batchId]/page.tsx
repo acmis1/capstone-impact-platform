@@ -205,7 +205,7 @@ export default async function ImportBatchDetailPage({
               color: '#9CA3AF',
               lineHeight: '1.4'
             }}>
-              <strong>🔒 Staging Safety Isolation:</strong> Imported package resources are stored inside private drafts buckets. Media assets do not promote to public URLs, keeping staging showcase records cleanly separated from active public distributions. Duda showcase remains completely disconnected.
+              <strong>🔒 Staging Safety Isolation:</strong> {batch.status === 'metadata_staged' ? 'Metadata is stored in local Supabase and projects remain in draft state. Media file uploads have not occurred, full binary validation is pending, and no approval or publication has been performed.' : 'Imported package resources are stored inside private drafts buckets. Media assets do not promote to public URLs, keeping staging showcase records cleanly separated from active public distributions.'}
             </div>
           </div>
 

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import Link from 'next/link';
 import { generateUploadKey, isIgnoredSystemFile, normalizeRelativePath } from '../../import/browserSelection';
 import {
   BrowserImportPreviewBatch,
@@ -39,6 +40,16 @@ export default function BrowserImportPreviewClient() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [isStaging, setIsStaging] = useState(false);
+  const [stagingError, setStagingError] = useState<string | null>(null);
+  const [stagedResult, setStagedResult] = useState<{
+    batchId: string;
+    projectCount: number;
+    warningCount: number;
+    result: 'created' | 'already_staged';
+  } | null>(null);
+
+  const stagingLockRef = useRef(false);
   const preparationLockRef = useRef(false);
   const selectionStateRef = useRef<BrowserImportSelectionState>(selectionState);
 
@@ -54,10 +65,16 @@ export default function BrowserImportPreviewClient() {
     });
   };
 
-  const isPreparingOrLocked = selectionState.isPreparing;
+  const invalidateStagingResult = () => {
+    setStagedResult(null);
+    setStagingError(null);
+  };
+
+  const isPreparingOrLocked = selectionState.isPreparing || isStaging;
+
 
   const handleFolderSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (preparationLockRef.current || selectionStateRef.current.isPreparing) return;
+    if (preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
 
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -68,6 +85,7 @@ export default function BrowserImportPreviewClient() {
     setDetectedPackageCount(0);
     setPreviewResult(null);
     setApiError(null);
+    invalidateStagingResult();
     updateSelectionState(resetSelectionState());
     setManifestCache(null);
 
@@ -137,12 +155,13 @@ export default function BrowserImportPreviewClient() {
   };
 
   const handleRequestPreview = async () => {
-    if (selectedFiles.length === 0 || !selectedRootName || preparationLockRef.current || selectionStateRef.current.isPreparing) return;
+    if (selectedFiles.length === 0 || !selectedRootName || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
 
     setIsLoading(true);
     setApiError(null);
     setPreviewResult(null);
     setManifestCache(null);
+    invalidateStagingResult();
     updateSelectionState(resetSelectionState());
 
     try {
@@ -246,7 +265,7 @@ export default function BrowserImportPreviewClient() {
   };
 
   const handleClearSelection = () => {
-    if (preparationLockRef.current || selectionStateRef.current.isPreparing) return;
+    if (preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
 
     setSelectedFiles([]);
     setSelectedRootName(null);
@@ -254,28 +273,33 @@ export default function BrowserImportPreviewClient() {
     setDetectedPackageCount(0);
     setPreviewResult(null);
     setApiError(null);
+    invalidateStagingResult();
     updateSelectionState(resetSelectionState());
     setManifestCache(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleToggleValid = (pkgPath: string) => {
-    if (!previewResult || preparationLockRef.current || selectionStateRef.current.isPreparing) return;
+    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
+    invalidateStagingResult();
     updateSelectionState((prev) => toggleValidPackage(prev, pkgPath, previewResult.packages));
   };
 
   const handleToggleWarningAck = (pkgPath: string) => {
-    if (!previewResult || preparationLockRef.current || selectionStateRef.current.isPreparing) return;
+    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
+    invalidateStagingResult();
     updateSelectionState((prev) => toggleWarningAcknowledgement(prev, pkgPath, previewResult.packages));
   };
 
   const handleToggleWarningSelect = (pkgPath: string) => {
-    if (!previewResult || preparationLockRef.current || selectionStateRef.current.isPreparing) return;
+    if (!previewResult || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
+    invalidateStagingResult();
     updateSelectionState((prev) => toggleWarningPackageSelection(prev, pkgPath, previewResult.packages));
   };
 
   const handlePrepareImport = async () => {
-    if (!previewResult || !manifestCache || preparationLockRef.current || selectionStateRef.current.isPreparing) return;
+    if (!previewResult || !manifestCache || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging) return;
+    invalidateStagingResult();
 
     await runBrowserImportPreparation({
       lock: preparationLockRef,
@@ -285,6 +309,96 @@ export default function BrowserImportPreviewClient() {
       getCurrentState: () => selectionStateRef.current,
       setSelectionState: updateSelectionState,
     });
+  };
+
+  const handleStageMetadata = async () => {
+    if (!selectionStateRef.current.preparedIntent || !manifestCache || stagingLockRef.current || preparationLockRef.current || isStaging) return;
+
+    stagingLockRef.current = true;
+    setIsStaging(true);
+    setStagingError(null);
+
+    try {
+      const intent = selectionStateRef.current.preparedIntent;
+      const formData = new FormData();
+      formData.append('manifest', JSON.stringify(manifestCache));
+      formData.append('intent', JSON.stringify(intent));
+
+      // Attach only expected metadata files (xlsx or json)
+      for (const file of selectedFiles) {
+        const relPath = file.webkitRelativePath || file.name;
+        const norm = normalizeRelativePath(relPath);
+        if (!norm || isIgnoredSystemFile(norm)) continue;
+        const parts = norm.split('/');
+        const lowerName = parts[parts.length - 1].toLowerCase();
+        if (lowerName === 'project-details.xlsx' || lowerName === 'project.json') {
+          const key = generateUploadKey(norm);
+          formData.append(key, file);
+        }
+      }
+
+      const res = await fetch('/api/imports/stage-metadata', {
+        method: 'POST',
+        body: formData,
+      });
+
+      let json: unknown = null;
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error('SERVER_NON_JSON');
+      }
+
+      if (!res.ok) {
+        const errObj = json as { code?: string; error?: string };
+        const knownErrorMap: Record<string, string> = {
+          UNAUTHENTICATED: 'Authentication required. Please log in with staff credentials.',
+          PERMISSION_DENIED: 'Access denied: You do not have permission to stage imports.',
+          AUTH_SERVICE_UNAVAILABLE: 'Authentication service is temporarily unavailable.',
+          CROSS_ORIGIN_REJECTED: 'Cross-origin requests are forbidden.',
+          MISSING_CONTENT_LENGTH: 'Request Content-Length is missing or invalid.',
+          INVALID_CONTENT_LENGTH: 'Request Content-Length is invalid.',
+          REQUEST_TOO_LARGE: 'Request size exceeds maximum limit.',
+          INVALID_MANIFEST: 'Selection manifest is invalid or malformed.',
+          INVALID_INTENT: 'Prepared intent is invalid or malformed.',
+          DUPLICATE_MANIFEST: 'Duplicate manifest field is forbidden.',
+          DUPLICATE_INTENT: 'Duplicate intent field is forbidden.',
+          UNEXPECTED_UPLOAD_FIELD: 'Form contains unrecognized upload fields.',
+          DUPLICATE_UPLOAD_FIELD: 'Form contains duplicate upload fields.',
+          MISSING_METADATA_UPLOAD: 'Missing expected metadata file upload.',
+          METADATA_SIZE_MISMATCH: 'Uploaded metadata file size mismatch.',
+          PREVIEW_FINGERPRINT_MISMATCH: 'Preview state has changed or fingerprint does not match.',
+          INVALID_SELECTION: 'Selected packages are invalid or not allowed.',
+          LOOKUP_NOT_FOUND: 'Required program, discipline, or category lookup could not be found.',
+          PROJECT_ALREADY_EXISTS: 'One or more selected project public IDs already exist in the database.',
+          PERSISTENCE_FAILED: 'The metadata staging operation could not be saved.',
+          UNEXPECTED_INTERNAL_ERROR: 'The metadata staging operation could not be completed. Please try again.',
+        };
+        const msg = (errObj.code && knownErrorMap[errObj.code]) || 'The metadata staging operation could not be completed. Please try again.';
+        setStagingError(msg);
+        return;
+      }
+
+      const resObj = json as {
+        success: true;
+        result: 'created' | 'already_staged';
+        batchId: string;
+        projectCount: number;
+        warningCount: number;
+      };
+
+      setStagedResult({
+        batchId: resObj.batchId,
+        projectCount: resObj.projectCount,
+        warningCount: resObj.warningCount,
+        result: resObj.result,
+      });
+    } catch {
+      setStagingError('The metadata staging operation could not be completed. Please try again.');
+    } finally {
+      setIsStaging(false);
+      stagingLockRef.current = false;
+    }
   };
 
   const togglePackageExpand = (pkgPath: string) => {
@@ -633,6 +747,109 @@ export default function BrowserImportPreviewClient() {
                 {selectionState.preparedIntent.acknowledgedWarningPackagePaths.length > selectionState.preparedIntent.selectedPackagePaths.filter((p) => previewResult.packages.find((pkg) => pkg.packagePath === p)?.status === 'warning').length && (
                   <div><span style={{ color: '#9CA3AF' }}>Acknowledged Unselected Warnings:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.acknowledgedWarningPackagePaths.length - selectionState.preparedIntent.selectedPackagePaths.filter((p) => previewResult.packages.find((pkg) => pkg.packagePath === p)?.status === 'warning').length}</strong></div>
                 )}
+              </div>
+
+              <div style={{
+                marginTop: '1.25rem',
+                paddingTop: '1rem',
+                borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '1rem',
+              }}>
+                <div style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>
+                  ℹ️ This creates draft project metadata and an import batch. Media files are not uploaded in this step.
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleStageMetadata}
+                  disabled={isStaging || selectionState.isPreparing}
+                  style={{
+                    backgroundColor: '#10B981',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.65rem 1.25rem',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    cursor: isStaging || selectionState.isPreparing ? 'not-allowed' : 'pointer',
+                    opacity: isStaging || selectionState.isPreparing ? 0.5 : 1,
+                  }}
+                >
+                  {isStaging ? '⏳ Staging Metadata...' : '💾 Stage Selected Metadata'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Staging Failure Feedback */}
+          {stagingError && (
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              borderRadius: '10px',
+              padding: '1rem 1.25rem',
+              marginBottom: '1.5rem',
+              color: '#EF4444',
+              fontSize: '0.9rem',
+            }}>
+              ❌ <strong>Metadata Staging Failed:</strong> {stagingError}
+            </div>
+          )}
+
+          {/* Staged Success Card */}
+          {stagedResult && (
+            <div style={{
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+              borderRadius: '12px',
+              padding: '1.25rem 1.5rem',
+              marginBottom: '1.5rem',
+              color: '#60A5FA',
+            }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', fontWeight: 800, fontSize: '1rem', color: '#60A5FA' }}>
+                🎉 {stagedResult.result === 'already_staged' ? 'Import Batch Already Staged (Idempotent Retry)' : 'Import Metadata Staged Successfully'}
+              </h4>
+              <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: '#D1D5DB' }}>
+                Draft project metadata and batch record have been atomically created in local Supabase. Media file uploads belong to a future step.
+              </p>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '0.75rem',
+                fontSize: '0.85rem',
+                backgroundColor: '#161F30',
+                padding: '1rem',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                marginBottom: '1rem',
+              }}>
+                <div><span style={{ color: '#9CA3AF' }}>Batch Status:</span> <strong style={{ color: '#A78BFA' }}>metadata_staged</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Staged Projects:</span> <strong style={{ color: '#F3F4F6' }}>{stagedResult.projectCount} draft(s)</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Warnings Logged:</span> <strong style={{ color: '#F3F4F6' }}>{stagedResult.warningCount}</strong></div>
+                <div><span style={{ color: '#9CA3AF' }}>Batch UUID:</span> <code style={{ color: '#E5E7EB' }}>{stagedResult.batchId}</code></div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <Link
+                  href={`/admin/imports/${stagedResult.batchId}`}
+                  style={{
+                    color: '#FFFFFF',
+                    backgroundColor: '#3B82F6',
+                    textDecoration: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '6px',
+                    display: 'inline-block',
+                  }}
+                >
+                  View Import Batch Detail Page →
+                </Link>
               </div>
             </div>
           )}

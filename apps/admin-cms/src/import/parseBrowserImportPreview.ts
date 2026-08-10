@@ -554,6 +554,99 @@ export async function parseBrowserImportPreview(
   };
 }
 
+export interface BrowserImportServerPackage {
+  packagePath: string;
+  folderName: string;
+  proposedPublicId: string;
+  status: 'valid' | 'warning' | 'invalid';
+  metadataSource: 'xlsx' | 'json' | null;
+  manifest: ImportPackageManifest;
+  filePresence: {
+    posterImagePresent: boolean;
+    posterPdfPresent: boolean;
+    snapshotPresent: boolean;
+  };
+  errors: BrowserImportIssue[];
+  warnings: BrowserImportIssue[];
+}
+
+export interface BrowserImportServerAnalysis {
+  preview: BrowserImportPreviewResponse;
+  packages: BrowserImportServerPackage[];
+}
+
+export async function analyzeBrowserImportServer(
+  manifestOrPreflight: unknown | ManifestPreflightSuccess,
+  uploadedMetadataFiles: Map<string, Buffer>
+): Promise<BrowserImportServerAnalysis> {
+  const preview = await parseBrowserImportPreview(manifestOrPreflight, uploadedMetadataFiles);
+  if (!preview.success || !preview.batch) {
+    throw new Error('FAILED_TO_ANALYZE');
+  }
+
+  const packages: BrowserImportServerPackage[] = [];
+
+  for (const pkgPreview of preview.batch.packages) {
+    let parsedManifest: ImportPackageManifest | null = null;
+    if (pkgPreview.metadataSource === 'json') {
+      const uploadKey = `${pkgPreview.packagePath}/project.json`.toLowerCase().replace(/[^a-z0-9._-]/g, '_');
+      const buf = uploadedMetadataFiles.get(uploadKey);
+      if (buf) {
+        try {
+          const res = parseProjectDetailsJson(buf.toString('utf8'), pkgPreview.folderName);
+          parsedManifest = res.manifest;
+        } catch {
+          // Fallback to empty manifest if parsing fails
+        }
+      }
+    } else if (pkgPreview.metadataSource === 'xlsx') {
+      const uploadKey = `${pkgPreview.packagePath}/project-details.xlsx`.toLowerCase().replace(/[^a-z0-9._-]/g, '_');
+      const buf = uploadedMetadataFiles.get(uploadKey);
+      if (buf) {
+        try {
+          const wb = await parseProjectDetailsWorkbook(buf);
+          parsedManifest = buildImportPackageManifestFromWorkbook({
+            parsedWorkbook: wb,
+            publicId: pkgPreview.folderName,
+          });
+        } catch {
+          // Fallback to empty manifest
+        }
+      }
+    }
+
+    packages.push({
+      packagePath: pkgPreview.packagePath,
+      folderName: pkgPreview.folderName,
+      proposedPublicId: pkgPreview.proposedPublicId,
+      status: pkgPreview.status,
+      metadataSource: pkgPreview.metadataSource,
+      manifest: parsedManifest || {
+        publicId: pkgPreview.proposedPublicId,
+        title: pkgPreview.previewMetadata?.title || pkgPreview.proposedPublicId,
+        summary: '',
+        background: '',
+        solution: '',
+        year: pkgPreview.previewMetadata?.year || '2026',
+        program: pkgPreview.previewMetadata?.program || '',
+        studyProgram: pkgPreview.previewMetadata?.program || '',
+        discipline: pkgPreview.previewMetadata?.discipline || '',
+        industry: '',
+        industryPartner: '',
+        academicSupervisor: '',
+        groupName: pkgPreview.previewMetadata?.groupName || '',
+        teamMembers: [],
+        layoutConfig: {},
+      },
+      filePresence: pkgPreview.filePresence,
+      errors: pkgPreview.errors,
+      warnings: pkgPreview.warnings,
+    });
+  }
+
+  return { preview, packages };
+}
+
 function stripLegacyDerivedDescriptorFields(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const manifest = raw as Record<string, unknown>;
