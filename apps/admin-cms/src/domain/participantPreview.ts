@@ -51,3 +51,23 @@ export interface ParticipantPreviewMediaViewRef {
   mimeType: string | null;
   signedUrl: string | null;
 }
+
+/**
+ * Result of confirming (or re-confirming) an exact participant preview version. Means only
+ * "the participant confirmed this exact immutable preview" — never that the mutable project row
+ * is confirmed, never a workflow status change, and never publication.
+ */
+export interface ParticipantPreviewConfirmationResult {
+  confirmationId: string;
+  confirmedAt: string;
+  alreadyConfirmed: boolean;
+}
+
+/**
+ * Confirmation status for an already-resolved participant preview, as read by either the
+ * participant-facing route (post-resolution) or Admin/CMS staff view. Never exposes the token
+ * hash or other internal-only identifiers beyond the confirmation timestamp.
+ */
+export interface ParticipantPreviewConfirmationStatus {
+  confirmedAt: string;
+}

@@ -1,6 +1,11 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { ParticipantPreviewExecutionError } from './ParticipantPreviewRepository';
-import { ParticipantPreviewMediaRef, ParticipantPreviewSnapshot } from '../domain/participantPreview';
+import {
+  ParticipantPreviewConfirmationResult,
+  ParticipantPreviewConfirmationStatus,
+  ParticipantPreviewMediaRef,
+  ParticipantPreviewSnapshot,
+} from '../domain/participantPreview';
 
 export const DEFAULT_PREVIEW_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
@@ -233,5 +238,81 @@ export class SupabaseParticipantPreviewRepositoryCore {
       mediaSnapshot: res.mediaSnapshot as ParticipantPreviewMediaRef[],
       expiresAt: res.expiresAt,
     };
+  }
+
+  /**
+   * Confirms (or idempotently re-confirms) the exact participant preview version identified by
+   * a token hash, via the service-role-only confirm_participant_preview RPC. Deliberately
+   * returns null on every failure mode (unknown, malformed, expired, revoked, or unexpected
+   * error) — identical in shape to resolveByTokenHash — so the caller renders one generic
+   * unavailable outcome without ever distinguishing the reason.
+   */
+  async confirmPreview(tokenHash: string): Promise<ParticipantPreviewConfirmationResult | null> {
+    if (!isNonEmptyString(tokenHash)) {
+      return null;
+    }
+
+    const { data, error } = await this.supabase.rpc('confirm_participant_preview', {
+      p_token_hash: tokenHash,
+    });
+
+    if (error || !data || typeof data !== 'object') {
+      return null;
+    }
+
+    const res = data as Record<string, unknown>;
+    if (res.resultCode !== 'SUCCESS') {
+      return null;
+    }
+
+    if (
+      !isNonEmptyString(res.confirmationId) ||
+      !isNonEmptyString(res.confirmedAt) ||
+      typeof res.alreadyConfirmed !== 'boolean'
+    ) {
+      return null;
+    }
+
+    return {
+      confirmationId: res.confirmationId,
+      confirmedAt: res.confirmedAt,
+      alreadyConfirmed: res.alreadyConfirmed,
+    };
+  }
+
+  /**
+   * Direct read of a confirmation row for an already-resolved participant preview id (service-
+   * role client bypasses RLS, same convention as getActivePreview). Used to render both the
+   * participant-facing confirmed/unconfirmed state after GET resolution and the Admin/CMS
+   * confirmation status — never exposes the token hash or other internal identifiers.
+   *
+   * Fails closed on a genuine query failure rather than returning null: null is reserved for the
+   * one legitimate "no confirmation row exists yet" state, so callers must never be able to
+   * mistake a backend failure for "not yet confirmed."
+   */
+  async getConfirmationStatus(participantPreviewId: string): Promise<ParticipantPreviewConfirmationStatus | null> {
+    if (!isNonEmptyString(participantPreviewId)) {
+      return null;
+    }
+
+    const { data, error } = await this.supabase
+      .from('participant_preview_confirmations')
+      .select('confirmed_at')
+      .eq('participant_preview_id', participantPreviewId)
+      .maybeSingle();
+
+    if (error) {
+      throw new ParticipantPreviewExecutionError('INTERNAL_FAILURE');
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    if (!isNonEmptyString(data.confirmed_at)) {
+      throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
+    }
+
+    return { confirmedAt: data.confirmed_at };
   }
 }

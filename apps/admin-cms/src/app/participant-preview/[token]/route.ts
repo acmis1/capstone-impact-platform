@@ -1,9 +1,10 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { SupabaseParticipantPreviewRepository } from '../../../repositories/SupabaseParticipantPreviewRepository';
 import { hashPreviewToken, isPlausibleRawPreviewToken } from '../../../previews/participantPreviewToken';
 import { createSignedDraftMediaUrl } from '../../../storage/mediaStorage';
 import { renderParticipantPreviewPage, renderParticipantPreviewUnavailablePage } from '../../../previews/participantPreviewHtml';
 import { ParticipantPreviewMediaViewRef } from '../../../domain/participantPreview';
+import { validateSameOrigin } from '../../../auth/csrf';
 
 /**
  * Public, unauthenticated participant preview route. Token is the sole authorization
@@ -23,8 +24,11 @@ const RESPONSE_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   // Defense-in-depth only — never a substitute for the explicit href scheme validation in
   // participantPreviewHtml.ts. Blocks script execution and any non-declared external fetch.
+  // form-action 'self' (rather than 'none') is required for the same-origin participant
+  // confirmation POST form below; same-origin submission is separately and authoritatively
+  // enforced server-side via validateSameOrigin, never by the CSP alone.
   'Content-Security-Policy':
-    "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+    "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'",
 } as const;
 
 function unavailableResponse(status: number): Response {
@@ -76,6 +80,62 @@ export async function GET(
     return unavailableResponse(404);
   }
 
-  const html = renderParticipantPreviewPage({ snapshot: resolved.snapshot, media: mediaViews });
+  let confirmation;
+  try {
+    confirmation = await repository.getConfirmationStatus(resolved.previewId);
+  } catch {
+    return unavailableResponse(500);
+  }
+
+  const html = renderParticipantPreviewPage({ snapshot: resolved.snapshot, media: mediaViews, confirmation });
   return new Response(html, { status: 200, headers: RESPONSE_HEADERS });
+}
+
+/**
+ * Explicit participant confirmation of the exact preview version currently shown. The token
+ * (from the URL, not the request body) remains the sole authorization capability — the POST
+ * carries no mutable project/preview data. Same-origin is required since this is a
+ * state-changing request despite the token capability.
+ *
+ * Every invalid-token condition (malformed, unknown, expired, revoked) and every backend
+ * confirmation failure renders the identical generic unavailable response — the participant must
+ * never be able to distinguish which condition occurred, nor learn whether a token hash exists.
+ * Only an actual SUCCESS (including the idempotent already-confirmed case) follows a safe
+ * POST/redirect/GET pattern: the subsequent GET resolves and renders the authoritative display
+ * state, and a page refresh after redirect only re-issues that same GET, never another
+ * confirmation submission.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ token: string }> }
+) {
+  const { token } = await params;
+
+  const origin = request.headers.get('origin');
+  if (!validateSameOrigin(origin, request.nextUrl.origin)) {
+    return unavailableResponse(403);
+  }
+
+  if (!isPlausibleRawPreviewToken(token)) {
+    return unavailableResponse(404);
+  }
+
+  const tokenHash = hashPreviewToken(token);
+  const repository = new SupabaseParticipantPreviewRepository();
+
+  let confirmation;
+  try {
+    confirmation = await repository.confirmPreview(tokenHash);
+  } catch {
+    return unavailableResponse(500);
+  }
+
+  if (!confirmation) {
+    return unavailableResponse(404);
+  }
+
+  return NextResponse.redirect(new URL(`/participant-preview/${token}`, request.nextUrl.origin), {
+    status: 303,
+    headers: RESPONSE_HEADERS,
+  });
 }
