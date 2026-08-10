@@ -324,18 +324,43 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
     expect(result).toEqual({ confirmedAt: '2026-08-11T00:00:00.000Z' });
   });
 
-  it('getConfirmationStatus returns null when no confirmation row exists or the query errors', async () => {
+  it('getConfirmationStatus returns null only for the genuine "no confirmation row exists yet" state', async () => {
     const notFoundSupabase = {
       from: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }) }) }),
     } as unknown as import('@supabase/supabase-js').SupabaseClient;
-    const repoA = new SupabaseParticipantPreviewRepositoryCore(notFoundSupabase);
-    expect(await repoA.getConfirmationStatus('preview-uuid-1')).toBeNull();
+    const repo = new SupabaseParticipantPreviewRepositoryCore(notFoundSupabase);
+    expect(await repo.getConfirmationStatus('preview-uuid-1')).toBeNull();
+  });
 
+  it('getConfirmationStatus fails closed (throws INTERNAL_FAILURE) on a genuine query error, never silently returning null/unconfirmed', async () => {
     const erroredSupabase = {
-      from: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: { message: 'db error' } }) }) }) }),
+      from: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: { message: 'SECRET_SQL_DETAIL db error' } }) }) }) }),
     } as unknown as import('@supabase/supabase-js').SupabaseClient;
-    const repoB = new SupabaseParticipantPreviewRepositoryCore(erroredSupabase);
-    expect(await repoB.getConfirmationStatus('preview-uuid-1')).toBeNull();
+    const repo = new SupabaseParticipantPreviewRepositoryCore(erroredSupabase);
+
+    let caught: ParticipantPreviewExecutionError | null = null;
+    try {
+      await repo.getConfirmationStatus('preview-uuid-1');
+    } catch (err) {
+      if (err instanceof ParticipantPreviewExecutionError) caught = err;
+    }
+    expect(caught?.code).toBe('INTERNAL_FAILURE');
+    expect(caught?.message).not.toContain('SECRET_SQL_DETAIL');
+  });
+
+  it('getConfirmationStatus fails closed (throws RESPONSE_INVALID) when the row exists but confirmed_at is malformed', async () => {
+    const malformedSupabase = {
+      from: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { confirmed_at: null }, error: null }) }) }) }),
+    } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(malformedSupabase);
+
+    let caught: ParticipantPreviewExecutionError | null = null;
+    try {
+      await repo.getConfirmationStatus('preview-uuid-1');
+    } catch (err) {
+      if (err instanceof ParticipantPreviewExecutionError) caught = err;
+    }
+    expect(caught?.code).toBe('RESPONSE_INVALID');
   });
 });
 

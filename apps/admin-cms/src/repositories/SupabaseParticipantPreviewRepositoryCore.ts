@@ -285,6 +285,10 @@ export class SupabaseParticipantPreviewRepositoryCore {
    * role client bypasses RLS, same convention as getActivePreview). Used to render both the
    * participant-facing confirmed/unconfirmed state after GET resolution and the Admin/CMS
    * confirmation status — never exposes the token hash or other internal identifiers.
+   *
+   * Fails closed on a genuine query failure rather than returning null: null is reserved for the
+   * one legitimate "no confirmation row exists yet" state, so callers must never be able to
+   * mistake a backend failure for "not yet confirmed."
    */
   async getConfirmationStatus(participantPreviewId: string): Promise<ParticipantPreviewConfirmationStatus | null> {
     if (!isNonEmptyString(participantPreviewId)) {
@@ -297,8 +301,16 @@ export class SupabaseParticipantPreviewRepositoryCore {
       .eq('participant_preview_id', participantPreviewId)
       .maybeSingle();
 
-    if (error || !data) {
+    if (error) {
+      throw new ParticipantPreviewExecutionError('INTERNAL_FAILURE');
+    }
+
+    if (!data) {
       return null;
+    }
+
+    if (!isNonEmptyString(data.confirmed_at)) {
+      throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
     }
 
     return { confirmedAt: data.confirmed_at };

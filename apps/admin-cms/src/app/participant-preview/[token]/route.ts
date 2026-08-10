@@ -95,10 +95,14 @@ export async function GET(
  * Explicit participant confirmation of the exact preview version currently shown. The token
  * (from the URL, not the request body) remains the sole authorization capability — the POST
  * carries no mutable project/preview data. Same-origin is required since this is a
- * state-changing request despite the token capability. Always follows a safe
- * POST/redirect/GET pattern: the response never distinguishes a successful confirmation from an
- * invalid/expired/revoked token — the subsequent GET resolves and renders the authoritative
- * display state, and a page refresh after redirect only re-issues that same GET, never another
+ * state-changing request despite the token capability.
+ *
+ * Every invalid-token condition (malformed, unknown, expired, revoked) and every backend
+ * confirmation failure renders the identical generic unavailable response — the participant must
+ * never be able to distinguish which condition occurred, nor learn whether a token hash exists.
+ * Only an actual SUCCESS (including the idempotent already-confirmed case) follows a safe
+ * POST/redirect/GET pattern: the subsequent GET resolves and renders the authoritative display
+ * state, and a page refresh after redirect only re-issues that same GET, never another
  * confirmation submission.
  */
 export async function POST(
@@ -119,10 +123,15 @@ export async function POST(
   const tokenHash = hashPreviewToken(token);
   const repository = new SupabaseParticipantPreviewRepository();
 
+  let confirmation;
   try {
-    await repository.confirmPreview(tokenHash);
+    confirmation = await repository.confirmPreview(tokenHash);
   } catch {
     return unavailableResponse(500);
+  }
+
+  if (!confirmation) {
+    return unavailableResponse(404);
   }
 
   return NextResponse.redirect(new URL(`/participant-preview/${token}`, request.nextUrl.origin), {

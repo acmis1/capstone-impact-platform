@@ -362,6 +362,40 @@ describe('Public participant-preview route', () => {
     resolveSpy.mockRestore();
     confirmationSpy.mockRestore();
   });
+
+  it('renders the generic unavailable response — never a falsely-unconfirmed form — when the confirmation-status lookup fails', async () => {
+    const { GET } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const { ParticipantPreviewExecutionError } = await import('../repositories/ParticipantPreviewRepository');
+
+    const resolveSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'resolveByTokenHash').mockResolvedValue({
+      previewId: 'p-status-failure',
+      snapshot: {
+        title: 'Status Lookup Failure Project', summary: null, background: null, solution: null, year: 2026,
+        program: null, studyProgram: null, discipline: null, disciplines: [], industry: null,
+        industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [],
+        posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [],
+      },
+      mediaSnapshot: [],
+      expiresAt: '2026-08-17T00:00:00.000Z',
+    });
+    const confirmationSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getConfirmationStatus').mockRejectedValue(
+      new ParticipantPreviewExecutionError('INTERNAL_FAILURE')
+    );
+
+    const token = '1'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`);
+    const res = await GET(req, { params: Promise.resolve({ token }) });
+    const html = await res.text();
+
+    expect(res.status).toBe(500);
+    expect(html).toContain('Preview Unavailable');
+    expect(html).not.toContain('Confirm project details');
+    expect(html).not.toContain('Status Lookup Failure Project');
+
+    resolveSpy.mockRestore();
+    confirmationSpy.mockRestore();
+  });
 });
 
 describe('Public participant-preview confirmation POST', () => {
@@ -427,10 +461,64 @@ describe('Public participant-preview confirmation POST', () => {
     confirmSpy.mockRestore();
   });
 
-  it('redirects identically (303, same Location) for an invalid/expired/revoked token, never leaking the reason', async () => {
+  it('renders the identical generic unavailable response (never a redirect) for a plausible but unknown/expired/revoked token', async () => {
     const { POST } = await import('../app/participant-preview/[token]/route');
     const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
     const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview').mockResolvedValue(null);
+
+    const token = 'b'.repeat(64);
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000' },
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+    const html = await res.text();
+
+    // Identical status/shape to the malformed-token case, never a 303 redirect: the participant
+    // must not be able to tell "unknown/expired/revoked" apart from "malformed" or from a
+    // successful confirmation.
+    expect(res.status).toBe(404);
+    expect(res.headers.get('Location')).toBeNull();
+    expect(html).toContain('Preview Unavailable');
+    expect(confirmSpy).toHaveBeenCalledWith(hashPreviewToken(token));
+
+    confirmSpy.mockRestore();
+  });
+
+  it('malformed and plausible-but-invalid confirmation tokens produce the identical response shape and status', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview').mockResolvedValue(null);
+
+    const malformedReq = new NextRequest('http://localhost:3000/participant-preview/not-a-valid-token', {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000' },
+    });
+    const malformedRes = await POST(malformedReq, { params: Promise.resolve({ token: 'not-a-valid-token' }) });
+    const malformedHtml = await malformedRes.text();
+
+    const token = 'b'.repeat(64);
+    const invalidReq = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000' },
+    });
+    const invalidRes = await POST(invalidReq, { params: Promise.resolve({ token }) });
+    const invalidHtml = await invalidRes.text();
+
+    expect(malformedRes.status).toBe(invalidRes.status);
+    expect(malformedHtml).toBe(invalidHtml);
+
+    confirmSpy.mockRestore();
+  });
+
+  it('an idempotent already-confirmed SUCCESS result still redirects (303), not just a first-time confirmation', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview').mockResolvedValue({
+      confirmationId: 'c1',
+      confirmedAt: '2026-08-11T00:00:00.000Z',
+      alreadyConfirmed: true,
+    });
 
     const token = 'b'.repeat(64);
     const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
