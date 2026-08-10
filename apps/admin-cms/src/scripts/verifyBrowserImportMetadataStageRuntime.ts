@@ -282,6 +282,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       summary: 'Scenario 3 Summary',
       year: 2026,
       program: program.name,
+      discipline: discipline.name,
       groupName: 'Group Gamma',
       teamMembers: ['Charlie'],
       layoutConfig: {},
