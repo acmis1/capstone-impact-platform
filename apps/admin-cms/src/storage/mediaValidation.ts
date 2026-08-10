@@ -71,3 +71,75 @@ export function validateMediaAsset(params: {
     warnings
   };
 }
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
+const WEBP_RIFF_SIGNATURE = Buffer.from('RIFF', 'ascii');
+const WEBP_FORMAT_SIGNATURE = Buffer.from('WEBP', 'ascii');
+const PDF_SIGNATURE = Buffer.from('%PDF-', 'ascii');
+
+/**
+ * Detects the actual media type of a buffer from its magic bytes (file signature),
+ * independent of any declared filename or browser-supplied MIME type.
+ */
+export function detectMediaSignature(content: Buffer): 'image/png' | 'image/jpeg' | 'image/webp' | 'application/pdf' | null {
+  if (content.length >= PNG_SIGNATURE.length && content.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+    return 'image/png';
+  }
+  if (content.length >= JPEG_SIGNATURE.length && content.subarray(0, JPEG_SIGNATURE.length).equals(JPEG_SIGNATURE)) {
+    return 'image/jpeg';
+  }
+  if (
+    content.length >= 12 &&
+    content.subarray(0, 4).equals(WEBP_RIFF_SIGNATURE) &&
+    content.subarray(8, 12).equals(WEBP_FORMAT_SIGNATURE)
+  ) {
+    return 'image/webp';
+  }
+  if (content.length >= PDF_SIGNATURE.length && content.subarray(0, PDF_SIGNATURE.length).equals(PDF_SIGNATURE)) {
+    return 'application/pdf';
+  }
+  return null;
+}
+
+/**
+ * Validates a media asset's actual byte content: exact declared length, allowed MIME,
+ * filename safety/size rules (via validateMediaAsset), and a real magic-byte signature
+ * match against the expected canonical MIME type. The browser-supplied MIME string is
+ * never treated as authoritative.
+ */
+export function validateMediaAssetBytes(params: {
+  fileName: string;
+  content: Buffer;
+  expectedMimeType: string;
+  expectedFileSizeBytes: number;
+}): ValidationResult {
+  const { fileName, content, expectedMimeType, expectedFileSizeBytes } = params;
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (content.length !== expectedFileSizeBytes) {
+    errors.push(`Uploaded file byte length [${content.length}] does not match expected size [${expectedFileSizeBytes}].`);
+  }
+
+  const base = validateMediaAsset({
+    fileName,
+    fileSizeBytes: content.length,
+    mimeType: expectedMimeType,
+  });
+  errors.push(...base.errors);
+  warnings.push(...base.warnings);
+
+  const detectedSignature = detectMediaSignature(content);
+  if (!detectedSignature) {
+    errors.push('File content does not match any supported file signature (PNG, JPEG, WEBP, PDF).');
+  } else if (detectedSignature !== expectedMimeType) {
+    errors.push(`File content signature [${detectedSignature}] does not match expected type [${expectedMimeType}].`);
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
