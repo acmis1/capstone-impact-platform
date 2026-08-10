@@ -25,6 +25,11 @@ CREATE TABLE IF NOT EXISTS public.browser_import_commits (
 CREATE INDEX IF NOT EXISTS idx_browser_import_commits_intent_hash ON public.browser_import_commits(intent_hash);
 CREATE INDEX IF NOT EXISTS idx_browser_import_commits_batch_id ON public.browser_import_commits(batch_id);
 
+ALTER TABLE public.browser_import_commits ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON public.browser_import_commits FROM PUBLIC, anon, authenticated;
+GRANT ALL ON public.browser_import_commits TO service_role;
+
 -- 3. Service-role-only atomic metadata staging RPC
 CREATE OR REPLACE FUNCTION public.stage_browser_import_metadata(
   p_intent_hash text,

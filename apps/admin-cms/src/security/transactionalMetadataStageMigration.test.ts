@@ -83,6 +83,8 @@ describe('Migration 0010 Atomic Browser Import Metadata Stage Security Contract 
     expect(content).toContain('v_pkg_count = 0 OR v_pkg_count > 25');
 
     // Revokes & Grants
+    expect(content).toContain('ALTER TABLE public.browser_import_commits ENABLE ROW LEVEL SECURITY;');
+    expect(content).toContain('GRANT ALL ON public.browser_import_commits TO service_role;');
     expect(content).toContain('REVOKE EXECUTE ON FUNCTION public.stage_browser_import_metadata(text, text, jsonb, text, text, uuid, jsonb) FROM PUBLIC;');
     expect(content).toContain('REVOKE EXECUTE ON FUNCTION public.stage_browser_import_metadata(text, text, jsonb, text, text, uuid, jsonb) FROM anon;');
     expect(content).toContain('REVOKE EXECUTE ON FUNCTION public.stage_browser_import_metadata(text, text, jsonb, text, text, uuid, jsonb) FROM authenticated;');
