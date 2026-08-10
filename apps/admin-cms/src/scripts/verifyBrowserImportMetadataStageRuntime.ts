@@ -336,10 +336,31 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     const storageBefore4 = await captureStorageSnapshot();
 
     // 4a. Duplicate public ID conflict in database
-    const failIntentDuplicatePubId = {
-      ...intent1, // pkg1Id already exists in database from Scenario 1
+    const conflictJson = json1.replace('Scenario 1 Title', 'Scenario 4 Conflict Title');
+    const conflictKey = generateUploadKey(`${pkg1Id}/project.json`);
+    const conflictManifest = {
+      ...manifest1,
+      declaredTotalBytes: Buffer.from(conflictJson).length + 800,
+      descriptors: manifest1.descriptors.map((descriptor) =>
+        descriptor.uploadKey === key1
+          ? { ...descriptor, uploadKey: conflictKey, fileSizeBytes: Buffer.from(conflictJson).length }
+          : descriptor
+      ),
     };
-    const resFail1 = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysis1, intent: failIntentDuplicatePubId });
+    const conflictAnalysis = await analyzeBrowserImportServer(
+      conflictManifest,
+      new Map([[conflictKey, Buffer.from(conflictJson, 'utf8')]])
+    );
+    const failIntentDuplicatePubId = {
+      ...intent1,
+      previewFingerprint: conflictAnalysis.preview.batch.previewFingerprint,
+      declaredTotalBytes: conflictManifest.declaredTotalBytes,
+    };
+    const resFail1 = await stageBrowserImportMetadata({
+      authContext,
+      serverAnalysis: conflictAnalysis,
+      intent: failIntentDuplicatePubId,
+    });
     if (resFail1.success || resFail1.code !== 'PROJECT_ALREADY_EXISTS') {
       throw new Error(`[Scenario 4a] Expected PROJECT_ALREADY_EXISTS, got ${JSON.stringify(resFail1)}`);
     }
