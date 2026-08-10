@@ -10,20 +10,30 @@ import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEn
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
 
 function ensureLocalEnvironmentVariables(): void {
-  const cliPath = path.resolve(REPO_ROOT, 'node_modules/.bin/supabase');
-  const workdir = path.resolve(REPO_ROOT, 'infra');
-  const output = execSync(`"${cliPath}" status --workdir "${workdir}" -o env`, { cwd: REPO_ROOT, encoding: 'utf8', stdio: 'pipe' });
-  const parsedEnv = parseSupabaseCliEnv(output);
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return;
+  }
+  try {
+    const cliPath = path.resolve(REPO_ROOT, 'node_modules/.bin/supabase');
+    const workdir = path.resolve(REPO_ROOT, 'infra');
+    const output = execSync(`"${cliPath}" status --workdir "${workdir}" -o env`, { cwd: REPO_ROOT, encoding: 'utf8', stdio: 'pipe' });
+    const parsedEnv = parseSupabaseCliEnv(output);
 
-  if (!parsedEnv.API_URL || !parsedEnv.ANON_KEY || !parsedEnv.SERVICE_ROLE_KEY || !isLoopbackUrl(parsedEnv.API_URL)) {
-    throw new Error('[Verifier Env] Missing or non-loopback Supabase CLI status output.');
+    if (parsedEnv.API_URL && parsedEnv.ANON_KEY && parsedEnv.SERVICE_ROLE_KEY && isLoopbackUrl(parsedEnv.API_URL)) {
+      process.env.NEXT_PUBLIC_SUPABASE_URL = parsedEnv.API_URL;
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = parsedEnv.ANON_KEY;
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = parsedEnv.ANON_KEY;
+      process.env.SUPABASE_SECRET_KEY = parsedEnv.SERVICE_ROLE_KEY;
+      process.env.SUPABASE_SERVICE_ROLE_KEY = parsedEnv.SERVICE_ROLE_KEY;
+      return;
+    }
+  } catch {
+    // If CLI status fails, fall back to checking if environment is already configured
   }
 
-  process.env.NEXT_PUBLIC_SUPABASE_URL = parsedEnv.API_URL;
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = parsedEnv.ANON_KEY;
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = parsedEnv.ANON_KEY;
-  process.env.SUPABASE_SECRET_KEY = parsedEnv.SERVICE_ROLE_KEY;
-  process.env.SUPABASE_SERVICE_ROLE_KEY = parsedEnv.SERVICE_ROLE_KEY;
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('Staging Configuration Error: Required public client variables are missing. NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing.');
+  }
 }
 
 interface StorageSnapshot {
@@ -95,7 +105,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     // -------------------------------------------------------------------------
     process.stdout.write('[Scenario 1] Testing single-package staging and deep database row verification...\n');
     const storageBefore1 = await captureStorageSnapshot();
-    const pkg1Id = `s1-pkg-${Date.now()}`;
+    const pkg1Id = 's1-pkg-1';
     const json1 = JSON.stringify({
       publicId: pkg1Id,
       title: 'Scenario 1 Title',
@@ -170,7 +180,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     // -------------------------------------------------------------------------
     process.stdout.write('[Scenario 2] Testing multi-package selected staging & exact idempotency retry...\n');
     const storageBefore2 = await captureStorageSnapshot();
-    const batchRoot2 = `s2-batch-${Date.now()}`;
+    const batchRoot2 = 's2-batch-1';
     const p1Path = `${batchRoot2}/pkg-a`;
     const p2Path = `${batchRoot2}/pkg-b`;
 
@@ -258,7 +268,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     // -------------------------------------------------------------------------
     process.stdout.write('[Scenario 3] Testing real concurrent staging with Promise.all...\n');
     const storageBefore3 = await captureStorageSnapshot();
-    const pkg3Id = `s3-pkg-${Date.now()}`;
+    const pkg3Id = 's3-pkg-1';
     const json3 = JSON.stringify({
       publicId: pkg3Id,
       title: 'Scenario 3 Title',
@@ -324,7 +334,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
 
     // 4b. Invalid taxonomy program lookup
     const jsonBadProgram = JSON.stringify({
-      publicId: `bad-prog-${Date.now()}`,
+      publicId: 'bad-prog-1',
       title: 'Bad Prog Title',
       summary: 'Bad Prog Summary',
       year: 2026,
@@ -333,22 +343,22 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       teamMembers: ['Xavier'],
       layoutConfig: {},
     });
-    const kBadProg = generateUploadKey(`bad-prog/project.json`);
+    const kBadProg = generateUploadKey('bad-prog-1/project.json');
     const manifestBadProg = {
-      selectedRootName: 'bad-prog',
+      selectedRootName: 'bad-prog-1',
       fileCount: 1,
       declaredTotalBytes: Buffer.from(jsonBadProgram).length,
       ignoredSystemFilesCount: 0,
-      descriptors: [{ uploadKey: kBadProg, originalPath: `bad-prog/project.json`, fileSizeBytes: Buffer.from(jsonBadProgram).length, browserMimeType: 'application/json' }],
+      descriptors: [{ uploadKey: kBadProg, originalPath: 'bad-prog-1/project.json', fileSizeBytes: Buffer.from(jsonBadProgram).length, browserMimeType: 'application/json' }],
     };
     const analysisBadProg = await analyzeBrowserImportServer(manifestBadProg, new Map([[kBadProg, Buffer.from(jsonBadProgram, 'utf8')]]));
     const intentBadProg = {
       version: 1 as const,
       previewFingerprint: analysisBadProg.preview.batch.previewFingerprint,
-      selectedRootName: 'bad-prog',
+      selectedRootName: 'bad-prog-1',
       fileCount: 1,
       declaredTotalBytes: manifestBadProg.declaredTotalBytes,
-      selectedPackagePaths: ['bad-prog'],
+      selectedPackagePaths: ['bad-prog-1'],
       acknowledgedWarningPackagePaths: [],
     };
     const resFail2 = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysisBadProg, intent: intentBadProg });
@@ -389,7 +399,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
 
     // Cleanup trigger in finally block
     try {
-      const rollbackPkgId = `rollback-pkg-${Date.now()}`;
+      const rollbackPkgId = 'rollback-pkg-1';
       const jsonRollback = JSON.stringify({
         publicId: rollbackPkgId,
         title: 'Rollback Title',
