@@ -2,8 +2,11 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
-import { runLocalDbQuery, RuntimeVerificationOptions } from './verifyReviewActionsRuntime';
 import { computeProjectReviewReadiness } from '../import/importBatchReviewReadiness';
+
+export interface RuntimeVerificationOptions {
+  repoRoot?: string;
+}
 
 interface Lookups {
   programId: string;
@@ -17,7 +20,6 @@ interface Lookups {
 export async function runImportBatchReviewSubmitRuntimeVerification(options?: RuntimeVerificationOptions): Promise<boolean> {
   console.log('=== Local Supabase Import Batch Review Submission Runtime Verification ===\n');
   const repoRoot = options?.repoRoot || path.resolve(__dirname, '../../../..');
-  const queryDb = options?.queryRunner || runLocalDbQuery;
 
   const runId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const testPrefix = `rbs-${runId}`;
@@ -38,29 +40,33 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
     adminClient = createClient(apiUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+    const client = adminClient;
 
-    const usersWithRoles = queryDb(
-      'SELECT u.id, r.role FROM public.admin_users u JOIN public.user_roles r ON r.user_id = u.id',
-      repoRoot
-    );
-    const adminUser = usersWithRoles.find((u) => u.role === 'admin');
-    const reviewerUser = usersWithRoles.find((u) => u.role === 'reviewer');
-    const editorUser = usersWithRoles.find((u) => u.role === 'editor');
+    // Resolve staff UUIDs by role via PostgREST (not the CLI's raw `db query -o json`, whose
+    // stdout-wrapping is not reliably parseable across platforms/CI runners).
+    const { data: rolesData, error: rolesError } = await client.from('user_roles').select('user_id, role');
+    if (rolesError || !rolesData) {
+      console.error('FAIL: Failed to resolve local user_roles.');
+      return false;
+    }
+    const adminUser = rolesData.find((u) => u.role === 'admin');
+    const reviewerUser = rolesData.find((u) => u.role === 'reviewer');
+    const editorUser = rolesData.find((u) => u.role === 'editor');
 
     if (!adminUser || !reviewerUser || !editorUser) {
       console.error('FAIL: Failed to resolve local staff users.');
       return false;
     }
 
-    const adminId = String(adminUser.id);
-    const reviewerId = String(reviewerUser.id);
-    const editorId = String(editorUser.id);
+    const adminId = String(adminUser.user_id);
+    const reviewerId = String(reviewerUser.user_id);
+    const editorId = String(editorUser.user_id);
 
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-    const programRow = queryDb('SELECT id, name FROM public.programs LIMIT 1;', repoRoot)[0];
-    const disciplineRow = queryDb('SELECT id, name FROM public.disciplines LIMIT 1;', repoRoot)[0];
-    const industryRow = queryDb('SELECT id, name FROM public.industry_categories LIMIT 1;', repoRoot)[0];
+    const { data: programRow } = await client.from('programs').select('id, name').limit(1).single();
+    const { data: disciplineRow } = await client.from('disciplines').select('id, name').limit(1).single();
+    const { data: industryRow } = await client.from('industry_categories').select('id, name').limit(1).single();
 
     if (!programRow || !disciplineRow || !industryRow) {
       console.error('FAIL: Failed to resolve local taxonomy fixtures (programs/disciplines/industry_categories).');
@@ -75,8 +81,6 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
       industryId: String(industryRow.id),
       industryName: String(industryRow.name),
     };
-
-    const client = adminClient;
 
     const createBatch = async (status: string, suffix: string) => {
       const { data, error } = await client
@@ -531,10 +535,18 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
     }
 
     try {
-      const projCountRows = queryDb(`SELECT count(*)::int as count FROM public.projects WHERE public_id LIKE '${testPrefix}-%';`, repoRoot);
-      const batchCountRows = queryDb(`SELECT count(*)::int as count FROM public.import_batches WHERE batch_name LIKE '${testPrefix}-%';`, repoRoot);
-      const projCount = Number(projCountRows[0]?.count ?? -1);
-      const batchCount = Number(batchCountRows[0]?.count ?? -1);
+      if (!adminClient) {
+        throw new Error('adminClient unavailable for post-cleanup verification');
+      }
+      const client = adminClient;
+      const { count: projCount } = await client
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .like('public_id', `${testPrefix}-%`);
+      const { count: batchCount } = await client
+        .from('import_batches')
+        .select('id', { count: 'exact', head: true })
+        .like('batch_name', `${testPrefix}-%`);
 
       if (!cleanupExecutionError && projCount === 0 && batchCount === 0) {
         console.log('PASS: Independent post-cleanup verification confirmed zero leftover test projects and batches.');
