@@ -104,6 +104,16 @@ export default async function ImportBatchDetailPage({
     };
   });
 
+  // Reset client-side selection whenever the authoritative selectable project set or workflow state changes.
+  // A React key remount avoids synchronously setting state from an effect while still guaranteeing stale
+  // selections cannot survive a server refresh that changes readiness, eligibility, status, or membership.
+  const reviewSelectionKey = [
+    batch.status,
+    ...reviewProjects.map((project) =>
+      `${project.publicId}:${project.status}:${project.eligibility}:${project.ready ? 'ready' : 'blocked'}`
+    ),
+  ].join('|');
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -243,6 +253,7 @@ export default async function ImportBatchDetailPage({
 
               {reviewProjects.length > 0 ? (
                 <ImportBatchReviewPanel
+                  key={reviewSelectionKey}
                   batchId={batch.id}
                   batchStatus={batch.status}
                   projects={reviewProjects}
