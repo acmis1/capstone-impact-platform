@@ -3,6 +3,7 @@
 import React, { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProjectMetadataNavigation } from './ProjectMetadataNavigation';
+import { canSubmitForReview } from './submitForReviewButtonState';
 
 interface SubmitForReviewButtonProps {
   batchId: string;
@@ -19,19 +20,16 @@ interface SubmitResponse {
 
 export function SubmitForReviewButton({ batchId, publicId, currentStatus }: SubmitForReviewButtonProps) {
   const router = useRouter();
-  const { dirty, confirmDiscard } = useProjectMetadataNavigation();
+  const { dirty } = useProjectMetadataNavigation();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const submitInFlightRef = useRef(false);
 
   const handleSubmit = async () => {
-    if (submitInFlightRef.current || pending) return;
-
-    // Unsaved metadata edits must never be silently submitted alongside the workflow transition.
-    if (dirty && !confirmDiscard()) {
-      return;
-    }
+    // Unsaved metadata edits must never be silently submitted alongside the workflow transition:
+    // the authoritative persisted metadata must exactly match what the user finished editing.
+    if (submitInFlightRef.current || !canSubmitForReview(pending, success, dirty)) return;
 
     submitInFlightRef.current = true;
     setPending(true);
@@ -83,20 +81,28 @@ export function SubmitForReviewButton({ batchId, publicId, currentStatus }: Subm
           ✅ Submitted for review.
         </div>
       )}
+      {dirty && !success && (
+        <div style={{
+          backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.2)',
+          borderRadius: '6px', padding: '0.5rem 0.75rem', fontWeight: 'bold', marginBottom: '0.75rem',
+        }}>
+          ⚠️ Save or Cancel the metadata edits before submitting for review.
+        </div>
+      )}
       <button
         type="button"
         onClick={handleSubmit}
-        disabled={pending || success}
+        disabled={!canSubmitForReview(pending, success, dirty)}
         style={{
           backgroundColor: '#10B981',
           color: '#FFFFFF',
           border: 'none',
           padding: '0.5rem 1rem',
           borderRadius: '6px',
-          cursor: pending || success ? 'not-allowed' : 'pointer',
+          cursor: !canSubmitForReview(pending, success, dirty) ? 'not-allowed' : 'pointer',
           fontWeight: 'bold',
           fontSize: '0.85rem',
-          opacity: pending || success ? 0.6 : 1,
+          opacity: !canSubmitForReview(pending, success, dirty) ? 0.6 : 1,
         }}
       >
         {pending ? 'Submitting…' : currentStatus === 'changes_requested' ? 'Resubmit for review' : 'Submit for review'}

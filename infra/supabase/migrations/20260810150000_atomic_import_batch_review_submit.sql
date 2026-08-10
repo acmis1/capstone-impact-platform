@@ -44,6 +44,7 @@ DECLARE
   v_industry_count integer;
   v_poster_ok boolean;
   v_poster_pdf_ok boolean;
+  v_unresolved_error_flag_count integer;
   v_blocking_reasons text[];
   v_to_submit uuid[] := ARRAY[]::uuid[];
   v_to_submit_from_status jsonb := '{}'::jsonb;
@@ -196,6 +197,17 @@ BEGIN
     END IF;
     IF v_project.validation_errors IS NOT NULL AND pg_catalog.cardinality(v_project.validation_errors) > 0 THEN
       v_blocking_reasons := pg_catalog.array_append(v_blocking_reasons, 'BLOCKING_VALIDATION_ERRORS');
+    END IF;
+
+    -- Authoritative validation_flags: an unresolved error-severity flag blocks submission.
+    -- Resolved flags, and warning/info severities regardless of resolution, are never blocking.
+    SELECT pg_catalog.count(*) INTO v_unresolved_error_flag_count
+      FROM public.validation_flags AS vf
+     WHERE vf.project_id = v_project.id
+       AND vf.severity = 'error'
+       AND vf.resolved = false;
+    IF v_unresolved_error_flag_count > 0 THEN
+      v_blocking_reasons := pg_catalog.array_append(v_blocking_reasons, 'BLOCKING_VALIDATION_FLAGS');
     END IF;
 
     SELECT pg_catalog.count(*) INTO v_discipline_count

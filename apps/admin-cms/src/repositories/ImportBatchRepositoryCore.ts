@@ -42,6 +42,12 @@ export interface MediaAssetRow {
   public_url?: string | null;
 }
 
+export interface ImportBatchReviewValidationFlagRow {
+  severity: string;
+  resolved: boolean | null;
+  message: string;
+}
+
 export interface ImportBatchReviewProjectRow {
   id: string;
   public_id: string;
@@ -57,9 +63,11 @@ export interface ImportBatchReviewProjectRow {
   accessibility_text_public: string | null;
   snapshots: string[] | null;
   validation_errors: string[] | null;
+  validation_warnings: string[] | null;
   project_disciplines?: Array<{ discipline_id: string }>;
   project_industry_categories?: Array<{ industry_category_id: string }>;
   media_assets?: Array<{ asset_type: string; is_public_approved: boolean | null; public_url: string | null }>;
+  validation_flags?: ImportBatchReviewValidationFlagRow[];
 }
 
 export class ImportBatchRepositoryCore {
@@ -141,10 +149,11 @@ export class ImportBatchRepositoryCore {
       .select(
         `id, public_id, title, summary, status, program_id, program_name, study_program,
          discipline, group_name, team_members, accessibility_text_public, snapshots,
-         validation_errors,
+         validation_errors, validation_warnings,
          project_disciplines(discipline_id),
          project_industry_categories(industry_category_id),
-         media_assets(asset_type, is_public_approved, public_url)`
+         media_assets(asset_type, is_public_approved, public_url),
+         validation_flags(severity, resolved, message)`
       )
       .eq('import_batch_id', batchId)
       .is('deleted_at', null)
@@ -166,10 +175,11 @@ export class ImportBatchRepositoryCore {
       .select(
         `id, public_id, title, summary, status, program_id, program_name, study_program,
          discipline, group_name, team_members, accessibility_text_public, snapshots,
-         validation_errors,
+         validation_errors, validation_warnings,
          project_disciplines(discipline_id),
          project_industry_categories(industry_category_id),
-         media_assets(asset_type, is_public_approved, public_url)`
+         media_assets(asset_type, is_public_approved, public_url),
+         validation_flags(severity, resolved, message)`
       )
       .eq('public_id', publicId)
       .is('deleted_at', null)

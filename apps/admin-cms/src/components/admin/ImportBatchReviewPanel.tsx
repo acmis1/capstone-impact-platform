@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { pruneStaleSelection } from './importBatchReviewPanelState';
 
 export interface ImportBatchReviewProjectView {
   publicId: string;
@@ -44,6 +45,18 @@ export function ImportBatchReviewPanel({ batchId, batchStatus, projects, canSubm
     () => projects.filter((p) => p.eligibility === 'eligible' && p.ready),
     [projects]
   );
+
+  const selectableIds = useMemo(
+    () => new Set(batchStatus === 'completed' ? readyProjects.map((p) => p.publicId) : []),
+    [batchStatus, readyProjects]
+  );
+
+  // Reconcile the selection against currently-authoritative props: a project must never remain
+  // selected once it is no longer ready, no longer eligible, no longer present, or the batch is
+  // no longer completed. Prevents the submit button from ever sending a stale disabled selection.
+  useEffect(() => {
+    setSelected((prev) => pruneStaleSelection(prev, selectableIds));
+  }, [selectableIds]);
 
   const toggleSelected = (publicId: string) => {
     if (pending) return;

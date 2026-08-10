@@ -197,8 +197,10 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
       .select(
         `id, public_id, title, summary, status, program_id, program_name, study_program, discipline,
          group_name, team_members, accessibility_text_public, snapshots, validation_errors,
+         validation_warnings,
          project_disciplines(discipline_id), project_industry_categories(industry_category_id),
-         media_assets(asset_type, is_public_approved, public_url)`
+         media_assets(asset_type, is_public_approved, public_url),
+         validation_flags(severity, resolved, message)`
       )
       .eq('import_batch_id', t1Batch.id);
 
@@ -219,6 +221,12 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
         accessibilityText: row.accessibility_text_public as string | null,
         snapshots: row.snapshots as string[] | null,
         validationErrors: row.validation_errors as string[] | null,
+        validationWarnings: row.validation_warnings as string[] | null,
+        validationFlags: ((row.validation_flags as Array<Record<string, unknown>>) || []).map((f) => ({
+          severity: f.severity as string,
+          resolved: f.resolved as boolean | null,
+          message: f.message as string,
+        })),
         status: row.status as string,
         disciplineMappingCount: ((row.project_disciplines as unknown[]) || []).length,
         industryMappingCount: ((row.project_industry_categories as unknown[]) || []).length,
@@ -505,6 +513,59 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
       success = false;
     }
 
+    // ============================================================
+    // Test 11: Unresolved error-severity validation_flags block submission at the SQL RPC layer
+    // (server-authoritative, re-derived inside submit_import_projects_for_review); resolving the
+    // flag allows the same otherwise-ready project to be submitted.
+    // ============================================================
+    console.log('--- Test 11: Unresolved error validation_flag blocks submission; resolving it unblocks ---');
+    const t11Batch = await createBatch('completed', 't11');
+    const t11Proj = await createProject({ batchId: String(t11Batch.id), suffix: 't11', status: 'draft', ready: true });
+
+    const { data: t11Flag, error: t11FlagErr } = await client
+      .from('validation_flags')
+      .insert({
+        project_id: t11Proj.id,
+        severity: 'error',
+        rule_code: 'SYNTHETIC_BLOCKING_FLAG',
+        message: 'Synthetic unresolved error flag for runtime verification',
+        resolved: false,
+      })
+      .select()
+      .single();
+    if (t11FlagErr || !t11Flag) throw new Error('Failed to create validation_flags fixture for Test 11');
+
+    const t11BlockedRes = await client.rpc('submit_import_projects_for_review', {
+      p_batch_id: t11Batch.id, p_project_public_ids: [t11Proj.public_id], p_admin_id: editorId, p_comments: null,
+    });
+    const t11StatusBlocked = await getProjectStatus(String(t11Proj.id));
+    const t11AuditsBlocked = await getAuditRecords(String(t11Proj.id));
+
+    await client.from('validation_flags').update({ resolved: true }).eq('id', t11Flag.id);
+
+    const t11ResolvedRes = await client.rpc('submit_import_projects_for_review', {
+      p_batch_id: t11Batch.id, p_project_public_ids: [t11Proj.public_id], p_admin_id: editorId, p_comments: null,
+    });
+    const t11StatusResolved = await getProjectStatus(String(t11Proj.id));
+    const t11AuditsResolved = await getAuditRecords(String(t11Proj.id));
+
+    if (
+      !t11BlockedRes.error &&
+      t11BlockedRes.data?.resultCode === 'READINESS_BLOCKED' &&
+      Array.isArray(t11BlockedRes.data?.blockingReasons) &&
+      t11BlockedRes.data.blockingReasons.includes('BLOCKING_VALIDATION_FLAGS') &&
+      t11StatusBlocked === 'draft' && t11AuditsBlocked.length === 0 &&
+      !t11ResolvedRes.error &&
+      t11ResolvedRes.data?.resultCode === 'SUCCESS' &&
+      t11StatusResolved === 'submitted' &&
+      t11AuditsResolved.length === 1
+    ) {
+      console.log('PASS: Test 11 - Unresolved error validation_flag blocked submission at the SQL layer; resolving it allowed submission.');
+    } else {
+      console.error('FAIL: Test 11 - Validation-flag blocking assertion failed.');
+      success = false;
+    }
+
     if (!uuidRegex.test(String(t3Audits[0]?.id || ''))) {
       console.error('FAIL: Sanity check — audit record id was not a valid UUID.');
       success = false;
@@ -522,6 +583,7 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
         const projectIds = (testProjects || []).map((p) => p.id);
         if (projectIds.length > 0) {
           await client.from('approval_records').delete().in('project_id', projectIds);
+          await client.from('validation_flags').delete().in('project_id', projectIds);
           await client.from('media_assets').delete().in('project_id', projectIds);
           await client.from('project_disciplines').delete().in('project_id', projectIds);
           await client.from('project_industry_categories').delete().in('project_id', projectIds);

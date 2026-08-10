@@ -8,6 +8,12 @@ export interface ImportBatchReviewMediaAssetInput {
   publicUrl: string | null;
 }
 
+export interface ImportBatchReviewValidationFlagInput {
+  severity: string;
+  resolved: boolean | null;
+  message: string;
+}
+
 export interface ImportBatchReviewProjectInput {
   publicId: string;
   title: string | null;
@@ -21,6 +27,8 @@ export interface ImportBatchReviewProjectInput {
   accessibilityText: string | null;
   snapshots: string[] | null;
   validationErrors: string[] | null;
+  validationWarnings: string[] | null;
+  validationFlags: ImportBatchReviewValidationFlagInput[];
   status: WorkflowStatus | string;
   disciplineMappingCount: number;
   industryMappingCount: number;
@@ -81,6 +89,19 @@ export function computeProjectReviewReadiness(input: ImportBatchReviewProjectInp
     blockingReasons.push(`Blocking ingestion validation error(s) present: ${input.validationErrors.join('; ')}`);
   }
 
+  // Authoritative validation_flags: mirrors the SQL-side check in submit_import_projects_for_review
+  // exactly — only a flag with resolved === false (not null, not true) is unresolved. An unresolved
+  // error-severity flag blocks; unresolved warning/info flags surface as non-blocking warnings.
+  // Resolved flags are never presented as active blockers or warnings.
+  for (const flag of input.validationFlags || []) {
+    if (flag.resolved !== false) continue;
+    if (flag.severity === 'error') {
+      blockingReasons.push(`Unresolved validation error: ${flag.message}`);
+    } else {
+      warnings.push(flag.message);
+    }
+  }
+
   if (input.disciplineMappingCount === 0) blockingReasons.push('No discipline mapping is registered for this project.');
   if (input.industryMappingCount === 0) blockingReasons.push('No industry category mapping is registered for this project.');
 
@@ -96,6 +117,9 @@ export function computeProjectReviewReadiness(input: ImportBatchReviewProjectInp
   }
   if (!input.snapshots || input.snapshots.length === 0) {
     warnings.push('Snapshot gallery is empty.');
+  }
+  if (input.validationWarnings) {
+    warnings.push(...input.validationWarnings);
   }
 
   const ready = eligibility === 'eligible' && blockingReasons.length === 0;
@@ -129,6 +153,12 @@ export function computeReadinessForImportBatchRow(row: ImportBatchReviewProjectR
     accessibilityText: row.accessibility_text_public,
     snapshots: row.snapshots,
     validationErrors: row.validation_errors,
+    validationWarnings: row.validation_warnings,
+    validationFlags: (row.validation_flags || []).map((flag) => ({
+      severity: flag.severity,
+      resolved: flag.resolved,
+      message: flag.message,
+    })),
     status: row.status,
     disciplineMappingCount: row.project_disciplines?.length ?? 0,
     industryMappingCount: row.project_industry_categories?.length ?? 0,
