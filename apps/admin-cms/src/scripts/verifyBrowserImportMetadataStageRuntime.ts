@@ -1,8 +1,30 @@
+import { execSync } from 'node:child_process';
+import path from 'node:path';
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { analyzeBrowserImportServer } from '../import/parseBrowserImportPreview';
 import { stageBrowserImportMetadata } from '../import/stageBrowserImportMetadata';
 import { generateUploadKey } from '../import/browserSelection';
 import { AuthenticatedAdminContext } from '../auth/authTypes';
+import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
+
+const REPO_ROOT = path.resolve(__dirname, '../../../..');
+
+function ensureLocalEnvironmentVariables(): void {
+  const cliPath = path.resolve(REPO_ROOT, 'node_modules/.bin/supabase');
+  const workdir = path.resolve(REPO_ROOT, 'infra');
+  const output = execSync(`"${cliPath}" status --workdir "${workdir}" -o env`, { cwd: REPO_ROOT, encoding: 'utf8', stdio: 'pipe' });
+  const parsedEnv = parseSupabaseCliEnv(output);
+
+  if (!parsedEnv.API_URL || !parsedEnv.ANON_KEY || !parsedEnv.SERVICE_ROLE_KEY || !isLoopbackUrl(parsedEnv.API_URL)) {
+    throw new Error('[Verifier Env] Missing or non-loopback Supabase CLI status output.');
+  }
+
+  process.env.NEXT_PUBLIC_SUPABASE_URL = parsedEnv.API_URL;
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = parsedEnv.ANON_KEY;
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = parsedEnv.ANON_KEY;
+  process.env.SUPABASE_SECRET_KEY = parsedEnv.SERVICE_ROLE_KEY;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = parsedEnv.SERVICE_ROLE_KEY;
+}
 
 interface StorageSnapshot {
   draftObjects: string[];
@@ -32,6 +54,7 @@ function assertStorageUnchanged(before: StorageSnapshot, after: StorageSnapshot,
 }
 
 export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
+  ensureLocalEnvironmentVariables();
   process.stdout.write('=== Capstone Impact Platform: Local Supabase Browser Metadata Staging Runtime Acceptance ===\n\n');
   const supabase = createSupabaseAdminClientCore();
 
