@@ -17,12 +17,13 @@ interface Props {
   disciplines: MetadataOption[];
   industryCategories: MetadataOption[];
   canEdit: boolean;
+  projectStatus: string;
   saveAction: (input: unknown) => Promise<ProjectMetadataActionResult>;
 }
 
 const selectValues = (event: React.ChangeEvent<HTMLSelectElement>) => Array.from(event.currentTarget.selectedOptions, (option) => option.value);
 
-export function ProjectMetadataEditor({ initialMetadata, programs, disciplines, industryCategories, canEdit, saveAction }: Props) {
+export function ProjectMetadataEditor({ initialMetadata, programs, disciplines, industryCategories, canEdit, projectStatus, saveAction }: Props) {
   const router = useRouter();
   const { setDirty, confirmDiscard } = useProjectMetadataNavigation();
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -63,8 +64,9 @@ export function ProjectMetadataEditor({ initialMetadata, programs, disciplines, 
   };
 
   const message = (name: string) => fieldErrors[name]?.[0];
+  const protectedNotice = projectStatus === 'approved' ? 'This project is approved. Request changes before editing metadata.' : projectStatus === 'published' ? 'Published project metadata is locked until a controlled revision workflow is available.' : null;
   if (mode === 'view') return <section aria-labelledby="metadata-editor-title">
-    <div className="flex items-center justify-between gap-4"><div><h2 id="metadata-editor-title" className="text-lg font-semibold">Project metadata</h2><p className="text-sm text-muted-foreground">Core public project information.</p></div>{canEdit ? <Button type="button" onClick={() => { setNotice(null); setMode('edit'); }}>Edit metadata</Button> : <p role="status" className="text-sm">Read-only: your role cannot edit project metadata.</p>}</div>
+    <div className="flex items-center justify-between gap-4"><div><h2 id="metadata-editor-title" className="text-lg font-semibold">Project metadata</h2><p className="text-sm text-muted-foreground">Core public project information.</p></div>{canEdit && !protectedNotice ? <Button type="button" onClick={() => { setNotice(null); setMode('edit'); }}>Edit metadata</Button> : <p role="status" className="text-sm">{protectedNotice || 'Read-only: your role cannot edit project metadata.'}</p>}</div>
     {notice && <p role="status" className="mt-3 text-sm">{notice}</p>}
   </section>;
 

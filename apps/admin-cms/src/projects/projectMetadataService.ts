@@ -21,7 +21,7 @@ const metadataResponseSchema = z.object({
   expectedUpdatedAt: z.string().refine((value) => !Number.isNaN(Date.parse(value))),
 }).strict();
 const rpcResponseSchema = z.object({
-  resultCode: z.enum(['SUCCESS', 'PROJECT_NOT_FOUND', 'STALE_VERSION', 'VALIDATION_FAILED']),
+  resultCode: z.enum(['SUCCESS', 'PROJECT_NOT_FOUND', 'STALE_VERSION', 'VALIDATION_FAILED', 'APPROVAL_REOPEN_REQUIRED', 'PUBLISHED_PROJECT_LOCKED']),
   metadata: metadataResponseSchema.optional(),
 }).strict();
 
@@ -96,6 +96,8 @@ export async function saveProjectMetadata(gateway: ProjectMetadataGateway, rawIn
       return response.data.metadata ? { ok: true, metadata: response.data.metadata } : failure('INTERNAL_FAILURE');
     case 'PROJECT_NOT_FOUND': return failure('PROJECT_NOT_FOUND');
     case 'STALE_VERSION': return failure('STALE_VERSION');
+    case 'APPROVAL_REOPEN_REQUIRED': return failure('APPROVAL_REOPEN_REQUIRED');
+    case 'PUBLISHED_PROJECT_LOCKED': return failure('PUBLISHED_PROJECT_LOCKED');
     case 'VALIDATION_FAILED': return failure('VALIDATION_FAILED');
   }
 }

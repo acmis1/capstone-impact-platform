@@ -35,6 +35,7 @@
     "verify:import-batch-review-submit-runtime": "tsx src/scripts/verifyImportBatchReviewSubmitRuntime.ts",
     "verify:participant-preview-runtime": "tsx src/scripts/verifyParticipantPreviewRuntime.ts",
     "verify:publication-readiness-runtime": "tsx src/scripts/verifyPublicationReadinessRuntime.ts",
+    "verify:approval-edit-gate-runtime": "tsx src/scripts/verifyApprovalEditGateRuntime.ts",
     "seed:buckets:local": "tsx src/scripts/seedLocalSupabaseFixtures.ts",
     "setup:local": "tsx src/scripts/setupLocal.ts",
     "verify:all": "tsx src/scripts/verifyAll.ts",

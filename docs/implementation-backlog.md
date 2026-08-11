@@ -59,7 +59,7 @@ This document maps out the completed project baseline, foundations present, and 
 ---
 
 ## 5. Priority 3 — Approval, Publication, Archive, History, and Rollback
-*   **Approval Gate**: Controlled editing of approved/published database records. Changes require revalidation and, where appropriate, reapproval before republishing.
+*   **Approval/Edit Gate** *(implemented)*: Migration 0018 blocks direct metadata changes to approved records until an authorized Request changes action reopens them, revoking the sole active participant preview atomically while preserving historical evidence. Published records are immutable pending a future controlled revision/republish workflow.
 *   **Staged Publication**: Compiling eligible approved and published records into `capstones-latest.json` and uploading it to public Supabase Storage, with safe publication failure handling.
 *   **Archive and Unpublish**: Mark projects as archived, removing them from the public feed compilation while preserving history in PostgreSQL.
 *   **Public-Removal Verification**: Ensure public-removal verification: publishing completion, fresh-feed retrieval, cache-busting or refresh verification, confirmation that the archived item is absent from Duda listing/detail rendering, and public-removal completion timestamp/audit record.
