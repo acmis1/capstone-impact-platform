@@ -21,6 +21,9 @@ import { ImportBatchRepository } from '../../../../repositories/ImportBatchRepos
 import { computeReadinessForImportBatchRow } from '../../../../import/importBatchReviewReadiness';
 import { SubmitForReviewButton } from '../../../../components/admin/SubmitForReviewButton';
 import { ParticipantPreviewResponseState } from '../../../../domain/participantPreview';
+import { PublicationReadinessPanel } from '../../../../components/admin/PublicationReadinessPanel';
+import { PublicationReadinessResult } from '../../../../domain/publicationReadiness';
+import { getServerEnv } from '../../../../lib/env';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -44,6 +47,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let previewResponseState: ParticipantPreviewResponseState = { type: 'unresponded' };
   let resolutionStatus: import('../../../../domain/participantPreview').ParticipantPreviewCorrectionResolutionStatus | null = null;
   let canResolveCorrection = false;
+  let publicationReadiness: PublicationReadinessResult | null = null;
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -98,15 +102,22 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         }
 
         const previewRepository = new SupabaseParticipantPreviewRepository();
-        const [preview, correctionResolutionStatus] = await Promise.all([
+        const env = getServerEnv();
+        const [preview, correctionResolutionStatus, readinessResult] = await Promise.all([
           previewRepository.getActivePreview(dbProj.id),
           previewRepository.getCorrectionResolutionStatus(dbProj.id),
+          previewRepository.getPublicationReadiness({
+            publicId,
+            adminId: adminContext.adminUserId,
+            privateBucket: env.SUPABASE_DRAFT_BUCKET,
+          }),
         ]);
         if (preview) {
           activePreview = { createdAt: preview.createdAt, expiresAt: preview.expiresAt };
           previewResponseState = await previewRepository.getResponseState(preview.previewId);
         }
         resolutionStatus = correctionResolutionStatus;
+        publicationReadiness = readinessResult;
         canResolveCorrection = hasPermission(adminContext.permissions, 'projects.edit') && hasPermission(adminContext.permissions, 'projects.review');
       }
     }
@@ -288,6 +299,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             currentStatus={project.status}
             allowedActions={allowedActions}
           />
+        </ProjectDetailSection>
+
+        <ProjectDetailSection title="🚀 Publication Readiness Gate" borderColor="#10B981">
+          <PublicationReadinessPanel readiness={publicationReadiness} />
         </ProjectDetailSection>
 
         <ProjectDetailSection title="🔗 Participant Preview" borderColor="#3B82F6">

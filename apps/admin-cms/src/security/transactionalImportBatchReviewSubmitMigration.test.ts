@@ -26,7 +26,7 @@ describe('Migration 0012 Atomic Import Batch Review Submit Security Contract Tes
     const rawFiles = fs.readdirSync(migrationsDir);
     const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
 
-    expect(sqlFiles.length).toBe(16);
+    expect(sqlFiles.length).toBe(17);
 
     for (let i = 0; i < expectedPriorMigrations.length; i++) {
       expect(sqlFiles[i]).toBe(expectedPriorMigrations[i]);

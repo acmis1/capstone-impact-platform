@@ -35,8 +35,8 @@ export async function runPublishStagingFeed(args?: string[]): Promise<boolean> {
 
   console.log(`Loaded ${projects.length} projects from database.`);
 
-  // 1. Compile Approved/Published projects only
-  console.log('Sanitizing and compiling approved-only public feed...');
+  // 1. Compile Published projects only
+  console.log('Sanitizing and compiling published-only public feed...');
   const feed = compilePublicFeed(projects);
   console.log(`Compiled feed contains ${feed.length} public records.`);
 

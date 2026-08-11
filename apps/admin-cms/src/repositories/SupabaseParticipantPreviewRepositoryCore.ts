@@ -588,4 +588,75 @@ export class SupabaseParticipantPreviewRepositoryCore {
       replacementPreviewId: row.replacement_preview_id ?? null,
     };
   }
+
+  /**
+   * Invokes the service-role-only get_project_publication_readiness RPC to derive
+   * authoritative publication readiness. Fails closed on any unexpected response.
+   */
+  async getPublicationReadiness(params: {
+    publicId: string;
+    adminId: string;
+    privateBucket: string;
+  }): Promise<import('../domain/publicationReadiness').PublicationReadinessResult> {
+    const { publicId, adminId, privateBucket } = params;
+
+    if (!isNonEmptyString(publicId) || !isNonEmptyString(adminId) || !isNonEmptyString(privateBucket)) {
+      return {
+        ready: false,
+        resultCode: 'READINESS_UNAVAILABLE',
+        blockers: ['Publication readiness unavailable'],
+      };
+    }
+
+    const { data, error } = await this.supabase.rpc('get_project_publication_readiness', {
+      p_public_id: publicId,
+      p_admin_id: adminId,
+      p_private_bucket: privateBucket,
+    });
+
+    if (error || !data || typeof data !== 'object') {
+      return {
+        ready: false,
+        resultCode: 'READINESS_UNAVAILABLE',
+        blockers: ['Publication readiness unavailable'],
+      };
+    }
+
+    const res = data as Record<string, unknown>;
+    const validCodes = new Set<import('../domain/publicationReadiness').PublicationReadinessCode>([
+      'READY', 'PROJECT_NOT_FOUND', 'READINESS_PERMISSION_DENIED', 'INVALID_PROJECT_STATE',
+      'INVALID_SELECTION', 'INVALID_PRIVATE_BUCKET', 'NO_ACTIVE_PREVIEW', 'PREVIEW_NOT_CONFIRMED',
+      'CORRECTION_UNRESOLVED', 'CORRECTED_PREVIEW_AWAITING_CONFIRMATION', 'PROJECT_SNAPSHOT_STALE',
+      'MEDIA_SNAPSHOT_STALE', 'READINESS_UNAVAILABLE',
+    ]);
+    if (
+      typeof res.ready !== 'boolean' ||
+      typeof res.resultCode !== 'string' ||
+      !validCodes.has(res.resultCode as import('../domain/publicationReadiness').PublicationReadinessCode) ||
+      !Array.isArray(res.blockers) ||
+      !res.blockers.every((blocker) => typeof blocker === 'string')
+    ) {
+      return { ready: false, resultCode: 'READINESS_UNAVAILABLE', blockers: ['Publication readiness unavailable'] };
+    }
+
+    const resultCode = res.resultCode as import('../domain/publicationReadiness').PublicationReadinessCode;
+    const confirmedPreviewId = isNonEmptyString(res.confirmedPreviewId) ? res.confirmedPreviewId : undefined;
+    const confirmedAt = isNonEmptyString(res.confirmedAt) && Number.isFinite(Date.parse(res.confirmedAt))
+      ? res.confirmedAt
+      : undefined;
+    if (
+      (res.ready && resultCode !== 'READY') ||
+      (resultCode === 'READY' && (!confirmedPreviewId || !confirmedAt))
+    ) {
+      return { ready: false, resultCode: 'READINESS_UNAVAILABLE', blockers: ['Publication readiness unavailable'] };
+    }
+
+    return {
+      ready: res.ready,
+      resultCode,
+      blockers: res.blockers,
+      confirmedPreviewId,
+      confirmedAt,
+    };
+  }
 }
