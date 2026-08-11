@@ -26,7 +26,14 @@ describe('Migration 0015 Participant Preview Correction Requests Security Contra
   });
 
   it('2. Migrations 0001 through 0014 remain byte-for-byte unmodified against origin/main (this migration never edits them)', () => {
-    for (const file of [priorLinksMigrationFile, priorConfirmationsMigrationFile]) {
+    const rawFiles = fs.readdirSync(migrationsDir);
+    const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
+
+    expect(sqlFiles[14]).toBe(migrationFile);
+    const priorMigrationFiles = sqlFiles.slice(0, 14);
+    expect(priorMigrationFiles.length).toBe(14);
+
+    for (const file of priorMigrationFiles) {
       const filePath = path.join(migrationsDir, file);
       expect(fs.existsSync(filePath)).toBe(true);
       const localContent = fs.readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n');

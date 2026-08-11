@@ -13,13 +13,50 @@ import { validateSameOrigin } from '../../../auth/csrf';
 // validateCorrectionComment plus the Migration 0015 RPC's own database-boundary validation.
 const MAX_RESPONSE_FORM_BODY_BYTES = 32_768;
 
-function parseContentLength(header: string | null): { bytes: number } | { code: 'MISSING' | 'INVALID' | 'TOO_LARGE' } {
-  if (header === null || header === '') return { code: 'MISSING' };
+function parseContentLength(header: string | null): { bytes: number } | { code: 'ABSENT' | 'INVALID' | 'TOO_LARGE' } {
+  if (header === null || header === '') return { code: 'ABSENT' };
   if (!/^(0|[1-9][0-9]*)$/.test(header)) return { code: 'INVALID' };
   const bytes = Number(header);
   if (!Number.isSafeInteger(bytes)) return { code: 'INVALID' };
   if (bytes > MAX_RESPONSE_FORM_BODY_BYTES) return { code: 'TOO_LARGE' };
   return { bytes };
+}
+
+/**
+ * Reads the request body as raw bytes, aborting the moment the accumulated size exceeds `limit`.
+ * This is the authoritative body-size boundary: a declared Content-Length is only an early
+ * rejection signal when present (and is never required — participant form submissions omitting
+ * it are otherwise valid), so the actual bytes read must be independently bounded regardless of
+ * what, if anything, Content-Length claimed.
+ */
+async function readBoundedBody(request: NextRequest, limit: number): Promise<Uint8Array | null> {
+  const body = request.body;
+  if (!body) return new Uint8Array(0);
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value || value.byteLength === 0) continue;
+
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return combined;
 }
 
 /**
@@ -140,24 +177,25 @@ export async function POST(
     return unavailableResponse(404);
   }
 
-  const contentLength = parseContentLength(request.headers.get('content-length'));
-  if ('code' in contentLength) {
-    return unavailableResponse(400);
-  }
-
   const contentType = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
   if (contentType !== 'application/x-www-form-urlencoded') {
     return unavailableResponse(400);
   }
 
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
+  const contentLength = parseContentLength(request.headers.get('content-length'));
+  if ('code' in contentLength && contentLength.code !== 'ABSENT') {
     return unavailableResponse(400);
   }
 
-  const actionEntries = formData.getAll('action');
+  const bodyBytes = await readBoundedBody(request, MAX_RESPONSE_FORM_BODY_BYTES);
+  if (bodyBytes === null) {
+    return unavailableResponse(400);
+  }
+
+  const bodyText = new TextDecoder('utf-8', { fatal: false }).decode(bodyBytes);
+  const searchParams = new URLSearchParams(bodyText);
+
+  const actionEntries = searchParams.getAll('action');
   const action = actionEntries.length === 1 ? actionEntries[0] : null;
 
   const tokenHash = hashPreviewToken(token);
@@ -184,7 +222,7 @@ export async function POST(
   }
 
   if (action === 'request_correction') {
-    const commentEntries = formData.getAll('comment');
+    const commentEntries = searchParams.getAll('comment');
     const rawComment = commentEntries.length === 1 ? commentEntries[0] : null;
     const validation = validateCorrectionComment(rawComment);
 

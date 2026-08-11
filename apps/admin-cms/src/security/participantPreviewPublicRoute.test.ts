@@ -533,15 +533,115 @@ describe('Public participant-preview confirmation POST', () => {
     confirmSpy.mockRestore();
   });
 
-  it('rejects a POST with a missing Content-Length header before ever parsing the body', async () => {
+  it('accepts a same-origin confirmation POST without a Content-Length header (absence is not itself an error)', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview').mockResolvedValue({
+      confirmationId: 'c1',
+      confirmedAt: '2026-08-11T00:00:00.000Z',
+      alreadyConfirmed: false,
+    });
+
+    const token = 'b'.repeat(64);
+    const body = 'action=confirm';
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000', 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(303);
+    expect(confirmSpy).toHaveBeenCalledWith(hashPreviewToken(token));
+
+    confirmSpy.mockRestore();
+  });
+
+  it('rejects a POST whose declared Content-Length exceeds the body-size limit before calling confirmPreview', async () => {
     const { POST } = await import('../app/participant-preview/[token]/route');
     const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
     const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
 
     const token = 'b'.repeat(64);
+    const body = 'action=confirm';
     const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
       method: 'POST',
-      headers: { origin: 'http://localhost:3000' },
+      headers: {
+        origin: 'http://localhost:3000',
+        'content-type': 'application/x-www-form-urlencoded',
+        'content-length': '9999999',
+      },
+      body,
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(400);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it('rejects a POST with a malformed Content-Length header', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const token = 'b'.repeat(64);
+    const body = 'action=confirm';
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      headers: {
+        origin: 'http://localhost:3000',
+        'content-type': 'application/x-www-form-urlencoded',
+        'content-length': 'not-a-number',
+      },
+      body,
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(400);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it('rejects a POST with no Content-Length whose actual body exceeds the size limit, without calling confirmPreview', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const token = 'b'.repeat(64);
+    const body = `action=confirm&padding=${'a'.repeat(40_000)}`;
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000', 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(400);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it('rejects a POST whose actual body exceeds the size limit even when a small Content-Length is declared, without calling confirmPreview', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const token = 'b'.repeat(64);
+    const body = `action=confirm&padding=${'a'.repeat(40_000)}`;
+    const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+      method: 'POST',
+      headers: {
+        origin: 'http://localhost:3000',
+        'content-type': 'application/x-www-form-urlencoded',
+        // Deliberately understated relative to the actual body — the actual-bytes guard must not
+        // trust this declared value.
+        'content-length': '15',
+      },
+      body,
     });
     const res = await POST(req, { params: Promise.resolve({ token }) });
 
