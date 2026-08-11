@@ -138,6 +138,24 @@ BEGIN
    WHERE pp.project_id = v_project.id
      AND r.status IN ('open', 'in_progress');
 
+  -- A confirmed current preview with any correction row is contradictory
+  -- persisted state. Check it before the legitimate lifecycle short-circuit.
+  SELECT pg_catalog.count(*)
+    INTO v_active_corr_count
+    FROM public.participant_preview_correction_requests r
+    JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
+    JOIN public.participant_preview_confirmations c ON c.participant_preview_id = pp.id
+   WHERE pp.project_id = v_project.id
+     AND pp.status = 'active';
+
+  IF v_active_corr_count > 0 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Active preview has contradictory participant responses'])
+    );
+  END IF;
+
   IF v_unresolved_corr_count > 0 THEN
     RETURN pg_catalog.jsonb_build_object(
       'ready', false,
@@ -197,15 +215,18 @@ BEGIN
     v_blockers := pg_catalog.array_append(v_blockers, 'Waiting for participant confirmation');
   END IF;
 
-  -- 7. Check unresolved correction requests on the active preview.
+  -- 7. Any correction against a confirmed active preview is contradictory.
   SELECT pg_catalog.count(*)
     INTO v_active_corr_count
     FROM public.participant_preview_correction_requests r
-   WHERE r.participant_preview_id = v_active_preview.id
-     AND r.status IN ('open', 'in_progress');
+   WHERE r.participant_preview_id = v_active_preview.id;
 
-  IF v_active_corr_count > 0 THEN
-    v_blockers := pg_catalog.array_append(v_blockers, 'Active preview has an open correction request');
+  IF v_confirmation.id IS NOT NULL AND v_active_corr_count > 0 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Active preview has contradictory participant responses'])
+    );
   END IF;
 
   -- 8. Check for unresolved (open or in_progress) correction requests across ALL previews of this project
@@ -220,7 +241,7 @@ BEGIN
     v_blockers := pg_catalog.array_append(v_blockers, 'Participant correction must be resolved');
   END IF;
 
-  IF v_unresolved_corr_count > 0 OR v_active_corr_count > 0 THEN
+  IF v_unresolved_corr_count > 0 THEN
     RETURN pg_catalog.jsonb_build_object(
       'ready', false,
       'resultCode', 'CORRECTION_UNRESOLVED',

@@ -332,6 +332,22 @@ export async function runPublicationReadinessRuntimeVerification(): Promise<bool
       status: 'open',
     });
     const r15 = await repo.getPublicationReadiness({ publicId: p15.public_id, adminId, privateBucket: PRIVATE_DRAFT_BUCKET });
+    const p15Resolved = await createProjectFixture('t15-resolved', 'approved');
+    const prev15Resolved = await generatePreview(p15Resolved.public_id);
+    await repo.confirmPreview(prev15Resolved.tokenHash);
+    const resolvedAt = new Date().toISOString();
+    const { error: resolvedCorrectionError } = await client.from('participant_preview_correction_requests').insert({
+      participant_preview_id: prev15Resolved.previewId,
+      correction_comment: 'Contradictory resolved correction',
+      status: 'resolved',
+      resolution_started_at: resolvedAt,
+      resolution_started_by: adminId,
+      resolved_at: resolvedAt,
+      resolved_by: adminId,
+      replacement_preview_id: prev15Resolved.previewId,
+    });
+    if (resolvedCorrectionError) throw new Error(`Test 15 resolved corruption setup failed: ${resolvedCorrectionError.message}`);
+    const resolvedCorrection = await repo.getPublicationReadiness({ publicId: p15Resolved.public_id, adminId, privateBucket: PRIVATE_DRAFT_BUCKET });
     const p15Malformed = await createProjectFixture('t15-malformed', 'approved');
     const prev15Malformed = await generatePreview(p15Malformed.public_id);
     await repo.confirmPreview(prev15Malformed.tokenHash);
@@ -342,10 +358,14 @@ export async function runPublicationReadinessRuntimeVerification(): Promise<bool
     await repo.confirmPreview(prev15MalformedMedia.tokenHash);
     await client.from('participant_previews').update({ media_snapshot: ['malformed media'] }).eq('id', prev15MalformedMedia.previewId);
     const malformedMedia = await repo.getPublicationReadiness({ publicId: p15MalformedMedia.public_id, adminId, privateBucket: PRIVATE_DRAFT_BUCKET });
-    if (!r15.ready && malformedSnapshot.resultCode === 'READINESS_UNAVAILABLE' && malformedMedia.resultCode === 'READINESS_UNAVAILABLE') {
-      console.log('PASS: Test 15 - Contradictory and malformed stored preview states failed closed');
+    if (
+      !r15.ready && r15.resultCode === 'READINESS_UNAVAILABLE' &&
+      !resolvedCorrection.ready && resolvedCorrection.resultCode === 'READINESS_UNAVAILABLE' &&
+      malformedSnapshot.resultCode === 'READINESS_UNAVAILABLE' && malformedMedia.resultCode === 'READINESS_UNAVAILABLE'
+    ) {
+      console.log('PASS: Test 15 - Active-preview correction and resolved-correction contradictions, plus malformed state, failed closed');
     } else {
-      console.error('FAIL: Test 15 fail-closed assertion failed', { r15, malformedSnapshot, malformedMedia });
+      console.error('FAIL: Test 15 fail-closed assertion failed', { r15, resolvedCorrection, malformedSnapshot, malformedMedia });
       return false;
     }
 

@@ -82,6 +82,12 @@ describe('Migration 0017 Publication Readiness Gate Security Contract Tests', ()
     expect(content).toContain("('admin' = ANY(v_roles) OR 'reviewer' = ANY(v_roles))");
     expect(content).not.toContain("('admin' = ANY(v_roles) OR 'editor' = ANY(v_roles))");
 
+    // Unresolved lifecycle state remains distinct from contradictory responses
+    // attached to the exact confirmed active preview.
+    expect(content).toMatch(/r\.status IN \('open', 'in_progress'\)[\s\S]*?'CORRECTION_UNRESOLVED'/);
+    expect(content).toMatch(/JOIN public\.participant_preview_confirmations c ON c\.participant_preview_id = pp\.id[\s\S]*?pp\.status = 'active'[\s\S]*?'READINESS_UNAVAILABLE'/);
+    expect(content).toMatch(/r\.status = 'resolved'[\s\S]*?r\.replacement_preview_id = v_active_preview\.id/);
+
     // Readiness checks
     expect(content).toContain("'READY'");
     expect(content).toContain("'PROJECT_NOT_FOUND'");
