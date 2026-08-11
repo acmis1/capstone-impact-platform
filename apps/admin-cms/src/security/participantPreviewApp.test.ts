@@ -150,6 +150,7 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
       p_token_hash: tokenHash,
       p_expires_in_seconds: 7 * 24 * 60 * 60,
       p_private_bucket: 'project-drafts-private',
+      p_is_correction_reissue: false,
     });
     expect(JSON.stringify(callArgs)).not.toContain('raw-token-value-should-never-appear-in-rpc-args');
     expect(result).toEqual({ previewId: 'p1', publicId: '2026-proj1', createdAt: '2026-08-10T00:00:00.000Z', expiresAt: '2026-08-17T00:00:00.000Z' });

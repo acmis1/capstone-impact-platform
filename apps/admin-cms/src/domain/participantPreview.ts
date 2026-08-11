@@ -95,6 +95,26 @@ export interface ParticipantPreviewCorrectionRequestStatus {
   comment: string;
 }
 
+export interface ParticipantPreviewCorrectionResolutionStatus {
+  status: 'open' | 'in_progress' | 'resolved';
+  correctionRequestId: string;
+  participantPreviewId: string;
+  comment: string;
+  requestedAt: string;
+  resolutionStartedAt?: string | null;
+  resolutionStartedBy?: string | null;
+  resolvedAt?: string | null;
+  resolvedBy?: string | null;
+  replacementPreviewId?: string | null;
+}
+
+export interface StartCorrectionResolutionResult {
+  correctionRequestId: string;
+  resolutionStartedAt: string;
+  auditRecordId?: string;
+  alreadyInProgress?: boolean;
+}
+
 /**
  * The participant-response state for one exact participant preview version is always exactly one
  * of these three — never both confirmed and correction_requested (enforced transactionally at the

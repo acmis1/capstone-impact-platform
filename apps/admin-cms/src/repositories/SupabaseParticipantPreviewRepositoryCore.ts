@@ -57,8 +57,9 @@ export class SupabaseParticipantPreviewRepositoryCore {
     tokenHash: string;
     privateBucket: string;
     expiresInSeconds?: number;
+    isCorrectionReissue?: boolean;
   }): Promise<GeneratePreviewResult> {
-    const { publicId, adminId, tokenHash, privateBucket, expiresInSeconds } = params;
+    const { publicId, adminId, tokenHash, privateBucket, expiresInSeconds, isCorrectionReissue } = params;
 
     if (
       !isNonEmptyString(publicId) ||
@@ -75,6 +76,7 @@ export class SupabaseParticipantPreviewRepositoryCore {
       p_token_hash: tokenHash,
       p_expires_in_seconds: expiresInSeconds ?? DEFAULT_PREVIEW_EXPIRES_IN_SECONDS,
       p_private_bucket: privateBucket,
+      p_is_correction_reissue: isCorrectionReissue ?? false,
     });
 
     if (error) {
@@ -98,6 +100,10 @@ export class SupabaseParticipantPreviewRepositoryCore {
         throw new ParticipantPreviewExecutionError('PERMISSION_DENIED');
       case 'ACTIVE_PREVIEW_EXISTS':
         throw new ParticipantPreviewExecutionError('ACTIVE_PREVIEW_EXISTS');
+      case 'CORRECTION_RESOLUTION_REQUIRED':
+        throw new ParticipantPreviewExecutionError('CORRECTION_RESOLUTION_REQUIRED');
+      case 'NO_CORRECTION_IN_PROGRESS':
+        throw new ParticipantPreviewExecutionError('NO_CORRECTION_IN_PROGRESS');
       default:
         throw new ParticipantPreviewExecutionError('INPUT_INVALID');
     }
@@ -424,5 +430,112 @@ export class SupabaseParticipantPreviewRepositoryCore {
     }
 
     return { type: 'unresponded' };
+  }
+
+  /**
+   * Atomically starts administrative resolution for an open participant correction request via
+   * start_participant_preview_correction_resolution.
+   */
+  async startCorrectionResolution(params: {
+    publicId: string;
+    adminId: string;
+  }): Promise<{ correctionRequestId: string; resolutionStartedAt: string; auditRecordId?: string; alreadyInProgress?: boolean }> {
+    const { publicId, adminId } = params;
+
+    if (!isNonEmptyString(publicId) || !isNonEmptyString(adminId)) {
+      throw new ParticipantPreviewExecutionError('INPUT_INVALID');
+    }
+
+    const { data, error } = await this.supabase.rpc('start_participant_preview_correction_resolution', {
+      p_public_id: publicId,
+      p_admin_id: adminId,
+    });
+
+    if (error) {
+      throw new ParticipantPreviewExecutionError('INTERNAL_FAILURE');
+    }
+
+    if (!data || typeof data !== 'object') {
+      throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
+    }
+
+    const res = data as Record<string, unknown>;
+
+    switch (res.resultCode) {
+      case 'SUCCESS':
+        break;
+      case 'ALREADY_IN_PROGRESS':
+        if (!isNonEmptyString(res.correctionRequestId) || !isNonEmptyString(res.resolutionStartedAt)) {
+          throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
+        }
+        return {
+          correctionRequestId: res.correctionRequestId,
+          resolutionStartedAt: res.resolutionStartedAt,
+          alreadyInProgress: true,
+        };
+      case 'PROJECT_NOT_FOUND':
+        throw new ParticipantPreviewExecutionError('PROJECT_NOT_FOUND');
+      case 'INVALID_PROJECT_STATE':
+        throw new ParticipantPreviewExecutionError('INVALID_PROJECT_STATE');
+      case 'PERMISSION_DENIED':
+        throw new ParticipantPreviewExecutionError('PERMISSION_DENIED');
+      case 'NO_OPEN_CORRECTION':
+        throw new ParticipantPreviewExecutionError('NO_OPEN_CORRECTION');
+      case 'AMBIGUOUS_CORRECTION_REQUEST':
+        throw new ParticipantPreviewExecutionError('AMBIGUOUS_CORRECTION_REQUEST');
+      default:
+        throw new ParticipantPreviewExecutionError('INPUT_INVALID');
+    }
+
+    if (!isNonEmptyString(res.correctionRequestId) || !isNonEmptyString(res.resolutionStartedAt)) {
+      throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
+    }
+
+    return {
+      correctionRequestId: res.correctionRequestId,
+      resolutionStartedAt: res.resolutionStartedAt,
+      auditRecordId: isNonEmptyString(res.auditRecordId) ? res.auditRecordId : undefined,
+    };
+  }
+
+  /**
+   * Reads the latest participant correction request resolution status for a project (by project DB ID).
+   * Used to populate Admin UI state even when Preview A has been revoked or project status is changes_requested.
+   */
+  async getCorrectionResolutionStatus(projectDbId: string): Promise<import('../domain/participantPreview').ParticipantPreviewCorrectionResolutionStatus | null> {
+    if (!isNonEmptyString(projectDbId)) {
+      return null;
+    }
+
+    // Direct query joining participant_preview_correction_requests with participant_previews for this project.
+    // Order by requested_at DESC to get the latest correction request.
+    const { data, error } = await this.supabase
+      .from('participant_preview_correction_requests')
+      .select('id, status, participant_preview_id, correction_comment, requested_at, resolution_started_at, resolution_started_by, resolved_at, resolved_by, replacement_preview_id, participant_previews!inner(project_id)')
+      .eq('participant_previews.project_id', projectDbId)
+      .order('requested_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new ParticipantPreviewExecutionError('INTERNAL_FAILURE');
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    return {
+      correctionRequestId: data.id,
+      status: data.status as 'open' | 'in_progress' | 'resolved',
+      participantPreviewId: data.participant_preview_id,
+      comment: data.correction_comment,
+      requestedAt: data.requested_at,
+      resolutionStartedAt: data.resolution_started_at ?? null,
+      resolutionStartedBy: data.resolution_started_by ?? null,
+      resolvedAt: data.resolved_at ?? null,
+      resolvedBy: data.resolved_by ?? null,
+      replacementPreviewId: data.replacement_preview_id ?? null,
+    };
   }
 }

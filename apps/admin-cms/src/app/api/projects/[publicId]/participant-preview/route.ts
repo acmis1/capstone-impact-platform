@@ -51,6 +51,19 @@ export async function POST(
       return NextResponse.json({ success: false, error }, { status, headers: NO_STORE });
     }
 
+    let isCorrectionReissue = false;
+    try {
+      const contentType = request.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const body = await request.json();
+        if (body && typeof body === 'object' && body.isCorrectionReissue === true) {
+          isCorrectionReissue = true;
+        }
+      }
+    } catch {
+      // Ignore body parsing errors for simple POST without body
+    }
+
     const rawToken = generateRawPreviewToken();
     const tokenHash = hashPreviewToken(rawToken);
 
@@ -61,6 +74,7 @@ export async function POST(
       tokenHash,
       privateBucket: getStagingBuckets().DRAFT_PRIVATE,
       expiresInSeconds: DEFAULT_PREVIEW_EXPIRES_IN_SECONDS,
+      isCorrectionReissue,
     });
 
     // The raw token is returned exactly once, here. It is never persisted or logged.
@@ -144,6 +158,16 @@ function handleParticipantPreviewError(error: unknown, actionLabel: 'Generate' |
         return NextResponse.json(
           { success: false, error: 'An active participant preview already exists. Revoke it before generating a new one.', code: 'ACTIVE_PREVIEW_EXISTS' },
           { status: 409, headers: NO_STORE }
+        );
+      case 'CORRECTION_RESOLUTION_REQUIRED':
+        return NextResponse.json(
+          { success: false, error: 'An unresolved participant correction request requires resolution before generating a new preview.', code: 'CORRECTION_RESOLUTION_REQUIRED' },
+          { status: 409, headers: NO_STORE }
+        );
+      case 'NO_CORRECTION_IN_PROGRESS':
+        return NextResponse.json(
+          { success: false, error: 'There is no correction resolution currently in progress for this project.', code: 'NO_CORRECTION_IN_PROGRESS' },
+          { status: 400, headers: NO_STORE }
         );
       case 'NO_ACTIVE_PREVIEW':
         return NextResponse.json(
