@@ -31,13 +31,15 @@ DECLARE
   v_public_id text;
   v_private_bucket text;
   v_roles text[];
-  v_has_edit boolean;
   v_has_review boolean;
   v_project RECORD;
   v_active_preview RECORD;
+  v_active_preview_count integer;
   v_confirmation RECORD;
   v_active_corr_count integer;
   v_unresolved_corr_count integer;
+  v_replacement_count integer;
+  v_invalid_media_element_count integer;
   v_current_snapshot jsonb;
   v_current_media_snapshot jsonb;
   v_stored_media_snapshot jsonb;
@@ -85,7 +87,8 @@ BEGIN
   -- 2. Advisory Lock Serialization
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('participant_preview:' || v_public_id));
 
-  -- 3. Authorization Check (require BOTH projects.edit AND projects.review)
+  -- 3. Authorization Check. Readiness is review evidence, so review authority
+  -- is sufficient; correction resolution retains its separate combined check.
   SELECT pg_catalog.array_agg(r.role)
     INTO v_roles
     FROM public.user_roles r
@@ -99,10 +102,9 @@ BEGIN
     );
   END IF;
 
-  v_has_edit := ('admin' = ANY(v_roles) OR 'editor' = ANY(v_roles));
   v_has_review := ('admin' = ANY(v_roles) OR 'reviewer' = ANY(v_roles));
 
-  IF NOT (v_has_edit AND v_has_review) THEN
+  IF NOT v_has_review THEN
     RETURN pg_catalog.jsonb_build_object(
       'ready', false,
       'resultCode', 'READINESS_PERMISSION_DENIED',
@@ -126,6 +128,26 @@ BEGIN
     );
   END IF;
 
+  -- Preserve meaningful correction workflow state ahead of generic project or
+  -- preview-state outcomes. Resolution may revoke the old preview while the
+  -- project awaits reapproval, but the correction is still unresolved.
+  SELECT pg_catalog.count(*)
+    INTO v_unresolved_corr_count
+    FROM public.participant_preview_correction_requests r
+    JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
+   WHERE pp.project_id = v_project.id
+     AND r.status IN ('open', 'in_progress');
+
+  IF v_unresolved_corr_count > 0 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'CORRECTION_UNRESOLVED',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Participant correction must be resolved']),
+      'confirmedPreviewId', null,
+      'confirmedAt', null
+    );
+  END IF;
+
   IF v_project.status <> 'approved' THEN
     RETURN pg_catalog.jsonb_build_object(
       'ready', false,
@@ -134,21 +156,36 @@ BEGIN
     );
   END IF;
 
-  -- 5. Lock and inspect active participant preview
-  SELECT pp.*
-    INTO v_active_preview
+  -- 5. Lock and inspect active participant preview. More than one active row
+  -- is contradictory persisted state and must never select an arbitrary row.
+  SELECT pg_catalog.count(*)
+    INTO v_active_preview_count
     FROM public.participant_previews pp
    WHERE pp.project_id = v_project.id
-     AND pp.status = 'active'
-     FOR UPDATE;
+     AND pp.status = 'active';
 
-  IF v_active_preview.id IS NULL THEN
+  IF v_active_preview_count = 0 THEN
     RETURN pg_catalog.jsonb_build_object(
       'ready', false,
       'resultCode', 'NO_ACTIVE_PREVIEW',
       'blockers', pg_catalog.to_jsonb(ARRAY['Participant preview required'])
     );
   END IF;
+
+  IF v_active_preview_count <> 1 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Participant preview state is ambiguous'])
+    );
+  END IF;
+
+  SELECT pp.*
+    INTO v_active_preview
+    FROM public.participant_previews pp
+   WHERE pp.project_id = v_project.id
+     AND pp.status = 'active'
+     FOR UPDATE;
 
   -- 6. Check confirmation for active preview
   SELECT c.*
@@ -160,11 +197,12 @@ BEGIN
     v_blockers := pg_catalog.array_append(v_blockers, 'Waiting for participant confirmation');
   END IF;
 
-  -- 7. Check for correction requests on active preview
+  -- 7. Check unresolved correction requests on the active preview.
   SELECT pg_catalog.count(*)
     INTO v_active_corr_count
     FROM public.participant_preview_correction_requests r
-   WHERE r.participant_preview_id = v_active_preview.id;
+   WHERE r.participant_preview_id = v_active_preview.id
+     AND r.status IN ('open', 'in_progress');
 
   IF v_active_corr_count > 0 THEN
     v_blockers := pg_catalog.array_append(v_blockers, 'Active preview has an open correction request');
@@ -182,34 +220,60 @@ BEGIN
     v_blockers := pg_catalog.array_append(v_blockers, 'Participant correction must be resolved');
   END IF;
 
-  -- If preview is unconfirmed or corrections are unresolved, we can early exit with primary blocker code
-  IF v_confirmation.id IS NULL THEN
-    IF v_unresolved_corr_count > 0 THEN
-      RETURN pg_catalog.jsonb_build_object(
-        'ready', false,
-        'resultCode', 'CORRECTED_PREVIEW_AWAITING_CONFIRMATION',
-        'blockers', pg_catalog.to_jsonb(v_blockers),
-        'confirmedPreviewId', null,
-        'confirmedAt', null
-      );
-    ELSE
-      RETURN pg_catalog.jsonb_build_object(
-        'ready', false,
-        'resultCode', 'PREVIEW_NOT_CONFIRMED',
-        'blockers', pg_catalog.to_jsonb(v_blockers),
-        'confirmedPreviewId', null,
-        'confirmedAt', null
-      );
-    END IF;
-  END IF;
-
   IF v_unresolved_corr_count > 0 OR v_active_corr_count > 0 THEN
     RETURN pg_catalog.jsonb_build_object(
       'ready', false,
       'resultCode', 'CORRECTION_UNRESOLVED',
       'blockers', pg_catalog.to_jsonb(v_blockers),
       'confirmedPreviewId', v_active_preview.id,
-      'confirmedAt', pg_catalog.to_jsonb(v_confirmation.confirmed_at)::text
+      'confirmedAt', v_confirmation.confirmed_at::text
+    );
+  END IF;
+
+  IF v_project.status <> 'approved' THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'INVALID_PROJECT_STATE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Project status must be approved to evaluate publication readiness'])
+    );
+  END IF;
+
+  -- A corrected replacement preview is identified from the persisted
+  -- correction-resolution relationship, never browser state or history alone.
+  SELECT pg_catalog.count(*)
+    INTO v_replacement_count
+    FROM public.participant_preview_correction_requests r
+   WHERE r.status = 'resolved'
+     AND r.replacement_preview_id = v_active_preview.id;
+
+  IF v_confirmation.id IS NULL THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', CASE WHEN v_replacement_count = 1
+        THEN 'CORRECTED_PREVIEW_AWAITING_CONFIRMATION'
+        WHEN v_replacement_count = 0 THEN 'PREVIEW_NOT_CONFIRMED'
+        ELSE 'READINESS_UNAVAILABLE'
+      END,
+      'blockers', pg_catalog.to_jsonb(v_blockers),
+      'confirmedPreviewId', null,
+      'confirmedAt', null
+    );
+  END IF;
+
+  IF v_replacement_count > 1 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Correction replacement state is ambiguous'])
+    );
+  END IF;
+
+  IF pg_catalog.jsonb_typeof(v_active_preview.snapshot) <> 'object'
+     OR pg_catalog.jsonb_typeof(v_active_preview.media_snapshot) <> 'array' THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Stored preview state is malformed'])
     );
   END IF;
 
@@ -257,7 +321,7 @@ BEGIN
       'resultCode', 'PROJECT_SNAPSHOT_STALE',
       'blockers', pg_catalog.to_jsonb(v_blockers),
       'confirmedPreviewId', v_active_preview.id,
-      'confirmedAt', pg_catalog.to_jsonb(v_confirmation.confirmed_at)::text
+      'confirmedAt', v_confirmation.confirmed_at::text
     );
   END IF;
 
@@ -284,6 +348,24 @@ BEGIN
 
   v_stored_media_snapshot := COALESCE(v_active_preview.media_snapshot, '[]'::jsonb);
 
+  SELECT pg_catalog.count(*) INTO v_invalid_media_element_count
+    FROM pg_catalog.jsonb_array_elements(v_stored_media_snapshot) elem
+   WHERE pg_catalog.jsonb_typeof(elem) <> 'object'
+      OR pg_catalog.jsonb_typeof(elem->'mediaAssetId') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'assetType') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'fileName') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'storageBucket') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'storagePath') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'mimeType') <> 'string';
+
+  IF v_invalid_media_element_count > 0 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Stored preview media state is malformed'])
+    );
+  END IF;
+
   SELECT COALESCE(pg_catalog.jsonb_agg(elem ORDER BY (elem->>'mediaAssetId')), '[]'::jsonb)
     INTO v_canonical_stored_media
     FROM pg_catalog.jsonb_array_elements(v_stored_media_snapshot) elem;
@@ -295,7 +377,7 @@ BEGIN
       'resultCode', 'MEDIA_SNAPSHOT_STALE',
       'blockers', pg_catalog.to_jsonb(v_blockers),
       'confirmedPreviewId', v_active_preview.id,
-      'confirmedAt', pg_catalog.to_jsonb(v_confirmation.confirmed_at)::text
+      'confirmedAt', v_confirmation.confirmed_at::text
     );
   END IF;
 
@@ -305,7 +387,7 @@ BEGIN
     'resultCode', 'READY',
     'blockers', '[]'::jsonb,
     'confirmedPreviewId', v_active_preview.id,
-    'confirmedAt', pg_catalog.to_jsonb(v_confirmation.confirmed_at)::text
+    'confirmedAt', v_confirmation.confirmed_at::text
   );
 END;
 $$;

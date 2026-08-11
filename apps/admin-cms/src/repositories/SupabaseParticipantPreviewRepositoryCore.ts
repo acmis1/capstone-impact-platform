@@ -623,16 +623,38 @@ export class SupabaseParticipantPreviewRepositoryCore {
     }
 
     const res = data as Record<string, unknown>;
-    const ready = res.ready === true;
-    const resultCode = (typeof res.resultCode === 'string' ? res.resultCode : 'READINESS_UNAVAILABLE') as import('../domain/publicationReadiness').PublicationReadinessCode;
-    const blockers = Array.isArray(res.blockers) ? res.blockers.map((b) => String(b)) : [];
+    const validCodes = new Set<import('../domain/publicationReadiness').PublicationReadinessCode>([
+      'READY', 'PROJECT_NOT_FOUND', 'READINESS_PERMISSION_DENIED', 'INVALID_PROJECT_STATE',
+      'INVALID_SELECTION', 'INVALID_PRIVATE_BUCKET', 'NO_ACTIVE_PREVIEW', 'PREVIEW_NOT_CONFIRMED',
+      'CORRECTION_UNRESOLVED', 'CORRECTED_PREVIEW_AWAITING_CONFIRMATION', 'PROJECT_SNAPSHOT_STALE',
+      'MEDIA_SNAPSHOT_STALE', 'READINESS_UNAVAILABLE',
+    ]);
+    if (
+      typeof res.ready !== 'boolean' ||
+      typeof res.resultCode !== 'string' ||
+      !validCodes.has(res.resultCode as import('../domain/publicationReadiness').PublicationReadinessCode) ||
+      !Array.isArray(res.blockers) ||
+      !res.blockers.every((blocker) => typeof blocker === 'string')
+    ) {
+      return { ready: false, resultCode: 'READINESS_UNAVAILABLE', blockers: ['Publication readiness unavailable'] };
+    }
+
+    const resultCode = res.resultCode as import('../domain/publicationReadiness').PublicationReadinessCode;
     const confirmedPreviewId = isNonEmptyString(res.confirmedPreviewId) ? res.confirmedPreviewId : undefined;
-    const confirmedAt = isNonEmptyString(res.confirmedAt) ? res.confirmedAt : undefined;
+    const confirmedAt = isNonEmptyString(res.confirmedAt) && Number.isFinite(Date.parse(res.confirmedAt))
+      ? res.confirmedAt
+      : undefined;
+    if (
+      (res.ready && resultCode !== 'READY') ||
+      (resultCode === 'READY' && (!confirmedPreviewId || !confirmedAt))
+    ) {
+      return { ready: false, resultCode: 'READINESS_UNAVAILABLE', blockers: ['Publication readiness unavailable'] };
+    }
 
     return {
-      ready,
+      ready: res.ready,
       resultCode,
-      blockers,
+      blockers: res.blockers,
       confirmedPreviewId,
       confirmedAt,
     };

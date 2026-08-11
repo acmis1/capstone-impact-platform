@@ -78,9 +78,9 @@ describe('Migration 0017 Publication Readiness Gate Security Contract Tests', ()
   it('4. get_project_publication_readiness enforces administrative role authority, snapshot matching, and zero side-effects', () => {
     const content = readMigrationNormalized();
 
-    // Combined edit+review authorization check
-    expect(content).toContain("('admin' = ANY(v_roles) OR 'editor' = ANY(v_roles))");
+    // Read-only readiness uses existing review authority.
     expect(content).toContain("('admin' = ANY(v_roles) OR 'reviewer' = ANY(v_roles))");
+    expect(content).not.toContain("('admin' = ANY(v_roles) OR 'editor' = ANY(v_roles))");
 
     // Readiness checks
     expect(content).toContain("'READY'");
