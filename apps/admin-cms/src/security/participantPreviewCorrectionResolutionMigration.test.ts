@@ -64,11 +64,12 @@ describe('Migration 0016 Participant Preview Correction Resolution Security Cont
     expect(content).toContain('ADD COLUMN IF NOT EXISTS resolution_started_by UUID REFERENCES public.admin_users(id) ON DELETE NO ACTION');
     expect(content).toContain('ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ');
     expect(content).toContain('ADD COLUMN IF NOT EXISTS resolved_by UUID REFERENCES public.admin_users(id) ON DELETE NO ACTION');
-    expect(content).toContain('ADD COLUMN IF NOT EXISTS replacement_preview_id UUID REFERENCES public.participant_previews(id) ON DELETE NO ACTION');
+    expect(content).toContain('ADD COLUMN IF NOT EXISTS replacement_preview_id UUID REFERENCES public.participant_previews(id) ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED');
 
     expect(content).not.toContain('resolution_started_by UUID REFERENCES public.admin_users(id) ON DELETE SET NULL');
     expect(content).not.toContain('resolved_by UUID REFERENCES public.admin_users(id) ON DELETE SET NULL');
     expect(content).not.toContain('replacement_preview_id UUID REFERENCES public.participant_previews(id) ON DELETE SET NULL');
+    expect(content).not.toContain('replacement_preview_id UUID REFERENCES public.participant_previews(id) ON DELETE CASCADE');
 
     expect(content).toContain('SECURITY DEFINER');
     expect(content).toContain("SET search_path = ''");

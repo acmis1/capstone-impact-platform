@@ -1365,38 +1365,128 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     }
 
     // ============================================================
-    // Test 46: Fully-Resolved Lifecycle Project Cascade Deletion
+    // Test 46: Fully-Resolved Lifecycle Deletion Semantics (Independent Block & Atomic Project Cascade)
     // ============================================================
-    console.log('--- Test 46: Fully-Resolved Lifecycle Project Cascade Deletion ---');
+    console.log('--- Test 46: Fully-Resolved Lifecycle Deletion Semantics ---');
     const t46Proj = await createProject('t46', 'approved');
     const t46A = await generate(String(t46Proj.public_id), adminId);
-    await requestCorrection(t46A.hash, 'Fully resolved lifecycle comment.');
-    await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t46Proj.public_id, p_admin_id: adminId });
-    await client.rpc('perform_project_review_action', {
+    if (!t46A.res.data?.previewId || t46A.res.data.resultCode !== 'SUCCESS') {
+      console.error('FAIL: Test 46 setup - Preview A generation failed.', t46A.res.data);
+      success = false;
+    }
+    const t46Correction = await requestCorrection(t46A.hash, 'Fully resolved lifecycle comment.');
+    if (t46Correction.data?.resultCode !== 'SUCCESS' || !t46Correction.data.correctionRequestId) {
+      console.error('FAIL: Test 46 setup - Correction request failed.', t46Correction.data);
+      success = false;
+    }
+    const t46Start = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: String(t46Proj.public_id), p_admin_id: adminId });
+    if (t46Start.data?.resultCode !== 'SUCCESS') {
+      console.error('FAIL: Test 46 setup - Start resolution failed.', t46Start.data);
+      success = false;
+    }
+    const t46Reapprove = await client.rpc('perform_project_review_action', {
       p_public_id: String(t46Proj.public_id),
       p_action: 'approve',
       p_comments: 'Reapproved for Scenario 46',
       p_admin_id: adminId,
     });
-    await generate(String(t46Proj.public_id), adminId, true);
+    if (t46Reapprove.error || t46Reapprove.data?.status !== 'approved') {
+      console.error('FAIL: Test 46 setup - Reapproval failed.', t46Reapprove.error, t46Reapprove.data);
+      success = false;
+    }
+    const t46B = await generate(String(t46Proj.public_id), adminId, true);
+    if (!t46B.res.data?.previewId || t46B.res.data.resultCode !== 'SUCCESS' || t46B.res.data.previewId === t46A.res.data?.previewId) {
+      console.error('FAIL: Test 46 setup - Corrected Preview B generation failed.', t46B.res.data);
+      success = false;
+    }
 
-    // Delete all participant_previews for t46Proj in one statement
-    const t46PreviewsDelete = await client.from('participant_previews').delete().eq('project_id', t46Proj.id);
-    const { count: t46CorrCountAfterPreviewsDelete } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t46A.res.data?.previewId);
-
-    // Delete synthetic project
-    const t46ProjDelete = await client.from('projects').delete().eq('id', t46Proj.id);
-    const { count: t46ProjCountAfter } = await client.from('projects').select('id', { count: 'exact', head: true }).eq('id', t46Proj.id);
+    const { data: t46CorrRowBefore } = await client
+      .from('participant_preview_correction_requests')
+      .select('status, resolved_at, resolved_by, replacement_preview_id, participant_preview_id')
+      .eq('id', t46Correction.data?.correctionRequestId)
+      .single();
 
     if (
-      !t46PreviewsDelete.error &&
-      t46CorrCountAfterPreviewsDelete === 0 &&
-      !t46ProjDelete.error &&
-      t46ProjCountAfter === 0
+      t46CorrRowBefore?.status !== 'resolved' ||
+      !t46CorrRowBefore.resolved_at ||
+      t46CorrRowBefore.resolved_by !== adminId ||
+      t46CorrRowBefore.replacement_preview_id !== t46B.res.data?.previewId ||
+      t46CorrRowBefore.participant_preview_id !== t46A.res.data?.previewId
     ) {
-      console.log('PASS: Test 46 - Fully resolved project, previews, and corrections cascade-deleted with zero FK errors under ON DELETE NO ACTION.');
+      console.error('FAIL: Test 46 setup - Correction request pre-deletion assertions failed.', t46CorrRowBefore);
+      success = false;
+    }
+
+    // A. Attempt independent deletion of Preview B ONLY (must be BLOCKED by 23503 FK error)
+    const t46BDeleteAttempt = await client.from('participant_previews').delete().eq('id', t46B.res.data?.previewId);
+    const { data: t46BStillExists } = await client.from('participant_previews').select('id').eq('id', t46B.res.data?.previewId).single();
+    const { data: t46CorrStillExists } = await client.from('participant_preview_correction_requests').select('status, replacement_preview_id').eq('id', t46Correction.data?.correctionRequestId).single();
+
+    if (
+      t46BDeleteAttempt.error?.code === '23503' &&
+      t46BStillExists?.id === t46B.res.data?.previewId &&
+      t46CorrStillExists?.status === 'resolved' &&
+      t46CorrStillExists.replacement_preview_id === t46B.res.data?.previewId
+    ) {
+      console.log('PASS: Test 46 Part A - Independent deletion of Preview B was correctly BLOCKED with FK error 23503, preserving correction history.');
     } else {
-      console.error('FAIL: Test 46 - Fully-resolved cascade deletion failed.', t46PreviewsDelete.error, t46CorrCountAfterPreviewsDelete, t46ProjDelete.error, t46ProjCountAfter);
+      console.error('FAIL: Test 46 Part A - Independent Preview B deletion blocking failed.', t46BDeleteAttempt.error, t46BStillExists, t46CorrStillExists);
+      success = false;
+    }
+
+    // B. Direct atomic PROJECT deletion (must SUCCEED via project -> previews -> correction cascade under deferred FK)
+    const t46ProjDelete = await client.from('projects').delete().eq('id', t46Proj.id);
+    const { count: t46ProjCountAfter } = await client.from('projects').select('id', { count: 'exact', head: true }).eq('id', t46Proj.id);
+    const { count: t46PreviewsCountAfter } = await client.from('participant_previews').select('id', { count: 'exact', head: true }).eq('project_id', t46Proj.id);
+    const { count: t46CorrCountAfter } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t46A.res.data?.previewId);
+
+    if (
+      !t46ProjDelete.error &&
+      t46ProjCountAfter === 0 &&
+      t46PreviewsCountAfter === 0 &&
+      t46CorrCountAfter === 0
+    ) {
+      console.log('PASS: Test 46 Part B - Direct atomic project deletion succeeded cleanly under DEFERRABLE INITIALLY DEFERRED FK.');
+    } else {
+      console.error('FAIL: Test 46 Part B - Direct atomic project deletion failed.', t46ProjDelete.error, t46ProjCountAfter, t46PreviewsCountAfter, t46CorrCountAfter);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 47: Multi-Project Deletion Order-Independence Regression Test
+    // ============================================================
+    console.log('--- Test 47: Multi-Project Deletion Order-Independence Regression Test ---');
+    const t47ProjX = await createProject('t47x', 'approved');
+    const t47XA = await generate(String(t47ProjX.public_id), adminId);
+    await requestCorrection(t47XA.hash, 'Multi-project regression X');
+    await client.rpc('start_participant_preview_correction_resolution', { p_public_id: String(t47ProjX.public_id), p_admin_id: adminId });
+    await client.rpc('perform_project_review_action', { p_public_id: String(t47ProjX.public_id), p_action: 'approve', p_comments: 'Reapproved X', p_admin_id: adminId });
+    const t47XB = await generate(String(t47ProjX.public_id), adminId, true);
+
+    const t47ProjY = await createProject('t47y', 'approved');
+    const t47YA = await generate(String(t47ProjY.public_id), adminId);
+    await requestCorrection(t47YA.hash, 'Multi-project regression Y');
+    await client.rpc('start_participant_preview_correction_resolution', { p_public_id: String(t47ProjY.public_id), p_admin_id: adminId });
+    await client.rpc('perform_project_review_action', { p_public_id: String(t47ProjY.public_id), p_action: 'approve', p_comments: 'Reapproved Y', p_admin_id: adminId });
+    const t47YB = await generate(String(t47ProjY.public_id), adminId, true);
+
+    // Delete both projects atomically in one request
+    const t47MultiDelete = await client.from('projects').delete().in('id', [t47ProjX.id, t47ProjY.id]);
+    const { count: t47RemainingProjs } = await client.from('projects').select('id', { count: 'exact', head: true }).in('id', [t47ProjX.id, t47ProjY.id]);
+    const { count: t47RemainingPreviews } = await client.from('participant_previews').select('id', { count: 'exact', head: true }).in('project_id', [t47ProjX.id, t47ProjY.id]);
+    const { count: t47RemainingCorrs } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).in('participant_preview_id', [t47XA.res.data?.previewId, t47YA.res.data?.previewId]);
+
+    if (
+      !t47MultiDelete.error &&
+      t47RemainingProjs === 0 &&
+      t47RemainingPreviews === 0 &&
+      t47RemainingCorrs === 0 &&
+      t47XB.res.data?.previewId &&
+      t47YB.res.data?.previewId
+    ) {
+      console.log('PASS: Test 47 - Multi-project atomic deletion succeeded cleanly regardless of row ordering.');
+    } else {
+      console.error('FAIL: Test 47 - Multi-project atomic deletion failed.', t47MultiDelete.error, t47RemainingProjs, t47RemainingPreviews, t47RemainingCorrs);
       success = false;
     }
   } catch (err: unknown) {
