@@ -60,7 +60,7 @@ DECLARE
   v_status text;
   v_existing_active_count integer;
   v_open_correction_count integer;
-  v_in_progress_correction RECORD;
+  v_in_progress_correction_id uuid;
   v_expires_in integer;
   v_now timestamptz;
   v_expires_at timestamptz;
@@ -154,37 +154,37 @@ BEGIN
   END IF;
 
   -- 6. Correction workflow enforcement
-  IF COALESCE(p_is_correction_reissue, false) THEN
-    -- Must have exactly one in_progress correction request
-    SELECT pg_catalog.count(*)
-      INTO v_open_correction_count
-      FROM public.participant_preview_correction_requests r
-      JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
-     WHERE pp.project_id = v_project_id
-       AND r.status = 'in_progress';
+  -- Total unresolved count (open + in_progress)
+  SELECT pg_catalog.count(*)
+    INTO v_open_correction_count
+    FROM public.participant_preview_correction_requests r
+    JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
+   WHERE pp.project_id = v_project_id
+     AND r.status IN ('open', 'in_progress');
 
-    IF v_open_correction_count = 0 THEN
-      RETURN pg_catalog.jsonb_build_object('resultCode', 'NO_CORRECTION_IN_PROGRESS');
-    ELSIF v_open_correction_count > 1 THEN
+  IF COALESCE(p_is_correction_reissue, false) THEN
+    -- Corrected reissue: total unresolved count must be exactly 1
+    IF v_open_correction_count > 1 THEN
       RETURN pg_catalog.jsonb_build_object('resultCode', 'AMBIGUOUS_CORRECTION_REQUEST');
+    ELSIF v_open_correction_count = 0 THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'NO_CORRECTION_IN_PROGRESS');
     END IF;
 
+    -- Exactly 1 unresolved request exists. Inspect its status.
     SELECT r.id
-      INTO v_in_progress_correction
+      INTO v_in_progress_correction_id
       FROM public.participant_preview_correction_requests r
       JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
      WHERE pp.project_id = v_project_id
        AND r.status = 'in_progress'
        FOR UPDATE OF r;
-  ELSE
-    -- Ordinary generation: blocked if an open or in_progress correction exists
-    SELECT pg_catalog.count(*)
-      INTO v_open_correction_count
-      FROM public.participant_preview_correction_requests r
-      JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
-     WHERE pp.project_id = v_project_id
-       AND r.status IN ('open', 'in_progress');
 
+    IF v_in_progress_correction_id IS NULL THEN
+      -- The single unresolved request is 'open', not 'in_progress'
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'NO_CORRECTION_IN_PROGRESS');
+    END IF;
+  ELSE
+    -- Ordinary generation: blocked if any unresolved correction exists
     IF v_open_correction_count > 0 THEN
       RETURN pg_catalog.jsonb_build_object('resultCode', 'CORRECTION_RESOLUTION_REQUIRED');
     END IF;
@@ -256,13 +256,13 @@ BEGIN
   END;
 
   -- 8. If this was a correction reissue, complete the resolution transactionally
-  IF COALESCE(p_is_correction_reissue, false) AND v_in_progress_correction.id IS NOT NULL THEN
+  IF COALESCE(p_is_correction_reissue, false) AND v_in_progress_correction_id IS NOT NULL THEN
     UPDATE public.participant_preview_correction_requests
        SET status = 'resolved',
            resolved_at = v_now,
            resolved_by = p_admin_id,
            replacement_preview_id = v_preview_id
-     WHERE id = v_in_progress_correction.id;
+     WHERE id = v_in_progress_correction_id;
   END IF;
 
   RETURN pg_catalog.jsonb_build_object(
@@ -328,8 +328,7 @@ DECLARE
   v_has_review boolean;
   v_project_id uuid;
   v_project_status text;
-  v_in_progress_count integer;
-  v_open_request_count integer;
+  v_unresolved_count integer;
   v_target_request RECORD;
   v_active_preview RECORD;
   v_now timestamptz;
@@ -381,24 +380,29 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'PROJECT_NOT_FOUND');
   END IF;
 
-  -- Check if resolution is already in_progress for this project
+  -- First determine total unresolved count (status IN ('open', 'in_progress'))
   SELECT pg_catalog.count(*)
-    INTO v_in_progress_count
+    INTO v_unresolved_count
     FROM public.participant_preview_correction_requests r
     JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
    WHERE pp.project_id = v_project_id
-     AND r.status = 'in_progress';
+     AND r.status IN ('open', 'in_progress');
 
-  IF v_in_progress_count > 1 THEN
+  IF v_unresolved_count = 0 THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'NO_OPEN_CORRECTION');
+  ELSIF v_unresolved_count > 1 THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'AMBIGUOUS_CORRECTION_REQUEST');
-  ELSIF v_in_progress_count = 1 THEN
-    SELECT r.id, r.resolution_started_at
-      INTO v_target_request
-      FROM public.participant_preview_correction_requests r
-      JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
-     WHERE pp.project_id = v_project_id
-       AND r.status = 'in_progress';
+  END IF;
 
+  -- Exactly 1 unresolved request exists. Inspect its status.
+  SELECT r.id, r.participant_preview_id, r.status, r.resolution_started_at
+    INTO v_target_request
+    FROM public.participant_preview_correction_requests r
+    JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
+   WHERE pp.project_id = v_project_id
+     AND r.status IN ('open', 'in_progress');
+
+  IF v_target_request.status = 'in_progress' THEN
     RETURN pg_catalog.jsonb_build_object(
       'resultCode', 'ALREADY_IN_PROGRESS',
       'correctionRequestId', v_target_request.id,
@@ -410,29 +414,6 @@ BEGIN
   IF v_project_status <> 'approved' THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_PROJECT_STATE', 'status', v_project_status);
   END IF;
-
-  -- 5. Resolve the unresolved correction request server-side
-  SELECT pg_catalog.count(*)
-    INTO v_open_request_count
-    FROM public.participant_preview_correction_requests r
-    JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
-   WHERE pp.project_id = v_project_id
-     AND r.status = 'open';
-
-  IF v_open_request_count = 0 THEN
-    RETURN pg_catalog.jsonb_build_object('resultCode', 'NO_OPEN_CORRECTION');
-  ELSIF v_open_request_count > 1 THEN
-    -- Fail closed on ambiguity
-    RETURN pg_catalog.jsonb_build_object('resultCode', 'AMBIGUOUS_CORRECTION_REQUEST');
-  END IF;
-
-  SELECT r.id, r.participant_preview_id
-    INTO v_target_request
-    FROM public.participant_preview_correction_requests r
-    JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
-   WHERE pp.project_id = v_project_id
-     AND r.status = 'open'
-     FOR UPDATE OF r;
 
   v_now := pg_catalog.now();
 

@@ -1037,42 +1037,62 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     console.log('--- Test 37 (Scenario C): Wrong Active Preview Protection ---');
     const t37Proj = await createProject('t37', 'approved');
     const t37A = await generate(String(t37Proj.public_id), adminId);
+    if (!t37A.res.data?.previewId || t37A.res.data.resultCode !== 'SUCCESS') {
+      console.error('FAIL: Test 37 setup - Preview A generation failed.', t37A.res.data);
+      success = false;
+    }
     const t37Correction = await requestCorrection(t37A.hash, 'Correction on Preview A.');
+    if (t37Correction.data?.resultCode !== 'SUCCESS') {
+      console.error('FAIL: Test 37 setup - Correction request failed.', t37Correction.data);
+      success = false;
+    }
     // Revoke Preview A manually
-    await client.rpc('revoke_participant_preview', { p_public_id: t37Proj.public_id, p_admin_id: adminId });
-    // Manually insert Preview B (active) directly for testing
+    const t37Revoke = await client.rpc('revoke_participant_preview', { p_public_id: t37Proj.public_id, p_admin_id: adminId });
+    if (t37Revoke.data?.resultCode !== 'SUCCESS') {
+      console.error('FAIL: Test 37 setup - Revoke Preview A failed.', t37Revoke.data);
+      success = false;
+    }
+    // Manually insert Preview B (active) directly with explicit valid future expires_at
     const t37BHash = hashToken(newRawToken());
-    const { data: t37BRow } = await client.from('participant_previews').insert({
+    const t37FutureExpiry = new Date(Date.now() + 7 * 86400 * 1000).toISOString();
+    const t37InsertRes = await client.from('participant_previews').insert({
       project_id: t37Proj.id,
       token_hash: t37BHash,
       snapshot: { title: t37Proj.title, summary: null, background: null, solution: null, year: 2026, program: null, studyProgram: null, discipline: null, disciplines: [], industry: null, industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [], posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [] },
       media_snapshot: [],
       status: 'active',
       created_by: adminId,
+      expires_at: t37FutureExpiry,
     }).select().single();
 
-    // Now attempt to start resolution of Preview A's open correction request
-    const t37StartAttempt = await client.rpc('start_participant_preview_correction_resolution', {
-      p_public_id: String(t37Proj.public_id),
-      p_admin_id: adminId,
-    });
-    const { data: t37ActiveRows } = await client.from('participant_previews').select('id, status').eq('id', t37BRow?.id);
-    const { data: t37ProjRow } = await client.from('projects').select('status').eq('id', t37Proj.id).single();
-    const { data: t37CorrRow } = await client.from('participant_preview_correction_requests').select('status, resolution_started_at').eq('id', t37Correction.data?.correctionRequestId).single();
-    const { count: t37AuditCount } = await client.from('approval_records').select('id', { count: 'exact', head: true }).eq('project_id', t37Proj.id);
-
-    if (
-      t37StartAttempt.data?.resultCode === 'CONFLICTING_ACTIVE_PREVIEW' &&
-      t37ActiveRows?.[0]?.status === 'active' &&
-      t37ProjRow?.status === 'approved' &&
-      t37CorrRow?.status === 'open' &&
-      t37CorrRow?.resolution_started_at === null &&
-      t37AuditCount === 0
-    ) {
-      console.log('PASS: Test 37 - Conflicting active preview correctly blocked start_resolution and preserved all state.');
-    } else {
-      console.error('FAIL: Test 37 - Wrong active preview protection failed.', t37StartAttempt.data, t37ActiveRows, t37ProjRow, t37CorrRow, t37AuditCount);
+    if (t37InsertRes.error) {
+      console.error('FAIL: Test 37 setup - Manual Preview B insertion error.', t37InsertRes.error);
       success = false;
+    } else {
+      const t37BRow = t37InsertRes.data;
+      // Now attempt to start resolution of Preview A's open correction request
+      const t37StartAttempt = await client.rpc('start_participant_preview_correction_resolution', {
+        p_public_id: String(t37Proj.public_id),
+        p_admin_id: adminId,
+      });
+      const { data: t37ActiveRows } = await client.from('participant_previews').select('id, status').eq('id', t37BRow.id);
+      const { data: t37ProjRow } = await client.from('projects').select('status').eq('id', t37Proj.id).single();
+      const { data: t37CorrRow } = await client.from('participant_preview_correction_requests').select('status, resolution_started_at').eq('id', t37Correction.data?.correctionRequestId).single();
+      const { count: t37AuditCount } = await client.from('approval_records').select('id', { count: 'exact', head: true }).eq('project_id', t37Proj.id);
+
+      if (
+        t37StartAttempt.data?.resultCode === 'CONFLICTING_ACTIVE_PREVIEW' &&
+        t37ActiveRows?.[0]?.status === 'active' &&
+        t37ProjRow?.status === 'approved' &&
+        t37CorrRow?.status === 'open' &&
+        t37CorrRow?.resolution_started_at === null &&
+        t37AuditCount === 0
+      ) {
+        console.log('PASS: Test 37 - Conflicting active preview correctly blocked start_resolution and preserved all state.');
+      } else {
+        console.error('FAIL: Test 37 - Wrong active preview protection failed.', t37StartAttempt.data, t37ActiveRows, t37ProjRow, t37CorrRow, t37AuditCount);
+        success = false;
+      }
     }
 
     // ============================================================
@@ -1083,12 +1103,12 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     const t38AttemptReissue = await generate(String(t35Proj.public_id), adminId, true);
     const { data: t38CorrBefore } = await client.from('participant_preview_correction_requests').select('status, resolved_at').eq('id', t35Correction.data?.correctionRequestId).single();
 
-    // Reapprove project using existing authoritative review RPC
+    // Reapprove project using existing authoritative review RPC (p_public_id, p_action, p_comments, p_admin_id)
     const t38ReapproveRpc = await client.rpc('perform_project_review_action', {
-      p_project_id: t35Proj.id,
-      p_admin_id: adminId,
+      p_public_id: String(t35Proj.public_id),
       p_action: 'approve',
       p_comments: 'Reapproved following correction resolution edits.',
+      p_admin_id: adminId,
     });
     const { data: t38ProjAfterReapprove } = await client.from('projects').select('status').eq('id', t35Proj.id).single();
 
@@ -1148,8 +1168,13 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t40Proj.public_id, p_admin_id: adminId });
     // Update project title while in changes_requested
     await client.from('projects').update({ title: 'Corrected Project Title F' }).eq('id', t40Proj.id);
-    // Reapprove
-    await client.rpc('perform_project_review_action', { p_project_id: t40Proj.id, p_admin_id: adminId, p_action: 'approve' });
+    // Reapprove using authoritative review RPC
+    await client.rpc('perform_project_review_action', {
+      p_public_id: String(t40Proj.public_id),
+      p_action: 'approve',
+      p_comments: 'Reapproved for Scenario F',
+      p_admin_id: adminId,
+    });
     // Reissue Preview B
     const t40B = await generate(String(t40Proj.public_id), adminId, true);
 
@@ -1183,7 +1208,7 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     await requestCorrection(t41A.hash, 'Concurrent resolution comment.');
     const [t41Start1, t41Start2] = await Promise.all([
       client.rpc('start_participant_preview_correction_resolution', { p_public_id: t41Proj.public_id, p_admin_id: adminId }),
-      client.rpc('start_participant_preview_correction_resolution', { p_public_id: t41Proj.public_id, p_admin_id: reviewerId }),
+      client.rpc('start_participant_preview_correction_resolution', { p_public_id: t41Proj.public_id, p_admin_id: adminId }),
     ]);
 
     const t41Codes = [t41Start1.data?.resultCode, t41Start2.data?.resultCode].sort();
@@ -1205,11 +1230,16 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     // Test 42 (Scenario H): Concurrent Corrected Reissue
     // ============================================================
     console.log('--- Test 42 (Scenario H): Concurrent Corrected Reissue ---');
-    // Reapprove t41Proj
-    await client.rpc('perform_project_review_action', { p_project_id: t41Proj.id, p_admin_id: adminId, p_action: 'approve' });
+    // Reapprove t41Proj using authoritative review RPC
+    await client.rpc('perform_project_review_action', {
+      p_public_id: String(t41Proj.public_id),
+      p_action: 'approve',
+      p_comments: 'Reapproved for Scenario H',
+      p_admin_id: adminId,
+    });
     const [t42Reissue1, t42Reissue2] = await Promise.all([
       generate(String(t41Proj.public_id), adminId, true),
-      generate(String(t41Proj.public_id), reviewerId, true),
+      generate(String(t41Proj.public_id), adminId, true),
     ]);
 
     const t42Codes = [t42Reissue1.res.data?.resultCode, t42Reissue2.res.data?.resultCode].sort();
@@ -1243,8 +1273,13 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     const t43StartEditor = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t43Proj.public_id, p_admin_id: editorId });
     const t43StartAdmin = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t43Proj.public_id, p_admin_id: adminId });
 
-    // Reapprove t43Proj
-    await client.rpc('perform_project_review_action', { p_project_id: t43Proj.id, p_admin_id: adminId, p_action: 'approve' });
+    // Reapprove t43Proj using authoritative review RPC
+    await client.rpc('perform_project_review_action', {
+      p_public_id: String(t43Proj.public_id),
+      p_action: 'approve',
+      p_comments: 'Reapproved for Scenario I',
+      p_admin_id: adminId,
+    });
 
     // Reissue role attempts:
     const t43ReissueReviewer = await generate(String(t43Proj.public_id), reviewerId, true);
@@ -1266,32 +1301,49 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     }
 
     // ============================================================
-    // Test 44 (Scenario J): Ambiguous State
+    // Test 44 (Scenario J): Ambiguous State (Multiple in_progress + Mixed open + in_progress)
     // ============================================================
     console.log('--- Test 44 (Scenario J): Ambiguous State ---');
-    const t44Proj = await createProject('t44', 'approved');
-    const t44A1 = await generate(String(t44Proj.public_id), adminId);
-    await client.rpc('revoke_participant_preview', { p_public_id: t44Proj.public_id, p_admin_id: adminId });
-    const t44A2 = await generate(String(t44Proj.public_id), adminId);
-    await client.rpc('revoke_participant_preview', { p_public_id: t44Proj.public_id, p_admin_id: adminId });
+    const t44Proj1 = await createProject('t44a', 'approved');
+    const t44A1 = await generate(String(t44Proj1.public_id), adminId);
+    await client.rpc('revoke_participant_preview', { p_public_id: t44Proj1.public_id, p_admin_id: adminId });
+    const t44A2 = await generate(String(t44Proj1.public_id), adminId);
+    await client.rpc('revoke_participant_preview', { p_public_id: t44Proj1.public_id, p_admin_id: adminId });
 
-    // Manually insert TWO in_progress correction requests for t44Proj
+    // Manually insert TWO in_progress correction requests for t44Proj1
     const now = new Date().toISOString();
     await client.from('participant_preview_correction_requests').insert([
-      { participant_preview_id: t44A1.res.data?.previewId, correction_comment: 'Ambiguous 1', status: 'in_progress', resolution_started_at: now, resolution_started_by: adminId },
-      { participant_preview_id: t44A2.res.data?.previewId, correction_comment: 'Ambiguous 2', status: 'in_progress', resolution_started_at: now, resolution_started_by: adminId },
+      { participant_preview_id: t44A1.res.data?.previewId, correction_comment: 'Ambiguous in_progress 1', status: 'in_progress', resolution_started_at: now, resolution_started_by: adminId },
+      { participant_preview_id: t44A2.res.data?.previewId, correction_comment: 'Ambiguous in_progress 2', status: 'in_progress', resolution_started_at: now, resolution_started_by: adminId },
     ]);
 
-    const t44ReissueAttempt = await generate(String(t44Proj.public_id), adminId, true);
-    const t44StartAttempt = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t44Proj.public_id, p_admin_id: adminId });
+    const t44aReissueAttempt = await generate(String(t44Proj1.public_id), adminId, true);
+    const t44aStartAttempt = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t44Proj1.public_id, p_admin_id: adminId });
+
+    // Mixed unresolved test (one open + one in_progress for t44Proj2)
+    const t44Proj2 = await createProject('t44b', 'approved');
+    const t44B1 = await generate(String(t44Proj2.public_id), adminId);
+    await client.rpc('revoke_participant_preview', { p_public_id: t44Proj2.public_id, p_admin_id: adminId });
+    const t44B2 = await generate(String(t44Proj2.public_id), adminId);
+    await client.rpc('revoke_participant_preview', { p_public_id: t44Proj2.public_id, p_admin_id: adminId });
+
+    await client.from('participant_preview_correction_requests').insert([
+      { participant_preview_id: t44B1.res.data?.previewId, correction_comment: 'Mixed open 1', status: 'open' },
+      { participant_preview_id: t44B2.res.data?.previewId, correction_comment: 'Mixed in_progress 2', status: 'in_progress', resolution_started_at: now, resolution_started_by: adminId },
+    ]);
+
+    const t44bReissueAttempt = await generate(String(t44Proj2.public_id), adminId, true);
+    const t44bStartAttempt = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t44Proj2.public_id, p_admin_id: adminId });
 
     if (
-      t44ReissueAttempt.res.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST' &&
-      t44StartAttempt.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST'
+      t44aReissueAttempt.res.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST' &&
+      t44aStartAttempt.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST' &&
+      t44bReissueAttempt.res.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST' &&
+      t44bStartAttempt.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST'
     ) {
-      console.log('PASS: Test 44 - Multiple in_progress correction requests correctly failed closed as AMBIGUOUS_CORRECTION_REQUEST.');
+      console.log('PASS: Test 44 - Multiple in_progress and mixed open+in_progress correction requests both correctly failed closed as AMBIGUOUS_CORRECTION_REQUEST.');
     } else {
-      console.error('FAIL: Test 44 - Ambiguous state assertion failed.', t44ReissueAttempt.res.data, t44StartAttempt.data);
+      console.error('FAIL: Test 44 - Ambiguous state assertion failed.', t44aReissueAttempt.res.data, t44aStartAttempt.data, t44bReissueAttempt.res.data, t44bStartAttempt.data);
       success = false;
     }
 

@@ -143,10 +143,10 @@ describe('Migration 0016 Participant Preview Correction Resolution Security Cont
     );
   });
 
-  it('7. start_participant_preview_correction_resolution declares v_in_progress_count and enforces wrong active preview and ambiguity checks', () => {
+  it('7. start_participant_preview_correction_resolution declares v_unresolved_count and enforces wrong active preview and ambiguity checks', () => {
     const content = readMigrationNormalized();
 
-    expect(content).toContain('v_in_progress_count integer;');
+    expect(content).toContain('v_unresolved_count integer;');
     expect(content).toContain("'resultCode', 'CONFLICTING_ACTIVE_PREVIEW'");
     expect(content).toContain("'resultCode', 'AMBIGUOUS_CORRECTION_REQUEST'");
   });
