@@ -53,7 +53,7 @@ describe('project metadata atomic persistence workflow', () => {
     expect(result).toMatchObject({ ok: false, code: 'VALIDATION_FAILED', fieldErrors: { [field]: expect.any(Array) } });
     expect(gateway.calls).toEqual(['lookups']);
   });
-  it.each(['PROJECT_NOT_FOUND', 'STALE_VERSION', 'VALIDATION_FAILED'])('maps expected RPC result %s safely', async (resultCode) => {
+  it.each(['PROJECT_NOT_FOUND', 'STALE_VERSION', 'VALIDATION_FAILED', 'APPROVAL_REOPEN_REQUIRED', 'PUBLISHED_PROJECT_LOCKED'])('maps expected RPC result %s safely', async (resultCode) => {
     const gateway = new FakeGateway(); gateway.response = { resultCode };
     expect(await saveProjectMetadata(gateway, metadata)).toMatchObject({ ok: false, code: resultCode });
   });

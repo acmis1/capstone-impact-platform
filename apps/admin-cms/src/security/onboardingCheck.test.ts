@@ -30,6 +30,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     '20260811120000_participant_preview_correction_requests.sql',
     '20260811130000_participant_preview_correction_resolution.sql',
     '20260811150000_publication_readiness_gate.sql',
+    '20260811160000_approval_edit_gate.sql',
   ];
 
   const defaultMockExec = (cmd: string): string => {
@@ -226,7 +227,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const shuffled = [...validMigrations].reverse();
     const result = validateMigrationsList(shuffled);
     expect(result.passed).toBe(true);
-    expect(result.message).toContain('17 timestamped migrations');
+    expect(result.message).toContain('18 timestamped migrations');
   });
 
   it('10. Duplicate migration timestamps fail', () => {
@@ -248,6 +249,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260811120000_participant_preview_correction_requests.sql',
       '20260811130000_participant_preview_correction_resolution.sql',
       '20260811150000_publication_readiness_gate.sql',
+      '20260811160000_approval_edit_gate.sql',
     ];
     const result = validateMigrationsList(duplicateMigrations);
     expect(result.passed).toBe(false);
@@ -273,6 +275,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260811120000_participant_preview_correction_requests.sql',
       '20260811130000_participant_preview_correction_resolution.sql',
       '20260811150000_publication_readiness_gate.sql',
+      '20260811160000_approval_edit_gate.sql',
     ];
     const result = validateMigrationsList(missing0008);
     expect(result.passed).toBe(false);
@@ -523,6 +526,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260811120000_participant_preview_correction_requests.sql',
       '20260811130000_participant_preview_correction_resolution.sql',
       '20260811150000_publication_readiness_gate.sql',
+      '20260811160000_approval_edit_gate.sql',
     ];
     const result = validateMigrationsList(invalidMigrationNames);
     expect(result.passed).toBe(false);

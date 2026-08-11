@@ -9,7 +9,7 @@ describe('transactional project metadata migration contract', () => {
   const content = fs.readFileSync(path.join(migrations, filename), 'utf8');
   it('is the ninth append-only migration and leaves prior migration files present', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
-    expect(files).toHaveLength(17); expect(files).toContain(filename);
+    expect(files).toHaveLength(18); expect(files).toContain(filename);
     expect(files.slice(0, 8)).toContain('20260803180000_transactional_review_actions.sql');
   });
   it('uses an atomic locked, service-role-only security-definer RPC', () => {
