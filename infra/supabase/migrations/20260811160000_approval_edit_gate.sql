@@ -78,13 +78,18 @@ BEGIN
   IF p_action IN ('request_changes', 'approve') AND NOT ('admin' = ANY(v_roles) OR 'reviewer' = ANY(v_roles)) THEN RAISE EXCEPTION 'REVIEW_PERMISSION_DENIED'; END IF;
   IF p_action = 'archive' AND NOT ('admin' = ANY(v_roles)) THEN RAISE EXCEPTION 'REVIEW_PERMISSION_DENIED'; END IF;
 
-  -- This is the existing participant-preview namespace. It serializes reopen against participant responses.
+  -- This project-scoped advisory lock serializes staff preview operations. Participant
+  -- confirmation/correction responses serialize through the active-preview row lock below.
   IF p_action = 'request_changes' THEN PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('participant_preview:' || v_public_id)); END IF;
   SELECT p.id, p.status INTO v_project_id, v_from_status FROM public.projects p
   WHERE p.public_id = v_public_id AND p.deleted_at IS NULL FOR UPDATE;
   IF v_project_id IS NULL THEN RAISE EXCEPTION 'REVIEW_PROJECT_NOT_FOUND'; END IF;
 
   IF v_from_status = 'approved' AND p_action = 'request_changes' THEN
+    -- Acquire the participant response serialization point before observing corrections.
+    PERFORM pp.id FROM public.participant_previews pp
+    WHERE pp.project_id = v_project_id AND pp.status = 'active'
+    ORDER BY pp.id FOR UPDATE;
     SELECT count(*) INTO v_unresolved FROM public.participant_preview_correction_requests r
     JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
     WHERE pp.project_id = v_project_id AND r.status IN ('open', 'in_progress');

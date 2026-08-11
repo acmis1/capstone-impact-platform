@@ -32,6 +32,13 @@ describe('Migration 0018 approval edit gate static security contract', () => {
     expect(content).toContain('CORRECTION_RESOLUTION_REQUIRED');
     expect(content).toContain('AMBIGUOUS_ACTIVE_PREVIEW');
     expect(content).toContain("status = 'revoked'");
+    const approvedReopen = content.indexOf("IF v_from_status = 'approved' AND p_action = 'request_changes' THEN");
+    const activePreviewLock = content.indexOf("WHERE pp.project_id = v_project_id AND pp.status = 'active'", approvedReopen);
+    const correctionCheck = content.indexOf('SELECT count(*) INTO v_unresolved', approvedReopen);
+    expect(approvedReopen).toBeGreaterThanOrEqual(0);
+    expect(activePreviewLock).toBeGreaterThan(approvedReopen);
+    expect(content.slice(activePreviewLock, correctionCheck)).toContain('FOR UPDATE');
+    expect(correctionCheck).toBeGreaterThan(activePreviewLock);
     expect(content).toContain('SECURITY DEFINER SET search_path = \'\'');
     expect(content).toContain('REVOKE ALL ON FUNCTION public.perform_project_review_action');
     expect(content).toContain('GRANT EXECUTE ON FUNCTION public.perform_project_review_action');
