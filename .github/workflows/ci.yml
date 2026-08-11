@@ -163,6 +163,9 @@ jobs:
       - name: Verify publication readiness gate runtime behavior
         run: npm run verify:publication-readiness-runtime --workspace=apps/admin-cms
 
+      - name: Verify publication preparation runtime behavior
+        run: npm run verify:publication-preparation-runtime --workspace=apps/admin-cms
+
       - name: Verify approval edit gate runtime behavior
         run: npm run verify:approval-edit-gate-runtime --workspace=apps/admin-cms
 

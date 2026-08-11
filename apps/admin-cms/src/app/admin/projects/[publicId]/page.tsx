@@ -10,7 +10,7 @@ import { getAllowedReviewActions } from '../../../../workflow/projectWorkflow';
 import { createSupabaseAdminClientCore } from '../../../../lib/supabase/adminCore';
 import { Project } from '../../../../domain/project';
 import { requireAdmin } from '../../../../auth/requireAdmin';
-import { hasPermission, canManageParticipantPreview } from '../../../../auth/permissions';
+import { hasPermission, canManageParticipantPreview, canPreparePublication } from '../../../../auth/permissions';
 import { ParticipantPreviewPanel } from '../../../../components/admin/ParticipantPreviewPanel';
 import { SupabaseParticipantPreviewRepository } from '../../../../repositories/SupabaseParticipantPreviewRepository';
 import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetadataEditor';
@@ -24,6 +24,7 @@ import { ParticipantPreviewResponseState } from '../../../../domain/participantP
 import { PublicationReadinessPanel } from '../../../../components/admin/PublicationReadinessPanel';
 import { PublicationReadinessResult } from '../../../../domain/publicationReadiness';
 import { getServerEnv } from '../../../../lib/env';
+import { PublicationPreparationPanel } from '../../../../components/admin/PublicationPreparationPanel';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -48,6 +49,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let resolutionStatus: import('../../../../domain/participantPreview').ParticipantPreviewCorrectionResolutionStatus | null = null;
   let canResolveCorrection = false;
   let publicationReadiness: PublicationReadinessResult | null = null;
+  let canPreparePublicationPlan = false;
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -60,6 +62,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       ]);
       canEditMetadata = hasPermission(adminContext.permissions, 'projects.edit');
       canManagePreview = canManageParticipantPreview(adminContext.permissions);
+      canPreparePublicationPlan = canPreparePublication(adminContext.permissions);
       metadataEditorData = editorData;
       if (!metadataEditorData) throw new Error('Project metadata editor data unavailable');
 
@@ -303,6 +306,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
         <ProjectDetailSection title="🚀 Publication Readiness Gate" borderColor="#10B981">
           <PublicationReadinessPanel readiness={publicationReadiness} />
+          <PublicationPreparationPanel publicId={project.publicId || ''} ready={publicationReadiness?.ready === true && publicationReadiness.resultCode === 'READY'} canPrepare={canPreparePublicationPlan} />
         </ProjectDetailSection>
 
         <ProjectDetailSection title="🔗 Participant Preview" borderColor="#3B82F6">

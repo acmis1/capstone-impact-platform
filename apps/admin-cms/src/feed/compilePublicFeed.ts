@@ -13,7 +13,11 @@ import { PublicFeedRecord } from '../domain/publicFeed';
 export function compilePublicFeed(projects: Project[]): PublicFeedRecord[] {
   return projects
     .filter((p) => p.status === 'published')
-    .map((p) => {
+    .map(toPublicFeedRecord);
+}
+
+/** The sole allow-listed conversion from an internal project to a public record. */
+export function toPublicFeedRecord(p: Project): PublicFeedRecord {
       // Explicitly construct public feed record from approved allowlist properties
       return {
         id: p.id,
@@ -58,5 +62,18 @@ export function compilePublicFeed(projects: Project[]): PublicFeedRecord[] {
             : {}),
         },
       };
-    });
+}
+
+/**
+ * Builds the exact proposed artifact for one approved target without changing any project.
+ * Existing published projects form the baseline; all other non-public records are excluded.
+ */
+export function compilePublicationCandidateFeed(projects: Project[], targetPublicId: string): PublicFeedRecord[] {
+  const targets = projects.filter((project) => project.publicId === targetPublicId);
+  if (targets.length !== 1 || targets[0].status !== 'approved') {
+    throw new Error('Publication candidate target is unavailable.');
+  }
+  return projects
+    .filter((project) => project.status === 'published' || project.publicId === targetPublicId)
+    .map(toPublicFeedRecord);
 }
