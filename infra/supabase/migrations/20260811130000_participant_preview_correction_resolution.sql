@@ -17,10 +17,10 @@ ALTER TABLE public.participant_preview_correction_requests
 
 ALTER TABLE public.participant_preview_correction_requests
   ADD COLUMN IF NOT EXISTS resolution_started_at TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS resolution_started_by UUID REFERENCES public.admin_users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS resolution_started_by UUID REFERENCES public.admin_users(id) ON DELETE NO ACTION,
   ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS resolved_by UUID REFERENCES public.admin_users(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS replacement_preview_id UUID REFERENCES public.participant_previews(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS resolved_by UUID REFERENCES public.admin_users(id) ON DELETE NO ACTION,
+  ADD COLUMN IF NOT EXISTS replacement_preview_id UUID REFERENCES public.participant_previews(id) ON DELETE NO ACTION;
 
 ALTER TABLE public.participant_preview_correction_requests
   ADD CONSTRAINT check_participant_preview_correction_request_status

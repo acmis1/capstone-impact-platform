@@ -1117,7 +1117,9 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
       t38CorrBefore?.status === 'in_progress' &&
       t38CorrBefore?.resolved_at === null &&
       !t38ReapproveRpc.error &&
-      t38ReapproveRpc.data?.resultCode === 'SUCCESS' &&
+      t38ReapproveRpc.data?.status === 'approved' &&
+      t38ReapproveRpc.data?.publicId === String(t35Proj.public_id) &&
+      t38ReapproveRpc.data?.auditRecordId &&
       t38ProjAfterReapprove?.status === 'approved'
     ) {
       console.log('PASS: Test 38 - Reissue blocked in changes_requested state; project reapproved cleanly via perform_project_review_action.');
@@ -1361,6 +1363,42 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
       console.error('FAIL: Test 45 - Zero publication side effects assertion failed.', t45ProjRow, t45MediaRows);
       success = false;
     }
+
+    // ============================================================
+    // Test 46: Fully-Resolved Lifecycle Project Cascade Deletion
+    // ============================================================
+    console.log('--- Test 46: Fully-Resolved Lifecycle Project Cascade Deletion ---');
+    const t46Proj = await createProject('t46', 'approved');
+    const t46A = await generate(String(t46Proj.public_id), adminId);
+    await requestCorrection(t46A.hash, 'Fully resolved lifecycle comment.');
+    await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t46Proj.public_id, p_admin_id: adminId });
+    await client.rpc('perform_project_review_action', {
+      p_public_id: String(t46Proj.public_id),
+      p_action: 'approve',
+      p_comments: 'Reapproved for Scenario 46',
+      p_admin_id: adminId,
+    });
+    await generate(String(t46Proj.public_id), adminId, true);
+
+    // Delete all participant_previews for t46Proj in one statement
+    const t46PreviewsDelete = await client.from('participant_previews').delete().eq('project_id', t46Proj.id);
+    const { count: t46CorrCountAfterPreviewsDelete } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t46A.res.data?.previewId);
+
+    // Delete synthetic project
+    const t46ProjDelete = await client.from('projects').delete().eq('id', t46Proj.id);
+    const { count: t46ProjCountAfter } = await client.from('projects').select('id', { count: 'exact', head: true }).eq('id', t46Proj.id);
+
+    if (
+      !t46PreviewsDelete.error &&
+      t46CorrCountAfterPreviewsDelete === 0 &&
+      !t46ProjDelete.error &&
+      t46ProjCountAfter === 0
+    ) {
+      console.log('PASS: Test 46 - Fully resolved project, previews, and corrections cascade-deleted with zero FK errors under ON DELETE NO ACTION.');
+    } else {
+      console.error('FAIL: Test 46 - Fully-resolved cascade deletion failed.', t46PreviewsDelete.error, t46CorrCountAfterPreviewsDelete, t46ProjDelete.error, t46ProjCountAfter);
+      success = false;
+    }
   } catch (err: unknown) {
     console.error('FAIL: Unexpected runtime verification error.', err instanceof Error ? err.message : err);
     success = false;
@@ -1372,10 +1410,22 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
         const { data: testProjects } = await client.from('projects').select('id').like('public_id', `${testPrefix}-%`);
         const projectIds = (testProjects || []).map((p) => p.id);
         if (projectIds.length > 0) {
-          await client.from('participant_previews').delete().in('project_id', projectIds);
-          await client.from('media_assets').delete().in('project_id', projectIds);
+          const previewDel = await client.from('participant_previews').delete().in('project_id', projectIds);
+          if (previewDel.error) {
+            cleanupExecutionError = true;
+            console.error('FAIL: Global cleanup participant_previews deletion error:', previewDel.error.code, previewDel.error.message);
+          }
+          const mediaDel = await client.from('media_assets').delete().in('project_id', projectIds);
+          if (mediaDel.error) {
+            cleanupExecutionError = true;
+            console.error('FAIL: Global cleanup media_assets deletion error:', mediaDel.error.code, mediaDel.error.message);
+          }
         }
-        await client.from('projects').delete().like('public_id', `${testPrefix}-%`);
+        const projDel = await client.from('projects').delete().like('public_id', `${testPrefix}-%`);
+        if (projDel.error) {
+          cleanupExecutionError = true;
+          console.error('FAIL: Global cleanup projects deletion error:', projDel.error.code, projDel.error.message);
+        }
       }
     } catch {
       cleanupExecutionError = true;
