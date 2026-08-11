@@ -42,6 +42,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let canManagePreview = false;
   let activePreview: { createdAt: string; expiresAt: string } | null = null;
   let previewResponseState: ParticipantPreviewResponseState = { type: 'unresponded' };
+  let resolutionStatus: import('../../../../domain/participantPreview').ParticipantPreviewCorrectionResolutionStatus | null = null;
+  let canResolveCorrection = false;
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -96,11 +98,16 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         }
 
         const previewRepository = new SupabaseParticipantPreviewRepository();
-        const preview = await previewRepository.getActivePreview(dbProj.id);
+        const [preview, correctionResolutionStatus] = await Promise.all([
+          previewRepository.getActivePreview(dbProj.id),
+          previewRepository.getCorrectionResolutionStatus(dbProj.id),
+        ]);
         if (preview) {
           activePreview = { createdAt: preview.createdAt, expiresAt: preview.expiresAt };
           previewResponseState = await previewRepository.getResponseState(preview.previewId);
         }
+        resolutionStatus = correctionResolutionStatus;
+        canResolveCorrection = hasPermission(adminContext.permissions, 'projects.edit') && hasPermission(adminContext.permissions, 'projects.review');
       }
     }
   } catch (error: unknown) {
@@ -290,6 +297,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             isApprovedEligible={project.status === 'approved'}
             initialActivePreview={activePreview}
             responseState={previewResponseState}
+            resolutionStatus={resolutionStatus}
+            canResolveCorrection={canResolveCorrection}
+            projectStatus={project.status}
           />
         </ProjectDetailSection>
 

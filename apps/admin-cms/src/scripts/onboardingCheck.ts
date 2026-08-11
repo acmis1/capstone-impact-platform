@@ -29,6 +29,7 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260810180000_participant_preview_links.sql',
   '20260811090000_participant_preview_confirmations.sql',
   '20260811120000_participant_preview_correction_requests.sql',
+  '20260811130000_participant_preview_correction_resolution.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {
@@ -61,8 +62,8 @@ export function isVersionInNpm11Range(versionStr: string): boolean {
 
 export function validateMigrationsList(filenames: string[]): { passed: boolean; message: string } {
   const sqlFiles = filenames.filter((f) => f.endsWith('.sql'));
-  if (sqlFiles.length !== 15) {
-    return { passed: false, message: `FAIL: Expected exactly 15 migration files, found ${sqlFiles.length}` };
+  if (sqlFiles.length !== 16) {
+    return { passed: false, message: `FAIL: Expected exactly 16 migration files, found ${sqlFiles.length}` };
   }
 
   const timestampRegex = /^(\d{14})_.+\.sql$/;
@@ -88,7 +89,7 @@ export function validateMigrationsList(filenames: string[]): { passed: boolean; 
     }
   }
 
-  return { passed: true, message: 'PASS: Exactly 15 timestamped migrations exist with exact expected filenames in ascending order' };
+  return { passed: true, message: 'PASS: Exactly 16 timestamped migrations exist with exact expected filenames in ascending order' };
 }
 
 export function sanitizePublicSafeMessage(msg: string): string {
@@ -269,13 +270,13 @@ export function performOnboardingCheck(options?: {
     const rawFiles = readdirSync(migrationsDir);
     const migrationsResult = validateMigrationsList(rawFiles);
     items.push({
-      name: 'Timestamped Database Migrations (15 ascending)',
+      name: 'Timestamped Database Migrations (16 ascending)',
       passed: migrationsResult.passed,
       message: migrationsResult.message,
     });
   } else {
     items.push({
-      name: 'Timestamped Database Migrations (15 ascending)',
+      name: 'Timestamped Database Migrations (16 ascending)',
       passed: false,
       message: 'FAIL: Migrations directory missing',
     });

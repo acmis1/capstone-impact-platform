@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { ParticipantPreviewResponseState } from '../../domain/participantPreview';
+import type { ParticipantPreviewResponseState, ParticipantPreviewCorrectionResolutionStatus } from '../../domain/participantPreview';
 
 interface ActivePreviewState {
   createdAt: string;
@@ -15,6 +15,9 @@ interface ParticipantPreviewPanelProps {
   isApprovedEligible: boolean;
   initialActivePreview: ActivePreviewState | null;
   responseState: ParticipantPreviewResponseState;
+  resolutionStatus?: ParticipantPreviewCorrectionResolutionStatus | null;
+  canResolveCorrection?: boolean;
+  projectStatus?: string;
 }
 
 interface GenerateResponse {
@@ -32,7 +35,24 @@ interface RevokeResponse {
   revokedAt?: string;
 }
 
-export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligible, initialActivePreview, responseState }: ParticipantPreviewPanelProps) {
+interface StartResolutionResponse {
+  success: boolean;
+  error?: string;
+  correctionRequestId?: string;
+  resolutionStartedAt?: string;
+  alreadyInProgress?: boolean;
+}
+
+export function ParticipantPreviewPanel({
+  publicId,
+  canManage,
+  isApprovedEligible,
+  initialActivePreview,
+  responseState,
+  resolutionStatus,
+  canResolveCorrection = false,
+  projectStatus = 'draft',
+}: ParticipantPreviewPanelProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +62,7 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const inFlightRef = useRef(false);
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (isCorrectionReissue = false) => {
     if (inFlightRef.current || pending) return;
     inFlightRef.current = true;
     setPending(true);
@@ -53,6 +73,7 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
       const response = await fetch(`/api/projects/${encodeURIComponent(publicId)}/participant-preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isCorrectionReissue }),
       });
       const data: GenerateResponse = await response.json().catch(() => ({ success: false, error: 'Invalid server response.' }));
 
@@ -69,6 +90,36 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred while generating the preview.');
+    } finally {
+      setPending(false);
+      inFlightRef.current = false;
+    }
+  };
+
+  const handleStartResolution = async () => {
+    if (inFlightRef.current || pending) return;
+    if (!window.confirm('Start correction resolution? This will revoke the current preview link and move the project status back to changes_requested so metadata can be edited.')) {
+      return;
+    }
+    inFlightRef.current = true;
+    setPending(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(publicId)}/participant-preview/correction-resolution`, {
+        method: 'POST',
+      });
+      const data: StartResolutionResponse = await response.json().catch(() => ({ success: false, error: 'Invalid server response.' }));
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to start correction resolution.');
+      }
+
+      setActivePreview(null);
+      setJustGeneratedUrl(null);
+      router.refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred while starting correction resolution.');
     } finally {
       setPending(false);
       inFlightRef.current = false;
@@ -124,6 +175,10 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
     );
   }
 
+  // Determine current resolution state if any
+  const resStatus = resolutionStatus?.status;
+  const isInProgress = resStatus === 'in_progress' || (projectStatus === 'changes_requested' && resolutionStatus?.status === 'in_progress');
+
   return (
     <div style={{ fontSize: '0.85rem' }}>
       {error && (
@@ -167,6 +222,7 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
         </div>
       )}
 
+      {/* CASE A: Active preview exists */}
       {activePreview ? (
         <div style={{
           backgroundColor: 'rgba(59, 130, 246, 0.06)', border: '1px solid rgba(59, 130, 246, 0.2)',
@@ -179,18 +235,32 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
           </div>
           <div className="mt-2 text-sm" role="status">
             {previewResponseState.type === 'confirmed' ? (
-              <span className="font-semibold text-emerald-500">
+              <span className="font-semibold text-emerald-500" style={{ color: '#10B981', fontWeight: 'bold' }}>
                 Participant confirmed on {new Date(previewResponseState.confirmedAt).toLocaleString()}
               </span>
             ) : previewResponseState.type === 'correction_requested' ? (
-              <div className="font-semibold text-amber-500">
+              <div className="font-semibold text-amber-500" style={{ color: '#F59E0B', fontWeight: 'bold' }}>
                 <div>Correction requested on {new Date(previewResponseState.requestedAt).toLocaleString()}</div>
-                <div className="mt-1 font-normal text-foreground" style={{ whiteSpace: 'pre-wrap' }}>
+                <div style={{ marginTop: '0.25rem', color: '#D1D5DB', fontWeight: 'normal', whiteSpace: 'pre-wrap' }}>
                   {previewResponseState.comment}
                 </div>
+                {canResolveCorrection && (
+                  <button
+                    type="button"
+                    onClick={handleStartResolution}
+                    disabled={pending}
+                    style={{
+                      marginTop: '0.6rem', backgroundColor: '#F59E0B', color: '#000000', border: 'none',
+                      padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: pending ? 'not-allowed' : 'pointer',
+                      fontWeight: 'bold', fontSize: '0.8rem', opacity: pending ? 0.6 : 1, display: 'block',
+                    }}
+                  >
+                    {pending ? 'Starting resolution…' : 'Start correction resolution'}
+                  </button>
+                )}
               </div>
             ) : (
-              <span className="italic text-muted-foreground">Not yet responded by the participant.</span>
+              <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Not yet responded by the participant.</span>
             )}
           </div>
           <button
@@ -206,10 +276,82 @@ export function ParticipantPreviewPanel({ publicId, canManage, isApprovedEligibl
             {pending ? 'Revoking…' : 'Revoke preview'}
           </button>
         </div>
+      ) : isInProgress ? (
+        /* CASE B: Correction in progress (Preview A revoked) */
+        <div style={{
+          backgroundColor: 'rgba(245, 158, 11, 0.06)', border: '1px solid rgba(245, 158, 11, 0.25)',
+          borderRadius: '8px', padding: '0.85rem 1rem',
+        }}>
+          <div style={{ color: '#F59E0B', fontWeight: 'bold', marginBottom: '0.4rem' }}>
+            🛠️ Correction resolution in progress
+          </div>
+          {resolutionStatus?.comment && (
+            <div style={{ color: '#D1D5DB', fontSize: '0.8rem', marginBottom: '0.5rem', whiteSpace: 'pre-wrap' }}>
+              <strong>Participant comment:</strong> {resolutionStatus.comment}
+            </div>
+          )}
+          {projectStatus === 'changes_requested' ? (
+            <div style={{ color: '#9CA3AF', fontSize: '0.8rem', fontStyle: 'italic' }}>
+              Project is currently in <code>changes_requested</code>. Update project metadata below, then use the review actions to re-approve the project before issuing a corrected preview.
+            </div>
+          ) : projectStatus === 'approved' && canResolveCorrection ? (
+            <div>
+              <div style={{ color: '#10B981', fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                Project re-approved! You may now issue a corrected participant preview.
+              </div>
+              <button
+                type="button"
+                onClick={() => handleGenerate(true)}
+                disabled={pending}
+                style={{
+                  backgroundColor: '#10B981', color: '#FFFFFF', border: 'none', padding: '0.5rem 1rem',
+                  borderRadius: '6px', cursor: pending ? 'not-allowed' : 'pointer', fontWeight: 'bold',
+                  fontSize: '0.85rem', opacity: pending ? 0.6 : 1,
+                }}
+              >
+                {pending ? 'Generating corrected preview…' : 'Generate corrected participant preview'}
+              </button>
+            </div>
+          ) : (
+            <div style={{ color: '#9CA3AF', fontSize: '0.8rem', fontStyle: 'italic' }}>
+              Correction resolution is active.
+            </div>
+          )}
+        </div>
+      ) : resolutionStatus?.status === 'resolved' ? (
+        /* CASE C: Correction resolved historical info */
+        <div>
+          <div style={{
+            backgroundColor: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.15)',
+            borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', color: '#D1D5DB', fontSize: '0.8rem',
+          }}>
+            <span style={{ color: '#10B981', fontWeight: 'bold' }}>✓ Participant correction resolved</span>
+            {resolutionStatus.resolvedAt && (
+              <span style={{ color: '#9CA3AF', marginLeft: '0.5rem' }}>
+                on {new Date(resolutionStatus.resolvedAt).toLocaleString()}
+              </span>
+            )}
+          </div>
+          {isApprovedEligible && (
+            <button
+              type="button"
+              onClick={() => handleGenerate(false)}
+              disabled={pending}
+              style={{
+                backgroundColor: '#3B82F6', color: '#FFFFFF', border: 'none', padding: '0.5rem 1rem',
+                borderRadius: '6px', cursor: pending ? 'not-allowed' : 'pointer', fontWeight: 'bold',
+                fontSize: '0.85rem', opacity: pending ? 0.6 : 1,
+              }}
+            >
+              {pending ? 'Generating…' : 'Generate participant preview'}
+            </button>
+          )}
+        </div>
       ) : isApprovedEligible ? (
+        /* CASE D: Normal approved state, no active preview */
         <button
           type="button"
-          onClick={handleGenerate}
+          onClick={() => handleGenerate(false)}
           disabled={pending}
           style={{
             backgroundColor: '#3B82F6', color: '#FFFFFF', border: 'none', padding: '0.5rem 1rem',
