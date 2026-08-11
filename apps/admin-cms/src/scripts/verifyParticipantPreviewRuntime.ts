@@ -102,16 +102,25 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
       return data as Record<string, unknown>;
     };
 
-    const generate = async (publicId: string, adminUserId: string) => {
+    const generate = async (publicId: string, adminUserId: string, isCorrectionReissue?: boolean) => {
       const raw = newRawToken();
       const hash = hashToken(raw);
-      const res = await client.rpc('generate_participant_preview', {
-        p_public_id: publicId,
-        p_admin_id: adminUserId,
-        p_token_hash: hash,
-        p_expires_in_seconds: null,
-        p_private_bucket: PRIVATE_DRAFT_BUCKET,
-      });
+      const res = isCorrectionReissue !== undefined
+        ? await client.rpc('generate_participant_preview', {
+            p_public_id: publicId,
+            p_admin_id: adminUserId,
+            p_token_hash: hash,
+            p_expires_in_seconds: null,
+            p_private_bucket: PRIVATE_DRAFT_BUCKET,
+            p_is_correction_reissue: isCorrectionReissue,
+          })
+        : await client.rpc('generate_participant_preview', {
+            p_public_id: publicId,
+            p_admin_id: adminUserId,
+            p_token_hash: hash,
+            p_expires_in_seconds: null,
+            p_private_bucket: PRIVATE_DRAFT_BUCKET,
+          });
       return { raw, hash, res };
     };
 
@@ -862,32 +871,38 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     }
 
     // ============================================================
-    // Test 31: Exact-version attribution — requesting a correction on Preview A, revoking it, and
-    // issuing Preview B leaves Preview A's correction request untouched as independent historical
-    // evidence; Preview B starts unresponded and may independently receive its own response.
+    // Test 31: Resolution Gating — manually revoking a preview with an open correction request
+    // MUST NOT allow bypassing correction resolution via ordinary 5-arg wrapper or 6-arg (false).
     // ============================================================
-    console.log('--- Test 31: Exact-version attribution survives revoke + reissue ---');
+    console.log('--- Test 31: Revoked preview with open correction blocks ordinary 5-arg and 6-arg (false) generation ---');
     const t31Proj = await createProject('t31', 'approved');
     const t31A = await generate(String(t31Proj.public_id), adminId);
-    const t31AComment = 'Correction against Preview A.';
+    const t31AComment = 'Correction against Preview A before manual revoke.';
     const t31ACorrection = await requestCorrection(t31A.hash, t31AComment);
     await client.rpc('revoke_participant_preview', { p_public_id: t31Proj.public_id, p_admin_id: adminId });
-    const t31B = await generate(String(t31Proj.public_id), adminId);
-    const { count: t31BCorrectionCountBefore } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t31B.res.data?.previewId);
-    const t31BConfirm = await confirm(t31B.hash);
-    const { data: t31ACorrectionRow } = await client.from('participant_preview_correction_requests').select('requested_at, correction_comment').eq('participant_preview_id', t31A.res.data?.previewId).single();
+
+    // Ordinary 5-arg generation attempt (omits p_is_correction_reissue)
+    const t31Ordinary5Arg = await generate(String(t31Proj.public_id), adminId);
+    // Ordinary 6-arg generation attempt (explicitly passes false)
+    const t31Ordinary6Arg = await generate(String(t31Proj.public_id), adminId, false);
+
+    const { count: t31BCount } = await client.from('participant_previews').select('id', { count: 'exact', head: true }).eq('project_id', t31Proj.id).eq('status', 'active');
+    const { data: t31ProjRow } = await client.from('projects').select('status').eq('id', t31Proj.id).single();
+    const { data: t31ACorrectionRow } = await client.from('participant_preview_correction_requests').select('status, correction_comment, requested_at').eq('participant_preview_id', t31A.res.data?.previewId).single();
 
     if (
       t31ACorrection.data?.resultCode === 'SUCCESS' &&
-      t31BCorrectionCountBefore === 0 &&
-      t31BConfirm.data?.resultCode === 'SUCCESS' &&
-      t31ACorrectionRow?.requested_at === t31ACorrection.data?.requestedAt &&
+      t31Ordinary5Arg.res.data?.resultCode === 'CORRECTION_RESOLUTION_REQUIRED' &&
+      t31Ordinary6Arg.res.data?.resultCode === 'CORRECTION_RESOLUTION_REQUIRED' &&
+      t31BCount === 0 &&
+      t31ProjRow?.status === 'approved' &&
+      t31ACorrectionRow?.status === 'open' &&
       t31ACorrectionRow?.correction_comment === t31AComment &&
-      t31A.res.data?.previewId !== t31B.res.data?.previewId
+      t31ACorrectionRow?.requested_at === t31ACorrection.data?.requestedAt
     ) {
-      console.log('PASS: Test 31 - Preview A correction request preserved untouched; Preview B started unresponded and was independently confirmed.');
+      console.log('PASS: Test 31 - Both 5-arg wrapper and 6-arg (false) were blocked by open correction on revoked Preview A.');
     } else {
-      console.error('FAIL: Test 31 - Exact-version attribution assertion failed.', t31ACorrection.data, t31BConfirm.data, t31ACorrectionRow);
+      console.error('FAIL: Test 31 - Resolution gating assertion failed.', t31Ordinary5Arg.res.data, t31Ordinary6Arg.res.data, t31ACorrectionRow);
       success = false;
     }
 
@@ -953,6 +968,345 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
       console.log('PASS: Test 34 - Correction request left project status and media publication state completely untouched.');
     } else {
       console.error('FAIL: Test 34 - Publication side-effect assertion failed.', t34ProjAfter, t34MediaAfter);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 35 (Scenario A): Start Resolution Happy Path
+    // ============================================================
+    console.log('--- Test 35 (Scenario A): Start Resolution Happy Path ---');
+    const t35Proj = await createProject('t35', 'approved');
+    const t35A = await generate(String(t35Proj.public_id), adminId);
+    const t35Comment = 'Please update team members list.';
+    const t35Correction = await requestCorrection(t35A.hash, t35Comment);
+    const t35Start = await client.rpc('start_participant_preview_correction_resolution', {
+      p_public_id: String(t35Proj.public_id),
+      p_admin_id: adminId,
+    });
+
+    const { data: t35PreviewRow } = await client.from('participant_previews').select('status').eq('id', t35A.res.data?.previewId).single();
+    const { data: t35ProjRow } = await client.from('projects').select('status').eq('id', t35Proj.id).single();
+    const { data: t35CorrRow } = await client.from('participant_preview_correction_requests').select('status, resolution_started_at, resolution_started_by, correction_comment, requested_at').eq('id', t35Correction.data?.correctionRequestId).single();
+    const { data: t35AuditRows } = await client.from('approval_records').select('*').eq('project_id', t35Proj.id).eq('from_status', 'approved').eq('to_status', 'changes_requested');
+
+    if (
+      !t35Start.error &&
+      t35Start.data?.resultCode === 'SUCCESS' &&
+      t35PreviewRow?.status === 'revoked' &&
+      t35ProjRow?.status === 'changes_requested' &&
+      t35CorrRow?.status === 'in_progress' &&
+      t35CorrRow?.resolution_started_at &&
+      t35CorrRow?.resolution_started_by === adminId &&
+      t35CorrRow?.correction_comment === t35Comment &&
+      t35CorrRow?.requested_at === t35Correction.data?.requestedAt &&
+      (t35AuditRows || []).length === 1
+    ) {
+      console.log('PASS: Test 35 - Start resolution happy path succeeded as expected.');
+    } else {
+      console.error('FAIL: Test 35 - Start resolution happy path failed.', t35Start.data, t35PreviewRow, t35ProjRow, t35CorrRow, t35AuditRows);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 36 (Scenario B): Start Resolution Idempotency
+    // ============================================================
+    console.log('--- Test 36 (Scenario B): Start Resolution Idempotency ---');
+    const t36StartAgain = await client.rpc('start_participant_preview_correction_resolution', {
+      p_public_id: String(t35Proj.public_id),
+      p_admin_id: adminId,
+    });
+    const { data: t36AuditRows } = await client.from('approval_records').select('*').eq('project_id', t35Proj.id).eq('from_status', 'approved').eq('to_status', 'changes_requested');
+    const { data: t36CorrRow } = await client.from('participant_preview_correction_requests').select('resolution_started_at, resolution_started_by').eq('id', t35Correction.data?.correctionRequestId).single();
+
+    if (
+      !t36StartAgain.error &&
+      t36StartAgain.data?.resultCode === 'ALREADY_IN_PROGRESS' &&
+      (t36AuditRows || []).length === 1 &&
+      t36CorrRow?.resolution_started_at === t35CorrRow?.resolution_started_at &&
+      t36CorrRow?.resolution_started_by === adminId
+    ) {
+      console.log('PASS: Test 36 - Start resolution repeat call was cleanly idempotent.');
+    } else {
+      console.error('FAIL: Test 36 - Start resolution idempotency failed.', t36StartAgain.data, t36AuditRows, t36CorrRow);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 37 (Scenario C): Wrong Active Preview Protection
+    // ============================================================
+    console.log('--- Test 37 (Scenario C): Wrong Active Preview Protection ---');
+    const t37Proj = await createProject('t37', 'approved');
+    const t37A = await generate(String(t37Proj.public_id), adminId);
+    const t37Correction = await requestCorrection(t37A.hash, 'Correction on Preview A.');
+    // Revoke Preview A manually
+    await client.rpc('revoke_participant_preview', { p_public_id: t37Proj.public_id, p_admin_id: adminId });
+    // Manually insert Preview B (active) directly for testing
+    const t37BHash = hashToken(newRawToken());
+    const { data: t37BRow } = await client.from('participant_previews').insert({
+      project_id: t37Proj.id,
+      token_hash: t37BHash,
+      snapshot: { title: t37Proj.title, summary: null, background: null, solution: null, year: 2026, program: null, studyProgram: null, discipline: null, disciplines: [], industry: null, industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [], posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [] },
+      media_snapshot: [],
+      status: 'active',
+      created_by: adminId,
+    }).select().single();
+
+    // Now attempt to start resolution of Preview A's open correction request
+    const t37StartAttempt = await client.rpc('start_participant_preview_correction_resolution', {
+      p_public_id: String(t37Proj.public_id),
+      p_admin_id: adminId,
+    });
+    const { data: t37ActiveRows } = await client.from('participant_previews').select('id, status').eq('id', t37BRow?.id);
+    const { data: t37ProjRow } = await client.from('projects').select('status').eq('id', t37Proj.id).single();
+    const { data: t37CorrRow } = await client.from('participant_preview_correction_requests').select('status, resolution_started_at').eq('id', t37Correction.data?.correctionRequestId).single();
+    const { count: t37AuditCount } = await client.from('approval_records').select('id', { count: 'exact', head: true }).eq('project_id', t37Proj.id);
+
+    if (
+      t37StartAttempt.data?.resultCode === 'CONFLICTING_ACTIVE_PREVIEW' &&
+      t37ActiveRows?.[0]?.status === 'active' &&
+      t37ProjRow?.status === 'approved' &&
+      t37CorrRow?.status === 'open' &&
+      t37CorrRow?.resolution_started_at === null &&
+      t37AuditCount === 0
+    ) {
+      console.log('PASS: Test 37 - Conflicting active preview correctly blocked start_resolution and preserved all state.');
+    } else {
+      console.error('FAIL: Test 37 - Wrong active preview protection failed.', t37StartAttempt.data, t37ActiveRows, t37ProjRow, t37CorrRow, t37AuditCount);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 38 (Scenario D): Reapproval Gate & Review RPC Call
+    // ============================================================
+    console.log('--- Test 38 (Scenario D): Reapproval Gate & perform_project_review_action ---');
+    // Using t35Proj (currently changes_requested)
+    const t38AttemptReissue = await generate(String(t35Proj.public_id), adminId, true);
+    const { data: t38CorrBefore } = await client.from('participant_preview_correction_requests').select('status, resolved_at').eq('id', t35Correction.data?.correctionRequestId).single();
+
+    // Reapprove project using existing authoritative review RPC
+    const t38ReapproveRpc = await client.rpc('perform_project_review_action', {
+      p_project_id: t35Proj.id,
+      p_admin_id: adminId,
+      p_action: 'approve',
+      p_comments: 'Reapproved following correction resolution edits.',
+    });
+    const { data: t38ProjAfterReapprove } = await client.from('projects').select('status').eq('id', t35Proj.id).single();
+
+    if (
+      t38AttemptReissue.res.data?.resultCode === 'INVALID_PROJECT_STATE' &&
+      t38CorrBefore?.status === 'in_progress' &&
+      t38CorrBefore?.resolved_at === null &&
+      !t38ReapproveRpc.error &&
+      t38ReapproveRpc.data?.resultCode === 'SUCCESS' &&
+      t38ProjAfterReapprove?.status === 'approved'
+    ) {
+      console.log('PASS: Test 38 - Reissue blocked in changes_requested state; project reapproved cleanly via perform_project_review_action.');
+    } else {
+      console.error('FAIL: Test 38 - Reapproval gate assertion failed.', t38AttemptReissue.res.data, t38CorrBefore, t38ReapproveRpc.data, t38ProjAfterReapprove);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 39 (Scenario E): Corrected Preview B Generation
+    // ============================================================
+    console.log('--- Test 39 (Scenario E): Corrected Preview B Generation ---');
+    const t39Reissue = await generate(String(t35Proj.public_id), adminId, true);
+    const t39PreviewBId = t39Reissue.res.data?.previewId;
+    const { data: t39ActivePreviews } = await client.from('participant_previews').select('id').eq('project_id', t35Proj.id).eq('status', 'active');
+    const { data: t39CorrAfter } = await client.from('participant_preview_correction_requests').select('status, resolved_at, resolved_by, replacement_preview_id, correction_comment, requested_at').eq('id', t35Correction.data?.correctionRequestId).single();
+    const { count: t39BConfirmCount } = await client.from('participant_preview_confirmations').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t39PreviewBId);
+    const { count: t39BCorrCount } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t39PreviewBId);
+
+    if (
+      !t39Reissue.res.error &&
+      t39Reissue.res.data?.resultCode === 'SUCCESS' &&
+      t39PreviewBId !== t35A.res.data?.previewId &&
+      (t39ActivePreviews || []).length === 1 &&
+      t39ActivePreviews?.[0]?.id === t39PreviewBId &&
+      t39CorrAfter?.status === 'resolved' &&
+      t39CorrAfter?.resolved_at &&
+      t39CorrAfter?.resolved_by === adminId &&
+      t39CorrAfter?.replacement_preview_id === t39PreviewBId &&
+      t39CorrAfter?.correction_comment === t35Comment &&
+      t39CorrAfter?.requested_at === t35Correction.data?.requestedAt &&
+      t39BConfirmCount === 0 &&
+      t39BCorrCount === 0
+    ) {
+      console.log('PASS: Test 39 - Corrected Preview B generated; correction request resolved; Preview B starts unresponded.');
+    } else {
+      console.error('FAIL: Test 39 - Corrected Preview B generation failed.', t39Reissue.res.data, t39CorrAfter, t39ActivePreviews);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 40 (Scenario F): Immutable Version History
+    // ============================================================
+    console.log('--- Test 40 (Scenario F): Immutable Version History ---');
+    const t40Proj = await createProject('t40', 'approved');
+    const t40A = await generate(String(t40Proj.public_id), adminId);
+    await requestCorrection(t40A.hash, 'Fix title typo.');
+    await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t40Proj.public_id, p_admin_id: adminId });
+    // Update project title while in changes_requested
+    await client.from('projects').update({ title: 'Corrected Project Title F' }).eq('id', t40Proj.id);
+    // Reapprove
+    await client.rpc('perform_project_review_action', { p_project_id: t40Proj.id, p_admin_id: adminId, p_action: 'approve' });
+    // Reissue Preview B
+    const t40B = await generate(String(t40Proj.public_id), adminId, true);
+
+    const t40AResolve = await resolve(t40A.hash);
+    const t40BResolve = await resolve(t40B.hash);
+
+    if (
+      t40AResolve.data?.resultCode === 'NOT_FOUND' && // Preview A was revoked during start_resolution
+      t40BResolve.data?.resultCode === 'SUCCESS' &&
+      t40BResolve.data?.snapshot?.title === 'Corrected Project Title F'
+    ) {
+      // Check stored snapshot in DB for Preview A directly
+      const { data: t40ARow } = await client.from('participant_previews').select('snapshot').eq('id', t40A.res.data?.previewId).single();
+      if (t40ARow?.snapshot?.title === t40Proj.title && t40ARow?.snapshot?.title !== 'Corrected Project Title F') {
+        console.log('PASS: Test 40 - Preview A stored snapshot remained untouched; Preview B captured corrected title.');
+      } else {
+        console.error('FAIL: Test 40 - Preview A stored snapshot mutated unexpectedly.', t40ARow);
+        success = false;
+      }
+    } else {
+      console.error('FAIL: Test 40 - Immutable version history failed.', t40AResolve.data, t40BResolve.data);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 41 (Scenario G): Concurrent Start Resolution
+    // ============================================================
+    console.log('--- Test 41 (Scenario G): Concurrent Start Resolution ---');
+    const t41Proj = await createProject('t41', 'approved');
+    const t41A = await generate(String(t41Proj.public_id), adminId);
+    await requestCorrection(t41A.hash, 'Concurrent resolution comment.');
+    const [t41Start1, t41Start2] = await Promise.all([
+      client.rpc('start_participant_preview_correction_resolution', { p_public_id: t41Proj.public_id, p_admin_id: adminId }),
+      client.rpc('start_participant_preview_correction_resolution', { p_public_id: t41Proj.public_id, p_admin_id: reviewerId }),
+    ]);
+
+    const t41Codes = [t41Start1.data?.resultCode, t41Start2.data?.resultCode].sort();
+    const { count: t41AuditCount } = await client.from('approval_records').select('id', { count: 'exact', head: true }).eq('project_id', t41Proj.id).eq('action_taken', 'request_changes');
+
+    if (
+      !t41Start1.error && !t41Start2.error &&
+      t41Codes[0] === 'ALREADY_IN_PROGRESS' &&
+      t41Codes[1] === 'SUCCESS' &&
+      t41AuditCount === 1
+    ) {
+      console.log('PASS: Test 41 - Concurrent start resolution converged to exactly one SUCCESS and one ALREADY_IN_PROGRESS.');
+    } else {
+      console.error('FAIL: Test 41 - Concurrent start resolution failed.', t41Start1.data, t41Start2.data, t41AuditCount);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 42 (Scenario H): Concurrent Corrected Reissue
+    // ============================================================
+    console.log('--- Test 42 (Scenario H): Concurrent Corrected Reissue ---');
+    // Reapprove t41Proj
+    await client.rpc('perform_project_review_action', { p_project_id: t41Proj.id, p_admin_id: adminId, p_action: 'approve' });
+    const [t42Reissue1, t42Reissue2] = await Promise.all([
+      generate(String(t41Proj.public_id), adminId, true),
+      generate(String(t41Proj.public_id), reviewerId, true),
+    ]);
+
+    const t42Codes = [t42Reissue1.res.data?.resultCode, t42Reissue2.res.data?.resultCode].sort();
+    const { data: t42ActivePreviews } = await client.from('participant_previews').select('id').eq('project_id', t41Proj.id).eq('status', 'active');
+    const { data: t42CorrRow } = await client.from('participant_preview_correction_requests').select('status, replacement_preview_id').eq('participant_preview_id', t41A.res.data?.previewId).single();
+
+    if (
+      !t42Reissue1.res.error && !t42Reissue2.res.error &&
+      t42Codes[0] === 'ACTIVE_PREVIEW_EXISTS' &&
+      t42Codes[1] === 'SUCCESS' &&
+      (t42ActivePreviews || []).length === 1 &&
+      t42CorrRow?.status === 'resolved' &&
+      t42CorrRow?.replacement_preview_id === t42ActivePreviews?.[0]?.id
+    ) {
+      console.log('PASS: Test 42 - Concurrent corrected reissue converged to exactly one active Preview B and one ACTIVE_PREVIEW_EXISTS.');
+    } else {
+      console.error('FAIL: Test 42 - Concurrent corrected reissue failed.', t42Reissue1.res.data, t42Reissue2.res.data, t42ActivePreviews, t42CorrRow);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 43 (Scenario I): Authorization Boundaries
+    // ============================================================
+    console.log('--- Test 43 (Scenario I): Authorization Boundaries ---');
+    const t43Proj = await createProject('t43', 'approved');
+    const t43A = await generate(String(t43Proj.public_id), adminId);
+    await requestCorrection(t43A.hash, 'Auth test comment.');
+
+    // Start resolution role attempts:
+    const t43StartReviewer = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t43Proj.public_id, p_admin_id: reviewerId });
+    const t43StartEditor = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t43Proj.public_id, p_admin_id: editorId });
+    const t43StartAdmin = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t43Proj.public_id, p_admin_id: adminId });
+
+    // Reapprove t43Proj
+    await client.rpc('perform_project_review_action', { p_project_id: t43Proj.id, p_admin_id: adminId, p_action: 'approve' });
+
+    // Reissue role attempts:
+    const t43ReissueReviewer = await generate(String(t43Proj.public_id), reviewerId, true);
+    const t43ReissueEditor = await generate(String(t43Proj.public_id), editorId, true);
+    const t43ReissueAdmin = await generate(String(t43Proj.public_id), adminId, true);
+
+    if (
+      t43StartReviewer.data?.resultCode === 'PERMISSION_DENIED' &&
+      t43StartEditor.data?.resultCode === 'PERMISSION_DENIED' &&
+      t43StartAdmin.data?.resultCode === 'SUCCESS' &&
+      t43ReissueReviewer.res.data?.resultCode === 'PREVIEW_PERMISSION_DENIED' &&
+      t43ReissueEditor.res.data?.resultCode === 'PREVIEW_PERMISSION_DENIED' &&
+      t43ReissueAdmin.res.data?.resultCode === 'SUCCESS'
+    ) {
+      console.log('PASS: Test 43 - Start resolution and corrected reissue both strictly require combined authority (admin).');
+    } else {
+      console.error('FAIL: Test 43 - Authorization boundary assertion failed.', t43StartReviewer.data, t43StartEditor.data, t43StartAdmin.data, t43ReissueReviewer.res.data, t43ReissueEditor.res.data, t43ReissueAdmin.res.data);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 44 (Scenario J): Ambiguous State
+    // ============================================================
+    console.log('--- Test 44 (Scenario J): Ambiguous State ---');
+    const t44Proj = await createProject('t44', 'approved');
+    const t44A1 = await generate(String(t44Proj.public_id), adminId);
+    await client.rpc('revoke_participant_preview', { p_public_id: t44Proj.public_id, p_admin_id: adminId });
+    const t44A2 = await generate(String(t44Proj.public_id), adminId);
+    await client.rpc('revoke_participant_preview', { p_public_id: t44Proj.public_id, p_admin_id: adminId });
+
+    // Manually insert TWO in_progress correction requests for t44Proj
+    const now = new Date().toISOString();
+    await client.from('participant_preview_correction_requests').insert([
+      { participant_preview_id: t44A1.res.data?.previewId, correction_comment: 'Ambiguous 1', status: 'in_progress', resolution_started_at: now, resolution_started_by: adminId },
+      { participant_preview_id: t44A2.res.data?.previewId, correction_comment: 'Ambiguous 2', status: 'in_progress', resolution_started_at: now, resolution_started_by: adminId },
+    ]);
+
+    const t44ReissueAttempt = await generate(String(t44Proj.public_id), adminId, true);
+    const t44StartAttempt = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t44Proj.public_id, p_admin_id: adminId });
+
+    if (
+      t44ReissueAttempt.res.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST' &&
+      t44StartAttempt.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST'
+    ) {
+      console.log('PASS: Test 44 - Multiple in_progress correction requests correctly failed closed as AMBIGUOUS_CORRECTION_REQUEST.');
+    } else {
+      console.error('FAIL: Test 44 - Ambiguous state assertion failed.', t44ReissueAttempt.res.data, t44StartAttempt.data);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 45 (Scenario K): Zero Publication Side Effects
+    // ============================================================
+    console.log('--- Test 45 (Scenario K): Zero Publication Side Effects Across Entire Flow ---');
+    const { data: t45ProjRow } = await client.from('projects').select('status').eq('id', t35Proj.id).single();
+    const { data: t45MediaRows } = await client.from('media_assets').select('public_url, is_public_approved, storage_bucket').eq('project_id', t35Proj.id);
+    const t45MediaClean = (t45MediaRows || []).every((m) => m.public_url === null && m.is_public_approved === false && m.storage_bucket === PRIVATE_DRAFT_BUCKET);
+
+    if (t45ProjRow?.status !== 'published' && t45MediaClean) {
+      console.log('PASS: Test 45 - Zero publication side effects across complete correction-resolution lifecycle.');
+    } else {
+      console.error('FAIL: Test 45 - Zero publication side effects assertion failed.', t45ProjRow, t45MediaRows);
       success = false;
     }
   } catch (err: unknown) {

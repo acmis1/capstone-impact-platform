@@ -104,6 +104,8 @@ export class SupabaseParticipantPreviewRepositoryCore {
         throw new ParticipantPreviewExecutionError('CORRECTION_RESOLUTION_REQUIRED');
       case 'NO_CORRECTION_IN_PROGRESS':
         throw new ParticipantPreviewExecutionError('NO_CORRECTION_IN_PROGRESS');
+      case 'AMBIGUOUS_CORRECTION_REQUEST':
+        throw new ParticipantPreviewExecutionError('AMBIGUOUS_CORRECTION_REQUEST');
       default:
         throw new ParticipantPreviewExecutionError('INPUT_INVALID');
     }
@@ -483,6 +485,8 @@ export class SupabaseParticipantPreviewRepositoryCore {
         throw new ParticipantPreviewExecutionError('NO_OPEN_CORRECTION');
       case 'AMBIGUOUS_CORRECTION_REQUEST':
         throw new ParticipantPreviewExecutionError('AMBIGUOUS_CORRECTION_REQUEST');
+      case 'CONFLICTING_ACTIVE_PREVIEW':
+        throw new ParticipantPreviewExecutionError('CONFLICTING_ACTIVE_PREVIEW');
       default:
         throw new ParticipantPreviewExecutionError('INPUT_INVALID');
     }
@@ -501,41 +505,87 @@ export class SupabaseParticipantPreviewRepositoryCore {
   /**
    * Reads the latest participant correction request resolution status for a project (by project DB ID).
    * Used to populate Admin UI state even when Preview A has been revoked or project status is changes_requested.
+   *
+   * Hardened:
+   * 1. First checks for unresolved (open / in_progress) requests.
+   * 2. If > 1 unresolved request exists for this project, fails closed (throws AMBIGUOUS_CORRECTION_REQUEST / RESPONSE_INVALID).
+   * 3. If exactly 1 unresolved request exists, returns it.
+   * 4. If 0 unresolved requests exist, returns the latest resolved request (if any).
    */
   async getCorrectionResolutionStatus(projectDbId: string): Promise<import('../domain/participantPreview').ParticipantPreviewCorrectionResolutionStatus | null> {
     if (!isNonEmptyString(projectDbId)) {
       return null;
     }
 
-    // Direct query joining participant_preview_correction_requests with participant_previews for this project.
-    // Order by requested_at DESC to get the latest correction request.
-    const { data, error } = await this.supabase
+    // Check for unresolved requests first
+    const { data: unresolvedData, error: unresolvedError } = await this.supabase
       .from('participant_preview_correction_requests')
       .select('id, status, participant_preview_id, correction_comment, requested_at, resolution_started_at, resolution_started_by, resolved_at, resolved_by, replacement_preview_id, participant_previews!inner(project_id)')
       .eq('participant_previews.project_id', projectDbId)
-      .order('requested_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .in('status', ['open', 'in_progress'])
+      .order('requested_at', { ascending: false });
 
-    if (error) {
+    if (unresolvedError) {
       throw new ParticipantPreviewExecutionError('INTERNAL_FAILURE');
     }
 
-    if (!data) {
+    if (unresolvedData && unresolvedData.length > 1) {
+      throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
+    }
+
+    let row = unresolvedData && unresolvedData.length === 1 ? unresolvedData[0] : null;
+
+    if (!row) {
+      // Fetch latest resolved request if no unresolved requests exist
+      const { data: resolvedData, error: resolvedError } = await this.supabase
+        .from('participant_preview_correction_requests')
+        .select('id, status, participant_preview_id, correction_comment, requested_at, resolution_started_at, resolution_started_by, resolved_at, resolved_by, replacement_preview_id, participant_previews!inner(project_id)')
+        .eq('participant_previews.project_id', projectDbId)
+        .eq('status', 'resolved')
+        .order('requested_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (resolvedError) {
+        throw new ParticipantPreviewExecutionError('INTERNAL_FAILURE');
+      }
+
+      row = resolvedData ?? null;
+    }
+
+    if (!row) {
       return null;
     }
 
+    const status = row.status;
+    if (status !== 'open' && status !== 'in_progress' && status !== 'resolved') {
+      throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
+    }
+
+    if (!isNonEmptyString(row.id) || !isNonEmptyString(row.participant_preview_id) || typeof row.correction_comment !== 'string' || !isNonEmptyString(row.requested_at)) {
+      throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
+    }
+
+    // Validate status metadata consistency
+    if (status === 'in_progress' && (!isNonEmptyString(row.resolution_started_at) || !isNonEmptyString(row.resolution_started_by))) {
+      throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
+    }
+
+    if (status === 'resolved' && (!isNonEmptyString(row.resolution_started_at) || !isNonEmptyString(row.resolution_started_by) || !isNonEmptyString(row.resolved_at) || !isNonEmptyString(row.resolved_by) || !isNonEmptyString(row.replacement_preview_id))) {
+      throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
+    }
+
     return {
-      correctionRequestId: data.id,
-      status: data.status as 'open' | 'in_progress' | 'resolved',
-      participantPreviewId: data.participant_preview_id,
-      comment: data.correction_comment,
-      requestedAt: data.requested_at,
-      resolutionStartedAt: data.resolution_started_at ?? null,
-      resolutionStartedBy: data.resolution_started_by ?? null,
-      resolvedAt: data.resolved_at ?? null,
-      resolvedBy: data.resolved_by ?? null,
-      replacementPreviewId: data.replacement_preview_id ?? null,
+      correctionRequestId: row.id,
+      status,
+      participantPreviewId: row.participant_preview_id,
+      comment: row.correction_comment,
+      requestedAt: row.requested_at,
+      resolutionStartedAt: row.resolution_started_at ?? null,
+      resolutionStartedBy: row.resolution_started_by ?? null,
+      resolvedAt: row.resolved_at ?? null,
+      resolvedBy: row.resolved_by ?? null,
+      replacementPreviewId: row.replacement_preview_id ?? null,
     };
   }
 }

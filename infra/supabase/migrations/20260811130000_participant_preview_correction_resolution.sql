@@ -45,7 +45,7 @@ CREATE OR REPLACE FUNCTION public.generate_participant_preview(
   p_token_hash text,
   p_expires_in_seconds integer,
   p_private_bucket text,
-  p_is_correction_reissue boolean DEFAULT false
+  p_is_correction_reissue boolean
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -155,7 +155,20 @@ BEGIN
 
   -- 6. Correction workflow enforcement
   IF COALESCE(p_is_correction_reissue, false) THEN
-    -- Must have an in_progress correction request
+    -- Must have exactly one in_progress correction request
+    SELECT pg_catalog.count(*)
+      INTO v_open_correction_count
+      FROM public.participant_preview_correction_requests r
+      JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
+     WHERE pp.project_id = v_project_id
+       AND r.status = 'in_progress';
+
+    IF v_open_correction_count = 0 THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'NO_CORRECTION_IN_PROGRESS');
+    ELSIF v_open_correction_count > 1 THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'AMBIGUOUS_CORRECTION_REQUEST');
+    END IF;
+
     SELECT r.id
       INTO v_in_progress_correction
       FROM public.participant_preview_correction_requests r
@@ -163,10 +176,6 @@ BEGIN
      WHERE pp.project_id = v_project_id
        AND r.status = 'in_progress'
        FOR UPDATE OF r;
-
-    IF v_in_progress_correction.id IS NULL THEN
-      RETURN pg_catalog.jsonb_build_object('resultCode', 'NO_CORRECTION_IN_PROGRESS');
-    END IF;
   ELSE
     -- Ordinary generation: blocked if an open or in_progress correction exists
     SELECT pg_catalog.count(*)
@@ -271,6 +280,37 @@ REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text,
 REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text, boolean) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text, boolean) TO service_role;
 
+-- Backward-compatibility wrapper for legacy 5-argument callers.
+-- Always passes p_is_correction_reissue = false so legacy calls receive full correction-resolution gating.
+CREATE OR REPLACE FUNCTION public.generate_participant_preview(
+  p_public_id text,
+  p_admin_id uuid,
+  p_token_hash text,
+  p_expires_in_seconds integer,
+  p_private_bucket text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  RETURN public.generate_participant_preview(
+    p_public_id,
+    p_admin_id,
+    p_token_hash,
+    p_expires_in_seconds,
+    p_private_bucket,
+    false
+  );
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) TO service_role;
+
 -- 3. Atomic RPC to start participant preview correction resolution
 CREATE OR REPLACE FUNCTION public.start_participant_preview_correction_resolution(
   p_public_id text,
@@ -288,6 +328,7 @@ DECLARE
   v_has_review boolean;
   v_project_id uuid;
   v_project_status text;
+  v_in_progress_count integer;
   v_open_request_count integer;
   v_target_request RECORD;
   v_active_preview RECORD;
@@ -341,15 +382,23 @@ BEGIN
   END IF;
 
   -- Check if resolution is already in_progress for this project
-  SELECT r.id, r.resolution_started_at
-    INTO v_target_request
+  SELECT pg_catalog.count(*)
+    INTO v_in_progress_count
     FROM public.participant_preview_correction_requests r
     JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
    WHERE pp.project_id = v_project_id
-     AND r.status = 'in_progress'
-   LIMIT 1;
+     AND r.status = 'in_progress';
 
-  IF v_target_request.id IS NOT NULL THEN
+  IF v_in_progress_count > 1 THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'AMBIGUOUS_CORRECTION_REQUEST');
+  ELSIF v_in_progress_count = 1 THEN
+    SELECT r.id, r.resolution_started_at
+      INTO v_target_request
+      FROM public.participant_preview_correction_requests r
+      JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
+     WHERE pp.project_id = v_project_id
+       AND r.status = 'in_progress';
+
     RETURN pg_catalog.jsonb_build_object(
       'resultCode', 'ALREADY_IN_PROGRESS',
       'correctionRequestId', v_target_request.id,
@@ -387,7 +436,7 @@ BEGIN
 
   v_now := pg_catalog.now();
 
-  -- 6. Revoke active preview if Preview A (or any preview for this project) is active
+  -- 6. Check active preview state against target_preview_id
   SELECT pp.id
     INTO v_active_preview
     FROM public.participant_previews pp
@@ -396,6 +445,12 @@ BEGIN
      FOR UPDATE;
 
   IF v_active_preview.id IS NOT NULL THEN
+    IF v_active_preview.id <> v_target_request.participant_preview_id THEN
+      -- An active preview exists that is NOT Preview A (the one with open correction request).
+      -- Fail closed to prevent silently revoking the wrong active preview.
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'CONFLICTING_ACTIVE_PREVIEW');
+    END IF;
+
     UPDATE public.participant_previews
        SET status = 'revoked',
            revoked_at = v_now,

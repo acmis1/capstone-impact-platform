@@ -106,7 +106,8 @@ describe('Migration 0016 Participant Preview Correction Resolution Security Cont
     const content = readMigrationNormalized();
 
     expect(content).toContain('CREATE OR REPLACE FUNCTION public.generate_participant_preview(');
-    expect(content).toContain('p_is_correction_reissue boolean DEFAULT false');
+    expect(content).toContain('p_is_correction_reissue boolean\n)');
+    expect(content).not.toContain('p_is_correction_reissue boolean DEFAULT false');
 
     // Blocking ordinary preview generation when unresolved correction exists
     expect(content).toContain("'resultCode', 'CORRECTION_RESOLUTION_REQUIRED'");
@@ -126,5 +127,27 @@ describe('Migration 0016 Participant Preview Correction Resolution Security Cont
     expect(content).toContain(
       'GRANT EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text, boolean) TO service_role;'
     );
+  });
+
+  it('6. generate_participant_preview legacy 5-arg wrapper exists and delegates with false', () => {
+    const content = readMigrationNormalized();
+
+    expect(content).toContain('CREATE OR REPLACE FUNCTION public.generate_participant_preview(');
+    expect(content).toContain('p_private_bucket text\n)');
+    expect(content).toContain('false\n  );');
+    expect(content).toContain(
+      'REVOKE EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) FROM PUBLIC;'
+    );
+    expect(content).toContain(
+      'GRANT EXECUTE ON FUNCTION public.generate_participant_preview(text, uuid, text, integer, text) TO service_role;'
+    );
+  });
+
+  it('7. start_participant_preview_correction_resolution declares v_in_progress_count and enforces wrong active preview and ambiguity checks', () => {
+    const content = readMigrationNormalized();
+
+    expect(content).toContain('v_in_progress_count integer;');
+    expect(content).toContain("'resultCode', 'CONFLICTING_ACTIVE_PREVIEW'");
+    expect(content).toContain("'resultCode', 'AMBIGUOUS_CORRECTION_REQUEST'");
   });
 });

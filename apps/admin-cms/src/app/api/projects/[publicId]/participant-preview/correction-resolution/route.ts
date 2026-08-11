@@ -95,6 +95,11 @@ export async function POST(
             { success: false, error: 'Multiple unresolved correction requests exist. Resolution cannot be started unambiguously.' },
             { status: 409, headers: NO_STORE }
           );
+        case 'CONFLICTING_ACTIVE_PREVIEW':
+          return NextResponse.json(
+            { success: false, error: 'A conflicting active preview exists for another version of this project.' },
+            { status: 409, headers: NO_STORE }
+          );
         case 'PERMISSION_DENIED': {
           const status = getAuthErrorHttpStatus('PERMISSION_DENIED');
           const errMessage = getPublicAuthErrorMessage('PERMISSION_DENIED');

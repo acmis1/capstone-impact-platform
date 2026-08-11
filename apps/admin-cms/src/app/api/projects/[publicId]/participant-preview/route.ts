@@ -3,7 +3,7 @@ import { SupabaseParticipantPreviewRepository } from '../../../../../repositorie
 import { ParticipantPreviewExecutionError } from '../../../../../repositories/ParticipantPreviewRepository';
 import { DEFAULT_PREVIEW_EXPIRES_IN_SECONDS } from '../../../../../repositories/SupabaseParticipantPreviewRepositoryCore';
 import { requireAdmin } from '../../../../../auth/requireAdmin';
-import { canManageParticipantPreview } from '../../../../../auth/permissions';
+import { canManageParticipantPreview, hasPermission } from '../../../../../auth/permissions';
 import { validateSameOrigin } from '../../../../../auth/csrf';
 import { AdminAuthError } from '../../../../../auth/authTypes';
 import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from '../../../../../auth/authHttp';
@@ -45,12 +45,6 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Validation failed.' }, { status: 400, headers: NO_STORE });
     }
 
-    if (!canManageParticipantPreview(adminContext.permissions)) {
-      const status = getAuthErrorHttpStatus('PERMISSION_DENIED');
-      const error = getPublicAuthErrorMessage('PERMISSION_DENIED');
-      return NextResponse.json({ success: false, error }, { status, headers: NO_STORE });
-    }
-
     let isCorrectionReissue = false;
     try {
       const contentType = request.headers.get('content-type');
@@ -62,6 +56,22 @@ export async function POST(
       }
     } catch {
       // Ignore body parsing errors for simple POST without body
+    }
+
+    if (isCorrectionReissue) {
+      const canEdit = hasPermission(adminContext.permissions, 'projects.edit');
+      const canReview = hasPermission(adminContext.permissions, 'projects.review');
+      if (!canEdit || !canReview) {
+        const status = getAuthErrorHttpStatus('PERMISSION_DENIED');
+        const error = getPublicAuthErrorMessage('PERMISSION_DENIED');
+        return NextResponse.json({ success: false, error }, { status, headers: NO_STORE });
+      }
+    } else {
+      if (!canManageParticipantPreview(adminContext.permissions)) {
+        const status = getAuthErrorHttpStatus('PERMISSION_DENIED');
+        const error = getPublicAuthErrorMessage('PERMISSION_DENIED');
+        return NextResponse.json({ success: false, error }, { status, headers: NO_STORE });
+      }
     }
 
     const rawToken = generateRawPreviewToken();
@@ -168,6 +178,11 @@ function handleParticipantPreviewError(error: unknown, actionLabel: 'Generate' |
         return NextResponse.json(
           { success: false, error: 'There is no correction resolution currently in progress for this project.', code: 'NO_CORRECTION_IN_PROGRESS' },
           { status: 400, headers: NO_STORE }
+        );
+      case 'AMBIGUOUS_CORRECTION_REQUEST':
+        return NextResponse.json(
+          { success: false, error: 'Multiple unresolved correction requests exist. Action cannot be completed unambiguously.', code: 'AMBIGUOUS_CORRECTION_REQUEST' },
+          { status: 409, headers: NO_STORE }
         );
       case 'NO_ACTIVE_PREVIEW':
         return NextResponse.json(
