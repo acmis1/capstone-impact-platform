@@ -13,7 +13,7 @@ describe('validatePublicFeed', () => {
   });
 
   it('passes validation for a valid compiled record', () => {
-    const validProject = createMockProject({ status: 'approved' });
+    const validProject = createMockProject({ status: 'published' });
     const compiled = compilePublicFeed([validProject]);
     const result = validatePublicFeed(compiled);
     expect(result.valid).toBe(true);
@@ -21,10 +21,10 @@ describe('validatePublicFeed', () => {
   });
 
   it('fails validation when a forbidden internal field is present', () => {
-    const validProject = createMockProject({ status: 'approved' });
+    const validProject = createMockProject({ status: 'published' });
     const compiled = compilePublicFeed([validProject]);
     // Manually inject a forbidden key
-    (compiled[0] as unknown as Record<string, unknown>).status = 'approved';
+    (compiled[0] as unknown as Record<string, unknown>).status = 'published';
 
     const result = validatePublicFeed(compiled);
     expect(result.valid).toBe(false);
@@ -33,7 +33,7 @@ describe('validatePublicFeed', () => {
   });
 
   it('fails validation when an unknown field is present', () => {
-    const validProject = createMockProject({ status: 'approved' });
+    const validProject = createMockProject({ status: 'published' });
     const compiled = compilePublicFeed([validProject]);
     // Manually inject an unknown key
     (compiled[0] as unknown as Record<string, unknown>).unknownExtraField = 'some-value';
@@ -51,7 +51,7 @@ describe('validatePublicFeed', () => {
     ];
 
     requiredFields.forEach(field => {
-      const validProject = createMockProject({ status: 'approved' });
+      const validProject = createMockProject({ status: 'published' });
       const compiled = compilePublicFeed([validProject]);
       delete (compiled[0] as unknown as Record<string, unknown>)[field];
 
@@ -63,7 +63,7 @@ describe('validatePublicFeed', () => {
   });
 
   it('fails validation when id is not an integer', () => {
-    const validProject = createMockProject({ status: 'approved' });
+    const validProject = createMockProject({ status: 'published' });
     const compiled = compilePublicFeed([validProject]);
     (compiled[0] as unknown as Record<string, unknown>).id = 1.5;
 
@@ -74,7 +74,7 @@ describe('validatePublicFeed', () => {
   });
 
   it('fails validation when teamMembers is not an array', () => {
-    const validProject = createMockProject({ status: 'approved' });
+    const validProject = createMockProject({ status: 'published' });
     const compiled = compilePublicFeed([validProject]);
     (compiled[0] as unknown as Record<string, unknown>).teamMembers = 'NotAnArray';
 
@@ -85,7 +85,7 @@ describe('validatePublicFeed', () => {
   });
 
   it('fails validation when layout template is invalid', () => {
-    const validProject = createMockProject({ status: 'approved' });
+    const validProject = createMockProject({ status: 'published' });
     const compiled = compilePublicFeed([validProject]);
     (compiled[0].layoutConfig as unknown as Record<string, unknown>).templateId = 'invalid_layout_type';
 
@@ -99,7 +99,7 @@ describe('validatePublicFeed', () => {
     const templates = ['poster_showcase', 'technical_detail', 'media_rich'];
     templates.forEach(templateId => {
       const validProject = createMockProject({
-        status: 'approved',
+        status: 'published',
         layoutConfig: {
           templateId,
           featuredMedia: 'poster',
@@ -115,7 +115,7 @@ describe('validatePublicFeed', () => {
 
   it('creates warnings but remains valid for missing recommended accessibility/indexing fields', () => {
     const projectMissingRecommended = createMockProject({
-      status: 'approved',
+      status: 'published',
       background: '',
       solution: '',
       accessibilityText: '',

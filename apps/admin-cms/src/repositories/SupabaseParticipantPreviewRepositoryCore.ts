@@ -588,4 +588,53 @@ export class SupabaseParticipantPreviewRepositoryCore {
       replacementPreviewId: row.replacement_preview_id ?? null,
     };
   }
+
+  /**
+   * Invokes the service-role-only get_project_publication_readiness RPC to derive
+   * authoritative publication readiness. Fails closed on any unexpected response.
+   */
+  async getPublicationReadiness(params: {
+    publicId: string;
+    adminId: string;
+    privateBucket: string;
+  }): Promise<import('../domain/publicationReadiness').PublicationReadinessResult> {
+    const { publicId, adminId, privateBucket } = params;
+
+    if (!isNonEmptyString(publicId) || !isNonEmptyString(adminId) || !isNonEmptyString(privateBucket)) {
+      return {
+        ready: false,
+        resultCode: 'READINESS_UNAVAILABLE',
+        blockers: ['Publication readiness unavailable'],
+      };
+    }
+
+    const { data, error } = await this.supabase.rpc('get_project_publication_readiness', {
+      p_public_id: publicId,
+      p_admin_id: adminId,
+      p_private_bucket: privateBucket,
+    });
+
+    if (error || !data || typeof data !== 'object') {
+      return {
+        ready: false,
+        resultCode: 'READINESS_UNAVAILABLE',
+        blockers: ['Publication readiness unavailable'],
+      };
+    }
+
+    const res = data as Record<string, unknown>;
+    const ready = res.ready === true;
+    const resultCode = (typeof res.resultCode === 'string' ? res.resultCode : 'READINESS_UNAVAILABLE') as import('../domain/publicationReadiness').PublicationReadinessCode;
+    const blockers = Array.isArray(res.blockers) ? res.blockers.map((b) => String(b)) : [];
+    const confirmedPreviewId = isNonEmptyString(res.confirmedPreviewId) ? res.confirmedPreviewId : undefined;
+    const confirmedAt = isNonEmptyString(res.confirmedAt) ? res.confirmedAt : undefined;
+
+    return {
+      ready,
+      resultCode,
+      blockers,
+      confirmedPreviewId,
+      confirmedAt,
+    };
+  }
 }

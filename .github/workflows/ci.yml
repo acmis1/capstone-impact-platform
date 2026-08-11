@@ -140,10 +140,10 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify sixteen migrations and local integrity
+      - name: Verify seventeen migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 16
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 17
 
       - name: Verify atomic project metadata runtime behavior
         run: npm run verify:metadata-runtime --workspace=apps/admin-cms
@@ -159,6 +159,9 @@ jobs:
 
       - name: Verify participant preview links runtime behavior
         run: npm run verify:participant-preview-runtime --workspace=apps/admin-cms
+
+      - name: Verify publication readiness gate runtime behavior
+        run: npm run verify:publication-readiness-runtime --workspace=apps/admin-cms
 
       - name: Admin Application Smoke Test (/api/health & /login 200 OK)
         run: npm run check:app-smoke

@@ -10,7 +10,7 @@ export function runCheckSampleFeed(): boolean {
   console.log(`Loading sample projects database... Total records: ${SAMPLE_PROJECTS.length}`);
 
   // 1. Compile public feed
-  console.log('Compiling approved-only public feed array...');
+  console.log('Compiling published-only public feed array...');
   const publicFeed = compilePublicFeed(SAMPLE_PROJECTS);
   console.log(`Compilation complete. Public feed record count: ${publicFeed.length}`);
 

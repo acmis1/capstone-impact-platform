@@ -4,7 +4,7 @@ import { createMockProject } from '../test/projectFixtures';
 import { Project } from '../domain/project';
 
 describe('compilePublicFeed', () => {
-  it('includes approved and published records, and excludes other statuses', () => {
+  it('includes published records, and excludes approved and other non-published statuses', () => {
     const projects: Project[] = [
       createMockProject({ id: 1, status: 'draft' }),
       createMockProject({ id: 2, status: 'submitted' }),
@@ -17,11 +17,11 @@ describe('compilePublicFeed', () => {
     ];
 
     const result = compilePublicFeed(projects);
-    expect(result.map(r => r.id)).toEqual([5, 6]);
+    expect(result.map(r => r.id)).toEqual([6]);
   });
 
   it('removes all known internal fields', () => {
-    const project = createMockProject({ status: 'approved' });
+    const project = createMockProject({ status: 'published' });
     const result = compilePublicFeed([project]);
     const record = result[0] as unknown as Record<string, unknown>;
 
@@ -51,7 +51,7 @@ describe('compilePublicFeed', () => {
   it('preserves required public fields', () => {
     const project = createMockProject({
       id: 99,
-      status: 'approved',
+      status: 'published',
       title: 'Test Title',
       year: '2026',
     });
@@ -63,7 +63,7 @@ describe('compilePublicFeed', () => {
 
   it('omits empty optional fields and includes non-empty optional fields', () => {
     const projectWithOptionals = createMockProject({
-      status: 'approved',
+      status: 'published',
       videoUrl: 'https://youtube.com/v',
       demoUrl: 'https://demo.com',
       repositoryUrl: 'https://github.com',
@@ -72,7 +72,7 @@ describe('compilePublicFeed', () => {
     });
 
     const projectWithoutOptionals = createMockProject({
-      status: 'approved',
+      status: 'published',
       videoUrl: '',
       demoUrl: '',
       repositoryUrl: '',
@@ -97,7 +97,7 @@ describe('compilePublicFeed', () => {
 
   it('applies expected layout defaults', () => {
     const project = createMockProject({
-      status: 'approved',
+      status: 'published',
     });
     delete (project as unknown as Record<string, unknown>).layoutConfig;
 
@@ -108,15 +108,15 @@ describe('compilePublicFeed', () => {
   });
 
   it('does not mutate the input projects', () => {
-    const project = createMockProject({ status: 'approved' });
+    const project = createMockProject({ status: 'published' });
     const originalJson = JSON.stringify(project);
     compilePublicFeed([project]);
     expect(JSON.stringify(project)).toBe(originalJson);
   });
 
   it('returns deterministic results for the same input', () => {
-    const project1 = createMockProject({ status: 'approved' });
-    const project2 = createMockProject({ status: 'approved' });
+    const project1 = createMockProject({ status: 'published' });
+    const project2 = createMockProject({ status: 'published' });
     const result1 = compilePublicFeed([project1, project2]);
     const result2 = compilePublicFeed([project1, project2]);
     expect(result1).toEqual(result2);

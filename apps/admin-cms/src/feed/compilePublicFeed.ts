@@ -5,14 +5,14 @@ import { PublicFeedRecord } from '../domain/publicFeed';
  * Compiles internal database records into the sanitized public showcase feed.
  * 
  * Rules:
- * - Only includes projects with a status of 'approved' or 'published'.
- * - Excludes draft, submitted, in_review, changes_requested, archived, and deleted states.
+ * - Only includes projects with a status of 'published'.
+ * - Excludes draft, submitted, in_review, changes_requested, approved, archived, and deleted states.
  * - Strips all internal tracking properties, database timestamps, staff comments, and RLS bypass attributes.
  * - Ensures no input mutations occur.
  */
 export function compilePublicFeed(projects: Project[]): PublicFeedRecord[] {
   return projects
-    .filter((p) => p.status === 'approved' || p.status === 'published')
+    .filter((p) => p.status === 'published')
     .map((p) => {
       // Explicitly construct public feed record from approved allowlist properties
       return {

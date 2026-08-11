@@ -598,16 +598,16 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
     return false;
   }
 
-  // Assert compiled feed contains EXACT approved and published public IDs only
+  // Assert compiled feed contains EXACT published public IDs only (approved is no longer public feed eligible)
   const feedPublicIds = feedItems.map((item) => item.publicId).sort();
-  const expectedPublicIds = ['2026-medical-drone', '2026-traffic-engine'].sort();
+  const expectedPublicIds = ['2026-traffic-engine'].sort();
   if (feedPublicIds.length !== expectedPublicIds.length || !feedPublicIds.every((v, i) => v === expectedPublicIds[i])) {
     console.error('❌ Public feed public IDs mismatch.');
     return false;
   }
 
-  // Assert draft and in_review public IDs are strictly absent
-  const forbiddenPublicIds = new Set(['2026-agri-iot', '2026-vr-rehab']);
+  // Assert draft, in_review, and approved public IDs are strictly absent
+  const forbiddenPublicIds = new Set(['2026-agri-iot', '2026-vr-rehab', '2026-medical-drone']);
   for (const item of feedItems) {
     if (forbiddenPublicIds.has(item.publicId)) {
       console.error(`❌ Security violation: Non-public project [${item.publicId}] included in public feed.`);
