@@ -18,7 +18,7 @@ describe('Migration 0014 Participant Preview Confirmations Security Contract Tes
     const rawFiles = fs.readdirSync(migrationsDir);
     const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
 
-    expect(sqlFiles.length).toBe(17);
+    expect(sqlFiles.length).toBe(18);
     expect(sqlFiles[12]).toBe(priorMigrationFile);
     expect(sqlFiles[13]).toBe(migrationFile);
     expect(sqlFiles[14]).toBe('20260811120000_participant_preview_correction_requests.sql');

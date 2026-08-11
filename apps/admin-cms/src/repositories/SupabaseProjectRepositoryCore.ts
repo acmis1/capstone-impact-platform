@@ -516,6 +516,9 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     }
 
     const res = data as Record<string, unknown>;
+    if (res.resultCode === 'CORRECTION_RESOLUTION_REQUIRED' || res.resultCode === 'AMBIGUOUS_ACTIVE_PREVIEW') {
+      throw new ReviewActionExecutionError(res.resultCode);
+    }
     const resPublicId = res.publicId;
     const resStatus = res.status;
     const resAuditRecordId = res.auditRecordId;

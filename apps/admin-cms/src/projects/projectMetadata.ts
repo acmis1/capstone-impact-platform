@@ -47,6 +47,8 @@ export type ProjectMetadataErrorCode =
   | 'PERMISSION_DENIED'
   | 'PROJECT_NOT_FOUND'
   | 'STALE_VERSION'
+  | 'APPROVAL_REOPEN_REQUIRED'
+  | 'PUBLISHED_PROJECT_LOCKED'
   | 'PERSISTENCE_FAILED'
   | 'INTERNAL_FAILURE';
 
@@ -73,6 +75,8 @@ export function metadataResultMessage(code: ProjectMetadataErrorCode): string {
   switch (code) {
     case 'STALE_VERSION':
       return 'This project changed after you opened it. Refresh and review the latest values before saving again.';
+    case 'APPROVAL_REOPEN_REQUIRED': return 'This project is approved. Request changes before editing metadata.';
+    case 'PUBLISHED_PROJECT_LOCKED': return 'Published project metadata is locked until a controlled revision workflow is available.';
     case 'PROJECT_NOT_FOUND':
       return 'This project is no longer available.';
     case 'PERMISSION_DENIED':

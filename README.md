@@ -4,7 +4,7 @@ The Capstone Impact Platform is a school-owned Admin/CMS and automation layer fo
 
 Manual email, spreadsheet, poster and Duda publishing workflows are difficult to validate and repeat at scale. This project introduces structured project records, validation, review controls and a stable publishing boundary while preserving the existing public showcase as the presentation layer.
 
-The current hybrid design is: staff operate the Admin/CMS, authenticated server-side services manage source data in Supabase, and public-eligible (`approved` and `published`) records are compiled into stable JSON for Duda. `Prototype/` is retained as historical feasibility evidence, not as the active application.
+The current hybrid design is: staff operate the Admin/CMS, authenticated server-side services manage source data in Supabase, and `published` records are compiled into stable JSON for Duda. `Prototype/` is retained as historical feasibility evidence, not as the active application.
 
 > [!IMPORTANT]
 > **NEW DEVELOPERS / CONTRIBUTORS**: Start with [`START_HERE.md`](./START_HERE.md) for a zero-instruction setup guide, prerequisite installation, daily commands, and synthetic login steps.
@@ -40,7 +40,7 @@ flowchart LR
     E -. pending controlled cutover .-> F[Duda public showcase]
 ```
 
-Staff use the protected Next.js application. Server-side authentication and authorization mediate access to Supabase using modern server key preference (`SUPABASE_SECRET_KEY` preferred with `SUPABASE_SERVICE_ROLE_KEY` fallback). Browser clients use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. The feed compiler removes internal fields and includes public-eligible `approved` and `published` records; all other workflow states are excluded. The architecture supports Duda as the public consumer, but staging feed output remains isolated from the live showcase until a controlled cutover.
+Staff use the protected Next.js application. Server-side authentication and authorization mediate access to Supabase using modern server key preference (`SUPABASE_SECRET_KEY` preferred with `SUPABASE_SERVICE_ROLE_KEY` fallback). Browser clients use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. The feed compiler removes internal fields and includes `published` records only; all other workflow states are excluded. The architecture supports Duda as the public consumer, but staging feed output remains isolated from the live showcase until a controlled cutover.
 
 ## Repository structure
 

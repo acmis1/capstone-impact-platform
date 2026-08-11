@@ -326,6 +326,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               disciplines={metadataEditorData.disciplines}
               industryCategories={metadataEditorData.industryCategories}
               canEdit={canEditMetadata}
+              projectStatus={project.status}
               saveAction={saveProjectMetadataAction}
             />
           )}
