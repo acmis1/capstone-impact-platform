@@ -25,16 +25,17 @@ describe('Migration 0013 Participant Preview Links Security Contract Tests', () 
   ];
 
   const confirmationsMigrationFile = '20260811090000_participant_preview_confirmations.sql';
+  const correctionRequestsMigrationFile = '20260811120000_participant_preview_correction_requests.sql';
 
   function readMigrationNormalized(): string {
     return fs.readFileSync(path.join(migrationsDir, migrationFile), 'utf8').replace(/\r\n/g, '\n');
   }
 
-  it('1. Migration 0013 is the thirteenth and Migration 0014 is the fourteenth timestamped migration in infra/supabase/migrations', () => {
+  it('1. Migration 0013 is the thirteenth, Migration 0014 is the fourteenth, and Migration 0015 is the fifteenth timestamped migration in infra/supabase/migrations', () => {
     const rawFiles = fs.readdirSync(migrationsDir);
     const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
 
-    expect(sqlFiles.length).toBe(14);
+    expect(sqlFiles.length).toBe(15);
 
     for (let i = 0; i < expectedPriorMigrations.length; i++) {
       expect(sqlFiles[i]).toBe(expectedPriorMigrations[i]);
@@ -42,6 +43,7 @@ describe('Migration 0013 Participant Preview Links Security Contract Tests', () 
 
     expect(sqlFiles[12]).toBe(migrationFile);
     expect(sqlFiles[13]).toBe(confirmationsMigrationFile);
+    expect(sqlFiles[14]).toBe(correctionRequestsMigrationFile);
   });
 
   it('2. Existing migrations 0001 through 0013 remain byte-for-byte unmodified against origin/main', () => {

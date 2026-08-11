@@ -4,6 +4,7 @@ import { ParticipantPreviewExecutionError } from '../repositories/ParticipantPre
 import { canManageParticipantPreview, getPermissionsForRoles } from '../auth/permissions';
 import { validatePreviewPublicId } from '../auth/participantPreviewInput';
 import { generateRawPreviewToken, hashPreviewToken, isPlausibleRawPreviewToken } from '../previews/participantPreviewToken';
+import { MAX_CORRECTION_COMMENT_LENGTH, validateCorrectionComment } from '../previews/participantPreviewCorrectionComment';
 import { POST, DELETE } from '../app/api/projects/[publicId]/participant-preview/route';
 import { NextRequest } from 'next/server';
 import { AdminAuthError, AdminRole, AdminPermission, AuthenticatedAdminContext } from '../auth/authTypes';
@@ -58,6 +59,26 @@ describe('Participant Preview Token Utilities', () => {
     expect(isPlausibleRawPreviewToken(null)).toBe(false);
     expect(isPlausibleRawPreviewToken(undefined)).toBe(false);
     expect(isPlausibleRawPreviewToken(12345)).toBe(false);
+  });
+});
+
+describe('Participant Preview Correction Comment Validation', () => {
+  it('trims whitespace and accepts a well-formed comment', () => {
+    expect(validateCorrectionComment('  Please fix the title.  ')).toEqual({ valid: true, comment: 'Please fix the title.' });
+  });
+
+  it('rejects empty, whitespace-only, non-string, and over-limit input', () => {
+    expect(validateCorrectionComment('')).toEqual({ valid: false });
+    expect(validateCorrectionComment('   \n\t  ')).toEqual({ valid: false });
+    expect(validateCorrectionComment(null)).toEqual({ valid: false });
+    expect(validateCorrectionComment(undefined)).toEqual({ valid: false });
+    expect(validateCorrectionComment(42)).toEqual({ valid: false });
+    expect(validateCorrectionComment('a'.repeat(MAX_CORRECTION_COMMENT_LENGTH + 1))).toEqual({ valid: false });
+  });
+
+  it('accepts a comment at exactly the maximum length bound', () => {
+    const comment = 'a'.repeat(MAX_CORRECTION_COMMENT_LENGTH);
+    expect(validateCorrectionComment(comment)).toEqual({ valid: true, comment });
   });
 });
 
@@ -357,6 +378,134 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
     let caught: ParticipantPreviewExecutionError | null = null;
     try {
       await repo.getConfirmationStatus('preview-uuid-1');
+    } catch (err) {
+      if (err instanceof ParticipantPreviewExecutionError) caught = err;
+    }
+    expect(caught?.code).toBe('RESPONSE_INVALID');
+  });
+
+  it('requestCorrection sends only the token hash and comment to the RPC and never a preview/project id, timestamp, status, or actor identity', async () => {
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: { resultCode: 'SUCCESS', correctionRequestId: 'cr1', requestedAt: '2026-08-11T00:00:00.000Z', comment: 'Please fix the title.', alreadyRequested: false },
+      error: null,
+    });
+    const mockSupabase = { rpc: mockRpc } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
+
+    const tokenHash = 'a'.repeat(64);
+    const result = await repo.requestCorrection(tokenHash, 'Please fix the title.');
+
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledWith('request_participant_preview_correction', { p_token_hash: tokenHash, p_comment: 'Please fix the title.' });
+    expect(result).toEqual({ correctionRequestId: 'cr1', requestedAt: '2026-08-11T00:00:00.000Z', comment: 'Please fix the title.', alreadyRequested: false });
+  });
+
+  it('requestCorrection reports alreadyRequested on an idempotent repeat submission', async () => {
+    const mockSupabase = {
+      rpc: vi.fn().mockResolvedValue({
+        data: { resultCode: 'SUCCESS', correctionRequestId: 'cr1', requestedAt: '2026-08-11T00:00:00.000Z', comment: 'Original comment.', alreadyRequested: true },
+        error: null,
+      }),
+    } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
+
+    const result = await repo.requestCorrection('a'.repeat(64), 'A different resubmitted comment.');
+    expect(result?.alreadyRequested).toBe(true);
+    expect(result?.comment).toBe('Original comment.');
+  });
+
+  it('requestCorrection returns null for every non-SUCCESS or malformed RPC outcome (invalid token, invalid comment, already-confirmed, and malformed response all collapse identically)', async () => {
+    const outcomes = [
+      { data: { resultCode: 'NOT_FOUND' }, error: null },
+      { data: { resultCode: 'INVALID_COMMENT' }, error: null },
+      { data: { resultCode: 'ALREADY_CONFIRMED' }, error: null },
+      { data: null, error: { message: 'db error' } },
+      { data: { resultCode: 'SUCCESS' }, error: null }, // missing required fields
+      { data: {}, error: null },
+    ];
+
+    for (const outcome of outcomes) {
+      const mockSupabase = { rpc: vi.fn().mockResolvedValue(outcome) } as unknown as import('@supabase/supabase-js').SupabaseClient;
+      const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
+      const result = await repo.requestCorrection('a'.repeat(64), 'Some comment.');
+      expect(result).toBeNull();
+    }
+  });
+
+  it('requestCorrection requires a non-empty token hash and comment before calling the RPC', async () => {
+    const mockSupabase = { rpc: vi.fn() } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
+
+    expect(await repo.requestCorrection('', 'Some comment.')).toBeNull();
+    expect(await repo.requestCorrection('a'.repeat(64), '')).toBeNull();
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it('getCorrectionRequestStatus reads requested_at and correction_comment only, keyed by the already-resolved preview id, and returns null when no request exists', async () => {
+    const maybeSingleSpy = vi.fn().mockResolvedValue({ data: { requested_at: '2026-08-11T00:00:00.000Z', correction_comment: 'Please fix the title.' }, error: null });
+    const eqSpy = vi.fn().mockReturnValue({ maybeSingle: maybeSingleSpy });
+    const selectSpy = vi.fn().mockReturnValue({ eq: eqSpy });
+    const fromSpy = vi.fn().mockReturnValue({ select: selectSpy });
+    const mockSupabase = { from: fromSpy } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(mockSupabase);
+
+    const result = await repo.getCorrectionRequestStatus('preview-uuid-1');
+
+    expect(fromSpy).toHaveBeenCalledWith('participant_preview_correction_requests');
+    expect(selectSpy).toHaveBeenCalledWith('requested_at, correction_comment');
+    expect(eqSpy).toHaveBeenCalledWith('participant_preview_id', 'preview-uuid-1');
+    expect(result).toEqual({ requestedAt: '2026-08-11T00:00:00.000Z', comment: 'Please fix the title.' });
+  });
+
+  it('getCorrectionRequestStatus returns null only for the genuine "no correction request exists yet" state', async () => {
+    const notFoundSupabase = {
+      from: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }) }) }),
+    } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(notFoundSupabase);
+    expect(await repo.getCorrectionRequestStatus('preview-uuid-1')).toBeNull();
+  });
+
+  it('getCorrectionRequestStatus fails closed (throws INTERNAL_FAILURE) on a genuine query error, never silently returning null/unresponded', async () => {
+    const erroredSupabase = {
+      from: vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: { message: 'SECRET_SQL_DETAIL db error' } }) }) }) }),
+    } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(erroredSupabase);
+
+    let caught: ParticipantPreviewExecutionError | null = null;
+    try {
+      await repo.getCorrectionRequestStatus('preview-uuid-1');
+    } catch (err) {
+      if (err instanceof ParticipantPreviewExecutionError) caught = err;
+    }
+    expect(caught?.code).toBe('INTERNAL_FAILURE');
+    expect(caught?.message).not.toContain('SECRET_SQL_DETAIL');
+  });
+
+  it('getResponseState resolves unresponded, confirmed, and correction_requested from the underlying reads', async () => {
+    const repo = new SupabaseParticipantPreviewRepositoryCore({} as unknown as import('@supabase/supabase-js').SupabaseClient);
+
+    vi.spyOn(repo, 'getConfirmationStatus').mockResolvedValueOnce(null);
+    vi.spyOn(repo, 'getCorrectionRequestStatus').mockResolvedValueOnce(null);
+    expect(await repo.getResponseState('preview-uuid-1')).toEqual({ type: 'unresponded' });
+
+    vi.spyOn(repo, 'getConfirmationStatus').mockResolvedValueOnce({ confirmedAt: '2026-08-11T00:00:00.000Z' });
+    vi.spyOn(repo, 'getCorrectionRequestStatus').mockResolvedValueOnce(null);
+    expect(await repo.getResponseState('preview-uuid-1')).toEqual({ type: 'confirmed', confirmedAt: '2026-08-11T00:00:00.000Z' });
+
+    vi.spyOn(repo, 'getConfirmationStatus').mockResolvedValueOnce(null);
+    vi.spyOn(repo, 'getCorrectionRequestStatus').mockResolvedValueOnce({ requestedAt: '2026-08-11T00:00:00.000Z', comment: 'Please fix the title.' });
+    expect(await repo.getResponseState('preview-uuid-1')).toEqual({ type: 'correction_requested', requestedAt: '2026-08-11T00:00:00.000Z', comment: 'Please fix the title.' });
+  });
+
+  it('getResponseState fails closed (throws RESPONSE_INVALID) when both a confirmation and a correction request exist for the same preview', async () => {
+    const repo = new SupabaseParticipantPreviewRepositoryCore({} as unknown as import('@supabase/supabase-js').SupabaseClient);
+
+    vi.spyOn(repo, 'getConfirmationStatus').mockResolvedValueOnce({ confirmedAt: '2026-08-11T00:00:00.000Z' });
+    vi.spyOn(repo, 'getCorrectionRequestStatus').mockResolvedValueOnce({ requestedAt: '2026-08-11T00:05:00.000Z', comment: 'Contradictory.' });
+
+    let caught: ParticipantPreviewExecutionError | null = null;
+    try {
+      await repo.getResponseState('preview-uuid-1');
     } catch (err) {
       if (err instanceof ParticipantPreviewExecutionError) caught = err;
     }

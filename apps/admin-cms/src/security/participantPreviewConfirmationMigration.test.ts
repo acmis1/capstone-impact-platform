@@ -14,13 +14,14 @@ describe('Migration 0014 Participant Preview Confirmations Security Contract Tes
     return fs.readFileSync(path.join(migrationsDir, migrationFile), 'utf8').replace(/\r\n/g, '\n');
   }
 
-  it('1. Migration 0014 is the fourteenth timestamped migration, immediately after Migration 0013', () => {
+  it('1. Migration 0014 is the fourteenth timestamped migration, immediately after Migration 0013 and immediately before Migration 0015', () => {
     const rawFiles = fs.readdirSync(migrationsDir);
     const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
 
-    expect(sqlFiles.length).toBe(14);
+    expect(sqlFiles.length).toBe(15);
     expect(sqlFiles[12]).toBe(priorMigrationFile);
     expect(sqlFiles[13]).toBe(migrationFile);
+    expect(sqlFiles[14]).toBe('20260811120000_participant_preview_correction_requests.sql');
   });
 
   it('2. Migration 0013 remains byte-for-byte unmodified against origin/main (this migration never edits it)', () => {

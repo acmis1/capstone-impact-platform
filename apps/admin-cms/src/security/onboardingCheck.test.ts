@@ -27,6 +27,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     '20260810150000_atomic_import_batch_review_submit.sql',
     '20260810180000_participant_preview_links.sql',
     '20260811090000_participant_preview_confirmations.sql',
+    '20260811120000_participant_preview_correction_requests.sql',
   ];
 
   const defaultMockExec = (cmd: string): string => {
@@ -223,7 +224,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const shuffled = [...validMigrations].reverse();
     const result = validateMigrationsList(shuffled);
     expect(result.passed).toBe(true);
-    expect(result.message).toContain('14 timestamped migrations');
+    expect(result.message).toContain('15 timestamped migrations');
   });
 
   it('10. Duplicate migration timestamps fail', () => {
@@ -242,6 +243,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260810150000_atomic_import_batch_review_submit.sql',
       '20260810180000_participant_preview_links.sql',
       '20260811090000_participant_preview_confirmations.sql',
+      '20260811120000_participant_preview_correction_requests.sql',
     ];
     const result = validateMigrationsList(duplicateMigrations);
     expect(result.passed).toBe(false);
@@ -264,6 +266,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260810150000_atomic_import_batch_review_submit.sql',
       '20260810180000_participant_preview_links.sql',
       '20260811090000_participant_preview_confirmations.sql',
+      '20260811120000_participant_preview_correction_requests.sql',
     ];
     const result = validateMigrationsList(missing0008);
     expect(result.passed).toBe(false);
@@ -511,6 +514,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260810150000_atomic_import_batch_review_submit.sql',
       '20260810180000_participant_preview_links.sql',
       '20260811090000_participant_preview_confirmations.sql',
+      '20260811120000_participant_preview_correction_requests.sql',
     ];
     const result = validateMigrationsList(invalidMigrationNames);
     expect(result.passed).toBe(false);
