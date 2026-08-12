@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,6 +15,8 @@ import { ReviewActionExecutionError } from '../repositories/ProjectRepository';
 import {
   captureProjectSnapshot,
   areProjectSnapshotsEqual,
+  parseLocalDbQueryRows,
+  resolveSupabaseCliInvocation,
   runLocalDbExec,
   runLocalDbQuery,
   runReviewActionsRuntimeVerification,
@@ -528,21 +531,42 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     consoleSpy.mockRestore();
   });
 
-  it('17. Local DB helpers pass complex SQL as one literal argument without shell interpolation', () => {
+  it('17. Resolver executes the real installed Supabase package bin declared by package metadata', () => {
+    const repoRoot = path.resolve(__dirname, '../../../..');
+    const packageRoot = path.join(repoRoot, 'node_modules', 'supabase');
+    const metadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8')) as {
+      version: string;
+      bin: { supabase: string };
+    };
+    const invocation = resolveSupabaseCliInvocation(repoRoot);
+
+    expect(invocation.launcherPath).toBe(path.resolve(packageRoot, metadata.bin.supabase));
+    expect(fs.statSync(invocation.launcherPath).isFile()).toBe(true);
+    expect(execFileSync(invocation.executable, [...invocation.argumentPrefix, '--version'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: { ...process.env, DO_NOT_TRACK: '1' },
+    }).trim())
+      .toBe(metadata.version);
+  });
+
+  it('18. Local DB helpers pass complex SQL as one literal argument through a declared package bin', () => {
     const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'review runtime cli with spaces-'));
-    const cliDirectory = path.join(fixtureRoot, 'node_modules', 'supabase', 'dist');
+    const packageRoot = path.join(fixtureRoot, 'node_modules', 'supabase');
+    const cliDirectory = path.join(packageRoot, 'cli');
     const capturePath = path.join(fixtureRoot, 'captured-arguments.json');
     const sql = `CREATE FUNCTION public.literal_sql() RETURNS text AS $$\nBEGIN\n  RETURN 'single quote and "double quotes"';\nEND;\n$$ LANGUAGE plpgsql;`;
 
     try {
       fs.mkdirSync(path.join(fixtureRoot, 'infra'), { recursive: true });
       fs.mkdirSync(cliDirectory, { recursive: true });
-      fs.writeFileSync(path.join(cliDirectory, 'supabase.js'), [
+      fs.writeFileSync(path.join(packageRoot, 'package.json'), JSON.stringify({ name: 'supabase', bin: { supabase: 'cli/record.cjs' } }));
+      fs.writeFileSync(path.join(cliDirectory, 'record.cjs'), [
         "const fs = require('node:fs');",
         "const path = require('node:path');",
         "const args = process.argv.slice(2);",
         "fs.writeFileSync(path.join(process.cwd(), 'captured-arguments.json'), JSON.stringify(args));",
-        "process.stdout.write(JSON.stringify({ rows: [{ args }] }));",
+        "process.stdout.write(JSON.stringify([{ args }]));",
       ].join('\n'));
 
       const rows = runLocalDbQuery(sql, fixtureRoot);
@@ -555,5 +579,10 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     } finally {
       fs.rmSync(fixtureRoot, { recursive: true, force: true });
     }
+  });
+
+  it('19. Query output parser supports the real Linux array and Windows bounded-object shapes', () => {
+    expect(parseLocalDbQueryRows('[{"count":1}]')).toEqual([{ count: 1 }]);
+    expect(parseLocalDbQueryRows('{"boundary":"safe","rows":[{"count":1}],"warning":"bounded"}')).toEqual([{ count: 1 }]);
   });
 });
