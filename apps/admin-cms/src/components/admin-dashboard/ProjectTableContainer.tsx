@@ -10,17 +10,21 @@ import {
   createColumnHelper,
 } from '@tanstack/react-table';
 import { ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
-import { ProjectListQuery } from '../../domain/projectQuery';
+import { AllowedSortField, ProjectListQuery } from '../../domain/projectQuery';
 import { ProjectStatusBadge } from '../admin/ProjectStatusBadge';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-
 import {
   getProjectDetailHref,
   getProjectColumnSortField,
   ProjectIndexRow,
   ProjectIndexResult,
 } from './projectDashboardHelpers';
+import { useDashboardPreferences } from './useDashboardPreferences';
+import {
+  DASHBOARD_CONFIGURABLE_COLUMN_IDS,
+  type DashboardColumnId,
+} from './dashboardPreferences';
 
 export interface ProjectTableContainerProps {
   query: ProjectListQuery;
@@ -44,6 +48,7 @@ function formatDate(dateStr?: string) {
   }
 }
 
+
 export function ProjectTableContainer({ query, result }: ProjectTableContainerProps) {
   // Opt out of React Compiler memoization because useReactTable is an incompatible library boundary
   "use no memo";
@@ -51,9 +56,22 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { preferences, updatePreferences } = useDashboardPreferences();
 
   const handleSort = React.useCallback(
     (field: string) => {
+      // Validate sort field before updating the URL
+      const sortableFields = [
+        'created_at',
+        'updated_at',
+        'title',
+        'year',
+        'status',
+      ] as const;
+
+      if (!sortableFields.includes(field as typeof sortableFields[number])) {
+        return;
+      }
       const currentSort = query.sort || 'created_at';
       const currentDirection = query.direction || 'desc';
 
@@ -61,6 +79,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
       if (currentSort === field) {
         nextDirection = currentDirection === 'asc' ? 'desc' : 'asc';
       }
+      updatePreferences({ sort: field as AllowedSortField, direction: nextDirection });
 
       const params = new URLSearchParams(searchParams?.toString() || '');
       params.set('sort', field);
@@ -69,7 +88,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
 
       router.push(`${pathname}?${params.toString()}`);
     },
-    [query.sort, query.direction, searchParams, pathname, router]
+    [query.sort, query.direction, searchParams, pathname, router, updatePreferences]
   );
 
   const handlePageChange = (newPage: number) => {
@@ -201,6 +220,14 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
     manualPagination: true,
     manualSorting: true,
     pageCount: result.pageCount,
+    state: {
+      columnVisibility: Object.fromEntries(
+        DASHBOARD_CONFIGURABLE_COLUMN_IDS.map((column) => [
+          column,
+          preferences.visibleColumns.includes(column),
+        ]),
+      ),
+    },
   });
 
   const { page, pageCount, total, pageSize } = result;
@@ -209,6 +236,27 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
 
   return (
     <div className="flex flex-col gap-4">
+      <fieldset className="flex flex-wrap gap-x-4 gap-y-2 rounded-lg border bg-card p-3 text-xs">
+        <legend className="px-1 font-semibold">Desktop table columns</legend>
+        {DASHBOARD_CONFIGURABLE_COLUMN_IDS.map((column) => (
+          <label key={column} className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={preferences.visibleColumns.includes(column)}
+              onChange={() => {
+                const visibleColumns: DashboardColumnId[] = preferences.visibleColumns.includes(column)
+                  ? preferences.visibleColumns.filter((value) => value !== column)
+                  : [...preferences.visibleColumns, column];
+                updatePreferences({ visibleColumns });
+              }}
+              className="size-4 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            {column === 'updatedAt'
+              ? 'Updated'
+              : `${column.charAt(0).toUpperCase()}${column.slice(1)}`}
+          </label>
+        ))}
+      </fieldset>
       {/* Desktop/Tablet Table View */}
       <div className="hidden md:block rounded-lg border bg-card shadow-xs overflow-hidden">
         <div className="overflow-x-auto">

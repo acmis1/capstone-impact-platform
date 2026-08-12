@@ -10,6 +10,7 @@ import {
 import { DashboardMetricsCards } from '../../components/admin-dashboard/DashboardMetricsCards';
 import { ProjectFilterBar } from '../../components/admin-dashboard/ProjectFilterBar';
 import { ProjectTableContainer } from '../../components/admin-dashboard/ProjectTableContainer';
+import { DashboardPreferencesProvider } from '../../components/admin-dashboard/useDashboardPreferences';
 import { ErrorState } from '../../components/ui/error-state';
 import { EmptyState } from '../../components/ui/empty-state';
 import { FolderOpen, SearchX } from 'lucide-react';
@@ -96,15 +97,16 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           <DashboardMetricsCards metrics={metrics} />
 
           {/* Filter Bar */}
-          <ProjectFilterBar
-            query={query}
-            availableYears={filterOptions.years}
-            availablePrograms={filterOptions.programs}
-            availableDisciplines={filterOptions.disciplines}
-          />
+          <DashboardPreferencesProvider>
+            <ProjectFilterBar
+              query={query}
+              availableYears={filterOptions.years}
+              availablePrograms={filterOptions.programs}
+              availableDisciplines={filterOptions.disciplines}
+            />
 
-          {/* Project List / Table Content */}
-          {clientResult.total === 0 ? (
+            {/* Project List / Table Content */}
+            {clientResult.total === 0 ? (
             hasActiveFilters ? (
               <EmptyState
                 icon={SearchX}
@@ -126,9 +128,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 description="There are currently no active capstone project records stored in the staging database repository."
               />
             )
-          ) : (
-            <ProjectTableContainer query={query} result={clientResult} />
-          )}
+            ) : (
+              <ProjectTableContainer query={query} result={clientResult} />
+            )}
+          </DashboardPreferencesProvider>
         </>
       )}
     </div>
