@@ -68,10 +68,6 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
       if (!sortableFields.includes(field as typeof sortableFields[number])) {
         return;
       }
-      updatePreferences({
-        sort: field as AllowedSortField,
-      });
-
       const currentSort = query.sort || 'created_at';
       const currentDirection = query.direction || 'desc';
 
@@ -79,6 +75,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
       if (currentSort === field) {
         nextDirection = currentDirection === 'asc' ? 'desc' : 'asc';
       }
+      updatePreferences({ sort: field as AllowedSortField, direction: nextDirection });
 
       const params = new URLSearchParams(searchParams?.toString() || '');
       params.set('sort', field);
@@ -87,7 +84,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
 
       router.push(`${pathname}?${params.toString()}`)
     },
-    [query.sort, query.direction, searchParams, pathname, router]
+    [query.sort, query.direction, searchParams, pathname, router, updatePreferences]
   );
 
   const handlePageChange = (newPage: number) => {
@@ -219,6 +216,9 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
     manualPagination: true,
     manualSorting: true,
     pageCount: result.pageCount,
+    state: {
+      columnVisibility: Object.fromEntries(['status', 'program', 'year', 'validation', 'updatedAt'].map((column) => [column, preferences.visibleColumns.includes(column)])),
+    },
   });
 
   const { page, pageCount, total, pageSize } = result;
@@ -227,6 +227,15 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
 
   return (
     <div className="flex flex-col gap-4">
+      <fieldset className="flex flex-wrap gap-3 rounded-lg border bg-card p-3 text-xs">
+        <legend className="px-1 font-semibold">Desktop table columns</legend>
+        {(['status', 'program', 'year', 'validation', 'updatedAt'] as const).map((column) => (
+          <label key={column} className="flex items-center gap-1">
+            <input type="checkbox" checked={preferences.visibleColumns.includes(column)} onChange={() => updatePreferences({ visibleColumns: preferences.visibleColumns.includes(column) ? preferences.visibleColumns.filter((value) => value !== column) : [...preferences.visibleColumns, column] })} />
+            {column === 'updatedAt' ? 'Updated' : column}
+          </label>
+        ))}
+      </fieldset>
       {/* Desktop/Tablet Table View */}
       <div className="hidden md:block rounded-lg border bg-card shadow-xs overflow-hidden">
         <div className="overflow-x-auto">

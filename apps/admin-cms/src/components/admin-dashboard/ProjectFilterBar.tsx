@@ -60,7 +60,7 @@ export function ProjectFilterBar({
   if (key === 'status') {
     // preferences.status = value as typeof preferences.status;
     updatePreferences({
-      status: value,
+      status: value as typeof preferences.status,
     });
   }
 
