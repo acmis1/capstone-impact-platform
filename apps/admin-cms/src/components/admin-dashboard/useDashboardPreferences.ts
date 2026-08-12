@@ -28,7 +28,6 @@ export function DashboardPreferencesProvider({ children }: { children: React.Rea
     // Browser storage is deliberately read only after hydration.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPreferences(loadDashboardPreferences());
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoaded(true);
   }, []);
 

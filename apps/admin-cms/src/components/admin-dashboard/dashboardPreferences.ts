@@ -8,19 +8,33 @@ import type { WorkflowStatus } from '../../domain/workflowStatus';
 export const DASHBOARD_PREFERENCES_KEY =
   'capstone-impact-platform:admin-dashboard-preferences:v1';
 
+export const DASHBOARD_COLUMN_IDS = [
+  'title',
+  'status',
+  'program',
+  'year',
+  'validation',
+  'updatedAt',
+  'actions',
+] as const;
+
+export type DashboardColumnId = (typeof DASHBOARD_COLUMN_IDS)[number];
+
+export const DASHBOARD_CONFIGURABLE_COLUMN_IDS = [
+  'status',
+  'program',
+  'year',
+  'validation',
+  'updatedAt',
+] as const satisfies readonly DashboardColumnId[];
+
+const DASHBOARD_MANDATORY_COLUMN_IDS = ['title', 'actions'] as const;
+
 export const DEFAULT_DASHBOARD_PREFERENCES: DashboardPreferences = {
   pageSize: 10,
   sort: 'created_at',
   direction: 'desc',
-  visibleColumns: [
-    'title',
-    'status',
-    'program',
-    'year',
-    'validation',
-    'updatedAt',
-    'actions',
-  ],
+  visibleColumns: [...DASHBOARD_COLUMN_IDS],
   status: '',
   program: '',
   discipline: '',
@@ -31,7 +45,7 @@ export interface DashboardPreferences {
   pageSize: PageSizeOption;
   sort: AllowedSortField;
   direction: SortDirection;
-  visibleColumns: string[];
+  visibleColumns: DashboardColumnId[];
   status: WorkflowStatus | '';
   program: string;
   discipline: string;
@@ -61,15 +75,14 @@ const ALLOWED_STATUSES: WorkflowStatus[] = [
   'deleted',
 ];
 
-const ALLOWED_COLUMNS = new Set([
-  'title',
-  'status',
-  'program',
-  'year',
-  'validation',
-  'updatedAt',
-  'actions',
-]);
+const ALLOWED_COLUMNS = new Set<string>(DASHBOARD_COLUMN_IDS);
+
+function defaultDashboardPreferences(): DashboardPreferences {
+  return {
+    ...DEFAULT_DASHBOARD_PREFERENCES,
+    visibleColumns: [...DEFAULT_DASHBOARD_PREFERENCES.visibleColumns],
+  };
+}
 
 function isPageSize(value: unknown): value is PageSizeOption {
   return (
@@ -100,29 +113,37 @@ function isStatus(value: unknown): value is WorkflowStatus | '' {
   );
 }
 
-function sanitizeColumns(value: unknown): string[] {
+function sanitizeColumns(value: unknown): DashboardColumnId[] {
   if (!Array.isArray(value)) {
-    return DEFAULT_DASHBOARD_PREFERENCES.visibleColumns;
+    return [...DEFAULT_DASHBOARD_PREFERENCES.visibleColumns];
   }
 
-  const columns = value.filter(
-    (column): column is string =>
-      typeof column === 'string' && ALLOWED_COLUMNS.has(column),
+  const requestedColumns = new Set(
+    value.filter(
+      (column): column is DashboardColumnId =>
+        typeof column === 'string' && ALLOWED_COLUMNS.has(column),
+    ),
   );
 
-  // Do not allow corrupted data to hide every column.
-  if (columns.length === 0) {
-    return DEFAULT_DASHBOARD_PREFERENCES.visibleColumns;
+  // An empty or unknown-only value is corrupt. A title/actions-only value is
+  // valid: users may hide every configurable desktop column.
+  if (requestedColumns.size === 0) {
+    return [...DEFAULT_DASHBOARD_PREFERENCES.visibleColumns];
   }
 
-  return [...new Set(columns)];
+  return DASHBOARD_COLUMN_IDS.filter(
+    (column) =>
+      DASHBOARD_MANDATORY_COLUMN_IDS.includes(
+        column as (typeof DASHBOARD_MANDATORY_COLUMN_IDS)[number],
+      ) || requestedColumns.has(column),
+  );
 }
 
 export function validateDashboardPreferences(
   value: unknown,
 ): DashboardPreferences {
   if (!value || typeof value !== 'object') {
-    return { ...DEFAULT_DASHBOARD_PREFERENCES };
+    return defaultDashboardPreferences();
   }
 
   const raw = value as Record<string, unknown>;
@@ -163,37 +184,16 @@ export function validateDashboardPreferences(
   };
 }
 
-// export function loadDashboardPreferences(): DashboardPreferences {
-//   if (typeof window === 'undefined') {
-//     return { ...DEFAULT_DASHBOARD_PREFERENCES };
-//   }
-
-//   try {
-//     const raw = window.localStorage.getItem(DASHBOARD_PREFERENCES_KEY);
-
-//     if (!raw) {
-//       return { ...DEFAULT_DASHBOARD_PREFERENCES };
-//     }
-
-//     const parsed: unknown = JSON.parse(raw);
-
-//     return validateDashboardPreferences(parsed);
-//   } catch {
-//     return { ...DEFAULT_DASHBOARD_PREFERENCES };
-//   }
-// }
-
 export function loadDashboardPreferences(): DashboardPreferences {
   if (typeof window === 'undefined') {
-    return { ...DEFAULT_DASHBOARD_PREFERENCES };
+    return defaultDashboardPreferences();
   }
-
 
   try {
     const raw = window.localStorage.getItem(DASHBOARD_PREFERENCES_KEY);
 
     if (!raw) {
-      return { ...DEFAULT_DASHBOARD_PREFERENCES };
+      return defaultDashboardPreferences();
     }
 
     const parsed: unknown = JSON.parse(raw);
@@ -204,7 +204,7 @@ export function loadDashboardPreferences(): DashboardPreferences {
       !('version' in parsed) ||
       !('preferences' in parsed)
     ) {
-      return { ...DEFAULT_DASHBOARD_PREFERENCES };
+      return defaultDashboardPreferences();
     }
 
     const stored = parsed as {
@@ -214,13 +214,13 @@ export function loadDashboardPreferences(): DashboardPreferences {
 
     // Reject unsupported storage versions.
     if (stored.version !== 1) {
-      return { ...DEFAULT_DASHBOARD_PREFERENCES };
+      return defaultDashboardPreferences();
     }
 
     return validateDashboardPreferences(stored.preferences);
   } catch {
     // Corrupted JSON or unavailable localStorage.
-    return { ...DEFAULT_DASHBOARD_PREFERENCES };
+    return defaultDashboardPreferences();
   }
 }
 
@@ -257,5 +257,5 @@ export function resetDashboardPreferences(): DashboardPreferences {
     }
   }
 
-  return { ...DEFAULT_DASHBOARD_PREFERENCES };
+  return defaultDashboardPreferences();
 }

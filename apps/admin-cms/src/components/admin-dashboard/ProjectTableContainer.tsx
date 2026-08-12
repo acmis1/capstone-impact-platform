@@ -21,6 +21,10 @@ import {
   ProjectIndexResult,
 } from './projectDashboardHelpers';
 import { useDashboardPreferences } from './useDashboardPreferences';
+import {
+  DASHBOARD_CONFIGURABLE_COLUMN_IDS,
+  type DashboardColumnId,
+} from './dashboardPreferences';
 
 export interface ProjectTableContainerProps {
   query: ProjectListQuery;
@@ -82,7 +86,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
       params.set('direction', nextDirection);
       params.delete('page'); // Reset to page 1
 
-      router.push(`${pathname}?${params.toString()}`)
+      router.push(`${pathname}?${params.toString()}`);
     },
     [query.sort, query.direction, searchParams, pathname, router, updatePreferences]
   );
@@ -217,7 +221,12 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
     manualSorting: true,
     pageCount: result.pageCount,
     state: {
-      columnVisibility: Object.fromEntries(['status', 'program', 'year', 'validation', 'updatedAt'].map((column) => [column, preferences.visibleColumns.includes(column)])),
+      columnVisibility: Object.fromEntries(
+        DASHBOARD_CONFIGURABLE_COLUMN_IDS.map((column) => [
+          column,
+          preferences.visibleColumns.includes(column),
+        ]),
+      ),
     },
   });
 
@@ -227,12 +236,24 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
 
   return (
     <div className="flex flex-col gap-4">
-      <fieldset className="flex flex-wrap gap-3 rounded-lg border bg-card p-3 text-xs">
+      <fieldset className="flex flex-wrap gap-x-4 gap-y-2 rounded-lg border bg-card p-3 text-xs">
         <legend className="px-1 font-semibold">Desktop table columns</legend>
-        {(['status', 'program', 'year', 'validation', 'updatedAt'] as const).map((column) => (
-          <label key={column} className="flex items-center gap-1">
-            <input type="checkbox" checked={preferences.visibleColumns.includes(column)} onChange={() => updatePreferences({ visibleColumns: preferences.visibleColumns.includes(column) ? preferences.visibleColumns.filter((value) => value !== column) : [...preferences.visibleColumns, column] })} />
-            {column === 'updatedAt' ? 'Updated' : column}
+        {DASHBOARD_CONFIGURABLE_COLUMN_IDS.map((column) => (
+          <label key={column} className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={preferences.visibleColumns.includes(column)}
+              onChange={() => {
+                const visibleColumns: DashboardColumnId[] = preferences.visibleColumns.includes(column)
+                  ? preferences.visibleColumns.filter((value) => value !== column)
+                  : [...preferences.visibleColumns, column];
+                updatePreferences({ visibleColumns });
+              }}
+              className="size-4 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            {column === 'updatedAt'
+              ? 'Updated'
+              : `${column.charAt(0).toUpperCase()}${column.slice(1)}`}
           </label>
         ))}
       </fieldset>

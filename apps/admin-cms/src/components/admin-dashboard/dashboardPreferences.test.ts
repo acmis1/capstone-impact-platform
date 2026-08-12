@@ -7,6 +7,7 @@ import {
   loadDashboardPreferences,
   saveDashboardPreferences,
   resetDashboardPreferences,
+  type DashboardColumnId,
 } from './dashboardPreferences';
 
 describe('dashboardPreferences', () => {
@@ -31,7 +32,7 @@ describe('dashboardPreferences', () => {
       program: 'Computer Science',
       discipline: 'Software Engineering',
       year: '2026',
-      visibleColumns: ['title', 'status', 'year'],
+      visibleColumns: ['title', 'status', 'year', 'actions'] as DashboardColumnId[],
     };
 
     saveDashboardPreferences(preferences);
