@@ -61,6 +61,7 @@ export function ImageMediaPreview({
             setIsLoading(false);
             setHasError(true);
         }}
+          style={{ display: 'block', maxWidth: '100%', height: 'auto', maxHeight: '32rem', objectFit: 'contain' }}
         />
     </>
     )}

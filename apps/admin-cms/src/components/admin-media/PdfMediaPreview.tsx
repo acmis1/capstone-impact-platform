@@ -13,6 +13,7 @@ interface PdfMediaPreviewProps {
 export function PdfMediaPreview({
   media,
 }: PdfMediaPreviewProps) {
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
 
   if (!media.url) {
@@ -35,23 +36,24 @@ export function PdfMediaPreview({
 
   return (
     <div>
+      <a href={media.url} target="_blank" rel="noopener noreferrer">
+        Open PDF in a new tab
+      </a>
       {hasError ? (
         <div role="alert">
-          <p>PDF preview is unavailable.</p>
-          <a
-            href={media.url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Open PDF in a new tab
-          </a>
+          <p>Inline PDF preview is unavailable. The file can still be opened in a new tab.</p>
         </div>
       ) : (
-        <iframe
-          src={media.url}
-          title={`PDF preview of ${media.fileName}`}
-          onError={() => setHasError(true)}
-        />
+        <>
+          {!hasLoaded && <p role="status">Loading PDF preview...</p>}
+          <iframe
+            src={media.url}
+            title={`PDF preview of ${media.fileName}`}
+            onLoad={() => setHasLoaded(true)}
+            onError={() => { setHasLoaded(false); setHasError(true); }}
+            style={{ display: 'block', width: '100%', minHeight: '32rem', border: 0 }}
+          />
+        </>
       )}
 
       <MediaFileInfo media={media} />

@@ -34,6 +34,9 @@ describe('PdfMediaPreview', () => {
     expect(
       screen.getByTitle('PDF preview of project.pdf'),
     ).toBeTruthy();
+    const link = screen.getByRole('link', { name: 'Open PDF in a new tab' });
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
   it('shows missing-file state when URL is absent', () => {

@@ -7,3 +7,9 @@ export interface MediaPreviewItem {
   fileSize?: number;
   altText?: string;
 }
+
+export interface ProjectMediaPreviewItem extends MediaPreviewItem {
+  id: string;
+  assetType: string;
+  previewSource: 'private-signed' | 'public' | 'unavailable';
+}
