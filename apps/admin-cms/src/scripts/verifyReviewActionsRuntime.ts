@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
 
 export interface ProjectStateSnapshot {
@@ -33,9 +33,11 @@ export function areProjectSnapshotsEqual(a: ProjectStateSnapshot, b: ProjectStat
 
 export function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, unknown>> {
   const workdir = path.resolve(repoRoot, 'infra');
-  const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
-  const cmd = `"${cliPath}" db query --local --workdir "${workdir}" -o json "${sql.replace(/"/g, '\\"')}"`;
-  const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+  const cliPath = path.resolve(repoRoot, 'node_modules/supabase/dist/supabase.js');
+  const raw = execFileSync(process.execPath, [cliPath, 'db', 'query', '--local', '--workdir', workdir, '-o', 'json', sql], {
+    encoding: 'utf8',
+    cwd: repoRoot,
+  });
   const firstBrace = raw.indexOf('{');
   const lastBrace = raw.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace !== -1) {
@@ -47,9 +49,11 @@ export function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<str
 
 export function runLocalDbExec(sql: string, repoRoot: string): void {
   const workdir = path.resolve(repoRoot, 'infra');
-  const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
-  const cmd = `"${cliPath}" db query --local --workdir "${workdir}" "${sql.replace(/"/g, '\\"')}"`;
-  execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+  const cliPath = path.resolve(repoRoot, 'node_modules/supabase/dist/supabase.js');
+  execFileSync(process.execPath, [cliPath, 'db', 'query', '--local', '--workdir', workdir, sql], {
+    encoding: 'utf8',
+    cwd: repoRoot,
+  });
 }
 
 export interface RuntimeVerificationOptions {
@@ -75,9 +79,11 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
     if (!options?.skipFullDatabaseRun) {
       // 1. Query local Supabase CLI env
     const workdir = path.resolve(repoRoot, 'infra');
-    const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
-    const cmd = `"${cliPath}" status --workdir "${workdir}" -o env`;
-    const rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+    const cliPath = path.resolve(repoRoot, 'node_modules/supabase/dist/supabase.js');
+    const rawEnv = execFileSync(process.execPath, [cliPath, 'status', '--workdir', workdir, '-o', 'env'], {
+      encoding: 'utf8',
+      cwd: repoRoot,
+    });
     const parsedEnv = parseSupabaseCliEnv(rawEnv);
 
     const apiUrl = parsedEnv.API_URL || 'http://127.0.0.1:54321';

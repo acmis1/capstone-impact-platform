@@ -7,6 +7,7 @@ import { requireAdmin } from '../../../../../auth/requireAdmin';
 import { AdminAuthError } from '../../../../../auth/authTypes';
 import { getServerEnv } from '../../../../../lib/env';
 import { createSupabaseAdminClient } from '../../../../../lib/supabase/admin';
+import { validatePreviewPublicId } from '../../../../../auth/participantPreviewInput';
 import { executeControlledPublicRemoval } from '../../../../../projects/controlledPublicRemovalService';
 import { createControlledPublicRemovalDependencies } from '../../../../../projects/createControlledPublicRemovalDependencies';
 import { isLocalPublicationExecutionAvailable } from '../../../../../projects/localPublicationExecution';
@@ -17,11 +18,13 @@ const json = (body: object, status = 200) => NextResponse.json(body, { status, h
 export async function POST(request: NextRequest, { params }: { params: Promise<{ publicId: string }> }) {
   try {
     if (!validateSameOrigin(request.headers.get('origin'), request.nextUrl.origin)) return json({ success: false, error: 'Access denied.' }, 403);
-    const body = await request.json().catch(() => null);
-    const input = validatePublicRemovalInput(body, (await params).publicId);
-    if (!input.valid) return json({ success: false, error: 'Validation failed.' }, 400);
+    const publicId = validatePreviewPublicId((await params).publicId);
+    if (!publicId.valid) return json({ success: false, error: 'Validation failed.' }, 400);
     const admin = await requireAdmin();
     if (!hasPermission(admin.permissions, 'projects.archive')) return json({ success: false, error: 'Access denied.' }, 403);
+    const body = await request.json().catch(() => null);
+    const input = validatePublicRemovalInput(body, publicId.publicId);
+    if (!input.valid) return json({ success: false, error: 'Validation failed.' }, 400);
     const env = getServerEnv();
     if (!isLocalPublicationExecutionAvailable(env.supabaseUrl)) return json({ success: false, code: 'LOCAL_ARCHIVE_UNAVAILABLE', error: 'Local archive is unavailable.' }, 404);
     const dependencies = createControlledPublicRemovalDependencies({

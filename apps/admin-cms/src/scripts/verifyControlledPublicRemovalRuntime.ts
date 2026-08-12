@@ -64,6 +64,11 @@ async function main(): Promise<void> {
   };
   const originalFeed = await download();
   const baselinePublishedRows = (await db.from('projects').select('id').eq('status', 'published')).data ?? [];
+  const baselineSnapshotResult = await db.from('published_snapshots').select('id').order('id');
+  if (baselineSnapshotResult.error) throw baselineSnapshotResult.error;
+  const baselineSnapshotIds = (baselineSnapshotResult.data ?? []).map((row) => String(row.id));
+  const verifierSnapshotIds = new Set<string>();
+  console.log(`Published snapshots baseline before verifier: ${baselineSnapshotIds.length}`);
   let baselineHidden = false;
 
   const scenario = async (number: number, name: string, run: () => Promise<void>): Promise<void> => {
@@ -113,6 +118,16 @@ async function main(): Promise<void> {
     archiveReason: `Archive ${fixture.publicId}`,
     dependencies: createControlledPublicRemovalDependencies({ supabase: db, supabaseUrl: env.API_URL!, publicId: fixture.publicId, adminId: actorId, feedBucket: FEED_BUCKET, feedPath: FEED_PATH }),
     failurePoint,
+    barriers,
+  });
+  const publish = (fixture: Fixture, barriers?: { afterReservation?(): Promise<void> }) => executeControlledPublication({
+    permissions: getPermissionsForRoles(['admin']),
+    publicId: fixture.publicId,
+    privateBucket: PRIVATE_BUCKET,
+    publicAssetsBucket: PUBLIC_BUCKET,
+    publicFeedBucket: FEED_BUCKET,
+    publicFeedPath: FEED_PATH,
+    dependencies: createControlledPublicationDependencies({ supabase: db, supabaseUrl: env.API_URL!, publicId: fixture.publicId, adminId, privateBucket: PRIVATE_BUCKET, publicFeedBucket: FEED_BUCKET, publicFeedPath: FEED_PATH }),
     barriers,
   });
   const attemptFor = async (fixture: Fixture) => {
@@ -245,15 +260,8 @@ async function main(): Promise<void> {
     const laterB = await makeReady('later-controlled-b');
     publicPaths.add(`published/${laterB.fixture.publicId}/poster_image/poster.png`);
     publicPaths.add(`published/${laterB.fixture.publicId}/poster_pdf/poster.pdf`);
-    const publishedB = await executeControlledPublication({
-      permissions: getPermissionsForRoles(['admin']),
-      publicId: laterB.fixture.publicId,
-      privateBucket: PRIVATE_BUCKET,
-      publicAssetsBucket: PUBLIC_BUCKET,
-      publicFeedBucket: FEED_BUCKET,
-      publicFeedPath: FEED_PATH,
-      dependencies: createControlledPublicationDependencies({ supabase: db, supabaseUrl: env.API_URL!, publicId: laterB.fixture.publicId, adminId, privateBucket: PRIVATE_BUCKET, publicFeedBucket: FEED_BUCKET, publicFeedPath: FEED_PATH }),
-    });
+    const publishedB = await publish(laterB.fixture);
+    if (publishedB.resultCode === 'COMPLETED') verifierSnapshotIds.add(publishedB.snapshotId);
     await scenario(22, 'archive A then controlled publish B then retry A uses current feed', async () => {
       assert.equal(publishedB.resultCode, 'COMPLETED');
       const retry = await execute(target);
@@ -337,10 +345,26 @@ async function main(): Promise<void> {
     const currentProjects = await projects.listProjects();
     const currentArtifact = serializePublicFeedArtifact(compilePublicFeed(currentProjects));
     const staleCandidate = serializePublicFeedArtifact(compilePublicRemovalCandidateFeed(currentProjects, stale.publicId));
-    await scenario(29, 'reclaim rotates token and stale token cannot mutate', async () => {
+    await scenario(29, 'reclaim rotates token and stale token cannot invoke any mutation path', async () => {
       assert.notEqual(claimed.executionToken, staleReserved.executionToken);
-      const result = await removal.prepareAttempt({ attemptId: String(staleReserved.attemptId), token: String(staleReserved.executionToken), count: staleCandidate.recordCount, hash: staleCandidate.feedHash, content: staleCandidate.content, bucket: FEED_BUCKET, path: FEED_PATH, publicUrl: removal.getPublicUrl(FEED_BUCKET, FEED_PATH), previous: currentArtifact.content });
-      assert.equal(result.resultCode, 'ATTEMPT_TOKEN_MISMATCH');
+      const assertRejectedWithoutMutation = async (invoke: () => Promise<Record<string, unknown>>) => {
+        const attemptBefore = await attemptFor(stale);
+        const projectBefore = await db.from('projects').select('*').eq('id', stale.id).single();
+        const feedBefore = await download();
+        const result = await invoke();
+        assert.equal(result.resultCode, 'ATTEMPT_TOKEN_MISMATCH');
+        assert.deepEqual(await attemptFor(stale), attemptBefore);
+        assert.deepEqual((await db.from('projects').select('*').eq('id', stale.id).single()).data, projectBefore.data);
+        assert.equal((await download())?.toString('base64') ?? null, feedBefore?.toString('base64') ?? null);
+        return result.resultCode;
+      };
+      const oldAttemptId = String(staleReserved.attemptId);
+      const oldToken = String(staleReserved.executionToken);
+      const prepareCode = await assertRejectedWithoutMutation(() => removal.prepareAttempt({ attemptId: oldAttemptId, token: oldToken, count: staleCandidate.recordCount, hash: staleCandidate.feedHash, content: staleCandidate.content, bucket: FEED_BUCKET, path: FEED_PATH, publicUrl: removal.getPublicUrl(FEED_BUCKET, FEED_PATH), previous: currentArtifact.content }));
+      const markCode = await assertRejectedWithoutMutation(() => removal.markStorageWritten(oldAttemptId, oldToken, staleCandidate.feedHash, staleCandidate.recordCount));
+      const finalizeCode = await assertRejectedWithoutMutation(() => removal.finalizeAttempt(oldAttemptId, oldToken));
+      const failCode = await assertRejectedWithoutMutation(() => removal.failAttempt(oldAttemptId, oldToken, 'STALE_TOKEN_MUST_NOT_MUTATE'));
+      console.log(`Stale old-token results: prepare=${prepareCode}, mark-storage-written=${markCode}, finalize=${finalizeCode}, fail=${failCode}`);
     });
     await failRemoval({ ...staleReserved, executionToken: claimed.executionToken });
 
@@ -383,27 +407,92 @@ async function main(): Promise<void> {
     psql(`DELETE FROM public.publication_attempts WHERE project_id = '${ready.fixture.id}'::uuid;`);
 
     const raceRemoval = await createProject('publication-removal-race');
+    publicPaths.add(`published/${ready.fixture.publicId}/poster_image/poster.png`);
+    publicPaths.add(`published/${ready.fixture.publicId}/poster_pdf/poster.pdf`);
     await syncFeed();
-    await scenario(35, 'publication-vs-removal concurrency has one durable winner', async () => {
-      const [publishResult, removalResult] = await Promise.all([
-        publication.reserveAttempt({ publicId: ready.fixture.publicId, adminId, privateBucket: PRIVATE_BUCKET, confirmedPreviewId: readiness.confirmedPreviewId!, confirmedAt: readiness.confirmedAt! }),
-        removal.reserveAttempt(raceRemoval.publicId, adminId, `Archive ${raceRemoval.publicId}`),
-      ]);
-      assert.deepEqual([publishResult.resultCode, removalResult.resultCode].sort(), ['ATTEMPT_RESERVED', 'PUBLICATION_IN_PROGRESS'].sort());
-      if (publishResult.resultCode === 'ATTEMPT_RESERVED') await publication.failAttempt(String(publishResult.attemptId), String(publishResult.executionToken), 'RUNTIME_CLEANUP');
-      if (removalResult.resultCode === 'ATTEMPT_RESERVED') await failRemoval(removalResult);
+    await scenario(35, 'full publication-vs-removal execution race has one durable winner', async () => {
+      let releaseWinner!: () => void;
+      let signalWinnerReserved!: () => void;
+      const winnerReserved = new Promise<void>((resolve) => { signalWinnerReserved = resolve; });
+      const winnerRelease = new Promise<void>((resolve) => { releaseWinner = resolve; });
+      const sharedBarrier = { afterReservation: async () => { signalWinnerReserved(); await winnerRelease; } };
+      const publicationExecution = publish(ready.fixture, sharedBarrier).then((result) => ({ operation: 'publication' as const, result }));
+      const removalExecution = execute(raceRemoval, adminId, 'admin', undefined, sharedBarrier).then((result) => ({ operation: 'removal' as const, result }));
+
+      await winnerReserved;
+      const loser = await Promise.race([publicationExecution, removalExecution]);
+      assert.equal(loser.result.resultCode, 'PUBLICATION_IN_PROGRESS');
+      releaseWinner();
+      const [publicationOutcome, removalOutcome] = await Promise.all([publicationExecution, removalExecution]);
+      const publicationWon = publicationOutcome.result.resultCode === 'COMPLETED';
+      const removalWon = removalOutcome.result.resultCode === 'COMPLETED';
+      assert.notEqual(publicationWon, removalWon);
+      assert.equal(publicationWon ? removalOutcome.result.resultCode : publicationOutcome.result.resultCode, 'PUBLICATION_IN_PROGRESS');
+      if (publicationOutcome.result.resultCode === 'COMPLETED') verifierSnapshotIds.add(publicationOutcome.result.snapshotId);
+
+      const raceRemovalRow = await db.from('projects').select('status').eq('id', raceRemoval.id).single();
+      const readyRow = await db.from('projects').select('status').eq('id', ready.fixture.id).single();
+      const stored = (await download())?.toString('utf8') ?? '';
+      const authoritative = serializePublicFeedArtifact(compilePublicFeed(await projects.listProjects()));
+      assert.equal(stored, authoritative.content);
+      if (removalWon) {
+        assert.equal(raceRemovalRow.data?.status, 'archived');
+        assert.equal(readyRow.data?.status, 'approved');
+        assert(!stored.includes(`"publicId": "${raceRemoval.publicId}"`));
+        assert(!stored.includes(`"publicId": "${ready.fixture.publicId}"`));
+        assert.equal(Number(psql(`SELECT count(*) FROM public.publication_attempts WHERE project_id = '${ready.fixture.id}'::uuid;`).trim()), 0);
+      } else {
+        assert.equal(raceRemovalRow.data?.status, 'published');
+        assert.equal(readyRow.data?.status, 'published');
+        assert(stored.includes(`"publicId": "${raceRemoval.publicId}"`));
+        assert(stored.includes(`"publicId": "${ready.fixture.publicId}"`));
+        assert.equal(Number(psql(`SELECT count(*) FROM public.public_removal_attempts WHERE project_id = '${raceRemoval.id}'::uuid;`).trim()), 0);
+      }
+      console.log(`Scenario 35 winner: ${removalWon ? 'removal' : 'publication'}; stored feed exactly matched authoritative serialization.`);
     });
 
     const raceA = await createProject('removal-race-a');
     const raceB = await createProject('removal-race-b');
     await syncFeed();
-    await scenario(36, 'removal-vs-removal concurrency has one durable winner', async () => {
-      const [a, b] = await Promise.all([
-        removal.reserveAttempt(raceA.publicId, adminId, `Archive ${raceA.publicId}`),
-        removal.reserveAttempt(raceB.publicId, adminId, `Archive ${raceB.publicId}`),
-      ]);
-      assert.deepEqual([a.resultCode, b.resultCode].sort(), ['ATTEMPT_RESERVED', 'PUBLICATION_IN_PROGRESS'].sort());
-      await failRemoval(a.resultCode === 'ATTEMPT_RESERVED' ? a : b);
+    await scenario(36, 'full removal-vs-removal race completes one winner then rebases loser retry', async () => {
+      let releaseWinner!: () => void;
+      let signalWinnerReserved!: () => void;
+      const winnerReserved = new Promise<void>((resolve) => { signalWinnerReserved = resolve; });
+      const winnerRelease = new Promise<void>((resolve) => { releaseWinner = resolve; });
+      const sharedBarrier = { afterReservation: async () => { signalWinnerReserved(); await winnerRelease; } };
+      const aExecution = execute(raceA, adminId, 'admin', undefined, sharedBarrier).then((result) => ({ fixture: raceA, result }));
+      const bExecution = execute(raceB, adminId, 'admin', undefined, sharedBarrier).then((result) => ({ fixture: raceB, result }));
+
+      await winnerReserved;
+      const first = await Promise.race([aExecution, bExecution]);
+      assert.equal(first.result.resultCode, 'PUBLICATION_IN_PROGRESS');
+      releaseWinner();
+      const [aOutcome, bOutcome] = await Promise.all([aExecution, bExecution]);
+      const winner = aOutcome.result.resultCode === 'COMPLETED' ? aOutcome : bOutcome;
+      const loser = winner.fixture.id === raceA.id ? bOutcome : aOutcome;
+      assert.equal(winner.result.resultCode, 'COMPLETED');
+      assert.equal(loser.result.resultCode, 'PUBLICATION_IN_PROGRESS');
+
+      const winnerRow = await db.from('projects').select('status').eq('id', winner.fixture.id).single();
+      const loserRow = await db.from('projects').select('status').eq('id', loser.fixture.id).single();
+      const postWinnerStored = (await download())?.toString('utf8') ?? '';
+      const postWinnerAuthoritative = serializePublicFeedArtifact(compilePublicFeed(await projects.listProjects()));
+      assert.equal(winnerRow.data?.status, 'archived');
+      assert.equal(loserRow.data?.status, 'published');
+      assert.equal(postWinnerStored, postWinnerAuthoritative.content);
+      assert(!postWinnerStored.includes(`"publicId": "${winner.fixture.publicId}"`));
+      assert(postWinnerStored.includes(`"publicId": "${loser.fixture.publicId}"`));
+
+      const loserRetry = await execute(loser.fixture);
+      assert.equal(loserRetry.resultCode, 'COMPLETED');
+      const finalRows = await db.from('projects').select('id,status').in('id', [raceA.id, raceB.id]);
+      assert.equal(finalRows.data?.filter((row) => row.status === 'archived').length, 2);
+      const finalStored = (await download())?.toString('utf8') ?? '';
+      const finalAuthoritative = serializePublicFeedArtifact(compilePublicFeed(await projects.listProjects()));
+      assert.equal(finalStored, finalAuthoritative.content);
+      assert(!finalStored.includes(`"publicId": "${raceA.publicId}"`));
+      assert(!finalStored.includes(`"publicId": "${raceB.publicId}"`));
+      console.log(`Scenario 36 winner: ${winner.fixture.publicId}; loser retry result: ${loserRetry.resultCode}; both feeds matched authoritative serialization.`);
     });
 
     const barrierTarget = await createProject('reservation-barrier');
@@ -435,7 +524,17 @@ async function main(): Promise<void> {
     try {
       if (baselineHidden) setBaselinePublishedVisibility(true);
       if (temporaryAdminRole) await db.from('user_roles').delete().eq('user_id', reviewerId).eq('role', 'admin');
-      psql(`DELETE FROM public.public_removal_attempts WHERE public_id LIKE '${prefix}%'; DELETE FROM public.publication_attempts WHERE public_id LIKE '${prefix}%';`);
+      const ownedSnapshotResult = await db.from('publication_attempts').select('published_snapshot_id').like('public_id', `${prefix}%`).not('published_snapshot_id', 'is', null);
+      if (ownedSnapshotResult.error) throw ownedSnapshotResult.error;
+      for (const row of ownedSnapshotResult.data ?? []) verifierSnapshotIds.add(String(row.published_snapshot_id));
+      console.log(`Verifier-created published snapshot IDs: ${[...verifierSnapshotIds].sort().join(', ') || 'none'}`);
+
+      psql(`DELETE FROM public.public_removal_attempts WHERE public_id LIKE '${prefix}%';`);
+      psql(`DELETE FROM public.publication_attempts WHERE public_id LIKE '${prefix}%';`);
+      if (verifierSnapshotIds.size) {
+        const deletedSnapshots = await db.from('published_snapshots').delete().in('id', [...verifierSnapshotIds]);
+        if (deletedSnapshots.error) throw deletedSnapshots.error;
+      }
       const ids = fixtures.map((fixture) => fixture.id);
       if (ids.length) {
         await db.from('approval_records').delete().in('project_id', ids);
@@ -449,11 +548,17 @@ async function main(): Promise<void> {
       const projectCount = (await db.from('projects').select('id', { count: 'exact', head: true }).like('public_id', `${prefix}%`)).count ?? -1;
       const attemptCount = Number(psql(`SELECT count(*) FROM public.public_removal_attempts WHERE public_id LIKE '${prefix}%';`).trim());
       const publicationCount = Number(psql(`SELECT count(*) FROM public.publication_attempts WHERE public_id LIKE '${prefix}%';`).trim());
+      const cleanupSnapshotResult = await db.from('published_snapshots').select('id').order('id');
+      if (cleanupSnapshotResult.error) throw cleanupSnapshotResult.error;
+      const cleanupSnapshotIds = (cleanupSnapshotResult.data ?? []).map((row) => String(row.id));
       assert.equal(projectCount, 0);
       assert.equal(attemptCount, 0);
       assert.equal(publicationCount, 0);
+      assert.deepEqual(cleanupSnapshotIds, baselineSnapshotIds);
+      assert([...verifierSnapshotIds].every((id) => !cleanupSnapshotIds.includes(id)));
       assert.equal((await download())?.toString('base64') ?? null, originalFeed?.toString('base64') ?? null);
       if (happyTarget) assert(!fixtures.some((fixture) => fixture.publicId === happyTarget?.publicId) || projectCount === 0);
+      console.log(`Published snapshots cleanup result: exact baseline restored (${cleanupSnapshotIds.length}); no verifier snapshot residue remains.`);
       console.log('PASS: Scenario 40 - cleanup restored exact original DB/storage/feed baseline with zero verifier residue');
     } catch (error) {
       cleanupFailure = error;

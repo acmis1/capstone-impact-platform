@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
 import { applyReviewActionTransition, getAllowedReviewActions } from '../workflow/projectWorkflow';
 import { canPerformReviewAction, getPermissionsForRoles } from '../auth/permissions';
@@ -11,6 +14,8 @@ import { ReviewActionExecutionError } from '../repositories/ProjectRepository';
 import {
   captureProjectSnapshot,
   areProjectSnapshotsEqual,
+  runLocalDbExec,
+  runLocalDbQuery,
   runReviewActionsRuntimeVerification,
 } from '../scripts/verifyReviewActionsRuntime';
 
@@ -521,5 +526,34 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
 
     expect(result).toBe(false);
     consoleSpy.mockRestore();
+  });
+
+  it('17. Local DB helpers pass complex SQL as one literal argument without shell interpolation', () => {
+    const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'review runtime cli with spaces-'));
+    const cliDirectory = path.join(fixtureRoot, 'node_modules', 'supabase', 'dist');
+    const capturePath = path.join(fixtureRoot, 'captured-arguments.json');
+    const sql = `CREATE FUNCTION public.literal_sql() RETURNS text AS $$\nBEGIN\n  RETURN 'single quote and "double quotes"';\nEND;\n$$ LANGUAGE plpgsql;`;
+
+    try {
+      fs.mkdirSync(path.join(fixtureRoot, 'infra'), { recursive: true });
+      fs.mkdirSync(cliDirectory, { recursive: true });
+      fs.writeFileSync(path.join(cliDirectory, 'supabase.js'), [
+        "const fs = require('node:fs');",
+        "const path = require('node:path');",
+        "const args = process.argv.slice(2);",
+        "fs.writeFileSync(path.join(process.cwd(), 'captured-arguments.json'), JSON.stringify(args));",
+        "process.stdout.write(JSON.stringify({ rows: [{ args }] }));",
+      ].join('\n'));
+
+      const rows = runLocalDbQuery(sql, fixtureRoot);
+      expect(rows).toEqual([{ args: ['db', 'query', '--local', '--workdir', path.join(fixtureRoot, 'infra'), '-o', 'json', sql] }]);
+
+      runLocalDbExec(sql, fixtureRoot);
+      expect(JSON.parse(fs.readFileSync(capturePath, 'utf8'))).toEqual([
+        'db', 'query', '--local', '--workdir', path.join(fixtureRoot, 'infra'), sql,
+      ]);
+    } finally {
+      fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 });
