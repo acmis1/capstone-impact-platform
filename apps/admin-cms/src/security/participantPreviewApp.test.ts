@@ -482,6 +482,33 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
     expect(caught?.message).not.toContain('SECRET_SQL_DETAIL');
   });
 
+  it('getCorrectionResolutionStatus selects the original-preview foreign key explicitly when the replacement-preview relationship also exists', async () => {
+    const unresolvedOrder = vi.fn().mockResolvedValue({ data: [], error: null });
+    const unresolvedIn = vi.fn().mockReturnValue({ order: unresolvedOrder });
+    const unresolvedEq = vi.fn().mockReturnValue({ in: unresolvedIn });
+    const resolvedMaybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const resolvedLimit = vi.fn().mockReturnValue({ maybeSingle: resolvedMaybeSingle });
+    const resolvedOrder = vi.fn().mockReturnValue({ limit: resolvedLimit });
+    const resolvedStatusEq = vi.fn().mockReturnValue({ order: resolvedOrder });
+    const resolvedProjectEq = vi.fn().mockReturnValue({ eq: resolvedStatusEq });
+    const select = vi.fn()
+      .mockReturnValueOnce({ eq: unresolvedEq })
+      .mockReturnValueOnce({ eq: resolvedProjectEq });
+    const supabase = {
+      from: vi.fn().mockReturnValue({ select }),
+    } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    const repo = new SupabaseParticipantPreviewRepositoryCore(supabase);
+
+    await expect(repo.getCorrectionResolutionStatus('project-uuid-1')).resolves.toBeNull();
+
+    const originalPreviewJoin = 'participant_previews!participant_preview_correction_requ_participant_preview_id_fkey!inner(project_id)';
+    expect(select).toHaveBeenCalledTimes(2);
+    for (const [selection] of select.mock.calls) {
+      expect(selection).toContain(originalPreviewJoin);
+      expect(selection).not.toContain('participant_previews!inner(project_id)');
+    }
+  });
+
   it('getResponseState resolves unresponded, confirmed, and correction_requested from the underlying reads', async () => {
     const repo = new SupabaseParticipantPreviewRepositoryCore({} as unknown as import('@supabase/supabase-js').SupabaseClient);
 
