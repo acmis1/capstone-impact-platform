@@ -25,6 +25,7 @@ import { PublicationReadinessPanel } from '../../../../components/admin/Publicat
 import { PublicationReadinessResult } from '../../../../domain/publicationReadiness';
 import { getServerEnv } from '../../../../lib/env';
 import { PublicationPreparationPanel } from '../../../../components/admin/PublicationPreparationPanel';
+import { isLocalPublicationExecutionAvailable } from '../../../../projects/localPublicationExecution';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -50,6 +51,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let canResolveCorrection = false;
   let publicationReadiness: PublicationReadinessResult | null = null;
   let canPreparePublicationPlan = false;
+  let localPublicationExecutionAvailable = false;
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -106,6 +108,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
         const previewRepository = new SupabaseParticipantPreviewRepository();
         const env = getServerEnv();
+        localPublicationExecutionAvailable = canPreparePublicationPlan && isLocalPublicationExecutionAvailable(env.supabaseUrl);
         const [preview, correctionResolutionStatus, readinessResult] = await Promise.all([
           previewRepository.getActivePreview(dbProj.id),
           previewRepository.getCorrectionResolutionStatus(dbProj.id),
@@ -306,7 +309,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
         <ProjectDetailSection title="🚀 Publication Readiness Gate" borderColor="#10B981">
           <PublicationReadinessPanel readiness={publicationReadiness} />
-          <PublicationPreparationPanel publicId={project.publicId || ''} ready={publicationReadiness?.ready === true && publicationReadiness.resultCode === 'READY'} canPrepare={canPreparePublicationPlan} />
+          <PublicationPreparationPanel publicId={project.publicId || ''} ready={publicationReadiness?.ready === true && publicationReadiness.resultCode === 'READY'} canPrepare={canPreparePublicationPlan} localExecutionAvailable={localPublicationExecutionAvailable} />
         </ProjectDetailSection>
 
         <ProjectDetailSection title="🔗 Participant Preview" borderColor="#3B82F6">
