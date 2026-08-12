@@ -529,7 +529,7 @@ export class SupabaseParticipantPreviewRepositoryCore {
     // Check for unresolved requests first
     const { data: unresolvedData, error: unresolvedError } = await this.supabase
       .from('participant_preview_correction_requests')
-      .select('id, status, participant_preview_id, correction_comment, requested_at, resolution_started_at, resolution_started_by, resolved_at, resolved_by, replacement_preview_id, participant_previews!inner(project_id)')
+      .select('id, status, participant_preview_id, correction_comment, requested_at, resolution_started_at, resolution_started_by, resolved_at, resolved_by, replacement_preview_id, participant_previews!participant_preview_correction_requ_participant_preview_id_fkey!inner(project_id)')
       .eq('participant_previews.project_id', projectDbId)
       .in('status', ['open', 'in_progress'])
       .order('requested_at', { ascending: false });
@@ -548,7 +548,7 @@ export class SupabaseParticipantPreviewRepositoryCore {
       // Fetch latest resolved request if no unresolved requests exist
       const { data: resolvedData, error: resolvedError } = await this.supabase
         .from('participant_preview_correction_requests')
-        .select('id, status, participant_preview_id, correction_comment, requested_at, resolution_started_at, resolution_started_by, resolved_at, resolved_by, replacement_preview_id, participant_previews!inner(project_id)')
+        .select('id, status, participant_preview_id, correction_comment, requested_at, resolution_started_at, resolution_started_by, resolved_at, resolved_by, replacement_preview_id, participant_previews!participant_preview_correction_requ_participant_preview_id_fkey!inner(project_id)')
         .eq('participant_previews.project_id', projectDbId)
         .eq('status', 'resolved')
         .order('requested_at', { ascending: false })
