@@ -77,3 +77,14 @@ export function compilePublicationCandidateFeed(projects: Project[], targetPubli
     .filter((project) => project.status === 'published' || project.publicId === targetPublicId)
     .map(toPublicFeedRecord);
 }
+
+/** Builds a public-feed candidate with one exact published target removed. */
+export function compilePublicRemovalCandidateFeed(projects: Project[], targetPublicId: string): PublicFeedRecord[] {
+  const targets = projects.filter((project) => project.publicId === targetPublicId);
+  if (targets.length !== 1 || targets[0].status !== 'published') {
+    throw new Error('Public-removal candidate target is unavailable.');
+  }
+  return projects
+    .filter((project) => project.status === 'published' && project.publicId !== targetPublicId)
+    .map(toPublicFeedRecord);
+}

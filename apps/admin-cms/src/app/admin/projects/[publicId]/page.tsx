@@ -26,6 +26,7 @@ import { PublicationReadinessResult } from '../../../../domain/publicationReadin
 import { getServerEnv } from '../../../../lib/env';
 import { PublicationPreparationPanel } from '../../../../components/admin/PublicationPreparationPanel';
 import { isLocalPublicationExecutionAvailable } from '../../../../projects/localPublicationExecution';
+import { LocalArchivePanel } from '../../../../components/admin/LocalArchivePanel';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let publicationReadiness: PublicationReadinessResult | null = null;
   let canPreparePublicationPlan = false;
   let localPublicationExecutionAvailable = false;
+  let canExecuteLocalArchive = false;
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -109,6 +111,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         const previewRepository = new SupabaseParticipantPreviewRepository();
         const env = getServerEnv();
         localPublicationExecutionAvailable = canPreparePublicationPlan && isLocalPublicationExecutionAvailable(env.supabaseUrl);
+        canExecuteLocalArchive = hasPermission(adminContext.permissions, 'projects.archive') && isLocalPublicationExecutionAvailable(env.supabaseUrl);
         const [preview, correctionResolutionStatus, readinessResult] = await Promise.all([
           previewRepository.getActivePreview(dbProj.id),
           previewRepository.getCorrectionResolutionStatus(dbProj.id),
@@ -273,7 +276,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             ⚠️ ADMINISTRATIVE REVIEW STAGING SANDBOX
           </h4>
           <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: '1.5', color: '#D1D5DB' }}>
-            This detail review operates purely on <strong>Staging Data</strong>. No active coordinator or participant personal folders are parsed. Live public feed showcase mirrors (Duda presentation layers) remain disconnected. Publishing and archiving actions remain locked during this summer semester development.
+            Hosted and production public-feed operations remain disabled, and Duda stays disconnected. Explicit Local test publication and removal controls may be available only when this Admin CMS is connected to proven loopback Local Supabase.
           </p>
         </div>
 
@@ -305,6 +308,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             currentStatus={project.status}
             allowedActions={allowedActions}
           />
+          {project.status === 'published' && canExecuteLocalArchive && <LocalArchivePanel publicId={project.publicId || ''} />}
         </ProjectDetailSection>
 
         <ProjectDetailSection title="🚀 Publication Readiness Gate" borderColor="#10B981">

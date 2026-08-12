@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compilePublicFeed } from './compilePublicFeed';
+import { compilePublicFeed, compilePublicRemovalCandidateFeed } from './compilePublicFeed';
 import { createMockProject } from '../test/projectFixtures';
 import { Project } from '../domain/project';
 
@@ -120,5 +120,32 @@ describe('compilePublicFeed', () => {
     const result1 = compilePublicFeed([project1, project2]);
     const result2 = compilePublicFeed([project1, project2]);
     expect(result1).toEqual(result2);
+  });
+});
+
+describe('compilePublicRemovalCandidateFeed', () => {
+  it('removes one exact published target while preserving other published records', () => {
+    const projects = [
+      createMockProject({ id: 1, publicId: 'target', status: 'published' }),
+      createMockProject({ id: 2, publicId: 'other', status: 'published' }),
+      createMockProject({ id: 3, publicId: 'approved', status: 'approved' }),
+    ];
+    const before = JSON.stringify(projects);
+    expect(compilePublicRemovalCandidateFeed(projects, 'target').map((record) => record.publicId)).toEqual(['other']);
+    expect(JSON.stringify(projects)).toBe(before);
+  });
+
+  it('supports the canonical zero-record feed when the target is the only published project', () => {
+    expect(compilePublicRemovalCandidateFeed([
+      createMockProject({ publicId: 'target', status: 'published' }),
+    ], 'target')).toEqual([]);
+  });
+
+  it.each([
+    [[], 'target'],
+    [[createMockProject({ publicId: 'target', status: 'approved' })], 'target'],
+    [[createMockProject({ publicId: 'target', status: 'published' }), createMockProject({ publicId: 'target', status: 'published' })], 'target'],
+  ])('rejects missing, non-published, or duplicate targets', (projects, target) => {
+    expect(() => compilePublicRemovalCandidateFeed(projects as Project[], target)).toThrow('Public-removal candidate target is unavailable.');
   });
 });

@@ -116,6 +116,12 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
       .rejects.toThrow(`Review action execution failed: ${resultCode}`);
   });
 
+  it('3c. preserves the controlled public-removal requirement before success-shape parsing', async () => {
+    const repo = new SupabaseProjectRepositoryCore({ rpc: vi.fn().mockResolvedValue({ data: { resultCode: 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED' }, error: null }) } as never);
+    await expect(repo.performReviewAction({ publicId: '2026-proj1', action: 'archive', adminId: '11111111-2222-3333-4444-555555555555' }))
+      .rejects.toThrow('Review action execution failed: CONTROLLED_PUBLIC_REMOVAL_REQUIRED');
+  });
+
   it('4. performReviewAction converts database RPC errors to safe typed internal errors', async () => {
     const mockRpc = vi.fn().mockResolvedValue({
       data: null,
@@ -330,6 +336,17 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     mockAction.mockRestore();
   });
 
+  it('10c. API maps published generic archive to the bounded controlled-removal 409 response', async () => {
+    const { requireAdmin } = await import('../auth/requireAdmin');
+    vi.mocked(requireAdmin).mockResolvedValueOnce({ authUserId: 'auth-uuid-1', adminUserId: 'admin-uuid-1', email: 'admin@capstone.test', fullName: 'Admin User', roles: ['admin'], permissions: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit'] });
+    const mockAction = vi.spyOn(SupabaseProjectRepository.prototype, 'performReviewAction').mockRejectedValueOnce(new ReviewActionExecutionError('CONTROLLED_PUBLIC_REMOVAL_REQUIRED'));
+    const req = new NextRequest('http://localhost:3000/api/projects/2026-proj1/review-action', { method: 'POST', headers: { origin: 'http://localhost:3000' }, body: JSON.stringify({ action: 'archive' }) });
+    const res = await POST(req, { params: Promise.resolve({ publicId: '2026-proj1' }) });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ success: false, error: 'Published projects must use the controlled public-removal workflow.' });
+    mockAction.mockRestore();
+  });
+
   // ============================================================
   // Safe Error Boundary & Secret Exclusion Verification Tests
   // ============================================================
@@ -413,7 +430,7 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     expect(getAllowedReviewActions('in_review')).toEqual(['request_changes', 'approve', 'archive']);
     expect(getAllowedReviewActions('changes_requested')).toEqual(['approve']);
     expect(getAllowedReviewActions('approved')).toEqual(['request_changes', 'archive']);
-    expect(getAllowedReviewActions('published')).toEqual(['archive']);
+    expect(getAllowedReviewActions('published')).toEqual([]);
     expect(getAllowedReviewActions('draft')).toEqual([]);
     expect(getAllowedReviewActions('archived')).toEqual([]);
     expect(getAllowedReviewActions('deleted')).toEqual([]);

@@ -11,7 +11,7 @@ const content = fs.readFileSync(path.join(migrations, migration), 'utf8');
 describe('Migration 0018 approval edit gate static security contract', () => {
   it('is the eighteenth migration and leaves 0001-0017 byte-for-byte identical to origin/main', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
-    expect(files).toHaveLength(19);
+    expect(files).toHaveLength(20);
     expect(files[17]).toBe(migration);
     for (const file of files.slice(0, 17)) {
       const migrationPath = `infra/supabase/migrations/${file}`;
