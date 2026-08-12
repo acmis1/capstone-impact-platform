@@ -4,7 +4,8 @@ export type AdminPermission =
   | 'projects.read'
   | 'projects.review'
   | 'projects.archive'
-  | 'projects.edit';
+  | 'projects.edit'
+  | 'projects.publish';
 
 export interface AuthenticatedAdminContext {
   authUserId: string; // matches auth_user_id (auth.users(id))

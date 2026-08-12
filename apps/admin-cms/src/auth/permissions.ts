@@ -1,7 +1,7 @@
 import { AdminRole, AdminPermission } from './authTypes';
 
 const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
-  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit'],
+  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit', 'projects.publish'],
   reviewer: ['projects.read', 'projects.review'],
   editor: ['projects.read', 'projects.edit'],
 };
@@ -48,4 +48,9 @@ export function canPerformReviewAction(userPermissions: AdminPermission[], actio
  */
 export function canManageParticipantPreview(userPermissions: AdminPermission[]): boolean {
   return hasPermission(userPermissions, 'projects.review');
+}
+
+/** Publication preparation has deliberately narrower, admin-only authority. */
+export function canPreparePublication(userPermissions: AdminPermission[]): boolean {
+  return hasPermission(userPermissions, 'projects.publish');
 }
