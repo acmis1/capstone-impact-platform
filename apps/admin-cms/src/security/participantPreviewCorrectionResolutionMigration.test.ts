@@ -20,7 +20,7 @@ describe('Migration 0016 Participant Preview Correction Resolution Security Cont
     const rawFiles = fs.readdirSync(migrationsDir);
     const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
 
-    expect(sqlFiles.length).toBe(19);
+    expect(sqlFiles.length).toBe(20);
     expect(sqlFiles[12]).toBe(priorLinksMigrationFile);
     expect(sqlFiles[13]).toBe(priorConfirmationsMigrationFile);
     expect(sqlFiles[14]).toBe(priorCorrectionRequestsMigrationFile);

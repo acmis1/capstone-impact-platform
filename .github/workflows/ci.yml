@@ -140,13 +140,16 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify nineteen migrations and local integrity
+      - name: Verify twenty migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 19
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 20
 
       - name: Verify atomic project metadata runtime behavior
         run: npm run verify:metadata-runtime --workspace=apps/admin-cms
+
+      - name: Verify review actions runtime behavior
+        run: npm run verify:review-actions-runtime --workspace=apps/admin-cms
 
       - name: Verify atomic browser import metadata stage runtime behavior
         run: npm run verify:browser-metadata-stage-runtime --workspace=apps/admin-cms
@@ -168,6 +171,9 @@ jobs:
 
       - name: Verify controlled publication runtime behavior
         run: npm run verify:controlled-publication-runtime --workspace=apps/admin-cms
+
+      - name: Verify controlled public removal runtime behavior
+        run: npm run verify:controlled-public-removal-runtime --workspace=apps/admin-cms
 
       - name: Verify approval edit gate runtime behavior
         run: npm run verify:approval-edit-gate-runtime --workspace=apps/admin-cms

@@ -24,7 +24,7 @@ describe('projectWorkflow', () => {
     });
 
     it('returns actions for published status', () => {
-      expect(getAllowedReviewActions('published')).toEqual(['archive']);
+      expect(getAllowedReviewActions('published')).toEqual([]);
     });
 
     it('returns actions for archived status', () => {
@@ -70,7 +70,6 @@ describe('projectWorkflow', () => {
         { from: 'changes_requested', action: 'approve', to: 'approved' },
         { from: 'approved', action: 'request_changes', to: 'changes_requested' },
         { from: 'approved', action: 'archive', to: 'archived' },
-        { from: 'published', action: 'archive', to: 'archived' },
       ];
 
       transitions.forEach(({ from, action, to }) => {
@@ -80,6 +79,10 @@ describe('projectWorkflow', () => {
         expect(result.toStatus).toBe(to);
         expect(result.error).toBeUndefined();
       });
+    });
+
+    it('rejects generic archive for a published project', () => {
+      expect(applyReviewActionTransition('published', 'archive')).toMatchObject({ allowed: false, fromStatus: 'published' });
     });
 
     it('rejects invalid actions from draft state', () => {
