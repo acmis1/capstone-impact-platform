@@ -1,9 +1,26 @@
 -- Migration 0019: controlled publication execution foundation.
 --
--- PostgreSQL and Storage are deliberately coordinated as separate systems:
--- a durable, globally exclusive attempt binds exact readiness/artifact evidence;
--- storage is written and verified outside a database transaction; then a short
--- atomic finalization transaction revalidates and commits all authoritative DB state.
+-- PostgreSQL and Storage are deliberately coordinated as separate systems. A durable,
+-- globally exclusive attempt is RESERVED before any global publication baseline is read;
+-- the exact artifact and public-media ownership baseline are then bound to that reservation;
+-- storage is written and verified outside a database transaction; then a short atomic
+-- finalization transaction revalidates and commits all authoritative DB state.
+--
+-- Durable two-phase protocol:
+--   reserved  -> global exclusivity exists; no baseline has been observed yet
+--   prepared  -> exact candidate artifact, previous-feed evidence and media ownership
+--                baseline are durably bound to this reservation
+--   storage_written -> external public storage is written and byte-verified
+--   completed -> atomic DB convergence succeeded
+-- Failure/recovery: failed, compensation_failed.
+--
+-- Canonical lock ordering for every controlled publication statement:
+--   controlled_publication_global advisory lock
+--     -> publication_attempts row
+--       -> participant_preview:<public_id> advisory lock (inside readiness)
+--         -> projects row
+-- No other workflow acquires the global publication lock, so no cycle can form with the
+-- existing preview -> project ordering used by review, preview and correction workflows.
 
 BEGIN;
 
@@ -54,16 +71,19 @@ CREATE TABLE public.publication_attempts (
   admin_id uuid NOT NULL REFERENCES public.admin_users(id) ON DELETE RESTRICT,
   confirmed_preview_id uuid NOT NULL REFERENCES public.participant_previews(id) ON DELETE RESTRICT,
   confirmed_at timestamptz NOT NULL,
-  candidate_record_count integer NOT NULL CHECK (candidate_record_count > 0),
-  candidate_feed_hash text NOT NULL CHECK (candidate_feed_hash ~ '^[0-9a-f]{64}$'),
-  candidate_feed_content text NOT NULL,
-  feed_storage_bucket text NOT NULL CHECK (pg_catalog.btrim(feed_storage_bucket) <> ''),
-  feed_storage_path text NOT NULL CHECK (pg_catalog.btrim(feed_storage_path) <> ''),
-  feed_public_url text NOT NULL CHECK (pg_catalog.btrim(feed_public_url) <> ''),
-  previous_feed_existed boolean NOT NULL,
+  -- Artifact evidence is NULL while an attempt only holds the global reservation. It is
+  -- bound exactly once, after reservation, by prepare_publication_attempt.
+  candidate_record_count integer CHECK (candidate_record_count IS NULL OR candidate_record_count > 0),
+  candidate_feed_hash text CHECK (candidate_feed_hash IS NULL OR candidate_feed_hash ~ '^[0-9a-f]{64}$'),
+  candidate_feed_content text,
+  feed_storage_bucket text CHECK (feed_storage_bucket IS NULL OR pg_catalog.btrim(feed_storage_bucket) <> ''),
+  feed_storage_path text CHECK (feed_storage_path IS NULL OR pg_catalog.btrim(feed_storage_path) <> ''),
+  feed_public_url text CHECK (feed_public_url IS NULL OR pg_catalog.btrim(feed_public_url) <> ''),
+  previous_feed_existed boolean,
   previous_feed_content text,
-  media_manifest jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (pg_catalog.jsonb_typeof(media_manifest) = 'array'),
-  state text NOT NULL CHECK (state IN ('prepared', 'storage_written', 'completed', 'failed', 'compensation_failed')),
+  media_manifest jsonb CHECK (media_manifest IS NULL OR pg_catalog.jsonb_typeof(media_manifest) = 'array'),
+  artifact_bound_at timestamptz,
+  state text NOT NULL CHECK (state IN ('reserved', 'prepared', 'storage_written', 'completed', 'failed', 'compensation_failed')),
   execution_token uuid NOT NULL DEFAULT gen_random_uuid(),
   lease_expires_at timestamptz NOT NULL,
   storage_verified_at timestamptz,
@@ -76,23 +96,47 @@ CREATE TABLE public.publication_attempts (
   completed_at timestamptz,
   failed_at timestamptz,
   CONSTRAINT publication_attempt_previous_feed_coherent CHECK (
-    (previous_feed_existed = true AND previous_feed_content IS NOT NULL)
+    (artifact_bound_at IS NULL AND previous_feed_existed IS NULL AND previous_feed_content IS NULL)
+    OR (previous_feed_existed = true AND previous_feed_content IS NOT NULL)
     OR (previous_feed_existed = false AND previous_feed_content IS NULL)
+  ),
+  -- Artifact evidence is all-or-nothing, and is bound if and only if artifact_bound_at is set.
+  CONSTRAINT publication_attempt_artifact_binding_coherent CHECK (
+    (artifact_bound_at IS NULL
+      AND candidate_record_count IS NULL AND candidate_feed_hash IS NULL AND candidate_feed_content IS NULL
+      AND feed_storage_bucket IS NULL AND feed_storage_path IS NULL AND feed_public_url IS NULL
+      AND previous_feed_existed IS NULL AND media_manifest IS NULL)
+    OR
+    (artifact_bound_at IS NOT NULL
+      AND candidate_record_count IS NOT NULL AND candidate_feed_hash IS NOT NULL AND candidate_feed_content IS NOT NULL
+      AND feed_storage_bucket IS NOT NULL AND feed_storage_path IS NOT NULL AND feed_public_url IS NOT NULL
+      AND previous_feed_existed IS NOT NULL AND media_manifest IS NOT NULL)
+  ),
+  -- A reservation never carries an artifact; no state past reservation may lack one.
+  CONSTRAINT publication_attempt_state_binding_coherent CHECK (
+    (state = 'reserved' AND artifact_bound_at IS NULL)
+    OR (state IN ('prepared', 'storage_written', 'completed') AND artifact_bound_at IS NOT NULL)
+    OR state IN ('failed', 'compensation_failed')
+  ),
+  CONSTRAINT publication_attempt_storage_evidence_coherent CHECK (
+    (state IN ('storage_written', 'completed') AND storage_verified_at IS NOT NULL)
+    OR state IN ('reserved', 'prepared', 'failed', 'compensation_failed')
   ),
   CONSTRAINT publication_attempt_terminal_state_coherent CHECK (
     (state = 'completed' AND completed_at IS NOT NULL AND published_snapshot_id IS NOT NULL
       AND publish_audit_record_id IS NOT NULL AND failure_code IS NULL)
     OR (state IN ('failed', 'compensation_failed') AND failed_at IS NOT NULL AND failure_code IS NOT NULL
       AND completed_at IS NULL AND published_snapshot_id IS NULL AND publish_audit_record_id IS NULL)
-    OR (state IN ('prepared', 'storage_written') AND completed_at IS NULL AND failed_at IS NULL
+    OR (state IN ('reserved', 'prepared', 'storage_written') AND completed_at IS NULL AND failed_at IS NULL
       AND published_snapshot_id IS NULL AND publish_audit_record_id IS NULL AND failure_code IS NULL)
   )
 );
 
 CREATE INDEX publication_attempts_project_id_idx ON public.publication_attempts(project_id);
+-- Every state that holds or blocks the global publication slot participates in this invariant.
 CREATE UNIQUE INDEX publication_attempts_one_active_global_idx
   ON public.publication_attempts ((true))
-  WHERE state IN ('prepared', 'storage_written', 'compensation_failed');
+  WHERE state IN ('reserved', 'prepared', 'storage_written', 'compensation_failed');
 CREATE UNIQUE INDEX publication_attempts_one_completed_project_idx
   ON public.publication_attempts(project_id)
   WHERE state = 'completed';
@@ -134,7 +178,7 @@ BEGIN
   SELECT pa.id INTO v_attempt_id
     FROM public.publication_attempts pa
    WHERE pa.project_id = v_project_id
-     AND pa.state IN ('prepared', 'storage_written', 'compensation_failed')
+     AND pa.state IN ('reserved', 'prepared', 'storage_written', 'compensation_failed')
    LIMIT 1;
 
   IF v_attempt_id IS NOT NULL AND COALESCE(v_marker, '') <> v_attempt_id::text THEN
@@ -145,7 +189,7 @@ BEGIN
     SELECT pa.id INTO v_attempt_id
       FROM public.publication_attempts pa
      WHERE pa.project_id = v_other_project_id
-       AND pa.state IN ('prepared', 'storage_written', 'compensation_failed')
+       AND pa.state IN ('reserved', 'prepared', 'storage_written', 'compensation_failed')
      LIMIT 1;
     IF v_attempt_id IS NOT NULL AND COALESCE(v_marker, '') <> v_attempt_id::text THEN
       RAISE EXCEPTION 'PUBLICATION_IN_PROGRESS';
@@ -179,21 +223,19 @@ CREATE TRIGGER guard_project_industries_during_publication
   BEFORE INSERT OR UPDATE OR DELETE ON public.project_industry_categories
   FOR EACH ROW EXECUTE FUNCTION public.guard_active_publication_attempt();
 
-CREATE OR REPLACE FUNCTION public.begin_publication_attempt(
+-- Phase A. Durable global reservation.
+--
+-- This transaction acquires global publication exclusivity and creates the durable
+-- reservation BEFORE the caller is allowed to observe any mutable global publication
+-- baseline (published projects, canonical feed bytes, public-media destinations).
+-- Because the reservation is durable and covered by the partial unique global index,
+-- no other execution can read-then-overwrite that baseline concurrently.
+CREATE OR REPLACE FUNCTION public.reserve_publication_attempt(
   p_public_id text,
   p_admin_id uuid,
   p_private_bucket text,
   p_confirmed_preview_id uuid,
-  p_confirmed_at timestamptz,
-  p_candidate_record_count integer,
-  p_candidate_feed_hash text,
-  p_candidate_feed_content text,
-  p_feed_storage_bucket text,
-  p_feed_storage_path text,
-  p_feed_public_url text,
-  p_previous_feed_existed boolean,
-  p_previous_feed_content text,
-  p_media_manifest jsonb
+  p_confirmed_at timestamptz
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -207,44 +249,22 @@ DECLARE
   v_project_id uuid;
   v_existing public.publication_attempts%ROWTYPE;
   v_attempt public.publication_attempts%ROWTYPE;
-  v_candidate jsonb;
 BEGIN
   IF v_public_id = '' OR pg_catalog.length(v_public_id) > 100 OR v_public_id !~ '^[A-Za-z0-9_-]+$'
     OR p_admin_id IS NULL OR p_confirmed_preview_id IS NULL OR p_confirmed_at IS NULL
-    OR p_candidate_record_count IS NULL OR p_candidate_record_count <= 0
-    OR p_candidate_feed_hash IS NULL OR p_candidate_feed_hash !~ '^[0-9a-f]{64}$'
-    OR p_candidate_feed_content IS NULL OR pg_catalog.octet_length(p_candidate_feed_content) > 10485760
     OR pg_catalog.btrim(COALESCE(p_private_bucket, '')) = ''
-    OR pg_catalog.btrim(COALESCE(p_feed_storage_bucket, '')) = ''
-    OR pg_catalog.btrim(COALESCE(p_feed_storage_path, '')) = ''
-    OR pg_catalog.btrim(COALESCE(p_feed_public_url, '')) = ''
-    OR p_previous_feed_existed IS NULL
-    OR (p_previous_feed_existed AND p_previous_feed_content IS NULL)
-    OR (NOT p_previous_feed_existed AND p_previous_feed_content IS NOT NULL)
-    OR p_media_manifest IS NULL OR pg_catalog.jsonb_typeof(p_media_manifest) <> 'array'
   THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_INPUT'); END IF;
-
-  BEGIN
-    v_candidate := p_candidate_feed_content::jsonb;
-  EXCEPTION WHEN others THEN
-    RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_ARTIFACT');
-  END;
-  IF pg_catalog.jsonb_typeof(v_candidate) <> 'array'
-    OR pg_catalog.jsonb_array_length(v_candidate) <> p_candidate_record_count
-    OR pg_catalog.encode(extensions.digest(pg_catalog.convert_to(p_candidate_feed_content, 'UTF8'), 'sha256'), 'hex') <> p_candidate_feed_hash
-  THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_ARTIFACT'); END IF;
 
   SELECT pg_catalog.array_agg(ur.role) INTO v_roles FROM public.user_roles ur WHERE ur.user_id = p_admin_id;
   IF v_roles IS NULL OR NOT ('admin' = ANY(v_roles)) THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'PERMISSION_DENIED');
   END IF;
 
-  -- Every controlled publication acquires locks in this order:
-  -- global publication advisory lock -> participant-preview advisory/rows -> project row.
+  -- Global publication exclusivity is established here, before any baseline read.
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('controlled_publication_global'));
 
   SELECT * INTO v_existing FROM public.publication_attempts
-   WHERE state IN ('prepared', 'storage_written', 'compensation_failed')
+   WHERE state IN ('reserved', 'prepared', 'storage_written', 'compensation_failed')
    ORDER BY created_at LIMIT 1 FOR UPDATE;
   IF v_existing.id IS NOT NULL THEN
     RETURN pg_catalog.jsonb_build_object(
@@ -273,21 +293,14 @@ BEGIN
   IF v_project_id IS NULL THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'NOT_READY', 'readinessCode', 'INVALID_PROJECT_STATE'); END IF;
 
   INSERT INTO public.publication_attempts(
-    project_id, public_id, admin_id, confirmed_preview_id, confirmed_at,
-    candidate_record_count, candidate_feed_hash, candidate_feed_content,
-    feed_storage_bucket, feed_storage_path, feed_public_url,
-    previous_feed_existed, previous_feed_content, media_manifest,
-    state, lease_expires_at
+    project_id, public_id, admin_id, confirmed_preview_id, confirmed_at, state, lease_expires_at
   ) VALUES (
     v_project_id, v_public_id, p_admin_id, p_confirmed_preview_id, p_confirmed_at,
-    p_candidate_record_count, p_candidate_feed_hash, p_candidate_feed_content,
-    p_feed_storage_bucket, p_feed_storage_path, p_feed_public_url,
-    p_previous_feed_existed, p_previous_feed_content, p_media_manifest,
-    'prepared', pg_catalog.now() + interval '5 minutes'
+    'reserved', pg_catalog.now() + interval '5 minutes'
   ) RETURNING * INTO v_attempt;
 
   RETURN pg_catalog.jsonb_build_object(
-    'resultCode', 'ATTEMPT_STARTED',
+    'resultCode', 'ATTEMPT_RESERVED',
     'attemptId', v_attempt.id::text,
     'executionToken', v_attempt.execution_token::text,
     'state', v_attempt.state
@@ -295,6 +308,122 @@ BEGIN
 END;
 $$;
 
+-- Phase B. Bind the exact artifact, previous-feed evidence and durable public-media
+-- ownership baseline to an existing reservation. Everything bound here was necessarily
+-- observed while this attempt already held global exclusivity.
+CREATE OR REPLACE FUNCTION public.prepare_publication_attempt(
+  p_attempt_id uuid,
+  p_execution_token uuid,
+  p_private_bucket text,
+  p_candidate_record_count integer,
+  p_candidate_feed_hash text,
+  p_candidate_feed_content text,
+  p_feed_storage_bucket text,
+  p_feed_storage_path text,
+  p_feed_public_url text,
+  p_previous_feed_existed boolean,
+  p_previous_feed_content text,
+  p_media_manifest jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_attempt public.publication_attempts%ROWTYPE;
+  v_readiness jsonb;
+  v_candidate jsonb;
+  v_invalid_media integer;
+  v_project_status text;
+BEGIN
+  IF p_attempt_id IS NULL OR p_execution_token IS NULL
+    OR p_candidate_record_count IS NULL OR p_candidate_record_count <= 0
+    OR p_candidate_feed_hash IS NULL OR p_candidate_feed_hash !~ '^[0-9a-f]{64}$'
+    OR p_candidate_feed_content IS NULL OR pg_catalog.octet_length(p_candidate_feed_content) > 10485760
+    OR pg_catalog.btrim(COALESCE(p_private_bucket, '')) = ''
+    OR pg_catalog.btrim(COALESCE(p_feed_storage_bucket, '')) = ''
+    OR pg_catalog.btrim(COALESCE(p_feed_storage_path, '')) = ''
+    OR pg_catalog.btrim(COALESCE(p_feed_public_url, '')) = ''
+    OR p_previous_feed_existed IS NULL
+    OR (p_previous_feed_existed AND p_previous_feed_content IS NULL)
+    OR (NOT p_previous_feed_existed AND p_previous_feed_content IS NOT NULL)
+    OR p_media_manifest IS NULL OR pg_catalog.jsonb_typeof(p_media_manifest) <> 'array'
+  THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_INPUT'); END IF;
+
+  -- Durable public-media ownership evidence is mandatory for every promoted asset.
+  SELECT pg_catalog.count(*) INTO v_invalid_media
+    FROM pg_catalog.jsonb_array_elements(p_media_manifest) elem
+   WHERE pg_catalog.jsonb_typeof(elem) <> 'object'
+      OR pg_catalog.jsonb_typeof(elem->'mediaAssetId') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'assetType') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'fileName') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'mimeType') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'sourceBucket') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'sourcePath') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'publicBucket') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'publicPath') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'publicUrl') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'fileSizeBytes') <> 'number'
+      OR pg_catalog.jsonb_typeof(elem->'preExisting') <> 'boolean'
+      OR COALESCE(elem->>'sourceSha256', '') !~ '^[0-9a-f]{64}$';
+  IF v_invalid_media > 0 THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_INPUT'); END IF;
+
+  BEGIN
+    v_candidate := p_candidate_feed_content::jsonb;
+  EXCEPTION WHEN others THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_ARTIFACT');
+  END;
+  IF pg_catalog.jsonb_typeof(v_candidate) <> 'array'
+    OR pg_catalog.jsonb_array_length(v_candidate) <> p_candidate_record_count
+    OR pg_catalog.encode(extensions.digest(pg_catalog.convert_to(p_candidate_feed_content, 'UTF8'), 'sha256'), 'hex') <> p_candidate_feed_hash
+  THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_ARTIFACT'); END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('controlled_publication_global'));
+  SELECT * INTO v_attempt FROM public.publication_attempts WHERE id = p_attempt_id FOR UPDATE;
+  IF v_attempt.id IS NULL THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'ATTEMPT_NOT_FOUND'); END IF;
+  IF v_attempt.execution_token IS DISTINCT FROM p_execution_token THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'ATTEMPT_TOKEN_MISMATCH'); END IF;
+  IF v_attempt.state <> 'reserved' OR v_attempt.artifact_bound_at IS NOT NULL THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_ATTEMPT_STATE', 'state', v_attempt.state);
+  END IF;
+
+  v_readiness := public.get_project_publication_readiness(v_attempt.public_id, v_attempt.admin_id, p_private_bucket);
+  IF v_readiness->>'resultCode' <> 'READY' OR COALESCE((v_readiness->>'ready')::boolean, false) = false THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'NOT_READY', 'readinessCode', COALESCE(v_readiness->>'resultCode', 'READINESS_UNAVAILABLE'));
+  END IF;
+  IF v_readiness->>'confirmedPreviewId' <> v_attempt.confirmed_preview_id::text
+    OR (v_readiness->>'confirmedAt')::timestamptz IS DISTINCT FROM v_attempt.confirmed_at
+  THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'STALE_EVIDENCE'); END IF;
+
+  SELECT p.status INTO v_project_status FROM public.projects p
+   WHERE p.id = v_attempt.project_id AND p.deleted_at IS NULL;
+  IF v_project_status IS DISTINCT FROM 'approved' THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'NOT_READY', 'readinessCode', 'INVALID_PROJECT_STATE');
+  END IF;
+
+  UPDATE public.publication_attempts
+     SET candidate_record_count = p_candidate_record_count,
+         candidate_feed_hash = p_candidate_feed_hash,
+         candidate_feed_content = p_candidate_feed_content,
+         feed_storage_bucket = p_feed_storage_bucket,
+         feed_storage_path = p_feed_storage_path,
+         feed_public_url = p_feed_public_url,
+         previous_feed_existed = p_previous_feed_existed,
+         previous_feed_content = p_previous_feed_content,
+         media_manifest = p_media_manifest,
+         artifact_bound_at = pg_catalog.now(),
+         state = 'prepared',
+         updated_at = pg_catalog.now(),
+         lease_expires_at = pg_catalog.now() + interval '5 minutes'
+   WHERE id = v_attempt.id;
+
+  RETURN pg_catalog.jsonb_build_object('resultCode', 'ARTIFACT_BOUND', 'attemptId', v_attempt.id::text, 'state', 'prepared');
+END;
+$$;
+
+-- Recovery is owner-only. Attribution for the publish audit record, the published
+-- snapshot and the attempt itself is the original reserving admin, so allowing a
+-- different admin to resume would durably misattribute the publication.
 CREATE OR REPLACE FUNCTION public.claim_publication_attempt(p_public_id text, p_admin_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -310,10 +439,14 @@ BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('controlled_publication_global'));
   SELECT * INTO v_attempt FROM public.publication_attempts
    WHERE public_id = pg_catalog.btrim(COALESCE(p_public_id, ''))
-     AND state IN ('prepared', 'storage_written', 'compensation_failed')
+     AND state IN ('reserved', 'prepared', 'storage_written', 'compensation_failed')
    ORDER BY created_at DESC LIMIT 1 FOR UPDATE;
   IF v_attempt.id IS NULL THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'ATTEMPT_NOT_FOUND'); END IF;
   IF v_attempt.state = 'compensation_failed' THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'COMPENSATION_INCOMPLETE', 'attemptId', v_attempt.id::text); END IF;
+  IF v_attempt.admin_id IS DISTINCT FROM p_admin_id THEN
+    -- No mutation, no token rotation, no lease change, and no sensitive attempt detail.
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'ATTEMPT_OWNER_MISMATCH');
+  END IF;
   IF v_attempt.lease_expires_at > pg_catalog.now() THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'PUBLICATION_IN_PROGRESS', 'attemptId', v_attempt.id::text); END IF;
   UPDATE public.publication_attempts SET execution_token = gen_random_uuid(), lease_expires_at = pg_catalog.now() + interval '5 minutes', updated_at = pg_catalog.now()
    WHERE id = v_attempt.id RETURNING * INTO v_attempt;
@@ -460,12 +593,14 @@ $$;
 
 REVOKE ALL ON FUNCTION public.normalize_public_media_mapping() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.guard_active_publication_attempt() FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON FUNCTION public.begin_publication_attempt(text,uuid,text,uuid,timestamptz,integer,text,text,text,text,text,boolean,text,jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.reserve_publication_attempt(text,uuid,text,uuid,timestamptz) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.prepare_publication_attempt(uuid,uuid,text,integer,text,text,text,text,text,boolean,text,jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.claim_publication_attempt(text,uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.mark_publication_attempt_storage_written(uuid,uuid,text,integer) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.finalize_publication_attempt(uuid,uuid,text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.fail_publication_attempt(uuid,uuid,text,text) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.begin_publication_attempt(text,uuid,text,uuid,timestamptz,integer,text,text,text,text,text,boolean,text,jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.reserve_publication_attempt(text,uuid,text,uuid,timestamptz) TO service_role;
+GRANT EXECUTE ON FUNCTION public.prepare_publication_attempt(uuid,uuid,text,integer,text,text,text,text,text,boolean,text,jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.claim_publication_attempt(text,uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.mark_publication_attempt_storage_written(uuid,uuid,text,integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.finalize_publication_attempt(uuid,uuid,text) TO service_role;

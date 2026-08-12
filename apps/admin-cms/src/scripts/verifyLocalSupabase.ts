@@ -447,7 +447,8 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
     }
 
     const publicationRpcs = [
-      'begin_publication_attempt',
+      'reserve_publication_attempt',
+      'prepare_publication_attempt',
       'claim_publication_attempt',
       'mark_publication_attempt_storage_written',
       'finalize_publication_attempt',

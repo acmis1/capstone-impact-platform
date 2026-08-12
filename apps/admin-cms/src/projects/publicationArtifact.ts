@@ -34,6 +34,17 @@ export interface PublicationMediaPromotion {
   publicUrl: string;
 }
 
+/**
+ * A promotion plus the durable public-media ownership evidence captured while the attempt
+ * already held global exclusivity. `preExisting` records whether the deterministic public
+ * destination existed before this attempt wrote anything, so compensation ownership survives
+ * process death and reclaim by a later process.
+ */
+export interface PublicationMediaBinding extends PublicationMediaPromotion {
+  preExisting: boolean;
+  sourceSha256: string;
+}
+
 export interface PublicationArtifactPlan {
   feed: ReturnType<typeof compilePublicationCandidateFeed>;
   content: string;
