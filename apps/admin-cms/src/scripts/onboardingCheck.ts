@@ -32,6 +32,7 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260811130000_participant_preview_correction_resolution.sql',
   '20260811150000_publication_readiness_gate.sql',
   '20260811160000_approval_edit_gate.sql',
+  '20260812120000_controlled_publication_execution.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {
@@ -64,8 +65,8 @@ export function isVersionInNpm11Range(versionStr: string): boolean {
 
 export function validateMigrationsList(filenames: string[]): { passed: boolean; message: string } {
   const sqlFiles = filenames.filter((f) => f.endsWith('.sql'));
-  if (sqlFiles.length !== 18) {
-    return { passed: false, message: `FAIL: Expected exactly 18 migration files, found ${sqlFiles.length}` };
+  if (sqlFiles.length !== 19) {
+    return { passed: false, message: `FAIL: Expected exactly 19 migration files, found ${sqlFiles.length}` };
   }
 
   const timestampRegex = /^(\d{14})_.+\.sql$/;
@@ -91,7 +92,7 @@ export function validateMigrationsList(filenames: string[]): { passed: boolean; 
     }
   }
 
-  return { passed: true, message: 'PASS: Exactly 18 timestamped migrations exist with exact expected filenames in ascending order' };
+  return { passed: true, message: 'PASS: Exactly 19 timestamped migrations exist with exact expected filenames in ascending order' };
 }
 
 export function sanitizePublicSafeMessage(msg: string): string {
@@ -272,13 +273,13 @@ export function performOnboardingCheck(options?: {
     const rawFiles = readdirSync(migrationsDir);
     const migrationsResult = validateMigrationsList(rawFiles);
     items.push({
-      name: 'Timestamped Database Migrations (18 ascending)',
+      name: 'Timestamped Database Migrations (19 ascending)',
       passed: migrationsResult.passed,
       message: migrationsResult.message,
     });
   } else {
     items.push({
-      name: 'Timestamped Database Migrations (18 ascending)',
+      name: 'Timestamped Database Migrations (19 ascending)',
       passed: false,
       message: 'FAIL: Migrations directory missing',
     });

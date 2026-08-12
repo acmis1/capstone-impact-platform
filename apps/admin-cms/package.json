@@ -36,6 +36,7 @@
     "verify:participant-preview-runtime": "tsx src/scripts/verifyParticipantPreviewRuntime.ts",
     "verify:publication-readiness-runtime": "tsx src/scripts/verifyPublicationReadinessRuntime.ts",
     "verify:publication-preparation-runtime": "tsx src/scripts/verifyPublicationPreparationRuntime.ts",
+    "verify:controlled-publication-runtime": "tsx src/scripts/verifyControlledPublicationRuntime.ts",
     "verify:approval-edit-gate-runtime": "tsx src/scripts/verifyApprovalEditGateRuntime.ts",
     "seed:buckets:local": "tsx src/scripts/seedLocalSupabaseFixtures.ts",
     "setup:local": "tsx src/scripts/setupLocal.ts",

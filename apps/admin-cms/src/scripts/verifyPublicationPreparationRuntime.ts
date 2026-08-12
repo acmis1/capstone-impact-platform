@@ -32,7 +32,7 @@ export async function runPublicationPreparationRuntimeVerification(): Promise<bo
   assert(adminId, 'Admin fixture unavailable.');
   async function create(tag: string, status: 'approved' | 'published' = 'approved') {
     const publicId = `${prefix}-${tag}`;
-    const result = await db.from('projects').insert({ public_id: publicId, title: tag, summary: 'Summary', background: 'Background', solution: 'Solution', year: 2026, program_name: 'Software Engineering', study_program: 'Bachelor of Software Engineering', discipline: 'Software Engineering', industry: 'Technology', industry_partner: 'Partner', academic_supervisor: 'Supervisor', group_name: 'Group', team_members: ['Synthetic'], poster_text_public: 'Poster', accessibility_text_public: 'Accessible', status }).select('id, public_id').single();
+    const result = await db.from('projects').insert({ public_id: publicId, title: tag, summary: 'Summary', background: 'Background', solution: 'Solution', year: 2026, program_name: 'Software Engineering', study_program: 'Bachelor of Software Engineering', discipline: 'Software Engineering', industry: 'Technology', industry_partner: 'Partner', academic_supervisor: 'Supervisor', group_name: 'Group', team_members: ['Synthetic'], poster_url: `${env.API_URL}/storage/v1/object/public/project-public-assets/${publicId}/poster.png`, poster_pdf_url: `${env.API_URL}/storage/v1/object/public/project-public-assets/${publicId}/poster.pdf`, poster_text_public: 'Poster', accessibility_text_public: 'Accessible', status }).select('id, public_id').single();
     if (result.error || !result.data) throw new Error(`Fixture ${tag} failed: ${result.error?.message}`);
     owned.push(result.data.id); return result.data;
   }

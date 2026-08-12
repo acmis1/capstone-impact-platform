@@ -80,6 +80,9 @@ export class SupabaseParticipantPreviewRepositoryCore {
     });
 
     if (error) {
+      if ((error.message || '').includes('PUBLICATION_IN_PROGRESS')) {
+        throw new ParticipantPreviewExecutionError('PUBLICATION_IN_PROGRESS');
+      }
       throw new ParticipantPreviewExecutionError('INTERNAL_FAILURE');
     }
 
@@ -144,6 +147,9 @@ export class SupabaseParticipantPreviewRepositoryCore {
     });
 
     if (error) {
+      if ((error.message || '').includes('PUBLICATION_IN_PROGRESS')) {
+        throw new ParticipantPreviewExecutionError('PUBLICATION_IN_PROGRESS');
+      }
       throw new ParticipantPreviewExecutionError('INTERNAL_FAILURE');
     }
 
@@ -454,6 +460,9 @@ export class SupabaseParticipantPreviewRepositoryCore {
     });
 
     if (error) {
+      if ((error.message || '').includes('PUBLICATION_IN_PROGRESS')) {
+        throw new ParticipantPreviewExecutionError('PUBLICATION_IN_PROGRESS');
+      }
       throw new ParticipantPreviewExecutionError('INTERNAL_FAILURE');
     }
 

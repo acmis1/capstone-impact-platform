@@ -121,6 +121,11 @@ export async function POST(
             { success: false, error: 'Project preview state is inconsistent. Request changes could not be completed safely.' },
             { status: 409 }
           );
+        case 'PUBLICATION_IN_PROGRESS':
+          return NextResponse.json(
+            { success: false, error: 'Publication is currently in progress for this project.' },
+            { status: 409 }
+          );
         case 'RESPONSE_INVALID':
         case 'INTERNAL_FAILURE':
         default: {
