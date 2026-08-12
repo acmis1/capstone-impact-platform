@@ -31,6 +31,8 @@ import {
   ProjectDetailAuxiliaryReadError,
   projectDetailFailureCategory,
 } from '../../../../projects/projectDetailAuxiliaryData';
+import { loadProjectMediaPreviewItems } from '../../../../projects/projectMediaPreview';
+import type { ProjectMediaPreviewItem } from '../../../../components/admin-media/mediaPreviewTypes';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -64,6 +66,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let canPreparePublicationPlan = false;
   let localPublicationExecutionAvailable = false;
   let canExecuteLocalArchive = false;
+  let mediaItems: ProjectMediaPreviewItem[] = [];
+  let mediaAvailable = false;
 
   // Essential dependencies: without the base project or authenticated staff context there is no
   // safe project-detail page to render.
@@ -162,6 +166,18 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       resolutionStatusAvailable = auxiliary.resolutionStatusAvailable;
       publicationReadiness = auxiliary.publicationReadiness;
       publicationActionsAvailable = auxiliary.publicationActionsAvailable;
+      try {
+        mediaItems = await loadProjectMediaPreviewItems({
+          supabase,
+          projectId: await projectDbId,
+          projectTitle: project.title,
+          accessibilityText: project.accessibilityText,
+          privateBucket: env.SUPABASE_DRAFT_BUCKET,
+        });
+        mediaAvailable = true;
+      } catch (error: unknown) {
+        console.error('[Project detail: media preview load failure]', projectDetailFailureCategory(error));
+      }
     } catch (error: unknown) {
       // Configuration/client creation is shared setup for all secondary reads. Keep every
       // mutation capability disabled and retain the already loaded project metadata.
@@ -543,7 +559,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
         {/* D. Media Review */}
         <ProjectDetailSection title="Staging Media Review" borderColor="#10B981">
-          <ProjectMediaSummary project={project} />
+          <ProjectMediaSummary project={project} mediaItems={mediaItems} mediaAvailable={mediaAvailable} />
         </ProjectDetailSection>
 
         {/* E. Layout Review */}
