@@ -3,6 +3,7 @@ import { requireAdmin } from '../../../../auth/requireAdmin';
 import { hasPermission } from '../../../../auth/permissions';
 import { AdminAuthError, AuthenticatedAdminContext } from '../../../../auth/authTypes';
 import { getAuthErrorHttpStatus } from '../../../../auth/authHttp';
+import { validateSameOrigin } from '../../../../auth/csrf';
 import {
   BROWSER_IMPORT_LIMITS,
   runBrowserImportManifestPreflight,
@@ -62,7 +63,12 @@ function parseContentLength(header: string | null): { code: 'MISSING_CONTENT_LEN
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  // Step 1: Auth check
+  // Step 1: Same-origin CSRF check
+  if (!validateSameOrigin(request.headers.get('origin'), request.nextUrl.origin)) {
+    return stageError('CROSS_ORIGIN_REJECTED', 403);
+  }
+
+  // Step 2: Auth check
   let authContext: AuthenticatedAdminContext;
   try {
     authContext = await requireAdmin();
@@ -81,19 +87,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   if (!hasPermission(authContext.permissions, 'projects.edit')) {
     return stageError('PERMISSION_DENIED', 403);
-  }
-
-  // Step 2: Same-origin CSRF check
-  const originHeader = request.headers.get('origin');
-  if (originHeader) {
-    try {
-      const originUrl = new URL(originHeader);
-      if (originUrl.origin !== request.nextUrl.origin) {
-        return stageError('CROSS_ORIGIN_REJECTED', 403);
-      }
-    } catch {
-      return stageError('CROSS_ORIGIN_REJECTED', 403);
-    }
   }
 
   // Step 3: Strict Content-Length Enforcement
