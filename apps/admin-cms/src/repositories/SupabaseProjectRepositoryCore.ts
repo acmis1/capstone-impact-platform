@@ -492,7 +492,9 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       const rawMsg = error.message || '';
       let code: ReviewActionExecutionErrorCode = 'INTERNAL_FAILURE';
 
-      if (rawMsg.includes('REVIEW_PROJECT_NOT_FOUND')) {
+      if (rawMsg.includes('PUBLICATION_IN_PROGRESS')) {
+        code = 'PUBLICATION_IN_PROGRESS';
+      } else if (rawMsg.includes('REVIEW_PROJECT_NOT_FOUND')) {
         code = 'PROJECT_NOT_FOUND';
       } else if (rawMsg.includes('REVIEW_TRANSITION_INVALID')) {
         code = 'TRANSITION_INVALID';

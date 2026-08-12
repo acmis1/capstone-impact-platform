@@ -6,6 +6,7 @@ import { validateSameOrigin } from '../../../../../auth/csrf';
 import { getServerEnv } from '../../../../../lib/env';
 import { SupabaseProjectRepository } from '../../../../../repositories/SupabaseProjectRepository';
 import { SupabaseParticipantPreviewRepository } from '../../../../../repositories/SupabaseParticipantPreviewRepository';
+import { SupabasePublicationExecutionRepository } from '../../../../../repositories/SupabasePublicationExecutionRepository';
 import { preparePublicationPlan } from '../../../../../projects/publicationPlanService';
 import { validatePreviewPublicId } from '../../../../../auth/participantPreviewInput';
 
@@ -24,10 +25,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     const projectRepository = new SupabaseProjectRepository();
     const previewRepository = new SupabaseParticipantPreviewRepository();
-    const privateBucket = getServerEnv().SUPABASE_DRAFT_BUCKET;
+    const publicationRepository = new SupabasePublicationExecutionRepository();
+    const env = getServerEnv();
+    const privateBucket = env.SUPABASE_DRAFT_BUCKET;
     const plan = await preparePublicationPlan(admin.permissions, validation.publicId, {
       getReadiness: () => previewRepository.getPublicationReadiness({ publicId: validation.publicId, adminId: admin.adminUserId, privateBucket }),
       listProjects: () => projectRepository.listProjects(),
+      listProjectMedia: () => publicationRepository.listProjectMedia(validation.publicId),
+      privateBucket,
+      publicBucket: env.SUPABASE_PUBLIC_ASSETS_BUCKET,
+      getPublicUrl: (bucket, path) => publicationRepository.getPublicUrl(bucket, path),
     });
     if (plan.resultCode === 'PERMISSION_DENIED') {
       return NextResponse.json({ success: false, error: getPublicAuthErrorMessage('PERMISSION_DENIED') }, { status: 403, headers: NO_STORE });

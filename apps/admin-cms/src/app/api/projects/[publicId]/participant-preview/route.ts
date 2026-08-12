@@ -184,6 +184,11 @@ function handleParticipantPreviewError(error: unknown, actionLabel: 'Generate' |
           { success: false, error: 'Multiple unresolved correction requests exist. Action cannot be completed unambiguously.', code: 'AMBIGUOUS_CORRECTION_REQUEST' },
           { status: 409, headers: NO_STORE }
         );
+      case 'PUBLICATION_IN_PROGRESS':
+        return NextResponse.json(
+          { success: false, error: 'Publication is currently in progress for this project.', code: 'PUBLICATION_IN_PROGRESS' },
+          { status: 409, headers: NO_STORE }
+        );
       case 'NO_ACTIVE_PREVIEW':
         return NextResponse.json(
           { success: false, error: 'There is no active participant preview to revoke.', code: 'NO_ACTIVE_PREVIEW' },

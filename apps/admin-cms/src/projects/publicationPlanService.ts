@@ -1,10 +1,8 @@
 import { AdminPermission } from '../auth/authTypes';
 import { canPreparePublication } from '../auth/permissions';
-import { compilePublicationCandidateFeed } from '../feed/compilePublicFeed';
-import { serializePublicFeedArtifact } from '../feed/serializePublicFeedArtifact';
-import { validatePublicFeed } from '../feed/validatePublicFeed';
 import { PublicationReadinessResult } from '../domain/publicationReadiness';
 import { Project } from '../domain/project';
+import { planPublicationArtifact, PublicationMediaSource } from './publicationArtifact';
 
 export type PublicationPlanResult =
   | { resultCode: 'READY_TO_STAGE'; publicId: string; confirmedPreviewId: string; confirmedAt: string; recordCount: number; feedHash: string }
@@ -15,6 +13,10 @@ export type PublicationPlanResult =
 export interface PublicationPlanDependencies {
   getReadiness(): Promise<PublicationReadinessResult>;
   listProjects(): Promise<Project[]>;
+  listProjectMedia?(): Promise<PublicationMediaSource[]>;
+  privateBucket?: string;
+  publicBucket?: string;
+  getPublicUrl?(bucket: string, path: string): string;
 }
 
 /** Performs fresh, server-derived evaluation only; this service has no write dependency. */
@@ -29,9 +31,14 @@ export async function preparePublicationPlan(
     if (!readiness.ready || readiness.resultCode !== 'READY' || !readiness.confirmedPreviewId || !readiness.confirmedAt) {
       return { resultCode: 'NOT_READY', readinessCode: readiness.resultCode, blockers: readiness.blockers };
     }
-    const feed = compilePublicationCandidateFeed(await dependencies.listProjects(), publicId);
-    if (!validatePublicFeed(feed).valid) return { resultCode: 'PLAN_UNAVAILABLE' };
-    const artifact = serializePublicFeedArtifact(feed);
+    const artifact = planPublicationArtifact({
+      projects: await dependencies.listProjects(),
+      targetPublicId: publicId,
+      mediaAssets: dependencies.listProjectMedia ? await dependencies.listProjectMedia() : [],
+      privateBucket: dependencies.privateBucket || 'project-drafts-private',
+      publicBucket: dependencies.publicBucket || 'project-public-assets',
+      getPublicUrl: dependencies.getPublicUrl || (() => { throw new Error('Public media URL resolver unavailable.'); }),
+    });
     return { resultCode: 'READY_TO_STAGE', publicId, confirmedPreviewId: readiness.confirmedPreviewId, confirmedAt: readiness.confirmedAt, recordCount: artifact.recordCount, feedHash: artifact.feedHash };
   } catch {
     return { resultCode: 'PLAN_UNAVAILABLE' };

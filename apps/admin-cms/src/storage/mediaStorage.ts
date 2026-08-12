@@ -215,9 +215,9 @@ export async function promoteDraftMediaAssetToPublic(assetId: string): Promise<M
   const { data: updatedAsset, error: updateError } = await supabase
     .from('media_assets')
     .update({
-      storage_bucket: publicBucket,
-      storage_path: publicPath,
       public_url: urlData.publicUrl,
+      public_storage_bucket: publicBucket,
+      public_storage_path: publicPath,
       is_public_approved: true
     })
     .eq('id', assetId)

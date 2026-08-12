@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   preparePublicationPlan: vi.fn(),
   getPublicationReadiness: vi.fn(),
   listProjects: vi.fn(),
+  listProjectMedia: vi.fn(),
+  getPublicUrl: vi.fn(),
 }));
 
 vi.mock('../../../../../auth/requireAdmin', () => ({ requireAdmin: mocks.requireAdmin }));
@@ -23,8 +25,17 @@ vi.mock('../../../../../repositories/SupabaseParticipantPreviewRepository', () =
     getPublicationReadiness = mocks.getPublicationReadiness;
   },
 }));
+vi.mock('../../../../../repositories/SupabasePublicationExecutionRepository', () => ({
+  SupabasePublicationExecutionRepository: class {
+    listProjectMedia = mocks.listProjectMedia;
+    getPublicUrl = mocks.getPublicUrl;
+  },
+}));
 vi.mock('../../../../../lib/env', () => ({
-  getServerEnv: () => ({ SUPABASE_DRAFT_BUCKET: 'server-draft-bucket' }),
+  getServerEnv: () => ({
+    SUPABASE_DRAFT_BUCKET: 'server-draft-bucket',
+    SUPABASE_PUBLIC_ASSETS_BUCKET: 'server-public-assets',
+  }),
 }));
 
 import { NextRequest } from 'next/server';
@@ -72,6 +83,8 @@ describe('POST /api/projects/[publicId]/publication-plan', () => {
     vi.clearAllMocks();
     mocks.requireAdmin.mockResolvedValue(SERVER_ADMIN);
     mocks.preparePublicationPlan.mockResolvedValue(READY_PLAN);
+    mocks.listProjectMedia.mockResolvedValue([]);
+    mocks.getPublicUrl.mockImplementation((bucket: string, path: string) => `http://app.test/${bucket}/${path}`);
   });
 
   it('authenticates a same-origin canonical underscore ID and returns the complete bounded READY plan', async () => {
@@ -89,6 +102,10 @@ describe('POST /api/projects/[publicId]/publication-plan', () => {
       {
         getReadiness: expect.any(Function),
         listProjects: expect.any(Function),
+        listProjectMedia: expect.any(Function),
+        privateBucket: 'server-draft-bucket',
+        publicBucket: 'server-public-assets',
+        getPublicUrl: expect.any(Function),
       },
     );
   });

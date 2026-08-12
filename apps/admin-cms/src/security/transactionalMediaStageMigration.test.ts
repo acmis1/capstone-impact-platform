@@ -25,7 +25,7 @@ describe('Migration 0011 Atomic Browser Import Media Stage Security Contract Tes
     const rawFiles = fs.readdirSync(migrationsDir);
     const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
 
-    expect(sqlFiles.length).toBe(18);
+    expect(sqlFiles.length).toBe(19);
 
     for (let i = 0; i < expectedPriorMigrations.length; i++) {
       expect(sqlFiles[i]).toBe(expectedPriorMigrations[i]);
