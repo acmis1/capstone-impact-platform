@@ -15,7 +15,9 @@ interface ParticipantPreviewPanelProps {
   isApprovedEligible: boolean;
   initialActivePreview: ActivePreviewState | null;
   responseState: ParticipantPreviewResponseState;
+  stateAvailable: boolean;
   resolutionStatus?: ParticipantPreviewCorrectionResolutionStatus | null;
+  resolutionStateAvailable: boolean;
   canResolveCorrection?: boolean;
   projectStatus?: string;
 }
@@ -49,7 +51,9 @@ export function ParticipantPreviewPanel({
   isApprovedEligible,
   initialActivePreview,
   responseState,
+  stateAvailable,
   resolutionStatus,
+  resolutionStateAvailable,
   canResolveCorrection = false,
   projectStatus = 'draft',
 }: ParticipantPreviewPanelProps) {
@@ -61,6 +65,28 @@ export function ParticipantPreviewPanel({
   const [justGeneratedUrl, setJustGeneratedUrl] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const inFlightRef = useRef(false);
+
+  if (!stateAvailable) {
+    return (
+      <div role="status" style={{ fontSize: '0.85rem', color: '#D1D5DB' }}>
+        <strong style={{ color: '#F59E0B' }}>Participant Preview status unavailable.</strong>
+        <div style={{ marginTop: '0.35rem', color: '#9CA3AF' }}>
+          Preview actions are temporarily disabled because the current preview state could not be verified.
+        </div>
+      </div>
+    );
+  }
+
+  if (!resolutionStateAvailable) {
+    return (
+      <div role="status" style={{ fontSize: '0.85rem', color: '#D1D5DB' }}>
+        <strong style={{ color: '#F59E0B' }}>Correction-resolution status unavailable.</strong>
+        <div style={{ marginTop: '0.35rem', color: '#9CA3AF' }}>
+          Preview and correction-resolution actions are temporarily disabled until authoritative state can be verified.
+        </div>
+      </div>
+    );
+  }
 
   const handleGenerate = async (isCorrectionReissue = false) => {
     if (inFlightRef.current || pending) return;

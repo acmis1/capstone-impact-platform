@@ -148,6 +148,9 @@ jobs:
       - name: Verify staff role and session governance runtime behavior
         run: npm exec --workspace=apps/admin-cms -- tsx src/scripts/verifyStaffRoleSessionGovernanceRuntime.ts
 
+      - name: Verify authenticated project detail runtime behavior
+        run: npm exec --workspace=apps/admin-cms -- tsx src/scripts/verifyProjectDetailRuntime.ts
+
       - name: Verify atomic project metadata runtime behavior
         run: npm run verify:metadata-runtime --workspace=apps/admin-cms
 

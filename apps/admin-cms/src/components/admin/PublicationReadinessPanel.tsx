@@ -15,7 +15,10 @@ export function PublicationReadinessPanel({ readiness }: PublicationReadinessPan
         border: '1px solid rgba(255, 255, 255, 0.05)',
       }}>
         <div style={{ color: '#9CA3AF', fontSize: '0.85rem' }}>
-          Publication readiness is currently unavailable.
+          <strong style={{ color: '#F59E0B' }}>Publication readiness unavailable.</strong>
+          <div style={{ marginTop: '0.35rem' }}>
+            Publication preparation and Local publication are disabled until readiness can be verified.
+          </div>
         </div>
       </div>
     );
