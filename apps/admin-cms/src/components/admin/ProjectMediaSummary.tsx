@@ -1,5 +1,7 @@
 import React from 'react';
 import { Project } from '../../domain/project';
+import { MediaPreview } from '@/components/admin-media/MediaPreview';
+import { adaptProjectMedia } from '@/components/admin-media/projectMediaAdapter';
 
 interface ProjectMediaSummaryProps {
   project: Project;
@@ -9,9 +11,17 @@ export function ProjectMediaSummary({ project }: ProjectMediaSummaryProps) {
   const isPosterAvailable = project.poster && project.poster.startsWith('http');
   const isPosterPdfAvailable = project.posterPdf && project.posterPdf.startsWith('http');
   const snapshotsCount = project.snapshots ? project.snapshots.filter(s => s.startsWith('http')).length : 0;
-
+  const mediaItems = adaptProjectMedia(project);
   return (
     <div style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
+      <div>
+      {mediaItems.map((media, index) => (
+        <MediaPreview
+          key={`${media.url ?? 'missing'}-${index}`}
+          media={media}
+        />
+      ))}
+    </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
         <tbody>
           <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
