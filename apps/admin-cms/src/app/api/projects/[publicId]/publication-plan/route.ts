@@ -7,6 +7,7 @@ import { getServerEnv } from '../../../../../lib/env';
 import { SupabaseProjectRepository } from '../../../../../repositories/SupabaseProjectRepository';
 import { SupabaseParticipantPreviewRepository } from '../../../../../repositories/SupabaseParticipantPreviewRepository';
 import { preparePublicationPlan } from '../../../../../projects/publicationPlanService';
+import { validatePreviewPublicId } from '../../../../../auth/participantPreviewInput';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
@@ -17,14 +18,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     const admin = await requireAdmin();
     const { publicId } = await params;
-    if (!/^[a-z0-9][a-z0-9-]{0,127}$/i.test(publicId)) {
+    const validation = validatePreviewPublicId(publicId);
+    if (!validation.valid) {
       return NextResponse.json({ success: false, error: 'Validation failed.' }, { status: 400, headers: NO_STORE });
     }
     const projectRepository = new SupabaseProjectRepository();
     const previewRepository = new SupabaseParticipantPreviewRepository();
     const privateBucket = getServerEnv().SUPABASE_DRAFT_BUCKET;
-    const plan = await preparePublicationPlan(admin.permissions, publicId, {
-      getReadiness: () => previewRepository.getPublicationReadiness({ publicId, adminId: admin.adminUserId, privateBucket }),
+    const plan = await preparePublicationPlan(admin.permissions, validation.publicId, {
+      getReadiness: () => previewRepository.getPublicationReadiness({ publicId: validation.publicId, adminId: admin.adminUserId, privateBucket }),
       listProjects: () => projectRepository.listProjects(),
     });
     if (plan.resultCode === 'PERMISSION_DENIED') {

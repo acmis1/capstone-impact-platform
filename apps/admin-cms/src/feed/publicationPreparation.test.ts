@@ -15,9 +15,20 @@ describe('publication preparation', () => {
     const before = JSON.stringify(input); const feed = compilePublicationCandidateFeed(input, 'target');
     expect(feed.map((record) => record.publicId)).toEqual(['baseline', 'target']); expect(feed[1]).not.toHaveProperty('internalStaffNotes'); expect(JSON.stringify(input)).toBe(before);
   });
+  it('excludes every non-public state and rejects duplicate/wrong-state targets', () => {
+    const target = createMockProject({ publicId: 'target', status: 'approved' });
+    const states = ['draft', 'submitted', 'in_review', 'changes_requested', 'archived', 'deleted'] as const;
+    const records = [createMockProject({ publicId: 'baseline', status: 'published' }), target, ...states.map((status, index) => createMockProject({ id: index + 10, publicId: status, status }))];
+    expect(compilePublicationCandidateFeed(records, 'target').map((record) => record.publicId)).toEqual(['baseline', 'target']);
+    expect(() => compilePublicationCandidateFeed([...records, createMockProject({ publicId: 'target', status: 'approved' })], 'target')).toThrow();
+    expect(() => compilePublicationCandidateFeed(records, 'baseline')).toThrow();
+  });
   it('fails closed and serializes deterministic canonical bytes', () => {
     expect(() => compilePublicationCandidateFeed([], 'missing')).toThrow();
     const feed = compilePublicationCandidateFeed([createMockProject({ publicId: 'target', status: 'approved' })], 'target');
-    expect(serializePublicFeedArtifact(feed)).toEqual(serializePublicFeedArtifact(feed));
+    const artifact = serializePublicFeedArtifact(feed);
+    expect(artifact).toEqual(serializePublicFeedArtifact(feed));
+    expect(artifact.content).toBe(JSON.stringify(feed, null, 2));
+    expect(artifact.recordCount).toBe(1);
   });
 });
