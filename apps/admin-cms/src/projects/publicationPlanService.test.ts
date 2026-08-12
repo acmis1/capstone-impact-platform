@@ -10,4 +10,17 @@ describe('preparePublicationPlan', () => {
     await expect(preparePublicationPlan(getPermissionsForRoles(['admin']), 'target', deps)).resolves.toMatchObject({ resultCode: 'NOT_READY' });
     await expect(preparePublicationPlan(getPermissionsForRoles(['reviewer']), 'target', deps)).resolves.toEqual({ resultCode: 'PERMISSION_DENIED' });
   });
+  it('fails closed for incomplete readiness and dependency errors', async () => {
+    const listProjects = async () => [createMockProject({ publicId: 'target', status: 'approved' })];
+    await expect(preparePublicationPlan(getPermissionsForRoles(['admin']), 'target', { getReadiness: async () => ({ ...ready, confirmedPreviewId: undefined }), listProjects })).resolves.toMatchObject({ resultCode: 'NOT_READY' });
+    await expect(preparePublicationPlan(getPermissionsForRoles(['admin']), 'target', { getReadiness: async () => ({ ...ready, confirmedAt: undefined }), listProjects })).resolves.toMatchObject({ resultCode: 'NOT_READY' });
+    await expect(preparePublicationPlan(getPermissionsForRoles(['admin']), 'target', { getReadiness: async () => { throw new Error('db'); }, listProjects })).resolves.toEqual({ resultCode: 'PLAN_UNAVAILABLE' });
+    await expect(preparePublicationPlan(getPermissionsForRoles(['admin']), 'target', { getReadiness: async () => ready, listProjects: async () => { throw new Error('db'); } })).resolves.toEqual({ resultCode: 'PLAN_UNAVAILABLE' });
+  });
+  it('denies reviewer/editor before dependencies execute', async () => {
+    let calls = 0; const dependencies = { getReadiness: async () => { calls++; return ready; }, listProjects: async () => { calls++; return []; } };
+    await expect(preparePublicationPlan(getPermissionsForRoles(['reviewer']), 'target', dependencies)).resolves.toEqual({ resultCode: 'PERMISSION_DENIED' });
+    await expect(preparePublicationPlan(getPermissionsForRoles(['editor']), 'target', dependencies)).resolves.toEqual({ resultCode: 'PERMISSION_DENIED' });
+    expect(calls).toBe(0);
+  });
 });
