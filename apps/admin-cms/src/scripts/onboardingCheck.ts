@@ -22,6 +22,18 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
   '20260803174000_harden_function_execute_defaults.sql',
   '20260803180000_transactional_review_actions.sql',
+  '20260808170000_transactional_project_metadata_update.sql',
+  '20260810090000_atomic_browser_import_metadata_stage.sql',
+  '20260810120000_atomic_browser_import_media_stage.sql',
+  '20260810150000_atomic_import_batch_review_submit.sql',
+  '20260810180000_participant_preview_links.sql',
+  '20260811090000_participant_preview_confirmations.sql',
+  '20260811120000_participant_preview_correction_requests.sql',
+  '20260811130000_participant_preview_correction_resolution.sql',
+  '20260811150000_publication_readiness_gate.sql',
+  '20260811160000_approval_edit_gate.sql',
+  '20260812120000_controlled_publication_execution.sql',
+  '20260812150000_controlled_public_removal.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {
@@ -54,45 +66,34 @@ export function isVersionInNpm11Range(versionStr: string): boolean {
 
 export function validateMigrationsList(filenames: string[]): { passed: boolean; message: string } {
   const sqlFiles = filenames.filter((f) => f.endsWith('.sql'));
-  if (sqlFiles.length !== 8) {
-    return { passed: false, message: `FAIL: Expected exactly 8 migration files, found ${sqlFiles.length}` };
+  if (sqlFiles.length !== 20) {
+    return { passed: false, message: `FAIL: Expected exactly 20 migration files, found ${sqlFiles.length}` };
   }
 
   const timestampRegex = /^(\d{14})_.+\.sql$/;
-  const timestamps: string[] = [];
-
   for (const file of sqlFiles) {
-    const match = file.match(timestampRegex);
-    if (!match) {
-      return { passed: false, message: `FAIL: Migration filename "${file}" does not match 14-digit timestamp format` };
-    }
-    timestamps.push(match[1]);
-  }
-
-  const uniqueTimestamps = new Set(timestamps);
-  if (uniqueTimestamps.size !== timestamps.length) {
-    return { passed: false, message: `FAIL: Duplicate migration timestamps detected` };
-  }
-
-  const sortedFiles = [...sqlFiles].sort((a, b) => a.localeCompare(b));
-  const sortedTimestamps = sortedFiles.map((f) => f.match(timestampRegex)![1]);
-
-  for (let i = 1; i < sortedTimestamps.length; i++) {
-    if (sortedTimestamps[i] <= sortedTimestamps[i - 1]) {
-      return { passed: false, message: `FAIL: Migrations are not in strict ascending timestamp order` };
+    if (!timestampRegex.test(file)) {
+      return { passed: false, message: `FAIL: Invalid migration filename format '${file}'` };
     }
   }
 
+  const timestamps = sqlFiles.map((f) => f.match(timestampRegex)![1]);
+  const timestampSet = new Set(timestamps);
+  if (timestampSet.size !== timestamps.length) {
+    return { passed: false, message: 'FAIL: Duplicate migration timestamps detected' };
+  }
+
+  const sortedSqlFiles = [...sqlFiles].sort((a, b) => a.localeCompare(b));
   for (let i = 0; i < EXPECTED_MIGRATION_FILENAMES.length; i++) {
-    if (sortedFiles[i] !== EXPECTED_MIGRATION_FILENAMES[i]) {
+    if (sortedSqlFiles[i] !== EXPECTED_MIGRATION_FILENAMES[i]) {
       return {
         passed: false,
-        message: `FAIL: Migration file at index ${i} does not match expected identity "${EXPECTED_MIGRATION_FILENAMES[i]}" (found "${sortedFiles[i]}")`,
+        message: `FAIL: Migration file at index ${i} does not match expected identity "${EXPECTED_MIGRATION_FILENAMES[i]}" (found "${sortedSqlFiles[i]}")`,
       };
     }
   }
 
-  return { passed: true, message: 'PASS: Exactly 8 timestamped migrations exist with exact expected filenames in ascending order' };
+  return { passed: true, message: 'PASS: Exactly 20 timestamped migrations exist with exact expected filenames in ascending order' };
 }
 
 export function sanitizePublicSafeMessage(msg: string): string {
@@ -271,15 +272,15 @@ export function performOnboardingCheck(options?: {
   const migrationsDir = path.join(repoRoot, 'infra/supabase/migrations');
   if (existsSync(migrationsDir)) {
     const rawFiles = readdirSync(migrationsDir);
-    const migResult = validateMigrationsList(rawFiles);
+    const migrationsResult = validateMigrationsList(rawFiles);
     items.push({
-      name: 'Timestamped Database Migrations (8 ascending)',
-      passed: migResult.passed,
-      message: migResult.message,
+      name: 'Timestamped Database Migrations (20 ascending)',
+      passed: migrationsResult.passed,
+      message: migrationsResult.message,
     });
   } else {
     items.push({
-      name: 'Timestamped Database Migrations (8 ascending)',
+      name: 'Timestamped Database Migrations (20 ascending)',
       passed: false,
       message: 'FAIL: Migrations directory missing',
     });

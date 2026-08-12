@@ -94,7 +94,7 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
         marginBottom: '1rem',
         lineHeight: '1.4'
       }}>
-        💡 <strong>Staging Action Scope:</strong> This controls staging transitions only. Real authentication is simulated, Duda is disconnected, and the JSON feed is not republished automatically.
+        💡 <strong>Review Action Scope:</strong> These generic review transitions do not rewrite the showcase feed. Published projects require the separate controlled Local archive workflow. Hosted publication and Duda remain disconnected.
       </div>
 
       {success && (

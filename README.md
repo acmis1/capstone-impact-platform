@@ -4,7 +4,7 @@ The Capstone Impact Platform is a school-owned Admin/CMS and automation layer fo
 
 Manual email, spreadsheet, poster and Duda publishing workflows are difficult to validate and repeat at scale. This project introduces structured project records, validation, review controls and a stable publishing boundary while preserving the existing public showcase as the presentation layer.
 
-The current hybrid design is: staff operate the Admin/CMS, authenticated server-side services manage source data in Supabase, and public-eligible (`approved` and `published`) records are compiled into stable JSON for Duda. `Prototype/` is retained as historical feasibility evidence, not as the active application.
+The current hybrid design is: staff operate the Admin/CMS, authenticated server-side services manage source data in Supabase, and `published` records are compiled into stable JSON for Duda. `Prototype/` is retained as historical feasibility evidence, not as the active application.
 
 > [!IMPORTANT]
 > **NEW DEVELOPERS / CONTRIBUTORS**: Start with [`START_HERE.md`](./START_HERE.md) for a zero-instruction setup guide, prerequisite installation, daily commands, and synthetic login steps.
@@ -21,9 +21,10 @@ The target workflow needs structured submissions, validation, review, archival a
 | Admin/CMS foundation | Authenticated internal shell, protected routes and operational project dashboard are implemented. |
 | Project index | Server-side search, filters, whitelisted sorting, exact-count pagination and deterministic ordering are implemented. |
 | Review | Project inspection and atomic, transaction-backed review actions (`approve`, `request_changes`, `archive`) via PostgreSQL RPC `perform_project_review_action` are implemented. |
+| Project metadata editor | The Admin/CMS includes a page-owned editor backed by one atomic, service-role-only PostgreSQL transaction. Hosted deployment and broader staff acceptance remain separate activities. Browser Back/Forward interception is not claimed. |
 | Ingestion | Package parsing, metadata/file validation, import-batch tracking and import-review foundations are implemented. |
 | Media and feed | Private draft storage, validated promotion foundations and public-eligible JSON feed compilation are implemented. |
-| Local Supabase | Pinned CLI 2.109.1, 8 timestamped migrations, 3 local storage buckets, synthetic staff provisioning and automated verifier implemented. *(Migrations 0007 and 0008 are repository/local only and not applied to hosted staging.)* |
+| Local Supabase | Pinned CLI 2.109.1, 9 timestamped migrations, 3 local storage buckets, synthetic staff provisioning and automated verifiers implemented. *(Migrations 0007 through 0009 are repository/local only and not applied to hosted staging.)* |
 | Staging Guardrails | Target environment identity checks, hostname matching, loopback rejection and double-acknowledgement CLI flags implemented. |
 | Quality & Onboarding | Node 24.14.1 and npm 11.11.0 toolchain contract, `npm run onboarding:check` precheck, and unit tests implemented. Verified in a clean Windows remote-clone run; macOS, Linux and independent human onboarding remain unverified. |
 | Pending | Hosted migration reconciliation, hosted staff lifecycle, interactive browser UAT matrix, cross-platform human onboarding verification and production cutover. |
@@ -39,7 +40,7 @@ flowchart LR
     E -. pending controlled cutover .-> F[Duda public showcase]
 ```
 
-Staff use the protected Next.js application. Server-side authentication and authorization mediate access to Supabase using modern server key preference (`SUPABASE_SECRET_KEY` preferred with `SUPABASE_SERVICE_ROLE_KEY` fallback). Browser clients use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. The feed compiler removes internal fields and includes public-eligible `approved` and `published` records; all other workflow states are excluded. The architecture supports Duda as the public consumer, but staging feed output remains isolated from the live showcase until a controlled cutover.
+Staff use the protected Next.js application. Server-side authentication and authorization mediate access to Supabase using modern server key preference (`SUPABASE_SECRET_KEY` preferred with `SUPABASE_SERVICE_ROLE_KEY` fallback). Browser clients use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. The feed compiler removes internal fields and includes `published` records only; all other workflow states are excluded. The architecture supports Duda as the public consumer, but staging feed output remains isolated from the live showcase until a controlled cutover.
 
 ## Repository structure
 
@@ -144,6 +145,6 @@ Run from the repository root:
 
 Implemented foundations include the authenticated Admin/CMS shell, project index, validation, import and media workflows, reproducible local Supabase stack, shared-staging execution guardrails, key preference model and public-eligible feed compiler.
 
-Remaining work includes hosted migration history reconciliation, controlled hosted staff lifecycle tooling, interactive browser UAT matrix validation, metadata editor, participant confirmation, preview and publication-history workflows, accessibility QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
+Remaining work includes hosted migration history reconciliation, controlled hosted staff lifecycle tooling, broader interactive browser UAT, participant confirmation, preview and publication-history workflows, accessibility QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
 
 Developer contribution policies and security boundaries are defined in [`CONTRIBUTING.md`](./CONTRIBUTING.md).

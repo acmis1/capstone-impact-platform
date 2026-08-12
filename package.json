@@ -16,6 +16,7 @@
     "build:admin": "npm run build --workspace=apps/admin-cms",
     "typecheck:admin": "npm run typecheck --workspace=apps/admin-cms",
     "check:feed": "npm run check:sample-feed --workspace=apps/admin-cms",
+    "benchmark:projects": "npm run benchmark:projects --workspace=apps/admin-cms --",
     "seed:admin-staging": "npm run seed:staging --workspace=apps/admin-cms --",
     "check:admin-staging": "npm run check:staging-projects --workspace=apps/admin-cms",
     "seed:admin-media": "npm run seed:staging-media --workspace=apps/admin-cms --",
@@ -43,7 +44,14 @@
     "check:yaml": "tsx apps/admin-cms/src/scripts/repositoryChecks.ts yaml",
     "check:markdown-links": "tsx apps/admin-cms/src/scripts/repositoryChecks.ts markdown-links",
     "supabase:assert-running": "tsx apps/admin-cms/src/scripts/assertSupabaseRunning.ts",
-    "supabase:assert-stopped": "tsx apps/admin-cms/src/scripts/assertSupabaseStopped.ts"
+    "supabase:assert-stopped": "tsx apps/admin-cms/src/scripts/assertSupabaseStopped.ts",
+    "verify:browser-metadata-stage-runtime": "npm run verify:browser-metadata-stage-runtime --workspace=apps/admin-cms",
+    "verify:review-actions-runtime": "npm run verify:review-actions-runtime --workspace=apps/admin-cms",
+    "verify:browser-media-stage-runtime": "npm run verify:browser-media-stage-runtime --workspace=apps/admin-cms",
+    "verify:import-batch-review-submit-runtime": "npm run verify:import-batch-review-submit-runtime --workspace=apps/admin-cms",
+    "verify:participant-preview-runtime": "npm run verify:participant-preview-runtime --workspace=apps/admin-cms",
+    "verify:controlled-publication-runtime": "npm run verify:controlled-publication-runtime --workspace=apps/admin-cms",
+    "verify:controlled-public-removal-runtime": "npm run verify:controlled-public-removal-runtime --workspace=apps/admin-cms"
   },
   "devDependencies": {
     "server-only": "^0.0.1",

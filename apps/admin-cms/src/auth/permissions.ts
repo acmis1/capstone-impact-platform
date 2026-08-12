@@ -1,7 +1,7 @@
 import { AdminRole, AdminPermission } from './authTypes';
 
 const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
-  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit'],
+  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit', 'projects.publish'],
   reviewer: ['projects.read', 'projects.review'],
   editor: ['projects.read', 'projects.edit'],
 };
@@ -27,6 +27,14 @@ export function hasPermission(userPermissions: AdminPermission[], required: Admi
   return userPermissions.includes(required);
 }
 
+/** Correction resolution requires the exact union of edit and review authority. */
+export function canResolveParticipantCorrection(userPermissions: AdminPermission[]): boolean {
+  return (
+    hasPermission(userPermissions, 'projects.edit') &&
+    hasPermission(userPermissions, 'projects.review')
+  );
+}
+
 /**
  * Maps review actions to permissions and validates.
  */
@@ -40,4 +48,17 @@ export function canPerformReviewAction(userPermissions: AdminPermission[], actio
     default:
       return false;
   }
+}
+
+/**
+ * Participant preview generation/revocation reuses the same permission as completing internal
+ * review (the 'approve' action) rather than introducing a new role or permission.
+ */
+export function canManageParticipantPreview(userPermissions: AdminPermission[]): boolean {
+  return hasPermission(userPermissions, 'projects.review');
+}
+
+/** Publication preparation has deliberately narrower, admin-only authority. */
+export function canPreparePublication(userPermissions: AdminPermission[]): boolean {
+  return hasPermission(userPermissions, 'projects.publish');
 }

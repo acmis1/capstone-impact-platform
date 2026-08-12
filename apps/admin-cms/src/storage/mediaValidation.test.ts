@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { validateMediaAsset } from './mediaValidation';
+import { validateMediaAsset, detectMediaSignature, validateMediaAssetBytes } from './mediaValidation';
+
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00]);
+const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x00, 0x00, 0x00]);
+const PDF_BYTES = Buffer.from('%PDF-1.4\n%%EOF', 'ascii');
+const WEBP_BYTES = Buffer.concat([
+  Buffer.from('RIFF', 'ascii'),
+  Buffer.from([0x10, 0x00, 0x00, 0x00]),
+  Buffer.from('WEBP', 'ascii'),
+]);
+const TEXT_BYTES = Buffer.from('this is not a real media file at all', 'ascii');
 
 describe('mediaValidation', () => {
   it('accepts valid PNG, JPEG, WEBP and PDF MIME types within limits', () => {
@@ -90,5 +100,98 @@ describe('mediaValidation', () => {
     });
     expect(result.valid).toBe(true);
     expect(result.warnings.length).toBe(0);
+  });
+});
+
+describe('detectMediaSignature', () => {
+  it('detects PNG from magic bytes regardless of declared type', () => {
+    expect(detectMediaSignature(PNG_BYTES)).toBe('image/png');
+  });
+
+  it('detects JPEG from magic bytes', () => {
+    expect(detectMediaSignature(JPEG_BYTES)).toBe('image/jpeg');
+  });
+
+  it('detects WEBP from RIFF/WEBP container bytes', () => {
+    expect(detectMediaSignature(WEBP_BYTES)).toBe('image/webp');
+  });
+
+  it('detects PDF from %PDF- header bytes', () => {
+    expect(detectMediaSignature(PDF_BYTES)).toBe('application/pdf');
+  });
+
+  it('returns null for content with no recognized signature', () => {
+    expect(detectMediaSignature(TEXT_BYTES)).toBeNull();
+  });
+
+  it('returns null for a PNG-named file whose content is actually plain text (renamed attack)', () => {
+    // Byte content is authoritative, not the filename or declared MIME type.
+    expect(detectMediaSignature(TEXT_BYTES)).not.toBe('image/png');
+  });
+});
+
+describe('validateMediaAssetBytes', () => {
+  it('accepts a real PNG whose bytes and declared size match expectations', () => {
+    const result = validateMediaAssetBytes({
+      fileName: 'poster.png',
+      content: PNG_BYTES,
+      expectedMimeType: 'image/png',
+      expectedFileSizeBytes: PNG_BYTES.length,
+    });
+    expect(result.valid).toBe(true);
+    expect(result.errors.length).toBe(0);
+  });
+
+  it('accepts a real PDF whose bytes and declared size match expectations', () => {
+    const result = validateMediaAssetBytes({
+      fileName: 'poster.pdf',
+      content: PDF_BYTES,
+      expectedMimeType: 'application/pdf',
+      expectedFileSizeBytes: PDF_BYTES.length,
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('rejects content whose actual byte length differs from the expected/declared size', () => {
+    const result = validateMediaAssetBytes({
+      fileName: 'poster.png',
+      content: PNG_BYTES,
+      expectedMimeType: 'image/png',
+      expectedFileSizeBytes: PNG_BYTES.length + 5,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes('byte length'))).toBe(true);
+  });
+
+  it('rejects a file renamed to poster.png whose actual bytes are a PDF (signature mismatch)', () => {
+    const result = validateMediaAssetBytes({
+      fileName: 'poster.png',
+      content: PDF_BYTES,
+      expectedMimeType: 'image/png',
+      expectedFileSizeBytes: PDF_BYTES.length,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes('signature'))).toBe(true);
+  });
+
+  it('rejects content with no recognizable file signature at all', () => {
+    const result = validateMediaAssetBytes({
+      fileName: 'poster.png',
+      content: TEXT_BYTES,
+      expectedMimeType: 'image/png',
+      expectedFileSizeBytes: TEXT_BYTES.length,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes('does not match any supported file signature'))).toBe(true);
+  });
+
+  it('never trusts the browser-declared MIME string alone: JPEG bytes declared as image/png are rejected', () => {
+    const result = validateMediaAssetBytes({
+      fileName: 'snapshot-1.png',
+      content: JPEG_BYTES,
+      expectedMimeType: 'image/png',
+      expectedFileSizeBytes: JPEG_BYTES.length,
+    });
+    expect(result.valid).toBe(false);
   });
 });

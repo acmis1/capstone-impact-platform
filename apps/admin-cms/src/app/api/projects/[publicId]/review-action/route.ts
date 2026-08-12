@@ -111,6 +111,26 @@ export async function POST(
             { success: false, error: 'Validation failed.' },
             { status: 400 }
           );
+        case 'CORRECTION_RESOLUTION_REQUIRED':
+          return NextResponse.json(
+            { success: false, error: 'Resolve the participant correction through the correction-resolution workflow before requesting changes.' },
+            { status: 409 }
+          );
+        case 'AMBIGUOUS_ACTIVE_PREVIEW':
+          return NextResponse.json(
+            { success: false, error: 'Project preview state is inconsistent. Request changes could not be completed safely.' },
+            { status: 409 }
+          );
+        case 'PUBLICATION_IN_PROGRESS':
+          return NextResponse.json(
+            { success: false, error: 'Publication is currently in progress for this project.' },
+            { status: 409 }
+          );
+        case 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED':
+          return NextResponse.json(
+            { success: false, error: 'Published projects must use the controlled public-removal workflow.' },
+            { status: 409 }
+          );
         case 'RESPONSE_INVALID':
         case 'INTERNAL_FAILURE':
         default: {

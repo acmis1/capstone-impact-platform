@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getPermissionsForRoles, hasPermission, canPerformReviewAction } from './permissions';
+import { getPermissionsForRoles, hasPermission, canPerformReviewAction, canResolveParticipantCorrection } from './permissions';
 import { validateSameOrigin } from './csrf';
 import { AdminAuthError, AdminRole } from './authTypes';
 import { extractSubClaim } from './claims';
@@ -16,7 +16,8 @@ describe('Authentication & Authorization Tests (Offline)', () => {
       expect(perms).toContain('projects.review');
       expect(perms).toContain('projects.archive');
       expect(perms).toContain('projects.edit');
-      expect(perms.length).toBe(4);
+      expect(perms).toContain('projects.publish');
+      expect(perms.length).toBe(5);
     });
 
     it('returns exact permissions for reviewer role', () => {
@@ -51,6 +52,25 @@ describe('Authentication & Authorization Tests (Offline)', () => {
       const readOccurrences = perms.filter(p => p === 'projects.read').length;
       expect(readOccurrences).toBe(1);
       expect(perms.length).toBe(3);
+    });
+
+    it('keeps the editor and reviewer union exact with duplicate and unknown roles', () => {
+      const perms = getPermissionsForRoles([
+        'editor',
+        'reviewer',
+        'editor',
+        'unknown' as AdminRole,
+      ]);
+      expect(perms).toEqual(['projects.read', 'projects.edit', 'projects.review']);
+      expect(perms).not.toContain('projects.archive');
+      expect(perms).not.toContain('projects.publish');
+    });
+
+    it('requires both edit and review permissions for correction resolution', () => {
+      expect(canResolveParticipantCorrection(getPermissionsForRoles(['admin']))).toBe(true);
+      expect(canResolveParticipantCorrection(getPermissionsForRoles(['editor', 'reviewer']))).toBe(true);
+      expect(canResolveParticipantCorrection(getPermissionsForRoles(['editor']))).toBe(false);
+      expect(canResolveParticipantCorrection(getPermissionsForRoles(['reviewer']))).toBe(false);
     });
 
     it('checks specific permissions correctly via hasPermission', () => {

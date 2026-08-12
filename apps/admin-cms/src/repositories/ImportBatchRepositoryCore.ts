@@ -42,6 +42,34 @@ export interface MediaAssetRow {
   public_url?: string | null;
 }
 
+export interface ImportBatchReviewValidationFlagRow {
+  severity: string;
+  resolved: boolean | null;
+  message: string;
+}
+
+export interface ImportBatchReviewProjectRow {
+  id: string;
+  public_id: string;
+  title: string | null;
+  summary: string | null;
+  status: string;
+  program_id: string | null;
+  program_name: string | null;
+  study_program: string | null;
+  discipline: string | null;
+  group_name: string | null;
+  team_members: string[] | null;
+  accessibility_text_public: string | null;
+  snapshots: string[] | null;
+  validation_errors: string[] | null;
+  validation_warnings: string[] | null;
+  project_disciplines?: Array<{ discipline_id: string }>;
+  project_industry_categories?: Array<{ industry_category_id: string }>;
+  media_assets?: Array<{ asset_type: string; is_public_approved: boolean | null; public_url: string | null }>;
+  validation_flags?: ImportBatchReviewValidationFlagRow[];
+}
+
 export class ImportBatchRepositoryCore {
   constructor(protected readonly supabase: SupabaseClient) {}
 
@@ -108,5 +136,58 @@ export class ImportBatchRepositoryCore {
       throw new Error(`Failed to get media assets for project [${projectId}]: ${error.message}`);
     }
     return (data as MediaAssetRow[]) || [];
+  }
+
+  /**
+   * Fetches every non-deleted project in a batch along with the relational/media data required
+   * to derive server-authoritative review readiness (see importBatchReviewReadiness.ts).
+   * Read-only: used purely for UI display, never as the authority for the submission RPC itself.
+   */
+  async getImportBatchReviewData(batchId: string): Promise<ImportBatchReviewProjectRow[]> {
+    const { data, error } = await this.supabase
+      .from('projects')
+      .select(
+        `id, public_id, title, summary, status, program_id, program_name, study_program,
+         discipline, group_name, team_members, accessibility_text_public, snapshots,
+         validation_errors, validation_warnings,
+         project_disciplines(discipline_id),
+         project_industry_categories(industry_category_id),
+         media_assets(asset_type, is_public_approved, public_url),
+         validation_flags(severity, resolved, message)`
+      )
+      .eq('import_batch_id', batchId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw new Error(`Failed to get import batch review data [${batchId}]: ${error.message}`);
+    }
+    return (data as unknown as ImportBatchReviewProjectRow[]) || [];
+  }
+
+  /**
+   * Single-project variant of getImportBatchReviewData, for the project detail page's
+   * "Submit for review" action. Read-only; same caveat applies.
+   */
+  async getProjectReviewDataByPublicId(publicId: string): Promise<ImportBatchReviewProjectRow | null> {
+    const { data, error } = await this.supabase
+      .from('projects')
+      .select(
+        `id, public_id, title, summary, status, program_id, program_name, study_program,
+         discipline, group_name, team_members, accessibility_text_public, snapshots,
+         validation_errors, validation_warnings,
+         project_disciplines(discipline_id),
+         project_industry_categories(industry_category_id),
+         media_assets(asset_type, is_public_approved, public_url),
+         validation_flags(severity, resolved, message)`
+      )
+      .eq('public_id', publicId)
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Failed to get project review data [${publicId}]: ${error.message}`);
+    }
+    return (data as unknown as ImportBatchReviewProjectRow) || null;
   }
 }

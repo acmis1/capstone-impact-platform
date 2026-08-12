@@ -3,9 +3,13 @@ import React from 'react';
 export default function ImportBatchStatusBadge({ status }: { status: string }) {
   let backgroundColor = '#4B5563';
   let color = '#FFFFFF';
-  const label = status.toUpperCase();
-
+  let label = status.toUpperCase();
   switch (status) {
+    case 'metadata_staged':
+      backgroundColor = 'rgba(139, 92, 246, 0.15)';
+      color = '#A78BFA';
+      label = 'METADATA STAGED';
+      break;
     case 'completed':
       backgroundColor = 'rgba(16, 185, 129, 0.1)';
       color = '#10B981';

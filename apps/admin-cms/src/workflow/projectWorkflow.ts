@@ -16,8 +16,6 @@ export function getAllowedReviewActions(status: WorkflowStatus): ReviewAction[] 
       return ['approve'];
     case 'approved':
       return ['request_changes', 'archive'];
-    case 'published':
-      return ['archive'];
     default:
       return [];
   }

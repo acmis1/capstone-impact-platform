@@ -118,7 +118,7 @@ capstone-impact-platform/
 │   └── developer-troubleshooting.md # Developer setup troubleshooting guide
 ├── infra/
 │   └── supabase/             # Database migrations, seed SQL, runbooks
-│       └── migrations/       # 8 timestamped PostgreSQL migration files
+│       └── migrations/       # 9 timestamped PostgreSQL migration files
 ├── Prototype/                # Legacy historical code (DO NOT MODIFY)
 ├── AGENTS.md                 # Agent governance & repository rules
 ├── CONTRIBUTING.md           # Contributor workflow & safety rules
@@ -215,12 +215,12 @@ npm run verify:all
 
 ## 10. Database Migration Rules
 
-1. **Append-Only Policy**: Existing migrations `0001` through `0008` in `infra/supabase/migrations/` are merged and immutable. **Never modify, rename, or delete migrations `0001` through `0008`.**
+1. **Append-Only Policy**: Existing migrations `0001` through `0009` in `infra/supabase/migrations/` are merged and immutable. **Never modify, rename, or delete migrations `0001` through `0009`.** Migration `0009` is `20260808170000_transactional_project_metadata_update.sql`, the atomic project metadata RPC; it remains repository/local-only and is not applied to hosted staging.
 2. **New Migrations**: If your feature requires schema, index, RLS, or function changes:
    - Create a new 14-digit timestamped file: `infra/supabase/migrations/YYYYMMDDHHMMSS_description.sql`.
    - Replay locally using `npm run supabase:reset`.
    - Add static contract tests in `apps/admin-cms/src/security/`.
-3. **Local/Repo Scope**: Migrations `0007` and `0008` are repository and local-only. Hosted staging migration application is managed separately by authorized maintainers.
+3. **Local/Repo Scope**: Migrations `0007` through `0009` are repository and local-only. Hosted staging migration application is managed separately by authorized maintainers.
 
 ---
 
@@ -286,7 +286,7 @@ Do not select broad roadmap topics directly from `docs/implementation-backlog.md
 - ❌ **DO NOT** hardcode or commit API keys, secrets, credentials, passwords, or connection strings.
 - ❌ **DO NOT** use real participant, staff, or supervisor personal identity data (use synthetic data only).
 - ❌ **DO NOT** modify files in `Prototype/`.
-- ❌ **DO NOT** edit merged migrations `0001` through `0008`.
+- ❌ **DO NOT** edit merged migrations `0001` through `0009`.
 - ❌ **DO NOT** self-merge Pull Requests without maintainer sign-off.
 
 ---

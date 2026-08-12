@@ -25,9 +25,12 @@ const EXPECTED_TABLES = [
   'validation_flags',
   'approval_records',
   'published_snapshots',
+  'publication_attempts',
+  'public_removal_attempts',
 ];
 
 const LOOKUP_TABLES = ['programs', 'disciplines', 'industry_categories'];
+const SERVICE_ROLE_READ_ONLY_TABLES = ['publication_attempts', 'public_removal_attempts'];
 
 const EXPECTED_BUCKETS = [
   {
@@ -266,7 +269,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
         return false;
       }
     }
-    console.log('✔ Live database RLS verified (RLS enabled on all 13 tables).');
+    console.log(`✔ Live database RLS verified (RLS enabled on all ${EXPECTED_TABLES.length} tables).`);
 
     // 3c. Triggers & Indexes verification
     const triggerRows = runLocalDbQuery(
@@ -332,7 +335,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       }
     }
 
-    // Verify all 13 admin_all_* policies
+    // Verify every restrictive admin_all_* policy.
     for (const tableName of EXPECTED_TABLES) {
       const polName = `admin_all_${tableName}`;
       const foundPol = policyRows.find((r) => String(r.policyname) === polName);
@@ -358,7 +361,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
         return false;
       }
     }
-    console.log('✔ Live database policy semantics verified (lookup SELECT true & 13 restrictive admin_all FALSE).');
+    console.log(`✔ Live database policy semantics verified (lookup SELECT true & ${EXPECTED_TABLES.length} restrictive admin_all FALSE).`);
 
     // 3e. Exact Live Table-Grant Matrix verification (Section 4)
     const grantRows = runLocalDbQuery(
@@ -373,7 +376,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
 
     const CRUD_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'DELETE'];
 
-    // Assert anon has ZERO privileges on all 13 tables
+    // Assert anon has ZERO privileges on all internal tables.
     for (const t of EXPECTED_TABLES) {
       for (const priv of CRUD_PRIVILEGES) {
         if (grantSet.has(`anon|${t}|${priv}`)) {
@@ -407,16 +410,21 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       }
     }
 
-    // Assert service_role has SELECT, INSERT, UPDATE, DELETE on all 13 tables
+    // Service role reads the attempt ledger, but mutations must use protected RPCs.
     for (const t of EXPECTED_TABLES) {
       for (const priv of CRUD_PRIVILEGES) {
-        if (!grantSet.has(`service_role|${t}|${priv}`)) {
+        const shouldHave = priv === 'SELECT' || !SERVICE_ROLE_READ_ONLY_TABLES.includes(t);
+        if (shouldHave && !grantSet.has(`service_role|${t}|${priv}`)) {
           console.error(`❌ Missing required grant: service_role missing ${priv} grant on table ${t}.`);
+          return false;
+        }
+        if (!shouldHave && grantSet.has(`service_role|${t}|${priv}`)) {
+          console.error(`❌ Security grant violation: service_role has direct ${priv} grant on protected table ${t}.`);
           return false;
         }
       }
     }
-    console.log('✔ Exact live table-grant matrix verified (anon 0, authenticated lookup SELECT only, service_role full CRUD across all 13 tables).');
+    console.log('✔ Exact live table-grant matrix verified (attempt-ledger mutation is RPC-only).');
 
     // 3f. Function Execution Grants verification (Section 5)
     const funcGrantRows = runLocalDbQuery(
@@ -439,14 +447,43 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       }
     }
 
-    // update_updated_at_column assertions: PUBLIC, anon, authenticated, service_role ALL DO NOT HAVE EXECUTE
-    for (const grantee of ['PUBLIC', 'ANON', 'AUTHENTICATED', 'SERVICE_ROLE']) {
-      if (funcGrantSet.has(`${grantee}|update_updated_at_column`)) {
-        console.error(`❌ Function grant security violation: ${grantee} has EXECUTE on update_updated_at_column.`);
+    const publicationRpcs = [
+      'reserve_publication_attempt',
+      'prepare_publication_attempt',
+      'claim_publication_attempt',
+      'mark_publication_attempt_storage_written',
+      'finalize_publication_attempt',
+      'fail_publication_attempt',
+      'reserve_public_removal_attempt',
+      'prepare_public_removal_attempt',
+      'claim_public_removal_attempt',
+      'mark_public_removal_storage_written',
+      'finalize_public_removal_attempt',
+      'fail_public_removal_attempt',
+    ];
+    for (const routine of publicationRpcs) {
+      if (!funcGrantSet.has(`SERVICE_ROLE|${routine}`)) {
+        console.error(`❌ Function grant verification failed: service_role missing EXECUTE on ${routine}.`);
         return false;
       }
+      for (const forbiddenGrantee of ['PUBLIC', 'ANON', 'AUTHENTICATED']) {
+        if (funcGrantSet.has(`${forbiddenGrantee}|${routine}`)) {
+          console.error(`❌ Function grant security violation: ${forbiddenGrantee} has EXECUTE on ${routine}.`);
+          return false;
+        }
+      }
     }
-    console.log('✔ Function execution grants verified (bootstrap_initial_admin restricted to service_role; update_updated_at_column unexposed).');
+
+    // Trigger-only helpers are never directly executable by API roles.
+    for (const routine of ['update_updated_at_column', 'normalize_public_media_mapping', 'guard_active_publication_attempt']) {
+      for (const grantee of ['PUBLIC', 'ANON', 'AUTHENTICATED', 'SERVICE_ROLE']) {
+        if (funcGrantSet.has(`${grantee}|${routine}`)) {
+          console.error(`❌ Function grant security violation: ${grantee} has EXECUTE on ${routine}.`);
+          return false;
+        }
+      }
+    }
+    console.log('✔ Function execution grants verified (bootstrap/publication RPCs restricted to service_role; trigger helper unexposed).');
 
     // 3g. Bootstrap function definition verification
     const funcDefRows = runLocalDbQuery(
@@ -494,6 +531,31 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       }
     }
     console.log('✔ Live perform_project_review_action RPC function definition & service_role-only execution grants verified.');
+    // 3i. Transactional project metadata RPC function & execution grants verification
+    const metadataRpcRows = runLocalDbQuery(
+      "SELECT p.prosecdef, pg_get_functiondef(p.oid) AS funcdef FROM pg_proc p WHERE p.proname = 'update_project_metadata' AND p.pronamespace = 'public'::regnamespace",
+      repoRoot
+    );
+    if (!metadataRpcRows || metadataRpcRows.length !== 1 || !metadataRpcRows[0].funcdef) {
+      console.error('Function verification failed: update_project_metadata missing or ambiguous.');
+      return false;
+    }
+    const metadataRpcDef = String(metadataRpcRows[0].funcdef);
+    if (!metadataRpcRows[0].prosecdef || !metadataRpcDef.includes('FOR UPDATE') || !metadataRpcDef.toLowerCase().includes('search_path')) {
+      console.error('Function verification failed: update_project_metadata security or locking contract missing.');
+      return false;
+    }
+    if (!funcGrantSet.has('SERVICE_ROLE|update_project_metadata')) {
+      console.error('Function grant verification failed: service_role missing EXECUTE on update_project_metadata.');
+      return false;
+    }
+    for (const forbiddenGrantee of ['PUBLIC', 'ANON', 'AUTHENTICATED']) {
+      if (funcGrantSet.has(`${forbiddenGrantee}|update_project_metadata`)) {
+        console.error(`Function grant security violation: ${forbiddenGrantee} has EXECUTE on update_project_metadata.`);
+        return false;
+      }
+    }
+    console.log('Live update_project_metadata RPC definition, row lock, and service_role-only execution grants verified.');
   } catch (err: unknown) {
     console.error('❌ Live database schema verification failed:', err instanceof Error ? err.message : String(err));
     return false;
@@ -573,16 +635,16 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
     return false;
   }
 
-  // Assert compiled feed contains EXACT approved and published public IDs only
+  // Assert compiled feed contains EXACT published public IDs only (approved is no longer public feed eligible)
   const feedPublicIds = feedItems.map((item) => item.publicId).sort();
-  const expectedPublicIds = ['2026-medical-drone', '2026-traffic-engine'].sort();
+  const expectedPublicIds = ['2026-traffic-engine'].sort();
   if (feedPublicIds.length !== expectedPublicIds.length || !feedPublicIds.every((v, i) => v === expectedPublicIds[i])) {
     console.error('❌ Public feed public IDs mismatch.');
     return false;
   }
 
-  // Assert draft and in_review public IDs are strictly absent
-  const forbiddenPublicIds = new Set(['2026-agri-iot', '2026-vr-rehab']);
+  // Assert draft, in_review, and approved public IDs are strictly absent
+  const forbiddenPublicIds = new Set(['2026-agri-iot', '2026-vr-rehab', '2026-medical-drone']);
   for (const item of feedItems) {
     if (forbiddenPublicIds.has(item.publicId)) {
       console.error(`❌ Security violation: Non-public project [${item.publicId}] included in public feed.`);

@@ -5,15 +5,19 @@ import { PublicFeedRecord } from '../domain/publicFeed';
  * Compiles internal database records into the sanitized public showcase feed.
  * 
  * Rules:
- * - Only includes projects with a status of 'approved' or 'published'.
- * - Excludes draft, submitted, in_review, changes_requested, archived, and deleted states.
+ * - Only includes projects with a status of 'published'.
+ * - Excludes draft, submitted, in_review, changes_requested, approved, archived, and deleted states.
  * - Strips all internal tracking properties, database timestamps, staff comments, and RLS bypass attributes.
  * - Ensures no input mutations occur.
  */
 export function compilePublicFeed(projects: Project[]): PublicFeedRecord[] {
   return projects
-    .filter((p) => p.status === 'approved' || p.status === 'published')
-    .map((p) => {
+    .filter((p) => p.status === 'published')
+    .map(toPublicFeedRecord);
+}
+
+/** The sole allow-listed conversion from an internal project to a public record. */
+export function toPublicFeedRecord(p: Project): PublicFeedRecord {
       // Explicitly construct public feed record from approved allowlist properties
       return {
         id: p.id,
@@ -58,5 +62,29 @@ export function compilePublicFeed(projects: Project[]): PublicFeedRecord[] {
             : {}),
         },
       };
-    });
+}
+
+/**
+ * Builds the exact proposed artifact for one approved target without changing any project.
+ * Existing published projects form the baseline; all other non-public records are excluded.
+ */
+export function compilePublicationCandidateFeed(projects: Project[], targetPublicId: string): PublicFeedRecord[] {
+  const targets = projects.filter((project) => project.publicId === targetPublicId);
+  if (targets.length !== 1 || targets[0].status !== 'approved') {
+    throw new Error('Publication candidate target is unavailable.');
+  }
+  return projects
+    .filter((project) => project.status === 'published' || project.publicId === targetPublicId)
+    .map(toPublicFeedRecord);
+}
+
+/** Builds a public-feed candidate with one exact published target removed. */
+export function compilePublicRemovalCandidateFeed(projects: Project[], targetPublicId: string): PublicFeedRecord[] {
+  const targets = projects.filter((project) => project.publicId === targetPublicId);
+  if (targets.length !== 1 || targets[0].status !== 'published') {
+    throw new Error('Public-removal candidate target is unavailable.');
+  }
+  return projects
+    .filter((project) => project.status === 'published' && project.publicId !== targetPublicId)
+    .map(toPublicFeedRecord);
 }

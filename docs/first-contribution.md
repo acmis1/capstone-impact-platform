@@ -192,6 +192,6 @@ npm run supabase:stop
 
 - ❌ Real participant, staff, or supervisor personal data (PII).
 - ❌ Hardcoded API keys, passwords, secrets, or connection strings.
-- ❌ Modified migrations `0001` through `0008`.
+- ❌ Modified migrations `0001` through `0009`.
 - ❌ Files inside `Prototype/` (except documentation links outside `Prototype/`).
 - ❌ Hosted environment credentials (`.env.local` or `.local-users.json`).

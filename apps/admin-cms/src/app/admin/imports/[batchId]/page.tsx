@@ -2,14 +2,14 @@ import React from 'react';
 import Link from 'next/link';
 import { ImportBatchRepository } from '../../../../repositories/ImportBatchRepository';
 import ImportBatchStatusBadge from '../../../../components/admin/ImportBatchStatusBadge';
-import ValidationFlagsTable from '../../../../components/admin/ValidationFlagsTable';
-import MediaAssetsTable from '../../../../components/admin/MediaAssetsTable';
+import { ImportBatchReviewPanel, ImportBatchReviewProjectView } from '../../../../components/admin/ImportBatchReviewPanel';
 import {
   ImportBatchRow,
-  ImportedProjectRow,
-  ValidationFlagRow,
-  MediaAssetRow
+  ImportBatchReviewProjectRow,
 } from '../../../../repositories/ImportBatchRepositoryCore';
+import { computeReadinessForImportBatchRow, isPrivateAssetPresent } from '../../../../import/importBatchReviewReadiness';
+import { requireAdmin } from '../../../../auth/requireAdmin';
+import { hasPermission } from '../../../../auth/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,24 +20,22 @@ export default async function ImportBatchDetailPage({
 }) {
   const { batchId } = await params;
   let batch: ImportBatchRow | null = null;
-  let projects: ImportedProjectRow[] = [];
-  let validationFlags: ValidationFlagRow[] = [];
-  let mediaAssets: MediaAssetRow[] = [];
+  let reviewRows: ImportBatchReviewProjectRow[] = [];
+  let canSubmit = false;
 
   let errorMsg: string | null = null;
 
   try {
     const repository = new ImportBatchRepository();
-    batch = await repository.getImportBatchById(batchId);
-    
+    const [batchResult, adminContext] = await Promise.all([
+      repository.getImportBatchById(batchId),
+      requireAdmin(),
+    ]);
+    batch = batchResult;
+    canSubmit = hasPermission(adminContext.permissions, 'projects.edit');
+
     if (batch) {
-      projects = await repository.getImportedProjectsForBatch(batchId);
-      if (projects && projects.length > 0) {
-        // Collect flags and assets for the imported project(s)
-        const primaryProject = projects[0];
-        validationFlags = await repository.getValidationFlagsForProject(primaryProject.id);
-        mediaAssets = await repository.getMediaAssetsForProject(primaryProject.id);
-      }
+      reviewRows = await repository.getImportBatchReviewData(batchId);
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'database error';
@@ -84,7 +82,37 @@ export default async function ImportBatchDetailPage({
     );
   }
 
-  const primaryProject = projects[0] || null;
+  const reviewProjects: ImportBatchReviewProjectView[] = reviewRows.map((row) => {
+    const readiness = computeReadinessForImportBatchRow(row);
+    const mediaAssets = (row.media_assets || []).map((a) => ({
+      assetType: a.asset_type,
+      isPublicApproved: a.is_public_approved,
+      publicUrl: a.public_url,
+    }));
+    const posterPresent = isPrivateAssetPresent(mediaAssets, 'poster_image');
+    const posterPdfPresent = isPrivateAssetPresent(mediaAssets, 'poster_pdf');
+    return {
+      publicId: row.public_id,
+      title: row.title || '(untitled)',
+      status: row.status,
+      eligibility: readiness.eligibility,
+      ready: readiness.ready,
+      blockingReasons: readiness.blockingReasons,
+      warnings: readiness.warnings,
+      posterPresent,
+      posterPdfPresent,
+    };
+  });
+
+  // Reset client-side selection whenever the authoritative selectable project set or workflow state changes.
+  // A React key remount avoids synchronously setting state from an effect while still guaranteeing stale
+  // selections cannot survive a server refresh that changes readiness, eligibility, status, or membership.
+  const reviewSelectionKey = [
+    batch.status,
+    ...reviewProjects.map((project) =>
+      `${project.publicId}:${project.status}:${project.eligibility}:${project.ready ? 'ready' : 'blocked'}`
+    ),
+  ].join('|');
 
   return (
     <div style={{
@@ -151,7 +179,7 @@ export default async function ImportBatchDetailPage({
             <h3 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', color: '#3B82F6', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.5rem' }}>
               Ingestion Metadata
             </h3>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', fontSize: '0.9rem' }}>
               <div>
                 <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Ingestion Status</strong>
@@ -205,14 +233,14 @@ export default async function ImportBatchDetailPage({
               color: '#9CA3AF',
               lineHeight: '1.4'
             }}>
-              <strong>🔒 Staging Safety Isolation:</strong> Imported package resources are stored inside private drafts buckets. Media assets do not promote to public URLs, keeping staging showcase records cleanly separated from active public distributions. Duda showcase remains completely disconnected.
+              <strong>🔒 Staging Safety Isolation:</strong> {batch.status === 'metadata_staged' ? 'Metadata is stored in local Supabase and projects remain in draft state. Media file uploads have not occurred, full binary validation is pending, and no approval or publication has been performed.' : 'Imported package resources are stored inside private drafts buckets. Media assets do not promote to public URLs, keeping staging showcase records cleanly separated from active public distributions.'}
             </div>
           </div>
 
-          {/* Right section: Ingested projects & assets details */}
+          {/* Right section: Ingested projects review surface */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            
-            {/* B. Imported Projects details card */}
+
+            {/* B. Multi-project review & submit-for-review card */}
             <div style={{
               backgroundColor: '#161F30',
               borderRadius: '12px',
@@ -220,89 +248,22 @@ export default async function ImportBatchDetailPage({
               border: '1px solid rgba(255, 255, 255, 0.05)',
             }}>
               <h3 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', color: '#3B82F6', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.5rem' }}>
-                Ingested Project Targets
+                Ingested Project Targets ({reviewProjects.length})
               </h3>
 
-              {primaryProject ? (
-                <div>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    backgroundColor: '#0B0F19',
-                    padding: '1rem',
-                    borderRadius: '8px',
-                    border: '1px solid rgba(255, 255, 255, 0.03)'
-                  }}>
-                    <div>
-                      <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>
-                        {primaryProject.title}
-                      </h4>
-                      <div style={{ marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#9CA3AF' }}>
-                        <span>ID: <code style={{ color: '#E5E7EB' }}>{primaryProject.public_id}</code></span>
-                        <span>•</span>
-                        <span>State: <strong style={{ color: '#F59E0B' }}>{primaryProject.status}</strong></span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <Link href={`/admin/projects/${primaryProject.public_id}`} style={{
-                        color: '#3B82F6',
-                        textDecoration: 'none',
-                        fontSize: '0.85rem',
-                        fontWeight: 600,
-                        border: '1px solid rgba(59, 130, 246, 0.2)',
-                        padding: '0.4rem 0.8rem',
-                        borderRadius: '6px',
-                        backgroundColor: 'rgba(59, 130, 246, 0.05)'
-                      }}>
-                        Inspect Project →
-                      </Link>
-                    </div>
-                  </div>
-
-                  {/* Public eligibility criteria mapping */}
-                  <div style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
-                    <strong>Public Showcase Eligibility Status:</strong>{' '}
-                    <span style={{
-                      color: primaryProject.status === 'approved' || primaryProject.status === 'published' ? '#10B981' : '#EF4444',
-                      fontWeight: 600
-                    }}>
-                      {primaryProject.status === 'approved' || primaryProject.status === 'published' ? 'YES (Eligible)' : 'NO (Staged Private drafts/in_review only)'}
-                    </span>
-                  </div>
-                </div>
+              {reviewProjects.length > 0 ? (
+                <ImportBatchReviewPanel
+                  key={reviewSelectionKey}
+                  batchId={batch.id}
+                  batchStatus={batch.status}
+                  projects={reviewProjects}
+                  canSubmit={canSubmit}
+                />
               ) : (
                 <div style={{ color: '#9CA3AF', fontSize: '0.9rem' }}>
                   No projects are registered for this batch ID.
                 </div>
               )}
-            </div>
-
-            {/* C. Validation Flags mapping card */}
-            <div style={{
-              backgroundColor: '#161F30',
-              borderRadius: '12px',
-              padding: '1.5rem',
-              border: '1px solid rgba(255, 255, 255, 0.05)',
-            }}>
-              <h3 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', color: '#F59E0B', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.5rem' }}>
-                Ingestion Validation Flags
-              </h3>
-              <ValidationFlagsTable flags={validationFlags} />
-            </div>
-
-            {/* D. Draft media uploads details table */}
-            <div style={{
-              backgroundColor: '#161F30',
-              borderRadius: '12px',
-              padding: '1.5rem',
-              border: '1px solid rgba(255, 255, 255, 0.05)',
-            }}>
-              <h3 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', color: '#10B981', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.5rem' }}>
-                Ingested Media Files (Staged Private)
-              </h3>
-              <MediaAssetsTable assets={mediaAssets} />
             </div>
 
           </div>

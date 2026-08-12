@@ -1,9 +1,9 @@
-import { createHash } from 'crypto';
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { getServerEnv } from '../lib/env';
+import { serializePublicFeedArtifact } from '../feed/serializePublicFeedArtifact';
 
 /**
- * Uploads the compiled approved public JSON feed to the staging public-feeds storage bucket.
+ * Uploads the compiled published-only public JSON feed to the staging public-feeds storage bucket.
  */
 export async function uploadPublicFeedToStorage(params: {
   feed: unknown[];
@@ -20,10 +20,7 @@ export async function uploadPublicFeedToStorage(params: {
   const bucket = env.SUPABASE_PUBLIC_FEEDS_BUCKET;
   const fileName = params.feedFileName || env.SUPABASE_PUBLIC_FEED_FILE;
 
-  const content = JSON.stringify(params.feed, null, 2);
-  
-  // 1. Generate SHA-256 hash of feed content
-  const feedHash = createHash('sha256').update(content).digest('hex');
+  const { content, feedHash, recordCount } = serializePublicFeedArtifact(params.feed);
 
   console.log(`Uploading feed to bucket [${bucket}] as [${fileName}]...`);
 
@@ -51,7 +48,7 @@ export async function uploadPublicFeedToStorage(params: {
   return {
     publicUrl: data.publicUrl,
     storagePath: `${bucket}/${fileName}`,
-    recordCount: params.feed.length,
+    recordCount,
     feedHash
   };
 }

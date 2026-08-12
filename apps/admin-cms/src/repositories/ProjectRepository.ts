@@ -10,6 +10,10 @@ export type ReviewActionExecutionErrorCode =
   | 'PROJECT_NOT_FOUND'
   | 'TRANSITION_INVALID'
   | 'PERMISSION_DENIED'
+  | 'CORRECTION_RESOLUTION_REQUIRED'
+  | 'AMBIGUOUS_ACTIVE_PREVIEW'
+  | 'PUBLICATION_IN_PROGRESS'
+  | 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED'
   | 'INPUT_INVALID'
   | 'RESPONSE_INVALID'
   | 'INTERNAL_FAILURE';
@@ -63,26 +67,6 @@ export interface ProjectRepository {
    * @param input Project data input
    */
   createProject(input: Partial<Project> & { title: string; year: string; publicId: string }): Promise<Project>;
-
-  /**
-   * Updates an existing project's fields.
-   * @param id The internal database UUID or public ID to update.
-   * @param patch Partial project updates
-   */
-  updateProject(id: string, patch: Partial<Project>): Promise<Project>;
-
-  /**
-   * Archives a project, marking it as archived with an audited reason.
-   * @param id The internal database UUID or public ID
-   * @param reason The auditing explanation for archiving the project
-   */
-  archiveProject(id: string, reason: string): Promise<Project>;
-
-  /**
-   * Performs a soft delete by setting the deleted_at timestamp.
-   * @param id The internal database UUID or public ID
-   */
-  softDeleteProject(id: string): Promise<void>;
 
   /**
    * Safe atomic review action transition mapping project workflows and audit tracking via PostgreSQL RPC.

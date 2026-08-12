@@ -150,7 +150,7 @@ Try these steps **in order**. Do not skip ahead.
 ## 4. Safe Reset & Shutdown Reference
 
 > [!WARNING]
-> `npm run supabase:reset` destroys the local database state and replays all 8 migrations from scratch. This affects **local** containers only. It does **not** touch hosted staging or production data.
+> `npm run supabase:reset` destroys the local database state and replays all 9 migrations from scratch. This affects **local** containers only. It does **not** touch hosted staging or production data.
 
 - **Safe Full Rerun (recommended after any partial failure):**
   ```bash
@@ -171,9 +171,9 @@ Try these steps **in order**. Do not skip ahead.
 
 ### Problem: Database Migration Mismatch / Migration Error
 - **Symptom**: `npm run supabase:reset` fails on a specific `.sql` migration file.
-- **Cause**: Local migration files `0001` through `0008` were edited, or PostgreSQL syntax error exists in a new migration.
+- **Cause**: Local migration files `0001` through `0009` were edited, or PostgreSQL syntax error exists in a new migration.
 - **Solution**:
-  - Ensure migrations `0001` through `0008` are **not edited** (`git diff infra/supabase/migrations/`).
+  - Ensure migrations `0001` through `0009` are **not edited** (`git diff infra/supabase/migrations/`).
   - Verify new migration SQL syntax locally:
     ```bash
     npm run supabase:reset

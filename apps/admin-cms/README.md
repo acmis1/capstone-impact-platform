@@ -13,7 +13,7 @@ The application currently owns:
 - private draft media and public-asset storage foundations;
 - public-eligible stable JSON feed compilation.
 
-It does not yet provide a completed metadata editor, participant portal or final confirmation workflow, integrated preview workspace, publishing/history or rollback UI, production Duda cutover, or production-readiness certification.
+It includes a project metadata editor backed by one atomic, service-role-only database transaction. Hosted deployment and broader staff acceptance remain separate activities. Browser Back/Forward interception is not supported or claimed. It does not yet provide a participant portal or final confirmation workflow, integrated preview workspace, publishing/history or rollback UI, production Duda cutover, or production-readiness certification.
 
 ## Current capability and verification
 
@@ -25,11 +25,11 @@ It does not yet provide a completed metadata editor, participant portal or final
 | Project dashboard and server-side index | Yes | Query helpers and repository behavior covered by tests | Manual responsive QA remains pending |
 | Import workflow | Foundations | Import validation and batch views implemented | Browser intake UX and spreadsheet upload are not complete |
 | Review transitions | Yes | Workflow tests, static contract tests, and atomic RPC performReviewAction route implemented | Full reviewer/editor UAT pending |
-| Project metadata editing | No | Repository supports update operations, but no editor route/UI exists | Planned |
+| Project metadata editing | Yes | Editor route/UI and one atomic metadata RPC are implemented locally | Hosted deployment and broader staff acceptance remain separate |
 | Media validation/storage | Foundations | Offline media validation tests; private-to-public storage functions exist | End-to-end staging and production verification pending |
 | Public-eligible feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled public cutover pending |
 | Duda integration | Design boundary | Stable-feed consumer is documented | Live Duda connection remains isolated |
-| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (8 timestamped migrations; migrations 0007 and 0008 repository/local-only) | Full production RLS verification pending |
+| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (11 timestamped migrations; migrations 0007 through 0011 repository/local-only) | Full production RLS verification pending |
 | Automated testing | Yes | Vitest offline suite and onboarding precheck | No hosted CI evidence is asserted here |
 | Production deployment | No | Not production-verified | Hardening and controlled cutover pending |
 
@@ -182,6 +182,9 @@ The migration set is manually governed for authorized isolated environments. It 
 - [`20260719165119_fix_initial_admin_bootstrap_runtime.sql`](../../infra/supabase/migrations/20260719165119_fix_initial_admin_bootstrap_runtime.sql) corrects the bootstrap runtime migration.
 - [`20260803174000_harden_function_execute_defaults.sql`](../../infra/supabase/migrations/20260803174000_harden_function_execute_defaults.sql) establishes function execution default privilege revokes and RLS helper guard. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
 - [`20260803180000_transactional_review_actions.sql`](../../infra/supabase/migrations/20260803180000_transactional_review_actions.sql) establishes atomic `public.perform_project_review_action` PostgreSQL RPC function for transaction-backed project review status updates and audit logging. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
+- [`20260808170000_transactional_project_metadata_update.sql`](../../infra/supabase/migrations/20260808170000_transactional_project_metadata_update.sql) establishes one atomic, service-role-only `public.update_project_metadata` transaction for metadata scalar and mapping writes. *(Repository/local-only; not applied to hosted staging.)*
+- [`20260810090000_atomic_browser_import_metadata_stage.sql`](../../infra/supabase/migrations/20260810090000_atomic_browser_import_metadata_stage.sql) establishes the `browser_import_commits` idempotency ledger and the atomic, service-role-only `public.stage_browser_import_metadata` transaction for browser folder-import metadata staging. *(Repository/local-only; not applied to hosted staging.)*
+- [`20260810120000_atomic_browser_import_media_stage.sql`](../../infra/supabase/migrations/20260810120000_atomic_browser_import_media_stage.sql) establishes `media_assets` idempotency uniqueness, the `browser_import_media_commits` ledger, and the atomic, service-role-only `public.finalize_browser_import_media_stage` transaction that registers private draft media and completes an import batch. *(Repository/local-only; not applied to hosted staging.)*
 
 See the [Supabase migration overview](../../infra/supabase/README.md), [manual apply guide](../../infra/supabase/manual-apply-guide.md), [staging reconciliation runbook](../../infra/supabase/staging-reconciliation-runbook.md) and [staging authentication verification runbook](../../infra/supabase/staging-auth-verification.md) before authorized operations.
 
@@ -208,11 +211,11 @@ Review mutations also require a same-origin `Origin` header. Audit attribution i
 | `/auth/confirm/accept` | Invitation session | Complete the invitation acceptance step. | Implemented |
 | `/auth/set-password` | Invitation session | Set a password, then terminate the invitation session. | Implemented |
 | `/admin` | Authenticated provisioned Admin/CMS staff | Dashboard metrics, filters, search, sorting and pagination. | Implemented; manual UI QA pending |
-| `/admin/projects/[publicId]` | Authenticated provisioned Admin/CMS staff | Inspect a project and access controlled review actions. | Implemented; editor and preview UI pending |
+| `/admin/projects/[publicId]` | Authenticated provisioned Admin/CMS staff | Inspect a project, edit metadata, and access controlled review actions. | Implemented; hosted deployment and broader staff acceptance remain separate |
 | `/admin/imports` | Authenticated provisioned Admin/CMS staff | List import batches and validation summaries. | Implemented |
 | `/admin/imports/[batchId]` | Authenticated provisioned Admin/CMS staff | Inspect a batch, linked project and validation flags. | Implemented |
 
-There is no implemented participant project-confirmation workflow or route, metadata editor, publishing-history route, or settings route.
+There is no implemented participant project-confirmation workflow or route, publishing-history route, or settings route. The metadata editor is implemented locally; hosted deployment and broader staff acceptance remain separate activities.
 
 ## API routes
 
@@ -246,9 +249,12 @@ The dashboard uses count-only metrics for total, public-eligible, in-review and 
 
 ## Import workflow
 
-The current fixture-based importer reads a local package containing a `project.json` manifest and supported poster/snapshot assets. It validates required metadata, file names, MIME types, size bounds and path safety, creates or updates an import batch, records validation flags, creates the project in `in_review`, and uploads imported assets as private drafts. The import list and batch detail routes expose the resulting status, warnings, errors, linked project and staged media.
+The application provides two import workflows:
 
-This is an ingestion foundation, not a finished browser submission process. Browser file upload and automated spreadsheet intake are not implemented.
+1. **Browser Folder & Batch Preview**: A client-side directory selector (`/admin/imports/new`) and server-side preview route (`POST /api/imports/preview`). Authorized staff (`projects.edit` permission) can select a single project folder or a batch parent folder containing multiple project packages. The preview parses `.xlsx` or `.json` metadata, validates file descriptors, checks package structure and folder-derived public IDs, and renders isolated package results. Staff can select eligible preview packages, acknowledge warnings per package (warning packages are unselected by default and require explicit acknowledgement before selection), and exclude invalid packages (which remain unselectable). Staff can prepare a deterministic, versioned `BrowserImportCommitIntent` contract verified against an authoritative SHA-256 preview fingerprint. The workflow remains strictly non-persisting: zero project rows, validation flags, storage files, import batches, public feeds, or emails are created, and actual atomic persistence and media upload remain separate future work. Actual media binaries stay in the browser during preview.
+2. **Local Package Importer**: A staging ingestion foundation reading local package fixtures requiring `project.json` metadata and assets (whereas browser preview supports either `.xlsx` or `.json`). It validates metadata, size bounds, and path safety, creates import batches, records validation flags, and stages private draft assets.
+
+Browser preview and commit-intent preparation form a non-persisting validation boundary. Database persistence and storage upload remain future import steps.
 
 ## Media and storage lifecycle
 
@@ -289,10 +295,10 @@ The offline suite covers authentication and authorization helpers, workflow tran
 
 ## Known limitations and production gaps
 
-- No completed metadata editor.
+- The metadata editor is implemented locally; browser Back/Forward interception is not supported or claimed, and hosted deployment plus broader staff acceptance remain pending.
 - Reviewer/editor permission-matrix UAT remains pending.
 - Project detail is the next major UI modernization area.
-- PostgreSQL RPC migration 0008 is committed locally and verified on Windows with Docker Desktop; hosted staging reconciliation remains pending.
+- PostgreSQL RPC migration 0009 introduced the local metadata editor transaction; it has not been applied to hosted staging, and hosted reconciliation remains pending.
 - Participant confirmation, integrated preview, publishing history and rollback UI are pending.
 - Live Duda cutover is pending.
 - Authenticated browser, responsive, accessibility and screen-reader validation remain incomplete.
@@ -319,6 +325,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - [Staff lifecycle design](../../infra/supabase/staff-lifecycle-design.md)
 - [Admin/CMS UI system](../../docs/admin-cms-ui-system.md)
 - [Duda integration plan](../../docs/duda-integration-plan.md)
+- [Project details workbook contract](../../docs/project-details-workbook-contract.md)
 - [Supabase migration overview](../../infra/supabase/README.md)
 - [Supabase manual apply guide](../../infra/supabase/manual-apply-guide.md)
 - [Staging authentication verification](../../infra/supabase/staging-auth-verification.md)

@@ -8,9 +8,9 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
   const configPath = path.resolve(repoRoot, 'infra/supabase/config.toml');
   const seedPath = path.resolve(repoRoot, 'infra/supabase/seed.sql');
 
-  it('1. Exactly 8 timestamped migration files exist in explicitly sorted ascending order', () => {
+  it('1. Exactly 20 timestamped migration files exist in explicitly sorted ascending order', () => {
     const rawFiles = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'));
-    expect(rawFiles.length).toBe(8);
+    expect(rawFiles.length).toBe(20);
 
     // Sort explicitly to not rely on OS directory enumeration order
     const files = [...rawFiles].sort((a, b) => a.localeCompare(b));
@@ -44,7 +44,7 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
     const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
     const combinedSql = files.map((f) => fs.readFileSync(path.join(migrationsDir, f), 'utf8')).join('\n');
 
-    // 13 expected tables
+    // 15 expected tables
     const expectedTables = [
       'programs',
       'disciplines',
@@ -59,11 +59,13 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
       'validation_flags',
       'approval_records',
       'published_snapshots',
+      'publication_attempts',
+      'public_removal_attempts',
     ];
 
     for (const table of expectedTables) {
-      expect(combinedSql).toContain(`CREATE TABLE IF NOT EXISTS ${table}`);
-      expect(combinedSql).toContain(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
+      expect(combinedSql).toMatch(new RegExp(`CREATE TABLE (?:IF NOT EXISTS )?(?:public\\.)?${table}`));
+      expect(combinedSql).toMatch(new RegExp(`ALTER TABLE (?:public\\.)?${table} ENABLE ROW LEVEL SECURITY`));
     }
 
     // Trigger check

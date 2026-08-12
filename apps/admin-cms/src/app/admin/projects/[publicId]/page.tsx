@@ -9,6 +9,30 @@ import { StagingReviewActions } from '../../../../components/admin/StagingReview
 import { getAllowedReviewActions } from '../../../../workflow/projectWorkflow';
 import { createSupabaseAdminClientCore } from '../../../../lib/supabase/adminCore';
 import { Project } from '../../../../domain/project';
+import { requireAdmin } from '../../../../auth/requireAdmin';
+import { hasPermission, canManageParticipantPreview, canPreparePublication, canResolveParticipantCorrection } from '../../../../auth/permissions';
+import { ParticipantPreviewPanel } from '../../../../components/admin/ParticipantPreviewPanel';
+import { SupabaseParticipantPreviewRepository } from '../../../../repositories/SupabaseParticipantPreviewRepository';
+import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetadataEditor';
+import { GuardedProjectBackLink, ProjectMetadataNavigationProvider } from '../../../../components/admin/ProjectMetadataNavigation';
+import { SupabaseProjectMetadataGateway, loadProjectMetadataEditorData } from '../../../../projects/projectMetadataService';
+import { saveProjectMetadataAction } from './actions';
+import { ImportBatchRepository } from '../../../../repositories/ImportBatchRepository';
+import { computeReadinessForImportBatchRow } from '../../../../import/importBatchReviewReadiness';
+import { SubmitForReviewButton } from '../../../../components/admin/SubmitForReviewButton';
+import { PublicationReadinessPanel } from '../../../../components/admin/PublicationReadinessPanel';
+import { getServerEnv } from '../../../../lib/env';
+import { PublicationPreparationPanel } from '../../../../components/admin/PublicationPreparationPanel';
+import { isLocalPublicationExecutionAvailable } from '../../../../projects/localPublicationExecution';
+import { LocalArchivePanel } from '../../../../components/admin/LocalArchivePanel';
+import type { AuthenticatedAdminContext } from '../../../../auth/authTypes';
+import {
+  loadProjectDetailAuxiliaryData,
+  ProjectDetailAuxiliaryReadError,
+  projectDetailFailureCategory,
+} from '../../../../projects/projectDetailAuxiliaryData';
+import { loadProjectMediaPreviewItems } from '../../../../projects/projectMediaPreview';
+import type { ProjectMediaPreviewItem } from '../../../../components/admin-media/mediaPreviewTypes';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -22,40 +46,143 @@ interface PageProps {
 export default async function ProjectDetailPage({ params }: PageProps) {
   const { publicId } = await params;
   let project: Project | null = null;
+  let adminContext: AuthenticatedAdminContext | null = null;
   let loadError: string | null = null;
-  let auditRecords: Array<Record<string, unknown>> = [];
+  let auditRecords: Array<Record<string, unknown>> | null = null;
+  let metadataEditorData: Awaited<ReturnType<typeof loadProjectMetadataEditorData>> = null;
+  let metadataEditorAvailable = false;
+  let canEditMetadata = false;
+  let submitForReview: { ready: boolean; blockingReasons: string[] } | null = null;
+  let submitForReviewUnavailable = false;
+  let canManagePreview = false;
+  let activePreview: { createdAt: string; expiresAt: string } | null = null;
+  let previewResponseState: import('../../../../domain/participantPreview').ParticipantPreviewResponseState = { type: 'unresponded' };
+  let previewStateAvailable = false;
+  let resolutionStatus: import('../../../../domain/participantPreview').ParticipantPreviewCorrectionResolutionStatus | null = null;
+  let resolutionStatusAvailable = false;
+  let canResolveCorrection = false;
+  let publicationReadiness: import('../../../../domain/publicationReadiness').PublicationReadinessResult | null = null;
+  let publicationActionsAvailable = false;
+  let canPreparePublicationPlan = false;
+  let localPublicationExecutionAvailable = false;
+  let canExecuteLocalArchive = false;
+  let mediaItems: ProjectMediaPreviewItem[] = [];
+  let mediaAvailable = false;
 
+  // Essential dependencies: without the base project or authenticated staff context there is no
+  // safe project-detail page to render.
   try {
     const repository = new SupabaseProjectRepository();
     project = await repository.getProjectByPublicId(publicId);
-
     if (project) {
-      // Fetch recent approval_records for this project
-      const supabase = createSupabaseAdminClientCore();
-      
-      // Resolve UUID for project
-      const { data: dbProj } = await supabase
-        .from('projects')
-        .select('id')
-        .eq('public_id', publicId)
-        .maybeSingle();
-
-      if (dbProj) {
-        const { data: records, error: recordsError } = await supabase
-          .from('approval_records')
-          .select('*')
-          .eq('project_id', dbProj.id)
-          .order('created_at', { ascending: false });
-
-        if (!recordsError && records) {
-          auditRecords = records;
-        }
-      }
+      adminContext = await requireAdmin();
     }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[Staging Project Detail Failure]:`, message);
-    loadError = message;
+    console.error('[Project detail: essential load failure]', error instanceof Error ? error.name : 'UNKNOWN_FAILURE');
+    loadError = 'Project details are temporarily unavailable.';
+  }
+
+  if (project && adminContext && !loadError) {
+    canEditMetadata = hasPermission(adminContext.permissions, 'projects.edit');
+    canManagePreview = canManageParticipantPreview(adminContext.permissions);
+    canPreparePublicationPlan = canPreparePublication(adminContext.permissions);
+    canResolveCorrection = canResolveParticipantCorrection(adminContext.permissions);
+
+    try {
+      metadataEditorData = await loadProjectMetadataEditorData(
+        new SupabaseProjectMetadataGateway(createSupabaseAdminClientCore()),
+        publicId,
+      );
+      metadataEditorAvailable = metadataEditorData !== null;
+      if (!metadataEditorAvailable) throw new ProjectDetailAuxiliaryReadError('INVALID_RESPONSE');
+    } catch (error: unknown) {
+      console.error('[Project detail: metadata editor load failure]', projectDetailFailureCategory(error));
+    }
+
+    // Submit-for-review readiness is optional and must not erase the base project when unavailable.
+    if (project.importBatchId && (project.status === 'draft' || project.status === 'changes_requested')) {
+      try {
+        const importBatchRepository = new ImportBatchRepository();
+        const [importBatch, reviewRow] = await Promise.all([
+          importBatchRepository.getImportBatchById(project.importBatchId),
+          importBatchRepository.getProjectReviewDataByPublicId(publicId),
+        ]);
+        if (importBatch && importBatch.status === 'completed' && reviewRow) {
+          const readiness = computeReadinessForImportBatchRow(reviewRow);
+          submitForReview = { ready: readiness.ready, blockingReasons: readiness.blockingReasons };
+        }
+      } catch (error: unknown) {
+        submitForReviewUnavailable = true;
+        console.error('[Project detail: import readiness load failure]', projectDetailFailureCategory(error));
+      }
+    }
+
+    try {
+      const supabase = createSupabaseAdminClientCore();
+      const previewRepository = new SupabaseParticipantPreviewRepository();
+      const env = getServerEnv();
+      localPublicationExecutionAvailable = canPreparePublicationPlan && isLocalPublicationExecutionAvailable(env.supabaseUrl);
+      canExecuteLocalArchive = hasPermission(adminContext.permissions, 'projects.archive') && isLocalPublicationExecutionAvailable(env.supabaseUrl);
+
+      const projectDbId = (async () => {
+        const { data, error } = await supabase.from('projects').select('id').eq('public_id', publicId).maybeSingle();
+        if (error) throw new ProjectDetailAuxiliaryReadError('QUERY_FAILED');
+        if (!data?.id) throw new ProjectDetailAuxiliaryReadError('PROJECT_ID_UNAVAILABLE');
+        return data.id;
+      })();
+
+      const auxiliary = await loadProjectDetailAuxiliaryData(project, {
+        loadAuditRecords: async () => {
+          const dbId = await projectDbId;
+          const { data, error } = await supabase
+            .from('approval_records')
+            .select('*')
+            .eq('project_id', dbId)
+            .order('created_at', { ascending: false });
+          if (error) throw new ProjectDetailAuxiliaryReadError('QUERY_FAILED');
+          return data ?? [];
+        },
+        loadPreviewState: async () => {
+          const preview = await previewRepository.getActivePreview(await projectDbId);
+          if (!preview) return { activePreview: null, responseState: { type: 'unresponded' as const } };
+          return {
+            activePreview: { createdAt: preview.createdAt, expiresAt: preview.expiresAt },
+            responseState: await previewRepository.getResponseState(preview.previewId),
+          };
+        },
+        loadResolutionStatus: async () => previewRepository.getCorrectionResolutionStatus(await projectDbId),
+        loadPublicationReadiness: async () => previewRepository.getPublicationReadiness({
+            publicId,
+            adminId: adminContext.adminUserId,
+            privateBucket: env.SUPABASE_DRAFT_BUCKET,
+          }),
+      });
+
+      auditRecords = auxiliary.auditRecords;
+      activePreview = auxiliary.previewState.activePreview;
+      previewResponseState = auxiliary.previewState.responseState;
+      previewStateAvailable = auxiliary.previewStateAvailable;
+      resolutionStatus = auxiliary.resolutionStatus;
+      resolutionStatusAvailable = auxiliary.resolutionStatusAvailable;
+      publicationReadiness = auxiliary.publicationReadiness;
+      publicationActionsAvailable = auxiliary.publicationActionsAvailable;
+      try {
+        mediaItems = await loadProjectMediaPreviewItems({
+          supabase,
+          projectId: await projectDbId,
+          projectTitle: project.title,
+          accessibilityText: project.accessibilityText,
+          privateBucket: env.SUPABASE_DRAFT_BUCKET,
+        });
+        mediaAvailable = true;
+      } catch (error: unknown) {
+        console.error('[Project detail: media preview load failure]', projectDetailFailureCategory(error));
+      }
+    } catch (error: unknown) {
+      // Configuration/client creation is shared setup for all secondary reads. Keep every
+      // mutation capability disabled and retain the already loaded project metadata.
+      console.error('[Project detail: auxiliary setup failure]', projectDetailFailureCategory(error));
+    }
   }
 
   if (loadError) {
@@ -79,23 +206,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           border: '1px solid rgba(239, 68, 68, 0.2)',
           textAlign: 'center',
         }}>
-          <h3 style={{ margin: '0 0 1rem 0' }}>Staging Database Connection Offline</h3>
+          <h3 style={{ margin: '0 0 1rem 0' }}>Project Details Unavailable</h3>
           <p style={{ color: '#D1D5DB', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '2rem' }}>
-            Next.js admin route failed to query project details from the staging database. Ensure that the migrations are applied and credentials set inside apps/admin-cms/.env.local.
+            Project details could not be loaded. Please try again shortly.
           </p>
-          <div style={{
-            backgroundColor: '#0F172A',
-            padding: '1rem',
-            borderRadius: '8px',
-            fontFamily: 'Courier New, monospace',
-            fontSize: '0.85rem',
-            textAlign: 'left',
-            color: '#F87171',
-            overflowX: 'auto',
-            marginBottom: '2rem',
-          }}>
-            {loadError}
-          </div>
           <Link href="/admin" style={{
             color: '#FFFFFF',
             backgroundColor: '#3B82F6',
@@ -157,6 +271,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   const allowedActions = getAllowedReviewActions(project.status);
 
   return (
+    <ProjectMetadataNavigationProvider>
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#0B0F19',
@@ -179,7 +294,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           paddingBottom: '1rem',
         }}>
           <div>
-            <Link href="/admin" style={{
+            <GuardedProjectBackLink href="/admin" style={{
               color: '#3B82F6',
               textDecoration: 'none',
               fontSize: '0.9rem',
@@ -189,7 +304,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               marginBottom: '0.5rem'
             }}>
               ← Back to Staging Dashboard
-            </Link>
+            </GuardedProjectBackLink>
             <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Project Ingestion Review</h1>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -211,17 +326,86 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             ⚠️ ADMINISTRATIVE REVIEW STAGING SANDBOX
           </h4>
           <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: '1.5', color: '#D1D5DB' }}>
-            This detail review operates purely on <strong>Staging Data</strong>. No active coordinator or participant personal folders are parsed. Live public feed showcase mirrors (Duda presentation layers) remain disconnected. Editing, publishing, and archiving actions are locked during this summer semester development.
+            Hosted and production public-feed operations remain disabled, and Duda stays disconnected. Explicit Local test publication and removal controls may be available only when this Admin CMS is connected to proven loopback Local Supabase.
           </p>
         </div>
 
         {/* Dynamic Action Trigger Panel */}
+        {submitForReviewUnavailable && (
+          <div style={{
+            maxWidth: '1000px', margin: '0 auto 1rem', fontSize: '0.8rem', color: '#F59E0B',
+            backgroundColor: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.15)',
+            borderRadius: '6px', padding: '0.5rem 0.75rem',
+          }}>
+            Submission readiness is temporarily unavailable. Submit-for-review is disabled until readiness can be verified.
+          </div>
+        )}
         <ProjectDetailSection title="⚡ Staging Review Actions" borderColor="#EC4899">
+          {submitForReview && canEditMetadata && (
+            <div style={{ marginBottom: allowedActions.length > 0 ? '1.25rem' : 0 }}>
+              {submitForReview.ready ? (
+                <SubmitForReviewButton
+                  batchId={project.importBatchId || ''}
+                  publicId={project.publicId || ''}
+                  currentStatus={project.status}
+                />
+              ) : (
+                <div style={{
+                  fontSize: '0.8rem', color: '#F59E0B', backgroundColor: 'rgba(245, 158, 11, 0.05)',
+                  border: '1px solid rgba(245, 158, 11, 0.15)', borderRadius: '6px', padding: '0.5rem 0.75rem',
+                }}>
+                  <strong>Not ready to submit for review:</strong>
+                  <ul style={{ margin: '0.25rem 0 0 0', paddingLeft: '1.1rem' }}>
+                    {submitForReview.blockingReasons.map((reason) => <li key={reason}>{reason}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
           <StagingReviewActions
             publicId={project.publicId || ''}
             currentStatus={project.status}
             allowedActions={allowedActions}
           />
+          {project.status === 'published' && canExecuteLocalArchive && <LocalArchivePanel publicId={project.publicId || ''} />}
+        </ProjectDetailSection>
+
+        <ProjectDetailSection title="🚀 Publication Readiness Gate" borderColor="#10B981">
+          <PublicationReadinessPanel readiness={publicationReadiness} />
+          <PublicationPreparationPanel publicId={project.publicId || ''} ready={publicationActionsAvailable} canPrepare={canPreparePublicationPlan} localExecutionAvailable={localPublicationExecutionAvailable} />
+        </ProjectDetailSection>
+
+        <ProjectDetailSection title="🔗 Participant Preview" borderColor="#3B82F6">
+          <ParticipantPreviewPanel
+            publicId={project.publicId || ''}
+            canManage={canManagePreview}
+            isApprovedEligible={project.status === 'approved'}
+            initialActivePreview={activePreview}
+            responseState={previewResponseState}
+            stateAvailable={previewStateAvailable}
+            resolutionStatus={resolutionStatus}
+            resolutionStateAvailable={resolutionStatusAvailable}
+            canResolveCorrection={canResolveCorrection}
+            projectStatus={project.status}
+          />
+        </ProjectDetailSection>
+
+        <ProjectDetailSection title="Project Metadata" borderColor="#3B82F6">
+          {metadataEditorData && metadataEditorAvailable ? (
+            <ProjectMetadataEditor
+              initialMetadata={metadataEditorData.metadata}
+              programs={metadataEditorData.programs}
+              disciplines={metadataEditorData.disciplines}
+              industryCategories={metadataEditorData.industryCategories}
+              canEdit={canEditMetadata}
+              projectStatus={project.status}
+              saveAction={saveProjectMetadataAction}
+            />
+          ) : (
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#9CA3AF' }}>
+              Project metadata editing is temporarily unavailable. Read-only project metadata remains visible below.
+            </p>
+          )}
         </ProjectDetailSection>
 
         {/* B. Project Overview */}
@@ -375,7 +559,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
         {/* D. Media Review */}
         <ProjectDetailSection title="Staging Media Review" borderColor="#10B981">
-          <ProjectMediaSummary project={project} />
+          <ProjectMediaSummary project={project} mediaItems={mediaItems} mediaAvailable={mediaAvailable} />
         </ProjectDetailSection>
 
         {/* E. Layout Review */}
@@ -479,7 +663,11 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         {/* Audit Log / Change History */}
         <div style={{ marginTop: '1.5rem' }}>
           <ProjectDetailSection title="📜 Staging Change & Audit Logs" borderColor="#6B7280">
-            {auditRecords.length === 0 ? (
+            {auditRecords === null ? (
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#9CA3AF', fontStyle: 'italic' }}>
+                Audit history is temporarily unavailable.
+              </p>
+            ) : auditRecords.length === 0 ? (
               <p style={{ margin: 0, fontSize: '0.85rem', color: '#9CA3AF', fontStyle: 'italic' }}>
                 No review action logs recorded for this staging project.
               </p>
@@ -529,5 +717,6 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
       </div>
     </div>
+    </ProjectMetadataNavigationProvider>
   );
 }
