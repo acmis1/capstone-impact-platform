@@ -43,8 +43,13 @@ vi.mock('../../auth/permissions', () => ({
 
 import { NextRequest } from 'next/server';
 import { AdminAuthError } from '../../auth/authTypes';
-import { POST as previewRouteHandler, parseContentLength } from '../../app/api/imports/preview/route';
+import { POST as rawPreviewRouteHandler, parseContentLength } from '../../app/api/imports/preview/route';
 import { requireAdmin } from '../../auth/requireAdmin';
+
+function previewRouteHandler(request: NextRequest) {
+  if (!request.headers.has('origin')) request.headers.set('origin', request.nextUrl.origin);
+  return rawPreviewRouteHandler(request);
+}
 import { generateUploadKey } from '../browserSelection';
 
 function makeDesc(normPath: string, sizeBytes = 500, browserMimeType = 'text/plain'): SelectedFileDescriptor {
@@ -1161,6 +1166,17 @@ describe('Browser Import Preview Suite', () => {
       const res = await previewRouteHandler(req);
       expect(res.status).toBe(403);
       expect(res.headers.get('Cache-Control')).toBe('no-store');
+    });
+
+    it('52b. Missing Origin is rejected before authentication', async () => {
+      vi.mocked(requireAdmin).mockClear();
+      const req = new NextRequest('http://localhost:3000/api/imports/preview', {
+        method: 'POST',
+      });
+      const res = await rawPreviewRouteHandler(req);
+      expect(res.status).toBe(403);
+      expect((await res.json()).code).toBe('CROSS_ORIGIN_REJECTED');
+      expect(requireAdmin).not.toHaveBeenCalled();
     });
 
     it('53. Oversized Content-Length returns 413 before multipart parsing', async () => {

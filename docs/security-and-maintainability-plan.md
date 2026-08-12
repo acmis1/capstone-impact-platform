@@ -30,7 +30,7 @@ Ensure that administrative workflows, participant project data, and public showc
 | **Live Session Verification** | Live initial identity provisioning and session verification check (`capstone-admin-cms-staging-2026`) | `VERIFIED (STAGING)` |
 | **Service-Role Client Isolation** | Server-only administrative client wrapper (`admin.ts`) with `server-only` guards | `VERIFIED (STAGING)` |
 | **RLS Policy Definitions** | Supabase RLS policies defined in migrations | `SCAFFOLDED` |
-| **RLS Staging Verification** | Effective full RLS verification across reviewer/editor role matrix | `PENDING MULTI-ROLE UAT` |
+| **RLS Role-Matrix Verification** | Real Local Auth, exact Admin/Reviewer/Editor and editor+reviewer union permissions, Data API/RLS mutation denial, and service-only RPC denial | `AUTOMATED LOCAL ACCEPTANCE IMPLEMENTED` |
 | **Public Feed Compiler & Validator** | Stripping admin metadata, compiling and validating approved/published JSON | `IMPLEMENTED` |
 | **Configurable private/public media workflow** | Storing drafts in project-drafts-private and approved posters in public bucket | `SCAFFOLDED` |
 | **Institutional account handover** | Cloud resource ownership transfer to school-controlled aliases | `REQUIRED` |
@@ -44,7 +44,7 @@ Ensure that administrative workflows, participant project data, and public showc
 ---
 
 ## 5. Authentication and Authorization Status
-*   **CMS Authentication**: Initial administrator authentication operationally verified in isolated staging (`capstone-admin-cms-staging-2026`). Full reviewer/editor RBAC matrices and multi-role RLS policy checks remain scheduled for future UAT.
+*   **CMS Authentication**: Initial administrator authentication remains operationally verified in isolated staging (`capstone-admin-cms-staging-2026`). Automated disposable-Local acceptance now verifies real Admin/Reviewer/Editor sign-in, exact role and multi-role permission unions, RLS/Data API denial, service-only RPC denial, 3600-second issued-session timing, sign-out browser-session removal, CSRF mutation boundaries, and server-derived audit attribution. Human reviewer/editor UAT, hosted multi-role acceptance, institutional provisioning, and staff handover remain pending.
 *   **Environment Lock**: Staging auth verification and session checks executed against the separate `capstone-admin-cms-staging-2026` environment in Singapore. The Prototype recovery project **was not used during this activation and must not be used** for Admin/CMS authentication.
 *   **Least Privilege Credentials**: Supabase `service_role` keys are backend-only and their usage is isolated in server-only modules (`import 'server-only'`). Static client bundle scanning confirmed zero service-role keys or secret names exist in frontend assets.
 *   **Migration Technical Debt**: This staging database currently follows the established manually applied version-controlled migration process (`0001` through `0006`). Future delivery should adopt a standard Supabase CLI/CI migration workflow through a separately planned task. Migration-history reconciliation is intentionally not part of this closure PR.
