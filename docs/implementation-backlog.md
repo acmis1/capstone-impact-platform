@@ -25,8 +25,8 @@ This document maps out the completed project baseline, foundations present, and 
 
 ## 2. Priority 0 — Remaining Auth, Roles, and Governance Work
 *   **School-Approved Identity Provisioning**: Design, implement and verify a separately approved multi-user administrator provisioning workflow for additional school staff. The existing `bootstrap_initial_admin` operation is restricted to the first administrator and same-identity idempotent recovery.
-*   **Role Acceptance Testing**: Verify reviewer and editor role matrices, RLS policies, and mutation permissions.
-*   **Session Governance**: Test session-expiry timing, CSRF protection, and audit record attribution during project mutations.
+*   **Role Acceptance Testing — automated Local acceptance implemented**: Disposable Local Supabase verification now exercises real Admin, Reviewer, and Editor password sessions; exact single-role and editor+reviewer union permissions; Auth-to-profile mapping; RLS/Data API mutation denial; service-role-only RPC denial; and role-accurate production workflow boundaries. Human reviewer/editor UAT and hosted/staging multi-role acceptance remain pending.
+*   **Session Governance — automated Local acceptance implemented**: Disposable Local verification now proves the unchanged 3600-second session policy through real issued-session timing, browser-session removal on sign-out, bounded unprovisioned/roleless/configuration failures, canonical same-origin enforcement across Admin/CMS mutation Route Handlers, and server-derived audit attribution. Production policy changes, institutional provisioning, and hosted staff-session UAT remain pending.
 *   **Staff UAT & Handover**: Conduct non-technical staff usability testing and transfer project ownership.
 
 ---

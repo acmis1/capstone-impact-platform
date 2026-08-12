@@ -27,6 +27,14 @@ export function hasPermission(userPermissions: AdminPermission[], required: Admi
   return userPermissions.includes(required);
 }
 
+/** Correction resolution requires the exact union of edit and review authority. */
+export function canResolveParticipantCorrection(userPermissions: AdminPermission[]): boolean {
+  return (
+    hasPermission(userPermissions, 'projects.edit') &&
+    hasPermission(userPermissions, 'projects.review')
+  );
+}
+
 /**
  * Maps review actions to permissions and validates.
  */

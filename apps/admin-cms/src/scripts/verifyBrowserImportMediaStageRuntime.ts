@@ -16,6 +16,21 @@ const PNG_BYTES = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
 ]);
 const PDF_BYTES = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF', 'ascii');
+const VERIFIER_PUBLIC_IDS = [
+  'ms1-pkg-1',
+  'ms2-pkg-a',
+  'ms2-pkg-b',
+  'ms3-pkg-1',
+  'ms4-pkg-1',
+  'ms4b-pkg-1',
+  'ms5c-pkg-1',
+  'ms6-pkg-1',
+] as const;
+const VERIFIER_PRIVATE_PATHS = VERIFIER_PUBLIC_IDS.flatMap((publicId) => [
+  `drafts/${publicId}/poster_image/poster.png`,
+  `drafts/${publicId}/poster_pdf/poster.pdf`,
+  `drafts/${publicId}/snapshot_image/snapshot-1.png`,
+]);
 
 function ensureLocalEnvironmentVariables(): void {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -246,6 +261,8 @@ export async function verifyBrowserImportMediaStageRuntime(): Promise<void> {
 
   const createdBatchIds: string[] = [];
   const publicSnapshotBefore = await listStorageObjects(supabase, buckets.PUBLIC_ASSETS);
+  const staleStorageCleanup = await supabase.storage.from(buckets.DRAFT_PRIVATE).remove(VERIFIER_PRIVATE_PATHS);
+  if (staleStorageCleanup.error) throw new Error('Stale runtime storage cleanup failed.');
 
   try {
     // -------------------------------------------------------------------------
@@ -645,8 +662,13 @@ export async function verifyBrowserImportMediaStageRuntime(): Promise<void> {
     process.stdout.write('  ✓ Scenario 6 PASSED!\n\n');
 
   } finally {
+    const storageCleanup = await supabase.storage.from(buckets.DRAFT_PRIVATE).remove(VERIFIER_PRIVATE_PATHS);
+    if (storageCleanup.error) throw new Error('Runtime storage cleanup failed.');
     for (const bId of createdBatchIds) {
-      await supabase.from('import_batches').delete().eq('id', bId);
+      const projectCleanup = await supabase.from('projects').delete().eq('import_batch_id', bId);
+      if (projectCleanup.error) throw new Error('Runtime project cleanup failed.');
+      const batchCleanup = await supabase.from('import_batches').delete().eq('id', bId);
+      if (batchCleanup.error) throw new Error('Runtime batch cleanup failed.');
     }
   }
 

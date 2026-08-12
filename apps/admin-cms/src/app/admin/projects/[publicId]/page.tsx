@@ -10,7 +10,7 @@ import { getAllowedReviewActions } from '../../../../workflow/projectWorkflow';
 import { createSupabaseAdminClientCore } from '../../../../lib/supabase/adminCore';
 import { Project } from '../../../../domain/project';
 import { requireAdmin } from '../../../../auth/requireAdmin';
-import { hasPermission, canManageParticipantPreview, canPreparePublication } from '../../../../auth/permissions';
+import { hasPermission, canManageParticipantPreview, canPreparePublication, canResolveParticipantCorrection } from '../../../../auth/permissions';
 import { ParticipantPreviewPanel } from '../../../../components/admin/ParticipantPreviewPanel';
 import { SupabaseParticipantPreviewRepository } from '../../../../repositories/SupabaseParticipantPreviewRepository';
 import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetadataEditor';
@@ -127,7 +127,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         }
         resolutionStatus = correctionResolutionStatus;
         publicationReadiness = readinessResult;
-        canResolveCorrection = hasPermission(adminContext.permissions, 'projects.edit') && hasPermission(adminContext.permissions, 'projects.review');
+        canResolveCorrection = canResolveParticipantCorrection(adminContext.permissions);
       }
     }
   } catch (error: unknown) {

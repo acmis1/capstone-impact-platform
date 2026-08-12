@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { POST as stagePOST } from '../../app/api/imports/stage-metadata/route';
+import { POST as rawStagePOST } from '../../app/api/imports/stage-metadata/route';
 import {
   computeCanonicalIntentHash,
 } from '../browserImportMetadataStageContract';
@@ -16,6 +16,11 @@ vi.mock('../../auth/requireAdmin', () => ({
 import { requireAdmin } from '../../auth/requireAdmin';
 
 const mockRequireAdmin = requireAdmin as unknown as ReturnType<typeof vi.fn>;
+
+function stagePOST(request: NextRequest) {
+  if (!request.headers.has('origin')) request.headers.set('origin', request.nextUrl.origin);
+  return rawStagePOST(request);
+}
 
 function makeMockAuthContext(permissions = ['projects.edit']) {
   return {
@@ -109,6 +114,19 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
       code: 'CROSS_ORIGIN_REJECTED',
       error: 'The request was not accepted.',
     });
+  });
+
+  it('4b. API rejects missing Origin before authentication', async () => {
+    mockRequireAdmin.mockClear();
+    const req = new NextRequest('http://localhost:3000/api/imports/stage-metadata', {
+      method: 'POST',
+      headers: { 'content-length': '100' },
+    });
+
+    const res = await rawStagePOST(req);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('CROSS_ORIGIN_REJECTED');
+    expect(mockRequireAdmin).not.toHaveBeenCalled();
   });
 
   it('5. API enforces Content-Length check', async () => {
