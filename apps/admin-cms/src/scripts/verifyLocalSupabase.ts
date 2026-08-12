@@ -26,10 +26,11 @@ const EXPECTED_TABLES = [
   'approval_records',
   'published_snapshots',
   'publication_attempts',
+  'public_removal_attempts',
 ];
 
 const LOOKUP_TABLES = ['programs', 'disciplines', 'industry_categories'];
-const SERVICE_ROLE_READ_ONLY_TABLES = ['publication_attempts'];
+const SERVICE_ROLE_READ_ONLY_TABLES = ['publication_attempts', 'public_removal_attempts'];
 
 const EXPECTED_BUCKETS = [
   {
@@ -453,6 +454,12 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       'mark_publication_attempt_storage_written',
       'finalize_publication_attempt',
       'fail_publication_attempt',
+      'reserve_public_removal_attempt',
+      'prepare_public_removal_attempt',
+      'claim_public_removal_attempt',
+      'mark_public_removal_storage_written',
+      'finalize_public_removal_attempt',
+      'fail_public_removal_attempt',
     ];
     for (const routine of publicationRpcs) {
       if (!funcGrantSet.has(`SERVICE_ROLE|${routine}`)) {

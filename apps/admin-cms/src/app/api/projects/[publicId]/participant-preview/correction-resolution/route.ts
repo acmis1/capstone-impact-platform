@@ -6,7 +6,7 @@ import { validateSameOrigin } from '../../../../../../auth/csrf';
 import { AdminAuthError } from '../../../../../../auth/authTypes';
 import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from '../../../../../../auth/authHttp';
 import { validatePreviewPublicId } from '../../../../../../auth/participantPreviewInput';
-import { hasPermission } from '../../../../../../auth/permissions';
+import { canResolveParticipantCorrection } from '../../../../../../auth/permissions';
 
 const NO_STORE = { 'Cache-Control': 'no-store' } as const;
 
@@ -42,11 +42,7 @@ export async function POST(
     }
 
     // Require both projects.edit and projects.review permissions
-    const permissions = adminContext.permissions;
-    const canEdit = hasPermission(permissions, 'projects.edit');
-    const canReview = hasPermission(permissions, 'projects.review');
-
-    if (!canEdit || !canReview) {
+    if (!canResolveParticipantCorrection(adminContext.permissions)) {
       const status = getAuthErrorHttpStatus('PERMISSION_DENIED');
       const error = getPublicAuthErrorMessage('PERMISSION_DENIED');
       return NextResponse.json({ success: false, error }, { status, headers: NO_STORE });

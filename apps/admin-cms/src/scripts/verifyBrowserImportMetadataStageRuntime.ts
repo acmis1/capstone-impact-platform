@@ -551,9 +551,13 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     process.stdout.write('  ✓ Scenario 5 PASSED!\n\n');
 
   } finally {
-    // Global Cleanup of test batches created by runtime verifier
+    // Global cleanup must remove projects before their batches; the foreign key intentionally
+    // preserves projects by setting import_batch_id to null when a batch alone is deleted.
     for (const bId of createdBatchIds) {
-      await supabase.from('import_batches').delete().eq('id', bId);
+      const projectCleanup = await supabase.from('projects').delete().eq('import_batch_id', bId);
+      if (projectCleanup.error) throw new Error('Runtime project cleanup failed.');
+      const batchCleanup = await supabase.from('import_batches').delete().eq('id', bId);
+      if (batchCleanup.error) throw new Error('Runtime batch cleanup failed.');
     }
   }
 

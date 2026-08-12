@@ -126,6 +126,11 @@ export async function POST(
             { success: false, error: 'Publication is currently in progress for this project.' },
             { status: 409 }
           );
+        case 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED':
+          return NextResponse.json(
+            { success: false, error: 'Published projects must use the controlled public-removal workflow.' },
+            { status: 409 }
+          );
         case 'RESPONSE_INVALID':
         case 'INTERNAL_FAILURE':
         default: {

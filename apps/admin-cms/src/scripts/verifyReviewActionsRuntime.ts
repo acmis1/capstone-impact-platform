@@ -1,7 +1,90 @@
 import { createClient } from '@supabase/supabase-js';
+import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
+
+export interface SupabaseCliInvocation {
+  executable: string;
+  argumentPrefix: string[];
+  launcherCategory: 'node-package-bin' | 'native-package-bin';
+  launcherPath: string;
+}
+
+interface SupabasePackageMetadata {
+  name?: unknown;
+  bin?: unknown;
+}
+
+class SupabaseCliExecutionError extends Error {
+  constructor(operation: string, invocation: SupabaseCliInvocation, error: unknown) {
+    const childError = error as { status?: unknown; code?: unknown };
+    const exit = typeof childError?.status === 'number' ? String(childError.status) : 'unavailable';
+    const code = typeof childError?.code === 'string' && /^[A-Z0-9_]+$/.test(childError.code)
+      ? `, code=${childError.code}`
+      : '';
+    super(`Supabase CLI operation ${operation} failed (launcher=${invocation.launcherCategory}, exit=${exit}${code}).`);
+    this.name = 'SupabaseCliExecutionError';
+  }
+}
+
+export function resolveSupabaseCliInvocation(repoRoot: string): SupabaseCliInvocation {
+  const packageRoot = path.resolve(repoRoot, 'node_modules', 'supabase');
+  const packageJsonPath = path.join(packageRoot, 'package.json');
+  let metadata: SupabasePackageMetadata;
+  try {
+    metadata = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as SupabasePackageMetadata;
+  } catch {
+    throw new Error('Supabase CLI package metadata is unavailable.');
+  }
+  const declaredBin = typeof metadata.bin === 'string'
+    ? metadata.bin
+    : metadata.bin && typeof metadata.bin === 'object'
+      ? (metadata.bin as Record<string, unknown>).supabase
+      : null;
+  if (metadata.name !== 'supabase' || typeof declaredBin !== 'string' || declaredBin.trim() === '') {
+    throw new Error('Supabase CLI package does not declare the expected bin entry.');
+  }
+  const launcherPath = path.resolve(packageRoot, declaredBin);
+  const relativeLauncher = path.relative(packageRoot, launcherPath);
+  if (relativeLauncher.startsWith('..') || path.isAbsolute(relativeLauncher) || !fs.statSync(launcherPath, { throwIfNoEntry: false })?.isFile()) {
+    throw new Error('Supabase CLI declared bin target is unavailable.');
+  }
+  const extension = path.extname(launcherPath).toLowerCase();
+  if (extension === '.js' || extension === '.cjs' || extension === '.mjs') {
+    return { executable: process.execPath, argumentPrefix: [launcherPath], launcherCategory: 'node-package-bin', launcherPath };
+  }
+  return { executable: launcherPath, argumentPrefix: [], launcherCategory: 'native-package-bin', launcherPath };
+}
+
+function runSupabaseCli(repoRoot: string, operation: string, args: string[]): string {
+  const invocation = resolveSupabaseCliInvocation(repoRoot);
+  try {
+    return execFileSync(invocation.executable, [...invocation.argumentPrefix, ...args], {
+      encoding: 'utf8',
+      cwd: repoRoot,
+      env: { ...process.env, DO_NOT_TRACK: '1' },
+    });
+  } catch (error) {
+    throw new SupabaseCliExecutionError(operation, invocation, error);
+  }
+}
+
+export function parseLocalDbQueryRows(raw: string): Array<Record<string, unknown>> {
+  const parsed = JSON.parse(raw.trim()) as unknown;
+  if (Array.isArray(parsed)) return parsed as Array<Record<string, unknown>>;
+  if (parsed && typeof parsed === 'object' && Array.isArray((parsed as { rows?: unknown }).rows)) {
+    return (parsed as { rows: Array<Record<string, unknown>> }).rows;
+  }
+  throw new Error('Supabase CLI query output has an unsupported JSON shape.');
+}
+
+function boundedVerifierDiagnostic(error: unknown): string {
+  if (error instanceof SupabaseCliExecutionError) return error.message;
+  if (error instanceof SyntaxError) return 'Supabase CLI query output was not valid JSON.';
+  if (error instanceof Error) return `Unexpected ${error.name}.`;
+  return 'Unexpected non-Error failure.';
+}
 
 export interface ProjectStateSnapshot {
   status: string | null;
@@ -33,23 +116,13 @@ export function areProjectSnapshotsEqual(a: ProjectStateSnapshot, b: ProjectStat
 
 export function runLocalDbQuery(sql: string, repoRoot: string): Array<Record<string, unknown>> {
   const workdir = path.resolve(repoRoot, 'infra');
-  const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
-  const cmd = `"${cliPath}" db query --local --workdir "${workdir}" -o json "${sql.replace(/"/g, '\\"')}"`;
-  const raw = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
-  const firstBrace = raw.indexOf('{');
-  const lastBrace = raw.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace !== -1) {
-    const parsed = JSON.parse(raw.slice(firstBrace, lastBrace + 1)) as { rows?: Array<Record<string, unknown>> };
-    return parsed.rows || [];
-  }
-  return [];
+  const raw = runSupabaseCli(repoRoot, 'db-query-json', ['db', 'query', '--local', '--workdir', workdir, '-o', 'json', sql]);
+  return parseLocalDbQueryRows(raw);
 }
 
 export function runLocalDbExec(sql: string, repoRoot: string): void {
   const workdir = path.resolve(repoRoot, 'infra');
-  const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
-  const cmd = `"${cliPath}" db query --local --workdir "${workdir}" "${sql.replace(/"/g, '\\"')}"`;
-  execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+  runSupabaseCli(repoRoot, 'db-query-exec', ['db', 'query', '--local', '--workdir', workdir, sql]);
 }
 
 export interface RuntimeVerificationOptions {
@@ -75,9 +148,7 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
     if (!options?.skipFullDatabaseRun) {
       // 1. Query local Supabase CLI env
     const workdir = path.resolve(repoRoot, 'infra');
-    const cliPath = path.resolve(repoRoot, 'node_modules/.bin/supabase');
-    const cmd = `"${cliPath}" status --workdir "${workdir}" -o env`;
-    const rawEnv = execSync(cmd, { encoding: 'utf8', cwd: repoRoot });
+    const rawEnv = runSupabaseCli(repoRoot, 'status-env', ['status', '--workdir', workdir, '-o', 'env']);
     const parsedEnv = parseSupabaseCliEnv(rawEnv);
 
     const apiUrl = parsedEnv.API_URL || 'http://127.0.0.1:54321';
@@ -438,8 +509,8 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
     }
     }
 
-  } catch {
-    console.error('FAIL: Unexpected runtime verification error.');
+  } catch (error) {
+    console.error(`FAIL: Runtime verification error: ${boundedVerifierDiagnostic(error)}`);
     success = false;
   } finally {
     // Fail-Closed Global Cleanup Block
@@ -452,9 +523,9 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
         execDb("DROP FUNCTION IF EXISTS public.temp_fail_audit();", repoRoot);
         execDb(`DELETE FROM public.approval_records WHERE project_id IN (SELECT id FROM public.projects WHERE public_id LIKE '${testProjectPrefix}-%');`, repoRoot);
         execDb(`DELETE FROM public.projects WHERE public_id LIKE '${testProjectPrefix}-%';`, repoRoot);
-      } catch {
+      } catch (error) {
         cleanupExecutionError = true;
-        console.error('FAIL: Global cleanup execution encountered an error.');
+        console.error(`FAIL: Global cleanup execution error: ${boundedVerifierDiagnostic(error)}`);
       }
     }
 
@@ -476,8 +547,8 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
         console.error('FAIL: Post-cleanup count validation failed or cleanup error occurred.');
         success = false;
       }
-    } catch {
-      console.error('FAIL: Independent post-cleanup query execution failed.');
+    } catch (error) {
+      console.error(`FAIL: Independent post-cleanup query error: ${boundedVerifierDiagnostic(error)}`);
       success = false;
     }
   }

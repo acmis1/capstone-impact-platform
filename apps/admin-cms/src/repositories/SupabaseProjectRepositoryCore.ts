@@ -426,49 +426,6 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     return this.mapDbToDomain(data as DatabaseProjectRow);
   }
 
-  async updateProject(id: string, patch: Partial<Project>): Promise<Project> {
-    const dbRow = this.mapDomainToDb(patch);
-
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const query = this.supabase.from('projects').update(dbRow);
-    const filterQuery = isUuid ? query.eq('id', id) : query.eq('public_id', id);
-
-    const { data, error } = await filterQuery
-      .select('*, project_disciplines(disciplines(name))')
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to update project: ${error.message}`);
-    }
-
-    return this.mapDbToDomain(data as DatabaseProjectRow);
-  }
-
-  async archiveProject(id: string, reason: string): Promise<Project> {
-    const patch: Partial<Project> = {
-      status: 'archived',
-      archivedAt: new Date().toISOString(),
-      archiveReason: reason,
-      pendingRemovalFromPublic: true
-    };
-    return this.updateProject(id, patch);
-  }
-
-  async softDeleteProject(id: string): Promise<void> {
-    const patch = {
-      status: 'deleted' as const,
-      deleted_at: new Date().toISOString()
-    };
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const query = this.supabase.from('projects').update(patch);
-    const filterQuery = isUuid ? query.eq('id', id) : query.eq('public_id', id);
-
-    const { error } = await filterQuery;
-    if (error) {
-      throw new Error(`Failed to soft-delete project: ${error.message}`);
-    }
-  }
-
   async performReviewAction(params: {
     publicId: string;
     action: 'request_changes' | 'approve' | 'archive';
@@ -494,6 +451,8 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
 
       if (rawMsg.includes('PUBLICATION_IN_PROGRESS')) {
         code = 'PUBLICATION_IN_PROGRESS';
+      } else if (rawMsg.includes('CONTROLLED_PUBLIC_REMOVAL_REQUIRED')) {
+        code = 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED';
       } else if (rawMsg.includes('REVIEW_PROJECT_NOT_FOUND')) {
         code = 'PROJECT_NOT_FOUND';
       } else if (rawMsg.includes('REVIEW_TRANSITION_INVALID')) {
@@ -518,7 +477,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     }
 
     const res = data as Record<string, unknown>;
-    if (res.resultCode === 'CORRECTION_RESOLUTION_REQUIRED' || res.resultCode === 'AMBIGUOUS_ACTIVE_PREVIEW') {
+    if (res.resultCode === 'CORRECTION_RESOLUTION_REQUIRED' || res.resultCode === 'AMBIGUOUS_ACTIVE_PREVIEW' || res.resultCode === 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED') {
       throw new ReviewActionExecutionError(res.resultCode);
     }
     const resPublicId = res.publicId;

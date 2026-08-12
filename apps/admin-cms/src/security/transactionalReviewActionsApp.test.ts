@@ -1,4 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
 import { applyReviewActionTransition, getAllowedReviewActions } from '../workflow/projectWorkflow';
 import { canPerformReviewAction, getPermissionsForRoles } from '../auth/permissions';
@@ -11,6 +15,10 @@ import { ReviewActionExecutionError } from '../repositories/ProjectRepository';
 import {
   captureProjectSnapshot,
   areProjectSnapshotsEqual,
+  parseLocalDbQueryRows,
+  resolveSupabaseCliInvocation,
+  runLocalDbExec,
+  runLocalDbQuery,
   runReviewActionsRuntimeVerification,
 } from '../scripts/verifyReviewActionsRuntime';
 
@@ -114,6 +122,12 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     const repo = new SupabaseProjectRepositoryCore({ rpc: vi.fn().mockResolvedValue({ data: { resultCode }, error: null }) } as never);
     await expect(repo.performReviewAction({ publicId: '2026-proj1', action: 'request_changes', adminId: '11111111-2222-3333-4444-555555555555' }))
       .rejects.toThrow(`Review action execution failed: ${resultCode}`);
+  });
+
+  it('3c. preserves the controlled public-removal requirement before success-shape parsing', async () => {
+    const repo = new SupabaseProjectRepositoryCore({ rpc: vi.fn().mockResolvedValue({ data: { resultCode: 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED' }, error: null }) } as never);
+    await expect(repo.performReviewAction({ publicId: '2026-proj1', action: 'archive', adminId: '11111111-2222-3333-4444-555555555555' }))
+      .rejects.toThrow('Review action execution failed: CONTROLLED_PUBLIC_REMOVAL_REQUIRED');
   });
 
   it('4. performReviewAction converts database RPC errors to safe typed internal errors', async () => {
@@ -330,6 +344,17 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     mockAction.mockRestore();
   });
 
+  it('10c. API maps published generic archive to the bounded controlled-removal 409 response', async () => {
+    const { requireAdmin } = await import('../auth/requireAdmin');
+    vi.mocked(requireAdmin).mockResolvedValueOnce({ authUserId: 'auth-uuid-1', adminUserId: 'admin-uuid-1', email: 'admin@capstone.test', fullName: 'Admin User', roles: ['admin'], permissions: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit'] });
+    const mockAction = vi.spyOn(SupabaseProjectRepository.prototype, 'performReviewAction').mockRejectedValueOnce(new ReviewActionExecutionError('CONTROLLED_PUBLIC_REMOVAL_REQUIRED'));
+    const req = new NextRequest('http://localhost:3000/api/projects/2026-proj1/review-action', { method: 'POST', headers: { origin: 'http://localhost:3000' }, body: JSON.stringify({ action: 'archive' }) });
+    const res = await POST(req, { params: Promise.resolve({ publicId: '2026-proj1' }) });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ success: false, error: 'Published projects must use the controlled public-removal workflow.' });
+    mockAction.mockRestore();
+  });
+
   // ============================================================
   // Safe Error Boundary & Secret Exclusion Verification Tests
   // ============================================================
@@ -413,7 +438,7 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     expect(getAllowedReviewActions('in_review')).toEqual(['request_changes', 'approve', 'archive']);
     expect(getAllowedReviewActions('changes_requested')).toEqual(['approve']);
     expect(getAllowedReviewActions('approved')).toEqual(['request_changes', 'archive']);
-    expect(getAllowedReviewActions('published')).toEqual(['archive']);
+    expect(getAllowedReviewActions('published')).toEqual([]);
     expect(getAllowedReviewActions('draft')).toEqual([]);
     expect(getAllowedReviewActions('archived')).toEqual([]);
     expect(getAllowedReviewActions('deleted')).toEqual([]);
@@ -504,5 +529,60 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
 
     expect(result).toBe(false);
     consoleSpy.mockRestore();
+  });
+
+  it('17. Resolver executes the real installed Supabase package bin declared by package metadata', () => {
+    const repoRoot = path.resolve(__dirname, '../../../..');
+    const packageRoot = path.join(repoRoot, 'node_modules', 'supabase');
+    const metadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8')) as {
+      version: string;
+      bin: { supabase: string };
+    };
+    const invocation = resolveSupabaseCliInvocation(repoRoot);
+
+    expect(invocation.launcherPath).toBe(path.resolve(packageRoot, metadata.bin.supabase));
+    expect(fs.statSync(invocation.launcherPath).isFile()).toBe(true);
+    expect(execFileSync(invocation.executable, [...invocation.argumentPrefix, '--version'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: { ...process.env, DO_NOT_TRACK: '1' },
+    }).trim())
+      .toBe(metadata.version);
+  });
+
+  it('18. Local DB helpers pass complex SQL as one literal argument through a declared package bin', () => {
+    const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'review runtime cli with spaces-'));
+    const packageRoot = path.join(fixtureRoot, 'node_modules', 'supabase');
+    const cliDirectory = path.join(packageRoot, 'cli');
+    const capturePath = path.join(fixtureRoot, 'captured-arguments.json');
+    const sql = `CREATE FUNCTION public.literal_sql() RETURNS text AS $$\nBEGIN\n  RETURN 'single quote and "double quotes"';\nEND;\n$$ LANGUAGE plpgsql;`;
+
+    try {
+      fs.mkdirSync(path.join(fixtureRoot, 'infra'), { recursive: true });
+      fs.mkdirSync(cliDirectory, { recursive: true });
+      fs.writeFileSync(path.join(packageRoot, 'package.json'), JSON.stringify({ name: 'supabase', bin: { supabase: 'cli/record.cjs' } }));
+      fs.writeFileSync(path.join(cliDirectory, 'record.cjs'), [
+        "const fs = require('node:fs');",
+        "const path = require('node:path');",
+        "const args = process.argv.slice(2);",
+        "fs.writeFileSync(path.join(process.cwd(), 'captured-arguments.json'), JSON.stringify(args));",
+        "process.stdout.write(JSON.stringify([{ args }]));",
+      ].join('\n'));
+
+      const rows = runLocalDbQuery(sql, fixtureRoot);
+      expect(rows).toEqual([{ args: ['db', 'query', '--local', '--workdir', path.join(fixtureRoot, 'infra'), '-o', 'json', sql] }]);
+
+      runLocalDbExec(sql, fixtureRoot);
+      expect(JSON.parse(fs.readFileSync(capturePath, 'utf8'))).toEqual([
+        'db', 'query', '--local', '--workdir', path.join(fixtureRoot, 'infra'), sql,
+      ]);
+    } finally {
+      fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('19. Query output parser supports the real Linux array and Windows bounded-object shapes', () => {
+    expect(parseLocalDbQueryRows('[{"count":1}]')).toEqual([{ count: 1 }]);
+    expect(parseLocalDbQueryRows('{"boundary":"safe","rows":[{"count":1}],"warning":"bounded"}')).toEqual([{ count: 1 }]);
   });
 });
