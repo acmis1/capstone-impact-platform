@@ -29,7 +29,7 @@ It includes a project metadata editor backed by one atomic, service-role-only da
 | Media validation/storage | Foundations | Offline media validation tests; private-to-public storage functions exist | End-to-end staging and production verification pending |
 | Public-eligible feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled public cutover pending |
 | Duda integration | Design boundary | Stable-feed consumer is documented | Live Duda connection remains isolated |
-| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (22 timestamped migrations; migrations 0007 through 0022 repository/local-only) | Full production RLS verification pending |
+| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (24 timestamped migrations; migrations 0007 through 0024 repository/local-only) | Full production RLS verification pending |
 | Automated testing | Yes | Vitest offline suite and onboarding precheck | No hosted CI evidence is asserted here |
 | Production deployment | No | Not production-verified | Hardening and controlled cutover pending |
 
@@ -128,6 +128,7 @@ Run from the repository root:
 | `PARTICIPANT_PREVIEW_EMAIL_SMTP_HOST`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_PORT`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE` | Server-only optional | SMTP endpoint for participant preview email. Incomplete or invalid configuration means disabled. |
 | `PARTICIPANT_PREVIEW_EMAIL_SMTP_USER`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_PASSWORD` | Server-only optional | SMTP credentials. Required together or not at all; a username without a password means disabled. |
 | `PARTICIPANT_PREVIEW_EMAIL_FROM` | Server-only optional | From address for participant preview email. Required when delivery is enabled. |
+| `PARTICIPANT_PREVIEW_REMINDERS_ENABLED` | Server-only optional | Enables due-reminder claiming only when explicitly set to `true`. Scheduling also requires complete participant-preview email configuration. Absent or invalid configuration fails closed. |
 
 The runtime contract in [`src/lib/env.ts`](./src/lib/env.ts) validates required public/server configuration and classifies keys without exposing their values. `.env` and `.env.local` are ignored by Git.
 
@@ -233,7 +234,17 @@ Staff holding participant-preview authority may explicitly choose **Generate pre
 
 **Delivery state machine.** PostgreSQL and SMTP cannot share a transaction, so the ledger records what is actually known: `reserved → transport_started → sent`, plus `failed` (reliable refusal, or transport provably never began) and `delivery_unknown` (the message may have gone out; acceptance cannot be proven). Execution ownership is a hashed two-minute lease; terminal states are immutable, so a stale owner can only observe them. An expired lease never re-grants execution, and an ambiguous outcome is never automatically resent. **Exactly-once delivery is not claimed** — generic SMTP cannot provide it. What is guaranteed is one authoritative lifecycle per exact preview, at most one ordinary transport invocation per claimed lifecycle, and deterministic convergence of duplicate sequential and concurrent requests.
 
-**Enablement.** Real delivery is disabled by default. It requires `PARTICIPANT_PREVIEW_EMAIL_ENABLED=true` **and** complete, valid SMTP configuration; anything partial or unparseable means disabled, and Generate + Send then fails closed with `EMAIL_DELIVERY_DISABLED` without generating a preview. Verification to date is Local/disposable only, against the Local email sink that the pinned Supabase stack already ships. **Still pending: institutional/provider approval, production SMTP or provider selection, production credentials, an approved From address and domain, institutional email policy, hosted/staging rollout, human UAT, and reminder policy.** Reminder scheduling is deliberately out of scope — the ledger retains the evidence a future reminder policy would need, but there is no cron, scheduler, queue worker, repeat send or arbitrary resend.
+**Enablement.** Real delivery is disabled by default. It requires `PARTICIPANT_PREVIEW_EMAIL_ENABLED=true` **and** complete, valid SMTP configuration; anything partial or unparseable means disabled, and Generate + Send then fails closed with `EMAIL_DELIVERY_DISABLED` without generating a preview. Verification is Local/disposable only, against the Local email sink that the pinned Supabase stack already ships. **Still pending: institutional/provider approval, production SMTP or provider selection, production credentials, an approved From address and domain, institutional email policy, hosted/staging rollout, and human UAT.**
+
+### Participant preview reminder scheduling
+
+Authorized Admin/Reviewer staff may choose an explicit future time for the exact active preview from the existing Participant Preview panel. Scheduling requires that preview's initial notification to be definitively `sent`; the time must be after server time and before the unchanged preview expiry. The server derives the exact preview, initial notification, recipient snapshot, and staff actor. Repeated submissions for the same preview and instant converge, and a still-scheduled reminder can be cancelled idempotently. Staff can see current and historical schedule, skip, cancellation, and linked delivery outcomes without seeing database IDs or execution credentials.
+
+Migration 0024 separates future planning from email execution. `participant_preview_reminder_schedules` records `scheduled → triggered`, `skipped`, or `cancelled`; only when a bounded trusted runner claims due work does it create a short-lived `notification_kind = reminder` ledger row. `FOR UPDATE SKIP LOCKED`, a semantic schedule uniqueness constraint, and unique schedule-to-notification linkage make PostgreSQL the concurrency boundary. The runner revalidates confirmation, correction, revocation, expiry, supersession, project state, initial-delivery evidence, and the current normalized contact both when claiming and immediately before SMTP. Ineligible work is durably skipped with zero mail. A changed contact sends to neither the old nor new address.
+
+Reminder bodies deliberately have no URL input. They tell the participant to use the secure link in the original preview email, because the raw preview credential remains non-persistent and unrecoverable. Text and HTML rendering preserve escaping, CRLF/header sanitization, bounded subjects, and the existing opaque Message-ID design. Delivery reuses the same conservative notification state machine: `sent`, known `failed`, and `delivery_unknown` are terminal and never automatically retried.
+
+`PARTICIPANT_PREVIEW_REMINDERS_ENABLED=true`, participant-preview email enablement, and valid SMTP configuration are all required before the runner claims work. `npm run run:participant-preview-reminders` is a loopback-Supabase-only local/disposable entrypoint; the reusable core has no Mailpit dependency and can be called later by an approved production scheduler. **No production cadence, hosted scheduler/provider activation, production credential, or arbitrary resend policy is included.**
 
 ## Application routes
 
@@ -259,6 +270,7 @@ There is no implemented participant project-confirmation workflow or route, publ
 | `GET` | `/api/projects` | `requireAdmin` plus `projects.read` | Returns the protected project collection. | No |
 | `POST` | `/api/projects/[publicId]/review-action` | Same-origin check, `requireAdmin`, then review/archive permission | Validates and applies `request_changes`, `approve` or `archive`. | Yes |
 | `POST` | `/api/staff/invitations` | Same-origin check, `requireAdmin`, then `staff.manage` | Creates a controlled staff provisioning invitation. Accepts only the target name, email and roles; all actor attribution is server-derived. | Yes |
+| `POST`, `DELETE` | `/api/projects/[publicId]/participant-preview/reminders` | Same-origin check, `requireAdmin`, then participant-preview management authority | Schedules an explicit future reminder or cancels a still-scheduled reminder. Recipient, preview, initial delivery and actor are server-derived. | Yes |
 
 No metadata `PATCH` route is currently implemented.
 

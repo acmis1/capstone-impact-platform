@@ -51,6 +51,8 @@
     "verify:import-batch-review-submit-runtime": "npm run verify:import-batch-review-submit-runtime --workspace=apps/admin-cms",
     "verify:participant-preview-runtime": "npm run verify:participant-preview-runtime --workspace=apps/admin-cms",
     "verify:participant-preview-notification-runtime": "npm run verify:participant-preview-notification-runtime --workspace=apps/admin-cms",
+    "verify:participant-preview-reminder-runtime": "npm run verify:participant-preview-reminder-runtime --workspace=apps/admin-cms",
+    "run:participant-preview-reminders": "npm run run:participant-preview-reminders --workspace=apps/admin-cms",
     "verify:controlled-publication-runtime": "npm run verify:controlled-publication-runtime --workspace=apps/admin-cms",
     "verify:controlled-public-removal-runtime": "npm run verify:controlled-public-removal-runtime --workspace=apps/admin-cms"
   },

@@ -5,6 +5,11 @@ import {
   renderParticipantPreviewEmailHtml,
   renderParticipantPreviewEmailText,
 } from './participantPreviewEmailMessage';
+import {
+  buildParticipantPreviewReminderEmailSubject,
+  renderParticipantPreviewReminderEmailHtml,
+  renderParticipantPreviewReminderEmailText,
+} from './participantPreviewReminderEmailMessage';
 import type { ParticipantPreviewEmailTransport } from './participantPreviewEmailTransport';
 import {
   participantPreviewNotificationMessage,
@@ -36,6 +41,7 @@ import {
 export interface NotificationTransitionOutcome {
   resultCode: string;
   status?: string | null;
+  skipReason?: string | null;
 }
 
 /** Durable lifecycle transitions. Each mutating call carries this execution's ownership token. */
@@ -53,20 +59,28 @@ export interface ParticipantPreviewNotificationGateway {
   ): Promise<NotificationTransitionOutcome>;
 }
 
-export interface ParticipantPreviewNotificationExecutionInput {
+interface ParticipantPreviewNotificationExecutionBase {
   notificationId: string;
   /** Server-generated ownership credential. Never persisted raw, never returned to a browser. */
   executionToken: string;
   recipient: string;
   projectTitle: string;
-  /**
-   * The freshly generated secure preview URL. It exists only in this process's memory and in the
-   * outgoing message; it is never persisted, logged or returned from this module.
-   */
-  previewUrl: string;
   expiresAt: string;
   fromAddress: string;
 }
+
+export type ParticipantPreviewNotificationExecutionInput =
+  | (ParticipantPreviewNotificationExecutionBase & {
+      kind?: 'initial';
+      /**
+       * The freshly generated secure preview URL. It exists only in this process's memory and in
+       * the outgoing message; it is never persisted, logged or returned from this module.
+       */
+      previewUrl: string;
+  })
+  | (ParticipantPreviewNotificationExecutionBase & {
+      kind: 'reminder';
+  });
 
 export interface ParticipantPreviewNotificationExecutionContext {
   notifications: ParticipantPreviewNotificationGateway;
@@ -130,9 +144,15 @@ export async function executeParticipantPreviewNotification(
   let html: string;
   let messageId: string;
   try {
-    subject = buildParticipantPreviewEmailSubject(input.projectTitle);
-    text = renderParticipantPreviewEmailText(input);
-    html = renderParticipantPreviewEmailHtml(input);
+    if (input.kind === 'reminder') {
+      subject = buildParticipantPreviewReminderEmailSubject(input.projectTitle);
+      text = renderParticipantPreviewReminderEmailText(input);
+      html = renderParticipantPreviewReminderEmailHtml(input);
+    } else {
+      subject = buildParticipantPreviewEmailSubject(input.projectTitle);
+      text = renderParticipantPreviewEmailText(input);
+      html = renderParticipantPreviewEmailHtml(input);
+    }
     messageId = buildParticipantPreviewMessageId(input.notificationId, input.fromAddress);
   } catch (error: unknown) {
     const failureCode =
@@ -168,6 +188,12 @@ export async function executeParticipantPreviewNotification(
     }
     if (authorization.resultCode === 'PREVIEW_NOT_ELIGIBLE') {
       return settleWithoutTransport('PREVIEW_NOT_ELIGIBLE', 'PREVIEW_NOT_ELIGIBLE');
+    }
+    if (authorization.resultCode === 'REMINDER_SKIPPED') {
+      return settleWithoutTransport(
+        authorization.skipReason ?? 'REMINDER_SKIPPED',
+        'REMINDER_SKIPPED',
+      );
     }
     return settleWithoutTransport('TRANSPORT_NOT_AUTHORIZED', 'NOTIFICATION_FAILED');
   }

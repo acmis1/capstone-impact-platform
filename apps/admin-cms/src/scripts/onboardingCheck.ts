@@ -37,6 +37,7 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260813002154_project_metadata_audit_history.sql',
   '20260813120000_staff_identity_provisioning.sql',
   '20260813180000_participant_preview_email_notifications.sql',
+  '20260813190000_participant_preview_reminder_schedules.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {
@@ -69,8 +70,8 @@ export function isVersionInNpm11Range(versionStr: string): boolean {
 
 export function validateMigrationsList(filenames: string[]): { passed: boolean; message: string } {
   const sqlFiles = filenames.filter((f) => f.endsWith('.sql'));
-  if (sqlFiles.length !== 23) {
-    return { passed: false, message: `FAIL: Expected exactly 23 migration files, found ${sqlFiles.length}` };
+  if (sqlFiles.length !== 24) {
+    return { passed: false, message: `FAIL: Expected exactly 24 migration files, found ${sqlFiles.length}` };
   }
 
   const timestampRegex = /^(\d{14})_.+\.sql$/;
@@ -96,7 +97,7 @@ export function validateMigrationsList(filenames: string[]): { passed: boolean; 
     }
   }
 
-  return { passed: true, message: 'PASS: Exactly 23 timestamped migrations exist with exact expected filenames in ascending order' };
+  return { passed: true, message: 'PASS: Exactly 24 timestamped migrations exist with exact expected filenames in ascending order' };
 }
 
 export function sanitizePublicSafeMessage(msg: string): string {
@@ -277,13 +278,13 @@ export function performOnboardingCheck(options?: {
     const rawFiles = readdirSync(migrationsDir);
     const migrationsResult = validateMigrationsList(rawFiles);
     items.push({
-      name: 'Timestamped Database Migrations (21 ascending)',
+      name: 'Timestamped Database Migrations (24 ascending)',
       passed: migrationsResult.passed,
       message: migrationsResult.message,
     });
   } else {
     items.push({
-      name: 'Timestamped Database Migrations (21 ascending)',
+      name: 'Timestamped Database Migrations (24 ascending)',
       passed: false,
       message: 'FAIL: Migrations directory missing',
     });

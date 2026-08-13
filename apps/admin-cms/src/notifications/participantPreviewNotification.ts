@@ -14,7 +14,7 @@ export type ParticipantPreviewNotificationStatus =
   | 'failed'
   | 'delivery_unknown';
 
-export type ParticipantPreviewNotificationKind = 'initial';
+export type ParticipantPreviewNotificationKind = 'initial' | 'reminder';
 
 export type ParticipantPreviewNotificationResultCode =
   /** The transport reliably accepted the message and that outcome was persisted. */
@@ -40,6 +40,8 @@ export type ParticipantPreviewNotificationResultCode =
   | 'ALREADY_CONFIRMED'
   /** The exact preview was revoked, expired or superseded before transport could begin. */
   | 'PREVIEW_NOT_ELIGIBLE'
+  /** A due reminder became ineligible before SMTP and was durably skipped. */
+  | 'REMINDER_SKIPPED'
   /** A bounded catch-all. No raw backend detail ever reaches the caller. */
   | 'NOTIFICATION_FAILED';
 
@@ -60,6 +62,7 @@ const MESSAGES: Record<ParticipantPreviewNotificationResultCode, string> = {
     'The participant has already confirmed this preview, so no further preview email is due.',
   PREVIEW_NOT_ELIGIBLE:
     'This preview is no longer eligible for a participant email, so nothing was sent.',
+  REMINDER_SKIPPED: 'The reminder became ineligible and was skipped without sending email.',
   NOTIFICATION_FAILED: 'The preview email could not be requested.',
 };
 

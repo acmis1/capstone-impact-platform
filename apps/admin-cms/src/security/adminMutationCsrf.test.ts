@@ -14,6 +14,7 @@ const ADMIN_MUTATION_ROUTES = [
   'src/app/api/projects/[publicId]/review-action/route.ts',
   'src/app/api/projects/[publicId]/participant-preview/route.ts',
   'src/app/api/projects/[publicId]/participant-preview/correction-resolution/route.ts',
+  'src/app/api/projects/[publicId]/participant-preview/reminders/route.ts',
   'src/app/api/projects/[publicId]/publication-plan/route.ts',
   'src/app/api/projects/[publicId]/local-publication/route.ts',
   'src/app/api/projects/[publicId]/local-archive/route.ts',
