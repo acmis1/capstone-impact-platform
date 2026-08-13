@@ -31,6 +31,7 @@
     "users:local": "tsx src/scripts/provisionLocalSupabaseUsers.ts",
     "verify:local": "tsx src/scripts/verifyLocalSupabase.ts",
     "verify:metadata-runtime": "tsx src/scripts/verifyProjectMetadataRuntime.ts",
+    "verify:metadata-audit-runtime": "tsx src/scripts/verifyProjectMetadataAuditRuntime.ts",
     "verify:review-actions-runtime": "tsx src/scripts/verifyReviewActionsRuntime.ts",
     "verify:browser-metadata-stage-runtime": "tsx src/scripts/verifyBrowserImportMetadataStageRuntime.ts",
     "verify:browser-media-stage-runtime": "tsx src/scripts/verifyBrowserImportMediaStageRuntime.ts",

@@ -31,6 +31,7 @@ import {
   ProjectDetailAuxiliaryReadError,
   projectDetailFailureCategory,
   AuditHistoryView,
+  PROJECT_AUDIT_HISTORY_SELECT,
   parseAuditHistoryRow,
 } from '../../../../projects/projectDetailAuxiliaryData';
 import { loadProjectMediaPreviewItems } from '../../../../projects/projectMediaPreview';
@@ -138,7 +139,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           const dbId = await projectDbId;
           const { data, error } = await supabase
             .from('approval_records')
-            .select('*, admin_users(first_name, last_name, email)')
+            .select(PROJECT_AUDIT_HISTORY_SELECT)
             .eq('project_id', dbId)
             .order('created_at', { ascending: false })
             .order('id', { ascending: false });
@@ -703,14 +704,12 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                             {rec.action.replace('_', ' ')}
                           </span>
 
-                          {rec.action === 'update_metadata' && (
-                            <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', fontWeight: 'normal' }}>
-                              <div style={{ color: '#9CA3AF' }}>Actor:</div>
-                              <div style={{ color: '#D1D5DB' }}>
-                                {rec.actorFullName || 'Unknown'} {rec.actorEmail ? `(${rec.actorEmail})` : ''}
-                              </div>
+                          <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', fontWeight: 'normal' }}>
+                            <div style={{ color: '#9CA3AF' }}>Actor:</div>
+                            <div style={{ color: '#D1D5DB' }}>
+                              {rec.actorFullName} {rec.actorEmail ? `(${rec.actorEmail})` : ''}
                             </div>
-                          )}
+                          </div>
                         </td>
                         <td style={{ padding: '0.5rem', verticalAlign: 'top' }}>
                           <code>{rec.fromStatus || 'N/A'}</code> → <code>{rec.toStatus || 'N/A'}</code>

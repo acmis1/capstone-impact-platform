@@ -61,6 +61,18 @@ describe('project metadata atomic persistence workflow', () => {
     const gateway = new FakeGateway(); gateway.response = { resultCode: 'NO_CHANGES', metadata };
     expect(await saveProjectMetadata(gateway, metadata, 'test-admin-user')).toEqual({ ok: true, metadata });
   });
+  it('requires NO_CHANGES nullable database text to be normalized to production strings', async () => {
+    const normalized = new FakeGateway();
+    normalized.response = { resultCode: 'NO_CHANGES', metadata: { ...metadata, background: '', solution: '' } };
+    expect(await saveProjectMetadata(normalized, metadata, 'test-admin-user')).toEqual({
+      ok: true,
+      metadata: { ...metadata, background: '', solution: '' },
+    });
+
+    const nullable = new FakeGateway();
+    nullable.response = { resultCode: 'NO_CHANGES', metadata: { ...metadata, background: null, solution: null } };
+    expect(await saveProjectMetadata(nullable, metadata, 'test-admin-user')).toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
+  });
   it('rejects malformed or unknown RPC responses and hides raw RPC errors', async () => {
     const malformed = new FakeGateway(); malformed.response = { resultCode: 'SUCCESS' };
     expect(await saveProjectMetadata(malformed, metadata, 'test-admin-user')).toMatchObject({ code: 'INTERNAL_FAILURE' });

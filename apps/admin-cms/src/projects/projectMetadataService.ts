@@ -15,7 +15,7 @@ type ProjectSnapshot = ProjectMetadataView & { id: string };
 type MetadataOptions = { programs: MetadataOption[]; disciplines: MetadataOption[]; industryCategories: MetadataOption[] };
 
 const uuidArray = z.array(postgresUuidSchema);
-const metadataResponseSchema = z.object({
+export const metadataResponseSchema = z.object({
   publicId: z.string().min(1), title: z.string(), summary: z.string(), background: z.string(), solution: z.string(),
   year: z.string().regex(/^\d{4}$/), programId: postgresUuidSchema, disciplineIds: uuidArray, industryCategoryIds: uuidArray,
   expectedUpdatedAt: z.string().refine((value) => !Number.isNaN(Date.parse(value))),

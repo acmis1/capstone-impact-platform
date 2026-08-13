@@ -4,18 +4,26 @@ import type {
 } from '../domain/participantPreview';
 import type { PublicationReadinessResult } from '../domain/publicationReadiness';
 import { ParticipantPreviewExecutionError } from '../repositories/ParticipantPreviewRepository';
+import { postgresUuidSchema } from './projectMetadata';
 import { z } from 'zod';
 
-const metadataFieldUnion = z.union([
-  z.literal('title'),
-  z.literal('summary'),
-  z.literal('background'),
-  z.literal('solution'),
-  z.literal('year'),
-  z.literal('program'),
-  z.literal('disciplines'),
-  z.literal('industryCategories'),
+export const PROJECT_AUDIT_HISTORY_SELECT = 'id,admin_id,action_taken,from_status,to_status,comments,created_at,actor_full_name_snapshot,actor_email_snapshot,event_details,admin_users!approval_records_admin_id_fkey(full_name,email)';
+
+const metadataFieldSchema = z.enum([
+  'title',
+  'summary',
+  'background',
+  'solution',
+  'year',
+  'program',
+  'disciplines',
+  'industryCategories',
 ]);
+
+const lookupSnapshotSchema = z.object({
+  id: postgresUuidSchema,
+  name: z.string().nullable(),
+}).strict();
 
 const metadataStateSchema = z.object({
   title: z.string().optional(),
@@ -23,18 +31,45 @@ const metadataStateSchema = z.object({
   background: z.string().optional(),
   solution: z.string().optional(),
   year: z.number().optional(),
-  program: z.object({ id: z.string(), name: z.string() }).optional(),
-  disciplines: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
-  industryCategories: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
-}).passthrough();
+  program: lookupSnapshotSchema.optional(),
+  disciplines: z.array(lookupSnapshotSchema).optional(),
+  industryCategories: z.array(lookupSnapshotSchema).optional(),
+}).strict();
 
 const metadataEventDetailsSchema = z.object({
   version: z.literal(1),
   type: z.literal('project_metadata'),
-  changedFields: z.array(metadataFieldUnion),
+  changedFields: z.array(metadataFieldSchema).min(1)
+    .refine((fields) => new Set(fields).size === fields.length, 'changedFields must be unique'),
   before: metadataStateSchema,
   after: metadataStateSchema,
+}).strict().superRefine((details, context) => {
+  for (const field of details.changedFields) {
+    if (!(field in details.before)) {
+      context.addIssue({ code: 'custom', path: ['before', field], message: `Missing before.${field}` });
+    }
+    if (!(field in details.after)) {
+      context.addIssue({ code: 'custom', path: ['after', field], message: `Missing after.${field}` });
+    }
+  }
 });
+
+const auditHistoryRowSchema = z.object({
+  id: postgresUuidSchema,
+  admin_id: postgresUuidSchema.nullable(),
+  action_taken: z.string().min(1),
+  from_status: z.string().nullable(),
+  to_status: z.string().nullable(),
+  comments: z.string().nullable(),
+  created_at: z.string().nullable(),
+  actor_full_name_snapshot: z.string().nullable(),
+  actor_email_snapshot: z.string().nullable(),
+  event_details: z.unknown().nullable(),
+  admin_users: z.object({
+    full_name: z.string().nullable(),
+    email: z.string(),
+  }).strict().nullable(),
+}).strict();
 
 export type ProjectMetadataEventDetails = z.infer<typeof metadataEventDetailsSchema>;
 
@@ -45,12 +80,18 @@ export interface AuditHistoryView {
   fromStatus: string | null;
   toStatus: string | null;
   comments: string | null;
-  actorFullName: string | null;
+  actorFullName: string;
   actorEmail: string | null;
   metadataEventDetails: ProjectMetadataEventDetails | null;
 }
 
-export function parseAuditHistoryRow(row: Record<string, unknown>): AuditHistoryView {
+function nonEmptyString(value: string | null): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+export function parseAuditHistoryRow(input: unknown): AuditHistoryView {
+  const row = auditHistoryRowSchema.parse(input);
   let metadataEventDetails: ProjectMetadataEventDetails | null = null;
   if (row.event_details) {
     const parsed = metadataEventDetailsSchema.safeParse(row.event_details);
@@ -61,25 +102,20 @@ export function parseAuditHistoryRow(row: Record<string, unknown>): AuditHistory
     }
   }
 
-  const adminUsers = row.admin_users as Record<string, unknown> | undefined;
-  
+  const snapshotName = nonEmptyString(row.actor_full_name_snapshot);
+  const fallbackName = nonEmptyString(row.admin_users?.full_name ?? null);
+  const snapshotEmail = nonEmptyString(row.actor_email_snapshot);
+  const fallbackEmail = nonEmptyString(row.admin_users?.email ?? null);
+
   return {
-    id: String(row.id || ''),
-    action: String(row.action_taken || ''),
-    timestamp: String(row.created_at || ''),
-    fromStatus: row.from_status ? String(row.from_status) : null,
-    toStatus: row.to_status ? String(row.to_status) : null,
-    comments: row.comments ? String(row.comments) : null,
-    actorFullName: row.actor_full_name_snapshot
-      ? String(row.actor_full_name_snapshot)
-      : adminUsers && adminUsers.first_name && adminUsers.last_name
-        ? `${adminUsers.first_name} ${adminUsers.last_name}`.trim()
-        : null,
-    actorEmail: row.actor_email_snapshot
-      ? String(row.actor_email_snapshot)
-      : adminUsers && adminUsers.email
-        ? String(adminUsers.email)
-        : null,
+    id: row.id,
+    action: row.action_taken,
+    timestamp: row.created_at ?? '',
+    fromStatus: row.from_status,
+    toStatus: row.to_status,
+    comments: row.comments,
+    actorFullName: snapshotName ?? fallbackName ?? 'Unknown staff member',
+    actorEmail: snapshotEmail ?? fallbackEmail,
     metadataEventDetails,
   };
 }

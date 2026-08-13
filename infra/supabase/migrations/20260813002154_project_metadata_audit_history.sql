@@ -21,6 +21,11 @@ CREATE OR REPLACE FUNCTION public.update_project_metadata(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $$
 DECLARE
+  v_public_id text := pg_catalog.btrim(COALESCE(p_public_id, ''));
+  v_title text := pg_catalog.btrim(COALESCE(p_title, ''));
+  v_summary text := pg_catalog.btrim(COALESCE(p_summary, ''));
+  v_background text := pg_catalog.btrim(COALESCE(p_background, ''));
+  v_solution text := pg_catalog.btrim(COALESCE(p_solution, ''));
   v_project_id uuid;
   v_current_updated_at timestamptz;
   v_status text;
@@ -50,11 +55,6 @@ DECLARE
   v_old_industries jsonb;
   v_new_industries jsonb;
 BEGIN
-  p_title := pg_catalog.btrim(COALESCE(p_title, ''));
-  p_summary := pg_catalog.btrim(COALESCE(p_summary, ''));
-  p_background := pg_catalog.btrim(COALESCE(p_background, ''));
-  p_solution := pg_catalog.btrim(COALESCE(p_solution, ''));
-
   SELECT full_name, email INTO v_actor_full_name, v_actor_email
   FROM public.admin_users WHERE id = p_admin_id;
 
@@ -65,9 +65,9 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'PERMISSION_DENIED');
   END IF;
 
-  IF p_public_id = '' OR p_title = '' OR p_summary = '' OR pg_catalog.length(p_title) > 200
-    OR pg_catalog.length(p_summary) > 1000 OR pg_catalog.length(p_background) > 10000
-    OR pg_catalog.length(p_solution) > 10000 OR p_year IS NULL OR p_year < 2000 OR p_year > 2100
+  IF v_public_id = '' OR v_title = '' OR v_summary = '' OR pg_catalog.length(v_title) > 200
+    OR pg_catalog.length(v_summary) > 1000 OR pg_catalog.length(v_background) > 10000
+    OR pg_catalog.length(v_solution) > 10000 OR p_year IS NULL OR p_year < 2000 OR p_year > 2100
     OR p_program_id IS NULL OR p_expected_updated_at IS NULL OR p_discipline_ids IS NULL
     OR pg_catalog.cardinality(p_discipline_ids) = 0 OR pg_catalog.array_position(p_discipline_ids, NULL) IS NOT NULL
     OR p_industry_category_ids IS NULL OR pg_catalog.cardinality(p_industry_category_ids) = 0
@@ -78,7 +78,7 @@ BEGIN
 
   SELECT id, updated_at, status, title, summary, background, solution, year, program_id, program_name, discipline, industry
   INTO v_project_id, v_current_updated_at, v_status, v_old_title, v_old_summary, v_old_background, v_old_solution, v_old_year, v_old_program_id, v_old_program_name, v_old_discipline_name, v_old_industry_name
-  FROM public.projects WHERE public_id = p_public_id AND deleted_at IS NULL FOR UPDATE;
+  FROM public.projects WHERE public_id = v_public_id AND deleted_at IS NULL FOR UPDATE;
 
   IF NOT FOUND THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'PROJECT_NOT_FOUND'); END IF;
   IF v_status = 'approved' THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'APPROVAL_REOPEN_REQUIRED'); END IF;
@@ -93,25 +93,25 @@ BEGIN
     OR (SELECT count(*) FROM public.industry_categories WHERE id = ANY(p_industry_category_ids)) <> pg_catalog.cardinality(p_industry_category_ids)
   THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'VALIDATION_FAILED'); END IF;
 
-  IF v_old_title IS DISTINCT FROM p_title THEN
+  IF v_old_title IS DISTINCT FROM v_title THEN
     v_changed_fields := array_append(v_changed_fields, 'title');
     v_before_state := jsonb_set(v_before_state, '{title}', to_jsonb(v_old_title));
-    v_after_state := jsonb_set(v_after_state, '{title}', to_jsonb(p_title));
+    v_after_state := jsonb_set(v_after_state, '{title}', to_jsonb(v_title));
   END IF;
-  IF v_old_summary IS DISTINCT FROM p_summary THEN
+  IF v_old_summary IS DISTINCT FROM v_summary THEN
     v_changed_fields := array_append(v_changed_fields, 'summary');
     v_before_state := jsonb_set(v_before_state, '{summary}', to_jsonb(v_old_summary));
-    v_after_state := jsonb_set(v_after_state, '{summary}', to_jsonb(p_summary));
+    v_after_state := jsonb_set(v_after_state, '{summary}', to_jsonb(v_summary));
   END IF;
-  IF coalesce(v_old_background, '') IS DISTINCT FROM p_background THEN
+  IF coalesce(v_old_background, '') IS DISTINCT FROM v_background THEN
     v_changed_fields := array_append(v_changed_fields, 'background');
     v_before_state := jsonb_set(v_before_state, '{background}', to_jsonb(coalesce(v_old_background, '')));
-    v_after_state := jsonb_set(v_after_state, '{background}', to_jsonb(p_background));
+    v_after_state := jsonb_set(v_after_state, '{background}', to_jsonb(v_background));
   END IF;
-  IF coalesce(v_old_solution, '') IS DISTINCT FROM p_solution THEN
+  IF coalesce(v_old_solution, '') IS DISTINCT FROM v_solution THEN
     v_changed_fields := array_append(v_changed_fields, 'solution');
     v_before_state := jsonb_set(v_before_state, '{solution}', to_jsonb(coalesce(v_old_solution, '')));
-    v_after_state := jsonb_set(v_after_state, '{solution}', to_jsonb(p_solution));
+    v_after_state := jsonb_set(v_after_state, '{solution}', to_jsonb(v_solution));
   END IF;
   IF coalesce(v_old_year, 0) IS DISTINCT FROM p_year THEN
     v_changed_fields := array_append(v_changed_fields, 'year');
@@ -156,7 +156,8 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object(
       'resultCode', 'NO_CHANGES',
       'metadata', pg_catalog.jsonb_build_object(
-        'publicId', p_public_id, 'title', v_old_title, 'summary', v_old_summary, 'background', v_old_background, 'solution', v_old_solution,
+        'publicId', v_public_id, 'title', v_old_title, 'summary', v_old_summary,
+        'background', coalesce(v_old_background, ''), 'solution', coalesce(v_old_solution, ''),
         'year', v_old_year::text, 'programId', v_old_program_id::text,
         'disciplineIds', (SELECT coalesce(pg_catalog.jsonb_agg(d->>'id'), '[]'::jsonb) FROM jsonb_array_elements(v_old_disciplines) d),
         'industryCategoryIds', (SELECT coalesce(pg_catalog.jsonb_agg(ic->>'id'), '[]'::jsonb) FROM jsonb_array_elements(v_old_industries) ic),
@@ -165,7 +166,7 @@ BEGIN
     );
   END IF;
 
-  UPDATE public.projects SET title = p_title, summary = p_summary, background = p_background, solution = p_solution,
+  UPDATE public.projects SET title = v_title, summary = v_summary, background = v_background, solution = v_solution,
     year = p_year, program_id = p_program_id, program_name = v_program_name, discipline = v_discipline_name, industry = v_industry_name
   WHERE id = v_project_id RETURNING updated_at INTO v_updated_at;
 
@@ -190,7 +191,7 @@ BEGIN
   RETURN pg_catalog.jsonb_build_object(
     'resultCode', 'SUCCESS',
     'metadata', pg_catalog.jsonb_build_object(
-      'publicId', p_public_id, 'title', p_title, 'summary', p_summary, 'background', p_background, 'solution', p_solution,
+      'publicId', v_public_id, 'title', v_title, 'summary', v_summary, 'background', v_background, 'solution', v_solution,
       'year', p_year::text, 'programId', p_program_id::text,
       'disciplineIds', (SELECT pg_catalog.jsonb_agg(x::text) FROM pg_catalog.unnest(p_discipline_ids) x),
       'industryCategoryIds', (SELECT pg_catalog.jsonb_agg(x::text) FROM pg_catalog.unnest(p_industry_category_ids) x),

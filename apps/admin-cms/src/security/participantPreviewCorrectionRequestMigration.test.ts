@@ -19,7 +19,7 @@ describe('Migration 0015 Participant Preview Correction Requests Security Contra
     const rawFiles = fs.readdirSync(migrationsDir);
     const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
 
-    expect(sqlFiles.length).toBeGreaterThanOrEqual(20);
+    expect(sqlFiles).toContain(migrationFile);
     expect(sqlFiles[12]).toBe(priorLinksMigrationFile);
     expect(sqlFiles[13]).toBe(priorConfirmationsMigrationFile);
     expect(sqlFiles[14]).toBe(migrationFile);
