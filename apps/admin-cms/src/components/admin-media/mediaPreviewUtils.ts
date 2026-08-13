@@ -1,4 +1,4 @@
-export type MediaKind = 'image' | 'pdf' | 'unsupported';
+import type { MediaKind } from './mediaPreviewTypes';
 
 export function isValidMediaUrl(value?: string): boolean {
   if (!value || value.trim() === '') {
@@ -27,6 +27,10 @@ export function classifyMediaType(mimeType: string): MediaKind {
 
   if (normalizedMimeType === 'application/pdf') {
     return 'pdf';
+  }
+
+  if (normalizedMimeType === 'video/mp4') {
+    return 'video';
   }
 
   return 'unsupported';

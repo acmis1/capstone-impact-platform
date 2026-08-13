@@ -3,12 +3,15 @@ import { MediaFileInfo } from './MediaFileInfo';
 import { PdfMediaPreview } from './PdfMediaPreview';
 import type { MediaPreviewItem } from './mediaPreviewTypes';
 import { classifyMediaType } from './mediaPreviewUtils';
+import { VideoMediaPreview } from './VideoMediaPreview';
 
 interface MediaPreviewProps {
   media: MediaPreviewItem;
 }
 
-export function MediaPreview({ media }: MediaPreviewProps) {
+export function MediaPreview({
+  media,
+}: MediaPreviewProps) {
   const mediaKind = classifyMediaType(media.mimeType);
 
   if (mediaKind === 'image') {
@@ -17,6 +20,10 @@ export function MediaPreview({ media }: MediaPreviewProps) {
 
   if (mediaKind === 'pdf') {
     return <PdfMediaPreview media={media} />;
+  }
+
+  if (mediaKind === 'video') {
+    return <VideoMediaPreview media={media} />;
   }
 
   return (

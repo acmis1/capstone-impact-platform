@@ -20,7 +20,9 @@ describe('isValidMediaUrl', () => {
   });
 
   it('rejects malformed URLs', () => {
-    expect(isValidMediaUrl('not-a-url')).toBe(false);
+    expect(
+      isValidMediaUrl('not-a-url'),
+    ).toBe(false);
   });
 
   it('rejects javascript URLs', () => {
@@ -37,40 +39,64 @@ describe('isValidMediaUrl', () => {
 
 describe('classifyMediaType', () => {
   it('classifies PNG as image', () => {
-    expect(classifyMediaType('image/png')).toBe('image');
+    expect(
+      classifyMediaType('image/png'),
+    ).toBe('image');
   });
 
   it('classifies JPEG as image', () => {
-    expect(classifyMediaType('image/jpeg')).toBe('image');
+    expect(
+      classifyMediaType('image/jpeg'),
+    ).toBe('image');
   });
 
   it('classifies WebP as image', () => {
-    expect(classifyMediaType('image/webp')).toBe('image');
+    expect(
+      classifyMediaType('image/webp'),
+    ).toBe('image');
   });
 
   it('classifies PDF as pdf', () => {
-    expect(classifyMediaType('application/pdf')).toBe('pdf');
+    expect(
+      classifyMediaType('application/pdf'),
+    ).toBe('pdf');
+  });
+
+  it('classifies MP4 as video', () => {
+    expect(
+      classifyMediaType('video/mp4'),
+    ).toBe('video');
   });
 
   it('classifies unsupported MIME types correctly', () => {
-    expect(classifyMediaType('video/mp4')).toBe('unsupported');
+    expect(
+      classifyMediaType('application/zip'),
+    ).toBe('unsupported');
   });
 });
 
 describe('formatFileSize', () => {
   it('formats bytes', () => {
-    expect(formatFileSize(500)).toBe('500 B');
+    expect(
+      formatFileSize(500),
+    ).toBe('500 B');
   });
 
   it('formats kilobytes', () => {
-    expect(formatFileSize(1024)).toBe('1.0 KB');
+    expect(
+      formatFileSize(1024),
+    ).toBe('1.0 KB');
   });
 
   it('formats megabytes', () => {
-    expect(formatFileSize(1024 * 1024)).toBe('1.0 MB');
+    expect(
+      formatFileSize(1024 * 1024),
+    ).toBe('1.0 MB');
   });
 
   it('handles an unknown file size', () => {
-    expect(formatFileSize(undefined)).toBe('Unknown size');
+    expect(
+      formatFileSize(undefined),
+    ).toBe('Unknown size');
   });
 });
