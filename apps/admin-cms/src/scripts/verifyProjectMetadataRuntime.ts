@@ -155,7 +155,7 @@ function getLookupFixture(): LookupFixture {
     INSERT INTO public.admin_users (id, email, full_name) VALUES ('00000000-0000-0000-0000-0000000000a2', 'reviewer@example.com', 'Reviewer User') ON CONFLICT DO NOTHING;
     INSERT INTO public.user_roles (user_id, role) VALUES ('00000000-0000-0000-0000-0000000000a2', 'reviewer') ON CONFLICT DO NOTHING;
   `);
-  
+
   const fixture = queryLocalJson<LookupFixture>(`
     SELECT pg_catalog.jsonb_build_object(
       'programId', (SELECT id::text FROM public.programs ORDER BY name LIMIT 1),
@@ -330,7 +330,7 @@ export async function verifyProjectMetadataRuntime(): Promise<void> {
     noChangesParams.p_background = expectedSuccess.background;
     noChangesParams.p_solution = expectedSuccess.solution;
     noChangesParams.p_year = expectedSuccess.year;
-    
+
     const noChangesResult = await serviceClient.rpc('update_project_metadata', noChangesParams) as RpcResult;
     assertRpcCode(noChangesResult, 'NO_CHANGES', 'Exact no-op should return NO_CHANGES');
     assertSnapshotEqual(getProjectSnapshot(successId), committedSuccess, 'Exact no-op shouldn\'t modify record');

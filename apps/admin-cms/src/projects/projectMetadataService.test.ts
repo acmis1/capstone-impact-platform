@@ -53,9 +53,13 @@ describe('project metadata atomic persistence workflow', () => {
     expect(result).toMatchObject({ ok: false, code: 'VALIDATION_FAILED', fieldErrors: { [field]: expect.any(Array) } });
     expect(gateway.calls).toEqual(['lookups']);
   });
-  it.each(['PROJECT_NOT_FOUND', 'STALE_VERSION', 'VALIDATION_FAILED', 'APPROVAL_REOPEN_REQUIRED', 'PUBLISHED_PROJECT_LOCKED'])('maps expected RPC result %s safely', async (resultCode) => {
+  it.each(['PROJECT_NOT_FOUND', 'STALE_VERSION', 'VALIDATION_FAILED', 'APPROVAL_REOPEN_REQUIRED', 'PUBLISHED_PROJECT_LOCKED', 'PERMISSION_DENIED'])('maps expected RPC result %s safely', async (resultCode) => {
     const gateway = new FakeGateway(); gateway.response = { resultCode };
     expect(await saveProjectMetadata(gateway, metadata, 'test-admin-user')).toMatchObject({ ok: false, code: resultCode });
+  });
+  it('maps NO_CHANGES to a successful result with authoritative metadata', async () => {
+    const gateway = new FakeGateway(); gateway.response = { resultCode: 'NO_CHANGES', metadata };
+    expect(await saveProjectMetadata(gateway, metadata, 'test-admin-user')).toEqual({ ok: true, metadata });
   });
   it('rejects malformed or unknown RPC responses and hides raw RPC errors', async () => {
     const malformed = new FakeGateway(); malformed.response = { resultCode: 'SUCCESS' };

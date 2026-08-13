@@ -138,9 +138,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           const dbId = await projectDbId;
           const { data, error } = await supabase
             .from('approval_records')
-            .select('*')
+            .select('*, admin_users(first_name, last_name, email)')
             .eq('project_id', dbId)
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: false });
           if (error) throw new ProjectDetailAuxiliaryReadError('QUERY_FAILED');
           return (data ?? []).map(parseAuditHistoryRow);
         },
@@ -285,7 +286,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         maxWidth: '1000px',
         margin: '0 auto',
       }}>
-        
+
         {/* Navigation header */}
         <header style={{
           display: 'flex',
@@ -422,7 +423,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             <div>
               <div style={{ color: '#9CA3AF' }}><strong>Project Title:</strong></div>
               <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#FFFFFF' }}>{project.title}</div>
-              
+
               <div style={{ color: '#9CA3AF', marginTop: '1rem' }}><strong>Public Showcase ID:</strong></div>
               <div><code style={{ backgroundColor: '#1E293B', padding: '0.15rem 0.35rem', borderRadius: '4px', color: '#F59E0B' }}>{project.publicId}</code></div>
 
@@ -627,7 +628,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             <div style={{ fontSize: '0.85rem', lineHeight: '1.6', color: '#D1D5DB' }}>
               <div><strong>Validation Errors (Cached):</strong> {project.validationErrors?.length || 0}</div>
               <div><strong>Validation Warnings (Cached):</strong> {project.validationWarnings?.length || 0}</div>
-              
+
               <div style={{ marginTop: '0.75rem' }}>
                 <strong>Pending Showcase Removal:</strong>{' '}
                 <span style={{ color: project.pendingRemovalFromPublic ? '#EF4444' : '#10B981', fontWeight: 'bold' }}>
@@ -701,7 +702,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                           }}>
                             {rec.action.replace('_', ' ')}
                           </span>
-                          
+
                           {rec.action === 'update_metadata' && (
                             <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', fontWeight: 'normal' }}>
                               <div style={{ color: '#9CA3AF' }}>Actor:</div>
@@ -716,7 +717,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                         </td>
                         <td style={{ padding: '0.5rem', color: '#F59E0B', verticalAlign: 'top' }}>
                           {rec.comments || 'N/A'}
-                          
+
                           {rec.action === 'update_metadata' && rec.metadataEventDetails && (
                             <div style={{ marginTop: '0.75rem', backgroundColor: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '6px' }}>
                               <div style={{ color: '#9CA3AF', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
@@ -728,17 +729,17 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                                   {rec.metadataEventDetails.changedFields.map(field => {
                                     const before = rec.metadataEventDetails!.before[field];
                                     const after = rec.metadataEventDetails!.after[field];
-                                    
+
                                     let changeView;
                                     if (field === 'background' || field === 'solution') {
                                       changeView = (
                                         <div style={{ marginTop: '0.25rem' }}>
                                           <div style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>Previous:</div>
-                                          <div style={{ maxHeight: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>
+                                          <div style={{ maxHeight: '80px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', opacity: 0.7, padding: '0.25rem', backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: '4px', fontSize: '0.75rem' }}>
                                             {before ? String(before) : 'N/A'}
                                           </div>
                                           <div style={{ color: '#10B981', fontSize: '0.75rem', marginTop: '0.25rem' }}>New:</div>
-                                          <div style={{ maxHeight: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          <div style={{ maxHeight: '80px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', padding: '0.25rem', backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: '4px', fontSize: '0.75rem' }}>
                                             {after ? String(after) : 'N/A'}
                                           </div>
                                         </div>

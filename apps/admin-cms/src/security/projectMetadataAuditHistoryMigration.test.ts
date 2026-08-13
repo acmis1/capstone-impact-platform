@@ -20,7 +20,7 @@ describe('project metadata audit history migration contract', () => {
     expect(content).toContain('SECURITY DEFINER');
     expect(content).toContain("SET search_path = ''");
     expect(content).toContain('FOR UPDATE');
-    
+
     // Authorization
     expect(content).toContain("role IN ('admin', 'editor')");
 
@@ -34,5 +34,19 @@ describe('project metadata audit history migration contract', () => {
   it('audits the exact state transitions in the same transaction', () => {
     expect(content).toContain('INSERT INTO public.approval_records');
     expect(content).toContain('update_metadata');
+  });
+
+  it('normalizes text input and array comparisons to prevent false mutations', () => {
+    // Normalizes input strings
+    expect(content).toContain("p_title := pg_catalog.btrim(COALESCE(p_title, ''));");
+    
+    // Fallbacks array changes gracefully
+    expect(content).toContain("v_old_disciplines IS NOT DISTINCT FROM v_new_disciplines");
+    expect(content).toContain("v_old_industries IS NOT DISTINCT FROM v_new_industries");
+  });
+
+  it('short-circuits unmodified saves and returns NO_CHANGES', () => {
+    expect(content).toContain("IF array_length(v_changed_fields, 1) IS NULL THEN");
+    expect(content).toContain("'resultCode', 'NO_CHANGES'");
   });
 });

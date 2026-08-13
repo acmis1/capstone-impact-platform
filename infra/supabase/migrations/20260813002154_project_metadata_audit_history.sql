@@ -35,6 +35,8 @@ DECLARE
   v_old_year integer;
   v_old_program_id uuid;
   v_old_program_name text;
+  v_old_discipline_name text;
+  v_old_industry_name text;
   v_audit_record_id uuid;
   v_admin_roles text[];
   v_actor_full_name text;
@@ -48,11 +50,16 @@ DECLARE
   v_old_industries jsonb;
   v_new_industries jsonb;
 BEGIN
+  p_title := pg_catalog.btrim(COALESCE(p_title, ''));
+  p_summary := pg_catalog.btrim(COALESCE(p_summary, ''));
+  p_background := pg_catalog.btrim(COALESCE(p_background, ''));
+  p_solution := pg_catalog.btrim(COALESCE(p_solution, ''));
+
   SELECT full_name, email INTO v_actor_full_name, v_actor_email
   FROM public.admin_users WHERE id = p_admin_id;
-  
+
   IF NOT FOUND OR NOT EXISTS (
-    SELECT 1 FROM public.user_roles 
+    SELECT 1 FROM public.user_roles
     WHERE user_id = p_admin_id AND role IN ('admin', 'editor')
   ) THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'PERMISSION_DENIED');
@@ -69,10 +76,10 @@ BEGIN
     OR (SELECT pg_catalog.count(DISTINCT x) FROM pg_catalog.unnest(p_industry_category_ids) x) <> pg_catalog.cardinality(p_industry_category_ids)
   THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'VALIDATION_FAILED'); END IF;
 
-  SELECT id, updated_at, status, title, summary, background, solution, year, program_id, program_name
-  INTO v_project_id, v_current_updated_at, v_status, v_old_title, v_old_summary, v_old_background, v_old_solution, v_old_year, v_old_program_id, v_old_program_name
+  SELECT id, updated_at, status, title, summary, background, solution, year, program_id, program_name, discipline, industry
+  INTO v_project_id, v_current_updated_at, v_status, v_old_title, v_old_summary, v_old_background, v_old_solution, v_old_year, v_old_program_id, v_old_program_name, v_old_discipline_name, v_old_industry_name
   FROM public.projects WHERE public_id = p_public_id AND deleted_at IS NULL FOR UPDATE;
-  
+
   IF NOT FOUND THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'PROJECT_NOT_FOUND'); END IF;
   IF v_status = 'approved' THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'APPROVAL_REOPEN_REQUIRED'); END IF;
   IF v_status = 'published' THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'PUBLISHED_PROJECT_LOCKED'); END IF;
@@ -86,32 +93,32 @@ BEGIN
     OR (SELECT count(*) FROM public.industry_categories WHERE id = ANY(p_industry_category_ids)) <> pg_catalog.cardinality(p_industry_category_ids)
   THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'VALIDATION_FAILED'); END IF;
 
-  IF v_old_title IS DISTINCT FROM p_title THEN 
+  IF v_old_title IS DISTINCT FROM p_title THEN
     v_changed_fields := array_append(v_changed_fields, 'title');
     v_before_state := jsonb_set(v_before_state, '{title}', to_jsonb(v_old_title));
     v_after_state := jsonb_set(v_after_state, '{title}', to_jsonb(p_title));
   END IF;
-  IF v_old_summary IS DISTINCT FROM p_summary THEN 
+  IF v_old_summary IS DISTINCT FROM p_summary THEN
     v_changed_fields := array_append(v_changed_fields, 'summary');
     v_before_state := jsonb_set(v_before_state, '{summary}', to_jsonb(v_old_summary));
     v_after_state := jsonb_set(v_after_state, '{summary}', to_jsonb(p_summary));
   END IF;
-  IF coalesce(v_old_background, '') IS DISTINCT FROM p_background THEN 
+  IF coalesce(v_old_background, '') IS DISTINCT FROM p_background THEN
     v_changed_fields := array_append(v_changed_fields, 'background');
     v_before_state := jsonb_set(v_before_state, '{background}', to_jsonb(coalesce(v_old_background, '')));
     v_after_state := jsonb_set(v_after_state, '{background}', to_jsonb(p_background));
   END IF;
-  IF coalesce(v_old_solution, '') IS DISTINCT FROM p_solution THEN 
+  IF coalesce(v_old_solution, '') IS DISTINCT FROM p_solution THEN
     v_changed_fields := array_append(v_changed_fields, 'solution');
     v_before_state := jsonb_set(v_before_state, '{solution}', to_jsonb(coalesce(v_old_solution, '')));
     v_after_state := jsonb_set(v_after_state, '{solution}', to_jsonb(p_solution));
   END IF;
-  IF coalesce(v_old_year, 0) IS DISTINCT FROM p_year THEN 
+  IF coalesce(v_old_year, 0) IS DISTINCT FROM p_year THEN
     v_changed_fields := array_append(v_changed_fields, 'year');
     v_before_state := jsonb_set(v_before_state, '{year}', to_jsonb(v_old_year));
     v_after_state := jsonb_set(v_after_state, '{year}', to_jsonb(p_year));
   END IF;
-  IF coalesce(v_old_program_id, '00000000-0000-0000-0000-000000000000'::uuid) IS DISTINCT FROM p_program_id THEN 
+  IF coalesce(v_old_program_id, '00000000-0000-0000-0000-000000000000'::uuid) IS DISTINCT FROM p_program_id THEN
     v_changed_fields := array_append(v_changed_fields, 'program');
     v_before_state := jsonb_set(v_before_state, '{program}', jsonb_build_object('id', v_old_program_id, 'name', v_old_program_name));
     v_after_state := jsonb_set(v_after_state, '{program}', jsonb_build_object('id', p_program_id, 'name', v_program_name));
@@ -119,11 +126,13 @@ BEGIN
 
   SELECT coalesce(jsonb_agg(jsonb_build_object('id', d.id, 'name', d.name) ORDER BY d.id), '[]'::jsonb) INTO v_old_disciplines
   FROM public.project_disciplines pd JOIN public.disciplines d ON pd.discipline_id = d.id WHERE pd.project_id = v_project_id;
-  
+
   SELECT coalesce(jsonb_agg(jsonb_build_object('id', d.id, 'name', d.name) ORDER BY d.id), '[]'::jsonb) INTO v_new_disciplines
   FROM public.disciplines d WHERE d.id = ANY(p_discipline_ids);
-  
-  IF v_old_disciplines IS DISTINCT FROM v_new_disciplines THEN
+
+  IF v_old_disciplines IS NOT DISTINCT FROM v_new_disciplines THEN
+    v_discipline_name := v_old_discipline_name;
+  ELSE
     v_changed_fields := array_append(v_changed_fields, 'disciplines');
     v_before_state := jsonb_set(v_before_state, '{disciplines}', v_old_disciplines);
     v_after_state := jsonb_set(v_after_state, '{disciplines}', v_new_disciplines);
@@ -131,27 +140,38 @@ BEGIN
 
   SELECT coalesce(jsonb_agg(jsonb_build_object('id', ic.id, 'name', ic.name) ORDER BY ic.id), '[]'::jsonb) INTO v_old_industries
   FROM public.project_industry_categories pic JOIN public.industry_categories ic ON pic.industry_category_id = ic.id WHERE pic.project_id = v_project_id;
-  
+
   SELECT coalesce(jsonb_agg(jsonb_build_object('id', ic.id, 'name', ic.name) ORDER BY ic.id), '[]'::jsonb) INTO v_new_industries
   FROM public.industry_categories ic WHERE ic.id = ANY(p_industry_category_ids);
-  
-  IF v_old_industries IS DISTINCT FROM v_new_industries THEN
+
+  IF v_old_industries IS NOT DISTINCT FROM v_new_industries THEN
+    v_industry_name := v_old_industry_name;
+  ELSE
     v_changed_fields := array_append(v_changed_fields, 'industryCategories');
     v_before_state := jsonb_set(v_before_state, '{industryCategories}', v_old_industries);
     v_after_state := jsonb_set(v_after_state, '{industryCategories}', v_new_industries);
   END IF;
 
   IF array_length(v_changed_fields, 1) IS NULL THEN
-    RETURN pg_catalog.jsonb_build_object('resultCode', 'NO_CHANGES');
+    RETURN pg_catalog.jsonb_build_object(
+      'resultCode', 'NO_CHANGES',
+      'metadata', pg_catalog.jsonb_build_object(
+        'publicId', p_public_id, 'title', v_old_title, 'summary', v_old_summary, 'background', v_old_background, 'solution', v_old_solution,
+        'year', v_old_year::text, 'programId', v_old_program_id::text,
+        'disciplineIds', (SELECT coalesce(pg_catalog.jsonb_agg(d->>'id'), '[]'::jsonb) FROM jsonb_array_elements(v_old_disciplines) d),
+        'industryCategoryIds', (SELECT coalesce(pg_catalog.jsonb_agg(ic->>'id'), '[]'::jsonb) FROM jsonb_array_elements(v_old_industries) ic),
+        'expectedUpdatedAt', v_current_updated_at
+      )
+    );
   END IF;
 
   UPDATE public.projects SET title = p_title, summary = p_summary, background = p_background, solution = p_solution,
     year = p_year, program_id = p_program_id, program_name = v_program_name, discipline = v_discipline_name, industry = v_industry_name
   WHERE id = v_project_id RETURNING updated_at INTO v_updated_at;
-  
+
   DELETE FROM public.project_disciplines WHERE project_id = v_project_id;
   INSERT INTO public.project_disciplines(project_id, discipline_id) SELECT v_project_id, x FROM pg_catalog.unnest(p_discipline_ids) x;
-  
+
   DELETE FROM public.project_industry_categories WHERE project_id = v_project_id;
   INSERT INTO public.project_industry_categories(project_id, industry_category_id) SELECT v_project_id, x FROM pg_catalog.unnest(p_industry_category_ids) x;
 

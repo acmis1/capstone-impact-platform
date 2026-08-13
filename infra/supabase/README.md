@@ -13,6 +13,7 @@ This directory contains the version-controlled database schema migrations, polic
 > * **Default Execution Hardening:** Migration `0007` (`20260803174000_harden_function_execute_defaults.sql`) establishes global postgres-owned function default privilege revokes and conditionally revokes execution on the optional hosted RLS helper. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
 > * **Transactional Review Actions:** Migration `0008` (`20260803180000_transactional_review_actions.sql`) establishes atomic `public.perform_project_review_action` PostgreSQL RPC function for transaction-backed project review status updates and approval audit logging. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
 > * **Transactional Metadata Update:** Migration `0009` (`20260808170000_transactional_project_metadata_update.sql`) establishes the one-transaction, service-role-only `public.update_project_metadata` RPC for scalar metadata and join-table writes. *(Repository/local-only; not applied to hosted staging.)*
+> * **Project Metadata Audit Trail:** Migration `0021` (`20260813002154_project_metadata_audit_history.sql`) introduces the project metadata audit trail directly into `approval_records`. *(Repository/local-only; not applied to hosted staging.)*
 > * **Identity Linkage:** Initial administrator linkage was verified in isolated staging (`READY_FOR_MANUAL_LOGIN_TEST`).
 > * **Do Not Rerun:** Do not rerun the migration sequence or initial bootstrap merely because these files exist.
 > * **Pending Scope:** Hosted migration reconciliation, hosted staff lifecycle provisioning, reviewer/editor UAT, and production deployment remain pending.
@@ -68,7 +69,7 @@ npm run supabase:stop
 
 ---
 
-## Migration Inventory (9 Migrations)
+## Migration Inventory (21 Migrations)
 
 * **[20260601035138_staging_schema.sql](./migrations/20260601035138_staging_schema.sql):** Creates core relational tables (`programs`, `disciplines`, `industry_categories`, `admin_users`, `user_roles`, `import_batches`, `projects`, `project_disciplines`, `project_industry_categories`, `media_assets`, `validation_flags`, `approval_records`, `published_snapshots`), check constraints, indexes, and `updated_at` triggers.
 * **[20260601035139_staging_rls_policies.sql](./migrations/20260601035139_staging_rls_policies.sql):** Enables Row-Level Security (RLS) across all tables with restrictive defaults.
@@ -79,3 +80,5 @@ npm run supabase:stop
 * **[20260803174000_harden_function_execute_defaults.sql](./migrations/20260803174000_harden_function_execute_defaults.sql):** Establishes global postgres-owned function default privilege revokes and conditionally revokes execution on the optional hosted RLS helper. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
 * **[20260803180000_transactional_review_actions.sql](./migrations/20260803180000_transactional_review_actions.sql):** Establishes atomic `public.perform_project_review_action` PostgreSQL RPC function for transaction-backed project review status updates and approval audit logging. *(Committed in repository; local/repository-only; not yet applied to hosted staging.)*
 * **[20260808170000_transactional_project_metadata_update.sql](./migrations/20260808170000_transactional_project_metadata_update.sql):** Establishes the atomic, service-role-only `public.update_project_metadata` transaction for metadata scalar and mapping writes. *(Repository/local-only; not applied to hosted staging.)*
+* **... Migrations 0010 through 0020 ...**
+* **[20260813002154_project_metadata_audit_history.sql](./migrations/20260813002154_project_metadata_audit_history.sql):** Introduces granular project metadata change history tracking in `approval_records`. *(Repository/local-only; not applied to hosted staging.)*

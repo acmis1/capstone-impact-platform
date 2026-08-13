@@ -93,10 +93,8 @@ export async function saveProjectMetadata(gateway: ProjectMetadataGateway, rawIn
   if (!response.success) return failure('INTERNAL_FAILURE');
   switch (response.data.resultCode) {
     case 'SUCCESS':
-      return response.data.metadata ? { ok: true, metadata: response.data.metadata } : failure('INTERNAL_FAILURE');
     case 'NO_CHANGES':
-      // The input matched the database state exactly.
-      return { ok: true, metadata: { ...input, year: String(input.year) } };
+      return response.data.metadata ? { ok: true, metadata: response.data.metadata } : failure('INTERNAL_FAILURE');
     case 'PROJECT_NOT_FOUND': return failure('PROJECT_NOT_FOUND');
     case 'STALE_VERSION': return failure('STALE_VERSION');
     case 'APPROVAL_REOPEN_REQUIRED': return failure('APPROVAL_REOPEN_REQUIRED');

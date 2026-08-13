@@ -6,12 +6,34 @@ import type { PublicationReadinessResult } from '../domain/publicationReadiness'
 import { ParticipantPreviewExecutionError } from '../repositories/ParticipantPreviewRepository';
 import { z } from 'zod';
 
+const metadataFieldUnion = z.union([
+  z.literal('title'),
+  z.literal('summary'),
+  z.literal('background'),
+  z.literal('solution'),
+  z.literal('year'),
+  z.literal('program'),
+  z.literal('disciplines'),
+  z.literal('industryCategories'),
+]);
+
+const metadataStateSchema = z.object({
+  title: z.string().optional(),
+  summary: z.string().optional(),
+  background: z.string().optional(),
+  solution: z.string().optional(),
+  year: z.number().optional(),
+  program: z.object({ id: z.string(), name: z.string() }).optional(),
+  disciplines: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
+  industryCategories: z.array(z.object({ id: z.string(), name: z.string() })).optional(),
+}).passthrough();
+
 const metadataEventDetailsSchema = z.object({
   version: z.literal(1),
   type: z.literal('project_metadata'),
-  changedFields: z.array(z.string()),
-  before: z.record(z.string(), z.unknown()),
-  after: z.record(z.string(), z.unknown()),
+  changedFields: z.array(metadataFieldUnion),
+  before: metadataStateSchema,
+  after: metadataStateSchema,
 });
 
 export type ProjectMetadataEventDetails = z.infer<typeof metadataEventDetailsSchema>;
@@ -39,6 +61,8 @@ export function parseAuditHistoryRow(row: Record<string, unknown>): AuditHistory
     }
   }
 
+  const adminUsers = row.admin_users as Record<string, unknown> | undefined;
+  
   return {
     id: String(row.id || ''),
     action: String(row.action_taken || ''),
@@ -46,8 +70,16 @@ export function parseAuditHistoryRow(row: Record<string, unknown>): AuditHistory
     fromStatus: row.from_status ? String(row.from_status) : null,
     toStatus: row.to_status ? String(row.to_status) : null,
     comments: row.comments ? String(row.comments) : null,
-    actorFullName: row.actor_full_name_snapshot ? String(row.actor_full_name_snapshot) : null,
-    actorEmail: row.actor_email_snapshot ? String(row.actor_email_snapshot) : null,
+    actorFullName: row.actor_full_name_snapshot
+      ? String(row.actor_full_name_snapshot)
+      : adminUsers && adminUsers.first_name && adminUsers.last_name
+        ? `${adminUsers.first_name} ${adminUsers.last_name}`.trim()
+        : null,
+    actorEmail: row.actor_email_snapshot
+      ? String(row.actor_email_snapshot)
+      : adminUsers && adminUsers.email
+        ? String(adminUsers.email)
+        : null,
     metadataEventDetails,
   };
 }
