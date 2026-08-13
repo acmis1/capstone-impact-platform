@@ -5,6 +5,7 @@ import {
   generateUploadKey,
   normalizeRelativePath,
 } from './browserSelection';
+import type { AdminReferenceIntent } from './browserImportCommitIntentContract';
 
 /**
  * Shared Server & Client Limits
@@ -111,6 +112,16 @@ export interface BrowserImportPackagePreview {
     posterPdfPresent: boolean;
     snapshotPresent: boolean;
   };
+  reconciliation?: {
+    status:
+      | 'RECONCILED'
+      | 'ADMIN_REFERENCE_NO_MATCH'
+      | 'ADMIN_REFERENCE_AMBIGUOUS_MATCH'
+      | 'ADMIN_REFERENCE_FIELD_MISMATCH'
+      | 'ADMIN_REFERENCE_VALUE_INVALID';
+    matchedRowNumber?: number;
+    mismatchedFields: string[];
+  };
   errors: BrowserImportIssue[];
   warnings: BrowserImportIssue[];
 }
@@ -133,6 +144,7 @@ export interface BrowserImportPreviewBatch {
   mediaValidationMode: 'descriptor_only';
   batchIssues: BrowserImportIssue[];
   packages: BrowserImportPackagePreview[];
+  adminReference?: AdminReferenceIntent;
 }
 
 export interface BrowserImportPreviewResponse {
@@ -565,6 +577,27 @@ export function validateBrowserImportPreviewResponse(raw: unknown): BrowserImpor
       };
     }
 
+    let reconciliation: BrowserImportPackagePreview['reconciliation'] = undefined;
+    if (pkg.reconciliation !== undefined && pkg.reconciliation !== null) {
+      if (typeof pkg.reconciliation !== 'object') return null;
+      const rec = pkg.reconciliation as Record<string, unknown>;
+      if (
+        rec.status !== 'RECONCILED' &&
+        rec.status !== 'ADMIN_REFERENCE_NO_MATCH' &&
+        rec.status !== 'ADMIN_REFERENCE_AMBIGUOUS_MATCH' &&
+        rec.status !== 'ADMIN_REFERENCE_FIELD_MISMATCH' &&
+        rec.status !== 'ADMIN_REFERENCE_VALUE_INVALID'
+      ) {
+        return null;
+      }
+      if (!Array.isArray(rec.mismatchedFields)) return null;
+      reconciliation = {
+        status: rec.status,
+        matchedRowNumber: typeof rec.matchedRowNumber === 'number' ? rec.matchedRowNumber : undefined,
+        mismatchedFields: rec.mismatchedFields as string[],
+      };
+    }
+
     packages.push({
       packagePath: pkg.packagePath,
       folderName: pkg.folderName,
@@ -579,6 +612,7 @@ export function validateBrowserImportPreviewResponse(raw: unknown): BrowserImpor
         posterPdfPresent: fp.posterPdfPresent,
         snapshotPresent: fp.snapshotPresent,
       },
+      reconciliation,
       errors: pkg.errors as BrowserImportIssue[],
       warnings: pkg.warnings as BrowserImportIssue[],
     });
@@ -592,6 +626,15 @@ export function validateBrowserImportPreviewResponse(raw: unknown): BrowserImpor
     else calculatedWarnings++;
   }
   if (batch.totalWarnings !== calculatedWarnings || batch.totalErrors !== calculatedErrors) return null;
+
+  let adminReference: AdminReferenceIntent | undefined = undefined;
+  if (batch.adminReference !== undefined && batch.adminReference !== null) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { adminReferenceIntentSchema } = require('./browserImportCommitIntentContract');
+    const parsedRef = adminReferenceIntentSchema.safeParse(batch.adminReference);
+    if (!parsedRef.success) return null;
+    adminReference = parsedRef.data;
+  }
 
   return {
     success: true,
@@ -610,6 +653,7 @@ export function validateBrowserImportPreviewResponse(raw: unknown): BrowserImpor
       mediaValidationMode: 'descriptor_only',
       batchIssues,
       packages,
+      ...(adminReference ? { adminReference } : {}),
     },
   };
 }

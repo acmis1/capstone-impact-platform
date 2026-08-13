@@ -1,5 +1,6 @@
 import { execFileSync, execSync } from 'node:child_process';
 import path from 'node:path';
+import ExcelJS from 'exceljs';
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { getStagingBuckets } from '../lib/supabase/buckets';
 import { analyzeBrowserImportServer } from '../import/parseBrowserImportPreview';
@@ -177,7 +178,19 @@ async function stageFixtureMetadataBatch(params: {
     descriptors,
   };
 
-  const analysis = await analyzeBrowserImportServer(manifest, metaFiles);
+  const referenceWorkbook = new ExcelJS.Workbook();
+  const referenceWorksheet = referenceWorkbook.addWorksheet('REFERENCE');
+  referenceWorksheet.addRow(['Public ID', 'Official Project Title']);
+  for (const pkg of packages) referenceWorksheet.addRow([pkg.publicId, `Title ${pkg.publicId}`]);
+  const analysis = await analyzeBrowserImportServer(manifest, metaFiles, {
+    referenceFileBuffer: Buffer.from(await referenceWorkbook.xlsx.writeBuffer()),
+    mapping: {
+      worksheet: 'REFERENCE',
+      matchMappings: [{ canonicalField: 'publicId', referenceColumn: 'Public ID' }],
+      comparisonMappings: [{ canonicalField: 'title', referenceColumn: 'Official Project Title' }],
+      reconciliationContractVersion: 'admin-reference-reconciliation-v1',
+    },
+  });
   const selectedPackagePaths = packages.map((p) => p.packagePath).sort();
 
   const intent = {
@@ -188,6 +201,7 @@ async function stageFixtureMetadataBatch(params: {
     declaredTotalBytes,
     selectedPackagePaths,
     acknowledgedWarningPackagePaths: selectedPackagePaths,
+    adminReference: analysis.preview.batch.adminReference,
   };
 
   const res = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysis, intent });

@@ -21,9 +21,15 @@ import {
 import { runBrowserImportPreparation } from '../../import/browserImportPreparationController';
 import { runBrowserImportMetadataStaging } from '../../import/browserImportStagingController';
 import { runBrowserImportMediaStaging } from '../../import/browserImportMediaStagingController';
+import { AdminReferenceDatasetSection } from './AdminReferenceDatasetSection';
+import type { AdminReferenceMappingConfig } from '../../import/adminReferenceReconciliation';
 
 export default function BrowserImportPreviewClient() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [adminReferenceData, setAdminReferenceData] = useState<{
+    referenceFile: File;
+    mappingConfig: AdminReferenceMappingConfig;
+  } | null>(null);
   const [isSupported] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     const inputEl = document.createElement('input');
@@ -216,6 +222,11 @@ export default function BrowserImportPreviewClient() {
       const formData = new FormData();
       formData.append('manifest', JSON.stringify(manifest));
 
+      if (adminReferenceData) {
+        formData.append('referenceFile', adminReferenceData.referenceFile);
+        formData.append('adminReferenceMapping', JSON.stringify(adminReferenceData.mappingConfig));
+      }
+
       for (const metaFile of metadataFilesToUpload) {
         const relPath = metaFile.webkitRelativePath || metaFile.name;
         const norm = normalizeRelativePath(relPath)!;
@@ -331,6 +342,8 @@ export default function BrowserImportPreviewClient() {
       preparedIntent: selectionStateRef.current.preparedIntent,
       manifestCache,
       selectedFiles,
+      adminReferenceFile: adminReferenceData?.referenceFile,
+      adminReferenceMappingConfig: adminReferenceData?.mappingConfig,
       setIsStaging,
       setStagingError,
       setStagedResult,
@@ -510,6 +523,21 @@ export default function BrowserImportPreviewClient() {
               <div style={{ fontSize: '0.75rem', color: '#9CA3AF', textTransform: 'uppercase' }}>Detected Packages</div>
               <div style={{ fontSize: '1rem', fontWeight: 700, color: '#10B981', marginTop: '0.25rem' }}>{detectedPackageCount}</div>
             </div>
+          </div>
+        )}
+
+        {selectedRootName && (
+          <div style={{ marginTop: '1.25rem' }}>
+            <AdminReferenceDatasetSection
+              onMappingConfigured={(data) => {
+                setAdminReferenceData(data);
+                setPreviewResult(null);
+                setManifestCache(null);
+                invalidateStagingResult();
+                updateSelectionState(resetSelectionState());
+              }}
+              disabled={isPreparingOrLocked}
+            />
           </div>
         )}
       </div>
@@ -1010,6 +1038,28 @@ export default function BrowserImportPreviewClient() {
                           }}>
                             {pkg.status.toUpperCase()}
                           </span>
+
+                          {pkg.reconciliation && (
+                            <span style={{
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              padding: '0.2rem 0.6rem',
+                              borderRadius: '12px',
+                              backgroundColor: pkg.reconciliation.status === 'RECONCILED' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                              color: pkg.reconciliation.status === 'RECONCILED' ? '#10B981' : '#EF4444',
+                              border: `1px solid ${pkg.reconciliation.status === 'RECONCILED' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                            }}>
+                              {pkg.reconciliation.status === 'RECONCILED'
+                                ? `✓ Reconciled (Row #${pkg.reconciliation.matchedRowNumber})`
+                                : pkg.reconciliation.status === 'ADMIN_REFERENCE_FIELD_MISMATCH'
+                                  ? `✕ Mismatch (${pkg.reconciliation.mismatchedFields.join(', ')})`
+                                  : pkg.reconciliation.status === 'ADMIN_REFERENCE_NO_MATCH'
+                                    ? '✕ No matching reference row'
+                                    : pkg.reconciliation.status === 'ADMIN_REFERENCE_AMBIGUOUS_MATCH'
+                                      ? '✕ Ambiguous reference match'
+                                      : '✕ Invalid match key'}
+                            </span>
+                          )}
                         </div>
                         <div style={{ fontSize: '0.8rem', color: '#9CA3AF', marginTop: '0.25rem' }}>
                           Public ID: <code style={{ color: '#60A5FA' }}>{pkg.proposedPublicId}</code> | Metadata Source: <strong>{pkg.metadataSource || 'None'}</strong>

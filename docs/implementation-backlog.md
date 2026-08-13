@@ -21,6 +21,7 @@ This document maps out the completed project baseline, foundations present, and 
 *   **Initial Admin Authentication Activation (Staging)**: Initial administrator authentication operationally verified in isolated staging (`capstone-admin-cms-staging-2026`).
 *   **Transactional Review Actions**: Atomic PostgreSQL RPC function `public.perform_project_review_action` (Migration 0008), repository integration, API route handler, static contract tests, and comprehensive local atomicity/rollback verifications implemented and merged into `main` via PR #36.
 *   **Import Batch Review Readiness & Submit-to-Review**: Server-authoritative readiness derivation surfaced on `/admin/imports/[batchId]` and project detail page. Authorized preparation staff (`projects.edit`) can select ready projects and submit them for administrative review (`draft`/`changes_requested` → `submitted`).
+*   **Admin Excel Reference Dataset Reconciliation Foundation**: Controlled, mapping-driven server-side reconciliation foundation matching submitted project packages against staff-supplied Admin Reference `.xlsx` workbooks during browser folder import preview and staging. Includes POST `/api/imports/admin-reference/inspect` for multi-sheet/headers inspection, 1–3 composite match keys, 1–20 comparison field cross-checks, TOCTOU preview fingerprint binding, server staging re-verification, and zero raw cell persistence. Verified with 12 vitest unit tests, 5 API route security tests, and `verifyAdminExcelReconciliationRuntime.ts`.
 
 ---
 

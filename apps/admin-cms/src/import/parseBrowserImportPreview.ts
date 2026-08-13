@@ -25,6 +25,14 @@ import {
   ImportPackageParseResult,
 } from './importTypes';
 
+import {
+  AdminReferenceMappingConfig,
+  computeAdminReferenceWorkbookFingerprint,
+  parseAdminReferenceWorksheet,
+  reconcilePackagesAgainstAdminReference,
+} from './adminReferenceReconciliation';
+import { AdminReferenceIntent } from './browserImportCommitIntentContract';
+
 export class BrowserImportPreviewLimitError extends Error {
   readonly code: string;
   readonly httpStatus: number;
@@ -35,6 +43,11 @@ export class BrowserImportPreviewLimitError extends Error {
     this.code = code;
     this.httpStatus = httpStatus;
   }
+}
+
+export interface AdminReferenceAnalysisOptions {
+  referenceFileBuffer: Buffer;
+  mapping: AdminReferenceMappingConfig;
 }
 
 export interface BrowserImportServerPackage {
@@ -51,6 +64,7 @@ export interface BrowserImportServerPackage {
     posterPdfPresent: boolean;
     snapshotPresent: boolean;
   };
+  reconciliation?: BrowserImportPackagePreview['reconciliation'];
   errors: BrowserImportIssue[];
   warnings: BrowserImportIssue[];
 }
@@ -62,7 +76,8 @@ export interface BrowserImportServerAnalysis {
 
 export async function analyzeBrowserImportServer(
   manifestOrPreflight: unknown | ManifestPreflightSuccess,
-  uploadedMetadataFiles: Map<string, Buffer>
+  uploadedMetadataFiles: Map<string, Buffer>,
+  adminReferenceOptions?: AdminReferenceAnalysisOptions
 ): Promise<BrowserImportServerAnalysis> {
   let preflight: ManifestPreflightSuccess;
 
@@ -563,11 +578,68 @@ export async function analyzeBrowserImportServer(
     });
   }
 
+  let adminReferenceIntentObj: AdminReferenceIntent | undefined = undefined;
+
+  if (adminReferenceOptions) {
+    const { referenceFileBuffer, mapping } = adminReferenceOptions;
+    const refFingerprint = computeAdminReferenceWorkbookFingerprint(referenceFileBuffer);
+    const parsedRefRows = await parseAdminReferenceWorksheet(referenceFileBuffer, mapping);
+
+    const reconRes = reconcilePackagesAgainstAdminReference({
+      packages: serverPackages.map((sp) => ({
+        packagePath: sp.packagePath,
+        manifest: sp.manifest || {},
+      })),
+      referenceRows: parsedRefRows,
+      mapping,
+    });
+
+    batchIssues.push(...reconRes.batchIssues);
+
+    for (let i = 0; i < packagePreviews.length; i++) {
+      const pkgPreview = packagePreviews[i];
+      const serverPkg = serverPackages[i];
+      const recResult = reconRes.packageResults.get(pkgPreview.packagePath);
+
+      if (recResult) {
+        pkgPreview.reconciliation = {
+          status: recResult.status,
+          matchedRowNumber: recResult.matchedRowNumber,
+          mismatchedFields: recResult.mismatchedFields,
+        };
+        serverPkg.reconciliation = pkgPreview.reconciliation;
+
+        if (recResult.status !== 'RECONCILED') {
+          if (pkgPreview.status === 'valid') validPackageCount--;
+          if (pkgPreview.status === 'warning') warningPackageCount--;
+          if (pkgPreview.status !== 'invalid') invalidPackageCount++;
+          pkgPreview.status = 'invalid';
+          serverPkg.status = 'invalid';
+
+          recResult.issues.forEach((issue) => {
+            pkgPreview.errors.push(issue);
+            serverPkg.errors.push(issue);
+            totalErrors++;
+          });
+        }
+      }
+    }
+
+    adminReferenceIntentObj = {
+      workbookFingerprint: refFingerprint,
+      worksheet: mapping.worksheet,
+      matchMappings: mapping.matchMappings,
+      comparisonMappings: mapping.comparisonMappings,
+      reconciliationContractVersion: 'admin-reference-reconciliation-v1',
+    };
+  }
+
   const previewFingerprint = generateBrowserPreviewFingerprint({
     selectedRootName: derivedRootName,
     fileCount: validDescriptors.length,
     declaredTotalBytes: manifest.declaredTotalBytes,
     packages: packagePreviews,
+    adminReference: adminReferenceIntentObj,
   });
 
   const preview: BrowserImportPreviewResponse = {
@@ -587,6 +659,7 @@ export async function analyzeBrowserImportServer(
       mediaValidationMode: 'descriptor_only',
       batchIssues,
       packages: packagePreviews,
+      ...(adminReferenceIntentObj ? { adminReference: adminReferenceIntentObj } : {}),
     },
   };
 
@@ -599,9 +672,14 @@ export async function analyzeBrowserImportServer(
  */
 export async function parseBrowserImportPreview(
   manifestOrPreflight: unknown | ManifestPreflightSuccess,
-  uploadedMetadataFiles: Map<string, Buffer>
+  uploadedMetadataFiles: Map<string, Buffer>,
+  adminReferenceOptions?: AdminReferenceAnalysisOptions
 ): Promise<BrowserImportPreviewResponse> {
-  const { preview } = await analyzeBrowserImportServer(manifestOrPreflight, uploadedMetadataFiles);
+  const { preview } = await analyzeBrowserImportServer(
+    manifestOrPreflight,
+    uploadedMetadataFiles,
+    adminReferenceOptions
+  );
   return preview;
 }
 

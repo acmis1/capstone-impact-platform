@@ -4,6 +4,9 @@ import {
   browserImportCommitIntentSchema,
 } from './browserImportCommitIntentContract';
 import {
+  adminReferenceIntentsSemanticallyEqual,
+} from './adminReferenceReconciliation';
+import {
   BrowserImportPackagePreview,
   BrowserImportPreviewBatch,
   SelectionManifest,
@@ -23,6 +26,13 @@ export function generateBrowserPreviewFingerprint(input: {
     errors: Array<{ code: string }>;
     warnings: Array<{ code: string }>;
   }>;
+  adminReference?: {
+    workbookFingerprint: string;
+    worksheet: string;
+    matchMappings: Array<{ canonicalField: string; referenceColumn: string }>;
+    comparisonMappings: Array<{ canonicalField: string; referenceColumn: string }>;
+    reconciliationContractVersion: string;
+  };
 }): string {
   const sortedPackages = [...input.packages]
     .sort((a, b) => a.packagePath.localeCompare(b.packagePath))
@@ -42,6 +52,7 @@ export function generateBrowserPreviewFingerprint(input: {
     fileCount: input.fileCount,
     declaredTotalBytes: input.declaredTotalBytes,
     packages: sortedPackages,
+    ...(input.adminReference ? { adminReference: input.adminReference } : {}),
   };
 
   return createHash('sha256').update(JSON.stringify(canonicalObj), 'utf8').digest('hex');
@@ -62,6 +73,9 @@ export type BrowserImportCommitIntentErrorCode =
   | 'INVALID_PACKAGE_SELECTED'
   | 'UNACKNOWLEDGED_WARNING_PACKAGE_SELECTED'
   | 'ACKNOWLEDGEMENT_REJECTED_FOR_NON_WARNING'
+  | 'MISSING_ADMIN_REFERENCE'
+  | 'ADMIN_REFERENCE_EVIDENCE_MISMATCH'
+  | 'ADMIN_REFERENCE_INVALID'
   | 'INVALID_COMMIT_INTENT';
 
 export type BrowserImportCommitIntentResult =
@@ -85,6 +99,13 @@ export function prepareBrowserImportCommitIntent(params: {
   selectedPackagePaths: string[];
   acknowledgedWarningPackagePaths: string[];
   expectedPreviewFingerprint: string;
+  adminReference?: {
+    workbookFingerprint: string;
+    worksheet: string;
+    matchMappings: Array<{ canonicalField: string; referenceColumn: string }>;
+    comparisonMappings: Array<{ canonicalField: string; referenceColumn: string }>;
+    reconciliationContractVersion: 'admin-reference-reconciliation-v1';
+  };
 }): BrowserImportCommitIntentResult {
   const {
     manifest,
@@ -92,6 +113,7 @@ export function prepareBrowserImportCommitIntent(params: {
     selectedPackagePaths,
     acknowledgedWarningPackagePaths,
     expectedPreviewFingerprint,
+    adminReference,
   } = params;
 
   // 1. Structure check on preview
@@ -102,6 +124,37 @@ export function prepareBrowserImportCommitIntent(params: {
       message: 'Preview structure is invalid.',
     };
   }
+
+  // Derive Admin Reference intent from the authoritative server preview if omitted.
+  if (!preview.adminReference) {
+    return {
+      success: false,
+      code: 'MISSING_ADMIN_REFERENCE',
+      message: 'Admin reference dataset cross-check is required before preparing or staging metadata.',
+    };
+  }
+  if (
+    adminReference &&
+    !adminReferenceIntentsSemanticallyEqual(adminReference, preview.adminReference)
+  ) {
+    return {
+      success: false,
+      code: 'ADMIN_REFERENCE_EVIDENCE_MISMATCH',
+      message: 'Admin reference evidence does not match the authoritative preview.',
+    };
+  }
+  if (
+    preview.batchIssues.some(
+      (issue) => issue.severity === 'error' && issue.code.startsWith('ADMIN_REFERENCE_')
+    )
+  ) {
+    return {
+      success: false,
+      code: 'ADMIN_REFERENCE_INVALID',
+      message: 'The Admin reference dataset is invalid for this reconciliation operation.',
+    };
+  }
+  const effectiveAdminReference = preview.adminReference;
 
   // 2. Strict preflight check on manifest
   const preflightRes = runBrowserImportManifestPreflight(manifest);
@@ -147,6 +200,7 @@ export function prepareBrowserImportCommitIntent(params: {
     fileCount: preview.selectedFileCount,
     declaredTotalBytes: preview.declaredTotalBytes,
     packages: preview.packages,
+    adminReference: effectiveAdminReference,
   });
 
   if (
@@ -269,6 +323,7 @@ export function prepareBrowserImportCommitIntent(params: {
     declaredTotalBytes: preview.declaredTotalBytes,
     selectedPackagePaths: sortedSelected,
     acknowledgedWarningPackagePaths: sortedAcked,
+    adminReference: effectiveAdminReference,
   };
 
   // Schema validation pass

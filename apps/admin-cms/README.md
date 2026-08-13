@@ -23,7 +23,7 @@ It includes a project metadata editor backed by one atomic, service-role-only da
 | Reviewer/editor roles | Yes | Permission definitions and helper tests | Permission-matrix UAT pending |
 | Protected Admin routes | Yes | Auth guard and route behavior covered by source/tests | Authenticated browser and screen-reader testing pending |
 | Project dashboard and server-side index | Yes | Query helpers and repository behavior covered by tests | Manual responsive QA remains pending |
-| Import workflow | Foundations | Import validation and batch views implemented | Browser intake UX and spreadsheet upload are not complete |
+| Import workflow | Yes | Browser import preview, metadata/media staging, and mapping-driven Admin Excel reference reconciliation foundation verified | Server-side reconciliation and replay verified; multi-batch analytics pending |
 | Review transitions | Yes | Workflow tests, static contract tests, and atomic RPC performReviewAction route implemented | Full reviewer/editor UAT pending |
 | Project metadata editing | Yes | Editor route/UI and one atomic metadata RPC are implemented locally | Hosted deployment and broader staff acceptance remain separate |
 | Media validation/storage | Foundations | Offline media validation tests; private-to-public storage functions exist | End-to-end staging and production verification pending |

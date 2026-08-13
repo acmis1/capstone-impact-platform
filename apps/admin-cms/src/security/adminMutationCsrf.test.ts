@@ -7,6 +7,7 @@ import { POST as stageMediaPOST } from '../app/api/imports/stage-media/route';
 vi.mock('../auth/requireAdmin', () => ({ requireAdmin: vi.fn() }));
 
 const ADMIN_MUTATION_ROUTES = [
+  'src/app/api/imports/admin-reference/inspect/route.ts',
   'src/app/api/imports/preview/route.ts',
   'src/app/api/imports/stage-metadata/route.ts',
   'src/app/api/imports/stage-media/route.ts',
@@ -22,7 +23,11 @@ const ADMIN_MUTATION_ROUTES = [
 ] as const;
 
 function read(relativePath: string): string {
-  return fs.readFileSync(path.resolve(process.cwd(), relativePath), 'utf8');
+  const normCwd = process.cwd().replace(/\\/g, '/');
+  const root = normCwd.endsWith('apps/admin-cms')
+    ? process.cwd()
+    : path.resolve(process.cwd(), 'apps/admin-cms');
+  return fs.readFileSync(path.resolve(root, relativePath), 'utf8');
 }
 
 describe('Admin mutation CSRF inventory', () => {

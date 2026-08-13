@@ -303,6 +303,7 @@ export function performOnboardingCheck(options?: {
     'provisionLocalSupabaseUsers.ts',
     'verifyLocalSupabase.ts',
     'seedLocalSupabaseFixtures.ts',
+    'verifyAdminExcelReconciliationRuntime.ts',
   ];
   const scriptsExist = requiredScripts.every((s) => existsSync(path.join(scriptsDir, s)));
   items.push({

@@ -14,10 +14,17 @@ import {
 import {
   analyzeBrowserImportServer,
   BrowserImportPreviewLimitError,
+  AdminReferenceAnalysisOptions,
 } from '../../../../import/parseBrowserImportPreview';
 import { prepareBrowserImportCommitIntent } from '../../../../import/prepareBrowserImportCommitIntent';
 import { stageBrowserImportMetadata } from '../../../../import/stageBrowserImportMetadata';
 import { BrowserImportMetadataStageErrorCode } from '../../../../import/browserImportMetadataStageContract';
+import {
+  computeAdminReferenceWorkbookFingerprint,
+  inspectAdminReferenceWorkbook,
+  validateAdminReferenceMapping,
+  WorksheetStructureSummary,
+} from '../../../../import/adminReferenceReconciliation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -151,8 +158,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const pendingFileReads: Array<{ key: string; file: File; expectedBytes: number }> = [];
     let actualMetadataBytes = 0;
 
+    let adminReferenceFile: File | null = null;
+    let adminReferenceMappingJsonStr: string | null = null;
+
     for (const [key, value] of formData.entries()) {
       if (key === 'manifest' || key === 'intent') continue;
+      if (key === 'referenceFile') {
+        if (adminReferenceFile !== null) return stageError('DUPLICATE_UPLOAD_FIELD', 400);
+        if (!(value instanceof File)) return stageError('UNEXPECTED_UPLOAD_FIELD', 400);
+        adminReferenceFile = value as File;
+        continue;
+      }
+      if (key === 'adminReferenceMapping') {
+        if (adminReferenceMappingJsonStr !== null) return stageError('DUPLICATE_UPLOAD_FIELD', 400);
+        if (typeof value !== 'string') return stageError('UNEXPECTED_UPLOAD_FIELD', 400);
+        adminReferenceMappingJsonStr = value;
+        continue;
+      }
 
       if (seenFormKeys.has(key)) return stageError('DUPLICATE_UPLOAD_FIELD', 400);
       seenFormKeys.add(key);
@@ -198,8 +220,68 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       uploadedMetadataFiles.set(key, buf);
     }
 
+    if (!submittedIntent.adminReference) {
+      return stageError('INVALID_INTENT', 400);
+    }
+
+    if (!adminReferenceFile || !adminReferenceMappingJsonStr) {
+      return stageError('MISSING_METADATA_UPLOAD', 400);
+    }
+    if (!adminReferenceFile.name.toLowerCase().endsWith('.xlsx') || adminReferenceFile.size === 0 || adminReferenceFile.size > BROWSER_IMPORT_LIMITS.MAX_XLSX_SIZE_BYTES) {
+      return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
+    }
+
+    let arrayBuf: ArrayBuffer;
+    const fileObj = adminReferenceFile as unknown as { arrayBuffer?: () => Promise<ArrayBuffer>; buffer?: ArrayBuffer };
+    if (typeof fileObj.arrayBuffer === 'function') {
+      arrayBuf = await fileObj.arrayBuffer();
+    } else {
+      arrayBuf = fileObj.buffer || (adminReferenceFile as unknown as ArrayBuffer);
+    }
+    const refBuf = Buffer.from(arrayBuf);
+
+    const recomputedRefFingerprint = computeAdminReferenceWorkbookFingerprint(refBuf);
+    if (recomputedRefFingerprint !== submittedIntent.adminReference.workbookFingerprint) {
+      return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
+    }
+
+    let parsedMapping: unknown;
+    try {
+      parsedMapping = JSON.parse(adminReferenceMappingJsonStr);
+    } catch {
+      return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
+    }
+
+    const inspection = await inspectAdminReferenceWorkbook(refBuf);
+    const targetSheet = inspection.worksheets.find((w: WorksheetStructureSummary) => w.name === submittedIntent.adminReference?.worksheet);
+    if (!targetSheet) {
+      return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
+    }
+
+    const mapVal = validateAdminReferenceMapping(parsedMapping, targetSheet.headers);
+    if (!mapVal.valid) {
+      return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
+    }
+
+    const canonicalRefIntent: import('../../../../import/browserImportCommitIntentContract').AdminReferenceIntent = {
+      workbookFingerprint: recomputedRefFingerprint,
+      worksheet: mapVal.canonicalMapping.worksheet,
+      matchMappings: mapVal.canonicalMapping.matchMappings,
+      comparisonMappings: mapVal.canonicalMapping.comparisonMappings,
+      reconciliationContractVersion: mapVal.canonicalMapping.reconciliationContractVersion,
+    };
+
+    if (JSON.stringify(canonicalRefIntent) !== JSON.stringify(submittedIntent.adminReference)) {
+      return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
+    }
+
+    const adminReferenceOptions: AdminReferenceAnalysisOptions = {
+      referenceFileBuffer: refBuf,
+      mapping: mapVal.canonicalMapping,
+    };
+
     // Step 8: Re-run authoritative server parsing and preview generation
-    const serverAnalysis = await analyzeBrowserImportServer(preflight, uploadedMetadataFiles);
+    const serverAnalysis = await analyzeBrowserImportServer(preflight, uploadedMetadataFiles, adminReferenceOptions);
 
     // Step 9: Re-run server-side commit intent planning to get canonical server intent
     const serverPlannerResult = prepareBrowserImportCommitIntent({
@@ -208,6 +290,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       selectedPackagePaths: submittedIntent.selectedPackagePaths,
       acknowledgedWarningPackagePaths: submittedIntent.acknowledgedWarningPackagePaths,
       expectedPreviewFingerprint: submittedIntent.previewFingerprint,
+      adminReference: submittedIntent.adminReference,
     });
 
     if (!serverPlannerResult.success) {

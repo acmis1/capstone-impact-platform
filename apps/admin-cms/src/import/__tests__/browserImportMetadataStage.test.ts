@@ -7,6 +7,9 @@ import {
 import { SelectionManifest } from '../browserImportPreviewContract';
 import { generateUploadKey } from '../browserSelection';
 import type { createSupabaseAdminClientCore } from '../../lib/supabase/adminCore';
+import type { BrowserImportCommitIntent } from '../browserImportCommitIntentContract';
+import type { AuthenticatedAdminContext } from '../../auth/authTypes';
+import ExcelJS from 'exceljs';
 
 // Mock requireAdmin auth helper
 vi.mock('../../auth/requireAdmin', () => ({
@@ -22,7 +25,9 @@ function stagePOST(request: NextRequest) {
   return rawStagePOST(request);
 }
 
-function makeMockAuthContext(permissions = ['projects.edit']) {
+function makeMockAuthContext(
+  permissions: AuthenticatedAdminContext['permissions'] = ['projects.edit']
+): AuthenticatedAdminContext {
   return {
     authUserId: '00000000-0000-0000-0000-000000000001',
     adminUserId: '00000000-0000-0000-0000-000000000001',
@@ -33,8 +38,24 @@ function makeMockAuthContext(permissions = ['projects.edit']) {
   };
 }
 
+async function createRefFixture(groupName = 'Group A', title = 'Valid Title') {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet('Sheet1');
+  sheet.addRow(['Group Name', 'Academic Year', 'Official Project Title', 'Degree Program', 'Contact Email']);
+  sheet.addRow([groupName, 2026, title, 'Software Engineering', 'a@b.com']);
+  const refBuf = Buffer.from(await wb.xlsx.writeBuffer());
+  const refMapping = {
+    worksheet: 'Sheet1',
+    matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Group Name' }],
+    comparisonMappings: [{ canonicalField: 'title', referenceColumn: 'Official Project Title' }],
+    reconciliationContractVersion: 'admin-reference-reconciliation-v1' as const,
+  };
+  return { refBuf, refMapping };
+}
+
 describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.resetAllMocks();
     mockRequireAdmin.mockResolvedValue(makeMockAuthContext());
   });
@@ -163,6 +184,7 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
   });
 
   it('7. API revalidates intent and rejects tampered preview fingerprint', async () => {
+    const { refBuf, refMapping } = await createRefFixture('Group A', 'Valid Title');
     const jsonContent = JSON.stringify({
       publicId: 'pkg1',
       title: 'Valid Title',
@@ -170,42 +192,59 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
       background: 'Valid Background',
       solution: 'Valid Solution',
       year: 2026,
-      program: 'Engineering',
+      program: 'Software Engineering',
       studyProgram: 'Software Engineering',
       discipline: 'Software Engineering',
-      industry: 'Technology',
+      industry: 'Software Industry',
       industryPartner: 'Partner',
       academicSupervisor: 'Supervisor',
       groupName: 'Group A',
       teamMembers: ['Alice'],
-      layoutConfig: {},
+      posterText: 'Poster content text',
+      accessibilityText: 'Accessibility text content',
+      layoutConfig: { templateId: 'poster_showcase', featuredMedia: 'poster' },
     });
     const jsonBytes = Buffer.from(jsonContent, 'utf8').length;
 
     const manifest: SelectionManifest = {
       selectedRootName: 'pkg1',
-      fileCount: 2,
-      declaredTotalBytes: jsonBytes + 300,
+      fileCount: 4,
+      declaredTotalBytes: jsonBytes + 300 + 400 + 500,
       ignoredSystemFilesCount: 0,
       descriptors: [
         { uploadKey: generateUploadKey('pkg1/project.json'), originalPath: 'pkg1/project.json', fileSizeBytes: jsonBytes, browserMimeType: 'application/json' },
         { uploadKey: generateUploadKey('pkg1/poster.png'), originalPath: 'pkg1/poster.png', fileSizeBytes: 300, browserMimeType: 'image/png' },
+        { uploadKey: generateUploadKey('pkg1/poster.pdf'), originalPath: 'pkg1/poster.pdf', fileSizeBytes: 400, browserMimeType: 'application/pdf' },
+        { uploadKey: generateUploadKey('pkg1/snapshot-1.png'), originalPath: 'pkg1/snapshot-1.png', fileSizeBytes: 500, browserMimeType: 'image/png' },
       ],
     };
 
-    const tamperedIntent = {
-      version: 1,
-      previewFingerprint: 'f'.repeat(64), // Tampered fingerprint
-      selectedRootName: 'pkg1',
-      fileCount: 2,
-      declaredTotalBytes: jsonBytes + 300,
+    const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
+    const { prepareBrowserImportCommitIntent } = await import('../prepareBrowserImportCommitIntent');
+    const metadataFiles = new Map<string, Buffer>();
+    metadataFiles.set(generateUploadKey('pkg1/project.json'), Buffer.from(jsonContent, 'utf8'));
+    const analysis = await analyzeBrowserImportServer(manifest, metadataFiles, { referenceFileBuffer: refBuf, mapping: refMapping });
+
+    const warningPaths7 = analysis.preview.batch.packages[0].status === 'warning' ? ['pkg1'] : [];
+    const plannerRes = prepareBrowserImportCommitIntent({
+      manifest,
+      preview: analysis.preview.batch,
       selectedPackagePaths: ['pkg1'],
-      acknowledgedWarningPackagePaths: [],
+      acknowledgedWarningPackagePaths: warningPaths7,
+      expectedPreviewFingerprint: analysis.preview.batch.previewFingerprint,
+    });
+    if (!plannerRes.success) throw new Error(`Planner failed in test 7: ${plannerRes.code}`);
+
+    const tamperedIntent = {
+      ...plannerRes.intent,
+      previewFingerprint: 'f'.repeat(64), // Tampered fingerprint
     };
 
     const formData = new FormData();
     formData.append('manifest', JSON.stringify(manifest));
     formData.append('intent', JSON.stringify(tamperedIntent));
+    formData.append('referenceFile', new File([refBuf], 'ref.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    formData.append('adminReferenceMapping', JSON.stringify(refMapping));
     formData.append(generateUploadKey('pkg1/project.json'), new File([jsonContent], 'project.json', { type: 'application/json' }));
 
     const req = new NextRequest('http://localhost:3000/api/imports/stage-metadata', {
@@ -221,6 +260,7 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
   });
 
   it('8. Successful metadata staging calls RPC with matching canonical payload and returns batchId', async () => {
+    const { refBuf, refMapping } = await createRefFixture('Group A', 'Valid Title');
     const mockRpc = vi.fn().mockResolvedValue({
       data: {
         resultCode: 'SUCCESS',
@@ -274,7 +314,7 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
     const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
     const metadataFiles = new Map<string, Buffer>();
     metadataFiles.set(generateUploadKey('pkg1/project.json'), Buffer.from(jsonContent, 'utf8'));
-    const analysis = await analyzeBrowserImportServer(manifest, metadataFiles);
+    const analysis = await analyzeBrowserImportServer(manifest, metadataFiles, { referenceFileBuffer: refBuf, mapping: refMapping });
 
     const { prepareBrowserImportCommitIntent } = await import('../prepareBrowserImportCommitIntent');
     const warningPaths = analysis.preview.batch.packages[0].status === 'warning' ? ['pkg1'] : [];
@@ -292,6 +332,8 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
     const formData = new FormData();
     formData.append('manifest', JSON.stringify(manifest));
     formData.append('intent', JSON.stringify(plannerRes.intent));
+    formData.append('referenceFile', new File([refBuf], 'ref.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    formData.append('adminReferenceMapping', JSON.stringify(refMapping));
     formData.append(generateUploadKey('pkg1/project.json'), new File([jsonContent], 'project.json', { type: 'application/json' }));
 
     const req = new NextRequest('http://localhost:3000/api/imports/stage-metadata', {
@@ -322,6 +364,7 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
   });
 
   it('9. Idempotent retry returns existing batch without error', async () => {
+    const { refBuf, refMapping } = await createRefFixture('Group A', 'Valid Title');
     const mockRpc = vi.fn().mockResolvedValue({
       data: {
         resultCode: 'SUCCESS',
@@ -374,7 +417,7 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
     const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
     const metadataFiles = new Map<string, Buffer>();
     metadataFiles.set(generateUploadKey('pkg1/project.json'), Buffer.from(jsonContent, 'utf8'));
-    const analysis = await analyzeBrowserImportServer(manifest, metadataFiles);
+    const analysis = await analyzeBrowserImportServer(manifest, metadataFiles, { referenceFileBuffer: refBuf, mapping: refMapping });
 
     const { prepareBrowserImportCommitIntent } = await import('../prepareBrowserImportCommitIntent');
     const warningPaths9 = analysis.preview.batch.packages[0].status === 'warning' ? ['pkg1'] : [];
@@ -390,6 +433,8 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
     const formData = new FormData();
     formData.append('manifest', JSON.stringify(manifest));
     formData.append('intent', JSON.stringify(plannerRes.intent));
+    formData.append('referenceFile', new File([refBuf], 'ref.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    formData.append('adminReferenceMapping', JSON.stringify(refMapping));
     formData.append(generateUploadKey('pkg1/project.json'), new File([jsonContent], 'project.json', { type: 'application/json' }));
 
     const req = new NextRequest('http://localhost:3000/api/imports/stage-metadata', {
@@ -412,6 +457,7 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
   });
 
   it('10. Existing public ID conflict causes HTTP 409 PROJECT_ALREADY_EXISTS', async () => {
+    const { refBuf, refMapping } = await createRefFixture('Group A', 'Valid Title');
     const mockRpc = vi.fn().mockResolvedValue({
       data: { resultCode: 'PROJECT_ALREADY_EXISTS' },
       error: null,
@@ -457,7 +503,7 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
     const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
     const metadataFiles = new Map<string, Buffer>();
     metadataFiles.set(generateUploadKey('pkg1/project.json'), Buffer.from(jsonContent, 'utf8'));
-    const analysis = await analyzeBrowserImportServer(manifest, metadataFiles);
+    const analysis = await analyzeBrowserImportServer(manifest, metadataFiles, { referenceFileBuffer: refBuf, mapping: refMapping });
 
     const { prepareBrowserImportCommitIntent } = await import('../prepareBrowserImportCommitIntent');
     const warningPaths10 = analysis.preview.batch.packages[0].status === 'warning' ? ['pkg1'] : [];
@@ -473,6 +519,8 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
     const formData = new FormData();
     formData.append('manifest', JSON.stringify(manifest));
     formData.append('intent', JSON.stringify(plannerRes.intent));
+    formData.append('referenceFile', new File([refBuf], 'ref.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    formData.append('adminReferenceMapping', JSON.stringify(refMapping));
     formData.append(generateUploadKey('pkg1/project.json'), new File([jsonContent], 'project.json', { type: 'application/json' }));
 
     const req = new NextRequest('http://localhost:3000/api/imports/stage-metadata', {
@@ -488,6 +536,7 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
   });
 
   it('11. Regression: Package with unparseable manifest sets manifest: null and persistence is never called', async () => {
+    const { refBuf, refMapping } = await createRefFixture('Group A', 'Valid Title');
     const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
 
     const jsonContent = 'INVALID_JSON_CONTENT';
@@ -507,7 +556,7 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
     const metadataFiles = new Map<string, Buffer>();
     metadataFiles.set(generateUploadKey('pkg1/project.json'), Buffer.from(jsonContent, 'utf8'));
 
-    const analysis = await analyzeBrowserImportServer(manifest, metadataFiles);
+    const analysis = await analyzeBrowserImportServer(manifest, metadataFiles, { referenceFileBuffer: refBuf, mapping: refMapping });
     expect(analysis.packages[0].manifest).toBeNull();
     expect(analysis.packages[0].status).toBe('invalid');
 
@@ -522,7 +571,10 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
       declaredTotalBytes: jsonBytes + 400,
       selectedPackagePaths: ['pkg1'],
       acknowledgedWarningPackagePaths: [],
+      adminReference: analysis.preview.batch.adminReference,
     }));
+    formData.append('referenceFile', new File([refBuf], 'ref.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    formData.append('adminReferenceMapping', JSON.stringify(refMapping));
     formData.append(generateUploadKey('pkg1/project.json'), new File([jsonContent], 'project.json', { type: 'application/json' }));
 
     const req = new NextRequest('http://localhost:3000/api/imports/stage-metadata', {
@@ -583,5 +635,190 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
       batchStatus: 'metadata_staged',
     };
     expect(validateBrowserImportMetadataStageResponse(badUuidSuccess)).toBeNull();
+  });
+
+  it('14. production service rejects missing Admin-reference evidence before creating a database client', async () => {
+    const publicId = 'service-no-ref';
+    const jsonContent = JSON.stringify({
+      publicId,
+      title: 'Service Boundary Title',
+      summary: 'Service boundary summary',
+      year: 2026,
+      program: 'Software Engineering',
+      discipline: 'Software Engineering',
+      industry: 'Software Industry',
+      groupName: 'Group A',
+      teamMembers: ['Alice'],
+      layoutConfig: {},
+    });
+    const jsonBytes = Buffer.from(jsonContent, 'utf8').length;
+    const manifest: SelectionManifest = {
+      selectedRootName: publicId,
+      fileCount: 3,
+      declaredTotalBytes: jsonBytes + 800,
+      ignoredSystemFilesCount: 0,
+      descriptors: [
+        { uploadKey: generateUploadKey(`${publicId}/project.json`), originalPath: `${publicId}/project.json`, fileSizeBytes: jsonBytes, browserMimeType: 'application/json' },
+        { uploadKey: generateUploadKey(`${publicId}/poster.png`), originalPath: `${publicId}/poster.png`, fileSizeBytes: 300, browserMimeType: 'image/png' },
+        { uploadKey: generateUploadKey(`${publicId}/poster.pdf`), originalPath: `${publicId}/poster.pdf`, fileSizeBytes: 500, browserMimeType: 'application/pdf' },
+      ],
+    };
+    const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
+    const analysis = await analyzeBrowserImportServer(
+      manifest,
+      new Map([[generateUploadKey(`${publicId}/project.json`), Buffer.from(jsonContent, 'utf8')]])
+    );
+    const createClientSpy = vi.spyOn(
+      await import('../../lib/supabase/adminCore'),
+      'createSupabaseAdminClientCore'
+    );
+    const { stageBrowserImportMetadata } = await import('../stageBrowserImportMetadata');
+
+    const result = await stageBrowserImportMetadata({
+      authContext: makeMockAuthContext(),
+      serverAnalysis: analysis,
+      intent: {
+        version: 1,
+        previewFingerprint: analysis.preview.batch.previewFingerprint,
+        selectedRootName: publicId,
+        fileCount: manifest.fileCount,
+        declaredTotalBytes: manifest.declaredTotalBytes,
+        selectedPackagePaths: [publicId],
+        acknowledgedWarningPackagePaths: [publicId],
+      } as BrowserImportCommitIntent,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      code: 'INVALID_INTENT',
+      error: 'Admin reference reconciliation evidence is required for staging.',
+    });
+    expect(createClientSpy).not.toHaveBeenCalled();
+  });
+
+  it('15. production service rejects mismatching Admin-reference evidence before database access', async () => {
+    const { refBuf, refMapping } = await createRefFixture('Group A', 'Valid Title');
+    const jsonContent = JSON.stringify({
+      publicId: 'service-ref-mismatch',
+      title: 'Valid Title',
+      summary: 'Service boundary summary',
+      year: 2026,
+      program: 'Software Engineering',
+      discipline: 'Software Engineering',
+      industry: 'Software Industry',
+      groupName: 'Group A',
+      teamMembers: ['Alice'],
+      layoutConfig: {},
+    });
+    const jsonBytes = Buffer.from(jsonContent, 'utf8').length;
+    const manifest: SelectionManifest = {
+      selectedRootName: 'service-ref-mismatch',
+      fileCount: 3,
+      declaredTotalBytes: jsonBytes + 800,
+      ignoredSystemFilesCount: 0,
+      descriptors: [
+        { uploadKey: generateUploadKey('service-ref-mismatch/project.json'), originalPath: 'service-ref-mismatch/project.json', fileSizeBytes: jsonBytes, browserMimeType: 'application/json' },
+        { uploadKey: generateUploadKey('service-ref-mismatch/poster.png'), originalPath: 'service-ref-mismatch/poster.png', fileSizeBytes: 300, browserMimeType: 'image/png' },
+        { uploadKey: generateUploadKey('service-ref-mismatch/poster.pdf'), originalPath: 'service-ref-mismatch/poster.pdf', fileSizeBytes: 500, browserMimeType: 'application/pdf' },
+      ],
+    };
+    const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
+    const analysis = await analyzeBrowserImportServer(
+      manifest,
+      new Map([[generateUploadKey('service-ref-mismatch/project.json'), Buffer.from(jsonContent, 'utf8')]]),
+      { referenceFileBuffer: refBuf, mapping: refMapping }
+    );
+    const { prepareBrowserImportCommitIntent } = await import('../prepareBrowserImportCommitIntent');
+    const prepared = prepareBrowserImportCommitIntent({
+      manifest,
+      preview: analysis.preview.batch,
+      selectedPackagePaths: ['service-ref-mismatch'],
+      acknowledgedWarningPackagePaths: ['service-ref-mismatch'],
+      expectedPreviewFingerprint: analysis.preview.batch.previewFingerprint,
+    });
+    if (!prepared.success) throw new Error(`Preparation failed: ${prepared.code}`);
+    const createClientSpy = vi.spyOn(
+      await import('../../lib/supabase/adminCore'),
+      'createSupabaseAdminClientCore'
+    );
+    const { stageBrowserImportMetadata } = await import('../stageBrowserImportMetadata');
+
+    const result = await stageBrowserImportMetadata({
+      authContext: makeMockAuthContext(),
+      serverAnalysis: analysis,
+      intent: {
+        ...prepared.intent,
+        adminReference: {
+          ...prepared.intent.adminReference!,
+          workbookFingerprint: 'b'.repeat(64),
+        },
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.code).toBe('PREVIEW_FINGERPRINT_MISMATCH');
+    expect(createClientSpy).not.toHaveBeenCalled();
+  });
+
+  it('16. production service rejects a selected non-reconciled package before database access', async () => {
+    const { refBuf, refMapping } = await createRefFixture('Group A', 'Valid Title');
+    const jsonContent = JSON.stringify({
+      publicId: 'service-unreconciled',
+      title: 'Valid Title',
+      summary: 'Service boundary summary',
+      year: 2026,
+      program: 'Software Engineering',
+      discipline: 'Software Engineering',
+      industry: 'Software Industry',
+      groupName: 'Group A',
+      teamMembers: ['Alice'],
+      layoutConfig: {},
+    });
+    const jsonBytes = Buffer.from(jsonContent, 'utf8').length;
+    const manifest: SelectionManifest = {
+      selectedRootName: 'service-unreconciled',
+      fileCount: 3,
+      declaredTotalBytes: jsonBytes + 800,
+      ignoredSystemFilesCount: 0,
+      descriptors: [
+        { uploadKey: generateUploadKey('service-unreconciled/project.json'), originalPath: 'service-unreconciled/project.json', fileSizeBytes: jsonBytes, browserMimeType: 'application/json' },
+        { uploadKey: generateUploadKey('service-unreconciled/poster.png'), originalPath: 'service-unreconciled/poster.png', fileSizeBytes: 300, browserMimeType: 'image/png' },
+        { uploadKey: generateUploadKey('service-unreconciled/poster.pdf'), originalPath: 'service-unreconciled/poster.pdf', fileSizeBytes: 500, browserMimeType: 'application/pdf' },
+      ],
+    };
+    const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
+    const analysis = await analyzeBrowserImportServer(
+      manifest,
+      new Map([[generateUploadKey('service-unreconciled/project.json'), Buffer.from(jsonContent, 'utf8')]]),
+      { referenceFileBuffer: refBuf, mapping: refMapping }
+    );
+    const { prepareBrowserImportCommitIntent } = await import('../prepareBrowserImportCommitIntent');
+    const prepared = prepareBrowserImportCommitIntent({
+      manifest,
+      preview: analysis.preview.batch,
+      selectedPackagePaths: ['service-unreconciled'],
+      acknowledgedWarningPackagePaths: ['service-unreconciled'],
+      expectedPreviewFingerprint: analysis.preview.batch.previewFingerprint,
+    });
+    if (!prepared.success) throw new Error(`Preparation failed: ${prepared.code}`);
+    analysis.packages[0].reconciliation = {
+      status: 'ADMIN_REFERENCE_FIELD_MISMATCH',
+      mismatchedFields: ['title'],
+    };
+    const createClientSpy = vi.spyOn(
+      await import('../../lib/supabase/adminCore'),
+      'createSupabaseAdminClientCore'
+    );
+    const { stageBrowserImportMetadata } = await import('../stageBrowserImportMetadata');
+
+    const result = await stageBrowserImportMetadata({
+      authContext: makeMockAuthContext(),
+      serverAnalysis: analysis,
+      intent: prepared.intent,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.code).toBe('INVALID_SELECTION');
+    expect(createClientSpy).not.toHaveBeenCalled();
   });
 });

@@ -24,7 +24,7 @@ The target workflow needs structured submissions, validation, review, archival a
 | Project metadata editor | The Admin/CMS includes a page-owned editor backed by one atomic, service-role-only PostgreSQL transaction. Hosted deployment and broader staff acceptance remain separate activities. Browser Back/Forward interception is not claimed. |
 | Ingestion | Package parsing, metadata/file validation, import-batch tracking and import-review foundations are implemented. |
 | Media and feed | Private draft storage, validated promotion foundations and public-eligible JSON feed compilation are implemented. |
-| Local Supabase | Pinned CLI 2.109.1, 9 timestamped migrations, 3 local storage buckets, synthetic staff provisioning and automated verifiers implemented. *(Migrations 0007 through 0009 are repository/local only and not applied to hosted staging.)* |
+| Local Supabase | Pinned CLI 2.109.1, 24 timestamped migrations, 3 local storage buckets, synthetic staff provisioning and automated verifiers implemented. *(Migrations 0007 through 0024 are repository/local only and not applied to hosted staging.)* |
 | Staging Guardrails | Target environment identity checks, hostname matching, loopback rejection and double-acknowledgement CLI flags implemented. |
 | Quality & Onboarding | Node 24.14.1 and npm 11.11.0 toolchain contract, `npm run onboarding:check` precheck, and unit tests implemented. Verified in a clean Windows remote-clone run; macOS, Linux and independent human onboarding remain unverified. |
 | Pending | Hosted migration reconciliation, hosted staff lifecycle, interactive browser UAT matrix, cross-platform human onboarding verification and production cutover. |
