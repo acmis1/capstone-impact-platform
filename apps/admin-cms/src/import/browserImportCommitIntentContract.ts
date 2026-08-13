@@ -1,6 +1,34 @@
 import { z } from 'zod';
 import { BROWSER_IMPORT_LIMITS, BrowserImportPackagePreview, BrowserImportPreviewBatch } from './browserImportPreviewContract';
 
+export const adminReferenceIntentSchema = z
+  .object({
+    workbookFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    worksheet: z.string().min(1).max(100),
+    matchMappings: z
+      .array(
+        z.object({
+          canonicalField: z.string().min(1).max(50),
+          referenceColumn: z.string().min(1).max(100),
+        }).strict()
+      )
+      .min(1)
+      .max(3),
+    comparisonMappings: z
+      .array(
+        z.object({
+          canonicalField: z.string().min(1).max(50),
+          referenceColumn: z.string().min(1).max(100),
+        }).strict()
+      )
+      .min(1)
+      .max(20),
+    reconciliationContractVersion: z.literal('admin-reference-reconciliation-v1'),
+  })
+  .strict();
+
+export type AdminReferenceIntent = z.infer<typeof adminReferenceIntentSchema>;
+
 /**
  * Strict Zod Schema and TypeScript Contract for BrowserImportCommitIntent
  */
@@ -34,6 +62,7 @@ export const browserImportCommitIntentSchema = z
         (arr) => [...arr].sort((a, b) => a.localeCompare(b)).every((v, i) => v === arr[i]),
         { message: 'Acknowledged warning package paths must be sorted deterministically.' }
       ),
+    adminReference: adminReferenceIntentSchema.optional(),
   })
   .strict();
 

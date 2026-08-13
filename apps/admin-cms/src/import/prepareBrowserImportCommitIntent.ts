@@ -23,6 +23,13 @@ export function generateBrowserPreviewFingerprint(input: {
     errors: Array<{ code: string }>;
     warnings: Array<{ code: string }>;
   }>;
+  adminReference?: {
+    workbookFingerprint: string;
+    worksheet: string;
+    matchMappings: Array<{ canonicalField: string; referenceColumn: string }>;
+    comparisonMappings: Array<{ canonicalField: string; referenceColumn: string }>;
+    reconciliationContractVersion: string;
+  };
 }): string {
   const sortedPackages = [...input.packages]
     .sort((a, b) => a.packagePath.localeCompare(b.packagePath))
@@ -42,6 +49,7 @@ export function generateBrowserPreviewFingerprint(input: {
     fileCount: input.fileCount,
     declaredTotalBytes: input.declaredTotalBytes,
     packages: sortedPackages,
+    ...(input.adminReference ? { adminReference: input.adminReference } : {}),
   };
 
   return createHash('sha256').update(JSON.stringify(canonicalObj), 'utf8').digest('hex');
@@ -85,6 +93,13 @@ export function prepareBrowserImportCommitIntent(params: {
   selectedPackagePaths: string[];
   acknowledgedWarningPackagePaths: string[];
   expectedPreviewFingerprint: string;
+  adminReference?: {
+    workbookFingerprint: string;
+    worksheet: string;
+    matchMappings: Array<{ canonicalField: string; referenceColumn: string }>;
+    comparisonMappings: Array<{ canonicalField: string; referenceColumn: string }>;
+    reconciliationContractVersion: 'admin-reference-reconciliation-v1';
+  };
 }): BrowserImportCommitIntentResult {
   const {
     manifest,
@@ -92,6 +107,7 @@ export function prepareBrowserImportCommitIntent(params: {
     selectedPackagePaths,
     acknowledgedWarningPackagePaths,
     expectedPreviewFingerprint,
+    adminReference,
   } = params;
 
   // 1. Structure check on preview
@@ -147,6 +163,7 @@ export function prepareBrowserImportCommitIntent(params: {
     fileCount: preview.selectedFileCount,
     declaredTotalBytes: preview.declaredTotalBytes,
     packages: preview.packages,
+    adminReference,
   });
 
   if (
@@ -269,6 +286,7 @@ export function prepareBrowserImportCommitIntent(params: {
     declaredTotalBytes: preview.declaredTotalBytes,
     selectedPackagePaths: sortedSelected,
     acknowledgedWarningPackagePaths: sortedAcked,
+    ...(adminReference ? { adminReference } : {}),
   };
 
   // Schema validation pass

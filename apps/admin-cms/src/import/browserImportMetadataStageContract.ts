@@ -137,6 +137,7 @@ export function computeCanonicalIntentHash(intent: BrowserImportCommitIntent): s
     declaredTotalBytes: intent.declaredTotalBytes,
     selectedPackagePaths: [...intent.selectedPackagePaths].sort((a, b) => a.localeCompare(b)),
     acknowledgedWarningPackagePaths: [...intent.acknowledgedWarningPackagePaths].sort((a, b) => a.localeCompare(b)),
+    ...(intent.adminReference ? { adminReference: intent.adminReference } : {}),
   };
 
   return createHash('sha256').update(JSON.stringify(canonicalObj), 'utf8').digest('hex');

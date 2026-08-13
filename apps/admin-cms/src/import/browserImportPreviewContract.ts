@@ -111,6 +111,16 @@ export interface BrowserImportPackagePreview {
     posterPdfPresent: boolean;
     snapshotPresent: boolean;
   };
+  reconciliation?: {
+    status:
+      | 'RECONCILED'
+      | 'ADMIN_REFERENCE_NO_MATCH'
+      | 'ADMIN_REFERENCE_AMBIGUOUS_MATCH'
+      | 'ADMIN_REFERENCE_FIELD_MISMATCH'
+      | 'ADMIN_REFERENCE_VALUE_INVALID';
+    matchedRowNumber?: number;
+    mismatchedFields: string[];
+  };
   errors: BrowserImportIssue[];
   warnings: BrowserImportIssue[];
 }
@@ -565,6 +575,27 @@ export function validateBrowserImportPreviewResponse(raw: unknown): BrowserImpor
       };
     }
 
+    let reconciliation: BrowserImportPackagePreview['reconciliation'] = undefined;
+    if (pkg.reconciliation !== undefined && pkg.reconciliation !== null) {
+      if (typeof pkg.reconciliation !== 'object') return null;
+      const rec = pkg.reconciliation as Record<string, unknown>;
+      if (
+        rec.status !== 'RECONCILED' &&
+        rec.status !== 'ADMIN_REFERENCE_NO_MATCH' &&
+        rec.status !== 'ADMIN_REFERENCE_AMBIGUOUS_MATCH' &&
+        rec.status !== 'ADMIN_REFERENCE_FIELD_MISMATCH' &&
+        rec.status !== 'ADMIN_REFERENCE_VALUE_INVALID'
+      ) {
+        return null;
+      }
+      if (!Array.isArray(rec.mismatchedFields)) return null;
+      reconciliation = {
+        status: rec.status,
+        matchedRowNumber: typeof rec.matchedRowNumber === 'number' ? rec.matchedRowNumber : undefined,
+        mismatchedFields: rec.mismatchedFields as string[],
+      };
+    }
+
     packages.push({
       packagePath: pkg.packagePath,
       folderName: pkg.folderName,
@@ -579,6 +610,7 @@ export function validateBrowserImportPreviewResponse(raw: unknown): BrowserImpor
         posterPdfPresent: fp.posterPdfPresent,
         snapshotPresent: fp.snapshotPresent,
       },
+      reconciliation,
       errors: pkg.errors as BrowserImportIssue[],
       warnings: pkg.warnings as BrowserImportIssue[],
     });

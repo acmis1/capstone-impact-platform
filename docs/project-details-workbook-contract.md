@@ -156,3 +156,15 @@ Unrecognized non-empty values emit a generic `WORKBOOK_UNKNOWN_FEATURED_MEDIA` w
 | `WORKBOOK_DUPLICATE_TEAM_MEMBER` | `warning` | Duplicate participant name detected and omitted. |
 | `WORKBOOK_UNKNOWN_LAYOUT` | `warning` | Unknown layout value defaulted to `poster_showcase`. |
 | `WORKBOOK_UNKNOWN_FEATURED_MEDIA` | `warning` | Unknown featured media option defaulted to `poster`. |
+
+---
+
+## 10. Admin Excel Reference Dataset Reconciliation
+
+Distinct from `project-details.xlsx` (which is submitted inside each project folder representing package metadata), staff may optionally supply a separate **Admin Reference Dataset** `.xlsx` workbook during browser import.
+
+- **Purpose**: Cross-checks submitted project packages against official administrative records (e.g. School master roster).
+- **Inspection**: Endpoint `POST /api/imports/admin-reference/inspect` inspects sheets, row counts, and headers safely without returning or persisting raw cell data.
+- **Mapping-Driven**: Mappings are user-configured (1–3 composite match key fields, 1–20 comparison fields) and validated server-side (`validateAdminReferenceMapping`).
+- **Rules-First Matching**: Reconciles normalized package values against reference rows. Packages with field mismatches, missing reference rows, or ambiguous/duplicate matches are marked `invalid` and blocked from staging.
+- **TOCTOU & Staging Replay**: The reference workbook SHA-256 fingerprint and canonicalized mapping are bound into the preview fingerprint (`previewFingerprint`) and commitment intent (`adminReference`). Staging re-verifies the uploaded reference workbook and mapping, re-running reconciliation server-side before persisting metadata.

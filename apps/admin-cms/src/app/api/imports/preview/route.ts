@@ -7,11 +7,17 @@ import { validateSameOrigin } from '../../../../auth/csrf';
 import {
   parseBrowserImportPreview,
   BrowserImportPreviewLimitError,
+  AdminReferenceAnalysisOptions,
 } from '../../../../import/parseBrowserImportPreview';
 import {
   BROWSER_IMPORT_LIMITS,
   runBrowserImportManifestPreflight,
 } from '../../../../import/browserImportPreviewContract';
+import {
+  inspectAdminReferenceWorkbook,
+  validateAdminReferenceMapping,
+  WorksheetStructureSummary,
+} from '../../../../import/adminReferenceReconciliation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -144,9 +150,44 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const pendingFileReads: Array<{ key: string; file: File; expectedBytes: number }> = [];
     let actualMetadataBytes = 0;
 
+    let adminReferenceFile: File | null = null;
+    let adminReferenceMappingJsonStr: string | null = null;
+
     // Phase A Validation of FormData entries against preflight expected metadata keys
     for (const [key, value] of formData.entries()) {
       if (key === 'manifest') continue;
+      if (key === 'referenceFile') {
+        if (adminReferenceFile !== null) {
+          return NextResponse.json(
+            { success: false, code: 'DUPLICATE_UPLOAD_FIELD', error: 'Duplicate reference file in form data is forbidden.' },
+            { status: 400, headers: { 'Cache-Control': 'no-store' } }
+          );
+        }
+        if (!(value instanceof File)) {
+          return NextResponse.json(
+            { success: false, code: 'UNEXPECTED_UPLOAD_FIELD', error: 'Reference file field must be a file upload.' },
+            { status: 400, headers: { 'Cache-Control': 'no-store' } }
+          );
+        }
+        adminReferenceFile = value as File;
+        continue;
+      }
+      if (key === 'adminReferenceMapping') {
+        if (adminReferenceMappingJsonStr !== null) {
+          return NextResponse.json(
+            { success: false, code: 'DUPLICATE_UPLOAD_FIELD', error: 'Duplicate reference mapping in form data is forbidden.' },
+            { status: 400, headers: { 'Cache-Control': 'no-store' } }
+          );
+        }
+        if (typeof value !== 'string') {
+          return NextResponse.json(
+            { success: false, code: 'UNEXPECTED_UPLOAD_FIELD', error: 'Reference mapping field must be a string.' },
+            { status: 400, headers: { 'Cache-Control': 'no-store' } }
+          );
+        }
+        adminReferenceMappingJsonStr = value;
+        continue;
+      }
 
       if (seenFormKeys.has(key)) {
         return NextResponse.json(
@@ -228,8 +269,66 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       uploadedMetadataFiles.set(key, buf);
     }
 
+    let adminReferenceOptions: AdminReferenceAnalysisOptions | undefined = undefined;
+
+    if (adminReferenceFile !== null || adminReferenceMappingJsonStr !== null) {
+      if (adminReferenceFile === null || adminReferenceMappingJsonStr === null) {
+        return NextResponse.json(
+          { success: false, code: 'INVALID_MANIFEST', error: 'Both reference file and mapping config must be uploaded.' },
+          { status: 400, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+      if (!adminReferenceFile.name.toLowerCase().endsWith('.xlsx') || adminReferenceFile.size === 0 || adminReferenceFile.size > BROWSER_IMPORT_LIMITS.MAX_XLSX_SIZE_BYTES) {
+        return NextResponse.json(
+          { success: false, code: 'INVALID_MANIFEST', error: 'Reference workbook file is invalid or exceeds size limit.' },
+          { status: 400, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+
+      let parsedMapping: unknown;
+      try {
+        parsedMapping = JSON.parse(adminReferenceMappingJsonStr);
+      } catch {
+        return NextResponse.json(
+          { success: false, code: 'INVALID_MANIFEST', error: 'Reference mapping is not valid JSON.' },
+          { status: 400, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+
+      let arrayBuf: ArrayBuffer;
+      const fileObj = adminReferenceFile as unknown as { arrayBuffer?: () => Promise<ArrayBuffer>; buffer?: ArrayBuffer };
+      if (typeof fileObj.arrayBuffer === 'function') {
+        arrayBuf = await fileObj.arrayBuffer();
+      } else {
+        arrayBuf = fileObj.buffer || (adminReferenceFile as unknown as ArrayBuffer);
+      }
+      const refBuf = Buffer.from(arrayBuf);
+
+      const inspection = await inspectAdminReferenceWorkbook(refBuf);
+      const targetSheet = inspection.worksheets.find((w: WorksheetStructureSummary) => w.name === (parsedMapping as { worksheet?: string }).worksheet);
+      if (!targetSheet) {
+        return NextResponse.json(
+          { success: false, code: 'INVALID_MANIFEST', error: 'Target worksheet not found in reference workbook.' },
+          { status: 400, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+
+      const mapValidation = validateAdminReferenceMapping(parsedMapping, targetSheet.headers);
+      if (!mapValidation.valid) {
+        return NextResponse.json(
+          { success: false, code: 'INVALID_MANIFEST', error: mapValidation.error },
+          { status: 400, headers: { 'Cache-Control': 'no-store' } }
+        );
+      }
+
+      adminReferenceOptions = {
+        referenceFileBuffer: refBuf,
+        mapping: mapValidation.canonicalMapping,
+      };
+    }
+
     // Call server-side preview parser passing preflight result and metadata buffers
-    const result = await parseBrowserImportPreview(preflight, uploadedMetadataFiles);
+    const result = await parseBrowserImportPreview(preflight, uploadedMetadataFiles, adminReferenceOptions);
 
     return NextResponse.json(result, {
       status: 200,
