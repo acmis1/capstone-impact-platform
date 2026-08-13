@@ -8,6 +8,7 @@ import {
 } from './browserImportMetadataStageContract';
 import { BrowserImportServerAnalysis } from './parseBrowserImportPreview';
 import { validateFolderDerivedPublicId } from './publicIdValidation';
+import { normalizeParticipantContactEmail } from '../domain/participantContactEmail';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -154,6 +155,9 @@ export async function stageBrowserImportMetadata(params: {
       industryPartner: m.industryPartner ? m.industryPartner.trim() : '',
       academicSupervisor: m.academicSupervisor ? m.academicSupervisor.trim() : '',
       groupName: m.groupName.trim(),
+      // Optional. Already validated at parse time; normalized again here so an unusable value can
+      // never reach persistence, and the database normalizes a third time as the final authority.
+      participantContactEmail: normalizeParticipantContactEmail(m.participantContactEmail),
       teamMembers: m.teamMembers.map((t) => String(t).trim()).filter((t) => t !== ''),
       posterText: m.posterText ? m.posterText.trim() : null,
       accessibilityText: m.accessibilityText ? m.accessibilityText.trim() : null,

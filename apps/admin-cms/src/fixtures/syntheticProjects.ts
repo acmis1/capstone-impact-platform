@@ -202,6 +202,9 @@ function createSyntheticProject(
     industryPartner: `Synthetic Industry Partner ${sequence}`,
     academicSupervisor: `Synthetic Supervisor ${sequence}`,
     groupName: `Synthetic Team ${sequence}`,
+    // Deliberately blank: synthetic benchmark data must contain nothing email-shaped, and these
+    // records exist only to exercise indexing and feed volume, never preview correspondence.
+    participantContactEmail: '',
     teamMembers: Array.from({ length: teamSize }, (_, memberIndex) =>
       `Synthetic Member ${sequence}-${String(memberIndex + 1).padStart(2, '0')}`,
     ),

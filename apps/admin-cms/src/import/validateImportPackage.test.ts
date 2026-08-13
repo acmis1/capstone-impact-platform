@@ -17,6 +17,7 @@ function createMockParsedPackage(overrides: Partial<ImportPackageParseResult> = 
     industryPartner: 'WindCorp',
     academicSupervisor: 'Dr. Jane Wind',
     groupName: 'Wind Team',
+    participantContactEmail: 'wind.team@example.invalid',
     teamMembers: ['Alice', 'Bob'],
     accessibilityText: 'Alternative text describing the layout.',
     posterText: 'Poster text about wind turbines.',

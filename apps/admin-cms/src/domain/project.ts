@@ -41,6 +41,9 @@ export interface Project {
   industryPartner: string; // Partner company name
   academicSupervisor: string; // Supervisor name
   groupName: string; // Project participant team group name
+  // Authoritative participant/group contact address for participant preview correspondence.
+  // Internal-only: never part of the public feed, and never accepted from a browser at send time.
+  participantContactEmail: string;
   teamMembers: string[]; // List of project participant names
   poster: string; // Public HTTPS URL to poster image preview
   posterPdf: string; // Public HTTPS URL to poster PDF file

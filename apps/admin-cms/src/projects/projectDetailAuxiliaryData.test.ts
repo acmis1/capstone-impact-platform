@@ -76,7 +76,7 @@ describe('project detail auxiliary failure isolation', () => {
   it('distinguishes audit and correction-resolution failures from valid empty state and disables preview actions', async () => {
     const result = await loadProjectDetailAuxiliaryData({ publicId: '2026-vr-rehab' }, {
       loadAuditRecords: async () => { throw new Error('database detail must stay private'); },
-      loadPreviewState: async () => ({ activePreview: null, responseState: { type: 'unresponded' } }),
+      loadPreviewState: async () => ({ activePreview: null, responseState: { type: 'unresponded' }, notification: null }),
       loadResolutionStatus: async () => { throw new ParticipantPreviewExecutionError('INTERNAL_FAILURE'); },
       loadPublicationReadiness: async () => readyResult,
     }, vi.fn());
@@ -109,6 +109,14 @@ describe('project detail auxiliary failure isolation', () => {
       loadPreviewState: async () => ({
         activePreview: { createdAt: '2026-08-12T00:00:00.000Z', expiresAt: '2026-08-13T00:00:00.000Z' },
         responseState: { type: 'confirmed', confirmedAt: '2026-08-12T00:05:00.000Z' },
+        notification: {
+          kind: 'initial' as const,
+          recipient: 'group@example.invalid',
+          status: 'sent' as const,
+          requestedAt: '2026-08-12T00:00:05.000Z',
+          sentAt: '2026-08-12T00:00:06.000Z',
+          failureCode: null,
+        },
       }),
       loadResolutionStatus: async () => null,
       loadPublicationReadiness: async () => readyResult,

@@ -122,6 +122,7 @@ function mapDbRowToProject(row: Record<string, unknown>): Project {
     industryPartner: String(row.industry_partner || ''),
     academicSupervisor: String(row.academic_supervisor || ''),
     groupName: String(row.group_name || 'Capstone Team 1'),
+    participantContactEmail: String(row.participant_contact_email || ''),
     teamMembers: Array.isArray(row.team_members) ? (row.team_members as string[]) : ['Participant One', 'Participant Two'],
     poster: String(row.poster_url || ''),
     posterPdf: String(row.poster_pdf_url || ''),

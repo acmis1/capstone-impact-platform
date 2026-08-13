@@ -12,6 +12,8 @@ export interface ImportPackageManifest {
   industryPartner: string;
   academicSupervisor: string;
   groupName: string;
+  /** Authoritative participant/group contact address; empty when the source left it blank. */
+  participantContactEmail: string;
   teamMembers: string[];
   posterText?: string;
   accessibilityText?: string;
@@ -63,6 +65,8 @@ export interface ImportedProjectDraft {
   industryPartner: string;
   academicSupervisor: string;
   groupName: string;
+  /** Authoritative participant/group contact address; empty when the source left it blank. */
+  participantContactEmail: string;
   teamMembers: string[];
   posterText?: string;
   accessibilityText?: string;

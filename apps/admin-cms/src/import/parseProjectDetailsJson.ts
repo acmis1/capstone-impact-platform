@@ -1,4 +1,5 @@
 import { ImportPackageManifest } from './importTypes';
+import { validateParticipantContactEmail } from '../domain/participantContactEmail';
 
 export interface ProjectDetailsJsonWarning {
   code: string;
@@ -93,6 +94,11 @@ export function parseProjectDetailsJson(
   const industryPartner = getString('industryPartner');
   const academicSupervisor = getString('academicSupervisor');
   const groupName = getString('groupName');
+  // Legacy JSON manifests predate the contact-email contract. An absent or unusable value simply
+  // yields no authoritative contact — Generate + Send then fails closed with a bounded result —
+  // rather than blocking an otherwise valid import.
+  const contactEmailValidation = validateParticipantContactEmail(getString('participantContactEmail'));
+  const participantContactEmail = contactEmailValidation.valid ? contactEmailValidation.email : '';
   const posterText = getString('posterText');
   const accessibilityText = getString('accessibilityText');
   const teamMembers = getArrayStrings('teamMembers');
@@ -121,6 +127,7 @@ export function parseProjectDetailsJson(
     industryPartner,
     academicSupervisor,
     groupName,
+    participantContactEmail,
     teamMembers,
     ...(posterText ? { posterText } : {}),
     ...(accessibilityText ? { accessibilityText } : {}),
