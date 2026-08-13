@@ -14,9 +14,29 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
   { name: 'Imports', href: '/admin/imports' },
 ];
 
+export const STAFF_NAVIGATION_ITEM: NavigationItem = { name: 'Staff access', href: '/admin/staff' };
+
+/**
+ * Navigation for a staff member's resolved authority. Omitting the staff-access entry is a
+ * usability affordance only — `/admin/staff` and `/api/staff/invitations` each re-authorize on
+ * the server, so an unauthorized caller gains nothing by navigating there directly.
+ */
+export function getNavigationItems(canManageStaff: boolean): NavigationItem[] {
+  return canManageStaff ? [...NAVIGATION_ITEMS, STAFF_NAVIGATION_ITEM] : [...NAVIGATION_ITEMS];
+}
+
 export function getRouteDescriptor(pathname: string): RouteDescriptor {
   // Normalize pathname
   const cleanPath = pathname.replace(/\/$/, '') || '/admin';
+
+  // Check exact staff route: /admin/staff
+  if (cleanPath === '/admin/staff') {
+    return {
+      title: 'Staff access',
+      breadcrumbs: [{ label: 'Staff access' }],
+      activeHref: '/admin/staff',
+    };
+  }
 
   // Check imports detail route first: /admin/imports/{batchId}
   if (cleanPath.startsWith('/admin/imports/')) {

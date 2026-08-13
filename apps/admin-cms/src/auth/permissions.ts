@@ -1,15 +1,57 @@
 import { AdminRole, AdminPermission } from './authTypes';
 
+/**
+ * Canonical staff role order, declared authority-descending. This is the repository's domain
+ * rule — deliberately NOT alphabetical — and is the single source of truth for the order in
+ * which recognized roles are reported, so resolution never depends on database row ordering.
+ */
+export const CANONICAL_ROLE_ORDER: readonly AdminRole[] = ['admin', 'reviewer', 'editor'];
+
+/**
+ * Canonical permission order. Project permissions are listed workflow-ascending, and the
+ * administrative staff-management capability last, so a permission union is always reported
+ * in one deterministic order regardless of which roles contributed it.
+ */
+export const CANONICAL_PERMISSION_ORDER: readonly AdminPermission[] = [
+  'projects.read',
+  'projects.review',
+  'projects.archive',
+  'projects.edit',
+  'projects.publish',
+  'staff.manage',
+];
+
+const RECOGNIZED_ROLES = new Set<AdminRole>(CANONICAL_ROLE_ORDER);
+
 const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
-  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit', 'projects.publish'],
+  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit', 'projects.publish', 'staff.manage'],
   reviewer: ['projects.read', 'projects.review'],
   editor: ['projects.read', 'projects.edit'],
 };
 
+/** Narrowing guard for role values arriving from the database or an untrusted boundary. */
+export function isAdminRole(value: unknown): value is AdminRole {
+  return typeof value === 'string' && RECOGNIZED_ROLES.has(value as AdminRole);
+}
+
 /**
- * Returns combined list of permissions for specified roles, without duplicates.
+ * Reduces arbitrary role input to the recognized, duplicate-free set in canonical order.
+ * Unrecognized values are discarded rather than carried through, so an unknown role row can
+ * never expand authority.
  */
-export function getPermissionsForRoles(roles: AdminRole[]): AdminPermission[] {
+export function canonicalizeRoles(roles: readonly unknown[]): AdminRole[] {
+  const recognized = new Set<AdminRole>();
+  roles.forEach((role) => {
+    if (isAdminRole(role)) recognized.add(role);
+  });
+  return CANONICAL_ROLE_ORDER.filter((role) => recognized.has(role));
+}
+
+/**
+ * Returns the combined permissions for the specified roles, without duplicates and in the
+ * canonical permission order.
+ */
+export function getPermissionsForRoles(roles: readonly AdminRole[]): AdminPermission[] {
   const permissionsSet = new Set<AdminPermission>();
   roles.forEach((role) => {
     const permissions = ROLE_PERMISSIONS[role];
@@ -17,7 +59,7 @@ export function getPermissionsForRoles(roles: AdminRole[]): AdminPermission[] {
       permissions.forEach((p) => permissionsSet.add(p));
     }
   });
-  return Array.from(permissionsSet);
+  return CANONICAL_PERMISSION_ORDER.filter((permission) => permissionsSet.has(permission));
 }
 
 /**
@@ -61,4 +103,13 @@ export function canManageParticipantPreview(userPermissions: AdminPermission[]):
 /** Publication preparation has deliberately narrower, admin-only authority. */
 export function canPreparePublication(userPermissions: AdminPermission[]): boolean {
   return hasPermission(userPermissions, 'projects.publish');
+}
+
+/**
+ * Staff identity provisioning is a dedicated administrative capability. It is deliberately a
+ * domain permission rather than a `role === 'admin'` check, so authority stays resolvable from
+ * the one centralized permission model.
+ */
+export function canManageStaff(userPermissions: AdminPermission[]): boolean {
+  return hasPermission(userPermissions, 'staff.manage');
 }

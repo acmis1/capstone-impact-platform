@@ -7,6 +7,7 @@ import { createClient, type Session, type SupabaseClient } from '@supabase/supab
 import { resolveAdminContextFromAuthUser } from '../auth/adminContext';
 import { AdminAuthError, type AuthenticatedAdminContext } from '../auth/authTypes';
 import {
+  canManageStaff,
   canPerformReviewAction,
   canPreparePublication,
   canResolveParticipantCorrection,
@@ -27,7 +28,7 @@ type StaffRuntime = {
 };
 
 const EXPECTED_PERMISSIONS = {
-  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit', 'projects.publish'],
+  admin: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit', 'projects.publish', 'staff.manage'],
   reviewer: ['projects.read', 'projects.review'],
   editor: ['projects.read', 'projects.edit'],
 } as const;
@@ -153,13 +154,14 @@ async function main(): Promise<void> {
     assert.ifError(addReviewer.error);
     editorReviewerAdded = true;
     const combined = await resolveAdminContextFromAuthUser(editor.authUserId, service);
-    await scenario(9, 'temporary editor+reviewer permissions are the exact union', () => {
-      assert.deepEqual(combined.roles, ['editor', 'reviewer']);
-      assert.deepEqual(combined.permissions, ['projects.read', 'projects.edit', 'projects.review']);
+    await scenario(9, 'temporary editor+reviewer permissions are the exact canonical union', () => {
+      assert.deepEqual(combined.roles, ['reviewer', 'editor']);
+      assert.deepEqual(combined.permissions, ['projects.read', 'projects.review', 'projects.edit']);
     });
-    await scenario(10, 'editor+reviewer gains neither publish nor archive', () => {
+    await scenario(10, 'editor+reviewer gains neither publish, archive nor staff management', () => {
       assert(!hasPermission(combined.permissions, 'projects.publish'));
       assert(!hasPermission(combined.permissions, 'projects.archive'));
+      assert(!canManageStaff(combined.permissions));
     });
     const removeReviewer = await service.from('user_roles').delete().eq('user_id', editor.adminUserId).eq('role', 'reviewer');
     assert.ifError(removeReviewer.error);
@@ -300,6 +302,9 @@ async function main(): Promise<void> {
       assert(canPerformReviewAction(permissions, 'approve'));
       assert(canPreparePublication(permissions));
       assert(canPerformReviewAction(permissions, 'archive'));
+      assert(canManageStaff(permissions));
+      assert(!canManageStaff(runtime('local-reviewer').context.permissions));
+      assert(!canManageStaff(runtime('local-editor').context.permissions));
     });
     await scenario(28, 'editor+reviewer combined correction authority succeeds', () => {
       assert(canResolveParticipantCorrection(combined.permissions));

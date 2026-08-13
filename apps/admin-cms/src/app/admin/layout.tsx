@@ -1,5 +1,6 @@
 import React from 'react';
 import { requireAdmin } from '../../auth/requireAdmin';
+import { canManageStaff } from '../../auth/permissions';
 import { logoutAction } from '../login/actions';
 import { redirect } from 'next/navigation';
 import { AdminAuthError } from '../../auth/authTypes';
@@ -61,6 +62,7 @@ export default async function AdminLayout({
       displayName={adminContext.fullName}
       email={adminContext.email}
       roles={adminContext.roles}
+      canManageStaff={canManageStaff(adminContext.permissions)}
       logoutAction={logoutAction}
     >
       {children}
