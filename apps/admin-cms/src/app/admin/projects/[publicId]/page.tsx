@@ -15,6 +15,8 @@ import { ParticipantPreviewPanel } from '../../../../components/admin/Participan
 import { SupabaseParticipantPreviewRepository } from '../../../../repositories/SupabaseParticipantPreviewRepository';
 import { SupabaseParticipantPreviewNotificationRepository } from '../../../../repositories/SupabaseParticipantPreviewNotificationRepository';
 import { isParticipantPreviewEmailEnabled } from '../../../../notifications/participantPreviewEmailConfig';
+import { isParticipantPreviewRemindersEnabled } from '../../../../reminders/participantPreviewReminderConfig';
+import { SupabaseParticipantPreviewReminderRepository } from '../../../../repositories/SupabaseParticipantPreviewReminderRepository';
 import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetadataEditor';
 import { GuardedProjectBackLink, ProjectMetadataNavigationProvider } from '../../../../components/admin/ProjectMetadataNavigation';
 import { SupabaseProjectMetadataGateway, loadProjectMetadataEditorData } from '../../../../projects/projectMetadataService';
@@ -64,9 +66,11 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let previewResponseState: import('../../../../domain/participantPreview').ParticipantPreviewResponseState = { type: 'unresponded' };
   let previewStateAvailable = false;
   let previewNotification: import('../../../../notifications/participantPreviewNotification').ParticipantPreviewNotificationView | null = null;
+  let previewReminders: import('../../../../reminders/participantPreviewReminder').ParticipantPreviewReminderView[] = [];
   // Server-only enablement. The browser never learns the SMTP configuration, only whether the
   // Generate + Send action is offered at all.
   const emailDeliveryEnabled = isParticipantPreviewEmailEnabled();
+  const reminderSchedulingEnabled = emailDeliveryEnabled && isParticipantPreviewRemindersEnabled();
   let resolutionStatus: import('../../../../domain/participantPreview').ParticipantPreviewCorrectionResolutionStatus | null = null;
   let resolutionStatusAvailable = false;
   let canResolveCorrection = false;
@@ -130,6 +134,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       const supabase = createSupabaseAdminClientCore();
       const previewRepository = new SupabaseParticipantPreviewRepository();
       const notificationRepository = new SupabaseParticipantPreviewNotificationRepository();
+      const reminderRepository = new SupabaseParticipantPreviewReminderRepository();
       const env = getServerEnv();
       localPublicationExecutionAvailable = canPreparePublicationPlan && isLocalPublicationExecutionAvailable(env.supabaseUrl);
       canExecuteLocalArchive = hasPermission(adminContext.permissions, 'projects.archive') && isLocalPublicationExecutionAvailable(env.supabaseUrl);
@@ -154,9 +159,19 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           return (data ?? []).map(parseAuditHistoryRow);
         },
         loadPreviewState: async () => {
-          const preview = await previewRepository.getActivePreview(await projectDbId);
+          const dbId = await projectDbId;
+          const preview = await previewRepository.getActivePreview(dbId);
+          const reminders = await reminderRepository.getReminderHistoryForProject(
+            dbId,
+            preview?.previewId ?? null,
+          );
           if (!preview) {
-            return { activePreview: null, responseState: { type: 'unresponded' as const }, notification: null };
+            return {
+              activePreview: null,
+              responseState: { type: 'unresponded' as const },
+              notification: null,
+              reminders,
+            };
           }
           const [responseState, notification] = await Promise.all([
             previewRepository.getResponseState(preview.previewId),
@@ -166,6 +181,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             activePreview: { createdAt: preview.createdAt, expiresAt: preview.expiresAt },
             responseState,
             notification,
+            reminders,
           };
         },
         loadResolutionStatus: async () => previewRepository.getCorrectionResolutionStatus(await projectDbId),
@@ -181,6 +197,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       previewResponseState = auxiliary.previewState.responseState;
       previewStateAvailable = auxiliary.previewStateAvailable;
       previewNotification = auxiliary.previewState.notification;
+      previewReminders = auxiliary.previewState.reminders;
       resolutionStatus = auxiliary.resolutionStatus;
       resolutionStatusAvailable = auxiliary.resolutionStatusAvailable;
       publicationReadiness = auxiliary.publicationReadiness;
@@ -405,6 +422,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             notification={previewNotification}
             participantContactEmail={project.participantContactEmail || null}
             emailDeliveryEnabled={emailDeliveryEnabled}
+            reminderSchedulingEnabled={reminderSchedulingEnabled}
+            reminders={previewReminders}
             resolutionStatus={resolutionStatus}
             resolutionStateAvailable={resolutionStatusAvailable}
             canResolveCorrection={canResolveCorrection}

@@ -7,6 +7,10 @@ import {
   participantPreviewNotificationStatusLabel,
   type ParticipantPreviewNotificationView,
 } from '../../notifications/participantPreviewNotification';
+import {
+  participantPreviewReminderStatusLabel,
+  type ParticipantPreviewReminderView,
+} from '../../reminders/participantPreviewReminder';
 
 interface ActivePreviewState {
   createdAt: string;
@@ -26,6 +30,8 @@ interface ParticipantPreviewPanelProps {
   participantContactEmail?: string | null;
   /** Server-side enablement. False hides Generate + Send rather than offering an action that fails. */
   emailDeliveryEnabled?: boolean;
+  reminderSchedulingEnabled?: boolean;
+  reminders?: ParticipantPreviewReminderView[];
   resolutionStatus?: ParticipantPreviewCorrectionResolutionStatus | null;
   resolutionStateAvailable: boolean;
   canResolveCorrection?: boolean;
@@ -62,6 +68,20 @@ interface StartResolutionResponse {
   alreadyInProgress?: boolean;
 }
 
+interface ReminderMutationResponse {
+  success: boolean;
+  code?: string;
+  message?: string;
+}
+
+function toLocalDateTimeInputValue(value: string): string | undefined {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return undefined;
+  const part = (number: number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}` +
+    `T${part(date.getHours())}:${part(date.getMinutes())}`;
+}
+
 export function ParticipantPreviewPanel({
   publicId,
   canManage,
@@ -72,6 +92,8 @@ export function ParticipantPreviewPanel({
   notification = null,
   participantContactEmail = null,
   emailDeliveryEnabled = false,
+  reminderSchedulingEnabled = false,
+  reminders = [],
   resolutionStatus,
   resolutionStateAvailable,
   canResolveCorrection = false,
@@ -85,6 +107,8 @@ export function ParticipantPreviewPanel({
   const [justGeneratedUrl, setJustGeneratedUrl] = useState<string | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [scheduledFor, setScheduledFor] = useState('');
+  const [reminderNotice, setReminderNotice] = useState<string | null>(null);
   const inFlightRef = useRef(false);
 
   if (!stateAvailable) {
@@ -218,6 +242,77 @@ export function ParticipantPreviewPanel({
     }
   };
 
+  const handleScheduleReminder = async () => {
+    if (inFlightRef.current || pending || !scheduledFor) return;
+    const instant = new Date(scheduledFor);
+    if (!Number.isFinite(instant.getTime())) {
+      setError('Choose a valid reminder date and time.');
+      return;
+    }
+    inFlightRef.current = true;
+    setPending(true);
+    setError(null);
+    setReminderNotice(null);
+    try {
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(publicId)}/participant-preview/reminders`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scheduledFor: instant.toISOString() }),
+        },
+      );
+      const data: ReminderMutationResponse = await response.json().catch(() => ({
+        success: false,
+        message: 'Invalid server response.',
+      }));
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to schedule the reminder.');
+      }
+      setReminderNotice(data.message ?? 'Reminder scheduled.');
+      setScheduledFor('');
+      router.refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to schedule the reminder.');
+    } finally {
+      setPending(false);
+      inFlightRef.current = false;
+    }
+  };
+
+  const handleCancelReminder = async (reference: string) => {
+    if (inFlightRef.current || pending) return;
+    if (!window.confirm('Cancel this future participant preview reminder?')) return;
+    inFlightRef.current = true;
+    setPending(true);
+    setError(null);
+    setReminderNotice(null);
+    try {
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(publicId)}/participant-preview/reminders`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reference }),
+        },
+      );
+      const data: ReminderMutationResponse = await response.json().catch(() => ({
+        success: false,
+        message: 'Invalid server response.',
+      }));
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to cancel the reminder.');
+      }
+      setReminderNotice(data.message ?? 'Reminder cancelled.');
+      router.refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel the reminder.');
+    } finally {
+      setPending(false);
+      inFlightRef.current = false;
+    }
+  };
+
   if (!canManage) {
     return (
       <div style={{ fontSize: '0.85rem', color: '#9CA3AF', fontStyle: 'italic' }}>
@@ -231,6 +326,14 @@ export function ParticipantPreviewPanel({
   const isInProgress = resStatus === 'in_progress' || (projectStatus === 'changes_requested' && resolutionStatus?.status === 'in_progress');
 
   const canSendEmail = emailDeliveryEnabled && Boolean(participantContactEmail);
+  const currentContactMatchesInitial = Boolean(
+    notification && participantContactEmail &&
+    notification.recipient.trim().toLowerCase() === participantContactEmail.trim().toLowerCase(),
+  );
+  const canScheduleReminder = Boolean(
+    reminderSchedulingEnabled && activePreview && notification?.status === 'sent' &&
+    currentContactMatchesInitial && previewResponseState.type === 'unresponded',
+  );
 
   /**
    * Generate + Send is offered only alongside generation, never as a later action on an existing
@@ -303,6 +406,15 @@ export function ParticipantPreviewPanel({
           }}
         >
           {deliveryNotice}
+        </div>
+      )}
+
+      {reminderNotice && (
+        <div role="status" style={{
+          backgroundColor: 'rgba(13, 148, 136, 0.08)', border: '1px solid rgba(13, 148, 136, 0.3)',
+          borderRadius: '8px', padding: '0.6rem 0.9rem', marginBottom: '0.75rem', color: '#5EEAD4',
+        }}>
+          {reminderNotice}
         </div>
       )}
 
@@ -405,6 +517,59 @@ export function ParticipantPreviewPanel({
               <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Not yet responded by the participant.</span>
             )}
           </div>
+          <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(59, 130, 246, 0.2)' }}>
+            <div style={{ color: '#93C5FD', fontWeight: 'bold', marginBottom: '0.35rem' }}>
+              Schedule reminder
+            </div>
+            <div style={{ color: '#9CA3AF', fontSize: '0.78rem', marginBottom: '0.5rem' }}>
+              Reminder emails contain no secure link. The participant must use the link from the
+              original preview email.
+            </div>
+            {canScheduleReminder ? (
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="datetime-local"
+                  value={scheduledFor}
+                  max={toLocalDateTimeInputValue(activePreview.expiresAt)}
+                  onChange={(event) => setScheduledFor(event.target.value)}
+                  disabled={pending}
+                  aria-label="Reminder date and time"
+                  style={{
+                    backgroundColor: '#111827', color: '#F3F4F6', border: '1px solid #374151',
+                    borderRadius: '6px', padding: '0.4rem 0.55rem', colorScheme: 'dark',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleScheduleReminder}
+                  disabled={pending || !scheduledFor}
+                  style={{
+                    backgroundColor: '#0F766E', color: '#FFFFFF', border: 'none',
+                    padding: '0.4rem 0.8rem', borderRadius: '6px',
+                    cursor: pending || !scheduledFor ? 'not-allowed' : 'pointer',
+                    fontWeight: 'bold', fontSize: '0.8rem', opacity: pending || !scheduledFor ? 0.6 : 1,
+                  }}
+                >
+                  {pending ? 'Working…' : 'Schedule reminder'}
+                </button>
+                <span style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>
+                  Must be before {new Date(activePreview.expiresAt).toLocaleString()}.
+                </span>
+              </div>
+            ) : (
+              <div style={{ color: '#9CA3AF', fontSize: '0.78rem', fontStyle: 'italic' }}>
+                {!reminderSchedulingEnabled
+                  ? 'Reminder scheduling is not enabled on this server.'
+                  : notification?.status !== 'sent'
+                    ? 'A confirmed successful original preview email is required.'
+                    : !currentContactMatchesInitial
+                      ? 'The current contact does not match the original email recipient.'
+                      : previewResponseState.type !== 'unresponded'
+                        ? 'This preview already has a participant response.'
+                        : 'This preview is no longer eligible for a future reminder.'}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={handleRevoke}
@@ -471,6 +636,57 @@ export function ParticipantPreviewPanel({
       ) : (
         <div style={{ color: '#9CA3AF', fontStyle: 'italic' }}>
           Available once the project reaches the approved state.
+        </div>
+      )}
+
+      {reminders.length > 0 && (
+        <div style={{ marginTop: '1rem' }}>
+          <div style={{ color: '#93C5FD', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+            Reminder history
+          </div>
+          <div style={{ display: 'grid', gap: '0.5rem' }}>
+            {reminders.map((reminder) => (
+              <div key={reminder.reference} style={{
+                backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '6px',
+                padding: '0.6rem 0.75rem', color: '#D1D5DB', fontSize: '0.78rem',
+              }}>
+                <div>
+                  <strong>{participantPreviewReminderStatusLabel(reminder.status)}</strong>
+                  {!reminder.currentPreview && <span style={{ color: '#9CA3AF' }}> · earlier preview</span>}
+                </div>
+                <div>Scheduled for: {new Date(reminder.scheduledFor).toLocaleString()}</div>
+                <div>Recipient snapshot: {reminder.recipient}</div>
+                <div>Scheduled by: {reminder.scheduledBy}</div>
+                <div>Preview expires: {new Date(reminder.previewExpiresAt).toLocaleString()}</div>
+                {reminder.triggeredAt && <div>Triggered: {new Date(reminder.triggeredAt).toLocaleString()}</div>}
+                {reminder.cancelledAt && <div>Cancelled: {new Date(reminder.cancelledAt).toLocaleString()}</div>}
+                {reminder.skipReason && <div>Skip reason: {reminder.skipReason}</div>}
+                {reminder.delivery && (
+                  <div>
+                    Delivery: {participantPreviewNotificationStatusLabel(reminder.delivery.status)}
+                    {reminder.delivery.sentAt
+                      ? ` on ${new Date(reminder.delivery.sentAt).toLocaleString()}`
+                      : ''}
+                    {reminder.delivery.failureCode ? ` (${reminder.delivery.failureCode})` : ''}
+                  </div>
+                )}
+                {reminder.status === 'scheduled' && (
+                  <button
+                    type="button"
+                    onClick={() => handleCancelReminder(reminder.reference)}
+                    disabled={pending}
+                    style={{
+                      marginTop: '0.4rem', backgroundColor: '#7F1D1D', color: '#FFFFFF', border: 'none',
+                      padding: '0.3rem 0.6rem', borderRadius: '5px', cursor: pending ? 'not-allowed' : 'pointer',
+                      fontWeight: 'bold', fontSize: '0.75rem', opacity: pending ? 0.6 : 1,
+                    }}
+                  >
+                    Cancel reminder
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

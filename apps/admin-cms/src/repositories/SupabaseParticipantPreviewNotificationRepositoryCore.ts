@@ -191,6 +191,7 @@ export class SupabaseParticipantPreviewNotificationRepositoryCore {
     return {
       resultCode: typeof res.resultCode === 'string' ? res.resultCode : 'INTERNAL_FAILURE',
       status: typeof res.status === 'string' ? res.status : null,
+      skipReason: typeof res.skipReason === 'string' ? res.skipReason : null,
     };
   }
 

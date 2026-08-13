@@ -4,6 +4,7 @@ import type {
 } from '../domain/participantPreview';
 import type { PublicationReadinessResult } from '../domain/publicationReadiness';
 import type { ParticipantPreviewNotificationView } from '../notifications/participantPreviewNotification';
+import type { ParticipantPreviewReminderView } from '../reminders/participantPreviewReminder';
 import { ParticipantPreviewExecutionError } from '../repositories/ParticipantPreviewRepository';
 import { postgresUuidSchema } from './projectMetadata';
 import { z } from 'zod';
@@ -130,6 +131,8 @@ export interface ProjectDetailPreviewState {
    * one-time credential no longer exists.
    */
   notification: ParticipantPreviewNotificationView | null;
+  /** Staff-facing reminder history across exact preview versions for this project. */
+  reminders: ParticipantPreviewReminderView[];
 }
 
 export interface ProjectDetailAuxiliaryData<TProject> {
@@ -224,7 +227,7 @@ export async function loadProjectDetailAuxiliaryData<TProject>(
     auditRecords: audit.available ? audit.value : null,
     previewState: preview.available
       ? preview.value
-      : { activePreview: null, responseState: { type: 'unresponded' }, notification: null },
+      : { activePreview: null, responseState: { type: 'unresponded' }, notification: null, reminders: [] },
     previewStateAvailable: preview.available,
     resolutionStatus: resolution.available ? resolution.value : null,
     resolutionStatusAvailable: resolution.available,
