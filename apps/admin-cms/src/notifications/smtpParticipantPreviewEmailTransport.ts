@@ -29,19 +29,24 @@ import type {
 
 /** SMTP permanent-failure classes that identify the recipient specifically. */
 const RECIPIENT_REJECTION_CODES = new Set(['EENVELOPE', 'ERECIPIENTS', 'EADDRESS']);
-/** Connection-level classes: the conversation never got far enough to hand over a message. */
+/** Connection-level classes where failure is known to occur pre-delivery (e.g. auth failure, DNS resolution failure, connection refusal). */
 const TRANSPORT_UNAVAILABLE_CODES = new Set([
-  'ECONNECTION',
   'ECONNREFUSED',
   'EDNS',
   'EAUTH',
   'ETLS',
-  'ESOCKET',
   'EHOSTUNREACH',
   'ENOTFOUND',
 ]);
-/** Classes that leave acceptance genuinely undecided. */
-const AMBIGUOUS_CODES = new Set(['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ECONNRESET', 'EPIPE']);
+/** Classes that leave acceptance ambiguous (socket drops mid-conversation, connection resets, generic connection/socket errors). */
+const AMBIGUOUS_CODES = new Set([
+  'ECONNECTION',
+  'ESOCKET',
+  'ETIMEDOUT',
+  'ESOCKETTIMEDOUT',
+  'ECONNRESET',
+  'EPIPE',
+]);
 
 function classify(error: unknown): ParticipantPreviewEmailTransportResult {
   const code =

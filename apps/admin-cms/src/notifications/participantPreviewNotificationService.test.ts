@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { Transporter } from 'nodemailer';
+import { SmtpParticipantPreviewEmailTransport } from './smtpParticipantPreviewEmailTransport';
 import {
   executeParticipantPreviewNotification,
   type NotificationTransitionOutcome,
@@ -128,6 +130,36 @@ describe('participant preview notification execution', () => {
     expect(transport.calls).toHaveLength(1);
     expect(finalizeCalls[0].outcome).toBe('delivery_unknown');
   });
+
+  it.each(['ECONNECTION', 'ESOCKET'])(
+    'finalizes as delivery_unknown (never failed) when SMTP transport encounters generic %s error',
+    async (code) => {
+      const transport = new SmtpParticipantPreviewEmailTransport(
+        {
+          host: '127.0.0.1',
+          port: 54325,
+          secure: false,
+          auth: null,
+          from: 'no-reply@capstone.invalid',
+        },
+        {
+          sendMail: vi.fn(async () => {
+            throw Object.assign(new Error('connection/socket error'), { code });
+          }),
+        } as unknown as Transporter,
+      );
+      const { gateway, finalizeCalls } = makeGateway();
+
+      const result = await executeParticipantPreviewNotification({ notifications: gateway, transport }, INPUT);
+
+      expect(result.code).toBe('DELIVERY_UNKNOWN');
+      expect(finalizeCalls[0]).toEqual({
+        outcome: 'delivery_unknown',
+        transportReference: null,
+        failureCode: null,
+      });
+    },
+  );
 
   it('becomes delivery_unknown when the accepted outcome cannot be persisted at all', async () => {
     const transport = makeTransport({ outcome: 'accepted', transportReference: '<ref-2@local>' });

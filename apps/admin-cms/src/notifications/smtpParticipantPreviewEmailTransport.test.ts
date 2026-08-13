@@ -108,7 +108,7 @@ describe('SMTP participant preview transport', () => {
     expect(await transport.send(MESSAGE)).toEqual({ outcome: 'rejected', failureCode });
   });
 
-  it.each(['ETIMEDOUT', 'ECONNRESET', 'EPIPE'])(
+  it.each(['ECONNECTION', 'ESOCKET', 'ETIMEDOUT', 'ECONNRESET', 'EPIPE'])(
     'leaves a %s failure undecided rather than calling it a failure',
     async (code) => {
       const transport = new SmtpParticipantPreviewEmailTransport(
