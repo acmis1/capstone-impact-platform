@@ -24,6 +24,7 @@ function statusFor(code: StaffProvisioningResultCode): number {
       return 400;
     case 'PERMISSION_DENIED':
       return 403;
+    case 'IN_PROGRESS':
     case 'ALREADY_INVITED':
     case 'ALREADY_PROVISIONED':
       return 409;

@@ -31,7 +31,8 @@ interface ProvisioningRow {
   status: string;
   auth_user_id: string | null;
   admin_user_id: string | null;
-  auth_identity_created: boolean;
+  auth_identity_owned: boolean;
+  lease_expires_at: string;
   failure_code: string | null;
   requested_by_admin_id: string | null;
   requested_by_email_snapshot: string | null;
@@ -460,47 +461,46 @@ async function main(): Promise<void> {
       assert.deepEqual(await rolesFor(profiles[0].id), ['reviewer']);
     });
 
-    const concurrentEmail = targetEmail('concurrent');
-    const concurrentResults = await Promise.all([
-      provision(admin, { fullName: 'Synthetic Concurrent', email: concurrentEmail, roles: ['reviewer'] }),
-      provision(admin, { fullName: 'Synthetic Concurrent', email: concurrentEmail, roles: ['reviewer'] }),
-    ]);
-    await track(concurrentEmail);
-    await scenario(19, 'concurrent identical requests converge to one authoritative identity', async () => {
-      const codes = concurrentResults.map((entry) => entry.code).sort();
-      assert(
-        codes.filter((code) => code === 'INVITATION_PENDING').length >= 1,
-        `Neither concurrent attempt produced an invitation: ${codes.join(',')}`,
-      );
-      for (const code of codes) {
-        assert(
-          ['INVITATION_PENDING', 'ALREADY_INVITED'].includes(code),
-          `Unexpected concurrent outcome ${code}.`,
-        );
+    await scenario(19, 'ten concurrent identical races each converge to one authoritative identity', async () => {
+      for (let iteration = 1; iteration <= 10; iteration += 1) {
+        const concurrentEmail = targetEmail(`concurrent-${iteration}`);
+        const outcomes = await Promise.all([
+          provision(admin, { fullName: 'Synthetic Concurrent', email: concurrentEmail, roles: ['reviewer'] }),
+          provision(admin, { fullName: 'Synthetic Concurrent', email: concurrentEmail, roles: ['reviewer'] }),
+        ]);
+        await track(concurrentEmail);
+        const codes = outcomes.map((entry) => entry.code).sort();
+        assert.equal(codes.filter((code) => code === 'INVITATION_PENDING').length, 1);
+        assert.equal(codes.filter((code) => code === 'IN_PROGRESS').length, 1);
+        assert.equal((await authUsersFor(concurrentEmail)).length, 1);
+        assert.equal((await profileFor(concurrentEmail)).length, 1);
+        assert.equal((await requestsFor(concurrentEmail)).length, 1);
+        const profiles = await profileFor(concurrentEmail);
+        assert.deepEqual(await rolesFor(profiles[0].id), ['reviewer']);
+        assert.equal((await mailbox(concurrentEmail)).length, 1);
+        assert.equal((await requestFor(concurrentEmail))?.status, 'pending_activation');
       }
-      assert.equal((await authUsersFor(concurrentEmail)).length, 1, 'Concurrency created two Auth identities.');
-      assert.equal((await profileFor(concurrentEmail)).length, 1, 'Concurrency created two staff profiles.');
-      assert.equal((await requestsFor(concurrentEmail)).length, 1, 'Concurrency created two lifecycles.');
-      const profiles = await profileFor(concurrentEmail);
-      assert.deepEqual(await rolesFor(profiles[0].id), ['reviewer']);
     });
 
-    const raceEmail = targetEmail('race');
-    const raceResults = await Promise.all([
-      provision(admin, { fullName: 'Synthetic Race', email: `  ${raceEmail.toUpperCase()} `, roles: ['editor'] }),
-      provision(admin, { fullName: 'Synthetic Race', email: raceEmail, roles: ['editor'] }),
-    ]);
-    await track(raceEmail);
-    await scenario(20, 'case and whitespace equivalent addresses race to one lifecycle', async () => {
-      for (const outcome of raceResults) {
-        assert(
-          ['INVITATION_PENDING', 'ALREADY_INVITED'].includes(outcome.code),
-          `Unexpected equivalence outcome ${outcome.code}.`,
-        );
+    await scenario(20, 'ten case/whitespace-equivalent races each converge to one lifecycle', async () => {
+      for (let iteration = 1; iteration <= 10; iteration += 1) {
+        const raceEmail = targetEmail(`race-${iteration}`);
+        const outcomes = await Promise.all([
+          provision(admin, { fullName: 'Synthetic Race', email: `  ${raceEmail.toUpperCase()} `, roles: ['editor'] }),
+          provision(admin, { fullName: 'Synthetic Race', email: raceEmail, roles: ['editor'] }),
+        ]);
+        await track(raceEmail);
+        const codes = outcomes.map((entry) => entry.code).sort();
+        assert.equal(codes.filter((code) => code === 'INVITATION_PENDING').length, 1);
+        assert.equal(codes.filter((code) => code === 'IN_PROGRESS').length, 1);
+        assert.equal((await authUsersFor(raceEmail)).length, 1);
+        assert.equal((await profileFor(raceEmail)).length, 1);
+        assert.equal((await requestsFor(raceEmail)).length, 1);
+        const profiles = await profileFor(raceEmail);
+        assert.deepEqual(await rolesFor(profiles[0].id), ['editor']);
+        assert.equal((await mailbox(raceEmail)).length, 1);
+        assert.equal((await requestFor(raceEmail))?.status, 'pending_activation');
       }
-      assert.equal((await authUsersFor(raceEmail)).length, 1);
-      assert.equal((await profileFor(raceEmail)).length, 1);
-      assert.equal((await requestsFor(raceEmail)).length, 1);
     });
 
     // ---- Validation --------------------------------------------------------------------
@@ -549,10 +549,12 @@ async function main(): Promise<void> {
     // ---- Privilege boundaries -----------------------------------------------------------
     const privilegedCalls: Array<[string, Record<string, unknown>]> = [
       ['reserve_staff_provisioning', { p_actor_admin_id: admin.adminUserId, p_email: targetEmail('rpc'), p_full_name: 'X', p_roles: ['admin'] }],
-      ['bind_staff_provisioning_identity', { p_request_id: crypto.randomUUID(), p_auth_user_id: crypto.randomUUID() }],
-      ['finalize_staff_provisioning', { p_request_id: crypto.randomUUID() }],
+      ['recover_staff_provisioning_identity', { p_request_id: crypto.randomUUID(), p_execution_token: crypto.randomUUID() }],
+      ['bind_staff_provisioning_identity', { p_request_id: crypto.randomUUID(), p_execution_token: crypto.randomUUID(), p_auth_user_id: crypto.randomUUID() }],
+      ['finalize_staff_provisioning', { p_request_id: crypto.randomUUID(), p_execution_token: crypto.randomUUID() }],
+      ['begin_staff_provisioning_compensation', { p_request_id: crypto.randomUUID(), p_execution_token: crypto.randomUUID(), p_auth_user_id: crypto.randomUUID() }],
       ['activate_staff_provisioning', { p_auth_user_id: crypto.randomUUID() }],
-      ['fail_staff_provisioning', { p_request_id: crypto.randomUUID(), p_failure_code: 'X', p_compensation_state: 'not_required' }],
+      ['fail_staff_provisioning', { p_request_id: crypto.randomUUID(), p_execution_token: crypto.randomUUID(), p_failure_code: 'X', p_compensation_state: 'not_required' }],
     ];
 
     await scenario(27, 'anon cannot execute any privileged provisioning function', async () => {
@@ -668,6 +670,7 @@ async function main(): Promise<void> {
     });
     assert.ifError(reserved.error);
     assert.equal(reserved.data.resultCode, 'RESERVED');
+    psql(`UPDATE public.staff_provisioning_requests SET lease_expires_at = pg_catalog.now() - interval '1 second' WHERE id = '${reserved.data.requestId}';`);
     const recovered = await provision(admin, {
       fullName: 'Synthetic Recovery',
       email: recoveryEmail,
@@ -683,7 +686,66 @@ async function main(): Promise<void> {
       assert.deepEqual(await rolesFor(profiles[0].id), ['editor']);
     });
 
-    await scenario(33, 'provisioning fails closed when it is not explicitly enabled', async () => {
+    const staleEmail = targetEmail('stale-owner');
+    const staleReservation = await service.rpc('reserve_staff_provisioning', {
+      p_actor_admin_id: admin.adminUserId,
+      p_email: staleEmail,
+      p_full_name: 'Synthetic Stale Owner',
+      p_roles: ['reviewer'],
+    });
+    assert.ifError(staleReservation.error);
+    psql(`UPDATE public.staff_provisioning_requests SET lease_expires_at = pg_catalog.now() - interval '1 second' WHERE id = '${staleReservation.data.requestId}';`);
+    const replacement = await service.rpc('reserve_staff_provisioning', {
+      p_actor_admin_id: admin.adminUserId,
+      p_email: staleEmail,
+      p_full_name: 'Synthetic Stale Owner',
+      p_roles: ['reviewer'],
+    });
+    assert.ifError(replacement.error);
+    await scenario(33, 'expired lease recovery rotates ownership and fences every stale mutation', async () => {
+      assert.equal(replacement.data.resultCode, 'RECOVERED');
+      assert.notEqual(replacement.data.executionToken, staleReservation.data.executionToken);
+      for (const [fn, args] of [
+        ['recover_staff_provisioning_identity', { p_request_id: staleReservation.data.requestId, p_execution_token: staleReservation.data.executionToken }],
+        ['bind_staff_provisioning_identity', { p_request_id: staleReservation.data.requestId, p_execution_token: staleReservation.data.executionToken, p_auth_user_id: crypto.randomUUID() }],
+        ['finalize_staff_provisioning', { p_request_id: staleReservation.data.requestId, p_execution_token: staleReservation.data.executionToken }],
+        ['begin_staff_provisioning_compensation', { p_request_id: staleReservation.data.requestId, p_execution_token: staleReservation.data.executionToken, p_auth_user_id: crypto.randomUUID() }],
+        ['fail_staff_provisioning', { p_request_id: staleReservation.data.requestId, p_execution_token: staleReservation.data.executionToken, p_failure_code: 'STALE', p_compensation_state: 'not_required' }],
+      ] as const) {
+        const response = await service.rpc(fn, args);
+        assert.ifError(response.error);
+        assert.equal(response.data.resultCode, 'EXECUTION_TOKEN_MISMATCH');
+      }
+      assert.equal((await requestFor(staleEmail))?.status, 'reserved');
+    });
+
+    const unrelatedEmail = targetEmail('unrelated-after-reserve');
+    const unrelatedReservation = await service.rpc('reserve_staff_provisioning', {
+      p_actor_admin_id: admin.adminUserId,
+      p_email: unrelatedEmail,
+      p_full_name: 'Synthetic Unrelated',
+      p_roles: ['reviewer'],
+    });
+    assert.ifError(unrelatedReservation.error);
+    const unrelated = await service.auth.admin.createUser({ email: unrelatedEmail, email_confirm: true });
+    assert.ifError(unrelated.error);
+    assert(unrelated.data.user);
+    createdAuthIds.add(unrelated.data.user.id);
+    psql(`UPDATE public.staff_provisioning_requests SET lease_expires_at = pg_catalog.now() - interval '1 second' WHERE id = '${unrelatedReservation.data.requestId}';`);
+    const unrelatedOutcome = await provision(admin, {
+      fullName: 'Synthetic Unrelated', email: unrelatedEmail, roles: ['reviewer'],
+    });
+    await scenario(34, 'an unrelated Auth identity created after reservation is never claimed or deleted', async () => {
+      assert.equal(unrelatedOutcome.code, 'INVITATION_FAILED');
+      assert.deepEqual(await authUsersFor(unrelatedEmail), [unrelated.data.user.id]);
+      const row = await requestFor(unrelatedEmail);
+      assert.equal(row?.auth_user_id, null);
+      assert.equal(row?.auth_identity_owned, false);
+      assert.equal(row?.status, 'failed');
+      assert.equal((await profileFor(unrelatedEmail)).length, 0);
+    });
+
+    await scenario(35, 'provisioning fails closed when it is not explicitly enabled', async () => {
       const disabledEmail = targetEmail('disabled');
       const before = Number(psql('SELECT count(*) FROM public.staff_provisioning_requests;'));
       const outcome = await provision(
@@ -697,7 +759,7 @@ async function main(): Promise<void> {
       assert.equal(Number(psql('SELECT count(*) FROM public.staff_provisioning_requests;')), before);
     });
 
-    await scenario(34, 'activation is never blocked by the creation enablement flag', async () => {
+    await scenario(36, 'activation is never blocked by the creation enablement flag', async () => {
       const pending = await requestFor(editorEmail);
       assert.equal(pending?.status, 'pending_activation');
       const editorPassword = `Local_${crypto.randomBytes(18).toString('hex')}!`;
@@ -708,7 +770,7 @@ async function main(): Promise<void> {
     });
 
     // ---- Bootstrap regression -----------------------------------------------------------
-    await scenario(35, 'bootstrap_initial_admin cannot provision an arbitrary additional staff member', async () => {
+    await scenario(37, 'bootstrap_initial_admin cannot provision an arbitrary additional staff member', async () => {
       const outsiderEmail = targetEmail('bootstrap');
       const outsiderPassword = `Local_${crypto.randomBytes(18).toString('hex')}!`;
       const outsider = await service.auth.admin.createUser({
@@ -740,7 +802,7 @@ async function main(): Promise<void> {
     });
 
     // ---- Inherited governance ------------------------------------------------------------
-    await scenario(36, 'existing Admin, Reviewer and Editor governance behaviour is unchanged', async () => {
+    await scenario(38, 'existing Admin, Reviewer and Editor governance behaviour is unchanged', async () => {
       assert.deepEqual(
         (await resolveAdminContextFromAuthUser(admin.authUserId, service)).permissions,
         getPermissionsForRoles(['admin']),
@@ -757,7 +819,7 @@ async function main(): Promise<void> {
       assert(rejected.error, 'Database accepted an unknown staff role.');
     });
 
-    await scenario(37, 'the bounded staff directory exposes no internal identifiers', async () => {
+    await scenario(39, 'the bounded staff directory exposes no internal identifiers', async () => {
       const directory = await readStaffDirectory(service);
       const serialized = JSON.stringify(directory);
       assert(directory.staff.some((entry) => entry.email === reviewerEmail));
@@ -768,11 +830,11 @@ async function main(): Promise<void> {
       assert(!serialized.includes(inviteToken), 'Directory exposed an invitation secret.');
     });
 
-    await scenario(38, 'no project workflow, media, publication or feed state changed', async () => {
+    await scenario(40, 'no project workflow, media, publication or feed state changed', async () => {
       assert.deepEqual(await workflowBaseline(), beforeWorkflow);
     });
 
-    await scenario(39, 'no public storage, feed or external provider operation occurred', async () => {
+    await scenario(41, 'no public storage, feed or external provider operation occurred', async () => {
       assert.equal(await storageBaseline(), beforeStorage);
       assert(isLoopbackUrl(env.API_URL!), 'Verification targeted a non-loopback endpoint.');
       const source = fs.readFileSync(
@@ -784,7 +846,7 @@ async function main(): Promise<void> {
       }
     });
 
-    await scenario(40, 'cleanup and residue verification run in the finalizer', () => {
+    await scenario(42, 'cleanup and residue verification run in the finalizer', () => {
       // Executed in the finally block below.
     });
   } catch (error) {
@@ -853,7 +915,7 @@ async function main(): Promise<void> {
       assert.equal(await countOf('admin_users'), adminBaselineCount);
       assert.deepEqual(await workflowBaseline(), beforeWorkflow);
       assert.equal(await storageBaseline(), beforeStorage);
-      console.log('PASS: Scenario 41 - independent residue check confirms the exact pre-verifier baseline');
+      console.log('PASS: Scenario 43 - independent residue check confirms the exact pre-verifier baseline');
     } catch (error) {
       cleanupFailure = error;
     }

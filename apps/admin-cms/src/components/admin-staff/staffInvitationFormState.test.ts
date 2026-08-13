@@ -78,6 +78,7 @@ describe('applyStaffInvitationOutcome', () => {
 describe('staffInvitationAlertVariant', () => {
   it('treats only a pending invitation as success', () => {
     expect(staffInvitationAlertVariant('INVITATION_PENDING')).toBe('success');
+    expect(staffInvitationAlertVariant('IN_PROGRESS')).toBe('warning');
     expect(staffInvitationAlertVariant('ALREADY_INVITED')).toBe('warning');
     expect(staffInvitationAlertVariant('VALIDATION_FAILED')).toBe('warning');
     expect(staffInvitationAlertVariant('COMPENSATION_FAILED')).toBe('destructive');

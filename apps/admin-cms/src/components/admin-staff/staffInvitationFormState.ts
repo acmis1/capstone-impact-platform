@@ -64,7 +64,12 @@ export function staffInvitationAlertVariant(
 ): 'success' | 'warning' | 'destructive' | null {
   if (!code) return null;
   if (code === 'INVITATION_PENDING') return 'success';
-  if (code === 'ALREADY_INVITED' || code === 'ALREADY_PROVISIONED' || code === 'VALIDATION_FAILED') {
+  if (
+    code === 'IN_PROGRESS'
+    || code === 'ALREADY_INVITED'
+    || code === 'ALREADY_PROVISIONED'
+    || code === 'VALIDATION_FAILED'
+  ) {
     return 'warning';
   }
   return 'destructive';

@@ -1,11 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AdminRole } from '../auth/authTypes';
 import type {
-  BindOutcome,
   FinalizeOutcome,
+  IdentityOutcome,
   ReservationOutcome,
   StaffInvitationGateway,
   StaffProvisioningGateway,
+  TransitionOutcome,
 } from './staffProvisioningService';
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -54,13 +55,36 @@ export class SupabaseStaffProvisioningGateway implements StaffProvisioningGatewa
       fullName: asText(payload.fullName),
       roles,
       authUserId: asText(payload.authUserId),
-      authIdentityCreated: payload.authIdentityCreated === true,
+      authIdentityOwned: payload.authIdentityOwned === true,
+      executionToken: asText(payload.executionToken),
+      authOwnershipToken: asText(payload.authOwnershipToken),
+      status: asText(payload.status),
     };
   }
 
-  async bind(requestId: string, authUserId: string): Promise<BindOutcome> {
+  async recoverIdentity(requestId: string, executionToken: string): Promise<IdentityOutcome> {
+    const { data, error } = await this.client.rpc('recover_staff_provisioning_identity', {
+      p_request_id: requestId,
+      p_execution_token: executionToken,
+    });
+    if (error) throw new Error('STAFF_PROVISIONING_RECOVERY_FAILED');
+
+    const payload = asRecord(data);
+    return {
+      resultCode: String(payload.resultCode ?? ''),
+      authUserId: asText(payload.authUserId),
+      authIdentityOwned: payload.authIdentityOwned === true,
+    };
+  }
+
+  async bind(
+    requestId: string,
+    executionToken: string,
+    authUserId: string,
+  ): Promise<IdentityOutcome> {
     const { data, error } = await this.client.rpc('bind_staff_provisioning_identity', {
       p_request_id: requestId,
+      p_execution_token: executionToken,
       p_auth_user_id: authUserId,
     });
     if (error) throw new Error('STAFF_PROVISIONING_BIND_FAILED');
@@ -69,13 +93,14 @@ export class SupabaseStaffProvisioningGateway implements StaffProvisioningGatewa
     return {
       resultCode: String(payload.resultCode ?? ''),
       authUserId: asText(payload.authUserId),
-      authIdentityCreated: payload.authIdentityCreated === true,
+      authIdentityOwned: payload.authIdentityOwned === true,
     };
   }
 
-  async finalize(requestId: string): Promise<FinalizeOutcome> {
+  async finalize(requestId: string, executionToken: string): Promise<FinalizeOutcome> {
     const { data, error } = await this.client.rpc('finalize_staff_provisioning', {
       p_request_id: requestId,
+      p_execution_token: executionToken,
     });
     if (error) throw new Error('STAFF_PROVISIONING_FINALIZE_FAILED');
 
@@ -87,45 +112,64 @@ export class SupabaseStaffProvisioningGateway implements StaffProvisioningGatewa
     };
   }
 
+  async beginCompensation(
+    requestId: string,
+    executionToken: string,
+    authUserId: string,
+  ): Promise<TransitionOutcome> {
+    const { data, error } = await this.client.rpc('begin_staff_provisioning_compensation', {
+      p_request_id: requestId,
+      p_execution_token: executionToken,
+      p_auth_user_id: authUserId,
+    });
+    if (error) throw new Error('STAFF_PROVISIONING_COMPENSATION_AUTH_FAILED');
+    return { resultCode: String(asRecord(data).resultCode ?? '') };
+  }
+
   async fail(
     requestId: string,
+    executionToken: string,
     failureCode: string,
     compensationState: 'not_required' | 'succeeded' | 'failed',
-  ): Promise<void> {
-    const { error } = await this.client.rpc('fail_staff_provisioning', {
+  ): Promise<TransitionOutcome> {
+    const { data, error } = await this.client.rpc('fail_staff_provisioning', {
       p_request_id: requestId,
+      p_execution_token: executionToken,
       p_failure_code: failureCode,
       p_compensation_state: compensationState,
     });
     if (error) throw new Error('STAFF_PROVISIONING_FAIL_RECORD_FAILED');
-  }
-
-  async readBoundAuthUserId(requestId: string): Promise<string | null> {
-    const { data, error } = await this.client
-      .from('staff_provisioning_requests')
-      .select('auth_user_id')
-      .eq('id', requestId)
-      .maybeSingle();
-    if (error) throw new Error('STAFF_PROVISIONING_READ_FAILED');
-    return asText(asRecord(data).auth_user_id);
+    return { resultCode: String(asRecord(data).resultCode ?? '') };
   }
 }
 
 /**
  * Supabase Auth administrative invitation gateway.
  *
- * Uses the platform's own invitation mechanism, so the application never generates, stores,
- * displays, logs or emails a password or an invitation token. The invited user completes account
- * setup themselves through the existing `/auth/confirm` -> `/auth/set-password` flow.
+ * Uses the platform's invitation mechanism. Supabase Auth generates and emails the invite link;
+ * the application never manually generates, stores, logs or renders its credential. The two
+ * ownership fields below are consumed by Migration 0022's Auth insert trigger before persistence.
  */
 export class SupabaseStaffInvitationGateway implements StaffInvitationGateway {
   constructor(private readonly client: SupabaseClient) {}
 
-  async invite(input: { email: string; fullName: string }): Promise<string | null> {
+  async invite(input: {
+    email: string;
+    fullName: string;
+    requestId: string;
+    authOwnershipToken: string;
+  }): Promise<string | null> {
     const { data, error } = await this.client.auth.admin.inviteUserByEmail(input.email, {
-      data: { full_name: input.fullName },
+      data: {
+        full_name: input.fullName,
+        staff_provisioning_request_id: input.requestId,
+        staff_provisioning_ownership_token: input.authOwnershipToken,
+      },
     });
-    if (error || !data?.user?.id) {
+    if (
+      error
+      || !data?.user?.id
+    ) {
       // Bounded operational code only. The provider response may contain identifying detail and
       // is deliberately never logged.
       console.error('[Staff Provisioning]: INVITATION_FAILED');

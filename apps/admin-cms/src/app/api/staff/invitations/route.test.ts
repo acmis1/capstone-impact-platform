@@ -134,6 +134,7 @@ describe('POST /api/staff/invitations', () => {
   it.each([
     ['VALIDATION_FAILED', 400],
     ['PERMISSION_DENIED', 403],
+    ['IN_PROGRESS', 409],
     ['ALREADY_INVITED', 409],
     ['ALREADY_PROVISIONED', 409],
     ['PROVISIONING_DISABLED', 503],

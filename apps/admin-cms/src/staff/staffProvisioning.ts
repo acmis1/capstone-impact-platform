@@ -8,6 +8,7 @@ import { CANONICAL_ROLE_ORDER, isAdminRole } from '../auth/permissions';
  */
 export type StaffProvisioningResultCode =
   | 'INVITATION_PENDING'
+  | 'IN_PROGRESS'
   | 'ALREADY_INVITED'
   | 'ALREADY_PROVISIONED'
   | 'VALIDATION_FAILED'
@@ -23,6 +24,7 @@ export type StaffProvisioningStatus =
   | 'invited'
   | 'pending_activation'
   | 'activated'
+  | 'compensating'
   | 'failed'
   | 'compensation_failed';
 
@@ -108,6 +110,8 @@ export function staffProvisioningMessage(code: StaffProvisioningResultCode): str
   switch (code) {
     case 'INVITATION_PENDING':
       return 'Invitation sent. The staff member gains access once they complete account setup.';
+    case 'IN_PROGRESS':
+      return 'An invitation for this email address is already being processed.';
     case 'ALREADY_INVITED':
       return 'An invitation for this email address is already awaiting activation.';
     case 'ALREADY_PROVISIONED':
