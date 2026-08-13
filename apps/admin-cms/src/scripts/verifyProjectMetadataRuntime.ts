@@ -47,12 +47,15 @@ type MetadataRpcParameters = {
   p_discipline_ids: string[];
   p_industry_category_ids: string[];
   p_expected_updated_at: string;
+  p_admin_id: string;
 };
 
 type LookupFixture = {
   programId: string;
   disciplineIds: string[];
   industryCategoryIds: string[];
+  adminUserId: string;
+  reviewerUserId: string;
 };
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
@@ -146,15 +149,24 @@ function getProjectSnapshot(publicId: string): MetadataSnapshot {
 }
 
 function getLookupFixture(): LookupFixture {
+  executeLocalSql(`
+    INSERT INTO public.admin_users (id, email, full_name) VALUES ('00000000-0000-0000-0000-0000000000a1', 'admin@example.com', 'Admin User') ON CONFLICT DO NOTHING;
+    INSERT INTO public.user_roles (user_id, role) VALUES ('00000000-0000-0000-0000-0000000000a1', 'admin') ON CONFLICT DO NOTHING;
+    INSERT INTO public.admin_users (id, email, full_name) VALUES ('00000000-0000-0000-0000-0000000000a2', 'reviewer@example.com', 'Reviewer User') ON CONFLICT DO NOTHING;
+    INSERT INTO public.user_roles (user_id, role) VALUES ('00000000-0000-0000-0000-0000000000a2', 'reviewer') ON CONFLICT DO NOTHING;
+  `);
+
   const fixture = queryLocalJson<LookupFixture>(`
     SELECT pg_catalog.jsonb_build_object(
       'programId', (SELECT id::text FROM public.programs ORDER BY name LIMIT 1),
       'disciplineIds', ARRAY(SELECT id::text FROM public.disciplines ORDER BY name LIMIT 2),
-      'industryCategoryIds', ARRAY(SELECT id::text FROM public.industry_categories ORDER BY name LIMIT 2)
+      'industryCategoryIds', ARRAY(SELECT id::text FROM public.industry_categories ORDER BY name LIMIT 2),
+      'adminUserId', (SELECT id::text FROM public.admin_users au WHERE EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.user_id = au.id AND ur.role = 'admin') LIMIT 1),
+      'reviewerUserId', (SELECT id::text FROM public.admin_users au WHERE EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.user_id = au.id AND ur.role = 'reviewer') AND NOT EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.user_id = au.id AND ur.role IN ('admin', 'editor')) LIMIT 1)
     )
   `);
-  if (!fixture.programId || fixture.disciplineIds.length < 2 || fixture.industryCategoryIds.length < 2) {
-    throw new Error('Local metadata runtime requires one program and two discipline/category fixtures.');
+  if (!fixture.programId || fixture.disciplineIds.length < 2 || fixture.industryCategoryIds.length < 2 || !fixture.adminUserId || !fixture.reviewerUserId) {
+    throw new Error('Local metadata runtime requires one program, two discipline/category fixtures, an admin, and a reviewer.');
   }
   return fixture;
 }
@@ -173,7 +185,7 @@ function seedProject(publicId: string, fixture: LookupFixture, title: string): v
   `);
 }
 
-function makeParameters(publicId: string, fixture: LookupFixture, expectedUpdatedAt: string, title: string, disciplineIds = fixture.disciplineIds, industryCategoryIds = fixture.industryCategoryIds): MetadataRpcParameters {
+function makeParameters(publicId: string, fixture: LookupFixture, expectedUpdatedAt: string, title: string, disciplineIds = fixture.disciplineIds, industryCategoryIds = fixture.industryCategoryIds, adminUserId = fixture.adminUserId): MetadataRpcParameters {
   return {
     p_public_id: publicId,
     p_title: title,
@@ -185,6 +197,7 @@ function makeParameters(publicId: string, fixture: LookupFixture, expectedUpdate
     p_discipline_ids: disciplineIds,
     p_industry_category_ids: industryCategoryIds,
     p_expected_updated_at: expectedUpdatedAt,
+    p_admin_id: adminUserId,
   };
 }
 
@@ -307,6 +320,21 @@ export async function verifyProjectMetadataRuntime(): Promise<void> {
       assertSnapshotEqual(getProjectSnapshot(successId), committedSuccess, `Invalid ${invalidCase.name}`);
     }
 
+    const reviewerDeniedResult = await serviceClient.rpc('update_project_metadata', makeParameters(successId, fixture, committedSuccess.updatedAt, 'Reviewer edit', fixture.disciplineIds, fixture.industryCategoryIds, fixture.reviewerUserId)) as RpcResult;
+    assertRpcCode(reviewerDeniedResult, 'PERMISSION_DENIED', 'Reviewer should be denied');
+    assertSnapshotEqual(getProjectSnapshot(successId), committedSuccess, 'Reviewer denied');
+
+    const noChangesParams = makeParameters(successId, fixture, committedSuccess.updatedAt, expectedSuccess.title, expectedSuccess.disciplineIds, expectedSuccess.industryCategoryIds);
+    // Explicitly make the string fields exactly match the committed state
+    noChangesParams.p_summary = expectedSuccess.summary;
+    noChangesParams.p_background = expectedSuccess.background;
+    noChangesParams.p_solution = expectedSuccess.solution;
+    noChangesParams.p_year = expectedSuccess.year;
+
+    const noChangesResult = await serviceClient.rpc('update_project_metadata', noChangesParams) as RpcResult;
+    assertRpcCode(noChangesResult, 'NO_CHANGES', 'Exact no-op should return NO_CHANGES');
+    assertSnapshotEqual(getProjectSnapshot(successId), committedSuccess, 'Exact no-op shouldn\'t modify record');
+
     seedProject(failureId, fixture, 'Atomic before');
     const beforeFailure = getProjectSnapshot(failureId);
     executeLocalSql(`CREATE FUNCTION public.${functionName}() RETURNS trigger LANGUAGE plpgsql AS $fn$ BEGIN RAISE EXCEPTION 'FORCED_METADATA_MAPPING_FAILURE'; END; $fn$;`);
@@ -331,7 +359,7 @@ export async function verifyProjectMetadataRuntime(): Promise<void> {
     assertSnapshotEqual(concurrentCommitted, snapshotFromSuccessfulResponse(concurrentOutcome.successfulResponse, beforeConcurrent), 'Concurrent save winner');
 
     const privilegeParameters = makeParameters(successId, fixture, committedSuccess.updatedAt, 'Forbidden role invocation');
-    const privilegeSql = `SELECT public.update_project_metadata('${privilegeParameters.p_public_id}', '${privilegeParameters.p_title}', '${privilegeParameters.p_summary}', '${privilegeParameters.p_background}', '${privilegeParameters.p_solution}', ${privilegeParameters.p_year}, '${privilegeParameters.p_program_id}'::uuid, ARRAY[${privilegeParameters.p_discipline_ids.map((id) => `'${id}'::uuid`).join(', ')}], ARRAY[${privilegeParameters.p_industry_category_ids.map((id) => `'${id}'::uuid`).join(', ')}], '${privilegeParameters.p_expected_updated_at}'::timestamptz);`;
+    const privilegeSql = `SELECT public.update_project_metadata('${privilegeParameters.p_public_id}', '${privilegeParameters.p_title}', '${privilegeParameters.p_summary}', '${privilegeParameters.p_background}', '${privilegeParameters.p_solution}', ${privilegeParameters.p_year}, '${privilegeParameters.p_program_id}'::uuid, ARRAY[${privilegeParameters.p_discipline_ids.map((id) => `'${id}'::uuid`).join(', ')}], ARRAY[${privilegeParameters.p_industry_category_ids.map((id) => `'${id}'::uuid`).join(', ')}], '${privilegeParameters.p_expected_updated_at}'::timestamptz, '${privilegeParameters.p_admin_id}'::uuid);`;
     let anonDenied = false;
     let authenticatedDenied = false;
     executeLocalSqlExpectingPermissionDenial('anon', privilegeSql); anonDenied = true;
@@ -348,7 +376,7 @@ export async function verifyProjectMetadataRuntime(): Promise<void> {
     }
   }
   if (verifierError) throw verifierError;
-  console.log('Project metadata runtime verification passed (SUCCESS=1, STALE_VERSION=1, forced rollback, service-role execution, anon/authenticated denial, cleanup verified).');
+  console.log('Project metadata runtime verification passed (SUCCESS=1, STALE_VERSION=1, PERMISSION_DENIED, NO_CHANGES, forced rollback, service-role execution, anon/authenticated denial, cleanup verified).');
 }
 
 if (require.main === module) {

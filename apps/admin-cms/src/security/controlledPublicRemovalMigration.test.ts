@@ -13,7 +13,7 @@ function routine(name: string): string { const start = content.indexOf(`CREATE O
 
 describe('Migration 0020 controlled public removal security contract', () => {
   it('is the sole final migration and leaves migrations 0001-0019 byte-identical to inherited main', () => {
-    const files = fs.readdirSync(dir).filter((file) => file.endsWith('.sql')).sort(); expect(files).toHaveLength(20); expect(files[19]).toBe(migration);
+    const files = fs.readdirSync(dir).filter((file) => file.endsWith('.sql')).sort(); expect(files).toContain(migration); expect(files[19]).toBe(migration);
     for (const file of files.slice(0, 19)) { const local = fs.readFileSync(path.join(dir, file), 'utf8').replace(/\r\n/g, '\n'); const inherited = execFileSync('git', ['show', `d18cf877e3abf662172366c3f1dd61126da44167:infra/supabase/migrations/${file}`], { cwd: root, encoding: 'utf8' }).replace(/\r\n/g, '\n'); expect(hash(local)).toBe(hash(inherited)); }
   });
   it('defines a separate durable all-or-nothing attempt ledger including zero-record candidates', () => {

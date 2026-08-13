@@ -18,7 +18,7 @@ class FakeGateway implements ProjectMetadataGateway {
 describe('project metadata atomic persistence workflow', () => {
   it('uses exactly one metadata mutation after lookup validation', async () => {
     const gateway = new FakeGateway();
-    expect(await saveProjectMetadata(gateway, metadata)).toEqual({ ok: true, metadata });
+    expect(await saveProjectMetadata(gateway, metadata, 'test-admin-user')).toEqual({ ok: true, metadata });
     expect(gateway.calls).toEqual(['lookups', 'rpc']);
   });
   it('accepts a successful RPC response containing PostgreSQL UUID-shaped lookup IDs', async () => {
@@ -36,7 +36,7 @@ describe('project metadata atomic persistence workflow', () => {
       industryCategories: [{ id: zeroVersion, name: 'Industry' }],
     };
     gateway.response = { resultCode: 'SUCCESS', metadata: zeroVersionMetadata };
-    expect(await saveProjectMetadata(gateway, zeroVersionMetadata)).toEqual({ ok: true, metadata: zeroVersionMetadata });
+    expect(await saveProjectMetadata(gateway, zeroVersionMetadata, 'test-admin-user')).toEqual({ ok: true, metadata: zeroVersionMetadata });
   });
   it('does not expose the database-only project id to the strict editor mutation payload', async () => {
     const gateway = new FakeGateway();
@@ -49,32 +49,49 @@ describe('project metadata atomic persistence workflow', () => {
     ['disciplineIds', { disciplineIds: ['b0000000-0000-4000-8000-000000000002'] }],
     ['industryCategoryIds', { industryCategoryIds: ['c0000000-0000-4000-8000-000000000002'] }],
   ])('attributes unsupported %s without calling the RPC', async (field, patch) => {
-    const gateway = new FakeGateway(); const result = await saveProjectMetadata(gateway, { ...metadata, ...patch });
+    const gateway = new FakeGateway(); const result = await saveProjectMetadata(gateway, { ...metadata, ...patch }, 'test-admin-user');
     expect(result).toMatchObject({ ok: false, code: 'VALIDATION_FAILED', fieldErrors: { [field]: expect.any(Array) } });
     expect(gateway.calls).toEqual(['lookups']);
   });
-  it.each(['PROJECT_NOT_FOUND', 'STALE_VERSION', 'VALIDATION_FAILED', 'APPROVAL_REOPEN_REQUIRED', 'PUBLISHED_PROJECT_LOCKED'])('maps expected RPC result %s safely', async (resultCode) => {
+  it.each(['PROJECT_NOT_FOUND', 'STALE_VERSION', 'VALIDATION_FAILED', 'APPROVAL_REOPEN_REQUIRED', 'PUBLISHED_PROJECT_LOCKED', 'PERMISSION_DENIED'])('maps expected RPC result %s safely', async (resultCode) => {
     const gateway = new FakeGateway(); gateway.response = { resultCode };
-    expect(await saveProjectMetadata(gateway, metadata)).toMatchObject({ ok: false, code: resultCode });
+    expect(await saveProjectMetadata(gateway, metadata, 'test-admin-user')).toMatchObject({ ok: false, code: resultCode });
+  });
+  it('maps NO_CHANGES to a successful result with authoritative metadata', async () => {
+    const gateway = new FakeGateway(); gateway.response = { resultCode: 'NO_CHANGES', metadata };
+    expect(await saveProjectMetadata(gateway, metadata, 'test-admin-user')).toEqual({ ok: true, metadata });
+  });
+  it('requires NO_CHANGES nullable database text to be normalized to production strings', async () => {
+    const normalized = new FakeGateway();
+    normalized.response = { resultCode: 'NO_CHANGES', metadata: { ...metadata, background: '', solution: '' } };
+    expect(await saveProjectMetadata(normalized, metadata, 'test-admin-user')).toEqual({
+      ok: true,
+      metadata: { ...metadata, background: '', solution: '' },
+    });
+
+    const nullable = new FakeGateway();
+    nullable.response = { resultCode: 'NO_CHANGES', metadata: { ...metadata, background: null, solution: null } };
+    expect(await saveProjectMetadata(nullable, metadata, 'test-admin-user')).toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
   });
   it('rejects malformed or unknown RPC responses and hides raw RPC errors', async () => {
     const malformed = new FakeGateway(); malformed.response = { resultCode: 'SUCCESS' };
-    expect(await saveProjectMetadata(malformed, metadata)).toMatchObject({ code: 'INTERNAL_FAILURE' });
+    expect(await saveProjectMetadata(malformed, metadata, 'test-admin-user')).toMatchObject({ code: 'INTERNAL_FAILURE' });
     const unknown = new FakeGateway(); unknown.response = { resultCode: 'UNSAFE_UNKNOWN' };
-    expect(await saveProjectMetadata(unknown, metadata)).toMatchObject({ code: 'INTERNAL_FAILURE' });
+    expect(await saveProjectMetadata(unknown, metadata, 'test-admin-user')).toMatchObject({ code: 'INTERNAL_FAILURE' });
     const failure = new FakeGateway(); failure.updateMetadataAtomically = async () => { throw new Error('raw backend detail'); };
-    const result = await saveProjectMetadata(failure, metadata);
+    const result = await saveProjectMetadata(failure, metadata, 'test-admin-user');
     expect(result).toMatchObject({ code: 'PERSISTENCE_FAILED' });
     if (!result.ok) expect(result.message).not.toContain('raw backend detail');
   });
   it('maps exactly one RPC name and exact allowed parameters', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: { resultCode: 'SUCCESS', metadata }, error: null });
     const gateway = new SupabaseProjectMetadataGateway({ rpc } as never);
-    await gateway.updateMetadataAtomically(input);
+    await gateway.updateMetadataAtomically(input, 'test-admin-user');
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(rpc).toHaveBeenCalledWith('update_project_metadata', {
       p_public_id: input.publicId, p_title: input.title, p_summary: input.summary, p_background: input.background, p_solution: input.solution,
-      p_year: input.year, p_program_id: input.programId, p_discipline_ids: input.disciplineIds, p_industry_category_ids: input.industryCategoryIds, p_expected_updated_at: input.expectedUpdatedAt,
+      p_year: input.year, p_program_id: input.programId, p_discipline_ids: input.disciplineIds, p_industry_category_ids: input.industryCategoryIds,
+      p_expected_updated_at: input.expectedUpdatedAt, p_admin_id: 'test-admin-user'
     });
   });
   it('uses scalar-name fallback only for an exact unique lookup match', () => {

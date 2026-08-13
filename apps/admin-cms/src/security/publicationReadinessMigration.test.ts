@@ -18,7 +18,7 @@ describe('Migration 0017 Publication Readiness Gate Security Contract Tests', ()
     const rawFiles = fs.readdirSync(migrationsDir);
     const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
 
-    expect(sqlFiles.length).toBe(20);
+    expect(sqlFiles).toContain(migrationFile);
     expect(sqlFiles[15]).toBe(priorMigrationFile);
     expect(sqlFiles[16]).toBe(migrationFile);
   });

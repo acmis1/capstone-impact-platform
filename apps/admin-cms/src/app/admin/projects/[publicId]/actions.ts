@@ -10,7 +10,7 @@ import { saveAuthorizedProjectMetadata } from '../../../../projects/projectMetad
 export async function saveProjectMetadataAction(rawInput: unknown): Promise<ProjectMetadataActionResult> {
   try {
     const context = await requireAdmin();
-    return await saveAuthorizedProjectMetadata(context.permissions, new SupabaseProjectMetadataGateway(createSupabaseAdminClient()), rawInput);
+    return await saveAuthorizedProjectMetadata(context.permissions, new SupabaseProjectMetadataGateway(createSupabaseAdminClient()), rawInput, context.adminUserId);
   } catch (error) {
     console.error('[Project metadata action failure]', error instanceof Error ? error.message : 'unknown');
     if (error instanceof AdminAuthError) {

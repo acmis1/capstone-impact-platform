@@ -276,6 +276,7 @@ async function main(): Promise<void> {
         runtime('local-reviewer').context.permissions,
         noGateway as never,
         {},
+        'test-admin'
       );
       assert.equal(result.ok, false);
       if (result.ok) assert.fail('Reviewer unexpectedly reached the edit workflow.');

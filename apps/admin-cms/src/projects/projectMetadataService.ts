@@ -15,13 +15,13 @@ type ProjectSnapshot = ProjectMetadataView & { id: string };
 type MetadataOptions = { programs: MetadataOption[]; disciplines: MetadataOption[]; industryCategories: MetadataOption[] };
 
 const uuidArray = z.array(postgresUuidSchema);
-const metadataResponseSchema = z.object({
+export const metadataResponseSchema = z.object({
   publicId: z.string().min(1), title: z.string(), summary: z.string(), background: z.string(), solution: z.string(),
   year: z.string().regex(/^\d{4}$/), programId: postgresUuidSchema, disciplineIds: uuidArray, industryCategoryIds: uuidArray,
   expectedUpdatedAt: z.string().refine((value) => !Number.isNaN(Date.parse(value))),
 }).strict();
 const rpcResponseSchema = z.object({
-  resultCode: z.enum(['SUCCESS', 'PROJECT_NOT_FOUND', 'STALE_VERSION', 'VALIDATION_FAILED', 'APPROVAL_REOPEN_REQUIRED', 'PUBLISHED_PROJECT_LOCKED']),
+  resultCode: z.enum(['SUCCESS', 'PROJECT_NOT_FOUND', 'STALE_VERSION', 'VALIDATION_FAILED', 'APPROVAL_REOPEN_REQUIRED', 'PUBLISHED_PROJECT_LOCKED', 'PERMISSION_DENIED', 'NO_CHANGES']),
   metadata: metadataResponseSchema.optional(),
 }).strict();
 
@@ -29,7 +29,7 @@ export interface ProjectMetadataGateway {
   loadProject(publicId: string, options?: MetadataOptions): Promise<ProjectSnapshot | null>;
   loadOptions(): Promise<MetadataOptions>;
   /** The only metadata mutation boundary: one database RPC invocation. */
-  updateMetadataAtomically(input: ProjectMetadataInput): Promise<unknown>;
+  updateMetadataAtomically(input: ProjectMetadataInput, actorAdminUserId: string): Promise<unknown>;
 }
 
 export interface ProjectMetadataEditorData extends MetadataOptions { metadata: ProjectMetadataView; }
@@ -67,7 +67,7 @@ export async function loadProjectMetadataEditorData(gateway: ProjectMetadataGate
   return { metadata, ...options };
 }
 
-export async function saveProjectMetadata(gateway: ProjectMetadataGateway, rawInput: unknown): Promise<ProjectMetadataActionResult> {
+export async function saveProjectMetadata(gateway: ProjectMetadataGateway, rawInput: unknown, actorAdminUserId: string): Promise<ProjectMetadataActionResult> {
   const parsed = projectMetadataInputSchema.safeParse(rawInput);
   if (!parsed.success) return failure('VALIDATION_FAILED', parsed.error.flatten().fieldErrors);
 
@@ -83,7 +83,7 @@ export async function saveProjectMetadata(gateway: ProjectMetadataGateway, rawIn
 
   let rawResponse: unknown;
   try {
-    rawResponse = await gateway.updateMetadataAtomically(input);
+    rawResponse = await gateway.updateMetadataAtomically(input, actorAdminUserId);
   } catch (error) {
     console.error('[Project metadata RPC failure]', error instanceof Error ? error.message : 'unknown');
     return failure('PERSISTENCE_FAILED');
@@ -93,12 +93,14 @@ export async function saveProjectMetadata(gateway: ProjectMetadataGateway, rawIn
   if (!response.success) return failure('INTERNAL_FAILURE');
   switch (response.data.resultCode) {
     case 'SUCCESS':
+    case 'NO_CHANGES':
       return response.data.metadata ? { ok: true, metadata: response.data.metadata } : failure('INTERNAL_FAILURE');
     case 'PROJECT_NOT_FOUND': return failure('PROJECT_NOT_FOUND');
     case 'STALE_VERSION': return failure('STALE_VERSION');
     case 'APPROVAL_REOPEN_REQUIRED': return failure('APPROVAL_REOPEN_REQUIRED');
     case 'PUBLISHED_PROJECT_LOCKED': return failure('PUBLISHED_PROJECT_LOCKED');
     case 'VALIDATION_FAILED': return failure('VALIDATION_FAILED');
+    case 'PERMISSION_DENIED': return failure('PERMISSION_DENIED');
   }
 }
 
@@ -138,11 +140,12 @@ export class SupabaseProjectMetadataGateway implements ProjectMetadataGateway {
     };
   }
 
-  async updateMetadataAtomically(input: ProjectMetadataInput): Promise<unknown> {
+  async updateMetadataAtomically(input: ProjectMetadataInput, actorAdminUserId: string): Promise<unknown> {
     const { data, error } = await this.supabase.rpc('update_project_metadata', {
       p_public_id: input.publicId, p_title: input.title, p_summary: input.summary, p_background: input.background, p_solution: input.solution,
       p_year: input.year, p_program_id: input.programId, p_discipline_ids: input.disciplineIds,
       p_industry_category_ids: input.industryCategoryIds, p_expected_updated_at: input.expectedUpdatedAt,
+      p_admin_id: actorAdminUserId,
     });
     if (error) throw new Error('Metadata update RPC failed');
     return data;
