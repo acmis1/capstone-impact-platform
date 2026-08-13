@@ -1,4 +1,5 @@
 import { Project } from '../domain/project';
+import { isAccessibleContentPresent } from '../domain/accessibleContent';
 
 export interface ValidationOutput {
   valid: boolean;
@@ -31,9 +32,13 @@ export function validateProjectForReview(project: Project): ValidationOutput {
     warnings.push(`${prefix} Missing poster.pdf file. Pending stakeholder validation confirmation.`);
   }
 
-  // Accessibility text warning
-  if (!project.accessibilityText || project.accessibilityText.trim() === '') {
-    warnings.push(`${prefix} Missing poster accessibility text description (accessibility.txt).`);
+  // Accessible poster content. Surfaced early as warnings at ingestion so staff can correct the
+  // source package; both become hard blockers at review submission and approval.
+  if (!isAccessibleContentPresent(project.posterText)) {
+    warnings.push(`${prefix} Missing poster full text. Required before this project can be submitted for review.`);
+  }
+  if (!isAccessibleContentPresent(project.accessibilityText)) {
+    warnings.push(`${prefix} Missing poster accessibility text description. Required before this project can be submitted for review.`);
   }
 
   if (!project.snapshots || project.snapshots.length === 0) {
@@ -81,9 +86,14 @@ export function validateProjectForApproval(project: Project): ValidationOutput {
     errors.push(`${prefix} Missing public poster PDF URL. Approval blocked.`);
   }
 
-  // Accessibility is a warning, not a blocking error
-  if (!project.accessibilityText || project.accessibilityText.trim() === '') {
-    warnings.push(`${prefix} Accessibility text is missing. Highly recommended prior to publication.`);
+  // Accessible poster content blocks approval. The published page must carry a full text version
+  // of its poster and a text alternative for the poster image; both are staff-authored or imported,
+  // and the metadata editor is the correction path when a package arrived without them.
+  if (!isAccessibleContentPresent(project.posterText)) {
+    errors.push(`${prefix} Poster full text is missing. Approval blocked.`);
+  }
+  if (!isAccessibleContentPresent(project.accessibilityText)) {
+    errors.push(`${prefix} Accessibility text is missing. Approval blocked.`);
   }
 
   return {

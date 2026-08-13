@@ -59,8 +59,15 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
     const requiredFields: (keyof PublicFeedRecord)[] = [
       'id', 'publicId', 'title', 'summary', 'year', 'program', 'studyProgram',
       'discipline', 'groupName', 'teamMembers', 'poster', 'posterPdf',
-      'layoutConfig'
+      'posterText', 'accessibilityText', 'layoutConfig'
     ];
+
+    /**
+     * A public project page must carry a full text version of its image content and a text
+     * alternative for the poster image. A record that reaches the feed without either is invalid,
+     * not merely suboptimal — an empty string would publish an image with no accessible equivalent.
+     */
+    const accessibleContentFields: (keyof PublicFeedRecord)[] = ['posterText', 'accessibilityText'];
 
     requiredFields.forEach((field) => {
       const val = record[field];
@@ -75,6 +82,9 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
       }
       if (field === 'teamMembers' && !Array.isArray(val)) {
         errors.push(`${prefix} Type error: "teamMembers" must be a string array.`);
+      }
+      if (accessibleContentFields.includes(field) && String(val).trim() === '') {
+        errors.push(`${prefix} Required field "${field}" is empty. Public records must include accessible poster content.`);
       }
       if (field === 'layoutConfig') {
         if (typeof val !== 'object') {
@@ -93,8 +103,6 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
     const recommendedFields = [
       { name: 'background', desc: 'problem background' },
       { name: 'solution', desc: 'project solution details' },
-      { name: 'accessibilityText', desc: 'poster accessibility description' },
-      { name: 'posterText', desc: 'poster text content for search indexing' },
       { name: 'academicSupervisor', desc: 'supervisor signature name' },
       { name: 'industryPartner', desc: 'industry corporate partner' },
       { name: 'industry', desc: 'industry categorization tag' },

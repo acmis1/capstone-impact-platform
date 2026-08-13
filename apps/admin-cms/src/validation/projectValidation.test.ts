@@ -73,13 +73,27 @@ describe('projectValidation', () => {
       expect(result.errors[0]).toContain('Missing public poster PDF URL');
     });
 
-    it('produces a warning (not error) if accessibilityText is missing', () => {
+    it('blocks approval if accessibilityText is missing', () => {
       const project = createMockProject({ accessibilityText: '' });
       const result = validateProjectForApproval(project);
-      expect(result.valid).toBe(true);
-      expect(result.errors.length).toBe(0);
-      expect(result.warnings.length).toBe(1);
-      expect(result.warnings[0]).toContain('Accessibility text is missing');
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((error) => error.includes('Accessibility text is missing'))).toBe(true);
+      expect(result.warnings.length).toBe(0);
+    });
+
+    it('blocks approval if posterText is missing', () => {
+      const project = createMockProject({ posterText: '' });
+      const result = validateProjectForApproval(project);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((error) => error.includes('Poster full text is missing'))).toBe(true);
+      expect(result.warnings.length).toBe(0);
+    });
+
+    it('blocks approval when whitespace-only accessible content is supplied', () => {
+      const result = validateProjectForApproval(createMockProject({ posterText: '   ', accessibilityText: '\n\t ' }));
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((error) => error.includes('Poster full text is missing'))).toBe(true);
+      expect(result.errors.some((error) => error.includes('Accessibility text is missing'))).toBe(true);
     });
 
     it('does not mutate the project object', () => {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
 
 export const PROJECT_METADATA_LIMITS = {
   /** Public-card headings should remain compact and usable in existing layouts. */
@@ -8,6 +9,9 @@ export const PROJECT_METADATA_LIMITS = {
   /** Long-form public copy is capped to keep the local CMS payload bounded. */
   background: 10_000,
   solution: 10_000,
+  /** Required accessible poster content; bounds are shared with the import workbook parser. */
+  posterText: ACCESSIBLE_CONTENT_LIMITS.posterText,
+  accessibilityText: ACCESSIBLE_CONTENT_LIMITS.accessibilityText,
   minimumYear: 2000,
   maximumYear: 2100,
 } as const;
@@ -28,6 +32,10 @@ export const projectMetadataInputSchema = z.object({
   summary: normalisedText(PROJECT_METADATA_LIMITS.summary, true),
   background: normalisedText(PROJECT_METADATA_LIMITS.background, false),
   solution: normalisedText(PROJECT_METADATA_LIMITS.solution, false),
+  // Required: a project cannot be saved back into the CMS without accessible poster content, so
+  // the metadata editor is always a path toward compliance and never away from it.
+  posterText: normalisedText(PROJECT_METADATA_LIMITS.posterText, true),
+  accessibilityText: normalisedText(PROJECT_METADATA_LIMITS.accessibilityText, true),
   year: z.string().trim().regex(/^\d{4}$/, 'Enter a four-digit year.')
     .transform((value) => Number(value))
     .refine((value) => value >= PROJECT_METADATA_LIMITS.minimumYear && value <= PROJECT_METADATA_LIMITS.maximumYear,
@@ -61,6 +69,8 @@ export interface ProjectMetadataView {
   summary: string;
   background: string;
   solution: string;
+  posterText: string;
+  accessibilityText: string;
   year: string;
   programId: string;
   disciplineIds: string[];

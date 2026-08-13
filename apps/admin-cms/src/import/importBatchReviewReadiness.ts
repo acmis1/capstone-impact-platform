@@ -1,6 +1,7 @@
 import { WorkflowStatus } from '../domain/workflowStatus';
 import { getSubmissionEligibility, SubmissionEligibility } from '../workflow/importBatchSubmission';
 import { ImportBatchReviewProjectRow } from '../repositories/ImportBatchRepositoryCore';
+import { isAccessibleContentPresent } from '../domain/accessibleContent';
 
 export interface ImportBatchReviewMediaAssetInput {
   assetType: string;
@@ -24,6 +25,7 @@ export interface ImportBatchReviewProjectInput {
   discipline: string | null;
   groupName: string | null;
   teamMembers: string[] | null;
+  posterText: string | null;
   accessibilityText: string | null;
   snapshots: string[] | null;
   validationErrors: string[] | null;
@@ -85,6 +87,12 @@ export function computeProjectReviewReadiness(input: ImportBatchReviewProjectInp
   if (!input.groupName || input.groupName.trim() === '') blockingReasons.push('Group name is missing.');
   if (!input.teamMembers || input.teamMembers.length === 0) blockingReasons.push('Team member roster is empty.');
 
+  // Accessible poster content. Mirrors MISSING_POSTER_TEXT / MISSING_ACCESSIBILITY_TEXT in
+  // submit_import_projects_for_review. These are blockers, not acknowledgeable warnings: a public
+  // project page must carry a full text version of its poster and a text alternative for the image.
+  if (!isAccessibleContentPresent(input.posterText)) blockingReasons.push('Poster full text is missing.');
+  if (!isAccessibleContentPresent(input.accessibilityText)) blockingReasons.push('Accessibility text is missing.');
+
   if (input.validationErrors && input.validationErrors.length > 0) {
     blockingReasons.push(`Blocking ingestion validation error(s) present: ${input.validationErrors.join('; ')}`);
   }
@@ -112,9 +120,6 @@ export function computeProjectReviewReadiness(input: ImportBatchReviewProjectInp
     blockingReasons.push('Poster PDF is missing or is not registered as private staged media.');
   }
 
-  if (!input.accessibilityText || input.accessibilityText.trim() === '') {
-    warnings.push('Accessibility text is missing.');
-  }
   if (!input.snapshots || input.snapshots.length === 0) {
     warnings.push('Snapshot gallery is empty.');
   }
@@ -150,6 +155,7 @@ export function computeReadinessForImportBatchRow(row: ImportBatchReviewProjectR
     discipline: row.discipline,
     groupName: row.group_name,
     teamMembers: row.team_members,
+    posterText: row.poster_text_public,
     accessibilityText: row.accessibility_text_public,
     snapshots: row.snapshots,
     validationErrors: row.validation_errors,

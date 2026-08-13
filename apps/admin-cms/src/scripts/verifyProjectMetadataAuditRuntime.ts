@@ -12,6 +12,8 @@ type MetadataView = {
   summary: string;
   background: string;
   solution: string;
+  posterText: string;
+  accessibilityText: string;
   year: string;
   programId: string;
   disciplineIds: string[];
@@ -39,6 +41,8 @@ type MetadataRpcParameters = {
   p_industry_category_ids: string[];
   p_expected_updated_at: string;
   p_admin_id: string;
+  p_poster_text: string;
+  p_accessibility_text: string;
 };
 
 type NamedLookup = { id: string; name: string };
@@ -61,6 +65,8 @@ type ProjectState = {
   summary: string;
   background: string | null;
   solution: string | null;
+  posterText: string | null;
+  accessibilityText: string | null;
   year: number;
   programId: string;
   programName: string | null;
@@ -200,6 +206,8 @@ function seedProject(
     status?: string;
     background?: string | null;
     solution?: string | null;
+    posterText?: string;
+    accessibilityText?: string;
     disciplineIds?: string[];
     industryIds?: string[];
   } = {},
@@ -209,14 +217,18 @@ function seedProject(
   const industryIds = options.industryIds ?? [fixture.industries[0].id];
   const background = options.background === undefined ? 'Original background' : options.background;
   const solution = options.solution === undefined ? 'Original solution' : options.solution;
+  const posterText = options.posterText ?? 'Original poster full text';
+  const accessibilityText = options.accessibilityText ?? 'Original accessibility text';
   executeLocalSql(`
     WITH inserted AS (
       INSERT INTO public.projects(
-        public_id, title, summary, background, solution, year, program_id, program_name,
+        public_id, title, summary, background, solution, poster_text_public,
+        accessibility_text_public, year, program_id, program_name,
         discipline, industry, group_name, status
       ) VALUES (
         ${sqlText(publicId)}, 'Original Title', 'Original summary', ${sqlText(background)},
-        ${sqlText(solution)}, 2026, '${fixture.programs[0].id}'::uuid,
+        ${sqlText(solution)}, ${sqlText(posterText)}, ${sqlText(accessibilityText)},
+        2026, '${fixture.programs[0].id}'::uuid,
         ${sqlText(fixture.programs[0].name)}, ${sqlText(fixture.disciplines[0].name)},
         ${sqlText(fixture.industries[0].name)}, 'Unrelated group', ${sqlText(options.status ?? 'draft')}
       ) RETURNING id
@@ -239,6 +251,8 @@ function projectState(publicId: string): ProjectState {
       'summary', p.summary,
       'background', p.background,
       'solution', p.solution,
+      'posterText', p.poster_text_public,
+      'accessibilityText', p.accessibility_text_public,
       'year', p.year,
       'programId', p.program_id::text,
       'programName', p.program_name,
@@ -292,6 +306,8 @@ function makeParameters(
     p_industry_category_ids: current.industries,
     p_expected_updated_at: current.updatedAt,
     p_admin_id: actorAdminId,
+    p_poster_text: current.posterText ?? '',
+    p_accessibility_text: current.accessibilityText ?? '',
     ...patch,
   };
 }
@@ -323,7 +339,8 @@ function directFunctionSql(parameters: MetadataRpcParameters): string {
     ${sqlText(parameters.p_background)}, ${sqlText(parameters.p_solution)}, ${parameters.p_year},
     '${parameters.p_program_id}'::uuid, ARRAY[${parameters.p_discipline_ids.map((id) => `'${id}'::uuid`).join(',')}],
     ARRAY[${parameters.p_industry_category_ids.map((id) => `'${id}'::uuid`).join(',')}],
-    '${parameters.p_expected_updated_at}'::timestamptz, '${parameters.p_admin_id}'::uuid
+    '${parameters.p_expected_updated_at}'::timestamptz, '${parameters.p_admin_id}'::uuid,
+    ${sqlText(parameters.p_poster_text)}, ${sqlText(parameters.p_accessibility_text)}
   );`;
 }
 

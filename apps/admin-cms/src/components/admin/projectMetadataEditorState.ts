@@ -10,7 +10,9 @@ function sameSelection(left: string[], right: string[]): boolean {
 
 export function isMetadataDirty(initial: ProjectMetadataView, draft: ProjectMetadataView): boolean {
   return initial.title !== draft.title || initial.summary !== draft.summary || initial.background !== draft.background ||
-    initial.solution !== draft.solution || initial.year !== draft.year || initial.programId !== draft.programId ||
+    initial.solution !== draft.solution || initial.posterText !== draft.posterText ||
+    initial.accessibilityText !== draft.accessibilityText ||
+    initial.year !== draft.year || initial.programId !== draft.programId ||
     !sameSelection(initial.disciplineIds, draft.disciplineIds) || !sameSelection(initial.industryCategoryIds, draft.industryCategoryIds);
 }
 

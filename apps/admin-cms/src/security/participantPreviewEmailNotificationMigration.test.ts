@@ -40,7 +40,7 @@ describe('participant preview email notification migration contract', () => {
   it('is the exact twenty-third migration in the authoritative inventory', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(24);
+    expect(files).toHaveLength(25);
     expect(files[22]).toBe(filename);
   });
 

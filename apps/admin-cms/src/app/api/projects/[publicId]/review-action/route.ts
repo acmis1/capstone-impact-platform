@@ -131,6 +131,11 @@ export async function POST(
             { success: false, error: 'Published projects must use the controlled public-removal workflow.' },
             { status: 409 }
           );
+        case 'ACCESSIBILITY_CONTENT_REQUIRED':
+          return NextResponse.json(
+            { success: false, error: 'Poster full text and accessibility text are required before approval. Add them in the project metadata editor, then approve.' },
+            { status: 409 }
+          );
         case 'RESPONSE_INVALID':
         case 'INTERNAL_FAILURE':
         default: {

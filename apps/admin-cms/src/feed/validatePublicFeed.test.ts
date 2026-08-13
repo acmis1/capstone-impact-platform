@@ -113,13 +113,11 @@ describe('validatePublicFeed', () => {
     });
   });
 
-  it('creates warnings but remains valid for missing recommended accessibility/indexing fields', () => {
+  it('creates warnings but remains valid for missing recommended indexing fields', () => {
     const projectMissingRecommended = createMockProject({
       status: 'published',
       background: '',
       solution: '',
-      accessibilityText: '',
-      posterText: '',
       academicSupervisor: '',
       industryPartner: '',
       industry: '',
@@ -131,5 +129,44 @@ describe('validatePublicFeed', () => {
     expect(result.valid).toBe(true);
     expect(result.errors.length).toBe(0);
     expect(result.warnings.length).toBeGreaterThan(0);
+  });
+
+  it('rejects a public record whose poster full text is blank', () => {
+    const compiled = compilePublicFeed([createMockProject({ status: 'published', posterText: '' })]);
+    const result = validatePublicFeed(compiled);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes('"posterText" is empty'))).toBe(true);
+  });
+
+  it('rejects a public record whose accessibility text is blank', () => {
+    const compiled = compilePublicFeed([createMockProject({ status: 'published', accessibilityText: '' })]);
+    const result = validatePublicFeed(compiled);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes('"accessibilityText" is empty'))).toBe(true);
+  });
+
+  it('rejects a public record whose accessible content is whitespace only', () => {
+    const compiled = compilePublicFeed([createMockProject({ status: 'published', posterText: '   ', accessibilityText: '\n ' })]);
+    const result = validatePublicFeed(compiled);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes('"posterText" is empty'))).toBe(true);
+    expect(result.errors.some((error) => error.includes('"accessibilityText" is empty'))).toBe(true);
+  });
+
+  it('accepts a public record carrying both accessible content values', () => {
+    const compiled = compilePublicFeed([createMockProject({
+      status: 'published',
+      posterText: 'Full textual version of every meaningful heading, figure caption, and body paragraph on the poster.',
+      accessibilityText: 'Research poster showing three turbine layout diagrams beside a results table.',
+    })]);
+    const result = validatePublicFeed(compiled);
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(compiled[0].posterText).toContain('Full textual version');
+    expect(compiled[0].accessibilityText).toContain('Research poster showing');
   });
 });

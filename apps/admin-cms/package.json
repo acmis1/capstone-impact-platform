@@ -37,6 +37,7 @@
     "verify:admin-excel-reconciliation-runtime": "tsx src/scripts/verifyAdminExcelReconciliationRuntime.ts",
     "verify:browser-media-stage-runtime": "tsx src/scripts/verifyBrowserImportMediaStageRuntime.ts",
     "verify:import-batch-review-submit-runtime": "tsx src/scripts/verifyImportBatchReviewSubmitRuntime.ts",
+    "verify:accessibility-full-text-runtime": "tsx src/scripts/verifyAccessibilityFullTextRuntime.ts",
     "verify:participant-preview-runtime": "tsx src/scripts/verifyParticipantPreviewRuntime.ts",
     "verify:publication-readiness-runtime": "tsx src/scripts/verifyPublicationReadinessRuntime.ts",
     "verify:publication-preparation-runtime": "tsx src/scripts/verifyPublicationPreparationRuntime.ts",

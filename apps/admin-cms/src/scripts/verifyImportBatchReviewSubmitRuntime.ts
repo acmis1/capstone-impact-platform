@@ -196,7 +196,7 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
       .from('projects')
       .select(
         `id, public_id, title, summary, status, program_id, program_name, study_program, discipline,
-         group_name, team_members, accessibility_text_public, snapshots, validation_errors,
+         group_name, team_members, poster_text_public, accessibility_text_public, snapshots, validation_errors,
          validation_warnings,
          project_disciplines(discipline_id), project_industry_categories(industry_category_id),
          media_assets(asset_type, is_public_approved, public_url),
@@ -218,6 +218,7 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
         discipline: row.discipline as string | null,
         groupName: row.group_name as string | null,
         teamMembers: row.team_members as string[] | null,
+        posterText: row.poster_text_public as string | null,
         accessibilityText: row.accessibility_text_public as string | null,
         snapshots: row.snapshots as string[] | null,
         validationErrors: row.validation_errors as string[] | null,

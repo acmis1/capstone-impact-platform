@@ -11,6 +11,7 @@ const baseInput: ImportBatchReviewProjectInput = {
   discipline: 'Discipline',
   groupName: 'Group',
   teamMembers: ['Member A'],
+  posterText: 'Full textual version of the poster content.',
   accessibilityText: 'Accessible description',
   snapshots: ['snap.png'],
   validationErrors: [],
@@ -83,9 +84,36 @@ describe('computeProjectReviewReadiness — validation_flags', () => {
     expect(result.warnings).toContain('New flag warning');
   });
 
-  it('preserves existing accessibility/snapshot warning behavior', () => {
-    const result = computeProjectReviewReadiness({ ...baseInput, accessibilityText: '', snapshots: [] });
-    expect(result.warnings).toContain('Accessibility text is missing.');
+  it('preserves the existing snapshot warning behavior', () => {
+    const result = computeProjectReviewReadiness({ ...baseInput, snapshots: [] });
     expect(result.warnings).toContain('Snapshot gallery is empty.');
+    expect(result.ready).toBe(true);
+  });
+
+  it('blocks submission when poster full text is missing', () => {
+    const result = computeProjectReviewReadiness({ ...baseInput, posterText: null });
+    expect(result.ready).toBe(false);
+    expect(result.blockingReasons).toContain('Poster full text is missing.');
+    expect(result.warnings).not.toContain('Poster full text is missing.');
+  });
+
+  it('blocks submission when accessibility text is missing', () => {
+    const result = computeProjectReviewReadiness({ ...baseInput, accessibilityText: null });
+    expect(result.ready).toBe(false);
+    expect(result.blockingReasons).toContain('Accessibility text is missing.');
+    expect(result.warnings).not.toContain('Accessibility text is missing.');
+  });
+
+  it('treats whitespace-only accessible content as absent', () => {
+    const result = computeProjectReviewReadiness({ ...baseInput, posterText: '   ', accessibilityText: '\n\t' });
+    expect(result.ready).toBe(false);
+    expect(result.blockingReasons).toContain('Poster full text is missing.');
+    expect(result.blockingReasons).toContain('Accessibility text is missing.');
+  });
+
+  it('is ready when both accessible content values are present', () => {
+    const result = computeProjectReviewReadiness(baseInput);
+    expect(result.ready).toBe(true);
+    expect(result.blockingReasons).toEqual([]);
   });
 });

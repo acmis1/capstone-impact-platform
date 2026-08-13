@@ -767,7 +767,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                                     const after = rec.metadataEventDetails!.after[field];
 
                                     let changeView;
-                                    if (field === 'background' || field === 'solution') {
+                                    if (field === 'background' || field === 'solution' || field === 'posterText' || field === 'accessibilityText') {
                                       changeView = (
                                         <div style={{ marginTop: '0.25rem' }}>
                                           <div style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>Previous:</div>

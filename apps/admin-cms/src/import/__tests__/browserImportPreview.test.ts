@@ -83,6 +83,7 @@ async function buildTestWorkbookBuffer(overrides: Record<string, string> = {}): 
     'Project year',
     'Showcase layout',
     'Main media to feature',
+    'Poster full text',
     'Accessibility text',
   ];
 
@@ -103,6 +104,7 @@ async function buildTestWorkbookBuffer(overrides: Record<string, string> = {}): 
     overrides.year ?? '2026',
     overrides.templateId ?? 'poster_showcase',
     overrides.featuredMedia ?? 'poster',
+    overrides.posterText ?? 'Autonomous Drone Navigation. Aim: AI-powered flight control. Method: onboard vision stack. Result: stable indoor waypoint tracking.',
     overrides.accessibilityText ?? 'Poster showing drone system architecture.',
   ];
 

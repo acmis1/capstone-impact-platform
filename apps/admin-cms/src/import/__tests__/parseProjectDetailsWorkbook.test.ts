@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import { parseProjectDetailsWorkbook } from '../parseProjectDetailsWorkbook';
 import { ProjectDetailsWorkbookError, COLUMN_DEFINITIONS } from '../projectDetailsWorkbookContract';
 import { buildImportPackageManifestFromWorkbook } from '../workbookManifestAdapter';
+import { ACCESSIBLE_CONTENT_LIMITS } from '../../domain/accessibleContent';
 
 async function createWorkbookBuffer(options: {
   sheetName?: string;
@@ -72,6 +73,7 @@ describe('parseProjectDetailsWorkbook', () => {
     'Project year',
     'Showcase layout',
     'Main media to feature',
+    'Poster full text',
     'Accessibility text'
   ];
 
@@ -90,6 +92,7 @@ describe('parseProjectDetailsWorkbook', () => {
     '2026',
     'Poster showcase',
     'Poster',
+    'Solar Power Optimizer. Problem: high energy loss in distributed solar grids. Method: smart dynamic micro-inverter controller. Results: 12% yield improvement across six test sites.',
     'Poster shows solar inverter architecture diagram.'
   ];
 
@@ -127,6 +130,7 @@ describe('parseProjectDetailsWorkbook', () => {
       'year',
       'templateId',
       'featuredMedia',
+      'poster text',
       'accessibilityText'
     ];
 
@@ -143,8 +147,8 @@ describe('parseProjectDetailsWorkbook', () => {
 
   // 3. Columns in a different order
   it('3. handles columns in a different order', async () => {
-    const unorderedHeaders = ['Project year', 'Team members', 'Project title', 'Short public summary', 'Study program', 'Primary discipline', 'Group name'];
-    const unorderedData = ['2026', 'Dave Min', 'Unordered Project', 'Summary text', 'Computer Science', 'Data Science', 'Data Squad'];
+    const unorderedHeaders = ['Project year', 'Accessibility text', 'Team members', 'Project title', 'Poster full text', 'Short public summary', 'Study program', 'Primary discipline', 'Group name'];
+    const unorderedData = ['2026', 'Poster describing a data pipeline', 'Dave Min', 'Unordered Project', 'Unordered Project poster full text.', 'Summary text', 'Computer Science', 'Data Science', 'Data Squad'];
 
     const buf = await createWorkbookBuffer({
       headers: unorderedHeaders,
@@ -962,6 +966,204 @@ describe('parseProjectDetailsWorkbook', () => {
       });
 
       expect(manifest.participantContactEmail).toBe('solar.team@example.invalid');
+    });
+  });
+
+  /**
+   * Accessible poster content. Both values are staff-authored in the workbook — the parser never
+   * derives, transcribes, or generates either one, and applies no quality judgement beyond
+   * presence and a bounded length.
+   */
+  describe('accessible poster content columns', () => {
+    const headerIndex = (canonicalName: string) => defaultCanonicalHeaders.indexOf(canonicalName);
+    const posterTextColumn = headerIndex('Poster full text');
+    const accessibilityTextColumn = headerIndex('Accessibility text');
+
+    const withoutColumn = (canonicalName: string) => {
+      const index = headerIndex(canonicalName);
+      return {
+        headers: defaultCanonicalHeaders.filter((_, i) => i !== index),
+        dataRows: [defaultCanonicalData.filter((_, i) => i !== index)],
+      };
+    };
+
+    const withValue = (
+      column: number,
+      value: string | { formula: string; result?: unknown }
+    ) => {
+      const row: (string | { formula: string; result?: unknown })[] = [...defaultCanonicalData];
+      row[column] = value;
+      return { headers: defaultCanonicalHeaders, dataRows: [row] };
+    };
+
+    const errorsFor = async (buf: Buffer, fieldName: string) => {
+      try {
+        await parseProjectDetailsWorkbook(buf);
+        throw new Error('Expected the workbook to be rejected.');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ProjectDetailsWorkbookError);
+        return (err as ProjectDetailsWorkbookError).errors.filter((i) => i.fieldName === fieldName);
+      }
+    };
+
+    it('46. parses a workbook carrying both accessible content values', async () => {
+      const result = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer({ headers: defaultCanonicalHeaders, dataRows: [defaultCanonicalData] })
+      );
+
+      expect(result.metadata.posterText).toContain('Solar Power Optimizer. Problem:');
+      expect(result.metadata.accessibilityText).toBe('Poster shows solar inverter architecture diagram.');
+      expect(result.warnings).toHaveLength(0);
+    });
+
+    it('47. declares both accessible content columns required', () => {
+      const posterDef = COLUMN_DEFINITIONS.find((c) => c.internalField === 'posterText');
+      const accessibilityDef = COLUMN_DEFINITIONS.find((c) => c.internalField === 'accessibilityText');
+
+      expect(posterDef?.required).toBe(true);
+      expect(posterDef?.canonicalName).toBe('Poster full text');
+      expect(accessibilityDef?.required).toBe(true);
+      expect(accessibilityDef?.canonicalName).toBe('Accessibility text');
+    });
+
+    it('48. rejects a workbook missing the Poster full text column', async () => {
+      const issues = await errorsFor(await createWorkbookBuffer(withoutColumn('Poster full text')), 'posterText');
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_MISSING_REQUIRED_COLUMN');
+    });
+
+    it('49. rejects a workbook missing the Accessibility text column', async () => {
+      const issues = await errorsFor(await createWorkbookBuffer(withoutColumn('Accessibility text')), 'accessibilityText');
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_MISSING_REQUIRED_COLUMN');
+    });
+
+    it('50. rejects a blank Poster full text value', async () => {
+      const issues = await errorsFor(await createWorkbookBuffer(withValue(posterTextColumn, '   ')), 'posterText');
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_MISSING_REQUIRED_VALUE');
+    });
+
+    it('51. rejects a blank Accessibility text value', async () => {
+      const issues = await errorsFor(await createWorkbookBuffer(withValue(accessibilityTextColumn, '')), 'accessibilityText');
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_MISSING_REQUIRED_VALUE');
+    });
+
+    it('52. rejects a Poster full text formula with no usable cached result', async () => {
+      const issues = await errorsFor(
+        await createWorkbookBuffer(withValue(posterTextColumn, { formula: 'CONCAT(A1,B1)' })),
+        'posterText'
+      );
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_UNUSABLE_FORMULA');
+    });
+
+    it('53. rejects an Accessibility text formula with no usable cached result', async () => {
+      const issues = await errorsFor(
+        await createWorkbookBuffer(withValue(accessibilityTextColumn, { formula: 'CONCAT(A1,B1)' })),
+        'accessibilityText'
+      );
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_UNUSABLE_FORMULA');
+    });
+
+    it('54. accepts a formula that carries a usable cached result', async () => {
+      const result = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer(withValue(posterTextColumn, { formula: 'A1', result: 'Cached poster full text.' }))
+      );
+      expect(result.metadata.posterText).toBe('Cached poster full text.');
+    });
+
+    it('55. rejects accessible content beyond the bounded technical ceiling', async () => {
+      const posterIssues = await errorsFor(
+        await createWorkbookBuffer(withValue(posterTextColumn, 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText + 1))),
+        'posterText'
+      );
+      expect(posterIssues[0].code).toBe('WORKBOOK_VALUE_TOO_LONG');
+
+      const accessibilityIssues = await errorsFor(
+        await createWorkbookBuffer(
+          withValue(accessibilityTextColumn, 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText + 1))
+        ),
+        'accessibilityText'
+      );
+      expect(accessibilityIssues[0].code).toBe('WORKBOOK_VALUE_TOO_LONG');
+    });
+
+    it('56. accepts accessible content exactly at the bounded ceiling', async () => {
+      const atLimit = 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText);
+      const result = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer(withValue(posterTextColumn, atLimit))
+      );
+      expect(result.metadata.posterText).toHaveLength(ACCESSIBLE_CONTENT_LIMITS.posterText);
+    });
+
+    it('57. trims outer whitespace without altering inner content', async () => {
+      const result = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer(withValue(posterTextColumn, '  Heading.  Body   with   inner   spacing.  '))
+      );
+      expect(result.metadata.posterText).toBe('Heading.  Body   with   inner   spacing.');
+    });
+
+    it('58. preserves multiline poster full text exactly', async () => {
+      const multiline = 'Aim\nInvestigate turbine spacing.\n\nMethod\nCFD simulation across six layouts.';
+      const result = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer(withValue(posterTextColumn, multiline))
+      );
+      expect(result.metadata.posterText).toBe(multiline);
+    });
+
+    it('59. preserves multiline accessibility text exactly', async () => {
+      const multiline = 'Research poster.\nLeft column: three diagrams.\nRight column: results table.';
+      const result = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer(withValue(accessibilityTextColumn, multiline))
+      );
+      expect(result.metadata.accessibilityText).toBe(multiline);
+    });
+
+    it('60. rejects a duplicate Poster full text alias header', async () => {
+      const issues = await errorsFor(
+        await createWorkbookBuffer({
+          headers: [...defaultCanonicalHeaders, 'poster text'],
+          dataRows: [[...defaultCanonicalData, 'Duplicate mapping']],
+        }),
+        'posterText'
+      );
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_DUPLICATE_COLUMN');
+    });
+
+    it('61. rejects a duplicate Accessibility text alias header', async () => {
+      const issues = await errorsFor(
+        await createWorkbookBuffer({
+          headers: [...defaultCanonicalHeaders, 'accessibilitytext'],
+          dataRows: [[...defaultCanonicalData, 'Duplicate mapping']],
+        }),
+        'accessibilityText'
+      );
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_DUPLICATE_COLUMN');
+    });
+
+    it('62. carries both accessible content values through the manifest adapter', async () => {
+      const parsed = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer({ headers: defaultCanonicalHeaders, dataRows: [defaultCanonicalData] })
+      );
+
+      const manifest = buildImportPackageManifestFromWorkbook({
+        parsedWorkbook: parsed,
+        publicId: '2026-solar-power-optimizer',
+      });
+
+      expect(manifest.posterText).toBe(parsed.metadata.posterText);
+      expect(manifest.accessibilityText).toBe(parsed.metadata.accessibilityText);
+    });
+
+    it('63. leaves every other required field behaving exactly as before', async () => {
+      const issues = await errorsFor(await createWorkbookBuffer(withValue(headerIndex('Project title'), '')), 'title');
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_MISSING_REQUIRED_VALUE');
     });
   });
 });
