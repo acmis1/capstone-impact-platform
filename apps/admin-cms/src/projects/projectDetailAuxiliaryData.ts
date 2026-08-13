@@ -4,6 +4,53 @@ import type {
 } from '../domain/participantPreview';
 import type { PublicationReadinessResult } from '../domain/publicationReadiness';
 import { ParticipantPreviewExecutionError } from '../repositories/ParticipantPreviewRepository';
+import { z } from 'zod';
+
+const metadataEventDetailsSchema = z.object({
+  version: z.literal(1),
+  type: z.literal('project_metadata'),
+  changedFields: z.array(z.string()),
+  before: z.record(z.string(), z.unknown()),
+  after: z.record(z.string(), z.unknown()),
+});
+
+export type ProjectMetadataEventDetails = z.infer<typeof metadataEventDetailsSchema>;
+
+export interface AuditHistoryView {
+  id: string;
+  action: string;
+  timestamp: string;
+  fromStatus: string | null;
+  toStatus: string | null;
+  comments: string | null;
+  actorFullName: string | null;
+  actorEmail: string | null;
+  metadataEventDetails: ProjectMetadataEventDetails | null;
+}
+
+export function parseAuditHistoryRow(row: Record<string, unknown>): AuditHistoryView {
+  let metadataEventDetails: ProjectMetadataEventDetails | null = null;
+  if (row.event_details) {
+    const parsed = metadataEventDetailsSchema.safeParse(row.event_details);
+    if (parsed.success) {
+      metadataEventDetails = parsed.data;
+    } else {
+      console.warn('[AuditHistory] Malformed event_details, degrading safely');
+    }
+  }
+
+  return {
+    id: String(row.id || ''),
+    action: String(row.action_taken || ''),
+    timestamp: String(row.created_at || ''),
+    fromStatus: row.from_status ? String(row.from_status) : null,
+    toStatus: row.to_status ? String(row.to_status) : null,
+    comments: row.comments ? String(row.comments) : null,
+    actorFullName: row.actor_full_name_snapshot ? String(row.actor_full_name_snapshot) : null,
+    actorEmail: row.actor_email_snapshot ? String(row.actor_email_snapshot) : null,
+    metadataEventDetails,
+  };
+}
 
 export interface ProjectDetailPreviewState {
   activePreview: { createdAt: string; expiresAt: string } | null;
@@ -12,7 +59,7 @@ export interface ProjectDetailPreviewState {
 
 export interface ProjectDetailAuxiliaryData<TProject> {
   project: TProject;
-  auditRecords: Array<Record<string, unknown>> | null;
+  auditRecords: AuditHistoryView[] | null;
   previewState: ProjectDetailPreviewState;
   previewStateAvailable: boolean;
   resolutionStatus: ParticipantPreviewCorrectionResolutionStatus | null;
@@ -22,7 +69,7 @@ export interface ProjectDetailAuxiliaryData<TProject> {
 }
 
 export interface ProjectDetailAuxiliaryLoaders {
-  loadAuditRecords(): Promise<Array<Record<string, unknown>>>;
+  loadAuditRecords(): Promise<AuditHistoryView[]>;
   loadPreviewState(): Promise<ProjectDetailPreviewState>;
   loadResolutionStatus(): Promise<ParticipantPreviewCorrectionResolutionStatus | null>;
   loadPublicationReadiness(): Promise<PublicationReadinessResult>;

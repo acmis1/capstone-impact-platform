@@ -31,7 +31,7 @@ function orderedWithin(source: string, first: string, second: string): void {
 describe('Migration 0019 controlled publication execution security contract', () => {
   it('is exactly migration 0019 and leaves migrations 0001-0018 byte-for-byte unchanged from inherited main', () => {
     const files = fs.readdirSync(migrationDir).filter((file) => file.endsWith('.sql')).sort();
-    expect(files).toHaveLength(20);
+    expect(files).toHaveLength(21);
     expect(files[18]).toBe(migration);
     for (const file of files.slice(0, 18)) {
       const local = fs.readFileSync(path.join(migrationDir, file), 'utf8').replace(/\r\n/g, '\n');

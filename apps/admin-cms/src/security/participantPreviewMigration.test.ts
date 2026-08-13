@@ -35,7 +35,7 @@ describe('Migration 0013 Participant Preview Links Security Contract Tests', () 
     const rawFiles = fs.readdirSync(migrationsDir);
     const sqlFiles = rawFiles.filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
 
-    expect(sqlFiles.length).toBe(20);
+    expect(sqlFiles.length).toBe(21);
 
     for (let i = 0; i < expectedPriorMigrations.length; i++) {
       expect(sqlFiles[i]).toBe(expectedPriorMigrations[i]);

@@ -30,6 +30,8 @@ import {
   loadProjectDetailAuxiliaryData,
   ProjectDetailAuxiliaryReadError,
   projectDetailFailureCategory,
+  AuditHistoryView,
+  parseAuditHistoryRow,
 } from '../../../../projects/projectDetailAuxiliaryData';
 import { loadProjectMediaPreviewItems } from '../../../../projects/projectMediaPreview';
 import type { ProjectMediaPreviewItem } from '../../../../components/admin-media/mediaPreviewTypes';
@@ -48,7 +50,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let project: Project | null = null;
   let adminContext: AuthenticatedAdminContext | null = null;
   let loadError: string | null = null;
-  let auditRecords: Array<Record<string, unknown>> | null = null;
+  let auditRecords: AuditHistoryView[] | null = null;
   let metadataEditorData: Awaited<ReturnType<typeof loadProjectMetadataEditorData>> = null;
   let metadataEditorAvailable = false;
   let canEditMetadata = false;
@@ -140,7 +142,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             .eq('project_id', dbId)
             .order('created_at', { ascending: false });
           if (error) throw new ProjectDetailAuxiliaryReadError('QUERY_FAILED');
-          return data ?? [];
+          return (data ?? []).map(parseAuditHistoryRow);
         },
         loadPreviewState: async () => {
           const preview = await previewRepository.getActivePreview(await projectDbId);
@@ -684,11 +686,11 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                   </thead>
                   <tbody>
                     {auditRecords.map((rec) => (
-                      <tr key={String(rec.id || '')} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', color: '#D1D5DB' }}>
-                        <td style={{ padding: '0.5rem', fontSize: '0.8rem', color: '#9CA3AF' }}>
-                          {rec.created_at ? new Date(String(rec.created_at)).toLocaleString() : 'N/A'}
+                      <tr key={rec.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', color: '#D1D5DB' }}>
+                        <td style={{ padding: '0.5rem', fontSize: '0.8rem', color: '#9CA3AF', verticalAlign: 'top' }}>
+                          {rec.timestamp ? new Date(rec.timestamp).toLocaleString() : 'N/A'}
                         </td>
-                        <td style={{ padding: '0.5rem', fontWeight: 'bold' }}>
+                        <td style={{ padding: '0.5rem', fontWeight: 'bold', verticalAlign: 'top' }}>
                           <span style={{
                             display: 'inline-block',
                             padding: '0.15rem 0.4rem',
@@ -697,14 +699,90 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                             fontSize: '0.75rem',
                             textTransform: 'uppercase'
                           }}>
-                            {String(rec.action_taken || '').replace('_', ' ')}
+                            {rec.action.replace('_', ' ')}
                           </span>
+                          
+                          {rec.action === 'update_metadata' && (
+                            <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', fontWeight: 'normal' }}>
+                              <div style={{ color: '#9CA3AF' }}>Actor:</div>
+                              <div style={{ color: '#D1D5DB' }}>
+                                {rec.actorFullName || 'Unknown'} {rec.actorEmail ? `(${rec.actorEmail})` : ''}
+                              </div>
+                            </div>
+                          )}
                         </td>
-                        <td style={{ padding: '0.5rem' }}>
-                          <code>{String(rec.from_status || '')}</code> → <code>{String(rec.to_status || '')}</code>
+                        <td style={{ padding: '0.5rem', verticalAlign: 'top' }}>
+                          <code>{rec.fromStatus || 'N/A'}</code> → <code>{rec.toStatus || 'N/A'}</code>
                         </td>
-                        <td style={{ padding: '0.5rem', color: '#F59E0B' }}>
-                          {String(rec.comments || 'N/A')}
+                        <td style={{ padding: '0.5rem', color: '#F59E0B', verticalAlign: 'top' }}>
+                          {rec.comments || 'N/A'}
+                          
+                          {rec.action === 'update_metadata' && rec.metadataEventDetails && (
+                            <div style={{ marginTop: '0.75rem', backgroundColor: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '6px' }}>
+                              <div style={{ color: '#9CA3AF', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+                                <strong>Changed:</strong> {rec.metadataEventDetails.changedFields.join(', ')}
+                              </div>
+                              <details style={{ cursor: 'pointer', fontSize: '0.8rem', color: '#60A5FA' }}>
+                                <summary>View Changes</summary>
+                                <div style={{ marginTop: '0.5rem', paddingLeft: '0.5rem', borderLeft: '2px solid #3B82F6', color: '#D1D5DB' }}>
+                                  {rec.metadataEventDetails.changedFields.map(field => {
+                                    const before = rec.metadataEventDetails!.before[field];
+                                    const after = rec.metadataEventDetails!.after[field];
+                                    
+                                    let changeView;
+                                    if (field === 'background' || field === 'solution') {
+                                      changeView = (
+                                        <div style={{ marginTop: '0.25rem' }}>
+                                          <div style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>Previous:</div>
+                                          <div style={{ maxHeight: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>
+                                            {before ? String(before) : 'N/A'}
+                                          </div>
+                                          <div style={{ color: '#10B981', fontSize: '0.75rem', marginTop: '0.25rem' }}>New:</div>
+                                          <div style={{ maxHeight: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {after ? String(after) : 'N/A'}
+                                          </div>
+                                        </div>
+                                      );
+                                    } else if (field === 'program') {
+                                      changeView = (
+                                        <div style={{ marginTop: '0.25rem' }}>
+                                          <span style={{ color: '#9CA3AF', textDecoration: 'line-through' }}>{(before as Record<string, unknown>)?.name as string || 'N/A'}</span>
+                                          {' → '}
+                                          <span style={{ color: '#10B981' }}>{(after as Record<string, unknown>)?.name as string || 'N/A'}</span>
+                                        </div>
+                                      );
+                                    } else if (field === 'disciplines' || field === 'industryCategories') {
+                                      const beforeSet = new Set(((before as Record<string, unknown>[]) || []).map(x => x.name as string));
+                                      const afterSet = new Set(((after as Record<string, unknown>[]) || []).map(x => x.name as string));
+                                      const added = [...afterSet].filter(x => !beforeSet.has(x));
+                                      const removed = [...beforeSet].filter(x => !afterSet.has(x));
+                                      changeView = (
+                                        <div style={{ marginTop: '0.25rem' }}>
+                                          {added.length > 0 && <div style={{ color: '#10B981' }}>Added: {added.join(', ')}</div>}
+                                          {removed.length > 0 && <div style={{ color: '#EF4444' }}>Removed: {removed.join(', ')}</div>}
+                                        </div>
+                                      );
+                                    } else {
+                                      changeView = (
+                                        <div style={{ marginTop: '0.25rem' }}>
+                                          <span style={{ color: '#9CA3AF', textDecoration: 'line-through' }}>{String(before)}</span>
+                                          {' → '}
+                                          <span style={{ color: '#10B981' }}>{String(after)}</span>
+                                        </div>
+                                      );
+                                    }
+
+                                    return (
+                                      <div key={field} style={{ marginBottom: '0.75rem' }}>
+                                        <strong style={{ color: '#E5E7EB', textTransform: 'capitalize' }}>{field}</strong>
+                                        {changeView}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </details>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}

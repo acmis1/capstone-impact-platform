@@ -50,7 +50,9 @@ export type ProjectMetadataErrorCode =
   | 'APPROVAL_REOPEN_REQUIRED'
   | 'PUBLISHED_PROJECT_LOCKED'
   | 'PERSISTENCE_FAILED'
-  | 'INTERNAL_FAILURE';
+  | 'INTERNAL_FAILURE'
+  | 'PERMISSION_DENIED'
+  | 'NO_CHANGES';
 
 export type MetadataOption = { id: string; name: string };
 
