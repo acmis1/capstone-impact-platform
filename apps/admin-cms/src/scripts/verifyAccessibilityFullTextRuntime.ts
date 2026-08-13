@@ -772,8 +772,103 @@ export async function verifyAccessibilityFullTextRuntime(): Promise<void> {
       assert(!/importBatchId|internalStaffNotes|validationFlags|sourceFolder/i.test(serialized), 'Compiled public record leaked internal state.');
     });
 
+    // ---------------------------------------------------------------- Bounded-content authority
+    // The declared ceilings are only real if a value that reached the table by any path — notably
+    // the deliberately permissive legacy project.json route — still cannot progress.
+    const oversizedPoster = 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText + 1);
+    const oversizedAccessibility = 'y'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText + 1);
+
+    await scenario(42, 'Review submission rejects oversized poster full text with zero mutation', async () => {
+      const project = seedProject(prefix, 'submit-big-poster', fixture!, {
+        posterText: oversizedPoster, inBatch: true, withMedia: true,
+      });
+      const result = await serviceClient.rpc('submit_import_projects_for_review', {
+        p_batch_id: fixture!.batchId, p_project_public_ids: [project], p_admin_id: fixture!.editor.id, p_comments: null,
+      }) as RpcResult<{ resultCode?: string; blockingReasons?: string[] }>;
+      assert(result.data?.resultCode === 'READINESS_BLOCKED', `Oversized submission returned ${result.data?.resultCode}.`);
+      assert(result.data?.blockingReasons?.includes('POSTER_TEXT_TOO_LONG'), 'POSTER_TEXT_TOO_LONG was not reported.');
+      const state = projectState(project);
+      assert(state.status === 'draft' && state.audits === 0, 'Oversized submission mutated status or audit history.');
+    });
+
+    await scenario(43, 'Review submission rejects oversized accessibility text with zero mutation', async () => {
+      const project = seedProject(prefix, 'submit-big-a11y', fixture!, {
+        accessibilityText: oversizedAccessibility, inBatch: true, withMedia: true,
+      });
+      const result = await serviceClient.rpc('submit_import_projects_for_review', {
+        p_batch_id: fixture!.batchId, p_project_public_ids: [project], p_admin_id: fixture!.editor.id, p_comments: null,
+      }) as RpcResult<{ resultCode?: string; blockingReasons?: string[] }>;
+      assert(result.data?.resultCode === 'READINESS_BLOCKED', `Oversized submission returned ${result.data?.resultCode}.`);
+      assert(result.data?.blockingReasons?.includes('ACCESSIBILITY_TEXT_TOO_LONG'), 'ACCESSIBILITY_TEXT_TOO_LONG was not reported.');
+      const state = projectState(project);
+      assert(state.status === 'draft' && state.audits === 0, 'Oversized submission mutated status or audit history.');
+    });
+
+    await scenario(44, 'Approval rejects oversized accessible content with zero mutation and zero audit', async () => {
+      const project = seedProject(prefix, 'approve-big-a11y', fixture!, {
+        status: 'submitted', accessibilityText: oversizedAccessibility,
+      });
+      const result = await serviceClient.rpc('perform_project_review_action', {
+        p_public_id: project, p_action: 'approve', p_comments: null, p_admin_id: fixture!.reviewer.id,
+      }) as RpcResult<{ resultCode?: string }>;
+      assert(result.data?.resultCode === 'ACCESSIBILITY_CONTENT_INVALID', `Oversized approval returned ${result.data?.resultCode}.`);
+      const state = projectState(project);
+      assert(state.status === 'submitted' && state.audits === 0, 'Oversized approval mutated status or created an approval audit.');
+      // The value is rejected, never silently shortened to fit.
+      assert(state.accessibilityText === oversizedAccessibility, 'Oversized accessibility text was mutated by the rejected approval.');
+    });
+
+    await scenario(45, 'Publication readiness rejects oversized accessible content', async () => {
+      const project = seedProject(prefix, 'ready-big-poster', fixture!, { status: 'approved', posterText: oversizedPoster });
+      const result = await serviceClient.rpc('get_project_publication_readiness', {
+        p_public_id: project, p_admin_id: fixture!.admin.id, p_private_bucket: PRIVATE_BUCKET,
+      }) as RpcResult<{ ready?: boolean; resultCode?: string; blockers?: string[] }>;
+      assert(result.data?.ready === false, 'Readiness accepted oversized poster full text.');
+      assert(result.data?.resultCode === 'ACCESSIBILITY_CONTENT_REQUIRED', `Readiness returned ${result.data?.resultCode}.`);
+      assert(
+        result.data?.blockers?.some((blocker) => blocker.includes('exceeds the 20,000 character safety limit')),
+        'Oversize blocker was not reported truthfully as an oversize.',
+      );
+      assert(
+        !result.data?.blockers?.some((blocker) => blocker.includes('Poster full text is missing')),
+        'An oversized value was misreported as missing.',
+      );
+    });
+
+    await scenario(46, 'Values exactly at each ceiling pass every database gate', async () => {
+      const atLimitPoster = 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText);
+      const atLimitAccessibility = 'y'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText);
+      const project = seedProject(prefix, 'at-limit', fixture!, {
+        status: 'submitted', posterText: atLimitPoster, accessibilityText: atLimitAccessibility,
+      });
+      const approval = await serviceClient.rpc('perform_project_review_action', {
+        p_public_id: project, p_action: 'approve', p_comments: null, p_admin_id: fixture!.reviewer.id,
+      }) as RpcResult<{ status?: string }>;
+      assert(approval.data?.status === 'approved', `At-limit approval returned ${JSON.stringify(approval.data)}.`);
+
+      const readiness = await serviceClient.rpc('get_project_publication_readiness', {
+        p_public_id: project, p_admin_id: fixture!.admin.id, p_private_bucket: PRIVATE_BUCKET,
+      }) as RpcResult<{ resultCode?: string }>;
+      assert(readiness.data?.resultCode === 'NO_ACTIVE_PREVIEW',
+        `At-limit readiness stopped at ${readiness.data?.resultCode} rather than the ordinary preview gate.`);
+
+      const state = projectState(project);
+      assert(state.posterText === atLimitPoster && state.accessibilityText === atLimitAccessibility,
+        'At-limit accessible content was altered while passing the gates.');
+    });
+
+    await scenario(47, 'Public-feed validation rejects oversized accessible content', () => {
+      const overPoster = validatePublicFeed(compilePublicFeed([createMockProject({ status: 'published', posterText: oversizedPoster })]));
+      assert(!overPoster.valid, 'Public feed accepted oversized poster full text.');
+      assert(overPoster.errors.some((error) => error.includes('"posterText" exceeds')), 'Oversized poster feed error was not reported.');
+
+      const overAccessibility = validatePublicFeed(compilePublicFeed([createMockProject({ status: 'published', accessibilityText: oversizedAccessibility })]));
+      assert(!overAccessibility.valid, 'Public feed accepted oversized accessibility text.');
+      assert(overAccessibility.errors.some((error) => error.includes('"accessibilityText" exceeds')), 'Oversized accessibility feed error was not reported.');
+    });
+
     // ---------------------------------------------------------------- Isolation guarantees
-    await scenario(42, 'No email, notification, or reminder state was created by this verifier', () => {
+    await scenario(48, 'No email, notification, or reminder state was created by this verifier', () => {
       const counts = queryLocalJson<{ notifications: number; schedules: number }>(`
         SELECT pg_catalog.jsonb_build_object(
           'notifications', (SELECT pg_catalog.count(*) FROM public.participant_preview_notifications n
@@ -788,7 +883,7 @@ export async function verifyAccessibilityFullTextRuntime(): Promise<void> {
       assert(counts.schedules === 0, 'The verifier created participant reminder state.');
     });
 
-    await scenario(43, 'No publication or public-removal attempt was created by this verifier', () => {
+    await scenario(49, 'No publication or public-removal attempt was created by this verifier', () => {
       const counts = queryLocalJson<{ publications: number; removals: number }>(`
         SELECT pg_catalog.jsonb_build_object(
           'publications', (SELECT pg_catalog.count(*) FROM public.publication_attempts a
@@ -801,7 +896,7 @@ export async function verifyAccessibilityFullTextRuntime(): Promise<void> {
       assert(counts.removals === 0, 'The verifier reserved a public-removal attempt.');
     });
 
-    assert(scenarioCount === 43, `Expected 43 independently asserted scenarios, completed ${scenarioCount}.`);
+    assert(scenarioCount === 49, `Expected 49 independently asserted scenarios, completed ${scenarioCount}.`);
   } catch (error) {
     verifierError = error;
   } finally {

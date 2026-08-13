@@ -162,20 +162,50 @@ describe('accessible full-text gate migration contract', () => {
     expect(content).toContain('alreadySubmittedPublicIds');
   });
 
-  it('blocks approval on blank accessible content before any mutation', () => {
+  it('blocks approval on blank or oversized accessible content before any mutation', () => {
     expect(content).toContain('ACCESSIBILITY_CONTENT_REQUIRED');
+    expect(content).toContain('ACCESSIBILITY_CONTENT_INVALID');
     expect(compact).toContain(
-      "IF p_action = 'approve' AND (pg_catalog.btrim(COALESCE(v_poster_text, '')) = '' OR pg_catalog.btrim(COALESCE(v_accessibility_text, '')) = '') THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'ACCESSIBILITY_CONTENT_REQUIRED');",
+      "IF p_action = 'approve' THEN IF pg_catalog.btrim(COALESCE(v_poster_text, '')) = '' OR pg_catalog.btrim(COALESCE(v_accessibility_text, '')) = '' THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'ACCESSIBILITY_CONTENT_REQUIRED');",
+    );
+    expect(compact).toContain(
+      "IF pg_catalog.length(pg_catalog.btrim(v_poster_text)) > 20000 OR pg_catalog.length(pg_catalog.btrim(v_accessibility_text)) > 2000 THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'ACCESSIBILITY_CONTENT_INVALID');",
     );
     // Re-read from the locked project row, and returned before the status UPDATE and the audit
     // INSERT are ever reached.
     expect(content).toContain('SELECT p.id, p.status, p.poster_text_public, p.accessibility_text_public');
     const reviewAction = bodyOf('public.perform_project_review_action');
-    const gate = reviewAction.indexOf("'ACCESSIBILITY_CONTENT_REQUIRED'");
-    expect(gate).toBeGreaterThan(-1);
-    expect(gate).toBeLessThan(reviewAction.indexOf('v_now := pg_catalog.now();'));
-    expect(gate).toBeLessThan(reviewAction.indexOf('UPDATE public.projects SET status = v_to_status'));
-    expect(gate).toBeLessThan(reviewAction.indexOf('INSERT INTO public.approval_records'));
+    for (const code of ["'ACCESSIBILITY_CONTENT_REQUIRED'", "'ACCESSIBILITY_CONTENT_INVALID'"]) {
+      const gate = reviewAction.indexOf(code);
+      expect(gate).toBeGreaterThan(-1);
+      expect(gate).toBeLessThan(reviewAction.indexOf('v_now := pg_catalog.now();'));
+      expect(gate).toBeLessThan(reviewAction.indexOf('UPDATE public.projects SET status = v_to_status'));
+      expect(gate).toBeLessThan(reviewAction.indexOf('INSERT INTO public.approval_records'));
+    }
+  });
+
+  it('blocks review submission and publication readiness on oversized accessible content', () => {
+    const submit = bodyOf('public.submit_import_projects_for_review');
+    expect(submit).toContain(
+      "ELSIF pg_catalog.length(pg_catalog.btrim(v_project.poster_text_public)) > 20000 THEN",
+    );
+    expect(submit).toContain("'POSTER_TEXT_TOO_LONG'");
+    expect(submit).toContain(
+      "ELSIF pg_catalog.length(pg_catalog.btrim(v_project.accessibility_text_public)) > 2000 THEN",
+    );
+    expect(submit).toContain("'ACCESSIBILITY_TEXT_TOO_LONG'");
+    expect(submit.indexOf("'POSTER_TEXT_TOO_LONG'")).toBeLessThan(submit.indexOf('FOREACH v_pid IN ARRAY v_to_submit LOOP'));
+
+    const readiness = bodyOf('public.get_project_publication_readiness');
+    expect(readiness).toContain('Poster full text exceeds the 20,000 character safety limit');
+    expect(readiness).toContain('Accessibility text exceeds the 2,000 character safety limit');
+    // Absence and oversize stay distinguishable, so a diagnostic never misreports which is wrong.
+    expect(readiness).toContain('Poster full text is missing');
+    expect(readiness).toContain('Accessibility text is missing');
+  });
+
+  it('never truncates accessible content to make a row pass a gate', () => {
+    expect(executable).not.toMatch(/\bleft\s*\(|\bsubstr(ing)?\s*\(|\btruncate\b/i);
   });
 
   it('leaves request_changes and archive review behaviour untouched', () => {

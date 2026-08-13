@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeProjectReviewReadiness, ImportBatchReviewProjectInput } from './importBatchReviewReadiness';
+import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
 
 const baseInput: ImportBatchReviewProjectInput = {
   publicId: 'synthetic-1',
@@ -115,5 +116,45 @@ describe('computeProjectReviewReadiness — validation_flags', () => {
     const result = computeProjectReviewReadiness(baseInput);
     expect(result.ready).toBe(true);
     expect(result.blockingReasons).toEqual([]);
+  });
+
+  it('blocks submission when poster full text exceeds its safety limit', () => {
+    const result = computeProjectReviewReadiness({
+      ...baseInput,
+      posterText: 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText + 1),
+    });
+    expect(result.ready).toBe(false);
+    expect(result.blockingReasons).toContain('Poster full text exceeds the 20,000 character safety limit.');
+    // Oversized is never downgraded to an acknowledgeable warning.
+    expect(result.warnings).not.toContain('Poster full text exceeds the 20,000 character safety limit.');
+  });
+
+  it('blocks submission when accessibility text exceeds its safety limit', () => {
+    const result = computeProjectReviewReadiness({
+      ...baseInput,
+      accessibilityText: 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText + 1),
+    });
+    expect(result.ready).toBe(false);
+    expect(result.blockingReasons).toContain('Accessibility text exceeds the 2,000 character safety limit.');
+  });
+
+  it('accepts accessible content exactly at each ceiling', () => {
+    const result = computeProjectReviewReadiness({
+      ...baseInput,
+      posterText: 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText),
+      accessibilityText: 'y'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText),
+    });
+    expect(result.ready).toBe(true);
+    expect(result.blockingReasons).toEqual([]);
+  });
+
+  it('reports absence and oversize as distinct blockers rather than one generic reason', () => {
+    const result = computeProjectReviewReadiness({
+      ...baseInput,
+      posterText: null,
+      accessibilityText: 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText + 1),
+    });
+    expect(result.blockingReasons).toContain('Poster full text is missing.');
+    expect(result.blockingReasons).toContain('Accessibility text exceeds the 2,000 character safety limit.');
   });
 });

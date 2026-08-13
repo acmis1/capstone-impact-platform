@@ -1,4 +1,9 @@
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
+import {
+  ACCESSIBLE_CONTENT_LABELS,
+  ACCESSIBLE_CONTENT_LIMITS,
+  getAccessibleContentProblem,
+} from '../domain/accessibleContent';
 import { AuthenticatedAdminContext } from '../auth/authTypes';
 import {
   adminReferenceIntentSchema,
@@ -188,6 +193,24 @@ export async function stageBrowserImportMetadata(params: {
 
     if (!m.layoutConfig || typeof m.layoutConfig !== 'object' || Array.isArray(m.layoutConfig)) {
       return { success: false, code: 'INVALID_SELECTION', error: 'Layout config must be an object.' };
+    }
+
+    // Accessible poster content bounds. The standard XLSX parser already rejects oversized values,
+    // but the legacy project.json path is deliberately permissive and would otherwise persist an
+    // unbounded string straight into the project row, the participant-preview snapshot and the
+    // compiled public feed. Absence stays permitted here — a legacy package may still be staged and
+    // is blocked later by the review/approval/publication gates, which is the staff correction
+    // path. Only a value that is present and over the ceiling is rejected, and it is rejected
+    // before intent hashing, before the admin client is created and before any RPC call, so an
+    // oversized package causes zero persistence attempt.
+    for (const field of ['posterText', 'accessibilityText'] as const) {
+      if (getAccessibleContentProblem(m[field], field, { required: false }) === 'TOO_LONG') {
+        return {
+          success: false,
+          code: 'INVALID_SELECTION',
+          error: `${ACCESSIBLE_CONTENT_LABELS[field]} exceeds the ${ACCESSIBLE_CONTENT_LIMITS[field].toLocaleString('en-US')} character safety limit.`,
+        };
+      }
     }
   }
 

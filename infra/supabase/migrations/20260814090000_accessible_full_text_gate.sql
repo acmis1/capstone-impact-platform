@@ -451,12 +451,17 @@ BEGIN
 
     -- Accessible poster content. A legacy project.json package can reach the CMS without either
     -- value; it may be staged, but it may never enter review until staff supply both through the
-    -- project metadata editor.
+    -- project metadata editor. The bound is re-derived from the persisted row rather than trusted
+    -- from whatever wrote it, so a row that reached the table by any path is still checked here.
     IF pg_catalog.btrim(COALESCE(v_project.poster_text_public, '')) = '' THEN
       v_blocking_reasons := pg_catalog.array_append(v_blocking_reasons, 'MISSING_POSTER_TEXT');
+    ELSIF pg_catalog.length(pg_catalog.btrim(v_project.poster_text_public)) > 20000 THEN
+      v_blocking_reasons := pg_catalog.array_append(v_blocking_reasons, 'POSTER_TEXT_TOO_LONG');
     END IF;
     IF pg_catalog.btrim(COALESCE(v_project.accessibility_text_public, '')) = '' THEN
       v_blocking_reasons := pg_catalog.array_append(v_blocking_reasons, 'MISSING_ACCESSIBILITY_TEXT');
+    ELSIF pg_catalog.length(pg_catalog.btrim(v_project.accessibility_text_public)) > 2000 THEN
+      v_blocking_reasons := pg_catalog.array_append(v_blocking_reasons, 'ACCESSIBILITY_TEXT_TOO_LONG');
     END IF;
 
     IF v_project.validation_errors IS NOT NULL AND pg_catalog.cardinality(v_project.validation_errors) > 0 THEN
@@ -631,10 +636,18 @@ BEGIN
   -- Re-read from the locked row, so this holds regardless of how the project got here. Only
   -- 'approve' is gated: request_changes and archive must stay available precisely so staff can
   -- move a non-compliant project somewhere useful.
-  IF p_action = 'approve'
-     AND (pg_catalog.btrim(COALESCE(v_poster_text, '')) = ''
-          OR pg_catalog.btrim(COALESCE(v_accessibility_text, '')) = '') THEN
-    RETURN pg_catalog.jsonb_build_object('resultCode', 'ACCESSIBILITY_CONTENT_REQUIRED');
+  --
+  -- Absent and oversized are reported as distinct codes so staff are never told to shorten
+  -- something that is missing, or to supply something that is merely too long.
+  IF p_action = 'approve' THEN
+    IF pg_catalog.btrim(COALESCE(v_poster_text, '')) = ''
+       OR pg_catalog.btrim(COALESCE(v_accessibility_text, '')) = '' THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'ACCESSIBILITY_CONTENT_REQUIRED');
+    END IF;
+    IF pg_catalog.length(pg_catalog.btrim(v_poster_text)) > 20000
+       OR pg_catalog.length(pg_catalog.btrim(v_accessibility_text)) > 2000 THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'ACCESSIBILITY_CONTENT_INVALID');
+    END IF;
   END IF;
   v_now := pg_catalog.now();
   IF p_action = 'archive' THEN
@@ -821,13 +834,19 @@ BEGIN
   END IF;
 
   -- 4b. Accessible poster content is a precondition of publication in its own right, evaluated
-  -- against the locked project row rather than against any stored preview evidence.
+  -- against the locked project row rather than against any stored preview evidence. Both absence
+  -- and oversize fail closed, and the diagnostic distinguishes them truthfully. Nothing is ever
+  -- truncated to make a row publishable.
   v_accessibility_blockers := '{}'::text[];
   IF pg_catalog.btrim(COALESCE(v_project.poster_text_public, '')) = '' THEN
     v_accessibility_blockers := pg_catalog.array_append(v_accessibility_blockers, 'Poster full text is missing');
+  ELSIF pg_catalog.length(pg_catalog.btrim(v_project.poster_text_public)) > 20000 THEN
+    v_accessibility_blockers := pg_catalog.array_append(v_accessibility_blockers, 'Poster full text exceeds the 20,000 character safety limit');
   END IF;
   IF pg_catalog.btrim(COALESCE(v_project.accessibility_text_public, '')) = '' THEN
     v_accessibility_blockers := pg_catalog.array_append(v_accessibility_blockers, 'Accessibility text is missing');
+  ELSIF pg_catalog.length(pg_catalog.btrim(v_project.accessibility_text_public)) > 2000 THEN
+    v_accessibility_blockers := pg_catalog.array_append(v_accessibility_blockers, 'Accessibility text exceeds the 2,000 character safety limit');
   END IF;
   IF pg_catalog.cardinality(v_accessibility_blockers) > 0 THEN
     RETURN pg_catalog.jsonb_build_object(

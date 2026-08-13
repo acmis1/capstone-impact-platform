@@ -136,6 +136,11 @@ export async function POST(
             { success: false, error: 'Poster full text and accessibility text are required before approval. Add them in the project metadata editor, then approve.' },
             { status: 409 }
           );
+        case 'ACCESSIBILITY_CONTENT_INVALID':
+          return NextResponse.json(
+            { success: false, error: 'Poster full text or accessibility text exceeds its character safety limit. Shorten it in the project metadata editor, then approve.' },
+            { status: 409 }
+          );
         case 'RESPONSE_INVALID':
         case 'INTERNAL_FAILURE':
         default: {

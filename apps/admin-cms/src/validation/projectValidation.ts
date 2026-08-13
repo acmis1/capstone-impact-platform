@@ -1,5 +1,9 @@
 import { Project } from '../domain/project';
-import { isAccessibleContentPresent } from '../domain/accessibleContent';
+import {
+  describeAccessibleContentProblem,
+  getAccessibleContentProblem,
+  isAccessibleContentPresent,
+} from '../domain/accessibleContent';
 
 export interface ValidationOutput {
   valid: boolean;
@@ -86,14 +90,15 @@ export function validateProjectForApproval(project: Project): ValidationOutput {
     errors.push(`${prefix} Missing public poster PDF URL. Approval blocked.`);
   }
 
-  // Accessible poster content blocks approval. The published page must carry a full text version
-  // of its poster and a text alternative for the poster image; both are staff-authored or imported,
-  // and the metadata editor is the correction path when a package arrived without them.
-  if (!isAccessibleContentPresent(project.posterText)) {
-    errors.push(`${prefix} Poster full text is missing. Approval blocked.`);
-  }
-  if (!isAccessibleContentPresent(project.accessibilityText)) {
-    errors.push(`${prefix} Accessibility text is missing. Approval blocked.`);
+  // Accessible poster content blocks approval, whether it is absent or beyond its bounded ceiling.
+  // The published page must carry a full text version of its poster and a text alternative for the
+  // poster image; both are staff-authored or imported, and the metadata editor is the correction
+  // path in either direction. Oversized content is never downgraded to a warning.
+  for (const field of ['posterText', 'accessibilityText'] as const) {
+    const problem = getAccessibleContentProblem(project[field], field);
+    if (problem) {
+      errors.push(`${prefix} ${describeAccessibleContentProblem(problem, field)} Approval blocked.`);
+    }
   }
 
   return {

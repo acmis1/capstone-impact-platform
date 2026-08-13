@@ -122,6 +122,11 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
           discipline: lookups.disciplineName,
           group_name: `Group ${params.suffix}`,
           team_members: ['Synthetic Member A', 'Synthetic Member B'],
+          // Review submission and approval both require accessible poster content. This verifier
+          // exercises batch submission atomicity/idempotency, so its fixture is compliant; the
+          // dedicated accessibility runtime verifier owns the missing-content scenarios.
+          poster_text_public: 'Synthetic runtime poster full text.',
+          accessibility_text_public: 'Synthetic runtime accessibility text.',
           status: params.status,
           import_batch_id: params.batchId,
           validation_errors: params.validationErrors || [],

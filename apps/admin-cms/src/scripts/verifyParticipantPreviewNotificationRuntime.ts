@@ -131,6 +131,10 @@ export async function runParticipantPreviewNotificationRuntimeVerification(
           year: 2026,
           status,
           participant_contact_email: contactEmail,
+          // Approval requires accessible poster content. This verifier exercises email delivery
+          // lifecycle, so its fixture is compliant by construction.
+          poster_text_public: 'Synthetic runtime poster full text.',
+          accessibility_text_public: 'Synthetic runtime accessibility text.',
         })
         .select()
         .single();
