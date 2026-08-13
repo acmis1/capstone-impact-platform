@@ -1,0 +1,164 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { AdminRole } from '../auth/authTypes';
+import type {
+  BindOutcome,
+  FinalizeOutcome,
+  ReservationOutcome,
+  StaffInvitationGateway,
+  StaffProvisioningGateway,
+} from './staffProvisioningService';
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asText(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/**
+ * Service-role gateway over the Migration 0022 provisioning state machine.
+ *
+ * Every privileged transition is a SECURITY DEFINER RPC; this class only forwards
+ * server-derived values and normalizes the bounded jsonb result. Raw PostgREST errors are
+ * deliberately converted into thrown control flow rather than being returned to a caller.
+ */
+export class SupabaseStaffProvisioningGateway implements StaffProvisioningGateway {
+  constructor(private readonly client: SupabaseClient) {}
+
+  async reserve(input: {
+    actorAdminUserId: string;
+    email: string;
+    fullName: string;
+    roles: AdminRole[];
+  }): Promise<ReservationOutcome> {
+    const { data, error } = await this.client.rpc('reserve_staff_provisioning', {
+      p_actor_admin_id: input.actorAdminUserId,
+      p_email: input.email,
+      p_full_name: input.fullName,
+      p_roles: input.roles,
+    });
+    if (error) throw new Error('STAFF_PROVISIONING_RESERVE_FAILED');
+
+    const payload = asRecord(data);
+    const roles = Array.isArray(payload.roles)
+      ? payload.roles.filter((role): role is string => typeof role === 'string')
+      : null;
+
+    return {
+      resultCode: String(payload.resultCode ?? ''),
+      requestId: asText(payload.requestId),
+      normalizedEmail: asText(payload.normalizedEmail),
+      fullName: asText(payload.fullName),
+      roles,
+      authUserId: asText(payload.authUserId),
+      authIdentityCreated: payload.authIdentityCreated === true,
+    };
+  }
+
+  async bind(requestId: string, authUserId: string): Promise<BindOutcome> {
+    const { data, error } = await this.client.rpc('bind_staff_provisioning_identity', {
+      p_request_id: requestId,
+      p_auth_user_id: authUserId,
+    });
+    if (error) throw new Error('STAFF_PROVISIONING_BIND_FAILED');
+
+    const payload = asRecord(data);
+    return {
+      resultCode: String(payload.resultCode ?? ''),
+      authUserId: asText(payload.authUserId),
+      authIdentityCreated: payload.authIdentityCreated === true,
+    };
+  }
+
+  async finalize(requestId: string): Promise<FinalizeOutcome> {
+    const { data, error } = await this.client.rpc('finalize_staff_provisioning', {
+      p_request_id: requestId,
+    });
+    if (error) throw new Error('STAFF_PROVISIONING_FINALIZE_FAILED');
+
+    const payload = asRecord(data);
+    return {
+      resultCode: String(payload.resultCode ?? ''),
+      adminUserId: asText(payload.adminUserId),
+      status: asText(payload.status),
+    };
+  }
+
+  async fail(
+    requestId: string,
+    failureCode: string,
+    compensationState: 'not_required' | 'succeeded' | 'failed',
+  ): Promise<void> {
+    const { error } = await this.client.rpc('fail_staff_provisioning', {
+      p_request_id: requestId,
+      p_failure_code: failureCode,
+      p_compensation_state: compensationState,
+    });
+    if (error) throw new Error('STAFF_PROVISIONING_FAIL_RECORD_FAILED');
+  }
+
+  async readBoundAuthUserId(requestId: string): Promise<string | null> {
+    const { data, error } = await this.client
+      .from('staff_provisioning_requests')
+      .select('auth_user_id')
+      .eq('id', requestId)
+      .maybeSingle();
+    if (error) throw new Error('STAFF_PROVISIONING_READ_FAILED');
+    return asText(asRecord(data).auth_user_id);
+  }
+}
+
+/**
+ * Supabase Auth administrative invitation gateway.
+ *
+ * Uses the platform's own invitation mechanism, so the application never generates, stores,
+ * displays, logs or emails a password or an invitation token. The invited user completes account
+ * setup themselves through the existing `/auth/confirm` -> `/auth/set-password` flow.
+ */
+export class SupabaseStaffInvitationGateway implements StaffInvitationGateway {
+  constructor(private readonly client: SupabaseClient) {}
+
+  async invite(input: { email: string; fullName: string }): Promise<string | null> {
+    const { data, error } = await this.client.auth.admin.inviteUserByEmail(input.email, {
+      data: { full_name: input.fullName },
+    });
+    if (error || !data?.user?.id) {
+      // Bounded operational code only. The provider response may contain identifying detail and
+      // is deliberately never logged.
+      console.error('[Staff Provisioning]: INVITATION_FAILED');
+      return null;
+    }
+    return data.user.id;
+  }
+
+  async deleteAuthIdentity(authUserId: string): Promise<boolean> {
+    const { error } = await this.client.auth.admin.deleteUser(authUserId);
+    if (error) {
+      console.error('[Staff Provisioning]: COMPENSATION_DELETE_FAILED');
+      return false;
+    }
+    return true;
+  }
+}
+
+/** Bounded, non-identifying view of a provisioned or pending staff member for the Admin/CMS. */
+export interface StaffDirectoryEntry {
+  fullName: string;
+  email: string;
+  roles: AdminRole[];
+  status: 'active' | 'pending_activation';
+  requestedAt: string | null;
+}
+
+/** Bounded view of a provisioning lifecycle that never produced a usable staff account. */
+export interface StaffProvisioningIncident {
+  fullName: string;
+  email: string;
+  roles: AdminRole[];
+  status: 'failed' | 'compensation_failed';
+  failureCode: string | null;
+  requestedAt: string | null;
+}

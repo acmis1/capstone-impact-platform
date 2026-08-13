@@ -70,6 +70,16 @@ vi.mock('../lib/supabase/server', () => ({
   createSupabaseServerClient: () => mockCreateSupabaseServerClient(),
 }));
 
+// Mock the service-role client used to complete staff activation after account setup.
+const mockActivationRpc = vi.fn().mockResolvedValue({
+  data: { resultCode: 'ACTIVATION_MISMATCH' },
+  error: null,
+});
+
+vi.mock('../lib/supabase/admin', () => ({
+  createSupabaseAdminClient: () => ({ rpc: (...args: unknown[]) => mockActivationRpc(...args) }),
+}));
+
 import { GET } from '../app/auth/confirm/route';
 import AcceptInvitationPage from '../app/auth/confirm/accept/page';
 import { acceptInvitationAction } from '../app/auth/confirm/accept/actions';
@@ -377,6 +387,32 @@ describe('Prefetch Flow Simulation', () => {
 describe('Password Setup Regression Safety', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: the authenticated identity is not completing a provisioning invitation.
+    mockActivationRpc.mockResolvedValue({ data: { resultCode: 'ACTIVATION_MISMATCH' }, error: null });
+  });
+
+  it('should complete staff activation for the exact server-verified identity before sign-out', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'invited-user-1' } }, error: null });
+    mockUpdateUser.mockResolvedValue({ error: null });
+    mockSignOut.mockResolvedValue({ error: null });
+    mockActivationRpc.mockResolvedValue({ data: { resultCode: 'ACTIVATED' }, error: null });
+
+    await expect(setPasswordAction({ password: 'validpassword123', confirmation: 'validpassword123' })).rejects.toThrow(RedirectError);
+    expect(mockActivationRpc).toHaveBeenCalledWith('activate_staff_provisioning', {
+      p_auth_user_id: 'invited-user-1',
+    });
+    expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' });
+  });
+
+  it('should keep the session usable for retry when activation cannot be completed', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'invited-user-2' } }, error: null });
+    mockUpdateUser.mockResolvedValue({ error: null });
+    mockActivationRpc.mockResolvedValue({ data: null, error: new Error('activation infrastructure failure') });
+
+    const res = await setPasswordAction({ password: 'validpassword123', confirmation: 'validpassword123' });
+    expect(res.error).toBe('ACTIVATION_FAILED');
+    expect(mockSignOut).not.toHaveBeenCalled();
+    expect(mockRedirect).not.toHaveBeenCalled();
   });
 
   it('should call updateUser and local signOut on successful password actions', async () => {
@@ -499,6 +535,7 @@ describe('Static Safety Assurances', () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } }, error: null });
     mockUpdateUser.mockResolvedValue({ error: null });
     mockSignOut.mockResolvedValue({ error: null });
+    mockActivationRpc.mockResolvedValue({ data: { resultCode: 'ACTIVATION_MISMATCH' }, error: null });
 
     await expect(setPasswordAction({ password: rawComplex, confirmation: rawComplex })).rejects.toThrow(RedirectError);
     // Raw password should reach updateUser exactly as entered without trimming

@@ -3,16 +3,20 @@
 import 'server-only';
 
 import { createSupabaseServerClient } from '../../../lib/supabase/server';
+import { createSupabaseAdminClient } from '../../../lib/supabase/admin';
 import { validatePasswordUpdate } from '../../../auth/invitationValidation';
+import { completeStaffActivation } from '../../../staff/staffActivation';
 import { redirect } from 'next/navigation';
 
 /**
  * Server Action to set/update a user's password during the invitation flow.
- * 
+ *
  * Rules:
  * - Validates input using the pure validation module before constructing client.
  * - Requires a valid authenticated session via getUser.
  * - Updates the password using supabase.auth.updateUser.
+ * - Completes staff activation for the exact server-verified Auth identity, so an invited staff
+ *   member becomes usable only after account setup actually succeeds.
  * - Signs the user out immediately via local scope on success.
  * - Inspects sign-out error and fails on error.
  * - Invokes redirect strictly outside the try/catch block.
@@ -69,12 +73,20 @@ export async function setPasswordAction(input: PasswordUpdateInput) {
       if (updateError) {
         actionError = 'PASSWORD_UPDATE_FAILED';
       } else {
-        // 4. Call signOut with local scope
-        const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
-        if (signOutError) {
-          actionError = 'SESSION_TERMINATION_FAILED';
+        // 4. Complete staff activation for the exact authenticated identity. An identity that is
+        // not completing a provisioning invitation returns a benign mismatch and continues.
+        const activation = await completeStaffActivation(createSupabaseAdminClient(), user.id);
+        if (activation === 'ACTIVATION_FAILED') {
+          // The session is deliberately left intact so account setup can be retried.
+          actionError = 'ACTIVATION_FAILED';
         } else {
-          updateSuccess = true;
+          // 5. Call signOut with local scope
+          const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+          if (signOutError) {
+            actionError = 'SESSION_TERMINATION_FAILED';
+          } else {
+            updateSuccess = true;
+          }
         }
       }
     }
@@ -82,7 +94,7 @@ export async function setPasswordAction(input: PasswordUpdateInput) {
     actionError = 'PASSWORD_UPDATE_FAILED';
   }
 
-  // 5. Invoke redirect strictly outside the try/catch block
+  // 6. Invoke redirect strictly outside the try/catch block
   if (updateSuccess) {
     redirect('/login?status=PASSWORD_SET');
   }

@@ -29,7 +29,7 @@ It includes a project metadata editor backed by one atomic, service-role-only da
 | Media validation/storage | Foundations | Offline media validation tests; private-to-public storage functions exist | End-to-end staging and production verification pending |
 | Public-eligible feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled public cutover pending |
 | Duda integration | Design boundary | Stable-feed consumer is documented | Live Duda connection remains isolated |
-| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (21 timestamped migrations; migrations 0007 through 0021 repository/local-only) | Full production RLS verification pending |
+| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (22 timestamped migrations; migrations 0007 through 0022 repository/local-only) | Full production RLS verification pending |
 | Automated testing | Yes | Vitest offline suite and onboarding precheck | No hosted CI evidence is asserted here |
 | Production deployment | No | Not production-verified | Hardening and controlled cutover pending |
 
@@ -123,6 +123,7 @@ Run from the repository root:
 | `SUPABASE_PUBLIC_FEED_FILE` | Server-only | Stable feed object name. |
 | `GEMINI_API_KEY` and `GEMINI_MODEL` | Server-side optional | Assistive extraction configuration. |
 | `GEMINI_ASSISTIVE_EXTRACTION_ENABLED` | Server-side optional | Enables assistive extraction only when explicitly set to `true`. |
+| `STAFF_PROVISIONING_ENABLED` | Server-only optional | Enables creation of new staff invitations only when explicitly set to `true`. Fails closed when absent. Never gates activation of an existing pending invitation. |
 
 The runtime contract in [`src/lib/env.ts`](./src/lib/env.ts) validates required public/server configuration and classifies keys without exposing their values. `.env` and `.env.local` are ignored by Git.
 
@@ -186,6 +187,7 @@ The migration set is manually governed for authorized isolated environments. It 
 - [`20260810090000_atomic_browser_import_metadata_stage.sql`](../../infra/supabase/migrations/20260810090000_atomic_browser_import_metadata_stage.sql) establishes the `browser_import_commits` idempotency ledger and the atomic, service-role-only `public.stage_browser_import_metadata` transaction for browser folder-import metadata staging. *(Repository/local-only; not applied to hosted staging.)*
 - [`20260810120000_atomic_browser_import_media_stage.sql`](../../infra/supabase/migrations/20260810120000_atomic_browser_import_media_stage.sql) establishes `media_assets` idempotency uniqueness, the `browser_import_media_commits` ledger, and the atomic, service-role-only `public.finalize_browser_import_media_stage` transaction that registers private draft media and completes an import batch. *(Repository/local-only; not applied to hosted staging.)*
 - [`20260813002154_project_metadata_audit_history.sql`](../../infra/supabase/migrations/20260813002154_project_metadata_audit_history.sql) introduces the comprehensive project metadata audit trail, recording granular diffs, actor identity, and change intent directly into `approval_records` on every atomic metadata save. *(Repository/local-only; not applied to hosted staging.)*
+- [`20260813120000_staff_identity_provisioning.sql`](../../infra/supabase/migrations/20260813120000_staff_identity_provisioning.sql) establishes the durable staff provisioning state machine and the service-role-only functions that converge Supabase Auth with PostgreSQL, so an invited staff identity stays fail-closed until the invitee completes account setup and a failure between the two systems is compensated rather than left half-created. *(Repository/local-only; not applied to hosted staging.)*
 
 See the [Supabase migration overview](../../infra/supabase/README.md), [manual apply guide](../../infra/supabase/manual-apply-guide.md), [staging reconciliation runbook](../../infra/supabase/staging-reconciliation-runbook.md) and [staging authentication verification runbook](../../infra/supabase/staging-auth-verification.md) before authorized operations.
 
@@ -197,11 +199,23 @@ Review mutations also require a same-origin `Origin` header. Audit attribution i
 
 ### Role-based access control
 
-| Role | Read | Edit metadata | Review | Archive | Verification status |
-| --- | --- | --- | --- | --- | --- |
-| `admin` | Yes | Yes | Yes | Yes | Initial role operationally verified in isolated staging |
-| `reviewer` | Yes | No | Yes | No | Definition and helpers tested; UAT pending |
-| `editor` | Yes | Yes | No | No | Definition and helpers tested; UAT pending |
+| Role | Read | Edit metadata | Review | Archive | Manage staff | Verification status |
+| --- | --- | --- | --- | --- | --- | --- |
+| `admin` | Yes | Yes | Yes | Yes | Yes | Initial role operationally verified in isolated staging |
+| `reviewer` | Yes | No | Yes | No | No | Definition and helpers tested; UAT pending |
+| `editor` | Yes | Yes | No | No | No | Definition and helpers tested; UAT pending |
+
+Recognized roles and the resulting permission union are reported in one canonical, repository-defined order (`admin`, `reviewer`, `editor`), so resolved authority never depends on database row ordering. An unrecognized role row is discarded and can never expand authority.
+
+### Staff identity provisioning
+
+An administrator holding `staff.manage` can invite additional Admin/CMS staff from `/admin/staff`. Provisioning uses the Supabase Auth invitation mechanism: the invitee sets their own password through `/auth/confirm` → `/auth/set-password`, and the application never generates, stores, logs, displays or emails a password or invitation token. An invited identity holds a staff profile and role rows but stays **fail-closed** in `requireAdmin` until activation completes.
+
+Creating new invitations is gated by the server-only `STAFF_PROVISIONING_ENABLED` environment variable, which fails closed when absent. Completing activation of an already-valid pending invitation is deliberately never gated by it, so disabling provisioning cannot strand an invited staff member.
+
+Supabase Auth and PostgreSQL cannot share a transaction, so provisioning runs as an explicit convergence state machine (Migration 0022). A failure after the Auth identity is created is compensated, and compensation may remove only an Auth identity the database proved that exact attempt created — a pre-existing account is never deleted. If compensation itself cannot complete, the attempt is recorded as `compensation_failed` and surfaced in the Admin/CMS rather than reported as success.
+
+Institutional approval for production use, an approved production SMTP/email arrangement, hosted multi-user acceptance and human staff UAT all remain pending. `bootstrap_initial_admin` is unchanged and remains restricted to the first administrator.
 
 ## Application routes
 
@@ -215,6 +229,7 @@ Review mutations also require a same-origin `Origin` header. Audit attribution i
 | `/admin/projects/[publicId]` | Authenticated provisioned Admin/CMS staff | Inspect a project, edit metadata, and access controlled review actions. | Implemented; hosted deployment and broader staff acceptance remain separate |
 | `/admin/imports` | Authenticated provisioned Admin/CMS staff | List import batches and validation summaries. | Implemented |
 | `/admin/imports/[batchId]` | Authenticated provisioned Admin/CMS staff | Inspect a batch, linked project and validation flags. | Implemented |
+| `/admin/staff` | `requireAdmin` plus `staff.manage` | Invite Admin/CMS staff and review current access and incomplete provisioning attempts. | Implemented locally; institutional rollout and staff UAT pending |
 
 There is no implemented participant project-confirmation workflow or route, publishing-history route, or settings route. The metadata editor is implemented locally; hosted deployment and broader staff acceptance remain separate activities.
 
@@ -225,6 +240,7 @@ There is no implemented participant project-confirmation workflow or route, publ
 | `GET` | `/api/health` | Public | Returns safe configuration status classifications only. | No |
 | `GET` | `/api/projects` | `requireAdmin` plus `projects.read` | Returns the protected project collection. | No |
 | `POST` | `/api/projects/[publicId]/review-action` | Same-origin check, `requireAdmin`, then review/archive permission | Validates and applies `request_changes`, `approve` or `archive`. | Yes |
+| `POST` | `/api/staff/invitations` | Same-origin check, `requireAdmin`, then `staff.manage` | Creates a controlled staff provisioning invitation. Accepts only the target name, email and roles; all actor attribution is server-derived. | Yes |
 
 No metadata `PATCH` route is currently implemented.
 

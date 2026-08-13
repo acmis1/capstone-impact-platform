@@ -8,6 +8,7 @@ export interface AdminShellClientProps {
   displayName?: string | null;
   email?: string | null;
   roles?: string[];
+  canManageStaff?: boolean;
   logoutAction: () => Promise<void>;
   children: React.ReactNode;
 }
@@ -16,6 +17,7 @@ export function AdminShellClient({
   displayName,
   email,
   roles = [],
+  canManageStaff = false,
   logoutAction,
   children,
 }: AdminShellClientProps) {
@@ -40,7 +42,7 @@ export function AdminShellClient({
       <div className="flex flex-1 min-h-screen">
         {/* Desktop Persistent Sidebar */}
         <aside className="hidden lg:block w-64 shrink-0">
-          <SidebarNav className="h-full sticky top-0" />
+          <SidebarNav className="h-full sticky top-0" canManageStaff={canManageStaff} />
         </aside>
 
         {/* Main Content Area */}
@@ -49,6 +51,7 @@ export function AdminShellClient({
             displayName={displayName}
             email={email}
             roles={roles}
+            canManageStaff={canManageStaff}
             logoutAction={logoutAction}
           />
 

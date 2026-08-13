@@ -3,26 +3,31 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FolderKanban, FileSpreadsheet } from 'lucide-react';
-import { NAVIGATION_ITEMS, NavigationItem, getRouteDescriptor } from './navigation';
+import { FolderKanban, FileSpreadsheet, Users } from 'lucide-react';
+import { NavigationItem, getNavigationItems, getRouteDescriptor } from './navigation';
 import { cn } from '../../lib/utils';
 import { Badge } from '../ui/badge';
 
 interface SidebarProps {
   onNavClick?: () => void;
   className?: string;
+  canManageStaff?: boolean;
 }
 
 function getNavIcon(href: string) {
   if (href.startsWith('/admin/imports')) {
     return FileSpreadsheet;
   }
+  if (href.startsWith('/admin/staff')) {
+    return Users;
+  }
   return FolderKanban;
 }
 
-export function SidebarNav({ onNavClick, className }: SidebarProps) {
+export function SidebarNav({ onNavClick, className, canManageStaff = false }: SidebarProps) {
   const pathname = usePathname() || '/admin';
   const activeHref = getRouteDescriptor(pathname).activeHref;
+  const navigationItems = getNavigationItems(canManageStaff);
 
   return (
     <div className={cn('flex flex-col h-full bg-background border-r', className)}>
@@ -37,7 +42,7 @@ export function SidebarNav({ onNavClick, className }: SidebarProps) {
 
       {/* Primary navigation */}
       <nav aria-label="Primary administration" className="flex-1 space-y-1 p-3">
-        {NAVIGATION_ITEMS.map((item: NavigationItem) => {
+        {navigationItems.map((item: NavigationItem) => {
           const Icon = getNavIcon(item.href);
           const isActive = item.href === activeHref;
 

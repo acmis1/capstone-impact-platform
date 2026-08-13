@@ -30,10 +30,11 @@ export interface UserSummaryProps {
   displayName?: string | null;
   email?: string | null;
   roles?: string[];
+  canManageStaff?: boolean;
   logoutAction: () => Promise<void>;
 }
 
-export function TopBar({ displayName, email, roles = [], logoutAction }: UserSummaryProps) {
+export function TopBar({ displayName, email, roles = [], canManageStaff = false, logoutAction }: UserSummaryProps) {
   const pathname = usePathname() || '/admin';
   const descriptor = getRouteDescriptor(pathname);
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -63,7 +64,7 @@ export function TopBar({ displayName, email, roles = [], logoutAction }: UserSum
                 Main navigation drawer for administrative sections.
               </SheetDescription>
             </SheetHeader>
-            <SidebarNav onNavClick={() => setMobileOpen(false)} />
+            <SidebarNav onNavClick={() => setMobileOpen(false)} canManageStaff={canManageStaff} />
           </SheetContent>
         </Sheet>
 

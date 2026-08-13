@@ -17,6 +17,7 @@ const ADMIN_MUTATION_ROUTES = [
   'src/app/api/projects/[publicId]/publication-plan/route.ts',
   'src/app/api/projects/[publicId]/local-publication/route.ts',
   'src/app/api/projects/[publicId]/local-archive/route.ts',
+  'src/app/api/staff/invitations/route.ts',
 ] as const;
 
 function read(relativePath: string): string {
