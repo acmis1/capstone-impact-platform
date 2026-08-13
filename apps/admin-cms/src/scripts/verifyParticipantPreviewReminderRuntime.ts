@@ -240,6 +240,8 @@ export async function runParticipantPreviewReminderRuntimeVerification(options?:
     });
     check(cancelled.resultCode === 'CANCELLED', 'Authorized staff can cancel a future reminder');
     check((await repository.cancel({ publicId: primary.public_id, adminId, reference: reviewerSchedule.reference ?? '' })).resultCode === 'ALREADY_CANCELLED', 'Cancellation is idempotent');
+    await repository.cancel({ publicId: primary.public_id, adminId, reference: adminSchedule.reference ?? '' });
+    await repository.cancel({ publicId: primary.public_id, adminId, reference: concurrentSchedules[0].reference ?? '' });
 
     // Build one actual due delivery and five due suppressions, then process one bounded batch.
     const dueAt = new Date(Date.now() + 10_000);
@@ -319,12 +321,19 @@ export async function runParticipantPreviewReminderRuntimeVerification(options?:
     });
     check(secondRun.claimed === 0, 'A second runner execution sends no duplicate reminder');
 
-    // Deterministic concurrent-runner fence: runner A owns the claim before transport, runner B sees none.
-    const concurrentProject = await createProject('runner-concurrency');
-    await generateInitial(concurrentProject);
-    const runnerConcurrentAt = new Date(Date.now() + 2_000);
-    await schedule(concurrentProject, adminId, runnerConcurrentAt);
-    await delay(Math.max(0, runnerConcurrentAt.getTime() - Date.now() + 150));
+    // Deterministic lease-lifetime barrier: later due work remains a schedule until the earlier
+    // reminder has crossed its transport attempt, so its short execution lease cannot burn in memory.
+    const incrementalProjectA = await createProject('incremental-a');
+    const incrementalProjectB = await createProject('incremental-b');
+    await generateInitial(incrementalProjectA);
+    await generateInitial(incrementalProjectB);
+    const incrementalAtA = new Date(Date.now() + 2_000);
+    const incrementalAtB = new Date(incrementalAtA.getTime() + 500);
+    const incrementalScheduleA = await schedule(incrementalProjectA, adminId, incrementalAtA);
+    const incrementalScheduleB = await schedule(incrementalProjectB, adminId, incrementalAtB);
+    const incrementalRowABefore = await scheduleRow(incrementalScheduleA.reference ?? '');
+    const incrementalRowBBefore = await scheduleRow(incrementalScheduleB.reference ?? '');
+    await delay(Math.max(0, incrementalAtB.getTime() - Date.now() + 150));
     let entered!: () => void;
     let release!: () => void;
     const enteredPromise = new Promise<void>((resolve) => { entered = resolve; });
@@ -335,22 +344,42 @@ export async function runParticipantPreviewReminderRuntimeVerification(options?:
       reconcile: repository.reconcile.bind(repository),
       finalize: repository.finalize.bind(repository),
       beginTransport: async (notificationId: string, executionToken: string) => {
-        entered(); await releasePromise;
+        entered();
+        await releasePromise;
         return repository.beginTransport(notificationId, executionToken);
       },
     };
     const firstRunner = runParticipantPreviewReminders({
-      enabled: true, notifications: gated, transport: smtp, fromAddress: SMTP.from,
+      enabled: true, notifications: gated, transport: smtp, fromAddress: SMTP.from, batchLimit: 2,
     });
     await enteredPromise;
-    const competingTransport = { send: async () => ({ outcome: 'accepted' as const }) };
-    const competingRunner = await runParticipantPreviewReminders({
-      enabled: true, notifications: repository, transport: competingTransport, fromAddress: SMTP.from,
-    });
-    check(competingRunner.claimed === 0, 'Concurrent runner cannot claim Runner A work');
+    const incrementalRowAPaused = await scheduleRow(incrementalScheduleA.reference ?? '');
+    const incrementalRowBPaused = await scheduleRow(incrementalScheduleB.reference ?? '');
+    const incrementalNotificationAPaused = await reminderNotification(String(incrementalRowABefore?.id ?? ''));
+    const incrementalNotificationBPaused = await reminderNotification(String(incrementalRowBBefore?.id ?? ''));
+    check(
+      incrementalRowAPaused?.status === 'triggered' &&
+      incrementalNotificationAPaused?.status === 'reserved',
+      'Runner creates the first execution lease immediately before its transport attempt',
+    );
+    check(
+      incrementalRowBPaused?.status === 'scheduled' && incrementalNotificationBPaused === null,
+      'Later due reminder remains scheduled with no execution lease while the first transport is paused',
+    );
     release();
     const firstRunnerResult = await firstRunner;
-    check(firstRunnerResult.sent === 1, 'Claim owner performs one transport invocation');
+    const incrementalNotificationA = await reminderNotification(String(incrementalRowABefore?.id ?? ''));
+    const incrementalNotificationB = await reminderNotification(String(incrementalRowBBefore?.id ?? ''));
+    check(firstRunnerResult.claimed === 2 && firstRunnerResult.sent === 2, 'Runner claims and sends the later reminder only after the first completes');
+    check(
+      incrementalNotificationA?.status === 'sent' && incrementalNotificationB?.status === 'sent',
+      'Each incrementally claimed schedule has one linked sent notification',
+    );
+    check(
+      (await mailbox(String(incrementalProjectA.participant_contact_email))).length === 2 &&
+      (await mailbox(String(incrementalProjectB.participant_contact_email))).length === 2,
+      'Each incremental schedule produces exactly one reminder transport',
+    );
 
     // Ambiguous and known failure outcomes are terminal; neither schedule retries automatically.
     const ambiguousProject = await createProject('ambiguous');

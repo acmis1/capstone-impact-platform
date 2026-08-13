@@ -63,11 +63,24 @@ export async function runParticipantPreviewReminders(context: {
       }
     }
 
-    const claimed = await context.notifications.claimDue(batchLimit);
-    summary.claimed = claimed.claimedCount;
-    summary.skipped = claimed.skippedCount;
+    let processed = 0;
+    while (processed < batchLimit) {
+      // Claim only the reminder that is about to execute. The notification lease begins inside
+      // claimDue, so preclaiming a batch would burn later reminders' short leases while they wait
+      // behind earlier SMTP work.
+      const claimed = await context.notifications.claimDue(1);
+      const handled = claimed.claimedCount + claimed.skippedCount;
+      if (claimed.claimedCount < 0 || claimed.skippedCount < 0 || handled > 1) {
+        throw new Error('Single-item reminder claim exceeded its bound.');
+      }
+      if (handled === 0) break;
 
-    for (const reminder of claimed.items) {
+      processed += handled;
+      summary.claimed += claimed.claimedCount;
+      summary.skipped += claimed.skippedCount;
+
+      const reminder = claimed.items[0];
+      if (!reminder) continue;
       const result = await executeParticipantPreviewNotification(
         { notifications: context.notifications, transport: context.transport },
         {
