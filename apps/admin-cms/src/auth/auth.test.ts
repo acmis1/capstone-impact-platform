@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getPermissionsForRoles, hasPermission, canPerformReviewAction, canResolveParticipantCorrection } from './permissions';
+import { getPermissionsForRoles, hasPermission, canPerformReviewAction, canResolveParticipantCorrection, canManageStaff, canonicalizeRoles } from './permissions';
 import { validateSameOrigin } from './csrf';
 import { AdminAuthError, AdminRole } from './authTypes';
 import { extractSubClaim } from './claims';
@@ -17,7 +17,8 @@ describe('Authentication & Authorization Tests (Offline)', () => {
       expect(perms).toContain('projects.archive');
       expect(perms).toContain('projects.edit');
       expect(perms).toContain('projects.publish');
-      expect(perms.length).toBe(5);
+      expect(perms).toContain('staff.manage');
+      expect(perms.length).toBe(6);
     });
 
     it('returns exact permissions for reviewer role', () => {
@@ -61,9 +62,29 @@ describe('Authentication & Authorization Tests (Offline)', () => {
         'editor',
         'unknown' as AdminRole,
       ]);
-      expect(perms).toEqual(['projects.read', 'projects.edit', 'projects.review']);
+      expect(perms).toEqual(['projects.read', 'projects.review', 'projects.edit']);
       expect(perms).not.toContain('projects.archive');
       expect(perms).not.toContain('projects.publish');
+      expect(perms).not.toContain('staff.manage');
+    });
+
+    it('reports the permission union in canonical order regardless of role input order', () => {
+      expect(getPermissionsForRoles(['editor', 'reviewer'])).toEqual(
+        getPermissionsForRoles(['reviewer', 'editor']),
+      );
+    });
+
+    it('grants staff management to Admin only', () => {
+      expect(canManageStaff(getPermissionsForRoles(['admin']))).toBe(true);
+      expect(canManageStaff(getPermissionsForRoles(['reviewer']))).toBe(false);
+      expect(canManageStaff(getPermissionsForRoles(['editor']))).toBe(false);
+      expect(canManageStaff(getPermissionsForRoles(['editor', 'reviewer']))).toBe(false);
+      expect(canManageStaff(getPermissionsForRoles(['unknown' as AdminRole]))).toBe(false);
+    });
+
+    it('canonicalizes recognized roles and discards unknown authority', () => {
+      expect(canonicalizeRoles(['editor', 'admin', 'editor', 'unknown'])).toEqual(['admin', 'editor']);
+      expect(canonicalizeRoles(['unknown', null, 7])).toEqual([]);
     });
 
     it('requires both edit and review permissions for correction resolution', () => {

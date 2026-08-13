@@ -43,6 +43,13 @@ enable_signup = true
 double_confirm_changes = true
 enable_confirmations = true
 
+# Staff invitations must land on the application's own confirmation route, which captures the
+# token hash into an HttpOnly cookie and requires an explicit acceptance step before account
+# setup. The default provider template would bypass that route entirely.
+[auth.email.template.invite]
+subject = "Complete your Capstone Impact Admin/CMS account setup"
+content_path = "./supabase/templates/invite.html"
+
 [storage]
 enabled = true
 

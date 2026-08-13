@@ -8,9 +8,9 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
   const configPath = path.resolve(repoRoot, 'infra/supabase/config.toml');
   const seedPath = path.resolve(repoRoot, 'infra/supabase/seed.sql');
 
-  it('1. Exactly 21 timestamped migration files exist in explicitly sorted ascending order', () => {
+  it('1. Exactly 22 timestamped migration files exist in explicitly sorted ascending order', () => {
     const rawFiles = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'));
-    expect(rawFiles.length).toBe(21);
+    expect(rawFiles.length).toBe(22);
 
     // Sort explicitly to not rely on OS directory enumeration order
     const files = [...rawFiles].sort((a, b) => a.localeCompare(b));
@@ -61,6 +61,7 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
       'published_snapshots',
       'publication_attempts',
       'public_removal_attempts',
+      'staff_provisioning_requests',
     ];
 
     for (const table of expectedTables) {
@@ -118,6 +119,18 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
     expect(authSection).toContain('"http://localhost:3000/auth/confirm/accept"');
     expect(authSection).toContain('"http://localhost:3000/auth/set-password"');
     expect(authSection).not.toContain('/auth/callback');
+
+    // Staff invitation emails must route through the application's own confirmation flow.
+    expect(content).toContain('[auth.email.template.invite]');
+    expect(content).toContain('content_path = "./supabase/templates/invite.html"');
+    const inviteTemplate = fs.readFileSync(
+      path.resolve(repoRoot, 'infra/supabase/templates/invite.html'),
+      'utf8',
+    );
+    expect(inviteTemplate).toContain('{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}');
+    expect(inviteTemplate).toContain('type=invite');
+    expect(inviteTemplate).toContain('next=/auth/set-password');
+    expect(inviteTemplate).not.toContain('{{ .Token }}');
 
     // Storage buckets
     expect(content).toContain('[storage.buckets.project-drafts-private]');

@@ -69,7 +69,7 @@ npm run supabase:stop
 
 ---
 
-## Migration Inventory (21 Migrations)
+## Migration Inventory (22 Migrations)
 
 * **[20260601035138_staging_schema.sql](./migrations/20260601035138_staging_schema.sql):** Creates core relational tables (`programs`, `disciplines`, `industry_categories`, `admin_users`, `user_roles`, `import_batches`, `projects`, `project_disciplines`, `project_industry_categories`, `media_assets`, `validation_flags`, `approval_records`, `published_snapshots`), check constraints, indexes, and `updated_at` triggers.
 * **[20260601035139_staging_rls_policies.sql](./migrations/20260601035139_staging_rls_policies.sql):** Enables Row-Level Security (RLS) across all tables with restrictive defaults.
@@ -82,3 +82,4 @@ npm run supabase:stop
 * **[20260808170000_transactional_project_metadata_update.sql](./migrations/20260808170000_transactional_project_metadata_update.sql):** Establishes the atomic, service-role-only `public.update_project_metadata` transaction for metadata scalar and mapping writes. *(Repository/local-only; not applied to hosted staging.)*
 * **... Migrations 0010 through 0020 ...**
 * **[20260813002154_project_metadata_audit_history.sql](./migrations/20260813002154_project_metadata_audit_history.sql):** Introduces granular project metadata change history tracking in `approval_records`. *(Repository/local-only; not applied to hosted staging.)*
+* **[20260813120000_staff_identity_provisioning.sql](./migrations/20260813120000_staff_identity_provisioning.sql):** Establishes the `staff_provisioning_requests` state machine and the service-role-only `reserve_staff_provisioning`, `bind_staff_provisioning_identity`, `finalize_staff_provisioning`, `activate_staff_provisioning` and `fail_staff_provisioning` functions that converge Supabase Auth and PostgreSQL for controlled staff identity provisioning, including proven-eligibility compensation and the canonical staff role order. *(Repository/local-only; not applied to hosted staging.)*

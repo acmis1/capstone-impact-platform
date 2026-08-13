@@ -5,7 +5,8 @@ export type AdminPermission =
   | 'projects.review'
   | 'projects.archive'
   | 'projects.edit'
-  | 'projects.publish';
+  | 'projects.publish'
+  | 'staff.manage';
 
 export interface AuthenticatedAdminContext {
   authUserId: string; // matches auth_user_id (auth.users(id))
@@ -19,6 +20,7 @@ export interface AuthenticatedAdminContext {
 export type AuthErrorType =
   | 'UNAUTHENTICATED'
   | 'ADMIN_NOT_PROVISIONED'
+  | 'STAFF_ACTIVATION_PENDING'
   | 'PERMISSION_DENIED'
   | 'CONFIGURATION_FAILURE';
 
