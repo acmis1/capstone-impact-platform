@@ -657,6 +657,7 @@ export async function analyzeBrowserImportServer(
       mediaValidationMode: 'descriptor_only',
       batchIssues,
       packages: packagePreviews,
+      ...(adminReferenceIntentObj ? { adminReference: adminReferenceIntentObj } : {}),
     },
   };
 

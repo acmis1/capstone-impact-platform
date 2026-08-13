@@ -220,59 +220,65 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       uploadedMetadataFiles.set(key, buf);
     }
 
-    let adminReferenceOptions: AdminReferenceAnalysisOptions | undefined = undefined;
+    if (!submittedIntent.adminReference) {
+      return stageError('INVALID_INTENT', 400);
+    }
 
-    if (submittedIntent.adminReference) {
-      if (!adminReferenceFile || !adminReferenceMappingJsonStr) {
-        return stageError('MISSING_METADATA_UPLOAD', 400);
-      }
-      if (!adminReferenceFile.name.toLowerCase().endsWith('.xlsx') || adminReferenceFile.size === 0 || adminReferenceFile.size > BROWSER_IMPORT_LIMITS.MAX_XLSX_SIZE_BYTES) {
-        return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
-      }
-
-      let arrayBuf: ArrayBuffer;
-      const fileObj = adminReferenceFile as unknown as { arrayBuffer?: () => Promise<ArrayBuffer>; buffer?: ArrayBuffer };
-      if (typeof fileObj.arrayBuffer === 'function') {
-        arrayBuf = await fileObj.arrayBuffer();
-      } else {
-        arrayBuf = fileObj.buffer || (adminReferenceFile as unknown as ArrayBuffer);
-      }
-      const refBuf = Buffer.from(arrayBuf);
-
-      const recomputedRefFingerprint = computeAdminReferenceWorkbookFingerprint(refBuf);
-      if (recomputedRefFingerprint !== submittedIntent.adminReference.workbookFingerprint) {
-        return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
-      }
-
-      let parsedMapping: unknown;
-      try {
-        parsedMapping = JSON.parse(adminReferenceMappingJsonStr);
-      } catch {
-        return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
-      }
-
-      const inspection = await inspectAdminReferenceWorkbook(refBuf);
-      const targetSheet = inspection.worksheets.find((w: WorksheetStructureSummary) => w.name === submittedIntent.adminReference?.worksheet);
-      if (!targetSheet) {
-        return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
-      }
-
-      const mapVal = validateAdminReferenceMapping(parsedMapping, targetSheet.headers);
-      if (!mapVal.valid) {
-        return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
-      }
-
-      if (JSON.stringify(mapVal.canonicalMapping) !== JSON.stringify(submittedIntent.adminReference)) {
-        return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
-      }
-
-      adminReferenceOptions = {
-        referenceFileBuffer: refBuf,
-        mapping: mapVal.canonicalMapping,
-      };
-    } else if (adminReferenceFile !== null || adminReferenceMappingJsonStr !== null) {
+    if (!adminReferenceFile || !adminReferenceMappingJsonStr) {
+      return stageError('MISSING_METADATA_UPLOAD', 400);
+    }
+    if (!adminReferenceFile.name.toLowerCase().endsWith('.xlsx') || adminReferenceFile.size === 0 || adminReferenceFile.size > BROWSER_IMPORT_LIMITS.MAX_XLSX_SIZE_BYTES) {
       return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
     }
+
+    let arrayBuf: ArrayBuffer;
+    const fileObj = adminReferenceFile as unknown as { arrayBuffer?: () => Promise<ArrayBuffer>; buffer?: ArrayBuffer };
+    if (typeof fileObj.arrayBuffer === 'function') {
+      arrayBuf = await fileObj.arrayBuffer();
+    } else {
+      arrayBuf = fileObj.buffer || (adminReferenceFile as unknown as ArrayBuffer);
+    }
+    const refBuf = Buffer.from(arrayBuf);
+
+    const recomputedRefFingerprint = computeAdminReferenceWorkbookFingerprint(refBuf);
+    if (recomputedRefFingerprint !== submittedIntent.adminReference.workbookFingerprint) {
+      return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
+    }
+
+    let parsedMapping: unknown;
+    try {
+      parsedMapping = JSON.parse(adminReferenceMappingJsonStr);
+    } catch {
+      return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
+    }
+
+    const inspection = await inspectAdminReferenceWorkbook(refBuf);
+    const targetSheet = inspection.worksheets.find((w: WorksheetStructureSummary) => w.name === submittedIntent.adminReference?.worksheet);
+    if (!targetSheet) {
+      return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
+    }
+
+    const mapVal = validateAdminReferenceMapping(parsedMapping, targetSheet.headers);
+    if (!mapVal.valid) {
+      return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
+    }
+
+    const canonicalRefIntent: import('../../../../import/browserImportCommitIntentContract').AdminReferenceIntent = {
+      workbookFingerprint: recomputedRefFingerprint,
+      worksheet: mapVal.canonicalMapping.worksheet,
+      matchMappings: mapVal.canonicalMapping.matchMappings,
+      comparisonMappings: mapVal.canonicalMapping.comparisonMappings,
+      reconciliationContractVersion: mapVal.canonicalMapping.reconciliationContractVersion,
+    };
+
+    if (JSON.stringify(canonicalRefIntent) !== JSON.stringify(submittedIntent.adminReference)) {
+      return stageError('PREVIEW_FINGERPRINT_MISMATCH', 400);
+    }
+
+    const adminReferenceOptions: AdminReferenceAnalysisOptions = {
+      referenceFileBuffer: refBuf,
+      mapping: mapVal.canonicalMapping,
+    };
 
     // Step 8: Re-run authoritative server parsing and preview generation
     const serverAnalysis = await analyzeBrowserImportServer(preflight, uploadedMetadataFiles, adminReferenceOptions);

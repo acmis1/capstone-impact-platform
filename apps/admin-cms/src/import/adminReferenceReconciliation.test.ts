@@ -65,7 +65,7 @@ describe('adminReferenceReconciliation unit test suite', () => {
   });
 
   describe('mapping validation', () => {
-    const validHeaders = ['Group Name', 'Project Title', 'Program', 'Year', 'Student Email'];
+    const validHeaders = ['Group Name', 'Project Title', 'Program', 'Year', 'Contact Email'];
 
     it('accepts a valid single-field or composite match key mapping', () => {
       const validConfig: AdminReferenceMappingConfig = {
@@ -110,7 +110,7 @@ describe('adminReferenceReconciliation unit test suite', () => {
     it('rejects unknown canonical fields or missing reference columns', () => {
       const invalidCanonical = {
         worksheet: 'ROSTER_2026',
-        matchMappings: [{ canonicalField: 'studentNumber', referenceColumn: 'Group Name' }],
+        matchMappings: [{ canonicalField: 'completelyUnknownField', referenceColumn: 'Group Name' }],
         comparisonMappings: [{ canonicalField: 'title', referenceColumn: 'Project Title' }],
         reconciliationContractVersion: 'admin-reference-reconciliation-v1',
       };
@@ -282,7 +282,7 @@ describe('adminReferenceReconciliation unit test suite', () => {
           manifest: {
             groupName: 'Group Alpha',
             year: 2026,
-            title: 'Submitted Student Title',
+            title: 'Submitted Project Title',
             program: 'Bachelor of Software Engineering',
           },
         },
@@ -300,7 +300,7 @@ describe('adminReferenceReconciliation unit test suite', () => {
       expect(result.mismatchedFields).toContain('title');
       expect(result.mismatchedFields).toContain('program');
       // Proof: project metadata is NOT auto-modified
-      expect(submitted[0].manifest.title).toBe('Submitted Student Title');
+      expect(submitted[0].manifest.title).toBe('Submitted Project Title');
     });
 
     it('treats extra unused admin reference rows as a summary metric without failing valid packages', () => {
@@ -326,6 +326,36 @@ describe('adminReferenceReconciliation unit test suite', () => {
       expect(res.packageResults.get('projects/alpha')?.status).toBe('RECONCILED');
       expect(res.totalReferenceRowsCount).toBe(3);
       expect(res.unusedReferenceRowCount).toBe(2);
+    });
+
+    it('rejects duplicate reference column mapping configurations', () => {
+      const dupMapping: AdminReferenceMappingConfig = {
+        worksheet: 'Sheet1',
+        matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Col A' }],
+        comparisonMappings: [
+          { canonicalField: 'title', referenceColumn: 'Col A' }, // Duplicate column mapping
+        ],
+        reconciliationContractVersion: 'admin-reference-reconciliation-v1',
+      };
+      const res = validateAdminReferenceMapping(dupMapping, ['Col A', 'Col B']);
+      expect(res.valid).toBe(false);
+      if (!res.valid) {
+        expect(res.code).toBe('DUPLICATE_REFERENCE_COLUMN_MAPPING');
+      }
+    });
+
+    it('flags duplicate normalized worksheet headers during validation', () => {
+      const mapping: AdminReferenceMappingConfig = {
+        worksheet: 'Sheet1',
+        matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Group Name' }],
+        comparisonMappings: [{ canonicalField: 'title', referenceColumn: 'Title' }],
+        reconciliationContractVersion: 'admin-reference-reconciliation-v1',
+      };
+      const res = validateAdminReferenceMapping(mapping, ['Group Name', '  group   name  ']);
+      expect(res.valid).toBe(false);
+      if (!res.valid) {
+        expect(res.code).toBe('DUPLICATE_NORMALIZED_HEADER');
+      }
     });
   });
 });

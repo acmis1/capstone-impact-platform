@@ -5,6 +5,7 @@ import {
   generateUploadKey,
   normalizeRelativePath,
 } from './browserSelection';
+import type { AdminReferenceIntent } from './browserImportCommitIntentContract';
 
 /**
  * Shared Server & Client Limits
@@ -143,6 +144,7 @@ export interface BrowserImportPreviewBatch {
   mediaValidationMode: 'descriptor_only';
   batchIssues: BrowserImportIssue[];
   packages: BrowserImportPackagePreview[];
+  adminReference?: AdminReferenceIntent;
 }
 
 export interface BrowserImportPreviewResponse {
@@ -625,6 +627,15 @@ export function validateBrowserImportPreviewResponse(raw: unknown): BrowserImpor
   }
   if (batch.totalWarnings !== calculatedWarnings || batch.totalErrors !== calculatedErrors) return null;
 
+  let adminReference: AdminReferenceIntent | undefined = undefined;
+  if (batch.adminReference !== undefined && batch.adminReference !== null) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { adminReferenceIntentSchema } = require('./browserImportCommitIntentContract');
+    const parsedRef = adminReferenceIntentSchema.safeParse(batch.adminReference);
+    if (!parsedRef.success) return null;
+    adminReference = parsedRef.data;
+  }
+
   return {
     success: true,
     batch: {
@@ -642,6 +653,7 @@ export function validateBrowserImportPreviewResponse(raw: unknown): BrowserImpor
       mediaValidationMode: 'descriptor_only',
       batchIssues,
       packages,
+      ...(adminReference ? { adminReference } : {}),
     },
   };
 }

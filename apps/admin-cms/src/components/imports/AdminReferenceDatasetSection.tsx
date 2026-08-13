@@ -34,18 +34,26 @@ export function AdminReferenceDatasetSection({
     { canonicalField: 'program', referenceColumn: '' },
   ]);
 
+  const [isConfirmed, setIsConfirmed] = useState(false);
+
+  const unconfirm = () => {
+    setIsConfirmed(false);
+    onMappingConfigured(null);
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     setSelectedFile(file);
     setInspectionResult(null);
     setInspectError(null);
-    onMappingConfigured(null);
+    unconfirm();
   };
 
   const handleInspect = async () => {
     if (!selectedFile) return;
     setIsInspecting(true);
     setInspectError(null);
+    unconfirm();
 
     try {
       const formData = new FormData();
@@ -60,33 +68,25 @@ export function AdminReferenceDatasetSection({
       if (!res.ok || !json.success) {
         setInspectError(json.error || 'Failed to inspect reference workbook.');
         setInspectionResult(null);
-        onMappingConfigured(null);
       } else {
         const result: AdminReferenceInspectionResult = json;
         setInspectionResult(result);
         if (result.worksheets.length > 0) {
           const firstSheet = result.worksheets[0];
           setSelectedWorksheet(firstSheet.name);
-          // Set default reference columns if matching names exist
-          const matchCol = firstSheet.headers.find((h) => /group/i.test(h)) || firstSheet.headers[0] || '';
-          const titleCol = firstSheet.headers.find((h) => /title/i.test(h)) || firstSheet.headers[1] || '';
-          const progCol = firstSheet.headers.find((h) => /program|degree/i.test(h)) || firstSheet.headers[2] || '';
+          const firstHeader = firstSheet.headers[0] || '';
+          const secondHeader = firstSheet.headers[1] || firstHeader;
+          const thirdHeader = firstSheet.headers[2] || secondHeader;
 
-          const defaultMatch = [{ canonicalField: 'groupName', referenceColumn: matchCol }];
-          const defaultComp = [
-            { canonicalField: 'title', referenceColumn: titleCol },
-            { canonicalField: 'program', referenceColumn: progCol },
-          ].filter((c) => c.referenceColumn !== '');
-
-          setMatchMappings(defaultMatch);
-          setComparisonMappings(defaultComp);
-
-          emitMappingIfValid(selectedFile, firstSheet.name, defaultMatch, defaultComp);
+          setMatchMappings([{ canonicalField: 'groupName', referenceColumn: firstHeader }]);
+          setComparisonMappings([
+            { canonicalField: 'title', referenceColumn: secondHeader },
+            { canonicalField: 'program', referenceColumn: thirdHeader },
+          ].filter((c) => c.referenceColumn !== ''));
         }
       }
     } catch {
       setInspectError('Network error while inspecting reference workbook.');
-      onMappingConfigured(null);
     } finally {
       setIsInspecting(false);
     }
@@ -95,37 +95,9 @@ export function AdminReferenceDatasetSection({
   const currentWorksheetHeaders =
     inspectionResult?.worksheets.find((w) => w.name === selectedWorksheet)?.headers || [];
 
-  const emitMappingIfValid = (
-    file: File | null,
-    sheet: string,
-    match: Array<{ canonicalField: string; referenceColumn: string }>,
-    comp: Array<{ canonicalField: string; referenceColumn: string }>
-  ) => {
-    if (
-      file &&
-      sheet &&
-      match.length > 0 &&
-      match.every((m) => m.canonicalField && m.referenceColumn) &&
-      comp.length > 0 &&
-      comp.every((c) => c.canonicalField && c.referenceColumn)
-    ) {
-      onMappingConfigured({
-        referenceFile: file,
-        mappingConfig: {
-          worksheet: sheet,
-          matchMappings: match,
-          comparisonMappings: comp,
-          reconciliationContractVersion: 'admin-reference-reconciliation-v1',
-        },
-      });
-    } else {
-      onMappingConfigured(null);
-    }
-  };
-
   const handleWorksheetChange = (sheetName: string) => {
     setSelectedWorksheet(sheetName);
-    emitMappingIfValid(selectedFile, sheetName, matchMappings, comparisonMappings);
+    unconfirm();
   };
 
   const handleAddMatchMapping = () => {
@@ -133,23 +105,26 @@ export function AdminReferenceDatasetSection({
     const availableCanonical = CANONICAL_MATCHABLE_FIELDS.find(
       (f) => !matchMappings.some((m) => m.canonicalField === f)
     ) || 'year';
-    const next = [...matchMappings, { canonicalField: availableCanonical, referenceColumn: currentWorksheetHeaders[0] || '' }];
-    setMatchMappings(next);
-    emitMappingIfValid(selectedFile, selectedWorksheet, next, comparisonMappings);
+    setMatchMappings((prev) => [
+      ...prev,
+      { canonicalField: availableCanonical, referenceColumn: currentWorksheetHeaders[0] || '' },
+    ]);
+    unconfirm();
   };
 
   const handleRemoveMatchMapping = (index: number) => {
     if (matchMappings.length <= 1) return;
-    const next = matchMappings.filter((_, i) => i !== index);
-    setMatchMappings(next);
-    emitMappingIfValid(selectedFile, selectedWorksheet, next, comparisonMappings);
+    setMatchMappings((prev) => prev.filter((_, i) => i !== index));
+    unconfirm();
   };
 
   const handleMatchChange = (index: number, key: 'canonicalField' | 'referenceColumn', val: string) => {
-    const next = [...matchMappings];
-    next[index] = { ...next[index], [key]: val };
-    setMatchMappings(next);
-    emitMappingIfValid(selectedFile, selectedWorksheet, next, comparisonMappings);
+    setMatchMappings((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [key]: val };
+      return next;
+    });
+    unconfirm();
   };
 
   const handleAddCompMapping = () => {
@@ -157,34 +132,61 @@ export function AdminReferenceDatasetSection({
     const availableCanonical = CANONICAL_COMPARABLE_FIELDS.find(
       (f) => !comparisonMappings.some((m) => m.canonicalField === f)
     ) || 'year';
-    const next = [...comparisonMappings, { canonicalField: availableCanonical, referenceColumn: currentWorksheetHeaders[0] || '' }];
-    setComparisonMappings(next);
-    emitMappingIfValid(selectedFile, selectedWorksheet, matchMappings, next);
+    setComparisonMappings((prev) => [
+      ...prev,
+      { canonicalField: availableCanonical, referenceColumn: currentWorksheetHeaders[0] || '' },
+    ]);
+    unconfirm();
   };
 
   const handleRemoveCompMapping = (index: number) => {
     if (comparisonMappings.length <= 1) return;
-    const next = comparisonMappings.filter((_, i) => i !== index);
-    setComparisonMappings(next);
-    emitMappingIfValid(selectedFile, selectedWorksheet, matchMappings, next);
+    setComparisonMappings((prev) => prev.filter((_, i) => i !== index));
+    unconfirm();
   };
 
   const handleCompChange = (index: number, key: 'canonicalField' | 'referenceColumn', val: string) => {
-    const next = [...comparisonMappings];
-    next[index] = { ...next[index], [key]: val };
-    setComparisonMappings(next);
-    emitMappingIfValid(selectedFile, selectedWorksheet, matchMappings, next);
+    setComparisonMappings((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [key]: val };
+      return next;
+    });
+    unconfirm();
   };
+
+  const handleConfirmMapping = () => {
+    if (
+      selectedFile &&
+      selectedWorksheet &&
+      matchMappings.length > 0 &&
+      matchMappings.every((m) => m.canonicalField && m.referenceColumn) &&
+      comparisonMappings.length > 0 &&
+      comparisonMappings.every((c) => c.canonicalField && c.referenceColumn)
+    ) {
+      setIsConfirmed(true);
+      onMappingConfigured({
+        referenceFile: selectedFile,
+        mappingConfig: {
+          worksheet: selectedWorksheet,
+          matchMappings,
+          comparisonMappings,
+          reconciliationContractVersion: 'admin-reference-reconciliation-v1',
+        },
+      });
+    }
+  };
+
+  const isControlDisabled = disabled || isInspecting;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-slate-800">
-            Admin Reference Dataset Cross-Check (Optional)
+            Admin Reference Dataset Cross-Check (Required for Staging)
           </h3>
           <p className="text-xs text-slate-500">
-            Cross-check submitted project packages against an official staff reference spreadsheet.
+            Cross-check submitted project packages against an official administrative reference spreadsheet.
           </p>
         </div>
       </div>
@@ -193,15 +195,15 @@ export function AdminReferenceDatasetSection({
         <input
           type="file"
           accept=".xlsx"
-          disabled={disabled || isInspecting}
+          disabled={isControlDisabled}
           onChange={handleFileChange}
-          className="text-xs text-slate-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300"
+          className="text-xs text-slate-600 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 disabled:opacity-50"
         />
         {selectedFile && !inspectionResult && (
           <button
             type="button"
             onClick={handleInspect}
-            disabled={disabled || isInspecting}
+            disabled={isControlDisabled}
             className="px-3 py-1 bg-slate-800 text-white text-xs font-medium rounded hover:bg-slate-700 disabled:opacity-50"
           >
             {isInspecting ? 'Inspecting...' : 'Inspect Reference Workbook'}
@@ -225,8 +227,9 @@ export function AdminReferenceDatasetSection({
               <label className="font-medium text-slate-700">Worksheet:</label>
               <select
                 value={selectedWorksheet}
+                disabled={isControlDisabled}
                 onChange={(e) => handleWorksheetChange(e.target.value)}
-                className="text-xs border rounded px-2 py-1 bg-white"
+                className="text-xs border rounded px-2 py-1 bg-white disabled:opacity-50"
               >
                 {inspectionResult.worksheets.map((ws) => (
                   <option key={ws.name} value={ws.name}>
@@ -247,7 +250,8 @@ export function AdminReferenceDatasetSection({
                 <button
                   type="button"
                   onClick={handleAddMatchMapping}
-                  className="text-xs text-blue-600 hover:underline font-medium"
+                  disabled={isControlDisabled}
+                  className="text-xs text-blue-600 hover:underline font-medium disabled:opacity-50"
                 >
                   + Add Match Field
                 </button>
@@ -257,8 +261,9 @@ export function AdminReferenceDatasetSection({
               <div key={idx} className="flex items-center gap-2">
                 <select
                   value={m.canonicalField}
+                  disabled={isControlDisabled}
                   onChange={(e) => handleMatchChange(idx, 'canonicalField', e.target.value)}
-                  className="text-xs border rounded px-2 py-1 bg-white flex-1"
+                  className="text-xs border rounded px-2 py-1 bg-white flex-1 disabled:opacity-50"
                 >
                   {CANONICAL_MATCHABLE_FIELDS.map((f) => (
                     <option key={f} value={f}>
@@ -269,8 +274,9 @@ export function AdminReferenceDatasetSection({
                 <span className="text-xs text-slate-400">=</span>
                 <select
                   value={m.referenceColumn}
+                  disabled={isControlDisabled}
                   onChange={(e) => handleMatchChange(idx, 'referenceColumn', e.target.value)}
-                  className="text-xs border rounded px-2 py-1 bg-white flex-1"
+                  className="text-xs border rounded px-2 py-1 bg-white flex-1 disabled:opacity-50"
                 >
                   {currentWorksheetHeaders.map((h) => (
                     <option key={h} value={h}>
@@ -282,7 +288,8 @@ export function AdminReferenceDatasetSection({
                   <button
                     type="button"
                     onClick={() => handleRemoveMatchMapping(idx)}
-                    className="text-xs text-red-500 hover:text-red-700"
+                    disabled={isControlDisabled}
+                    className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
                   >
                     ×
                   </button>
@@ -301,7 +308,8 @@ export function AdminReferenceDatasetSection({
                 <button
                   type="button"
                   onClick={handleAddCompMapping}
-                  className="text-xs text-blue-600 hover:underline font-medium"
+                  disabled={isControlDisabled}
+                  className="text-xs text-blue-600 hover:underline font-medium disabled:opacity-50"
                 >
                   + Add Comparison Field
                 </button>
@@ -311,8 +319,9 @@ export function AdminReferenceDatasetSection({
               <div key={idx} className="flex items-center gap-2">
                 <select
                   value={c.canonicalField}
+                  disabled={isControlDisabled}
                   onChange={(e) => handleCompChange(idx, 'canonicalField', e.target.value)}
-                  className="text-xs border rounded px-2 py-1 bg-white flex-1"
+                  className="text-xs border rounded px-2 py-1 bg-white flex-1 disabled:opacity-50"
                 >
                   {CANONICAL_COMPARABLE_FIELDS.map((f) => (
                     <option key={f} value={f}>
@@ -323,8 +332,9 @@ export function AdminReferenceDatasetSection({
                 <span className="text-xs text-slate-400">=</span>
                 <select
                   value={c.referenceColumn}
+                  disabled={isControlDisabled}
                   onChange={(e) => handleCompChange(idx, 'referenceColumn', e.target.value)}
-                  className="text-xs border rounded px-2 py-1 bg-white flex-1"
+                  className="text-xs border rounded px-2 py-1 bg-white flex-1 disabled:opacity-50"
                 >
                   {currentWorksheetHeaders.map((h) => (
                     <option key={h} value={h}>
@@ -336,13 +346,37 @@ export function AdminReferenceDatasetSection({
                   <button
                     type="button"
                     onClick={() => handleRemoveCompMapping(idx)}
-                    className="text-xs text-red-500 hover:text-red-700"
+                    disabled={isControlDisabled}
+                    className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
                   >
                     ×
                   </button>
                 )}
               </div>
             ))}
+          </div>
+
+          {/* Explicit Confirmation Action */}
+          <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+            <div className="text-xs font-medium">
+              {isConfirmed ? (
+                <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                  ✓ Mapping Confirmed
+                </span>
+              ) : (
+                <span className="text-amber-700 font-medium">
+                  ⚠️ Mapping Unconfirmed (Staff confirmation required)
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleConfirmMapping}
+              disabled={isControlDisabled || isConfirmed}
+              className="px-3 py-1.5 bg-emerald-700 text-white text-xs font-bold rounded hover:bg-emerald-800 disabled:opacity-50"
+            >
+              {isConfirmed ? '✓ Confirmed' : 'Confirm Mapping'}
+            </button>
           </div>
         </div>
       )}

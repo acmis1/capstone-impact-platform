@@ -83,11 +83,22 @@ function makeMockPreviewBatch(overrides: Partial<BrowserImportPreviewBatch> = {}
     },
   ];
 
+  const defaultAdminRef = overrides.adminReference !== undefined
+    ? (overrides.adminReference === null ? undefined : overrides.adminReference)
+    : {
+        workbookFingerprint: 'a'.repeat(64),
+        worksheet: 'Sheet1',
+        matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Group Name' }],
+        comparisonMappings: [{ canonicalField: 'title', referenceColumn: 'Title' }],
+        reconciliationContractVersion: 'admin-reference-reconciliation-v1' as const,
+      };
+
   const baseInput = {
     selectedRootName: overrides.selectedRootName || 'root',
     fileCount: overrides.selectedFileCount ?? 6,
     declaredTotalBytes: overrides.declaredTotalBytes ?? 1200,
     packages,
+    ...(defaultAdminRef ? { adminReference: defaultAdminRef } : {}),
   };
 
   const fingerprint = generateBrowserPreviewFingerprint(baseInput);
@@ -107,6 +118,7 @@ function makeMockPreviewBatch(overrides: Partial<BrowserImportPreviewBatch> = {}
     mediaValidationMode: 'descriptor_only',
     batchIssues: [],
     packages,
+    ...(defaultAdminRef ? { adminReference: defaultAdminRef } : {}),
     ...overrides,
   };
 }

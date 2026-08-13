@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { BROWSER_IMPORT_LIMITS, BrowserImportPackagePreview, BrowserImportPreviewBatch } from './browserImportPreviewContract';
+import { BROWSER_IMPORT_LIMITS } from './browserImportPreviewContract';
+import type { BrowserImportPackagePreview, BrowserImportPreviewBatch } from './browserImportPreviewContract';
 
 export const adminReferenceIntentSchema = z
   .object({

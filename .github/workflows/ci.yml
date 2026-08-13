@@ -166,6 +166,9 @@ jobs:
       - name: Verify atomic browser import metadata stage runtime behavior
         run: npm run verify:browser-metadata-stage-runtime --workspace=apps/admin-cms
 
+      - name: Verify Admin Excel reference reconciliation runtime behavior
+        run: npm run verify:admin-excel-reconciliation-runtime --workspace=apps/admin-cms
+
       - name: Verify atomic browser import media stage runtime behavior
         run: npm run verify:browser-media-stage-runtime --workspace=apps/admin-cms
 

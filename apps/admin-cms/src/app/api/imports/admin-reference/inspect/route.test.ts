@@ -112,7 +112,7 @@ describe('POST /api/imports/admin-reference/inspect route security & contract', 
     expect(json.worksheets[0].name).toBe('Sheet1');
     expect(json.worksheets[0].headers).toEqual(['Group Name', 'Project Title', 'Program']);
 
-    // Assert privacy: raw student cell values are not in structural summary
+    // Assert privacy: raw participant cell values are not in structural summary
     expect(JSON.stringify(json)).not.toContain('Group A');
     expect(JSON.stringify(json)).not.toContain('Title A');
   });

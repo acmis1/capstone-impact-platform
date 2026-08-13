@@ -70,6 +70,7 @@ export type BrowserImportCommitIntentErrorCode =
   | 'INVALID_PACKAGE_SELECTED'
   | 'UNACKNOWLEDGED_WARNING_PACKAGE_SELECTED'
   | 'ACKNOWLEDGEMENT_REJECTED_FOR_NON_WARNING'
+  | 'MISSING_ADMIN_REFERENCE'
   | 'INVALID_COMMIT_INTENT';
 
 export type BrowserImportCommitIntentResult =
@@ -119,6 +120,16 @@ export function prepareBrowserImportCommitIntent(params: {
     };
   }
 
+  // Derive Admin Reference intent from validated server preview if omitted
+  const effectiveAdminReference = adminReference || preview.adminReference;
+  if (!effectiveAdminReference) {
+    return {
+      success: false,
+      code: 'MISSING_ADMIN_REFERENCE',
+      message: 'Admin reference dataset cross-check is required before preparing or staging metadata.',
+    };
+  }
+
   // 2. Strict preflight check on manifest
   const preflightRes = runBrowserImportManifestPreflight(manifest);
   if (!preflightRes.success) {
@@ -163,7 +174,7 @@ export function prepareBrowserImportCommitIntent(params: {
     fileCount: preview.selectedFileCount,
     declaredTotalBytes: preview.declaredTotalBytes,
     packages: preview.packages,
-    adminReference,
+    adminReference: effectiveAdminReference,
   });
 
   if (
@@ -286,7 +297,7 @@ export function prepareBrowserImportCommitIntent(params: {
     declaredTotalBytes: preview.declaredTotalBytes,
     selectedPackagePaths: sortedSelected,
     acknowledgedWarningPackagePaths: sortedAcked,
-    ...(adminReference ? { adminReference } : {}),
+    adminReference: effectiveAdminReference,
   };
 
   // Schema validation pass

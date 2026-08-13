@@ -108,17 +108,37 @@ export function computeAdminReferenceWorkbookFingerprint(buffer: Buffer): string
 }
 
 export function canonicalizeAdminReferenceMapping(
-  mapping: AdminReferenceMappingConfig
+  mapping: AdminReferenceMappingConfig,
+  availableHeaders?: string[]
 ): AdminReferenceMappingConfig {
-  const sortedMatch = [...mapping.matchMappings].sort((a, b) =>
-    a.canonicalField.localeCompare(b.canonicalField)
-  );
-  const sortedComp = [...mapping.comparisonMappings].sort((a, b) =>
-    a.canonicalField.localeCompare(b.canonicalField)
-  );
+  const normMap = new Map<string, string>();
+  if (availableHeaders) {
+    for (const h of availableHeaders) {
+      normMap.set(h.trim().toLowerCase().replace(/\s+/g, ' '), h);
+    }
+  }
+
+  const resolveCol = (col: string) => {
+    const norm = col.trim().toLowerCase().replace(/\s+/g, ' ');
+    return normMap.get(norm) || col.trim();
+  };
+
+  const sortedMatch = [...mapping.matchMappings]
+    .map((m) => ({
+      canonicalField: m.canonicalField.trim(),
+      referenceColumn: resolveCol(m.referenceColumn),
+    }))
+    .sort((a, b) => a.canonicalField.localeCompare(b.canonicalField));
+
+  const sortedComp = [...mapping.comparisonMappings]
+    .map((m) => ({
+      canonicalField: m.canonicalField.trim(),
+      referenceColumn: resolveCol(m.referenceColumn),
+    }))
+    .sort((a, b) => a.canonicalField.localeCompare(b.canonicalField));
 
   return {
-    worksheet: mapping.worksheet,
+    worksheet: mapping.worksheet.trim(),
     matchMappings: sortedMatch,
     comparisonMappings: sortedComp,
     reconciliationContractVersion: 'admin-reference-reconciliation-v1',
@@ -162,7 +182,7 @@ export async function inspectAdminReferenceWorkbook(
   buffer: Buffer
 ): Promise<AdminReferenceInspectionResult> {
   if (buffer.length > ADMIN_REFERENCE_LIMITS.MAX_WORKBOOK_BYTES) {
-    throw new Error('WORKBOOK_TOO_LARGE');
+    throw new Error('EXCEEDS_MAX_WORKBOOK_BYTES');
   }
 
   const workbook = new ExcelJS.Workbook();
@@ -172,27 +192,34 @@ export async function inspectAdminReferenceWorkbook(
     throw new Error('EMPTY_WORKBOOK');
   }
 
-  const worksheets: WorksheetStructureSummary[] = [];
-  const countSheets = Math.min(workbook.worksheets.length, ADMIN_REFERENCE_LIMITS.MAX_SHEETS);
+  if (workbook.worksheets.length > ADMIN_REFERENCE_LIMITS.MAX_SHEETS) {
+    throw new Error('EXCEEDS_MAX_SHEETS');
+  }
 
-  for (let i = 0; i < countSheets; i++) {
-    const sheet = workbook.worksheets[i];
+  const worksheets: WorksheetStructureSummary[] = [];
+
+  for (const sheet of workbook.worksheets) {
     const sheetName = sheet.name;
     let headers: string[] = [];
     let rowCount = 0;
-
-    // Find header row (first non-empty row)
     let headerRowIndex = -1;
+
     sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
       if (headerRowIndex === -1) {
         const rowHeaders: string[] = [];
         row.eachCell({ includeEmpty: false }, (cell) => {
           const text = extractCellText(cell);
-          if (text && rowHeaders.length < ADMIN_REFERENCE_LIMITS.MAX_COLS_PER_SHEET) {
-            rowHeaders.push(text.slice(0, ADMIN_REFERENCE_LIMITS.MAX_HEADER_LENGTH));
+          if (text) {
+            if (text.length > ADMIN_REFERENCE_LIMITS.MAX_HEADER_LENGTH) {
+              throw new Error('EXCEEDS_MAX_HEADER_LENGTH');
+            }
+            rowHeaders.push(text);
           }
         });
         if (rowHeaders.length > 0) {
+          if (rowHeaders.length > ADMIN_REFERENCE_LIMITS.MAX_COLS_PER_SHEET) {
+            throw new Error('EXCEEDS_MAX_COLS');
+          }
           headerRowIndex = rowNumber;
           headers = rowHeaders;
         }
@@ -201,9 +228,13 @@ export async function inspectAdminReferenceWorkbook(
       }
     });
 
+    if (rowCount > ADMIN_REFERENCE_LIMITS.MAX_ROWS_PER_SHEET) {
+      throw new Error('EXCEEDS_MAX_ROWS');
+    }
+
     worksheets.push({
       name: sheetName,
-      rowCount: Math.min(rowCount, ADMIN_REFERENCE_LIMITS.MAX_ROWS_PER_SHEET),
+      rowCount,
       headers,
     });
   }
@@ -244,6 +275,29 @@ export function validateAdminReferenceMapping(
 
   const mapping = zodRes.data;
 
+  // Check duplicate normalized headers in availableHeaders
+  const normHeaderMap = new Map<string, string[]>();
+  for (const h of availableHeaders) {
+    const norm = h.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!normHeaderMap.has(norm)) normHeaderMap.set(norm, []);
+    normHeaderMap.get(norm)!.push(h);
+  }
+
+  for (const [normKey, headers] of normHeaderMap.entries()) {
+    if (headers.length > 1) {
+      const allMappedCols = [...mapping.matchMappings, ...mapping.comparisonMappings].map((m) =>
+        m.referenceColumn.trim().toLowerCase().replace(/\s+/g, ' ')
+      );
+      if (allMappedCols.includes(normKey)) {
+        return {
+          valid: false,
+          code: 'DUPLICATE_NORMALIZED_HEADER',
+          error: `Ambiguous duplicate normalized header in worksheet: '${headers[0]}'`,
+        };
+      }
+    }
+  }
+
   // Check canonical field validity
   const matchCanonicals = new Set<string>();
   for (const m of mapping.matchMappings) {
@@ -283,27 +337,38 @@ export function validateAdminReferenceMapping(
     compCanonicals.add(m.canonicalField);
   }
 
-  // Check reference column existence in available headers (case-insensitive trim)
-  const normHeaders = new Set(availableHeaders.map((h) => h.trim().toLowerCase()));
+  // Check reference column existence and prevent mapping same reference column to multiple canonical fields
+  const normHeadersSet = new Set(availableHeaders.map((h) => h.trim().toLowerCase().replace(/\s+/g, ' ')));
+  const mappedRefCols = new Map<string, string>();
+
   for (const m of [...mapping.matchMappings, ...mapping.comparisonMappings]) {
-    if (!normHeaders.has(m.referenceColumn.trim().toLowerCase())) {
+    const normCol = m.referenceColumn.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!normHeadersSet.has(normCol)) {
       return {
         valid: false,
         code: 'MISSING_REFERENCE_COLUMN',
         error: `Reference column does not exist in worksheet: ${m.referenceColumn}`,
       };
     }
+    if (mappedRefCols.has(normCol)) {
+      return {
+        valid: false,
+        code: 'DUPLICATE_REFERENCE_COLUMN_MAPPING',
+        error: `Reference column '${m.referenceColumn}' cannot be mapped to multiple canonical fields.`,
+      };
+    }
+    mappedRefCols.set(normCol, m.canonicalField);
   }
 
   return {
     valid: true,
-    canonicalMapping: canonicalizeAdminReferenceMapping(mapping),
+    canonicalMapping: canonicalizeAdminReferenceMapping(mapping, availableHeaders),
   };
 }
 
 export interface ParsedAdminReferenceRow {
   rowNumber: number;
-  values: Record<string, string>; // canonicalField -> normalized string value
+  values: Record<string, string>;
 }
 
 export async function parseAdminReferenceWorksheet(
@@ -319,19 +384,19 @@ export async function parseAdminReferenceWorksheet(
   }
 
   const allMappings = [...mapping.matchMappings, ...mapping.comparisonMappings];
-  const targetCols = new Map<string, string>(); // refColNorm -> canonicalField
+  const targetCols = new Map<string, string>();
   for (const m of allMappings) {
-    targetCols.set(m.referenceColumn.trim().toLowerCase(), m.canonicalField);
+    targetCols.set(m.referenceColumn.trim().toLowerCase().replace(/\s+/g, ' '), m.canonicalField);
   }
 
-  // Find header row and map column index -> canonicalField
   let headerRowNumber = -1;
   const colToCanonical = new Map<number, string>();
+  let dataRowCount = 0;
 
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (headerRowNumber === -1) {
       row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-        const headerText = extractCellText(cell).trim().toLowerCase();
+        const headerText = extractCellText(cell).trim().toLowerCase().replace(/\s+/g, ' ');
         if (targetCols.has(headerText)) {
           colToCanonical.set(colNumber, targetCols.get(headerText)!);
         }
@@ -339,8 +404,14 @@ export async function parseAdminReferenceWorksheet(
       if (colToCanonical.size > 0) {
         headerRowNumber = rowNumber;
       }
+    } else {
+      dataRowCount++;
     }
   });
+
+  if (dataRowCount > ADMIN_REFERENCE_LIMITS.MAX_ROWS_PER_SHEET) {
+    throw new Error('EXCEEDS_MAX_ROWS');
+  }
 
   if (headerRowNumber === -1) {
     return [];
@@ -350,7 +421,6 @@ export async function parseAdminReferenceWorksheet(
 
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber <= headerRowNumber) return;
-    if (rows.length >= ADMIN_REFERENCE_LIMITS.MAX_ROWS_PER_SHEET) return;
 
     const values: Record<string, string> = {};
     let hasAnyValue = false;
@@ -360,7 +430,10 @@ export async function parseAdminReferenceWorksheet(
       if (canonicalField) {
         const text = extractCellText(cell);
         if (text) {
-          values[canonicalField] = text.slice(0, ADMIN_REFERENCE_LIMITS.MAX_CELL_STRING_LENGTH);
+          if (text.length > ADMIN_REFERENCE_LIMITS.MAX_CELL_STRING_LENGTH) {
+            throw new Error('EXCEEDS_MAX_CELL_STRING_LENGTH');
+          }
+          values[canonicalField] = text;
           hasAnyValue = true;
         }
       }
@@ -438,7 +511,7 @@ export function buildCompositeMatchKey(
   for (const m of mapping.matchMappings) {
     const raw = fieldValues[m.canonicalField];
     const norm = normalizeFieldValue(m.canonicalField, raw);
-    if (!norm) return ''; // Empty match key component makes entire key empty
+    if (!norm) return '';
     parts.push(`${m.canonicalField}:${norm}`);
   }
   return parts.join('||');
@@ -451,17 +524,26 @@ export function reconcilePackagesAgainstAdminReference(params: {
 }): AdminReferenceReconciliationBatchResult {
   const { packages, referenceRows, mapping } = params;
   const canonicalMapping = canonicalizeAdminReferenceMapping(mapping);
+  const batchIssues: BrowserImportIssue[] = [];
 
-  // Build match key index for reference rows
+  // Build match key index for reference rows & validate keyspace
   const referenceKeyMap = new Map<string, ParsedAdminReferenceRow[]>();
+
   for (const row of referenceRows) {
     const key = buildCompositeMatchKey(canonicalMapping, row.values);
-    if (key) {
-      if (!referenceKeyMap.has(key)) {
-        referenceKeyMap.set(key, []);
-      }
-      referenceKeyMap.get(key)!.push(row);
+    if (!key) {
+      batchIssues.push({
+        code: 'ADMIN_REFERENCE_MISSING_MATCH_KEY',
+        message: `Official reference row ${row.rowNumber} is missing required match key values.`,
+        severity: 'error',
+        rowNumber: row.rowNumber,
+      });
+      continue;
     }
+    if (!referenceKeyMap.has(key)) {
+      referenceKeyMap.set(key, []);
+    }
+    referenceKeyMap.get(key)!.push(row);
   }
 
   // Check duplicate reference match keys
@@ -469,6 +551,11 @@ export function reconcilePackagesAgainstAdminReference(params: {
   for (const [key, rows] of referenceKeyMap.entries()) {
     if (rows.length > 1) {
       duplicateRefKeys.add(key);
+      batchIssues.push({
+        code: 'ADMIN_REFERENCE_DUPLICATE_MATCH_KEY',
+        message: `Multiple reference rows (e.g. #${rows[0].rowNumber}, #${rows[1].rowNumber}) share identical composite match key.`,
+        severity: 'error',
+      });
     }
   }
 
@@ -486,7 +573,6 @@ export function reconcilePackagesAgainstAdminReference(params: {
 
   const packageResults = new Map<string, AdminReferencePackageResult>();
   const matchedReferenceRowNumbers = new Set<number>();
-  const batchIssues: BrowserImportIssue[] = [];
 
   for (const pkg of packages) {
     const pkgMatchKey = buildCompositeMatchKey(

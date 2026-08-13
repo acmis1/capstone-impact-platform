@@ -529,7 +529,13 @@ export default function BrowserImportPreviewClient() {
         {selectedRootName && (
           <div style={{ marginTop: '1.25rem' }}>
             <AdminReferenceDatasetSection
-              onMappingConfigured={setAdminReferenceData}
+              onMappingConfigured={(data) => {
+                setAdminReferenceData(data);
+                setPreviewResult(null);
+                setManifestCache(null);
+                invalidateStagingResult();
+                updateSelectionState(resetSelectionState());
+              }}
               disabled={isPreparingOrLocked}
             />
           </div>

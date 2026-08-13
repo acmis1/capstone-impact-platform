@@ -34,6 +34,7 @@
     "verify:metadata-audit-runtime": "tsx src/scripts/verifyProjectMetadataAuditRuntime.ts",
     "verify:review-actions-runtime": "tsx src/scripts/verifyReviewActionsRuntime.ts",
     "verify:browser-metadata-stage-runtime": "tsx src/scripts/verifyBrowserImportMetadataStageRuntime.ts",
+    "verify:admin-excel-reconciliation-runtime": "tsx src/scripts/verifyAdminExcelReconciliationRuntime.ts",
     "verify:browser-media-stage-runtime": "tsx src/scripts/verifyBrowserImportMediaStageRuntime.ts",
     "verify:import-batch-review-submit-runtime": "tsx src/scripts/verifyImportBatchReviewSubmitRuntime.ts",
     "verify:participant-preview-runtime": "tsx src/scripts/verifyParticipantPreviewRuntime.ts",
