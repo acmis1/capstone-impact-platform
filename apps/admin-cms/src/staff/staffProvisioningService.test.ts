@@ -214,6 +214,60 @@ describe('provisionStaffMember', () => {
     expect(parts.invitations.invite).not.toHaveBeenCalled();
   });
 
+  it('recovers an expired compensating lifecycle by deleting only the existing owned identity', async () => {
+    const parts = gateways({
+      reserve: {
+        resultCode: 'RECOVERED_COMPENSATION', requestId: REQUEST_ID, executionToken: EXECUTION_TOKEN,
+        normalizedEmail: 'synthetic.reviewer@capstone.test', fullName: 'Synthetic Reviewer',
+        roles: ['reviewer'], authUserId: AUTH_ID, authIdentityOwned: true, status: 'compensating',
+      },
+    });
+    expect((await provisionStaffMember(context(parts), VALID_INPUT)).code).toBe('PROVISIONING_FAILED');
+    expect(parts.provisioning.beginCompensation).toHaveBeenCalledWith(REQUEST_ID, EXECUTION_TOKEN, AUTH_ID);
+    expect(parts.invitations.deleteAuthIdentity).toHaveBeenCalledWith(AUTH_ID);
+    expect(parts.provisioning.fail).toHaveBeenCalledWith(
+      REQUEST_ID, EXECUTION_TOKEN, 'COMPENSATION_RECOVERED', 'succeeded',
+    );
+    expect(parts.invitations.invite).not.toHaveBeenCalled();
+    expect(parts.provisioning.bind).not.toHaveBeenCalled();
+    expect(parts.provisioning.finalize).not.toHaveBeenCalled();
+  });
+
+  it('finalizes a recovered compensating lifecycle when the owned Auth identity was already deleted', async () => {
+    const parts = gateways({
+      reserve: {
+        resultCode: 'RECOVERED_COMPENSATION', requestId: REQUEST_ID, executionToken: EXECUTION_TOKEN,
+        normalizedEmail: 'synthetic.reviewer@capstone.test', fullName: 'Synthetic Reviewer',
+        roles: ['reviewer'], authUserId: AUTH_ID, authIdentityOwned: true, status: 'compensating',
+      },
+      beginCompensation: { resultCode: 'COMPENSATION_ALREADY_COMPLETE' },
+    });
+    expect((await provisionStaffMember(context(parts), VALID_INPUT)).code).toBe('PROVISIONING_FAILED');
+    expect(parts.invitations.deleteAuthIdentity).not.toHaveBeenCalled();
+    expect(parts.provisioning.fail).toHaveBeenCalledWith(
+      REQUEST_ID, EXECUTION_TOKEN, 'COMPENSATION_RECOVERED', 'succeeded',
+    );
+    expect(parts.invitations.invite).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on a recovered compensation marker mismatch without deleting or inviting', async () => {
+    const parts = gateways({
+      reserve: {
+        resultCode: 'RECOVERED_COMPENSATION', requestId: REQUEST_ID, executionToken: EXECUTION_TOKEN,
+        normalizedEmail: 'synthetic.reviewer@capstone.test', fullName: 'Synthetic Reviewer',
+        roles: ['reviewer'], authUserId: AUTH_ID, authIdentityOwned: true, status: 'compensating',
+      },
+      beginCompensation: { resultCode: 'COMPENSATION_NOT_AUTHORIZED' },
+      fail: { resultCode: 'COMPENSATION_FAILED' },
+    });
+    expect((await provisionStaffMember(context(parts), VALID_INPUT)).code).toBe('COMPENSATION_FAILED');
+    expect(parts.invitations.deleteAuthIdentity).not.toHaveBeenCalled();
+    expect(parts.invitations.invite).not.toHaveBeenCalled();
+    expect(parts.provisioning.fail).toHaveBeenCalledWith(
+      REQUEST_ID, EXECUTION_TOKEN, 'COMPENSATION_MARKER_MISMATCH', 'failed',
+    );
+  });
+
   it('converges on a marked identity after a lost invitation response', async () => {
     const parts = gateways({
       invite: null,

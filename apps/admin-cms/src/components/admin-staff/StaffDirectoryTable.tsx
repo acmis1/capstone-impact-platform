@@ -89,8 +89,8 @@ export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTablePro
           <CardHeader>
             <CardTitle>Incomplete provisioning attempts</CardTitle>
             <CardDescription>
-              These attempts did not create a usable staff account. Attempts marked as needing
-              attention stopped before their rollback could complete.
+              Cleanup in progress remains visible here. Attempts marked as needing attention
+              stopped before their rollback could complete.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -115,7 +115,9 @@ export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTablePro
                         {incident.roles.map((role) => ROLE_LABELS[role] ?? role).join(', ') || '—'}
                       </td>
                       <td className="px-3 py-2">
-                        {incident.status === 'compensation_failed' ? (
+                        {incident.status === 'compensating' ? (
+                          <Badge variant="warning">Cleanup in progress</Badge>
+                        ) : incident.status === 'compensation_failed' ? (
                           <Badge variant="destructive">Needs attention</Badge>
                         ) : (
                           <Badge variant="neutral">Stopped safely</Badge>

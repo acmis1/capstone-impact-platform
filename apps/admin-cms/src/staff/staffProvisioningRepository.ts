@@ -202,7 +202,7 @@ export interface StaffProvisioningIncident {
   fullName: string;
   email: string;
   roles: AdminRole[];
-  status: 'failed' | 'compensation_failed';
+  status: 'compensating' | 'failed' | 'compensation_failed';
   failureCode: string | null;
   requestedAt: string | null;
 }

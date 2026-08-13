@@ -819,7 +819,61 @@ async function main(): Promise<void> {
       assert(rejected.error, 'Database accepted an unknown staff role.');
     });
 
-    await scenario(39, 'the bounded staff directory exposes no internal identifiers', async () => {
+    const crashBeforeDeleteEmail = targetEmail('crash-before-delete');
+    const crashBeforeDelete = await service.rpc('reserve_staff_provisioning', {
+      p_actor_admin_id: admin.adminUserId, p_email: crashBeforeDeleteEmail,
+      p_full_name: 'Synthetic Crash Before Delete', p_roles: ['reviewer'],
+    });
+    assert.ifError(crashBeforeDelete.error);
+    const crashBeforeDeleteAuthId = await new SupabaseStaffInvitationGateway(service).invite({
+      email: crashBeforeDeleteEmail, fullName: 'Synthetic Crash Before Delete',
+      requestId: crashBeforeDelete.data.requestId, authOwnershipToken: crashBeforeDelete.data.authOwnershipToken,
+    });
+    assert(crashBeforeDeleteAuthId);
+    createdAuthIds.add(crashBeforeDeleteAuthId);
+    assert.equal((await service.rpc('bind_staff_provisioning_identity', { p_request_id: crashBeforeDelete.data.requestId, p_execution_token: crashBeforeDelete.data.executionToken, p_auth_user_id: crashBeforeDeleteAuthId })).data.resultCode, 'BOUND');
+    assert.equal((await service.rpc('begin_staff_provisioning_compensation', { p_request_id: crashBeforeDelete.data.requestId, p_execution_token: crashBeforeDelete.data.executionToken, p_auth_user_id: crashBeforeDeleteAuthId })).data.resultCode, 'COMPENSATION_AUTHORIZED');
+    const beforeDeleteMailCount = (await mailbox(crashBeforeDeleteEmail)).length;
+    psql(`UPDATE public.staff_provisioning_requests SET lease_expires_at = pg_catalog.now() - interval '1 second' WHERE id = '${crashBeforeDelete.data.requestId}';`);
+    const crashBeforeDeleteRecovery = await provision(admin, { fullName: 'Synthetic Crash Before Delete', email: crashBeforeDeleteEmail, roles: ['reviewer'] });
+    await track(crashBeforeDeleteEmail);
+    await scenario(39, 'expired compensation before delete recovers exactly the marked identity without a second invitation', async () => {
+      assert.equal(crashBeforeDeleteRecovery.code, 'PROVISIONING_FAILED');
+      assert.equal((await requestFor(crashBeforeDeleteEmail))?.status, 'failed');
+      assert.equal((await authUsersFor(crashBeforeDeleteEmail)).length, 0);
+      assert.equal((await profileFor(crashBeforeDeleteEmail)).length, 0);
+      assert.equal((await requestsFor(crashBeforeDeleteEmail)).length, 1);
+      assert.equal((await mailbox(crashBeforeDeleteEmail)).length, beforeDeleteMailCount);
+      assert.equal((await service.rpc('begin_staff_provisioning_compensation', { p_request_id: crashBeforeDelete.data.requestId, p_execution_token: crashBeforeDelete.data.executionToken, p_auth_user_id: crashBeforeDeleteAuthId })).data.resultCode, 'EXECUTION_TOKEN_MISMATCH');
+    });
+
+    const crashAfterDeleteEmail = targetEmail('crash-after-delete');
+    const crashAfterDelete = await service.rpc('reserve_staff_provisioning', {
+      p_actor_admin_id: admin.adminUserId, p_email: crashAfterDeleteEmail,
+      p_full_name: 'Synthetic Crash After Delete', p_roles: ['reviewer'],
+    });
+    assert.ifError(crashAfterDelete.error);
+    const crashAfterDeleteAuthId = await new SupabaseStaffInvitationGateway(service).invite({
+      email: crashAfterDeleteEmail, fullName: 'Synthetic Crash After Delete',
+      requestId: crashAfterDelete.data.requestId, authOwnershipToken: crashAfterDelete.data.authOwnershipToken,
+    });
+    assert(crashAfterDeleteAuthId);
+    assert.equal((await service.rpc('bind_staff_provisioning_identity', { p_request_id: crashAfterDelete.data.requestId, p_execution_token: crashAfterDelete.data.executionToken, p_auth_user_id: crashAfterDeleteAuthId })).data.resultCode, 'BOUND');
+    assert.equal((await service.rpc('begin_staff_provisioning_compensation', { p_request_id: crashAfterDelete.data.requestId, p_execution_token: crashAfterDelete.data.executionToken, p_auth_user_id: crashAfterDeleteAuthId })).data.resultCode, 'COMPENSATION_AUTHORIZED');
+    assert(await new SupabaseStaffInvitationGateway(service).deleteAuthIdentity(crashAfterDeleteAuthId));
+    const afterDeleteMailCount = (await mailbox(crashAfterDeleteEmail)).length;
+    psql(`UPDATE public.staff_provisioning_requests SET lease_expires_at = pg_catalog.now() - interval '1 second' WHERE id = '${crashAfterDelete.data.requestId}';`);
+    const crashAfterDeleteRecovery = await provision(admin, { fullName: 'Synthetic Crash After Delete', email: crashAfterDeleteEmail, roles: ['reviewer'] });
+    await scenario(40, 'expired compensation after a lost delete response records completed cleanup without reinviting', async () => {
+      assert.equal(crashAfterDeleteRecovery.code, 'PROVISIONING_FAILED');
+      assert.equal((await requestFor(crashAfterDeleteEmail))?.status, 'failed');
+      assert.equal((await authUsersFor(crashAfterDeleteEmail)).length, 0);
+      assert.equal((await profileFor(crashAfterDeleteEmail)).length, 0);
+      assert.equal((await requestsFor(crashAfterDeleteEmail)).length, 1);
+      assert.equal((await mailbox(crashAfterDeleteEmail)).length, afterDeleteMailCount);
+    });
+
+    await scenario(41, 'the bounded staff directory exposes no internal identifiers', async () => {
       const directory = await readStaffDirectory(service);
       const serialized = JSON.stringify(directory);
       assert(directory.staff.some((entry) => entry.email === reviewerEmail));
@@ -830,11 +884,11 @@ async function main(): Promise<void> {
       assert(!serialized.includes(inviteToken), 'Directory exposed an invitation secret.');
     });
 
-    await scenario(40, 'no project workflow, media, publication or feed state changed', async () => {
+    await scenario(42, 'no project workflow, media, publication or feed state changed', async () => {
       assert.deepEqual(await workflowBaseline(), beforeWorkflow);
     });
 
-    await scenario(41, 'no public storage, feed or external provider operation occurred', async () => {
+    await scenario(43, 'no public storage, feed or external provider operation occurred', async () => {
       assert.equal(await storageBaseline(), beforeStorage);
       assert(isLoopbackUrl(env.API_URL!), 'Verification targeted a non-loopback endpoint.');
       const source = fs.readFileSync(
@@ -846,7 +900,7 @@ async function main(): Promise<void> {
       }
     });
 
-    await scenario(42, 'cleanup and residue verification run in the finalizer', () => {
+    await scenario(44, 'cleanup and residue verification run in the finalizer', () => {
       // Executed in the finally block below.
     });
   } catch (error) {

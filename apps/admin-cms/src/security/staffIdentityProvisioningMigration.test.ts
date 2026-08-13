@@ -67,12 +67,13 @@ describe('staff identity provisioning migration contract', () => {
     expect(content).not.toMatch(/\bauth_ownership_token\s+uuid\s+NOT NULL/);
   });
 
-  it('returns execution authority only for a new reservation or atomic expired-lease recovery', () => {
+  it('returns distinct execution authority for normal and compensation expired-lease recovery', () => {
     expect(content).toContain("'resultCode', 'RESERVED'");
-    expect(content).toContain("'resultCode', 'RECOVERED'");
+    expect(content).toContain("THEN 'RECOVERED_COMPENSATION' ELSE 'RECOVERED' END");
     expect(content).toContain("'resultCode', 'IN_PROGRESS'");
     expect(squashed).toContain("v_existing.lease_expires_at > pg_catalog.now()");
     expect(squashed).toContain('SET execution_token_hash = pg_catalog.encode(');
+    expect(content).toContain("'COMPENSATION_ALREADY_COMPLETE'");
   });
 
   it('consumes transient Auth markers and establishes server-controlled app metadata atomically', () => {

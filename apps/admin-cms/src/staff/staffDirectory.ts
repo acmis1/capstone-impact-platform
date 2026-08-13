@@ -97,12 +97,12 @@ export async function readStaffDirectory(
   staff.sort((a, b) => a.email.localeCompare(b.email));
 
   const incidents: StaffProvisioningIncident[] = provisioningRows
-    .filter((row) => text(row.status) === 'failed' || text(row.status) === 'compensation_failed')
+    .filter((row) => ['compensating', 'failed', 'compensation_failed'].includes(text(row.status)))
     .map((row) => ({
       fullName: text(row.full_name),
       email: text(row.normalized_email),
       roles: canonicalizeRoles(Array.isArray(row.requested_roles) ? row.requested_roles : []),
-      status: text(row.status) as 'failed' | 'compensation_failed',
+      status: text(row.status) as 'compensating' | 'failed' | 'compensation_failed',
       failureCode: optionalText(row.failure_code),
       requestedAt: optionalText(row.created_at),
     }))

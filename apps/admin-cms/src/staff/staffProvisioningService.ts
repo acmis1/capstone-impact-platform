@@ -101,7 +101,7 @@ function lostExecutionOwnership(code: string): boolean {
 /**
  * Executes the fenced workflow across Supabase Auth and PostgreSQL.
  *
- * RESERVED and RECOVERED are the only execution-capable reservation results. IN_PROGRESS is an
+ * RESERVED, RECOVERED and RECOVERED_COMPENSATION are execution-capable reservation results. IN_PROGRESS is an
  * observer result and returns before Auth is touched. Every bind/finalize/fail/compensation call
  * carries the current execution token; recovery rotates its hash so a former owner is fenced.
  */
@@ -141,6 +141,7 @@ export async function provisionStaffMember(
       return result('ALREADY_PROVISIONED');
     case 'RESERVED':
     case 'RECOVERED':
+    case 'RECOVERED_COMPENSATION':
       break;
     default:
       return result('PROVISIONING_FAILED');
@@ -149,7 +150,7 @@ export async function provisionStaffMember(
   const requestId = reservation.requestId;
   const executionToken = reservation.executionToken;
   const authOwnershipToken = reservation.authOwnershipToken;
-  if (!requestId || !executionToken || !authOwnershipToken) {
+  if (!requestId || !executionToken || (reservation.resultCode !== 'RECOVERED_COMPENSATION' && !authOwnershipToken)) {
     return result('PROVISIONING_FAILED');
   }
 
@@ -166,6 +167,50 @@ export async function provisionStaffMember(
       return null;
     }
   };
+
+  const recordCompensation = async (
+    failureCode: string,
+    compensationState: 'succeeded' | 'failed',
+  ): Promise<StaffProvisioningResult> => {
+    let failure: TransitionOutcome;
+    try {
+      failure = await context.provisioning.fail(requestId, executionToken, failureCode, compensationState);
+    } catch {
+      return result('COMPENSATION_FAILED', reserved);
+    }
+    if (lostExecutionOwnership(failure.resultCode)) return result('IN_PROGRESS', reserved);
+    if (!['FAILED', 'COMPENSATION_FAILED'].includes(failure.resultCode)) {
+      return result('COMPENSATION_FAILED', reserved);
+    }
+    return result(compensationState === 'failed' ? 'COMPENSATION_FAILED' : 'PROVISIONING_FAILED', reserved);
+  };
+
+  // An expired compensating lease is strictly a cleanup reconciliation: it never reaches invite,
+  // bind or finalize. The SQL function rechecks exact marker ownership before deletion.
+  if (reservation.resultCode === 'RECOVERED_COMPENSATION') {
+    const authUserId = reservation.authUserId;
+    if (!authUserId || reservation.authIdentityOwned !== true) {
+      return recordCompensation('COMPENSATION_RECOVERY_INVALID', 'failed');
+    }
+    let authorization: TransitionOutcome;
+    try {
+      authorization = await context.provisioning.beginCompensation(requestId, executionToken, authUserId);
+    } catch {
+      return result('COMPENSATION_FAILED', reserved);
+    }
+    if (lostExecutionOwnership(authorization.resultCode)) return result('IN_PROGRESS', reserved);
+    if (authorization.resultCode === 'COMPENSATION_ALREADY_COMPLETE') {
+      return recordCompensation('COMPENSATION_RECOVERED', 'succeeded');
+    }
+    if (authorization.resultCode !== 'COMPENSATION_AUTHORIZED') {
+      return recordCompensation('COMPENSATION_MARKER_MISMATCH', 'failed');
+    }
+    let deleted = false;
+    try { deleted = await context.invitations.deleteAuthIdentity(authUserId); } catch { /* fail closed below */ }
+    return recordCompensation('COMPENSATION_RECOVERED', deleted ? 'succeeded' : 'failed');
+  }
+
+  if (!authOwnershipToken) return result('PROVISIONING_FAILED');
 
   const compensate = async (
     failureCode: string,

@@ -200,8 +200,8 @@ FOR EACH ROW EXECUTE FUNCTION public.claim_staff_provisioning_auth_insert();
 REVOKE ALL ON FUNCTION public.claim_staff_provisioning_auth_insert()
   FROM PUBLIC, anon, authenticated, service_role;
 
--- Atomically reserve a new lifecycle, observe an active owner, or recover an expired reserved or
--- invited execution. Only RESERVED and RECOVERED return raw ownership credentials.
+-- Atomically reserve a new lifecycle, observe an active owner, or recover an expired execution.
+-- A recovered compensating lifecycle receives a distinct result so callers can resume only cleanup.
 CREATE OR REPLACE FUNCTION public.reserve_staff_provisioning(
   p_actor_admin_id uuid,
   p_email text,
@@ -278,9 +278,7 @@ BEGIN
     IF v_existing.status = 'pending_activation' THEN
       RETURN pg_catalog.jsonb_build_object('resultCode', 'ALREADY_INVITED');
     END IF;
-    IF v_existing.status = 'compensating'
-       OR v_existing.lease_expires_at > pg_catalog.now()
-    THEN
+    IF v_existing.lease_expires_at > pg_catalog.now() THEN
       RETURN pg_catalog.jsonb_build_object('resultCode', 'IN_PROGRESS');
     END IF;
 
@@ -301,7 +299,8 @@ BEGIN
      RETURNING * INTO v_existing;
 
     RETURN pg_catalog.jsonb_build_object(
-      'resultCode', 'RECOVERED',
+      'resultCode', CASE WHEN v_existing.status = 'compensating'
+        THEN 'RECOVERED_COMPENSATION' ELSE 'RECOVERED' END,
       'requestId', v_existing.id::text,
       'executionToken', v_execution_token::text,
       'authOwnershipToken', v_auth_ownership_token::text,
@@ -606,8 +605,8 @@ REVOKE ALL ON FUNCTION public.finalize_staff_provisioning(uuid, uuid)
 GRANT EXECUTE ON FUNCTION public.finalize_staff_provisioning(uuid, uuid)
   TO service_role;
 
--- Fence destructive compensation before crossing into Auth. `compensating` cannot be recovered,
--- so no rotated/stale execution can race a delete already authorized for the current owner.
+-- Fence destructive compensation before crossing into Auth. A current recovered owner may repeat
+-- this authorization, but only after rechecking the exact server-controlled Auth marker.
 CREATE OR REPLACE FUNCTION public.begin_staff_provisioning_compensation(
   p_request_id uuid,
   p_execution_token uuid,
@@ -636,7 +635,7 @@ BEGIN
   IF v_request.lease_expires_at <= pg_catalog.now() THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'EXECUTION_LEASE_EXPIRED');
   END IF;
-  IF v_request.status <> 'invited'
+  IF v_request.status NOT IN ('invited', 'compensating')
      OR v_request.auth_user_id IS DISTINCT FROM p_auth_user_id
      OR v_request.auth_identity_owned = false
   THEN
@@ -645,7 +644,13 @@ BEGIN
 
   SELECT raw_app_meta_data->>'staff_provisioning_marker' INTO v_auth_marker
   FROM auth.users WHERE id = p_auth_user_id;
-  IF NOT FOUND OR v_auth_marker IS DISTINCT FROM pg_catalog.encode(
+  IF NOT FOUND THEN
+    IF v_request.status = 'compensating' THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'COMPENSATION_ALREADY_COMPLETE');
+    END IF;
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'COMPENSATION_NOT_AUTHORIZED');
+  END IF;
+  IF v_auth_marker IS DISTINCT FROM pg_catalog.encode(
     extensions.digest(pg_catalog.convert_to(v_request.id::text, 'UTF8'), 'sha256'), 'hex'
   ) THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'COMPENSATION_NOT_AUTHORIZED');
@@ -740,7 +745,7 @@ BEGIN
   ) THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'EXECUTION_TOKEN_MISMATCH');
   END IF;
-  IF v_request.status <> 'compensating' AND v_request.lease_expires_at <= pg_catalog.now() THEN
+  IF v_request.lease_expires_at <= pg_catalog.now() THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'EXECUTION_LEASE_EXPIRED');
   END IF;
 
