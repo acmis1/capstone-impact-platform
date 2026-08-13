@@ -5,6 +5,7 @@ import {
   validateAdminReferenceMapping,
   reconcilePackagesAgainstAdminReference,
   canonicalizeAdminReferenceMapping,
+  adminReferenceIntentsSemanticallyEqual,
   computeAdminReferenceWorkbookFingerprint,
   type AdminReferenceMappingConfig,
 } from './adminReferenceReconciliation';
@@ -105,6 +106,33 @@ describe('adminReferenceReconciliation unit test suite', () => {
       const canonical = canonicalizeAdminReferenceMapping(configA);
       expect(canonical.matchMappings[0].canonicalField).toBe('groupName');
       expect(canonical.matchMappings[1].canonicalField).toBe('year');
+    });
+
+    it('compares Admin-reference evidence by canonical mapping order', () => {
+      const left = {
+        workbookFingerprint: 'a'.repeat(64),
+        worksheet: 'Sheet1',
+        matchMappings: [
+          { canonicalField: 'year', referenceColumn: 'Year' },
+          { canonicalField: 'groupName', referenceColumn: 'Group Name' },
+        ],
+        comparisonMappings: [
+          { canonicalField: 'title', referenceColumn: 'Title' },
+          { canonicalField: 'program', referenceColumn: 'Program' },
+        ],
+        reconciliationContractVersion: 'admin-reference-reconciliation-v1' as const,
+      };
+      const right = {
+        ...left,
+        matchMappings: [...left.matchMappings].reverse(),
+        comparisonMappings: [...left.comparisonMappings].reverse(),
+      };
+
+      expect(adminReferenceIntentsSemanticallyEqual(left, right)).toBe(true);
+      expect(adminReferenceIntentsSemanticallyEqual(left, {
+        ...right,
+        workbookFingerprint: 'b'.repeat(64),
+      })).toBe(false);
     });
 
     it('rejects unknown canonical fields or missing reference columns', () => {
@@ -326,6 +354,49 @@ describe('adminReferenceReconciliation unit test suite', () => {
       expect(res.packageResults.get('projects/alpha')?.status).toBe('RECONCILED');
       expect(res.totalReferenceRowsCount).toBe(3);
       expect(res.unusedReferenceRowCount).toBe(2);
+    });
+
+    it('fails the whole reference keyspace when an unrelated official key is duplicated', () => {
+      const refRows = [
+        { rowNumber: 2, values: { groupName: 'Group Alpha', year: '2026', title: 'Title A', program: 'CS' } },
+        { rowNumber: 3, values: { groupName: 'Group Beta', year: '2026', title: 'Title B1', program: 'CS' } },
+        { rowNumber: 4, values: { groupName: 'Group Beta', year: '2026', title: 'Title B2', program: 'CS' } },
+      ];
+
+      const res = reconcilePackagesAgainstAdminReference({
+        packages: [{
+          packagePath: 'projects/alpha',
+          manifest: { groupName: 'Group Alpha', year: 2026, title: 'Title A', program: 'CS' },
+        }],
+        referenceRows: refRows,
+        mapping,
+      });
+
+      expect(res.packageResults.get('projects/alpha')?.status).toBe('RECONCILED');
+      expect(res.batchIssues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'ADMIN_REFERENCE_DUPLICATE_MATCH_KEY', severity: 'error' }),
+      ]));
+    });
+
+    it('fails the whole reference keyspace when an unrelated official row lacks a match key', () => {
+      const refRows = [
+        { rowNumber: 2, values: { groupName: 'Group Alpha', year: '2026', title: 'Title A', program: 'CS' } },
+        { rowNumber: 3, values: { groupName: '', year: '2026', title: 'Incomplete', program: 'CS' } },
+      ];
+
+      const res = reconcilePackagesAgainstAdminReference({
+        packages: [{
+          packagePath: 'projects/alpha',
+          manifest: { groupName: 'Group Alpha', year: 2026, title: 'Title A', program: 'CS' },
+        }],
+        referenceRows: refRows,
+        mapping,
+      });
+
+      expect(res.packageResults.get('projects/alpha')?.status).toBe('RECONCILED');
+      expect(res.batchIssues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'ADMIN_REFERENCE_MISSING_MATCH_KEY', severity: 'error', rowNumber: 3 }),
+      ]));
     });
 
     it('rejects duplicate reference column mapping configurations', () => {

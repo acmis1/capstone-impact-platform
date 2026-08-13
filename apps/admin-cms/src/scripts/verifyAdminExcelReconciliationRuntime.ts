@@ -21,6 +21,130 @@ import { validateSameOrigin } from '../auth/csrf';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
+const VERIFIER_PUBLIC_ID_PREFIX = 'admin-excel-runtime-';
+
+interface DatabaseCounts {
+  importBatches: number;
+  projects: number;
+  browserImportCommits: number;
+}
+
+interface SideEffectCounts {
+  publicationAttempts: number | 'TABLE_ABSENT';
+  publishedSnapshots: number | 'TABLE_ABSENT';
+  participantPreviews: number | 'TABLE_ABSENT';
+  participantPreviewNotifications: number | 'TABLE_ABSENT';
+  participantPreviewReminderSchedules: number | 'TABLE_ABSENT';
+}
+
+async function captureDatabaseCounts(
+  supabase: ReturnType<typeof createSupabaseAdminClientCore>
+): Promise<DatabaseCounts> {
+  const [batches, projects, commits] = await Promise.all([
+    supabase.from('import_batches').select('*', { count: 'exact', head: true }),
+    supabase.from('projects').select('*', { count: 'exact', head: true }),
+    supabase.from('browser_import_commits').select('*', { count: 'exact', head: true }),
+  ]);
+  if (batches.error || projects.error || commits.error) {
+    throw new Error('[Verifier] Could not capture database mutation baseline.');
+  }
+  if (batches.count === null || projects.count === null || commits.count === null) {
+    throw new Error('[Verifier] Database mutation baseline returned incomplete counts.');
+  }
+  return {
+    importBatches: batches.count,
+    projects: projects.count,
+    browserImportCommits: commits.count,
+  };
+}
+
+function assertDatabaseCountsUnchanged(before: DatabaseCounts, after: DatabaseCounts, scenario: string): void {
+  if (
+    before.importBatches !== after.importBatches ||
+    before.projects !== after.projects ||
+    before.browserImportCommits !== after.browserImportCommits
+  ) {
+    throw new Error(`[${scenario}] Database mutation detected: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+  }
+}
+
+async function captureSideEffectCounts(
+  supabase: ReturnType<typeof createSupabaseAdminClientCore>
+): Promise<SideEffectCounts> {
+  const countRows = async (table: string): Promise<number | 'TABLE_ABSENT'> => {
+    const result = await supabase.from(table).select('id');
+    if (result.error) {
+      if (result.error.code === 'PGRST205' || result.error.code === '42P01') return 'TABLE_ABSENT';
+      throw new Error(`[Verifier] Could not capture side-effect baseline table: ${table}.`);
+    }
+    return result.data?.length ?? 0;
+  };
+
+  const [attempts, snapshots, previews, notifications, reminders] = await Promise.all([
+    countRows('publication_attempts'),
+    countRows('published_snapshots'),
+    countRows('participant_previews'),
+    countRows('participant_preview_notifications'),
+    countRows('participant_preview_reminder_schedules'),
+  ]);
+  return {
+    publicationAttempts: attempts,
+    publishedSnapshots: snapshots,
+    participantPreviews: previews,
+    participantPreviewNotifications: notifications,
+    participantPreviewReminderSchedules: reminders,
+  };
+}
+
+async function assertVerifierResidueAbsent(
+  supabase: ReturnType<typeof createSupabaseAdminClientCore>
+): Promise<void> {
+  const [projects, batches] = await Promise.all([
+    supabase.from('projects').select('*', { count: 'exact', head: true }).like('public_id', `${VERIFIER_PUBLIC_ID_PREFIX}%`),
+    supabase.from('import_batches').select('*', { count: 'exact', head: true }).like('source_folder', `${VERIFIER_PUBLIC_ID_PREFIX}%`),
+  ]);
+  if (projects.error || batches.error || projects.count !== 0 || batches.count !== 0) {
+    throw new Error('[Verifier] Admin Excel runtime residue exists before execution.');
+  }
+}
+
+async function cleanupVerifierResidue(
+  supabase: ReturnType<typeof createSupabaseAdminClientCore>,
+  createdBatchIds: string[],
+  baseline: DatabaseCounts
+): Promise<void> {
+  const { data: verifierProjects, error: projectLookupError } = await supabase
+    .from('projects')
+    .select('id, import_batch_id')
+    .like('public_id', `${VERIFIER_PUBLIC_ID_PREFIX}%`);
+  if (projectLookupError) throw new Error('[Verifier] Runtime project cleanup lookup failed.');
+
+  const batchIds = new Set(createdBatchIds);
+  for (const project of verifierProjects ?? []) {
+    if (project.import_batch_id) batchIds.add(project.import_batch_id);
+  }
+
+  const projectCleanup = await supabase
+    .from('projects')
+    .delete()
+    .like('public_id', `${VERIFIER_PUBLIC_ID_PREFIX}%`);
+  if (projectCleanup.error) throw new Error('[Verifier] Runtime project cleanup failed.');
+
+  const { data: verifierBatches, error: batchLookupError } = await supabase
+    .from('import_batches')
+    .select('id')
+    .like('source_folder', `${VERIFIER_PUBLIC_ID_PREFIX}%`);
+  if (batchLookupError) throw new Error('[Verifier] Runtime batch cleanup lookup failed.');
+  for (const batch of verifierBatches ?? []) batchIds.add(batch.id);
+
+  if (batchIds.size > 0) {
+    const batchCleanup = await supabase.from('import_batches').delete().in('id', [...batchIds]);
+    if (batchCleanup.error) throw new Error('[Verifier] Runtime batch cleanup failed.');
+  }
+
+  await assertVerifierResidueAbsent(supabase);
+  assertDatabaseCountsUnchanged(baseline, await captureDatabaseCounts(supabase), 'Cleanup');
+}
 
 function ensureLocalEnvironmentVariables(): void {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -87,6 +211,9 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
   if (!program || !discipline || !industry) throw new Error('[Verifier] Missing seed taxonomy rows.');
 
   const createdBatchIds: string[] = [];
+  const databaseBaseline = await captureDatabaseCounts(supabase);
+  const sideEffectBaseline = await captureSideEffectCounts(supabase);
+  await assertVerifierResidueAbsent(supabase);
 
   const defaultRefRows = [
     { groupName: 'Group Alpha', year: 2026, title: 'Smart Grid Energy AI', program: program.name, email: 'alpha@capstone.invalid' },
@@ -109,9 +236,9 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
 
   try {
     // -------------------------------------------------------------------------
-    // Scenario 1: Authorized Reference Inspection Succeeds
+    // Scenario 1: Reference Workbook Parser Inspection Succeeds
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 1] Testing authorized reference inspection...\n');
+    process.stdout.write('[Scenario 1] Testing reference workbook parser inspection...\n');
     const refBuf1 = await createSyntheticReferenceWorkbook(defaultRefRows);
     const inspection1 = await inspectAdminReferenceWorkbook(refBuf1);
     if (!inspection1.success || !/^[a-f0-9]{64}$/.test(inspection1.referenceWorkbookFingerprint) || inspection1.worksheets.length !== 1) {
@@ -120,9 +247,9 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
     process.stdout.write('  ✓ Scenario 1 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
-    // Scenario 2: Unauthenticated Inspection Rejected
+    // Scenario 2: Pure Unauthenticated-Context Sentinel Check
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 2] Testing unauthenticated inspection check...\n');
+    process.stdout.write('[Scenario 2] Testing pure unauthenticated-context sentinel...\n');
     const unauthContext = null;
     if (unauthContext !== null) {
       throw new Error('[Scenario 2] Expected unauthenticated access to be null.');
@@ -130,9 +257,9 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
     process.stdout.write('  ✓ Scenario 2 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
-    // Scenario 3: Wrong Permission Rejected
+    // Scenario 3: Authorization Policy Helper Denies Missing Permission
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 3] Testing wrong permission rejection...\n');
+    process.stdout.write('[Scenario 3] Testing authorization policy helper without projects.edit...\n');
     const noPermContext: AuthenticatedAdminContext = { ...authContext, permissions: ['projects.read'] };
     if (hasPermission(noPermContext.permissions, 'projects.edit')) {
       throw new Error('[Scenario 3] Wrong permission should not satisfy projects.edit.');
@@ -140,9 +267,9 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
     process.stdout.write('  ✓ Scenario 3 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
-    // Scenario 4: Cross-Origin Inspection Rejected
+    // Scenario 4: Same-Origin Policy Helper Rejects Cross-Origin Input
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 4] Testing cross-origin request rejection...\n');
+    process.stdout.write('[Scenario 4] Testing same-origin policy helper rejection...\n');
     const isAllowedOrigin = validateSameOrigin('https://attacker.example.com', 'http://localhost:3000');
     if (isAllowedOrigin) {
       throw new Error('[Scenario 4] Cross-origin request was improperly allowed.');
@@ -310,7 +437,7 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
     // Scenario 16: Stage Without Admin Reference Is Rejected
     // -------------------------------------------------------------------------
     process.stdout.write('[Scenario 16] Testing staging rejection without Admin reference evidence...\n');
-    const pkg16Id = 's16-pkg-1';
+    const pkg16Id = `${VERIFIER_PUBLIC_ID_PREFIX}s16-pkg-1`;
     const json16 = JSON.stringify({
       publicId: pkg16Id,
       title: 'Scenario 16 Title',
@@ -345,17 +472,19 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
       selectedPackagePaths: [pkg16Id],
       acknowledgedWarningPackagePaths: [pkg16Id],
     };
+    const countsBefore16 = await captureDatabaseCounts(supabase);
     const resStageNoRef = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysis16, intent: intentNoRef as unknown as BrowserImportCommitIntent });
     if (resStageNoRef.success || resStageNoRef.code !== 'INVALID_INTENT') {
       throw new Error(`[Scenario 16] Expected INVALID_INTENT staging rejection, got ${JSON.stringify(resStageNoRef)}`);
     }
+    assertDatabaseCountsUnchanged(countsBefore16, await captureDatabaseCounts(supabase), 'Scenario 16');
     process.stdout.write('  ✓ Scenario 16 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
     // Scenario 17: Valid Preview -> Preparation -> Stage Succeeds
     // -------------------------------------------------------------------------
     process.stdout.write('[Scenario 17] Testing end-to-end valid preview -> preparation -> stage pipeline...\n');
-    const pkg17Id = 's17-pkg-1';
+    const pkg17Id = `${VERIFIER_PUBLIC_ID_PREFIX}s17-pkg-1`;
     const json17 = JSON.stringify({
       publicId: pkg17Id,
       title: 'Smart Grid Energy AI',
@@ -426,10 +555,12 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
     const refOptionsB = { referenceFileBuffer: refBufB, mapping: defaultMapping };
     const analysisB = await analyzeBrowserImportServer(manifest17, new Map([[k17, Buffer.from(json17, 'utf8')]]), refOptionsB);
 
+    const countsBefore19 = await captureDatabaseCounts(supabase);
     const resStageMismatchFile = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysisB, intent: prepRes17.intent });
     if (resStageMismatchFile.success || resStageMismatchFile.code !== 'PREVIEW_FINGERPRINT_MISMATCH') {
       throw new Error(`[Scenario 19] Expected PREVIEW_FINGERPRINT_MISMATCH on file swap, got ${JSON.stringify(resStageMismatchFile)}`);
     }
+    assertDatabaseCountsUnchanged(countsBefore19, await captureDatabaseCounts(supabase), 'Scenario 19');
     process.stdout.write('  ✓ Scenario 19 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
@@ -443,17 +574,19 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
     const refOptionsMapB = { referenceFileBuffer: refBuf1, mapping: mappingB };
     const analysisMapB = await analyzeBrowserImportServer(manifest17, new Map([[k17, Buffer.from(json17, 'utf8')]]), refOptionsMapB);
 
+    const countsBefore20 = await captureDatabaseCounts(supabase);
     const resStageMismatchMap = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysisMapB, intent: prepRes17.intent });
     if (resStageMismatchMap.success || resStageMismatchMap.code !== 'PREVIEW_FINGERPRINT_MISMATCH') {
       throw new Error(`[Scenario 20] Expected PREVIEW_FINGERPRINT_MISMATCH on mapping swap, got ${JSON.stringify(resStageMismatchMap)}`);
     }
+    assertDatabaseCountsUnchanged(countsBefore20, await captureDatabaseCounts(supabase), 'Scenario 20');
     process.stdout.write('  ✓ Scenario 20 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
     // Scenario 21: Selected Unreconciled Package Cannot Be Smuggled Into Stage
     // -------------------------------------------------------------------------
     process.stdout.write('[Scenario 21] Testing selected unreconciled package smuggling rejection...\n');
-    const pkg21Id = 's21-unreconciled';
+    const pkg21Id = `${VERIFIER_PUBLIC_ID_PREFIX}s21-unreconciled`;
     const json21 = JSON.stringify({
       publicId: pkg21Id,
       title: 'Mismatched Title Unreconciled',
@@ -489,85 +622,184 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
       acknowledgedWarningPackagePaths: [pkg21Id],
       adminReference: analysis17.preview.batch.adminReference,
     };
+    const countsBefore21 = await captureDatabaseCounts(supabase);
     const resSmuggle = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysis21, intent: forgedSmuggleIntent as unknown as BrowserImportCommitIntent });
     if (resSmuggle.success || resSmuggle.code !== 'INVALID_SELECTION') {
       throw new Error(`[Scenario 21] Expected INVALID_SELECTION on smuggling unreconciled package, got ${JSON.stringify(resSmuggle)}`);
     }
+    assertDatabaseCountsUnchanged(countsBefore21, await captureDatabaseCounts(supabase), 'Scenario 21');
     process.stdout.write('  ✓ Scenario 21 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
-    // Scenario 22: Successful Stage Creates Exactly Expected Project/Batch Records
+    // Scenario 22: Unrelated Duplicate Official Key Blocks Preparation and Staging
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 22] Testing database records creation for staged batch...\n');
-    const { data: batch22 } = await supabase.from('import_batches').select('*').eq('id', resStage17.batchId).single();
-    const { data: proj22 } = await supabase.from('projects').select('*').eq('import_batch_id', resStage17.batchId).single();
-    if (!batch22 || !proj22 || proj22.public_id !== pkg17Id) {
-      throw new Error('[Scenario 22] Staged project or batch database record missing.');
+    process.stdout.write('[Scenario 22] Testing whole-reference duplicate-key rejection...\n');
+    const refBuf22 = await createSyntheticReferenceWorkbook([
+      defaultRefRows[0],
+      { groupName: 'Group Beta', year: 2026, title: 'Title Beta 1', program: program.name, email: 'beta1@capstone.invalid' },
+      { groupName: 'Group Beta', year: 2026, title: 'Title Beta 2', program: program.name, email: 'beta2@capstone.invalid' },
+    ]);
+    const analysis22 = await analyzeBrowserImportServer(
+      manifest17,
+      new Map([[k17, Buffer.from(json17, 'utf8')]]),
+      { referenceFileBuffer: refBuf22, mapping: defaultMapping }
+    );
+    if (!analysis22.preview.batch.batchIssues.some((issue) => issue.code === 'ADMIN_REFERENCE_DUPLICATE_MATCH_KEY' && issue.severity === 'error')) {
+      throw new Error('[Scenario 22] Authoritative preview did not contain duplicate-key batch error.');
     }
+    const prepRes22 = prepareBrowserImportCommitIntent({
+      manifest: manifest17,
+      preview: analysis22.preview.batch,
+      selectedPackagePaths: [pkg17Id],
+      acknowledgedWarningPackagePaths: [pkg17Id],
+      expectedPreviewFingerprint: analysis22.preview.batch.previewFingerprint,
+    });
+    if (prepRes22.success || prepRes22.code !== 'ADMIN_REFERENCE_INVALID') {
+      throw new Error(`[Scenario 22] Expected preparation rejection, got ${JSON.stringify(prepRes22)}`);
+    }
+    const countsBefore22 = await captureDatabaseCounts(supabase);
+    const resStage22 = await stageBrowserImportMetadata({
+      authContext,
+      serverAnalysis: analysis22,
+      intent: {
+        ...prepRes17.intent,
+        previewFingerprint: analysis22.preview.batch.previewFingerprint,
+        adminReference: analysis22.preview.batch.adminReference,
+      } as BrowserImportCommitIntent,
+    });
+    if (resStage22.success || resStage22.code !== 'INVALID_SELECTION') {
+      throw new Error(`[Scenario 22] Expected service-level INVALID_SELECTION, got ${JSON.stringify(resStage22)}`);
+    }
+    assertDatabaseCountsUnchanged(countsBefore22, await captureDatabaseCounts(supabase), 'Scenario 22');
     process.stdout.write('  ✓ Scenario 22 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
-    // Scenario 23: browser_import_commits.canonical_intent Stores Reference Fingerprint
+    // Scenario 23: Unrelated Missing Official Key Blocks Preparation and Staging
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 23] Testing browser_import_commits.canonical_intent stores reference fingerprint...\n');
-    const { data: commit23 } = await supabase.from('browser_import_commits').select('*').eq('batch_id', resStage17.batchId).single();
-    if (!commit23 || commit23.canonical_intent?.adminReference?.workbookFingerprint !== computeAdminReferenceWorkbookFingerprint(refBuf1)) {
-      throw new Error('[Scenario 23] Idempotency ledger missing canonical adminReference fingerprint.');
+    process.stdout.write('[Scenario 23] Testing whole-reference missing-key rejection...\n');
+    const refBuf23 = await createSyntheticReferenceWorkbook([
+      defaultRefRows[0],
+      { groupName: '', year: 2026, title: 'Incomplete Official Row', program: program.name, email: 'incomplete@capstone.invalid' },
+    ]);
+    const analysis23 = await analyzeBrowserImportServer(
+      manifest17,
+      new Map([[k17, Buffer.from(json17, 'utf8')]]),
+      { referenceFileBuffer: refBuf23, mapping: defaultMapping }
+    );
+    if (!analysis23.preview.batch.batchIssues.some((issue) => issue.code === 'ADMIN_REFERENCE_MISSING_MATCH_KEY' && issue.severity === 'error')) {
+      throw new Error('[Scenario 23] Authoritative preview did not contain missing-key batch error.');
     }
+    const prepRes23 = prepareBrowserImportCommitIntent({
+      manifest: manifest17,
+      preview: analysis23.preview.batch,
+      selectedPackagePaths: [pkg17Id],
+      acknowledgedWarningPackagePaths: [pkg17Id],
+      expectedPreviewFingerprint: analysis23.preview.batch.previewFingerprint,
+    });
+    if (prepRes23.success || prepRes23.code !== 'ADMIN_REFERENCE_INVALID') {
+      throw new Error(`[Scenario 23] Expected preparation rejection, got ${JSON.stringify(prepRes23)}`);
+    }
+    const countsBefore23 = await captureDatabaseCounts(supabase);
+    const resStage23 = await stageBrowserImportMetadata({
+      authContext,
+      serverAnalysis: analysis23,
+      intent: {
+        ...prepRes17.intent,
+        previewFingerprint: analysis23.preview.batch.previewFingerprint,
+        adminReference: analysis23.preview.batch.adminReference,
+      } as BrowserImportCommitIntent,
+    });
+    if (resStage23.success || resStage23.code !== 'INVALID_SELECTION') {
+      throw new Error(`[Scenario 23] Expected service-level INVALID_SELECTION, got ${JSON.stringify(resStage23)}`);
+    }
+    assertDatabaseCountsUnchanged(countsBefore23, await captureDatabaseCounts(supabase), 'Scenario 23');
     process.stdout.write('  ✓ Scenario 23 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
-    // Scenario 24: canonical_intent Stores Canonical Mapping/Version
+    // Scenario 24: Successful Stage Creates Exactly Expected Project/Batch Records
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 24] Testing canonical_intent stores canonical mapping and version...\n');
-    const intentAdminRef24 = commit23.canonical_intent?.adminReference;
-    if (!intentAdminRef24 || intentAdminRef24.reconciliationContractVersion !== 'admin-reference-reconciliation-v1' || !Array.isArray(intentAdminRef24.matchMappings)) {
-      throw new Error('[Scenario 24] Canonical mapping or contract version missing from ledger.');
+    process.stdout.write('[Scenario 24] Testing database records creation for staged batch...\n');
+    const { data: batch22 } = await supabase.from('import_batches').select('*').eq('id', resStage17.batchId).single();
+    const { data: proj22 } = await supabase.from('projects').select('*').eq('import_batch_id', resStage17.batchId).single();
+    if (!batch22 || !proj22 || proj22.public_id !== pkg17Id) {
+      throw new Error('[Scenario 24] Staged project or batch database record missing.');
     }
     process.stdout.write('  ✓ Scenario 24 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
-    // Scenario 25: canonical_intent Contains No Raw Reference Rows/Values
+    // Scenario 25: browser_import_commits.canonical_intent Stores Reference Fingerprint
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 25] Testing canonical_intent contains zero raw reference row values...\n');
-    const jsonIntent25 = JSON.stringify(commit23.canonical_intent);
-    if (jsonIntent25.includes('alpha@capstone.invalid') || jsonIntent25.includes('Smart Grid Energy AI')) {
-      throw new Error('[Scenario 25] Privacy violation: raw reference cell values found in canonical_intent!');
+    process.stdout.write('[Scenario 25] Testing browser_import_commits.canonical_intent stores reference fingerprint...\n');
+    const { data: commit23 } = await supabase.from('browser_import_commits').select('*').eq('batch_id', resStage17.batchId).single();
+    if (!commit23 || commit23.canonical_intent?.adminReference?.workbookFingerprint !== computeAdminReferenceWorkbookFingerprint(refBuf1)) {
+      throw new Error('[Scenario 25] Idempotency ledger missing canonical adminReference fingerprint.');
     }
     process.stdout.write('  ✓ Scenario 25 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
-    // Scenario 26: Raw Workbook Bytes Are Not Stored
+    // Scenario 26: canonical_intent Stores Canonical Mapping/Version
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 26] Testing raw workbook bytes are not stored in database or buckets...\n');
-    const { count: blobCount } = await supabase.from('browser_import_commits').select('*', { count: 'exact', head: true }).eq('batch_id', resStage17.batchId);
-    if (blobCount !== 1) throw new Error('[Scenario 26] Ledger count mismatch.');
+    process.stdout.write('[Scenario 26] Testing canonical_intent stores canonical mapping and version...\n');
+    const intentAdminRef24 = commit23.canonical_intent?.adminReference;
+    if (!intentAdminRef24 || intentAdminRef24.reconciliationContractVersion !== 'admin-reference-reconciliation-v1' || !Array.isArray(intentAdminRef24.matchMappings)) {
+      throw new Error('[Scenario 26] Canonical mapping or contract version missing from ledger.');
+    }
     process.stdout.write('  ✓ Scenario 26 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
-    // Scenario 27: Reconciliation Never Modifies Submitted Metadata to Force Match
+    // Scenario 27: canonical_intent Contains No Raw Reference Rows/Values
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 27] Testing reconciliation never alters submitted metadata...\n');
-    if (proj22.title !== 'Smart Grid Energy AI') {
-      throw new Error('[Scenario 27] Submitted project title was altered during reconciliation.');
+    process.stdout.write('[Scenario 27] Testing canonical_intent contains zero raw reference row values...\n');
+    const jsonIntent25 = JSON.stringify(commit23.canonical_intent);
+    if (jsonIntent25.includes('alpha@capstone.invalid') || jsonIntent25.includes('Smart Grid Energy AI')) {
+      throw new Error('[Scenario 27] Privacy violation: raw reference cell values found in canonical_intent!');
     }
     process.stdout.write('  ✓ Scenario 27 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
-    // Scenario 28: project-details.xlsx Flow Remains Functional
+    // Scenario 28: Raw Workbook Bytes Are Not Stored
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 28] Testing project-details.xlsx metadata source flow...\n');
-    const pkg28Id = 's28-xlsx';
+    process.stdout.write('[Scenario 28] Testing raw workbook bytes are not stored in database or buckets...\n');
+    const { count: blobCount } = await supabase.from('browser_import_commits').select('*', { count: 'exact', head: true }).eq('batch_id', resStage17.batchId);
+    if (blobCount !== 1) throw new Error('[Scenario 28] Ledger count mismatch.');
+    process.stdout.write('  ✓ Scenario 28 PASSED!\n\n');
+
+    // -------------------------------------------------------------------------
+    // Scenario 29: Reconciliation Never Modifies Submitted Metadata to Force Match
+    // -------------------------------------------------------------------------
+    process.stdout.write('[Scenario 29] Testing reconciliation never alters submitted metadata...\n');
+    if (proj22.title !== 'Smart Grid Energy AI') {
+      throw new Error('[Scenario 29] Submitted project title was altered during reconciliation.');
+    }
+    process.stdout.write('  ✓ Scenario 29 PASSED!\n\n');
+
+    // -------------------------------------------------------------------------
+    // Scenario 30: project-details.xlsx Flow Remains Functional
+    // -------------------------------------------------------------------------
+    process.stdout.write('[Scenario 30] Testing project-details.xlsx metadata source flow...\n');
+    const pkg28Id = `${VERIFIER_PUBLIC_ID_PREFIX}s28-xlsx`;
     const wb28 = new ExcelJS.Workbook();
     const sheet28 = wb28.addWorksheet('PROJECT_DETAILS');
-    sheet28.addRow(['Field', 'Value']);
-    sheet28.addRow(['Title', 'XLSX Project Title']);
-    sheet28.addRow(['Year', 2026]);
-    sheet28.addRow(['Program', program.name]);
-    sheet28.addRow(['Discipline', discipline.name]);
-    sheet28.addRow(['Industry', industry.name]);
-    sheet28.addRow(['Group Name', 'Group Beta']);
-    sheet28.addRow(['Team Members', 'Bob']);
+    sheet28.addRow([
+      'Project title',
+      'Short public summary',
+      'Team members',
+      'Group name',
+      'Industry sector',
+      'Study program',
+      'Primary discipline',
+      'Project year',
+    ]);
+    sheet28.addRow([
+      'XLSX Project Title',
+      'Synthetic XLSX project summary.',
+      'Bob',
+      'Group Beta',
+      industry.name,
+      program.name,
+      discipline.name,
+      2026,
+    ]);
     const xlsxBuf28 = Buffer.from(await wb28.xlsx.writeBuffer());
 
     const k28 = generateUploadKey(`${pkg28Id}/project-details.xlsx`);
@@ -582,52 +814,59 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
         { uploadKey: generateUploadKey(`${pkg28Id}/poster.pdf`), originalPath: `${pkg28Id}/poster.pdf`, fileSizeBytes: 500, browserMimeType: 'application/pdf' },
       ],
     };
-    const analysis28 = await analyzeBrowserImportServer(manifest28, new Map([[k28, xlsxBuf28]]), refOptions17);
+    const refBuf28 = await createSyntheticReferenceWorkbook([
+      { groupName: 'Group Beta', year: 2026, title: 'XLSX Project Title', program: program.name, email: 'beta@capstone.invalid' },
+    ]);
+    const analysis28 = await analyzeBrowserImportServer(
+      manifest28,
+      new Map([[k28, xlsxBuf28]]),
+      { referenceFileBuffer: refBuf28, mapping: defaultMapping }
+    );
+    const warningPaths28 = analysis28.preview.batch.packages[0].status === 'warning' ? [pkg28Id] : [];
     const prepRes28 = prepareBrowserImportCommitIntent({
       manifest: manifest28,
       preview: analysis28.preview.batch,
       selectedPackagePaths: [pkg28Id],
-      acknowledgedWarningPackagePaths: [pkg28Id],
+      acknowledgedWarningPackagePaths: warningPaths28,
       expectedPreviewFingerprint: analysis28.preview.batch.previewFingerprint,
     });
-    if (!prepRes28.success) throw new Error(`[Scenario 28] XLSX intent prep failed: ${prepRes28.code}`);
+    if (!prepRes28.success) throw new Error(`[Scenario 30] XLSX intent prep failed: ${prepRes28.code}`);
 
     const resStage28 = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysis28, intent: prepRes28.intent });
-    if (!resStage28.success) throw new Error('[Scenario 28] XLSX metadata staging failed.');
+    if (!resStage28.success) throw new Error('[Scenario 30] XLSX metadata staging failed.');
     createdBatchIds.push(resStage28.batchId);
-    process.stdout.write('  ✓ Scenario 28 PASSED!\n\n');
-
-    // -------------------------------------------------------------------------
-    // Scenario 29: project.json Fallback Remains Functional
-    // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 29] Testing project.json fallback flow...\n');
-    if (!analysis17.preview.batch.packages[0].metadataSource || analysis17.preview.batch.packages[0].metadataSource !== 'json') {
-      throw new Error('[Scenario 29] project.json metadata source failed.');
-    }
-    process.stdout.write('  ✓ Scenario 29 PASSED!\n\n');
-
-    // -------------------------------------------------------------------------
-    // Scenario 30: No Public-Feed / Publication / Email / Reminder Mutation
-    // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 30] Testing zero publication/email/reminder side-effects...\n');
-    const { count: pubCount } = await supabase.from('publication_readiness').select('*', { count: 'exact', head: true }).eq('project_id', proj22.id);
-    if (pubCount !== 0) throw new Error('[Scenario 30] Unexpected publication record created.');
     process.stdout.write('  ✓ Scenario 30 PASSED!\n\n');
 
     // -------------------------------------------------------------------------
-    // Scenario 31: Cleanup Restores Baseline
+    // Scenario 31: project.json Fallback Remains Functional
     // -------------------------------------------------------------------------
-    process.stdout.write('[Scenario 31] Performing cleanup and baseline restoration...\n');
-  } finally {
-    for (const bId of createdBatchIds) {
-      await supabase.from('projects').delete().eq('import_batch_id', bId);
-      await supabase.from('import_batches').delete().eq('id', bId);
+    process.stdout.write('[Scenario 31] Testing project.json fallback flow...\n');
+    if (!analysis17.preview.batch.packages[0].metadataSource || analysis17.preview.batch.packages[0].metadataSource !== 'json') {
+      throw new Error('[Scenario 31] project.json metadata source failed.');
     }
     process.stdout.write('  ✓ Scenario 31 PASSED!\n\n');
+
+    // -------------------------------------------------------------------------
+    // Scenario 32: No Public-Feed / Publication / Email / Reminder Mutation
+    // -------------------------------------------------------------------------
+    process.stdout.write('[Scenario 32] Testing zero publication/email/reminder side-effects...\n');
+    const sideEffectsAfter = await captureSideEffectCounts(supabase);
+    if (JSON.stringify(sideEffectsAfter) !== JSON.stringify(sideEffectBaseline)) {
+      throw new Error(`[Scenario 32] Unexpected publication/email/reminder side effects: before=${JSON.stringify(sideEffectBaseline)} after=${JSON.stringify(sideEffectsAfter)}`);
+    }
+    process.stdout.write('  ✓ Scenario 32 PASSED!\n\n');
+
+    // -------------------------------------------------------------------------
+    // Scenario 33: Cleanup Restores Baseline
+    // -------------------------------------------------------------------------
+    process.stdout.write('[Scenario 33] Performing cleanup and baseline restoration...\n');
+  } finally {
+    await cleanupVerifierResidue(supabase, createdBatchIds, databaseBaseline);
+    process.stdout.write('  ✓ Scenario 33 PASSED!\n\n');
   }
 
   process.stdout.write('====================================================\n');
-  process.stdout.write('ALL 31 RUNTIME RECONCILIATION SCENARIOS PASSED!\n');
+  process.stdout.write('ALL 33 RUNTIME RECONCILIATION SCENARIOS PASSED!\n');
   process.stdout.write('====================================================\n');
 }
 

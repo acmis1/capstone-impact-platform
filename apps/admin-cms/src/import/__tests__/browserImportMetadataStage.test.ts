@@ -7,6 +7,8 @@ import {
 import { SelectionManifest } from '../browserImportPreviewContract';
 import { generateUploadKey } from '../browserSelection';
 import type { createSupabaseAdminClientCore } from '../../lib/supabase/adminCore';
+import type { BrowserImportCommitIntent } from '../browserImportCommitIntentContract';
+import type { AuthenticatedAdminContext } from '../../auth/authTypes';
 import ExcelJS from 'exceljs';
 
 // Mock requireAdmin auth helper
@@ -23,7 +25,9 @@ function stagePOST(request: NextRequest) {
   return rawStagePOST(request);
 }
 
-function makeMockAuthContext(permissions = ['projects.edit']) {
+function makeMockAuthContext(
+  permissions: AuthenticatedAdminContext['permissions'] = ['projects.edit']
+): AuthenticatedAdminContext {
   return {
     authUserId: '00000000-0000-0000-0000-000000000001',
     adminUserId: '00000000-0000-0000-0000-000000000001',
@@ -51,6 +55,7 @@ async function createRefFixture(groupName = 'Group A', title = 'Valid Title') {
 
 describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.resetAllMocks();
     mockRequireAdmin.mockResolvedValue(makeMockAuthContext());
   });
@@ -630,5 +635,190 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
       batchStatus: 'metadata_staged',
     };
     expect(validateBrowserImportMetadataStageResponse(badUuidSuccess)).toBeNull();
+  });
+
+  it('14. production service rejects missing Admin-reference evidence before creating a database client', async () => {
+    const publicId = 'service-no-ref';
+    const jsonContent = JSON.stringify({
+      publicId,
+      title: 'Service Boundary Title',
+      summary: 'Service boundary summary',
+      year: 2026,
+      program: 'Software Engineering',
+      discipline: 'Software Engineering',
+      industry: 'Software Industry',
+      groupName: 'Group A',
+      teamMembers: ['Alice'],
+      layoutConfig: {},
+    });
+    const jsonBytes = Buffer.from(jsonContent, 'utf8').length;
+    const manifest: SelectionManifest = {
+      selectedRootName: publicId,
+      fileCount: 3,
+      declaredTotalBytes: jsonBytes + 800,
+      ignoredSystemFilesCount: 0,
+      descriptors: [
+        { uploadKey: generateUploadKey(`${publicId}/project.json`), originalPath: `${publicId}/project.json`, fileSizeBytes: jsonBytes, browserMimeType: 'application/json' },
+        { uploadKey: generateUploadKey(`${publicId}/poster.png`), originalPath: `${publicId}/poster.png`, fileSizeBytes: 300, browserMimeType: 'image/png' },
+        { uploadKey: generateUploadKey(`${publicId}/poster.pdf`), originalPath: `${publicId}/poster.pdf`, fileSizeBytes: 500, browserMimeType: 'application/pdf' },
+      ],
+    };
+    const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
+    const analysis = await analyzeBrowserImportServer(
+      manifest,
+      new Map([[generateUploadKey(`${publicId}/project.json`), Buffer.from(jsonContent, 'utf8')]])
+    );
+    const createClientSpy = vi.spyOn(
+      await import('../../lib/supabase/adminCore'),
+      'createSupabaseAdminClientCore'
+    );
+    const { stageBrowserImportMetadata } = await import('../stageBrowserImportMetadata');
+
+    const result = await stageBrowserImportMetadata({
+      authContext: makeMockAuthContext(),
+      serverAnalysis: analysis,
+      intent: {
+        version: 1,
+        previewFingerprint: analysis.preview.batch.previewFingerprint,
+        selectedRootName: publicId,
+        fileCount: manifest.fileCount,
+        declaredTotalBytes: manifest.declaredTotalBytes,
+        selectedPackagePaths: [publicId],
+        acknowledgedWarningPackagePaths: [publicId],
+      } as BrowserImportCommitIntent,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      code: 'INVALID_INTENT',
+      error: 'Admin reference reconciliation evidence is required for staging.',
+    });
+    expect(createClientSpy).not.toHaveBeenCalled();
+  });
+
+  it('15. production service rejects mismatching Admin-reference evidence before database access', async () => {
+    const { refBuf, refMapping } = await createRefFixture('Group A', 'Valid Title');
+    const jsonContent = JSON.stringify({
+      publicId: 'service-ref-mismatch',
+      title: 'Valid Title',
+      summary: 'Service boundary summary',
+      year: 2026,
+      program: 'Software Engineering',
+      discipline: 'Software Engineering',
+      industry: 'Software Industry',
+      groupName: 'Group A',
+      teamMembers: ['Alice'],
+      layoutConfig: {},
+    });
+    const jsonBytes = Buffer.from(jsonContent, 'utf8').length;
+    const manifest: SelectionManifest = {
+      selectedRootName: 'service-ref-mismatch',
+      fileCount: 3,
+      declaredTotalBytes: jsonBytes + 800,
+      ignoredSystemFilesCount: 0,
+      descriptors: [
+        { uploadKey: generateUploadKey('service-ref-mismatch/project.json'), originalPath: 'service-ref-mismatch/project.json', fileSizeBytes: jsonBytes, browserMimeType: 'application/json' },
+        { uploadKey: generateUploadKey('service-ref-mismatch/poster.png'), originalPath: 'service-ref-mismatch/poster.png', fileSizeBytes: 300, browserMimeType: 'image/png' },
+        { uploadKey: generateUploadKey('service-ref-mismatch/poster.pdf'), originalPath: 'service-ref-mismatch/poster.pdf', fileSizeBytes: 500, browserMimeType: 'application/pdf' },
+      ],
+    };
+    const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
+    const analysis = await analyzeBrowserImportServer(
+      manifest,
+      new Map([[generateUploadKey('service-ref-mismatch/project.json'), Buffer.from(jsonContent, 'utf8')]]),
+      { referenceFileBuffer: refBuf, mapping: refMapping }
+    );
+    const { prepareBrowserImportCommitIntent } = await import('../prepareBrowserImportCommitIntent');
+    const prepared = prepareBrowserImportCommitIntent({
+      manifest,
+      preview: analysis.preview.batch,
+      selectedPackagePaths: ['service-ref-mismatch'],
+      acknowledgedWarningPackagePaths: ['service-ref-mismatch'],
+      expectedPreviewFingerprint: analysis.preview.batch.previewFingerprint,
+    });
+    if (!prepared.success) throw new Error(`Preparation failed: ${prepared.code}`);
+    const createClientSpy = vi.spyOn(
+      await import('../../lib/supabase/adminCore'),
+      'createSupabaseAdminClientCore'
+    );
+    const { stageBrowserImportMetadata } = await import('../stageBrowserImportMetadata');
+
+    const result = await stageBrowserImportMetadata({
+      authContext: makeMockAuthContext(),
+      serverAnalysis: analysis,
+      intent: {
+        ...prepared.intent,
+        adminReference: {
+          ...prepared.intent.adminReference!,
+          workbookFingerprint: 'b'.repeat(64),
+        },
+      },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.code).toBe('PREVIEW_FINGERPRINT_MISMATCH');
+    expect(createClientSpy).not.toHaveBeenCalled();
+  });
+
+  it('16. production service rejects a selected non-reconciled package before database access', async () => {
+    const { refBuf, refMapping } = await createRefFixture('Group A', 'Valid Title');
+    const jsonContent = JSON.stringify({
+      publicId: 'service-unreconciled',
+      title: 'Valid Title',
+      summary: 'Service boundary summary',
+      year: 2026,
+      program: 'Software Engineering',
+      discipline: 'Software Engineering',
+      industry: 'Software Industry',
+      groupName: 'Group A',
+      teamMembers: ['Alice'],
+      layoutConfig: {},
+    });
+    const jsonBytes = Buffer.from(jsonContent, 'utf8').length;
+    const manifest: SelectionManifest = {
+      selectedRootName: 'service-unreconciled',
+      fileCount: 3,
+      declaredTotalBytes: jsonBytes + 800,
+      ignoredSystemFilesCount: 0,
+      descriptors: [
+        { uploadKey: generateUploadKey('service-unreconciled/project.json'), originalPath: 'service-unreconciled/project.json', fileSizeBytes: jsonBytes, browserMimeType: 'application/json' },
+        { uploadKey: generateUploadKey('service-unreconciled/poster.png'), originalPath: 'service-unreconciled/poster.png', fileSizeBytes: 300, browserMimeType: 'image/png' },
+        { uploadKey: generateUploadKey('service-unreconciled/poster.pdf'), originalPath: 'service-unreconciled/poster.pdf', fileSizeBytes: 500, browserMimeType: 'application/pdf' },
+      ],
+    };
+    const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
+    const analysis = await analyzeBrowserImportServer(
+      manifest,
+      new Map([[generateUploadKey('service-unreconciled/project.json'), Buffer.from(jsonContent, 'utf8')]]),
+      { referenceFileBuffer: refBuf, mapping: refMapping }
+    );
+    const { prepareBrowserImportCommitIntent } = await import('../prepareBrowserImportCommitIntent');
+    const prepared = prepareBrowserImportCommitIntent({
+      manifest,
+      preview: analysis.preview.batch,
+      selectedPackagePaths: ['service-unreconciled'],
+      acknowledgedWarningPackagePaths: ['service-unreconciled'],
+      expectedPreviewFingerprint: analysis.preview.batch.previewFingerprint,
+    });
+    if (!prepared.success) throw new Error(`Preparation failed: ${prepared.code}`);
+    analysis.packages[0].reconciliation = {
+      status: 'ADMIN_REFERENCE_FIELD_MISMATCH',
+      mismatchedFields: ['title'],
+    };
+    const createClientSpy = vi.spyOn(
+      await import('../../lib/supabase/adminCore'),
+      'createSupabaseAdminClientCore'
+    );
+    const { stageBrowserImportMetadata } = await import('../stageBrowserImportMetadata');
+
+    const result = await stageBrowserImportMetadata({
+      authContext: makeMockAuthContext(),
+      serverAnalysis: analysis,
+      intent: prepared.intent,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.code).toBe('INVALID_SELECTION');
+    expect(createClientSpy).not.toHaveBeenCalled();
   });
 });

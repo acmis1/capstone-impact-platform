@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import ExcelJS from 'exceljs';
 import { normalizeParticipantContactEmail } from '../domain/participantContactEmail';
 import type { BrowserImportIssue } from './browserImportPreviewContract';
+import type { AdminReferenceIntent } from './browserImportCommitIntentContract';
 
 export const ADMIN_REFERENCE_LIMITS = {
   MAX_WORKBOOK_BYTES: 5 * 1024 * 1024, // 5 MB
@@ -143,6 +144,26 @@ export function canonicalizeAdminReferenceMapping(
     comparisonMappings: sortedComp,
     reconciliationContractVersion: 'admin-reference-reconciliation-v1',
   };
+}
+
+export function canonicalizeAdminReferenceIntent(intent: AdminReferenceIntent): AdminReferenceIntent {
+  return {
+    workbookFingerprint: intent.workbookFingerprint,
+    ...canonicalizeAdminReferenceMapping({
+      worksheet: intent.worksheet,
+      matchMappings: intent.matchMappings,
+      comparisonMappings: intent.comparisonMappings,
+      reconciliationContractVersion: intent.reconciliationContractVersion,
+    }),
+  };
+}
+
+export function adminReferenceIntentsSemanticallyEqual(
+  left: AdminReferenceIntent,
+  right: AdminReferenceIntent
+): boolean {
+  return JSON.stringify(canonicalizeAdminReferenceIntent(left)) ===
+    JSON.stringify(canonicalizeAdminReferenceIntent(right));
 }
 
 function extractCellText(cell: ExcelJS.Cell): string {

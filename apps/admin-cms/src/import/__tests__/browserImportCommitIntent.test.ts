@@ -648,6 +648,30 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       }
     });
 
+    it('blocks preparation when the authoritative preview has an Admin-reference batch error', () => {
+      const preview = makeMockPreviewBatch({
+        batchIssues: [{
+          code: 'ADMIN_REFERENCE_DUPLICATE_MATCH_KEY',
+          message: 'The official reference keyspace contains a duplicate key.',
+          severity: 'error',
+        }],
+      });
+
+      const res = prepareBrowserImportCommitIntent({
+        manifest: makeMockManifest(),
+        preview,
+        selectedPackagePaths: ['root/p1'],
+        acknowledgedWarningPackagePaths: [],
+        expectedPreviewFingerprint: preview.previewFingerprint,
+      });
+
+      expect(res).toEqual({
+        success: false,
+        code: 'ADMIN_REFERENCE_INVALID',
+        message: 'The Admin reference dataset is invalid for this reconciliation operation.',
+      });
+    });
+
     it('22. Unexpected contract fields fail schema validation', () => {
       const invalidIntent = {
         version: 1,

@@ -5,6 +5,7 @@ import { POST } from './route';
 import { requireAdmin } from '../../../../../auth/requireAdmin';
 import { validateSameOrigin } from '../../../../../auth/csrf';
 import { AdminAuthError, AdminPermission } from '../../../../../auth/authTypes';
+import { ADMIN_REFERENCE_LIMITS } from '../../../../../import/adminReferenceReconciliation';
 
 vi.mock('server-only', () => ({}));
 vi.mock('../../../../../auth/requireAdmin', () => ({ requireAdmin: vi.fn() }));
@@ -135,5 +136,85 @@ describe('POST /api/imports/admin-reference/inspect route security & contract', 
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.code).toBe('INVALID_FILE_TYPE');
+  });
+
+  it('rejects duplicate referenceFile fields', async () => {
+    vi.mocked(validateSameOrigin).mockReturnValue(true);
+    mockAdmin(['projects.edit']);
+
+    const file = await createXlsxFile();
+    const formData = new FormData();
+    formData.append('referenceFile', file);
+    formData.append('referenceFile', file);
+    const req = new NextRequest(URL, {
+      method: 'POST',
+      headers: { origin: ORIGIN, 'content-length': String(file.size * 2 + 500) },
+      body: formData,
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('DUPLICATE_REFERENCE_FILE');
+  });
+
+  it('rejects unexpected multipart fields', async () => {
+    vi.mocked(validateSameOrigin).mockReturnValue(true);
+    mockAdmin(['projects.edit']);
+
+    const file = await createXlsxFile();
+    const formData = new FormData();
+    formData.append('referenceFile', file);
+    formData.append('unexpected', 'value');
+    const req = new NextRequest(URL, {
+      method: 'POST',
+      headers: { origin: ORIGIN, 'content-length': String(file.size + 500) },
+      body: formData,
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('UNEXPECTED_UPLOAD_FIELD');
+  });
+
+  it('rejects a malformed .xlsx workbook', async () => {
+    vi.mocked(validateSameOrigin).mockReturnValue(true);
+    mockAdmin(['projects.edit']);
+
+    const file = new File(['not an xlsx archive'], 'reference.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const formData = new FormData();
+    formData.append('referenceFile', file);
+    const req = new NextRequest(URL, {
+      method: 'POST',
+      headers: { origin: ORIGIN, 'content-length': String(file.size + 200) },
+      body: formData,
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('INVALID_WORKBOOK');
+  });
+
+  it('rejects an oversized reference workbook before parsing', async () => {
+    vi.mocked(validateSameOrigin).mockReturnValue(true);
+    mockAdmin(['projects.edit']);
+
+    const file = new File(
+      [new Uint8Array(ADMIN_REFERENCE_LIMITS.MAX_WORKBOOK_BYTES + 1)],
+      'reference.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+    );
+    const formData = new FormData();
+    formData.append('referenceFile', file);
+    const req = new NextRequest(URL, {
+      method: 'POST',
+      headers: { origin: ORIGIN, 'content-length': String(file.size + 200) },
+      body: formData,
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(413);
+    expect((await res.json()).code).toBe('REQUEST_TOO_LARGE');
   });
 });

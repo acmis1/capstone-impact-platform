@@ -4,6 +4,9 @@ import {
   browserImportCommitIntentSchema,
 } from './browserImportCommitIntentContract';
 import {
+  adminReferenceIntentsSemanticallyEqual,
+} from './adminReferenceReconciliation';
+import {
   BrowserImportPackagePreview,
   BrowserImportPreviewBatch,
   SelectionManifest,
@@ -71,6 +74,8 @@ export type BrowserImportCommitIntentErrorCode =
   | 'UNACKNOWLEDGED_WARNING_PACKAGE_SELECTED'
   | 'ACKNOWLEDGEMENT_REJECTED_FOR_NON_WARNING'
   | 'MISSING_ADMIN_REFERENCE'
+  | 'ADMIN_REFERENCE_EVIDENCE_MISMATCH'
+  | 'ADMIN_REFERENCE_INVALID'
   | 'INVALID_COMMIT_INTENT';
 
 export type BrowserImportCommitIntentResult =
@@ -120,15 +125,36 @@ export function prepareBrowserImportCommitIntent(params: {
     };
   }
 
-  // Derive Admin Reference intent from validated server preview if omitted
-  const effectiveAdminReference = adminReference || preview.adminReference;
-  if (!effectiveAdminReference) {
+  // Derive Admin Reference intent from the authoritative server preview if omitted.
+  if (!preview.adminReference) {
     return {
       success: false,
       code: 'MISSING_ADMIN_REFERENCE',
       message: 'Admin reference dataset cross-check is required before preparing or staging metadata.',
     };
   }
+  if (
+    adminReference &&
+    !adminReferenceIntentsSemanticallyEqual(adminReference, preview.adminReference)
+  ) {
+    return {
+      success: false,
+      code: 'ADMIN_REFERENCE_EVIDENCE_MISMATCH',
+      message: 'Admin reference evidence does not match the authoritative preview.',
+    };
+  }
+  if (
+    preview.batchIssues.some(
+      (issue) => issue.severity === 'error' && issue.code.startsWith('ADMIN_REFERENCE_')
+    )
+  ) {
+    return {
+      success: false,
+      code: 'ADMIN_REFERENCE_INVALID',
+      message: 'The Admin reference dataset is invalid for this reconciliation operation.',
+    };
+  }
+  const effectiveAdminReference = preview.adminReference;
 
   // 2. Strict preflight check on manifest
   const preflightRes = runBrowserImportManifestPreflight(manifest);

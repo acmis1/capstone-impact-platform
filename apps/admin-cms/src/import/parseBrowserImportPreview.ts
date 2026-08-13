@@ -594,6 +594,8 @@ export async function analyzeBrowserImportServer(
       mapping,
     });
 
+    batchIssues.push(...reconRes.batchIssues);
+
     for (let i = 0; i < packagePreviews.length; i++) {
       const pkgPreview = packagePreviews[i];
       const serverPkg = serverPackages[i];

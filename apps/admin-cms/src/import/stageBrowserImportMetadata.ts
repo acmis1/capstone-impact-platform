@@ -1,6 +1,10 @@
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { AuthenticatedAdminContext } from '../auth/authTypes';
-import { BrowserImportCommitIntent } from './browserImportCommitIntentContract';
+import {
+  adminReferenceIntentSchema,
+  BrowserImportCommitIntent,
+  browserImportCommitIntentSchema,
+} from './browserImportCommitIntentContract';
 import {
   BrowserImportMetadataStageErrorCode,
   BrowserImportMetadataStageResponse,
@@ -9,6 +13,10 @@ import {
 import { BrowserImportServerAnalysis } from './parseBrowserImportPreview';
 import { validateFolderDerivedPublicId } from './publicIdValidation';
 import { normalizeParticipantContactEmail } from '../domain/participantContactEmail';
+import {
+  adminReferenceIntentsSemanticallyEqual,
+  canonicalizeAdminReferenceIntent,
+} from './adminReferenceReconciliation';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -19,7 +27,50 @@ export async function stageBrowserImportMetadata(params: {
 }): Promise<BrowserImportMetadataStageResponse> {
   const { authContext, serverAnalysis, intent } = params;
 
-  const intentHash = computeCanonicalIntentHash(intent);
+  if (!browserImportCommitIntentSchema.safeParse(intent).success) {
+    return {
+      success: false,
+      code: 'INVALID_INTENT',
+      error: 'Commit intent is invalid.',
+    };
+  }
+
+  const intentAdminReference = adminReferenceIntentSchema.safeParse(intent.adminReference);
+  const previewAdminReference = adminReferenceIntentSchema.safeParse(
+    serverAnalysis.preview.batch.adminReference
+  );
+  if (!intentAdminReference.success || !previewAdminReference.success) {
+    return {
+      success: false,
+      code: 'INVALID_INTENT',
+      error: 'Admin reference reconciliation evidence is required for staging.',
+    };
+  }
+
+  if (
+    !adminReferenceIntentsSemanticallyEqual(
+      intentAdminReference.data,
+      previewAdminReference.data
+    )
+  ) {
+    return {
+      success: false,
+      code: 'PREVIEW_FINGERPRINT_MISMATCH',
+      error: 'Admin reference evidence does not match the authoritative preview.',
+    };
+  }
+
+  if (
+    serverAnalysis.preview.batch.batchIssues.some(
+      (issue) => issue.severity === 'error' && issue.code.startsWith('ADMIN_REFERENCE_')
+    )
+  ) {
+    return {
+      success: false,
+      code: 'INVALID_SELECTION',
+      error: 'The Admin reference dataset is invalid for staging.',
+    };
+  }
 
   const selectedPathsSet = new Set(intent.selectedPackagePaths);
   if (selectedPathsSet.size !== intent.selectedPackagePaths.length) {
@@ -65,6 +116,14 @@ export async function stageBrowserImportMetadata(params: {
         success: false,
         code: 'INVALID_SELECTION',
         error: 'Invalid packages cannot be staged.',
+      };
+    }
+
+    if (!pkg.reconciliation || pkg.reconciliation.status !== 'RECONCILED') {
+      return {
+        success: false,
+        code: 'INVALID_SELECTION',
+        error: 'Selected packages must be reconciled against the Admin reference dataset.',
       };
     }
 
@@ -132,6 +191,12 @@ export async function stageBrowserImportMetadata(params: {
     }
   }
 
+  const canonicalIntent: BrowserImportCommitIntent = {
+    ...intent,
+    adminReference: canonicalizeAdminReferenceIntent(intentAdminReference.data),
+  };
+  const intentHash = computeCanonicalIntentHash(canonicalIntent);
+
   // Format packages payload for RPC with zero defaults or fallbacks
   const payloadPackages = selectedPackages.map((pkg) => {
     const m = pkg.manifest!;
@@ -186,7 +251,7 @@ export async function stageBrowserImportMetadata(params: {
   const { data, error } = await supabase.rpc('stage_browser_import_metadata', {
     p_intent_hash: intentHash,
     p_preview_fingerprint: intent.previewFingerprint,
-    p_canonical_intent: intent,
+    p_canonical_intent: canonicalIntent,
     p_mode: serverAnalysis.preview.batch.mode,
     p_source_folder: intent.selectedRootName,
     p_imported_by_id: authContext.adminUserId,
