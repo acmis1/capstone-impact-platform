@@ -124,6 +124,10 @@ Run from the repository root:
 | `GEMINI_API_KEY` and `GEMINI_MODEL` | Server-side optional | Assistive extraction configuration. |
 | `GEMINI_ASSISTIVE_EXTRACTION_ENABLED` | Server-side optional | Enables assistive extraction only when explicitly set to `true`. |
 | `STAFF_PROVISIONING_ENABLED` | Server-only optional | Enables creation of new staff invitations only when explicitly set to `true`. Fails closed when absent. Never gates activation of an existing pending invitation. |
+| `PARTICIPANT_PREVIEW_EMAIL_ENABLED` | Server-only optional | Enables participant preview email delivery only when explicitly set to `true`. Fails closed when absent. |
+| `PARTICIPANT_PREVIEW_EMAIL_SMTP_HOST`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_PORT`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_SECURE` | Server-only optional | SMTP endpoint for participant preview email. Incomplete or invalid configuration means disabled. |
+| `PARTICIPANT_PREVIEW_EMAIL_SMTP_USER`, `PARTICIPANT_PREVIEW_EMAIL_SMTP_PASSWORD` | Server-only optional | SMTP credentials. Required together or not at all; a username without a password means disabled. |
+| `PARTICIPANT_PREVIEW_EMAIL_FROM` | Server-only optional | From address for participant preview email. Required when delivery is enabled. |
 
 The runtime contract in [`src/lib/env.ts`](./src/lib/env.ts) validates required public/server configuration and classifies keys without exposing their values. `.env` and `.env.local` are ignored by Git.
 
@@ -216,6 +220,20 @@ Creating new invitations is gated by the server-only `STAFF_PROVISIONING_ENABLED
 Supabase Auth and PostgreSQL cannot share a transaction, so provisioning runs as an explicit convergence state machine (Migration 0022). A database-validated marker is consumed during the Auth insert and replaced with a one-way lifecycle hash in server-controlled Auth app metadata. Compensation may remove only an identity carrying that exact marker; email and creation time are never sufficient ownership proof, so pre-existing or unrelated accounts are never deleted. If compensation itself cannot complete, the attempt is recorded as `compensation_failed` and surfaced in the Admin/CMS rather than reported as success.
 
 Institutional approval for production use, an approved production SMTP/email arrangement, hosted multi-user acceptance and human staff UAT all remain pending. `bootstrap_initial_admin` is unchanged and remains restricted to the first administrator.
+
+### Participant preview email notification
+
+Staff holding participant-preview authority may explicitly choose **Generate preview and send email**. Sending is never automatic: no page load, approval, correction resolution or readiness change triggers it.
+
+**Authoritative recipient.** The destination is always `projects.participant_contact_email`, resolved server-side from persisted project data at execution time. It arrives through the canonical import path (`Participant contact email` in `project-details.xlsx` → workbook parser → `stage_browser_import_metadata`) and is normalized to trimmed lowercase by the database. The browser cannot supply, override, add or copy a recipient: the request body accepts only the `isCorrectionReissue` and `sendEmail` intent flags, and any attempt to include a destination, actor or credential field is rejected with `400` before any state change. Missing and invalid contacts fail closed with `PARTICIPANT_EMAIL_MISSING` / `PARTICIPANT_EMAIL_INVALID` **before** anything is generated.
+
+**Token non-persistence.** The existing preview security property is unchanged: the raw token is generated server-side, only its SHA-256 hash reaches the database, and the raw value is returned exactly once. The secure URL is assembled in server memory and exists only there, in the outgoing message, and in that one-time response. It is never persisted, never logged, and never recoverable. A preview generated **without** email therefore cannot be emailed later — the Admin/CMS says so plainly rather than offering an action that cannot work. Staff who need an emailed link revoke and issue a new preview through the ordinary lifecycle.
+
+**Atomic Generate + Send.** One PostgreSQL transaction (Migration 0023) validates the recipient, creates the preview from its hash alone, and reserves a delivery lifecycle bound to that exact `participant_preview_id`. Either all three exist afterwards or none does, so an active preview whose one-time credential has already evaporated can never be left without a delivery lifecycle.
+
+**Delivery state machine.** PostgreSQL and SMTP cannot share a transaction, so the ledger records what is actually known: `reserved → transport_started → sent`, plus `failed` (reliable refusal, or transport provably never began) and `delivery_unknown` (the message may have gone out; acceptance cannot be proven). Execution ownership is a hashed two-minute lease; terminal states are immutable, so a stale owner can only observe them. An expired lease never re-grants execution, and an ambiguous outcome is never automatically resent. **Exactly-once delivery is not claimed** — generic SMTP cannot provide it. What is guaranteed is one authoritative lifecycle per exact preview, at most one ordinary transport invocation per claimed lifecycle, and deterministic convergence of duplicate sequential and concurrent requests.
+
+**Enablement.** Real delivery is disabled by default. It requires `PARTICIPANT_PREVIEW_EMAIL_ENABLED=true` **and** complete, valid SMTP configuration; anything partial or unparseable means disabled, and Generate + Send then fails closed with `EMAIL_DELIVERY_DISABLED` without generating a preview. Verification to date is Local/disposable only, against the Local email sink that the pinned Supabase stack already ships. **Still pending: institutional/provider approval, production SMTP or provider selection, production credentials, an approved From address and domain, institutional email policy, hosted/staging rollout, human UAT, and reminder policy.** Reminder scheduling is deliberately out of scope — the ledger retains the evidence a future reminder policy would need, but there is no cron, scheduler, queue worker, repeat send or arbitrary resend.
 
 ## Application routes
 

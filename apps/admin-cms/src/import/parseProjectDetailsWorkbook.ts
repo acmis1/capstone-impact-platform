@@ -12,6 +12,7 @@ import {
   normalizeShowcaseLayout,
   normalizeFeaturedMedia
 } from './projectDetailsWorkbookContract';
+import { validateParticipantContactEmail } from '../domain/participantContactEmail';
 
 interface CellExtractionResult {
   rawString: string;
@@ -337,6 +338,27 @@ export async function parseProjectDetailsWorkbook(
   const background = processTextField('background', false);
   const solution = processTextField('solution', false);
   const groupName = processTextField('groupName', true);
+
+  // Optional participant/group contact address. Staff may leave the column blank — an ordinary
+  // preview never needs one — but a value that is present and unusable is a blocking error rather
+  // than something silently discarded, because a wrong address means correspondence goes nowhere or
+  // to the wrong people. The raw cell value is deliberately never echoed into the issue message.
+  const contactEmailRaw = processTextField('participantContactEmail', false);
+  const contactEmailValidation = validateParticipantContactEmail(contactEmailRaw);
+  let participantContactEmail = '';
+  if (contactEmailValidation.valid) {
+    participantContactEmail = contactEmailValidation.email;
+  } else if (contactEmailValidation.reason === 'INVALID') {
+    errors.push({
+      code: 'WORKBOOK_INVALID_PARTICIPANT_CONTACT_EMAIL',
+      message: 'Participant contact email is not a valid single email address.',
+      severity: 'error',
+      fieldName: 'participantContactEmail',
+      columnName: extractFieldValue('participantContactEmail').colInfo?.rawHeader,
+      rowNumber: projectRowObj.rowNumber
+    });
+  }
+
   const academicSupervisor = processTextField('academicSupervisor', false);
   const industryPartner = processTextField('industryPartner', false);
   const industry = processTextField('industry', false);
@@ -511,6 +533,7 @@ export async function parseProjectDetailsWorkbook(
     solution,
     teamMembers,
     groupName,
+    participantContactEmail,
     academicSupervisor,
     industryPartner,
     industry,

@@ -3,6 +3,7 @@ import type {
   ParticipantPreviewResponseState,
 } from '../domain/participantPreview';
 import type { PublicationReadinessResult } from '../domain/publicationReadiness';
+import type { ParticipantPreviewNotificationView } from '../notifications/participantPreviewNotification';
 import { ParticipantPreviewExecutionError } from '../repositories/ParticipantPreviewRepository';
 import { postgresUuidSchema } from './projectMetadata';
 import { z } from 'zod';
@@ -123,6 +124,12 @@ export function parseAuditHistoryRow(input: unknown): AuditHistoryView {
 export interface ProjectDetailPreviewState {
   activePreview: { createdAt: string; expiresAt: string } | null;
   responseState: ParticipantPreviewResponseState;
+  /**
+   * Delivery history for the current active preview, or null when its link was generated without
+   * email — a state the panel must state plainly rather than offer to "send later", because the
+   * one-time credential no longer exists.
+   */
+  notification: ParticipantPreviewNotificationView | null;
 }
 
 export interface ProjectDetailAuxiliaryData<TProject> {
@@ -217,7 +224,7 @@ export async function loadProjectDetailAuxiliaryData<TProject>(
     auditRecords: audit.available ? audit.value : null,
     previewState: preview.available
       ? preview.value
-      : { activePreview: null, responseState: { type: 'unresponded' } },
+      : { activePreview: null, responseState: { type: 'unresponded' }, notification: null },
     previewStateAvailable: preview.available,
     resolutionStatus: resolution.available ? resolution.value : null,
     resolutionStatusAvailable: resolution.available,

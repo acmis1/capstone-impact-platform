@@ -13,6 +13,8 @@ import { requireAdmin } from '../../../../auth/requireAdmin';
 import { hasPermission, canManageParticipantPreview, canPreparePublication, canResolveParticipantCorrection } from '../../../../auth/permissions';
 import { ParticipantPreviewPanel } from '../../../../components/admin/ParticipantPreviewPanel';
 import { SupabaseParticipantPreviewRepository } from '../../../../repositories/SupabaseParticipantPreviewRepository';
+import { SupabaseParticipantPreviewNotificationRepository } from '../../../../repositories/SupabaseParticipantPreviewNotificationRepository';
+import { isParticipantPreviewEmailEnabled } from '../../../../notifications/participantPreviewEmailConfig';
 import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetadataEditor';
 import { GuardedProjectBackLink, ProjectMetadataNavigationProvider } from '../../../../components/admin/ProjectMetadataNavigation';
 import { SupabaseProjectMetadataGateway, loadProjectMetadataEditorData } from '../../../../projects/projectMetadataService';
@@ -61,6 +63,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let activePreview: { createdAt: string; expiresAt: string } | null = null;
   let previewResponseState: import('../../../../domain/participantPreview').ParticipantPreviewResponseState = { type: 'unresponded' };
   let previewStateAvailable = false;
+  let previewNotification: import('../../../../notifications/participantPreviewNotification').ParticipantPreviewNotificationView | null = null;
+  // Server-only enablement. The browser never learns the SMTP configuration, only whether the
+  // Generate + Send action is offered at all.
+  const emailDeliveryEnabled = isParticipantPreviewEmailEnabled();
   let resolutionStatus: import('../../../../domain/participantPreview').ParticipantPreviewCorrectionResolutionStatus | null = null;
   let resolutionStatusAvailable = false;
   let canResolveCorrection = false;
@@ -123,6 +129,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     try {
       const supabase = createSupabaseAdminClientCore();
       const previewRepository = new SupabaseParticipantPreviewRepository();
+      const notificationRepository = new SupabaseParticipantPreviewNotificationRepository();
       const env = getServerEnv();
       localPublicationExecutionAvailable = canPreparePublicationPlan && isLocalPublicationExecutionAvailable(env.supabaseUrl);
       canExecuteLocalArchive = hasPermission(adminContext.permissions, 'projects.archive') && isLocalPublicationExecutionAvailable(env.supabaseUrl);
@@ -148,10 +155,17 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         },
         loadPreviewState: async () => {
           const preview = await previewRepository.getActivePreview(await projectDbId);
-          if (!preview) return { activePreview: null, responseState: { type: 'unresponded' as const } };
+          if (!preview) {
+            return { activePreview: null, responseState: { type: 'unresponded' as const }, notification: null };
+          }
+          const [responseState, notification] = await Promise.all([
+            previewRepository.getResponseState(preview.previewId),
+            notificationRepository.getNotificationForPreview(preview.previewId),
+          ]);
           return {
             activePreview: { createdAt: preview.createdAt, expiresAt: preview.expiresAt },
-            responseState: await previewRepository.getResponseState(preview.previewId),
+            responseState,
+            notification,
           };
         },
         loadResolutionStatus: async () => previewRepository.getCorrectionResolutionStatus(await projectDbId),
@@ -166,6 +180,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       activePreview = auxiliary.previewState.activePreview;
       previewResponseState = auxiliary.previewState.responseState;
       previewStateAvailable = auxiliary.previewStateAvailable;
+      previewNotification = auxiliary.previewState.notification;
       resolutionStatus = auxiliary.resolutionStatus;
       resolutionStatusAvailable = auxiliary.resolutionStatusAvailable;
       publicationReadiness = auxiliary.publicationReadiness;
@@ -387,6 +402,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             initialActivePreview={activePreview}
             responseState={previewResponseState}
             stateAvailable={previewStateAvailable}
+            notification={previewNotification}
+            participantContactEmail={project.participantContactEmail || null}
+            emailDeliveryEnabled={emailDeliveryEnabled}
             resolutionStatus={resolutionStatus}
             resolutionStateAvailable={resolutionStatusAvailable}
             canResolveCorrection={canResolveCorrection}

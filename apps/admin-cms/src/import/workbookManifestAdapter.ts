@@ -32,6 +32,7 @@ export function buildImportPackageManifestFromWorkbook(
     industryPartner: metadata.industryPartner || '',
     academicSupervisor: metadata.academicSupervisor || '',
     groupName: metadata.groupName,
+    participantContactEmail: metadata.participantContactEmail || '',
     teamMembers: [...metadata.teamMembers],
     ...(posterText ? { posterText: posterText.trim() } : {}),
     ...(metadata.accessibilityText ? { accessibilityText: metadata.accessibilityText } : {}),

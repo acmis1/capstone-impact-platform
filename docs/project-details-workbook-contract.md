@@ -51,6 +51,7 @@ Header matching is case-insensitive, order-independent, trims surrounding whites
 | `Solution / impact` | `solution` | Optional | `solution / impact`, `solution`, `impact`, `solution/impact` |
 | `Team members` | `teamMembers` | **Required** | `team members`, `teammembers`, `participants` |
 | `Group name` | `groupName` | **Required** | `group name`, `groupname` |
+| `Participant contact email` | `participantContactEmail` | Optional | `participant contact email`, `participantcontactemail`, `group contact email`, `groupcontactemail`, `participant email`, `group email`, `contact email` |
 | `Academic supervisor` | `academicSupervisor` | Optional | `academic supervisor`, `academicsupervisor`, `supervisor` |
 | `Industry partner` | `industryPartner` | Optional | `industry partner`, `industrypartner` |
 | `Industry sector` | `industry` | Optional | `industry sector`, `industrysector`, `industry` |
@@ -60,6 +61,20 @@ Header matching is case-insensitive, order-independent, trims surrounding whites
 | `Showcase layout` | `templateId` | Optional | `showcase layout`, `showcaselayout`, `templateid`, `template id` |
 | `Main media to feature` | `layoutConfig.featuredMedia` | Optional | `main media to feature`, `mainmediatofeature`, `featuredmedia`, `featured media` |
 | `Accessibility text` | `accessibilityText` | Optional | `accessibility text`, `accessibilitytext` |
+
+### Participant Contact Email
+
+`Participant contact email` is the authoritative destination for participant preview correspondence.
+It is a **project/group communication contact**, not an individual participant account, and staff may
+leave it blank — an ordinary participant preview never requires one.
+
+- Stored normalized: surrounding whitespace trimmed and the whole address lowercased.
+- Blank or absent leaves the project with no authoritative contact. Generate + Send then fails closed
+  with `PARTICIPANT_EMAIL_MISSING` and creates no preview.
+- Present but not a single valid address is a blocking `WORKBOOK_INVALID_PARTICIPANT_CONTACT_EMAIL`
+  error. The raw cell value is never echoed into the issue message.
+- The browser never supplies or overrides this address at send time; the server resolves it from
+  persisted project data at execution time.
 
 ### Public ID Separation
 
@@ -134,6 +149,7 @@ Unrecognized non-empty values emit a generic `WORKBOOK_UNKNOWN_FEATURED_MEDIA` w
 | `WORKBOOK_MISSING_REQUIRED_VALUE` | `error` | A required cell value is empty or missing. |
 | `WORKBOOK_INVALID_YEAR` | `error` | Project year is not a valid 4-digit year between 1900 and 2100. |
 | `WORKBOOK_UNUSABLE_FORMULA` | `error` | Formula cell in a required field has no usable cached result. |
+| `WORKBOOK_INVALID_PARTICIPANT_CONTACT_EMAIL` | `error` | Participant contact email is present but is not a valid single email address. |
 | `WORKBOOK_UNEXPECTED_SHEET_NAME` | `warning` | Preferred sheet `Project details` was absent; processed fallback sheet. |
 | `WORKBOOK_EXTRA_SHEET` | `warning` | Additional non-empty worksheet detected and ignored. |
 | `WORKBOOK_UNKNOWN_COLUMN` | `warning` | Non-empty header column not recognized in canonical/alias dictionary. |

@@ -36,6 +36,7 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260812150000_controlled_public_removal.sql',
   '20260813002154_project_metadata_audit_history.sql',
   '20260813120000_staff_identity_provisioning.sql',
+  '20260813180000_participant_preview_email_notifications.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {
@@ -68,8 +69,8 @@ export function isVersionInNpm11Range(versionStr: string): boolean {
 
 export function validateMigrationsList(filenames: string[]): { passed: boolean; message: string } {
   const sqlFiles = filenames.filter((f) => f.endsWith('.sql'));
-  if (sqlFiles.length !== 22) {
-    return { passed: false, message: `FAIL: Expected exactly 22 migration files, found ${sqlFiles.length}` };
+  if (sqlFiles.length !== 23) {
+    return { passed: false, message: `FAIL: Expected exactly 23 migration files, found ${sqlFiles.length}` };
   }
 
   const timestampRegex = /^(\d{14})_.+\.sql$/;
@@ -95,7 +96,7 @@ export function validateMigrationsList(filenames: string[]): { passed: boolean; 
     }
   }
 
-  return { passed: true, message: 'PASS: Exactly 22 timestamped migrations exist with exact expected filenames in ascending order' };
+  return { passed: true, message: 'PASS: Exactly 23 timestamped migrations exist with exact expected filenames in ascending order' };
 }
 
 export function sanitizePublicSafeMessage(msg: string): string {

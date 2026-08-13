@@ -33,6 +33,7 @@ export interface DatabaseProjectRow {
   industry_partner?: string;
   academic_supervisor?: string;
   group_name?: string;
+  participant_contact_email?: string | null;
   team_members?: string[];
   poster_url?: string;
   poster_pdf_url?: string;
@@ -92,6 +93,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       industryPartner: row.industry_partner || '',
       academicSupervisor: row.academic_supervisor || '',
       groupName: row.group_name || '',
+      participantContactEmail: row.participant_contact_email || '',
       teamMembers: row.team_members || [],
       poster: row.poster_url || '',
       posterPdf: row.poster_pdf_url || '',

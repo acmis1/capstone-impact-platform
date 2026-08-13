@@ -898,6 +898,7 @@ describe('Browser Import Preview Suite', () => {
           industryPartner: 'Partner',
           academicSupervisor: 'Supervisor',
           groupName: 'Group 1',
+          participantContactEmail: 'group1@example.invalid',
           teamMembers: ['Alice'],
           layoutConfig: {},
         },

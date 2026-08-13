@@ -890,4 +890,78 @@ describe('parseProjectDetailsWorkbook', () => {
     expect(parsed.metadata.layoutConfig.sectionOrder).not.toContain('extra_section');
     expect(parsed.metadata.layoutConfig.hiddenSections).not.toContain('hidden_test');
   });
+
+  // 41-45. Authoritative participant/group contact email column
+  describe('participant contact email column', () => {
+    const headersWithContact = [...defaultCanonicalHeaders, 'Participant contact email'];
+
+    it('41. normalizes a supplied contact email to trimmed lowercase', async () => {
+      const buf = await createWorkbookBuffer({
+        headers: headersWithContact,
+        dataRows: [[...defaultCanonicalData, '  Solar.Team@Example.INVALID  ']]
+      });
+
+      const result = await parseProjectDetailsWorkbook(buf);
+      expect(result.metadata.participantContactEmail).toBe('solar.team@example.invalid');
+      expect(result.warnings).toHaveLength(0);
+    });
+
+    it('42. treats an absent column and a blank cell alike, as no authoritative contact', async () => {
+      const withoutColumn = await createWorkbookBuffer({
+        headers: defaultCanonicalHeaders,
+        dataRows: [defaultCanonicalData]
+      });
+      expect((await parseProjectDetailsWorkbook(withoutColumn)).metadata.participantContactEmail).toBe('');
+
+      const blankCell = await createWorkbookBuffer({
+        headers: headersWithContact,
+        dataRows: [[...defaultCanonicalData, '   ']]
+      });
+      expect((await parseProjectDetailsWorkbook(blankCell)).metadata.participantContactEmail).toBe('');
+    });
+
+    it('43. rejects a malformed address rather than importing an unusable contact', async () => {
+      const buf = await createWorkbookBuffer({
+        headers: headersWithContact,
+        dataRows: [[...defaultCanonicalData, 'not-an-email']]
+      });
+
+      await expect(parseProjectDetailsWorkbook(buf)).rejects.toThrow(ProjectDetailsWorkbookError);
+      try {
+        await parseProjectDetailsWorkbook(buf);
+      } catch (err) {
+        const pErr = err as ProjectDetailsWorkbookError;
+        const issues = pErr.errors.filter(i => i.fieldName === 'participantContactEmail');
+        expect(issues).toHaveLength(1);
+        expect(issues[0].code).toBe('WORKBOOK_INVALID_PARTICIPANT_CONTACT_EMAIL');
+        // The raw cell value must never be echoed back into a staff-facing issue message.
+        expect(issues[0].message).not.toContain('not-an-email');
+      }
+    });
+
+    it('44. rejects an address carrying a header-injection payload', async () => {
+      const CRLF = String.fromCharCode(13) + String.fromCharCode(10);
+      const buf = await createWorkbookBuffer({
+        headers: headersWithContact,
+        dataRows: [[...defaultCanonicalData, `solar@example.invalid${CRLF}Bcc: attacker@evil.test`]]
+      });
+
+      await expect(parseProjectDetailsWorkbook(buf)).rejects.toThrow(ProjectDetailsWorkbookError);
+    });
+
+    it('45. carries the normalized contact through the import manifest adapter', async () => {
+      const buf = await createWorkbookBuffer({
+        headers: [...defaultCanonicalHeaders, 'Group contact email'],
+        dataRows: [[...defaultCanonicalData, 'Solar.Team@Example.INVALID']]
+      });
+      const parsed = await parseProjectDetailsWorkbook(buf);
+
+      const manifest = buildImportPackageManifestFromWorkbook({
+        parsedWorkbook: parsed,
+        publicId: '2026-solar-power-optimizer'
+      });
+
+      expect(manifest.participantContactEmail).toBe('solar.team@example.invalid');
+    });
+  });
 });

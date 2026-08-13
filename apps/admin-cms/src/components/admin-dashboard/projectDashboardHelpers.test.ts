@@ -95,6 +95,7 @@ describe('projectDashboardHelpers', () => {
         industryPartner: 'Acme Corp',
         academicSupervisor: 'Dr Smith',
         groupName: 'Group Alpha',
+        participantContactEmail: 'group.alpha@example.invalid',
         teamMembers: ['Alice', 'Bob'],
         poster: 'https://secret.com/poster.jpg',
         posterPdf: 'https://secret.com/poster.pdf',

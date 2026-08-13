@@ -17,6 +17,7 @@ export function createMockProject(overrides: Partial<Project> = {}): Project {
     industryPartner: 'EcoPower Global',
     academicSupervisor: 'Dr. John Doe',
     groupName: 'WindForce Twin Tech',
+    participantContactEmail: 'windforce.twin.tech@example.invalid',
     teamMembers: ['Jane Smith', 'Alice Johnson'],
     poster: 'https://example.com/assets/poster.png',
     posterPdf: 'https://example.com/assets/poster.pdf',

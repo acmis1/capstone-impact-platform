@@ -14,6 +14,11 @@ export interface ProjectDetailsWorkbookMetadata {
   solution: string;
   teamMembers: string[];
   groupName: string;
+  /**
+   * Authoritative participant/group contact address used for participant preview correspondence.
+   * Normalized to trimmed lowercase, or empty when the staff-facing column is left blank.
+   */
+  participantContactEmail: string;
   academicSupervisor: string;
   industryPartner: string;
   industry: string;
@@ -145,6 +150,20 @@ export const COLUMN_DEFINITIONS: ColumnDefinition[] = [
     internalField: 'groupName',
     required: true,
     aliases: ['group name', 'groupname']
+  },
+  {
+    canonicalName: 'Participant contact email',
+    internalField: 'participantContactEmail',
+    required: false,
+    aliases: [
+      'participant contact email',
+      'participantcontactemail',
+      'group contact email',
+      'groupcontactemail',
+      'participant email',
+      'group email',
+      'contact email'
+    ]
   },
   {
     canonicalName: 'Academic supervisor',

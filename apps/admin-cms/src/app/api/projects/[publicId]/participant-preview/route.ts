@@ -10,6 +10,12 @@ import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from '../../../../.
 import { validatePreviewPublicId } from '../../../../../auth/participantPreviewInput';
 import { generateRawPreviewToken, hashPreviewToken } from '../../../../../previews/participantPreviewToken';
 import { getStagingBuckets } from '../../../../../lib/supabase/buckets';
+import { SupabaseParticipantPreviewNotificationRepository } from '../../../../../repositories/SupabaseParticipantPreviewNotificationRepository';
+import { resolveParticipantPreviewEmailConfig } from '../../../../../notifications/participantPreviewEmailConfig';
+import { SmtpParticipantPreviewEmailTransport } from '../../../../../notifications/smtpParticipantPreviewEmailTransport';
+import { executeParticipantPreviewNotification } from '../../../../../notifications/participantPreviewNotificationService';
+import { participantPreviewNotificationMessage } from '../../../../../notifications/participantPreviewNotification';
+import { parseParticipantPreviewRequestBody } from '../../../../../auth/participantPreviewInput';
 
 const NO_STORE = { 'Cache-Control': 'no-store' } as const;
 
@@ -45,18 +51,25 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Validation failed.' }, { status: 400, headers: NO_STORE });
     }
 
-    let isCorrectionReissue = false;
+    let parsedBody: ReturnType<typeof parseParticipantPreviewRequestBody> = {
+      valid: true,
+      isCorrectionReissue: false,
+      sendEmail: false,
+    };
     try {
       const contentType = request.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
-        const body = await request.json();
-        if (body && typeof body === 'object' && body.isCorrectionReissue === true) {
-          isCorrectionReissue = true;
-        }
+        parsedBody = parseParticipantPreviewRequestBody(await request.json());
       }
     } catch {
-      // Ignore body parsing errors for simple POST without body
+      // A malformed or absent body is the ordinary bodyless POST; the defaults above apply.
     }
+
+    if (!parsedBody.valid) {
+      return NextResponse.json({ success: false, error: 'Validation failed.' }, { status: 400, headers: NO_STORE });
+    }
+
+    const { isCorrectionReissue, sendEmail } = parsedBody;
 
     if (isCorrectionReissue) {
       const canEdit = hasPermission(adminContext.permissions, 'projects.edit');
@@ -74,15 +87,101 @@ export async function POST(
       }
     }
 
+    // Enablement is checked before anything is generated. Discovering that delivery is switched off
+    // only after creating a preview would burn its one-time credential for nothing.
+    const emailConfig = sendEmail
+      ? resolveParticipantPreviewEmailConfig()
+      : ({ enabled: false } as const);
+
+    if (sendEmail && !emailConfig.enabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'EMAIL_DELIVERY_DISABLED',
+          error: participantPreviewNotificationMessage('EMAIL_DELIVERY_DISABLED'),
+        },
+        { status: 409, headers: NO_STORE }
+      );
+    }
+
     const rawToken = generateRawPreviewToken();
     const tokenHash = hashPreviewToken(rawToken);
+    const privateBucket = getStagingBuckets().DRAFT_PRIVATE;
+
+    if (sendEmail && emailConfig.enabled) {
+      const notificationRepository = new SupabaseParticipantPreviewNotificationRepository();
+      const generated = await notificationRepository.generatePreviewWithNotification({
+        publicId: validation.publicId,
+        adminId: adminContext.adminUserId,
+        tokenHash,
+        privateBucket,
+        expiresInSeconds: DEFAULT_PREVIEW_EXPIRES_IN_SECONDS,
+        isCorrectionReissue,
+      });
+
+      if (generated.resultCode !== 'SUCCESS') {
+        // Nothing was created: the atomic RPC validates the authoritative contact first.
+        return NextResponse.json(
+          {
+            success: false,
+            code: generated.resultCode,
+            error: participantPreviewNotificationMessage(generated.resultCode),
+          },
+          { status: 409, headers: NO_STORE }
+        );
+      }
+
+      const preview = generated.value;
+      // The secure URL is assembled here, in server memory, and handed only to the transport. It is
+      // never persisted, never logged, and leaves this process only in the outgoing message and in
+      // the existing one-time response below.
+      const previewUrl = `${requestOrigin}/participant-preview/${rawToken}`;
+
+      const notification = await executeParticipantPreviewNotification(
+        {
+          notifications: notificationRepository,
+          transport: new SmtpParticipantPreviewEmailTransport(emailConfig.smtp),
+        },
+        {
+          notificationId: preview.notificationId,
+          executionToken: preview.executionToken,
+          recipient: preview.recipient,
+          projectTitle: preview.projectTitle,
+          previewUrl,
+          expiresAt: preview.expiresAt,
+          fromAddress: emailConfig.smtp.from,
+        }
+      );
+
+      // The preview itself exists regardless of the delivery outcome, so the one-time credential is
+      // still returned exactly once — otherwise an ambiguous delivery would strand a valid preview
+      // that no one could reach.
+      return NextResponse.json(
+        {
+          success: true,
+          publicId: preview.publicId,
+          previewToken: rawToken,
+          previewUrl,
+          createdAt: preview.createdAt,
+          expiresAt: preview.expiresAt,
+          notification: {
+            status: notification.code,
+            message: notification.message,
+            recipient: preview.recipient,
+            requestedAt: preview.requestedAt,
+            failureCode: notification.failureCode,
+          },
+        },
+        { headers: NO_STORE }
+      );
+    }
 
     const repository = new SupabaseParticipantPreviewRepository();
     const result = await repository.generatePreview({
       publicId: validation.publicId,
       adminId: adminContext.adminUserId,
       tokenHash,
-      privateBucket: getStagingBuckets().DRAFT_PRIVATE,
+      privateBucket,
       expiresInSeconds: DEFAULT_PREVIEW_EXPIRES_IN_SECONDS,
       isCorrectionReissue,
     });

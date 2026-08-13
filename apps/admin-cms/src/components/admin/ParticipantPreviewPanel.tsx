@@ -3,6 +3,10 @@
 import React, { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ParticipantPreviewResponseState, ParticipantPreviewCorrectionResolutionStatus } from '../../domain/participantPreview';
+import {
+  participantPreviewNotificationStatusLabel,
+  type ParticipantPreviewNotificationView,
+} from '../../notifications/participantPreviewNotification';
 
 interface ActivePreviewState {
   createdAt: string;
@@ -16,6 +20,12 @@ interface ParticipantPreviewPanelProps {
   initialActivePreview: ActivePreviewState | null;
   responseState: ParticipantPreviewResponseState;
   stateAvailable: boolean;
+  /** Delivery history for the current active preview; null when it was generated without email. */
+  notification?: ParticipantPreviewNotificationView | null;
+  /** Authoritative recipient, shown read-only. The server resolves it again at execution time. */
+  participantContactEmail?: string | null;
+  /** Server-side enablement. False hides Generate + Send rather than offering an action that fails. */
+  emailDeliveryEnabled?: boolean;
   resolutionStatus?: ParticipantPreviewCorrectionResolutionStatus | null;
   resolutionStateAvailable: boolean;
   canResolveCorrection?: boolean;
@@ -29,6 +39,13 @@ interface GenerateResponse {
   previewUrl?: string;
   createdAt?: string;
   expiresAt?: string;
+  notification?: {
+    status?: string;
+    message?: string;
+    recipient?: string;
+    requestedAt?: string;
+    failureCode?: string | null;
+  };
 }
 
 interface RevokeResponse {
@@ -52,6 +69,9 @@ export function ParticipantPreviewPanel({
   initialActivePreview,
   responseState,
   stateAvailable,
+  notification = null,
+  participantContactEmail = null,
+  emailDeliveryEnabled = false,
   resolutionStatus,
   resolutionStateAvailable,
   canResolveCorrection = false,
@@ -63,6 +83,7 @@ export function ParticipantPreviewPanel({
   const [activePreview, setActivePreview] = useState<ActivePreviewState | null>(initialActivePreview);
   const [previewResponseState, setPreviewResponseState] = useState<ParticipantPreviewResponseState>(responseState);
   const [justGeneratedUrl, setJustGeneratedUrl] = useState<string | null>(null);
+  const [deliveryNotice, setDeliveryNotice] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const inFlightRef = useRef(false);
 
@@ -88,18 +109,21 @@ export function ParticipantPreviewPanel({
     );
   }
 
-  const handleGenerate = async (isCorrectionReissue = false) => {
+  // The in-flight guard stops an ordinary accidental double click. It is a convenience, not the
+  // safety boundary: the server and database converge duplicate requests on their own.
+  const handleGenerate = async (isCorrectionReissue = false, sendEmail = false) => {
     if (inFlightRef.current || pending) return;
     inFlightRef.current = true;
     setPending(true);
     setError(null);
+    setDeliveryNotice(null);
     setCopyState('idle');
 
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(publicId)}/participant-preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isCorrectionReissue }),
+        body: JSON.stringify({ isCorrectionReissue, sendEmail }),
       });
       const data: GenerateResponse = await response.json().catch(() => ({ success: false, error: 'Invalid server response.' }));
 
@@ -113,6 +137,7 @@ export function ParticipantPreviewPanel({
       setJustGeneratedUrl(data.previewUrl || null);
       setActivePreview({ createdAt: data.createdAt || '', expiresAt: data.expiresAt || '' });
       setPreviewResponseState({ type: 'unresponded' });
+      setDeliveryNotice(data.notification?.message ?? null);
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred while generating the preview.');
@@ -205,6 +230,59 @@ export function ParticipantPreviewPanel({
   const resStatus = resolutionStatus?.status;
   const isInProgress = resStatus === 'in_progress' || (projectStatus === 'changes_requested' && resolutionStatus?.status === 'in_progress');
 
+  const canSendEmail = emailDeliveryEnabled && Boolean(participantContactEmail);
+
+  /**
+   * Generate + Send is offered only alongside generation, never as a later action on an existing
+   * preview: the secure link is deliberately not stored, so there is nothing left to send once the
+   * request that created it has finished.
+   */
+  const renderGenerateActions = (isCorrectionReissue: boolean, primaryLabel: string, primaryColor: string) => (
+    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+      <button
+        type="button"
+        onClick={() => handleGenerate(isCorrectionReissue, false)}
+        disabled={pending}
+        style={{
+          backgroundColor: primaryColor, color: '#FFFFFF', border: 'none', padding: '0.5rem 1rem',
+          borderRadius: '6px', cursor: pending ? 'not-allowed' : 'pointer', fontWeight: 'bold',
+          fontSize: '0.85rem', opacity: pending ? 0.6 : 1,
+        }}
+      >
+        {pending ? 'Working…' : primaryLabel}
+      </button>
+      {canSendEmail && (
+        <button
+          type="button"
+          onClick={() => handleGenerate(isCorrectionReissue, true)}
+          disabled={pending}
+          style={{
+            backgroundColor: '#0F766E', color: '#FFFFFF', border: 'none', padding: '0.5rem 1rem',
+            borderRadius: '6px', cursor: pending ? 'not-allowed' : 'pointer', fontWeight: 'bold',
+            fontSize: '0.85rem', opacity: pending ? 0.6 : 1,
+          }}
+        >
+          {pending ? 'Working…' : `${primaryLabel} and send email`}
+        </button>
+      )}
+      {emailDeliveryEnabled && participantContactEmail && (
+        <span style={{ color: '#9CA3AF', fontSize: '0.78rem' }}>
+          Email would be sent to <strong style={{ color: '#D1D5DB' }}>{participantContactEmail}</strong>
+        </span>
+      )}
+      {emailDeliveryEnabled && !participantContactEmail && (
+        <span style={{ color: '#9CA3AF', fontSize: '0.78rem', fontStyle: 'italic' }}>
+          No participant contact email is recorded for this project, so the link cannot be emailed.
+        </span>
+      )}
+      {!emailDeliveryEnabled && (
+        <span style={{ color: '#9CA3AF', fontSize: '0.78rem', fontStyle: 'italic' }}>
+          Email delivery is not enabled on this server.
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div style={{ fontSize: '0.85rem' }}>
       {error && (
@@ -213,6 +291,18 @@ export function ParticipantPreviewPanel({
           borderRadius: '6px', padding: '0.5rem 0.75rem', fontWeight: 'bold', marginBottom: '0.75rem',
         }}>
           ❌ {error}
+        </div>
+      )}
+
+      {deliveryNotice && (
+        <div
+          role="status"
+          style={{
+            backgroundColor: 'rgba(13, 148, 136, 0.08)', border: '1px solid rgba(13, 148, 136, 0.3)',
+            borderRadius: '8px', padding: '0.6rem 0.9rem', marginBottom: '0.75rem', color: '#5EEAD4',
+          }}
+        >
+          {deliveryNotice}
         </div>
       )}
 
@@ -258,6 +348,32 @@ export function ParticipantPreviewPanel({
           <div style={{ color: '#D1D5DB', fontSize: '0.8rem' }}>
             <div>Created: {activePreview.createdAt ? new Date(activePreview.createdAt).toLocaleString() : 'N/A'}</div>
             <div>Expires: {activePreview.expiresAt ? new Date(activePreview.expiresAt).toLocaleString() : 'N/A'}</div>
+          </div>
+          <div style={{ marginTop: '0.6rem', fontSize: '0.8rem' }} role="status">
+            {notification ? (
+              <div style={{ color: '#D1D5DB' }}>
+                <div>
+                  <strong style={{ color: '#93C5FD' }}>Email delivery:</strong>{' '}
+                  {participantPreviewNotificationStatusLabel(notification.status)}
+                </div>
+                <div>Sent to: {notification.recipient}</div>
+                <div>Requested: {new Date(notification.requestedAt).toLocaleString()}</div>
+                {notification.sentAt && <div>Delivered: {new Date(notification.sentAt).toLocaleString()}</div>}
+                {notification.failureCode && <div>Reason: {notification.failureCode}</div>}
+                {notification.status === 'delivery_unknown' && (
+                  <div style={{ color: '#F59E0B', marginTop: '0.25rem' }}>
+                    The message may or may not have reached the participant. It has not been sent again
+                    automatically. Revoke this preview and issue a new one if you need to be certain.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ color: '#9CA3AF', fontStyle: 'italic' }}>
+                This preview was generated without email delivery. Its secure link is intentionally not
+                stored and cannot be recovered for later sending — revoke it and generate a new preview
+                to email a link.
+              </div>
+            )}
           </div>
           <div className="mt-2 text-sm" role="status">
             {previewResponseState.type === 'confirmed' ? (
@@ -325,18 +441,7 @@ export function ParticipantPreviewPanel({
               <div style={{ color: '#10B981', fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
                 Project re-approved! You may now issue a corrected participant preview.
               </div>
-              <button
-                type="button"
-                onClick={() => handleGenerate(true)}
-                disabled={pending}
-                style={{
-                  backgroundColor: '#10B981', color: '#FFFFFF', border: 'none', padding: '0.5rem 1rem',
-                  borderRadius: '6px', cursor: pending ? 'not-allowed' : 'pointer', fontWeight: 'bold',
-                  fontSize: '0.85rem', opacity: pending ? 0.6 : 1,
-                }}
-              >
-                {pending ? 'Generating corrected preview…' : 'Generate corrected participant preview'}
-              </button>
+              {renderGenerateActions(true, 'Generate corrected participant preview', '#10B981')}
             </div>
           ) : (
             <div style={{ color: '#9CA3AF', fontSize: '0.8rem', fontStyle: 'italic' }}>
@@ -358,35 +463,11 @@ export function ParticipantPreviewPanel({
               </span>
             )}
           </div>
-          {isApprovedEligible && (
-            <button
-              type="button"
-              onClick={() => handleGenerate(false)}
-              disabled={pending}
-              style={{
-                backgroundColor: '#3B82F6', color: '#FFFFFF', border: 'none', padding: '0.5rem 1rem',
-                borderRadius: '6px', cursor: pending ? 'not-allowed' : 'pointer', fontWeight: 'bold',
-                fontSize: '0.85rem', opacity: pending ? 0.6 : 1,
-              }}
-            >
-              {pending ? 'Generating…' : 'Generate participant preview'}
-            </button>
-          )}
+          {isApprovedEligible && renderGenerateActions(false, 'Generate participant preview', '#3B82F6')}
         </div>
       ) : isApprovedEligible ? (
         /* CASE D: Normal approved state, no active preview */
-        <button
-          type="button"
-          onClick={() => handleGenerate(false)}
-          disabled={pending}
-          style={{
-            backgroundColor: '#3B82F6', color: '#FFFFFF', border: 'none', padding: '0.5rem 1rem',
-            borderRadius: '6px', cursor: pending ? 'not-allowed' : 'pointer', fontWeight: 'bold',
-            fontSize: '0.85rem', opacity: pending ? 0.6 : 1,
-          }}
-        >
-          {pending ? 'Generating…' : 'Generate participant preview'}
-        </button>
+        renderGenerateActions(false, 'Generate participant preview', '#3B82F6')
       ) : (
         <div style={{ color: '#9CA3AF', fontStyle: 'italic' }}>
           Available once the project reaches the approved state.
