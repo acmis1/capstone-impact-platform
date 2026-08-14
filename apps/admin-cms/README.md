@@ -158,7 +158,7 @@ Read-only staging checks require validated staging runtime identity (`CAPSTONE_R
 | Staging media check | `npm run check:admin-media` | `npm run check:staging-media` | Authorized read-only database/storage check |
 | Auth check | `npm run check:admin-auth` | `npm run check:staging-auth` | Authorized read-only database check |
 | Import-batch check | `npm run check:admin-imports` | `npm run check:import-batches` | Authorized read-only database check |
-| Deployment readiness check | `npm run check:admin-deployment-readiness` | `npm run check:deployment-readiness` | Authorized read-only schema & migration check |
+| Deployment readiness check | `npm run check:admin-deployment-readiness` | `npm run check:deployment-readiness` | Authorized GET/HEAD expected-object check; migration history and exact Gate 3/4 schema evidence remain manual |
 
 ### State-changing staging operations
 

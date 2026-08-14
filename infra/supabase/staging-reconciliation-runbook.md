@@ -9,7 +9,7 @@
 
 1. **Historical Staging Origin**: Initial database DDL statements (`0001` through `0006`) were applied manually to the isolated hosted Supabase instance (`capstone-admin-cms-staging-2026`) using the dashboard SQL Editor.
 2. **Migration Tracking State**: Because early migrations were manually applied, remote migration tracking (`supabase_migrations.schema_migrations`) may be unpopulated or contain legacy version numbers. Running `supabase db push` without prior reconciliation risks re-executing DDL against existing tables (`relation already exists`).
-3. **Repository State vs Hosted State**: Current repository `main` contains **exactly 26 migrations** defining 22 tables, 3 storage buckets, and 28 RPC functions. Hosted staging is documented as having only early baseline migrations (`0001`–`0006`) applied. Migrations `0007` through `0026` are repository/local-only until reconciled.
+3. **Repository State vs Hosted State**: Current repository `main` contains **exactly 26 migrations** defining 23 public application tables, 3 storage buckets, and 42 service-role application RPC signatures across 41 names. The separate `canonical_staff_roles(text[])` grant is an internal helper, not an application RPC contract. Hosted staging is documented as having only early baseline migrations (`0001`–`0006`) applied. Migrations `0007` through `0026` are repository/local-only until reconciled.
 4. **Scope of Migration Repair**: `supabase migration repair` modifies **only the tracking history table** (`supabase_migrations.schema_migrations`). It does not alter database tables, columns, constraints, or RPC functions.
 
 ---
@@ -32,14 +32,14 @@
 | 10 | `20260810090000_atomic_browser_import_metadata_stage.sql` | `stage_browser_import_metadata` RPC and `browser_import_commits` ledger |
 | 11 | `20260810120000_atomic_browser_import_media_stage.sql` | `finalize_browser_import_media_stage` RPC and `browser_import_media_commits` ledger |
 | 12 | `20260810150000_atomic_import_batch_review_submit.sql` | `submit_import_projects_for_review` RPC with pre-mutation validation |
-| 13 | `20260810180000_participant_preview_links.sql` | `participant_previews` & `participant_preview_tokens` tables and preview generation RPCs |
+| 13 | `20260810180000_participant_preview_links.sql` | `participant_previews` table (including `token_hash`) and preview lifecycle RPCs |
 | 14 | `20260811090000_participant_preview_confirmations.sql` | `participant_preview_confirmations` table and confirmation RPCs |
 | 15 | `20260811120000_participant_preview_correction_requests.sql` | `participant_preview_correction_requests` table and correction request RPC |
-| 16 | `20260811130000_participant_preview_correction_resolution.sql` | `resolve_participant_preview_correction_request` RPC and preview reissue logic |
+| 16 | `20260811130000_participant_preview_correction_resolution.sql` | `start_participant_preview_correction_resolution` RPC and five-/six-parameter preview-generation overloads |
 | 17 | `20260811150000_publication_readiness_gate.sql` | `get_project_publication_readiness` RPC and validation gates |
 | 18 | `20260811160000_approval_edit_gate.sql` | Approved/published state edit locks in `update_project_metadata` |
-| 19 | `20260812120000_controlled_publication_execution.sql` | `execute_controlled_publication` RPC and snapshot staging |
-| 20 | `20260812150000_controlled_public_removal.sql` | `execute_controlled_public_removal` RPC and archive status gates |
+| 19 | `20260812120000_controlled_publication_execution.sql` | `publication_attempts` ledger and six-phase reserve/prepare/claim/write/finalize/fail publication RPC protocol |
+| 20 | `20260812150000_controlled_public_removal.sql` | `public_removal_attempts` ledger and six-phase reserve/prepare/claim/write/finalize/fail removal RPC protocol |
 | 21 | `20260813002154_project_metadata_audit_history.sql` | Detailed metadata diff audit logging in `approval_records.event_details` |
 | 22 | `20260813120000_staff_identity_provisioning.sql` | `staff_provisioning_requests` table and staff provisioning state machine RPCs |
 | 23 | `20260813180000_participant_preview_email_notifications.sql` | `projects.participant_contact_email` column, `participant_preview_notifications` ledger, and notification RPCs |
@@ -47,10 +47,11 @@
 | 25 | `20260814090000_accessible_full_text_gate.sql` | Mandatory poster full text (`poster_text_public`) and accessibility text (`accessibility_text_public`) gates |
 | 26 | `20260814140000_snapshot_image_alt_text.sql` | Mandatory snapshot image alt text (`media_assets.alt_text_public`) column and gates |
 
-### B. Expected Tables (22 Total)
+### B. Expected Tables (23 Total)
 - **Core Relational (13)**: `programs`, `disciplines`, `industry_categories`, `admin_users`, `user_roles`, `import_batches`, `projects`, `project_disciplines`, `project_industry_categories`, `media_assets`, `validation_flags`, `approval_records`, `published_snapshots`
 - **Import Commit Ledgers (2)**: `browser_import_commits`, `browser_import_media_commits`
-- **Participant Preview & Correction (4)**: `participant_previews`, `participant_preview_tokens`, `participant_preview_confirmations`, `participant_preview_correction_requests`
+- **Participant Preview & Correction (3)**: `participant_previews`, `participant_preview_confirmations`, `participant_preview_correction_requests`. The SHA-256 token is stored in `participant_previews.token_hash`; there is no `participant_preview_tokens` table.
+- **Publication State (2)**: `publication_attempts`, `public_removal_attempts`
 - **Staff Lifecycle (1)**: `staff_provisioning_requests`
 - **Notification & Reminder Ledgers (2)**: `participant_preview_notifications`, `participant_preview_reminder_schedules`
 
@@ -59,7 +60,10 @@
 - `project-public-assets`: Approved public poster and snapshot image assets.
 - `public-feeds`: Schema-validated public JSON showcase feed (`capstones-latest.json`).
 
-### D. Key Column & Constraint Requirements
+### D. RPC Contract Basis
+The authoritative migration contract contains **42 service-role application RPC signatures across 41 names**. `generate_participant_preview` has distinct five- and six-parameter overloads. Controlled publication and removal each use six phase-specific functions; there is no `execute_controlled_publication` or `execute_controlled_public_removal` function. Later `DROP FUNCTION` statements remove obsolete `update_project_metadata` signatures. The exact names, parameter names, and PostgreSQL types are enforced by `hostedDeploymentReadiness.test.ts` against final migration grants and definitions.
+
+### E. Key Column & Constraint Requirements
 - `projects.participant_contact_email`: Normalized nullable email address (Migration 0023).
 - `projects.poster_text_public`: Required, non-blank after trim, <= 20000 chars (Migration 0025).
 - `projects.accessibility_text_public`: Required, non-blank after trim, <= 2000 chars (Migration 0025).
@@ -88,14 +92,25 @@ npm run check:admin-deployment-readiness
 
 Verify the output report:
 - `TARGET_IDENTITY_MATCH = YES`
-- `MIGRATION_HISTORY_READABLE = YES/NO`
+- `MIGRATION_HISTORY_READABLE = NO`
 - `REPOSITORY_MIGRATIONS = 26`
 - `HOSTED_RECORDED_MIGRATIONS = <count or UNKNOWN>`
-- `SCHEMA_BASELINE = MATCH / INCOMPLETE / DRIFT / UNKNOWN`
-- `REQUIRED_RPC_SET = PRESENT / INCOMPLETE`
-- `REQUIRED_TABLE_SET = PRESENT / INCOMPLETE`
-- `REQUIRED_STORAGE_BUCKETS = PRESENT / INCOMPLETE`
-- `AUTH_FOUNDATION = READY / INCOMPLETE`
+- `SCHEMA_BASELINE = UNVERIFIED / INCOMPLETE / DRIFT / UNKNOWN`
+- `REQUIRED_RPC_NAMES = PRESENT / INCOMPLETE / UNVERIFIED`
+- `REQUIRED_RPC_SIGNATURES = PRESENT / INCOMPLETE / UNVERIFIED`
+- `REQUIRED_TABLE_SET = PRESENT / INCOMPLETE / UNVERIFIED`
+- `REQUIRED_STORAGE_BUCKETS = PRESENT / INCOMPLETE / UNVERIFIED`
+- `AUTH_FOUNDATION = READY / INCOMPLETE / UNVERIFIED`
+- `MANUAL_EVIDENCE_REQUIRED = YES`
+
+The checker uses only GET/HEAD requests: zero-row table HEAD probes, aggregate filtered Auth existence counts, storage bucket listing, and a credential-scoped GET of the PostgREST OpenAPI root. It never executes an RPC. OpenAPI proves the callable names for the active role but can collapse overloads, so exact overload evidence remains a Gate 4 responsibility.
+
+Classification is fail-closed:
+- `BLOCKED`: target identity fails or read-only inspection cannot initialize.
+- `DRIFT_REQUIRES_REVIEW`: OpenAPI proves an unexpected public relation or governed Gate 4 evidence proves schema, constraint, grant, or RPC-signature drift.
+- `RECONCILIATION_REQUIRED`: read-only evidence proves a required table, RPC name, bucket, Auth foundation, or recorded migration is missing.
+- `MANUAL_EVIDENCE_REQUIRED`: no automated defect is proven, but Gate 3/4 evidence is unavailable or incomplete.
+- `READY_FOR_MUTATION_DECISION`: every automated dimension is present and explicit Gate 3/4 evidence proves exact migrations, schema objects, constraints, grants, and RPC signatures. The CLI does not synthesize this manual evidence.
 
 ### Gate 3: Read-Only Migration Tracking Audit
 Inspect `supabase_migrations.schema_migrations` to determine recorded migration versions:
@@ -107,13 +122,15 @@ SELECT version, inserted_at
 ```
 Record exact count and missing timestamps against the 26 repository migrations.
 
+The configured Data API exposes `public`, `graphql_public`, and `storage`, not `supabase_migrations`. Therefore the automated checker truthfully reports `MIGRATION_HISTORY_READABLE = NO` and `HOSTED_RECORDED_MIGRATIONS = UNKNOWN`; this separately governed read-only evidence is mandatory and must not be replaced with a `public.schema_migrations` fallback.
+
 ### Gate 4: Hosted vs Repository Schema Evidence
 Perform read-only inspection of hosted tables, columns, and RPC functions:
-1. Verify presence of 13 core tables vs 9 post-0006 extended tables.
+1. Verify presence of 13 core tables vs 10 post-0006 extended tables.
 2. Verify presence of `alt_text_public` column in `media_assets`.
 3. Verify presence of `poster_text_public` and `accessibility_text_public` in `projects`.
-4. Verify presence of core RPCs (`update_project_metadata`, `submit_import_projects_for_review`, `perform_project_review_action`, `get_project_publication_readiness`, `update_snapshot_image_alt_text`).
-5. Verify Row Level Security is active across all existing tables.
+4. Verify all 42 service-role application RPC signatures, including both preview overloads and both six-phase publication/removal protocols.
+5. Verify exact constraints, grants, Row Level Security, and the absence of unexpected schema objects across all existing tables.
 
 ---
 
@@ -130,7 +147,7 @@ flowchart TD
     C -->|Target mismatch or unauthorized| PD[Path D: Stop & Abort]
 ```
 
-- **Path A (Full Match / Ready)**: All 26 migrations are recorded and all 22 tables / 28 RPCs are verified. Proceed directly to Gate 7 verification.
+- **Path A (Full Match / Ready)**: All 26 migrations, 23 public application tables, 42 service-role application RPC signatures, exact constraints/grants, and absence of unexpected schema objects are verified by combined automated and governed manual evidence. Proceed directly to Gate 7 verification.
 - **Path B (Phased Reconciliation / Staging Standard)**: Hosted staging contains baseline migrations 0001–0006; migration tracking history needs repair for 0001–0006, followed by separately authorized application of forward migrations 0007–0026. Proceed to Gate 6.
 - **Path C (Drift Detected)**: Unrecognized columns, conflicting constraint names, or manual schema changes detected. STOP. Document drift and formulate an explicit resolution plan.
 - **Path D (Abort)**: Target identity mismatch or lack of operator authorization. STOP immediately.
@@ -171,7 +188,7 @@ supabase db push --workdir infra
    ```bash
    npm run check:admin-deployment-readiness
    ```
-   *Required result: `DEPLOYMENT_CLASSIFICATION = READY_FOR_MUTATION_DECISION` (or deployment).*
+   *Required automated result: no proven missing objects or drift, normally `DEPLOYMENT_CLASSIFICATION = MANUAL_EVIDENCE_REQUIRED`. Combine it with completed Gate 3/4 evidence before any human `READY_FOR_MUTATION_DECISION`; the automated checker alone cannot assert readiness.*
 
 2. Verify authentication linkage:
    ```bash

@@ -125,14 +125,18 @@ npm run check:admin-deployment-readiness
 
 Based on the output classification, select the appropriate path:
 
-### PATH A: Full Match (`READY_FOR_MUTATION_DECISION`)
-- **Condition**: All 26 migrations are recorded in `supabase_migrations.schema_migrations`, all 22 tables exist, and all 28 RPCs are registered.
+### PATH A: Manual Evidence Completion (`MANUAL_EVIDENCE_REQUIRED`)
+- **Condition**: The automated GET/HEAD inspection finds all 23 public application tables, all 41 application RPC names represented by 42 authoritative signatures, and all 3 buckets, with no visible unexpected public relations. The Data API cannot read `supabase_migrations.schema_migrations`, and PostgREST OpenAPI may collapse overloads, so exact migrations, signatures, constraints, and grants remain unverified.
+- **Next Step**: Complete read-only Gates 3 and 4 in the [staging reconciliation runbook](../infra/supabase/staging-reconciliation-runbook.md). Only their combined evidence can support a human `READY_FOR_MUTATION_DECISION`.
+
+### PATH B: Full Match (`READY_FOR_MUTATION_DECISION`)
+- **Condition**: All automated evidence plus governed Gate 3/4 evidence proves all 26 migrations, 23 tables, 42 RPC signatures, exact constraints/grants, and no unexpected schema objects.
 - **Next Step**: Authorize deployment of the Admin/CMS web service.
 
-### PATH B: Migration Reconciliation Required (`RECONCILIATION_REQUIRED`)
+### PATH C: Migration Reconciliation Required (`RECONCILIATION_REQUIRED`)
 - **Condition**: Hosted database has baseline migrations 0001–0006 applied, but tracking history is unpopulated or forward migrations 0007–0026 are pending.
 - **Next Step**: Follow [staging-reconciliation-runbook.md](../infra/supabase/staging-reconciliation-runbook.md) Gate 6 to repair baseline tracking and apply forward migrations under explicit authorization.
 
-### PATH C: Schema Drift Detected (`DRIFT_REQUIRES_REVIEW` or `BLOCKED`)
-- **Condition**: Hostname mismatch, conflicting columns, or unexpected tables.
+### PATH D: Schema Drift or Guard Failure (`DRIFT_REQUIRES_REVIEW` or `BLOCKED`)
+- **Condition**: Hostname mismatch, conflicting schema evidence, or OpenAPI-visible unexpected public relations.
 - **Next Step**: STOP immediately. Do NOT run `db push`. Formulate an explicit schema remediation plan.

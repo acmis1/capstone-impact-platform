@@ -145,6 +145,9 @@ jobs:
           npm run supabase:verify:local
           test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 26
 
+      - name: Verify read-only hosted readiness inspection against Local Supabase
+        run: npm run verify:hosted-readiness-inspection-runtime
+
       - name: Verify staff role and session governance runtime behavior
         run: npm exec --workspace=apps/admin-cms -- tsx src/scripts/verifyStaffRoleSessionGovernanceRuntime.ts
 

@@ -36,6 +36,7 @@
     "supabase:env:local": "npm run env:local --workspace=apps/admin-cms --",
     "supabase:users:local": "npm run users:local --workspace=apps/admin-cms --",
     "supabase:verify:local": "npm run verify:local --workspace=apps/admin-cms --",
+    "verify:hosted-readiness-inspection-runtime": "npm run verify:hosted-readiness-inspection-runtime --workspace=apps/admin-cms",
     "setup:local": "npm run setup:local --workspace=apps/admin-cms",
     "verify:all": "npm run verify:all --workspace=apps/admin-cms",
     "check:onboarding-docs": "npm run check:onboarding-docs --workspace=apps/admin-cms",

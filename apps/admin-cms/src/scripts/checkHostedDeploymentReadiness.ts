@@ -2,6 +2,7 @@ import { loadEnvConfig } from '@next/env';
 loadEnvConfig(process.cwd());
 
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
+import { getServerEnv } from '../lib/env';
 import { validateStagingGuard } from '../security/stagingExecutionGuard';
 import {
   checkHostedDeploymentReadinessWithClient,
@@ -9,7 +10,28 @@ import {
   HostedReadinessEvaluation,
   HostedReadinessClient,
   evaluateHostedDeploymentReadiness,
+  fetchPostgrestOpenApi,
 } from '../deployment/hostedDeploymentReadiness';
+
+function unavailableEvidence(targetIdentityMatch: boolean, inspectionBlocked = false) {
+  return evaluateHostedDeploymentReadiness({
+    targetIdentityMatch,
+    inspectionBlocked,
+    migrationHistoryReadable: false,
+    recordedMigrationVersions: [],
+    presentTables: [],
+    rpcMetadataReadable: false,
+    presentRpcNames: [],
+    presentRpcSignatures: [],
+    relationMetadataReadable: false,
+    publicRelations: [],
+    storageEvidenceReadable: false,
+    presentBuckets: [],
+    authUserIdColumnPresent: null,
+    initialAdminLinkagePresent: null,
+    recognizedRolesPresent: null,
+  });
+}
 
 export interface RunCheckHostedDeploymentReadinessResult {
   evaluation: HostedReadinessEvaluation;
@@ -33,17 +55,7 @@ export async function runCheckHostedDeploymentReadiness(
     });
     guardPassed = true;
   } catch {
-    const blockedEval = evaluateHostedDeploymentReadiness({
-      targetIdentityMatch: false,
-      migrationHistoryReadable: false,
-      recordedMigrationVersions: [],
-      presentTables: [],
-      presentRpcs: [],
-      presentBuckets: [],
-      authUserIdColumnPresent: false,
-      initialAdminLinkagePresent: false,
-      recognizedRolesPresent: false,
-    });
+    const blockedEval = unavailableEvidence(false);
 
     console.log(formatHostedReadinessReport(blockedEval));
     return { evaluation: blockedEval, exitCode: 1 };
@@ -51,20 +63,20 @@ export async function runCheckHostedDeploymentReadiness(
 
   // 2. Initialize Supabase Admin Client Core
   let supabase: HostedReadinessClient;
+  let openApiDocument: unknown;
   try {
+    const serverEnv = getServerEnv();
     supabase = createSupabaseAdminClientCore() as unknown as HostedReadinessClient;
+    try {
+      openApiDocument = await fetchPostgrestOpenApi(
+        serverEnv.supabaseUrl,
+        serverEnv.supabaseDatabaseAdminKey
+      );
+    } catch {
+      openApiDocument = undefined;
+    }
   } catch {
-    const errorEval = evaluateHostedDeploymentReadiness({
-      targetIdentityMatch: true,
-      migrationHistoryReadable: false,
-      recordedMigrationVersions: [],
-      presentTables: [],
-      presentRpcs: [],
-      presentBuckets: [],
-      authUserIdColumnPresent: false,
-      initialAdminLinkagePresent: false,
-      recognizedRolesPresent: false,
-    });
+    const errorEval = unavailableEvidence(true, true);
 
     console.log(formatHostedReadinessReport(errorEval));
     return { evaluation: errorEval, exitCode: 1 };
@@ -73,6 +85,7 @@ export async function runCheckHostedDeploymentReadiness(
   // 3. Delegate to pure, read-only client checker
   const evaluation = await checkHostedDeploymentReadinessWithClient(supabase, {
     targetIdentityMatch: guardPassed,
+    openApiDocument,
   });
 
   console.log(formatHostedReadinessReport(evaluation));
@@ -81,6 +94,7 @@ export async function runCheckHostedDeploymentReadiness(
   if (evaluation.deploymentClassification === 'READY_FOR_MUTATION_DECISION') {
     exitCode = 0;
   } else if (
+    evaluation.deploymentClassification === 'MANUAL_EVIDENCE_REQUIRED' ||
     evaluation.deploymentClassification === 'RECONCILIATION_REQUIRED' ||
     evaluation.deploymentClassification === 'DRIFT_REQUIRES_REVIEW'
   ) {
