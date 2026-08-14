@@ -20,6 +20,7 @@ describe('Staging Scripts Integration & Classification Registry Tests', () => {
     process.env.CAPSTONE_RUNTIME_ENV = 'staging';
     process.env.CAPSTONE_EXPECTED_SUPABASE_HOST = 'app-staging.supabase.co';
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://app-staging.supabase.co';
+    process.env.CAPSTONE_STAGING_MUTATION_CONFIRMATION = 'capstone-admin-cms-staging-2026';
   });
 
   afterEach(() => {

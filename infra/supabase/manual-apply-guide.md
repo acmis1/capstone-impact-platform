@@ -147,13 +147,14 @@ Follow this exact safe sequence to provision the initial administrator in a fres
    ```bash
    export CAPSTONE_RUNTIME_ENV=staging
    export CAPSTONE_EXPECTED_SUPABASE_HOST=app-staging.supabase.co
+   export CAPSTONE_STAGING_MUTATION_CONFIRMATION=capstone-admin-cms-staging-v2-2026
    export CAPSTONE_BOOTSTRAP_ADMIN_EMAIL=admin@school.edu
    export CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME="Initial Admin"
    export CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN
    ```
 4. **Run the guarded linking script with double-acknowledgment flags:**
    ```bash
-   npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026
+   npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026
    ```
 5. **Clear all temporary variables:** Immediately clear the temporary bootstrap variables from your shell process.
 6. **Run the check command:**

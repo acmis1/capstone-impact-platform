@@ -204,7 +204,7 @@ Try these steps **in order**. Do not skip ahead.
 
 ### DO NOT Retry — Stop Immediately If:
 1. You see any prompt or error requesting hosted Supabase organization credentials, database connection strings, or cloud API tokens.
-2. A script targets a hosted environment or prompts for `--confirm-staging=capstone-admin-cms-staging-2026`.
+2. A script targets a hosted environment or prompts for `--confirm-staging=<label>`.
 3. You detect accidental secret exposure or uncommitted credentials in `git status`.
 4. Git merge conflicts exist on `main` or affect merged migration files.
 

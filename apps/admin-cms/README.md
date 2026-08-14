@@ -164,16 +164,17 @@ Read-only staging checks require validated staging runtime identity (`CAPSTONE_R
 
 > [!WARNING]
 > DO NOT RUN UNTIL THE PROJECT OWNER APPROVES THE SPECIFIC OPERATION.
-> State-changing operations require explicit operator authorization, target environment identity validation (`CAPSTONE_RUNTIME_ENV=staging`), and double-acknowledgment flags (`--apply` and `--confirm-staging=capstone-admin-cms-staging-2026`). Missing acknowledgment flags cause refusal before Supabase admin-client creation.
+> State-changing operations require explicit operator authorization, target environment identity validation (`CAPSTONE_RUNTIME_ENV=staging`), target hostname validation (`CAPSTONE_EXPECTED_SUPABASE_HOST`), staging mutation confirmation configuration (`CAPSTONE_STAGING_MUTATION_CONFIRMATION=<label>`), and double-acknowledgment flags (`--apply` and `--confirm-staging=<label>`). Missing or mismatched acknowledgment flags cause refusal before Supabase admin-client creation.
+> The confirmation label (e.g. `capstone-admin-cms-staging-v2-2026`) is a non-secret human acknowledgment label configured per environment without code changes.
 > Administrator linking additionally requires process environment variable `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN`.
 
 | Purpose | Complete Root Command | App Command | Classification |
 | --- | --- | --- | --- |
-| Seed fake projects | `npm run seed:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run seed:staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; synthetic data only |
-| Seed/promote fake media | `npm run seed:admin-media -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run seed:staging-media -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; synthetic data only |
-| Import local package | `npm run import:admin-package -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run import:staging-package -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; authorized fixture operation |
-| Publish staging feed | `npm run publish:admin-feed -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run publish:staging-feed -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; authorized staging operation |
-| Link initial administrator | `npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run link:staging-admin -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; requires `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN` |
+| Seed fake projects | `npm run seed:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | `npm run seed:staging -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | State-changing; synthetic data only |
+| Seed/promote fake media | `npm run seed:admin-media -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | `npm run seed:staging-media -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | State-changing; synthetic data only |
+| Import local package | `npm run import:admin-package -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | `npm run import:staging-package -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | State-changing; authorized fixture operation |
+| Publish staging feed | `npm run publish:admin-feed -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | `npm run publish:staging-feed -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | State-changing; authorized staging operation |
+| Link initial administrator | `npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | `npm run link:staging-admin -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | State-changing; requires `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN` |
 
 Do not blindly reinitialize an already-applied environment. Use the [Supabase migration guide](../../infra/supabase/manual-apply-guide.md) for a genuinely new authorized isolated environment and never target `Prototype/` or a recovery environment.
 

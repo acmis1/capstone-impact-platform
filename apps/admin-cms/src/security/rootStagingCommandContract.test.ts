@@ -92,13 +92,15 @@ describe('Root Staging Command Contract & Argument Forwarding Tests', () => {
 
       // Must contain CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN
       expect(docContent).toContain('LINK_EXISTING_STAGING_ADMIN');
-      // Must contain CLI flags --apply and --confirm-staging=capstone-admin-cms-staging-2026
+      // Must contain CLI flags --apply and --confirm-staging=
       expect(docContent).toContain('--apply');
-      expect(docContent).toContain('--confirm-staging=capstone-admin-cms-staging-2026');
+      expect(docContent).toContain('--confirm-staging=');
 
-      // No runbook must assign capstone-admin-cms-staging-2026 to CAPSTONE_BOOTSTRAP_CONFIRM
+      // No runbook must assign confirmation label to CAPSTONE_BOOTSTRAP_CONFIRM
       expect(docContent).not.toContain('CAPSTONE_BOOTSTRAP_CONFIRM="capstone-admin-cms-staging-2026"');
       expect(docContent).not.toContain('CAPSTONE_BOOTSTRAP_CONFIRM=capstone-admin-cms-staging-2026');
+      expect(docContent).not.toContain('CAPSTONE_BOOTSTRAP_CONFIRM="capstone-admin-cms-staging-v2-2026"');
+      expect(docContent).not.toContain('CAPSTONE_BOOTSTRAP_CONFIRM=capstone-admin-cms-staging-v2-2026');
     });
 
     // 3. Historical activation evidence check
