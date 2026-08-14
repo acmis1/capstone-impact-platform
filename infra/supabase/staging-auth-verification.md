@@ -9,7 +9,7 @@ This guide outlines the manual verification checklist to audit and validate the 
 The following operations are **staging database mutations** that require explicit operator approval before execution:
 *   Applying database schema migrations (Phase B);
 *   Sending/processing an authorized user invitation in Supabase Auth (Phase C);
-*   Running the guarded bootstrap script (`npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026`) to link an Auth user to `admin_users` and `user_roles` (Phase E);
+*   Running the guarded bootstrap script (`npm run link:admin-staging -- --apply --confirm-staging=<label>`) to link an Auth user to `admin_users` and `user_roles` (Phase E);
 *   Assigning or modifying administrative roles in `user_roles` via an approved role-provisioning workflow (Phase E & Phase I);
 *   Executing project review actions or workflow transitions (Phase H).
 
@@ -94,12 +94,13 @@ To link an authenticated Supabase Auth user to the administrative schema in a ne
    ```powershell
    $env:CAPSTONE_RUNTIME_ENV = "staging"
    $env:CAPSTONE_EXPECTED_SUPABASE_HOST = "app-staging.supabase.co"
+   $env:CAPSTONE_STAGING_MUTATION_CONFIRMATION = "capstone-admin-cms-staging-v2-2026"
    $env:CAPSTONE_BOOTSTRAP_ADMIN_EMAIL = "admin@example.com"
    $env:CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME = "Initial Admin"
    $env:CAPSTONE_BOOTSTRAP_CONFIRM = "LINK_EXISTING_STAGING_ADMIN"
    ```
 
-2. Execute `npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026` passing CLI guard flags only after explicit operator approval.
+2. Execute `npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` passing CLI guard flags only after explicit operator approval.
 3. Clear temporary process variables immediately.
 4. Run `npm run check:admin-auth` to confirm readiness status `READY_FOR_MANUAL_LOGIN_TEST`.
 5. **Security Invariant:** Never paste Auth UUIDs into SQL queries or manually modify administrator/role rows directly in the database.
