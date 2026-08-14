@@ -9,6 +9,7 @@ import { runCheckStagingProjects } from '../scripts/checkStagingProjects';
 import { runCheckMediaAssets } from '../scripts/checkMediaAssets';
 import { runCheckStagingAuth } from '../scripts/checkStagingAuth';
 import { runCheckImportBatches } from '../scripts/checkImportBatches';
+import { runCheckHostedDeploymentReadiness } from '../scripts/checkHostedDeploymentReadiness';
 import { runCheckSampleFeed } from '../scripts/checkSampleFeed';
 import * as adminCore from '../lib/supabase/adminCore';
 
@@ -26,9 +27,9 @@ describe('Staging Scripts Integration & Classification Registry Tests', () => {
     vi.restoreAllMocks();
   });
 
-  it('1. Central operation registry contains exactly 9 staging operations with explicit classifications', () => {
+  it('1. Central operation registry contains exactly 10 staging operations with explicit classifications', () => {
     const registeredIds = Object.keys(STAGING_OPERATIONS_REGISTRY);
-    expect(registeredIds.length).toBe(9);
+    expect(registeredIds.length).toBe(10);
 
     const expectedIds = [
       'seed-staging-projects',
@@ -40,6 +41,7 @@ describe('Staging Scripts Integration & Classification Registry Tests', () => {
       'check-media-assets',
       'check-staging-auth',
       'check-import-batches',
+      'check-hosted-deployment-readiness',
     ];
 
     expect(registeredIds).toEqual(expect.arrayContaining(expectedIds));
@@ -53,13 +55,13 @@ describe('Staging Scripts Integration & Classification Registry Tests', () => {
     });
   });
 
-  it('2. Exactly 5 scripts are classified as mutating and 4 as read_only', () => {
+  it('2. Exactly 5 scripts are classified as mutating and 5 as read_only', () => {
     const ops = Object.values(STAGING_OPERATIONS_REGISTRY);
     const mutatingOps = ops.filter((o) => o.type === 'mutating');
     const readOnlyOps = ops.filter((o) => o.type === 'read_only');
 
     expect(mutatingOps.length).toBe(5);
-    expect(readOnlyOps.length).toBe(4);
+    expect(readOnlyOps.length).toBe(5);
   });
 
   it('3. Specific operations enforce exact touchesAuth and changesDatabaseRows flags', () => {
@@ -108,7 +110,7 @@ describe('Staging Scripts Integration & Classification Registry Tests', () => {
     expect(result).toBe(true);
   });
 
-  it('6. All nine staging-capable runner modules are imported and callable', () => {
+  it('6. All ten staging-capable runner modules are imported and callable', () => {
     expect(typeof runSeedStagingProjects).toBe('function');
     expect(typeof runSeedFakeMediaAssets).toBe('function');
     expect(typeof runImportStagingPackage).toBe('function');
@@ -118,6 +120,7 @@ describe('Staging Scripts Integration & Classification Registry Tests', () => {
     expect(typeof runCheckMediaAssets).toBe('function');
     expect(typeof runCheckStagingAuth).toBe('function');
     expect(typeof runCheckImportBatches).toBe('function');
+    expect(typeof runCheckHostedDeploymentReadiness).toBe('function');
   });
 
   it('7. Default mutating script invocations create zero Supabase admin clients (dry-run protection)', async () => {

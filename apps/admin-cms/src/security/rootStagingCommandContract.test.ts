@@ -42,6 +42,8 @@ describe('Root Staging Command Contract & Argument Forwarding Tests', () => {
     expect(scripts['check:admin-media']).toBe('npm run check:staging-media --workspace=apps/admin-cms');
     expect(scripts['check:admin-imports']).toBe('npm run check:import-batches --workspace=apps/admin-cms');
     expect(scripts['check:admin-auth']).toBe('npm run check:staging-auth --workspace=apps/admin-cms');
+    expect(scripts['check:admin-deployment-readiness']).toBe('npm run check:deployment-readiness --workspace=apps/admin-cms');
+    expect(scripts['check:admin-staging-readiness']).toBe('npm run check:staging-readiness --workspace=apps/admin-cms');
     expect(scripts['check:feed']).toBe('npm run check:sample-feed --workspace=apps/admin-cms');
   });
 
