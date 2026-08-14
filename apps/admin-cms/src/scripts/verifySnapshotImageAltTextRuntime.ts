@@ -238,15 +238,15 @@ function seedProject(
       SELECT id, '${fixture.discipline.id}'::uuid FROM public.projects WHERE public_id = ${sqlText(publicId)};
     INSERT INTO public.project_industry_categories(project_id, industry_category_id)
       SELECT id, '${fixture.industry.id}'::uuid FROM public.projects WHERE public_id = ${sqlText(publicId)};
-    INSERT INTO public.media_assets(project_id, asset_type, file_name, storage_bucket, storage_path, is_public_approved, public_url)
-      SELECT id, 'poster_image', 'poster.png', ${sqlText(PRIVATE_BUCKET)}, ${sqlText(`${publicId}/poster.png`)}, false, NULL
+    INSERT INTO public.media_assets(project_id, asset_type, file_name, mime_type, file_size_bytes, storage_bucket, storage_path, is_public_approved, public_url)
+      SELECT id, 'poster_image', 'poster.png', 'image/png', 1048576, ${sqlText(PRIVATE_BUCKET)}, ${sqlText(`${publicId}/poster.png`)}, false, NULL
       FROM public.projects WHERE public_id = ${sqlText(publicId)};
-    INSERT INTO public.media_assets(project_id, asset_type, file_name, storage_bucket, storage_path, is_public_approved, public_url)
-      SELECT id, 'poster_pdf', 'poster.pdf', ${sqlText(PRIVATE_BUCKET)}, ${sqlText(`${publicId}/poster.pdf`)}, false, NULL
+    INSERT INTO public.media_assets(project_id, asset_type, file_name, mime_type, file_size_bytes, storage_bucket, storage_path, is_public_approved, public_url)
+      SELECT id, 'poster_pdf', 'poster.pdf', 'application/pdf', 2097152, ${sqlText(PRIVATE_BUCKET)}, ${sqlText(`${publicId}/poster.pdf`)}, false, NULL
       FROM public.projects WHERE public_id = ${sqlText(publicId)};
     ${withSnapshot ? `
-    INSERT INTO public.media_assets(project_id, asset_type, file_name, storage_bucket, storage_path, is_public_approved, public_url, alt_text_public)
-      SELECT id, 'snapshot_image', 'snapshot-1.png', ${sqlText(PRIVATE_BUCKET)}, ${sqlText(`${publicId}/snapshot-1.png`)}, false, NULL, ${sqlText(snapshotAlt)}
+    INSERT INTO public.media_assets(project_id, asset_type, file_name, mime_type, file_size_bytes, storage_bucket, storage_path, is_public_approved, public_url, alt_text_public)
+      SELECT id, 'snapshot_image', 'snapshot-1.png', 'image/png', 524288, ${sqlText(PRIVATE_BUCKET)}, ${sqlText(`${publicId}/snapshot-1.png`)}, false, NULL, ${sqlText(snapshotAlt)}
       FROM public.projects WHERE public_id = ${sqlText(publicId)};` : ''}
   `);
   return publicId;
