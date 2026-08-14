@@ -52,6 +52,8 @@
     "run:participant-preview-reminders": "tsx src/scripts/runParticipantPreviewReminders.ts",
     "seed:buckets:local": "tsx src/scripts/seedLocalSupabaseFixtures.ts",
     "setup:local": "tsx src/scripts/setupLocal.ts",
+    "verify:scaling-runtime": "tsx src/scripts/verifyLocalScalingRuntime.ts",
+    "benchmark:local-scaling": "tsx src/scripts/benchmarkLocalScaling.ts",
     "verify:all": "tsx src/scripts/verifyAll.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
