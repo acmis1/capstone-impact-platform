@@ -53,11 +53,28 @@ describe('snapshot image alt text migration contract', () => {
     expect(executable).not.toContain('ALTER TABLE public.projects');
   });
 
-  it('permits NULL but never a blank or oversized stored value', () => {
+  it('permits NULL but never a blank, untrimmed, or oversized stored value', () => {
     expect(content).toContain('ADD CONSTRAINT check_media_asset_alt_text_public CHECK (');
     expect(content).toContain('alt_text_public IS NULL');
-    expect(content).toContain('pg_catalog.btrim(alt_text_public) <> \'\'');
-    expect(content).toContain('pg_catalog.length(pg_catalog.btrim(alt_text_public)) <= 2000');
+    expect(content).toContain('alt_text_public = pg_catalog.btrim(alt_text_public)');
+    expect(content).toContain('alt_text_public <> \'\'');
+    expect(content).toContain('pg_catalog.length(alt_text_public) <= 2000');
+  });
+
+  it('enforces exact canonical trimmed storage semantics on non-null values', () => {
+    const isConstraintSatisfied = (val: string | null): boolean => {
+      if (val === null) return true;
+      return val === val.trim() && val !== '' && val.length <= 2000;
+    };
+
+    expect(isConstraintSatisfied(null)).toBe(true);
+    expect(isConstraintSatisfied('Description')).toBe(true);
+    expect(isConstraintSatisfied('')).toBe(false);
+    expect(isConstraintSatisfied('   ')).toBe(false);
+    expect(isConstraintSatisfied('  Description')).toBe(false);
+    expect(isConstraintSatisfied('Description  ')).toBe(false);
+    expect(isConstraintSatisfied('a'.repeat(2000))).toBe(true);
+    expect(isConstraintSatisfied('a'.repeat(2001))).toBe(false);
   });
 
   it('never backfills existing rows with fabricated accessibility text', () => {

@@ -206,22 +206,32 @@ function seedProject(
   prefix: string,
   label: string,
   fixture: RuntimeFixture,
-  options: { status?: string; snapshotAlt?: string | null; withSnapshot?: boolean; inBatch?: boolean } = {},
+  options: {
+    status?: string;
+    snapshotAlt?: string | null;
+    withSnapshot?: boolean;
+    inBatch?: boolean;
+    participantEmail?: string | null;
+  } = {},
 ): string {
   const publicId = `${prefix}-${label}`;
   const withSnapshot = options.withSnapshot ?? true;
   const snapshotAlt = options.snapshotAlt === undefined ? SNAPSHOT_ALT : options.snapshotAlt;
+  const participantEmail = options.participantEmail === undefined
+    ? `${publicId}-participant@example.test`
+    : options.participantEmail;
 
   executeLocalSql(`
     INSERT INTO public.projects(
       public_id, title, summary, background, solution, poster_text_public, accessibility_text_public,
       year, program_id, program_name, study_program, discipline, industry, group_name, team_members,
-      status${options.inBatch ? ', import_batch_id' : ''}
+      participant_contact_email, status${options.inBatch ? ', import_batch_id' : ''}
     ) VALUES (
       ${sqlText(publicId)}, 'Runtime Title', 'Runtime summary', 'Runtime background', 'Runtime solution',
       ${sqlText(POSTER_TEXT)}, ${sqlText(ACCESSIBILITY_TEXT)}, 2026, '${fixture.program.id}'::uuid,
       ${sqlText(fixture.program.name)}, 'Runtime study program', ${sqlText(fixture.discipline.name)},
       ${sqlText(fixture.industry.name)}, 'Runtime Group', ARRAY['Alice Smith'],
+      ${sqlText(participantEmail)},
       ${sqlText(options.status ?? 'draft')}${options.inBatch ? `, '${fixture.batchId}'::uuid` : ''}
     );
     INSERT INTO public.project_disciplines(project_id, discipline_id)
@@ -324,7 +334,24 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(rejected, 'The database accepted a blank snapshot alt text.');
     });
 
-    await scenario(4, 'An oversized stored alt text is rejected by the database constraint', () => {
+    await scenario(4, 'Untrimmed stored alt text is rejected by the database canonicalization constraint', () => {
+      const publicId = `${prefix}-constraint-blank`;
+      for (const untrimmed of ['  Description', 'Description  ', '  Description  ']) {
+        let rejected = false;
+        try {
+          executeLocalSql(`
+            UPDATE public.media_assets SET alt_text_public = ${sqlText(untrimmed)}
+             WHERE project_id = (SELECT id FROM public.projects WHERE public_id = ${sqlText(publicId)})
+               AND asset_type = 'snapshot_image';
+          `);
+        } catch {
+          rejected = true;
+        }
+        assert(rejected, `The database accepted untrimmed snapshot alt text: "${untrimmed}".`);
+      }
+    });
+
+    await scenario(5, 'An oversized stored alt text is rejected by the database constraint', () => {
       const publicId = `${prefix}-constraint-blank`;
       let rejected = false;
       try {
@@ -339,21 +366,21 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(rejected, 'The database accepted an oversized snapshot alt text.');
     });
 
-    await scenario(5, 'NULL remains storable for a legacy snapshot awaiting staff correction', () => {
+    await scenario(6, 'NULL remains storable for a legacy snapshot awaiting staff correction', () => {
       const publicId = seedProject(prefix, 'legacy-null', fixture!, { snapshotAlt: null });
       assert(snapshotMediaState(publicId).altText === null, 'A legacy NULL snapshot alt could not be stored.');
     });
 
     // -------------------------------------------------------- standard xlsx
 
-    await scenario(6, 'Standard XLSX carrying a snapshot alt value parses and reaches the manifest', async () => {
+    await scenario(7, 'Standard XLSX carrying a snapshot alt value parses and reaches the manifest', async () => {
       const parsed = await parseProjectDetailsWorkbook(await buildWorkbook('Snapshot image alt text', SNAPSHOT_ALT));
       assert(parsed.metadata.snapshotAltText === SNAPSHOT_ALT, 'Workbook snapshot alt text was not parsed.');
       const manifest = buildImportPackageManifestFromWorkbook({ parsedWorkbook: parsed, publicId: '2026-runtime' });
       assert(manifest.snapshotAltText === SNAPSHOT_ALT, 'Snapshot alt text did not reach the manifest.');
     });
 
-    await scenario(7, 'Every deterministic snapshot-alt alias is recognised', async () => {
+    await scenario(8, 'Every deterministic snapshot-alt alias is recognised', async () => {
       for (const alias of [
         'snapshot image alt text', 'snapshot alt text', 'snapshot accessibility text',
         'snapshotimagealttext', 'snapshotalttext',
@@ -363,7 +390,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       }
     });
 
-    await scenario(8, 'A duplicate snapshot-alt column mapping is a blocking workbook error', async () => {
+    await scenario(9, 'A duplicate snapshot-alt column mapping is a blocking workbook error', async () => {
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet('Project details');
       sheet.addRow([...WORKBOOK_HEADERS, 'Snapshot image alt text', 'snapshot alt text']);
@@ -376,21 +403,21 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(codes.includes('WORKBOOK_DUPLICATE_COLUMN'), 'A duplicate snapshot-alt column was accepted.');
     });
 
-    await scenario(9, 'A snapshot-alt formula with no usable cached result is blocking', async () => {
+    await scenario(10, 'A snapshot-alt formula with no usable cached result is blocking', async () => {
       const codes = await workbookErrors(
         await buildWorkbook('Snapshot image alt text', { formula: 'A1&B1', result: undefined }),
       );
       assert(codes.includes('WORKBOOK_UNUSABLE_FORMULA'), 'An unusable snapshot-alt formula was accepted.');
     });
 
-    await scenario(10, 'The exact maximum parses and one character beyond it is blocking', async () => {
+    await scenario(11, 'The exact maximum parses and one character beyond it is blocking', async () => {
       const atMax = await parseProjectDetailsWorkbook(await buildWorkbook('Snapshot image alt text', 'a'.repeat(MAX_ALT)));
       assert(atMax.metadata.snapshotAltText.length === MAX_ALT, 'The exact maximum snapshot alt was not accepted.');
       const codes = await workbookErrors(await buildWorkbook('Snapshot image alt text', 'a'.repeat(MAX_ALT + 1)));
       assert(codes.includes('WORKBOOK_VALUE_TOO_LONG'), 'An oversized snapshot alt was accepted by the parser.');
     });
 
-    await scenario(11, 'A snapshot-present standard package with no alt text is invalid', () => {
+    await scenario(12, 'A snapshot-present standard package with no alt text is invalid', () => {
       const result = validateImportPackage(packageFrom(undefined, true), { metadataSource: 'xlsx' });
       assert(!result.valid, 'A standard package with an undescribed snapshot was accepted.');
       assert(
@@ -399,17 +426,17 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       );
     });
 
-    await scenario(12, 'A snapshot-present standard package with blank alt text is invalid', () => {
+    await scenario(13, 'A snapshot-present standard package with blank alt text is invalid', () => {
       const result = validateImportPackage(packageFrom('   \n\t ', true), { metadataSource: 'xlsx' });
       assert(!result.valid, 'A blank snapshot alt was accepted at the package boundary.');
     });
 
-    await scenario(13, 'A snapshot-present standard package with valid alt text is valid', () => {
+    await scenario(14, 'A snapshot-present standard package with valid alt text is valid', () => {
       const result = validateImportPackage(packageFrom(SNAPSHOT_ALT, true), { metadataSource: 'xlsx' });
       assert(result.valid, `A compliant package was rejected: ${JSON.stringify(result.errors)}`);
     });
 
-    await scenario(14, 'A package with no snapshot image is never asked to describe one', () => {
+    await scenario(15, 'A package with no snapshot image is never asked to describe one', () => {
       const absent = validateImportPackage(packageFrom(undefined, false), { metadataSource: 'xlsx' });
       assert(absent.valid, 'A package without a snapshot image was blocked for a missing alt.');
       const blank = validateImportPackage(packageFrom('   ', false), { metadataSource: 'xlsx' });
@@ -420,7 +447,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       );
     });
 
-    await scenario(15, 'An oversized alt is rejected at the package boundary from either source', () => {
+    await scenario(16, 'An oversized alt is rejected at the package boundary from either source', () => {
       for (const metadataSource of ['xlsx', 'json'] as const) {
         const result = validateImportPackage(packageFrom('a'.repeat(MAX_ALT + 1), true), { metadataSource });
         assert(
@@ -432,7 +459,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
 
     // ---------------------------------------------------------- legacy json
 
-    await scenario(16, 'Legacy project.json without a snapshot alt remains importable', () => {
+    await scenario(17, 'Legacy project.json without a snapshot alt remains importable', () => {
       const parsed = parseProjectDetailsJson(
         Buffer.from(JSON.stringify({ title: 'T', summary: 'S', year: '2026', program: 'P', discipline: 'D', groupName: 'G', teamMembers: ['A'] })),
         '2026-runtime',
@@ -442,7 +469,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(result.valid, 'A legacy package with an undescribed snapshot was blocked at import.');
     });
 
-    await scenario(17, 'Legacy project.json with a supplied snapshot alt persists it verbatim', () => {
+    await scenario(18, 'Legacy project.json with a supplied snapshot alt persists it verbatim', () => {
       const parsed = parseProjectDetailsJson(
         Buffer.from(JSON.stringify({ title: 'T', summary: 'S', year: '2026', program: 'P', discipline: 'D', groupName: 'G', teamMembers: ['A'], snapshotAltText: `  ${SNAPSHOT_ALT}  ` })),
         '2026-runtime',
@@ -450,7 +477,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(parsed.manifest.snapshotAltText === SNAPSHOT_ALT, 'A legacy snapshot alt was not trimmed and preserved.');
     });
 
-    await scenario(18, 'Legacy project.json with an oversized snapshot alt is rejected', () => {
+    await scenario(19, 'Legacy project.json with an oversized snapshot alt is rejected', () => {
       let rejected = false;
       try {
         parseProjectDetailsJson(
@@ -465,7 +492,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
 
     // -------------------------------------------------- media intent binding
 
-    await scenario(19, 'The canonical media intent changes when the authoritative alt changes', () => {
+    await scenario(20, 'The canonical media intent changes when the authoritative alt changes', () => {
       const base = { batchId: fixture!.batchId, metadataIntentHash: 'a'.repeat(64) };
       const files = (alt: string | null) => [{
         packagePath: 'batch/p', projectPublicId: '2026-runtime', assetType: 'snapshot_image',
@@ -477,12 +504,12 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(withAlt !== computeCanonicalMediaIntentHash({ ...base, files: files(null) }), 'An absent alt was indistinguishable from a present one.');
     });
 
-    await scenario(20, 'Media staging persists the exact server-derived alt onto the snapshot row', () => {
+    await scenario(21, 'Media staging persists the exact server-derived alt onto the snapshot row', () => {
       const publicId = seedProject(prefix, 'stage-exact', fixture!, { snapshotAlt: SNAPSHOT_ALT });
       assert(snapshotMediaState(publicId).altText === SNAPSHOT_ALT, 'The staged snapshot alt was not persisted exactly.');
     });
 
-    await scenario(21, 'Poster image and poster PDF rows carry no media-level alt text', () => {
+    await scenario(22, 'Poster image and poster PDF rows carry no media-level alt text', () => {
       const rows = queryLocalJson<Array<{ assetType: string; altText: string | null }>>(`
         SELECT coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('assetType', ma.asset_type, 'altText', ma.alt_text_public) ORDER BY ma.asset_type), '[]'::jsonb)
           FROM public.media_assets ma JOIN public.projects p ON p.id = ma.project_id
@@ -496,7 +523,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
 
     const editTarget = seedProject(prefix, 'edit-target', fixture!, { snapshotAlt: null });
 
-    await scenario(22, 'Admin can save the snapshot alt text', async () => {
+    await scenario(23, 'Admin can save the snapshot alt text', async () => {
       const before = projectState(editTarget);
       const { data } = await serviceClient.rpc('update_snapshot_image_alt_text', {
         p_public_id: editTarget, p_alt_text: SNAPSHOT_ALT,
@@ -506,12 +533,12 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(snapshotMediaState(editTarget).altText === SNAPSHOT_ALT, 'The saved alt text was not persisted.');
     });
 
-    await scenario(23, 'A successful save advances the shared project version', () => {
+    await scenario(24, 'A successful save advances the shared project version', () => {
       const after = projectState(editTarget);
       assert(after.updatedAt !== null, 'The project version was not readable after a save.');
     });
 
-    await scenario(24, 'A successful save writes exactly one typed audit record', () => {
+    await scenario(25, 'A successful save writes exactly one typed audit record', () => {
       const audits = queryLocalJson<Array<Record<string, unknown>>>(`
         SELECT coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
           'action', ar.action_taken, 'type', ar.event_details->>'type',
@@ -536,7 +563,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(audit.fromStatus === 'draft' && audit.toStatus === 'draft', 'The audit misreports the project status.');
     });
 
-    await scenario(25, 'Re-saving the identical value is a no-op with zero further audit rows', async () => {
+    await scenario(26, 'Re-saving the identical value is a no-op with zero further audit rows', async () => {
       const before = projectState(editTarget);
       const { data } = await serviceClient.rpc('update_snapshot_image_alt_text', {
         p_public_id: editTarget, p_alt_text: SNAPSHOT_ALT,
@@ -548,7 +575,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(after.updatedAt === before.updatedAt, 'A no-op save touched the project version.');
     });
 
-    await scenario(26, 'The saved value is trimmed exactly', async () => {
+    await scenario(27, 'The saved value is trimmed exactly', async () => {
       const before = projectState(editTarget);
       const { data } = await serviceClient.rpc('update_snapshot_image_alt_text', {
         p_public_id: editTarget, p_alt_text: `   ${SNAPSHOT_ALT_B}   `,
@@ -558,7 +585,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(snapshotMediaState(editTarget).altText === SNAPSHOT_ALT_B, 'The saved alt text was not trimmed exactly.');
     });
 
-    await scenario(27, 'An Editor may save the snapshot alt text', async () => {
+    await scenario(28, 'An Editor may save the snapshot alt text', async () => {
       const before = projectState(editTarget);
       const { data } = await serviceClient.rpc('update_snapshot_image_alt_text', {
         p_public_id: editTarget, p_alt_text: SNAPSHOT_ALT,
@@ -567,7 +594,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(data?.resultCode === 'SUCCESS', `Editor save failed: ${JSON.stringify(data)}`);
     });
 
-    await scenario(28, 'A reviewer-only identity is denied, with zero mutation', async () => {
+    await scenario(29, 'A reviewer-only identity is denied, with zero mutation', async () => {
       const before = projectState(editTarget);
       const beforeAlt = snapshotMediaState(editTarget).altText;
       const { data } = await serviceClient.rpc('update_snapshot_image_alt_text', {
@@ -580,7 +607,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(after.audits === before.audits, 'A denied save created an audit row.');
     });
 
-    await scenario(29, 'A blank value is rejected with zero mutation', async () => {
+    await scenario(30, 'A blank value is rejected with zero mutation', async () => {
       const before = projectState(editTarget);
       const beforeAlt = snapshotMediaState(editTarget).altText;
       const { data } = await serviceClient.rpc('update_snapshot_image_alt_text', {
@@ -592,7 +619,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(projectState(editTarget).audits === before.audits, 'A blank save created an audit row.');
     });
 
-    await scenario(30, 'An oversized value is rejected and the exact maximum is accepted', async () => {
+    await scenario(31, 'An oversized value is rejected and the exact maximum is accepted', async () => {
       const before = projectState(editTarget);
       const { data: rejected } = await serviceClient.rpc('update_snapshot_image_alt_text', {
         p_public_id: editTarget, p_alt_text: 'a'.repeat(MAX_ALT + 1),
@@ -607,7 +634,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(accepted?.resultCode === 'SUCCESS', `The exact maximum was rejected: ${JSON.stringify(accepted)}`);
     });
 
-    await scenario(31, 'A stale expected version loses, with zero mutation', async () => {
+    await scenario(32, 'A stale expected version loses, with zero mutation', async () => {
       const beforeAlt = snapshotMediaState(editTarget).altText;
       const beforeAudits = projectState(editTarget).audits;
       const { data } = await serviceClient.rpc('update_snapshot_image_alt_text', {
@@ -619,7 +646,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(projectState(editTarget).audits === beforeAudits, 'A stale save created an audit row.');
     });
 
-    await scenario(32, 'A project with no snapshot image reports a bounded not-found failure', async () => {
+    await scenario(33, 'A project with no snapshot image reports a bounded not-found failure', async () => {
       const noSnapshot = seedProject(prefix, 'no-snapshot-edit', fixture!, { withSnapshot: false });
       const { data } = await serviceClient.rpc('update_snapshot_image_alt_text', {
         p_public_id: noSnapshot, p_alt_text: SNAPSHOT_ALT,
@@ -629,7 +656,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(projectState(noSnapshot).audits === 0, 'A not-found save created an audit row.');
     });
 
-    await scenario(33, 'An unknown project reports a bounded not-found failure', async () => {
+    await scenario(34, 'An unknown project reports a bounded not-found failure', async () => {
       const { data } = await serviceClient.rpc('update_snapshot_image_alt_text', {
         p_public_id: `${prefix}-does-not-exist`, p_alt_text: SNAPSHOT_ALT,
         p_expected_updated_at: new Date().toISOString(), p_admin_id: fixture!.admin.id,
@@ -637,7 +664,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(data?.resultCode === 'PROJECT_NOT_FOUND', `Expected PROJECT_NOT_FOUND, got ${JSON.stringify(data)}`);
     });
 
-    await scenario(34, 'An approved project requires reopening before its alt can be edited', async () => {
+    await scenario(35, 'An approved project requires reopening before its alt can be edited', async () => {
       const approved = seedProject(prefix, 'approved-edit', fixture!, { status: 'approved' });
       const { data } = await serviceClient.rpc('update_snapshot_image_alt_text', {
         p_public_id: approved, p_alt_text: SNAPSHOT_ALT_B,
@@ -648,7 +675,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(projectState(approved).audits === 0, 'A blocked approved edit created an audit row.');
     });
 
-    await scenario(35, 'A published project keeps its accessibility metadata locked', async () => {
+    await scenario(36, 'A published project keeps its accessibility metadata locked', async () => {
       const published = seedProject(prefix, 'published-edit', fixture!, { status: 'published' });
       const { data } = await serviceClient.rpc('update_snapshot_image_alt_text', {
         p_public_id: published, p_alt_text: SNAPSHOT_ALT_B,
@@ -660,7 +687,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
 
     // ---------------------------------------------------------- review gate
 
-    await scenario(36, 'Application readiness blocks a snapshot with no alt and permits one with alt', () => {
+    await scenario(37, 'Application readiness blocks a snapshot with no alt and permits one with alt', () => {
       const withAlt = computeProjectReviewReadiness({
         publicId: 'x', title: 'T', summary: 'S', programId: 'p', programName: 'P', studyProgram: 'SP',
         discipline: 'D', groupName: 'G', teamMembers: ['A'], posterText: POSTER_TEXT,
@@ -696,7 +723,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       );
     });
 
-    await scenario(37, 'The database blocks review submission for an undescribed snapshot', async () => {
+    await scenario(38, 'The database blocks review submission for an undescribed snapshot', async () => {
       const blocked = seedProject(prefix, 'submit-blocked', fixture!, { snapshotAlt: null, inBatch: true });
       const { data } = await serviceClient.rpc('submit_import_projects_for_review', {
         p_batch_id: fixture!.batchId, p_project_public_ids: [blocked],
@@ -711,7 +738,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(projectState(blocked).audits === 0, 'A blocked submission created an audit row.');
     });
 
-    await scenario(38, 'A mixed selection with one undescribed snapshot transitions nothing', async () => {
+    await scenario(39, 'A mixed selection with one undescribed snapshot transitions nothing', async () => {
       const compliant = seedProject(prefix, 'submit-mixed-ok', fixture!, { inBatch: true });
       const blocked = `${prefix}-submit-blocked`;
       const { data } = await serviceClient.rpc('submit_import_projects_for_review', {
@@ -723,7 +750,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(projectState(compliant).audits === 0, 'A compliant project in a blocked selection gained an audit row.');
     });
 
-    await scenario(39, 'A described snapshot and a snapshot-free project both submit successfully', async () => {
+    await scenario(40, 'A described snapshot and a snapshot-free project both submit successfully', async () => {
       const compliant = `${prefix}-submit-mixed-ok`;
       const noSnapshot = seedProject(prefix, 'submit-nosnap', fixture!, { withSnapshot: false, inBatch: true });
       const { data } = await serviceClient.rpc('submit_import_projects_for_review', {
@@ -737,7 +764,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
 
     // -------------------------------------------------------- approval gate
 
-    await scenario(40, 'Approval is blocked for an undescribed snapshot, with zero mutation', async () => {
+    await scenario(41, 'Approval is blocked for an undescribed snapshot, with zero mutation', async () => {
       const target = seedProject(prefix, 'approve-blocked', fixture!, { status: 'in_review', snapshotAlt: null });
       const { data } = await serviceClient.rpc('perform_project_review_action', {
         p_public_id: target, p_action: 'approve', p_comments: null, p_admin_id: fixture!.admin.id,
@@ -747,7 +774,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(projectState(target).audits === 0, 'A blocked approval created an audit row.');
     });
 
-    await scenario(41, 'Request changes remains available for an undescribed snapshot', async () => {
+    await scenario(42, 'Request changes remains available for an undescribed snapshot', async () => {
       const target = `${prefix}-approve-blocked`;
       const { data } = await serviceClient.rpc('perform_project_review_action', {
         p_public_id: target, p_action: 'request_changes', p_comments: 'Please describe the snapshot image.', p_admin_id: fixture!.admin.id,
@@ -755,7 +782,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(data?.status === 'changes_requested', `Request changes was blocked: ${JSON.stringify(data)}`);
     });
 
-    await scenario(42, 'Approval succeeds once the snapshot is described', async () => {
+    await scenario(43, 'Approval succeeds once the snapshot is described', async () => {
       const target = seedProject(prefix, 'approve-ok', fixture!, { status: 'in_review' });
       const { data } = await serviceClient.rpc('perform_project_review_action', {
         p_public_id: target, p_action: 'approve', p_comments: null, p_admin_id: fixture!.admin.id,
@@ -763,7 +790,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(data?.status === 'approved', `Approval of a described snapshot failed: ${JSON.stringify(data)}`);
     });
 
-    await scenario(43, 'Approval succeeds for a project with no snapshot image at all', async () => {
+    await scenario(44, 'Approval succeeds for a project with no snapshot image at all', async () => {
       const target = seedProject(prefix, 'approve-nosnap', fixture!, { status: 'in_review', withSnapshot: false });
       const { data } = await serviceClient.rpc('perform_project_review_action', {
         p_public_id: target, p_action: 'approve', p_comments: null, p_admin_id: fixture!.admin.id,
@@ -771,7 +798,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(data?.status === 'approved', `Approval without a snapshot image failed: ${JSON.stringify(data)}`);
     });
 
-    await scenario(44, 'Application approval validation mirrors the database gate', () => {
+    await scenario(45, 'Application approval validation mirrors the database gate', () => {
       const project = createMockProject({ status: 'in_review' });
       assert(validateProjectForApproval(project, { snapshotMedia: null }).valid, 'Approval validation blocked a project with no snapshot.');
       assert(validateProjectForApproval(project, { snapshotMedia: { altText: SNAPSHOT_ALT } }).valid, 'Approval validation blocked a described snapshot.');
@@ -780,7 +807,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
 
     // ------------------------------------------------------- preview gating
 
-    await scenario(45, 'Preview generation fails closed for an undescribed snapshot', async () => {
+    await scenario(46, 'Preview generation fails closed for an undescribed snapshot', async () => {
       const target = seedProject(prefix, 'preview-blocked', fixture!, { status: 'approved', snapshotAlt: null });
       const { data } = await serviceClient.rpc('generate_participant_preview', {
         p_public_id: target, p_admin_id: fixture!.admin.id, p_token_hash: tokenPair().hash,
@@ -795,7 +822,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(previews.count === 0, 'A blocked preview attempt still created a preview row.');
     });
 
-    await scenario(46, 'The legacy 5-argument preview wrapper cannot bypass the gate', async () => {
+    await scenario(47, 'The legacy 5-argument preview wrapper cannot bypass the gate', async () => {
       const { data } = await serviceClient.rpc('generate_participant_preview', {
         p_public_id: `${prefix}-preview-blocked`, p_admin_id: fixture!.admin.id, p_token_hash: tokenPair().hash,
         p_expires_in_seconds: 604800, p_private_bucket: PRIVATE_BUCKET,
@@ -803,19 +830,37 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(data?.resultCode === 'MEDIA_ACCESSIBILITY_REQUIRED', `The 5-argument wrapper bypassed the gate: ${JSON.stringify(data)}`);
     });
 
-    await scenario(47, 'The notification generator inherits the same gate', async () => {
+    await scenario(48, 'The notification generator inherits the same gate', async () => {
+      const target = `${prefix}-preview-blocked`;
       const { data } = await serviceClient.rpc('generate_participant_preview_with_notification', {
-        p_public_id: `${prefix}-preview-blocked`, p_admin_id: fixture!.admin.id, p_token_hash: tokenPair().hash,
-        p_expires_in_seconds: 604800, p_private_bucket: PRIVATE_BUCKET,
-        p_recipient_email: `${prefix}-participant@example.test`, p_is_correction_reissue: false,
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_token_hash: tokenPair().hash,
+        p_expires_in_seconds: 604800,
+        p_private_bucket: PRIVATE_BUCKET,
+        p_is_correction_reissue: false,
       }) as RpcResult;
       assert(
         data?.resultCode === 'MEDIA_ACCESSIBILITY_REQUIRED',
         `The notification generator bypassed the gate: ${JSON.stringify(data)}`,
       );
+      const notifications = queryLocalJson<{ count: number }>(`
+        SELECT pg_catalog.jsonb_build_object('count', pg_catalog.count(*))
+          FROM public.participant_preview_notifications pn
+          JOIN public.projects p ON p.id = pn.project_id
+         WHERE p.public_id = ${sqlText(target)}
+      `);
+      assert(notifications.count === 0, 'A blocked preview attempt created a notification row.');
+      const previews = queryLocalJson<{ count: number }>(`
+        SELECT pg_catalog.jsonb_build_object('count', pg_catalog.count(*))
+          FROM public.participant_previews pp
+          JOIN public.projects p ON p.id = pp.project_id
+         WHERE p.public_id = ${sqlText(target)}
+      `);
+      assert(previews.count === 0, 'A blocked preview attempt created a preview row.');
     });
 
-    await scenario(48, 'A described snapshot yields a preview whose media snapshot stores the exact alt', async () => {
+    await scenario(49, 'A described snapshot yields a preview whose media snapshot stores the exact alt', async () => {
       const target = seedProject(prefix, 'preview-ok', fixture!, { status: 'approved' });
       const { data } = await serviceClient.rpc('generate_participant_preview', {
         p_public_id: target, p_admin_id: fixture!.admin.id, p_token_hash: tokenPair().hash,
@@ -838,7 +883,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(posterEntry?.altText === null, 'The poster image duplicated an alt into the media snapshot.');
     });
 
-    await scenario(49, 'Participant HTML renders the snapshotted alt, never the filename', () => {
+    await scenario(50, 'Participant HTML renders the snapshotted alt, never the filename', () => {
       const html = renderParticipantPreviewPage({
         snapshot: {
           title: 'Runtime Project', summary: null, background: null, solution: null, year: 2026,
@@ -860,7 +905,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(!alts.includes('snapshot-1.png'), 'A filename was used as participant-facing alt text.');
     });
 
-    await scenario(50, 'Malicious alt text cannot inject markup into the participant page', () => {
+    await scenario(51, 'Malicious alt text cannot inject markup into the participant page', () => {
       const html = renderParticipantPreviewPage({
         snapshot: {
           title: 'Runtime Project', summary: null, background: null, solution: null, year: 2026,
@@ -880,7 +925,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
 
     // ------------------------------------------------- publication readiness
 
-    await scenario(51, 'Publication readiness rejects an undescribed snapshot outright', async () => {
+    await scenario(52, 'Publication readiness rejects an undescribed snapshot outright', async () => {
       const target = `${prefix}-preview-blocked`;
       const { data } = await serviceClient.rpc('get_project_publication_readiness', {
         p_public_id: target, p_admin_id: fixture!.admin.id, p_private_bucket: PRIVATE_BUCKET,
@@ -893,7 +938,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       );
     });
 
-    await scenario(52, 'A confirmed preview with a described snapshot reaches READY', async () => {
+    await scenario(53, 'A confirmed preview with a described snapshot reaches READY', async () => {
       const target = `${prefix}-preview-ok`;
       executeLocalSql(`
         INSERT INTO public.participant_preview_confirmations(participant_preview_id, confirmed_at)
@@ -908,7 +953,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(data?.resultCode === 'READY', `Expected READY, got ${JSON.stringify(data)}`);
     });
 
-    await scenario(53, 'Editing the alt after confirmation makes the media snapshot stale', async () => {
+    await scenario(54, 'Editing the alt after confirmation makes the media snapshot stale', async () => {
       const target = `${prefix}-preview-ok`;
       // Edited directly, because the approved-project gate deliberately routes staff through
       // Request changes; the point here is that the confirmation can no longer authorize publication.
@@ -924,7 +969,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(data?.resultCode === 'MEDIA_SNAPSHOT_STALE', `Expected MEDIA_SNAPSHOT_STALE, got ${JSON.stringify(data)}`);
     });
 
-    await scenario(54, 'Restoring the confirmed alt restores readiness exactly', async () => {
+    await scenario(55, 'Restoring the confirmed alt restores readiness exactly', async () => {
       const target = `${prefix}-preview-ok`;
       executeLocalSql(`
         UPDATE public.media_assets SET alt_text_public = ${sqlText(SNAPSHOT_ALT)}
@@ -937,7 +982,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(data?.resultCode === 'READY', `Readiness did not return to READY: ${JSON.stringify(data)}`);
     });
 
-    await scenario(55, 'A project with no snapshot image keeps its existing readiness behaviour', async () => {
+    await scenario(56, 'A project with no snapshot image keeps its existing readiness behaviour', async () => {
       const target = seedProject(prefix, 'ready-nosnap', fixture!, { status: 'approved', withSnapshot: false });
       const { data } = await serviceClient.rpc('generate_participant_preview', {
         p_public_id: target, p_admin_id: fixture!.admin.id, p_token_hash: tokenPair().hash,
@@ -958,7 +1003,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
 
     // ------------------------------------------------------------ public feed
 
-    await scenario(56, 'The public feed emits both snapshots and the structured pairing', () => {
+    await scenario(57, 'The public feed emits both snapshots and the structured pairing', () => {
       const url = 'https://cdn.invalid/published/runtime/snapshot-1.png';
       const [record] = compilePublicFeed([createMockProject({
         status: 'published', snapshots: [url], snapshotMedia: [{ url, altText: SNAPSHOT_ALT }],
@@ -971,7 +1016,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       assert(validatePublicFeed([record]).valid, 'A compliant feed record failed validation.');
     });
 
-    await scenario(57, 'The feed validator rejects an undescribed or mismatched published snapshot', () => {
+    await scenario(58, 'The feed validator rejects an undescribed or mismatched published snapshot', () => {
       const url = 'https://cdn.invalid/published/runtime/snapshot-1.png';
       const base = createMockProject({ status: 'published', snapshots: [url], snapshotMedia: [] });
       assert(!validatePublicFeed(compilePublicFeed([base])).valid, 'A published snapshot with no pairing passed validation.');
@@ -988,7 +1033,49 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
       }
     });
 
-    await scenario(58, 'The verifier created no public media and no published rows', () => {
+    await scenario(59, 'The feed validator rejects unsafe, malformed, or private/draft snapshot URLs', () => {
+      for (const badUrl of [
+        'not-a-url',
+        '/relative/path.png',
+        'javascript:alert(1)',
+        'data:image/png;base64,iVBORw0KGgo=',
+        'https://cdn.invalid/storage/v1/object/public/project-drafts-private/a.png',
+        'https://cdn.invalid/drafts/runtime/snapshot-1.png',
+        'https://cdn.invalid/storage/v1/object/sign/project-public-assets/a.png',
+      ]) {
+        const record = createMockProject({
+          status: 'published',
+          snapshots: [badUrl],
+          snapshotMedia: [{ url: badUrl, altText: SNAPSHOT_ALT }],
+        });
+        assert(!validatePublicFeed([record]).valid, `Unsafe snapshot URL "${badUrl}" passed validation.`);
+      }
+    });
+
+    await scenario(60, 'The feed validator rejects duplicate snapshot URLs', () => {
+      const url = 'https://cdn.invalid/published/runtime/snapshot-1.png';
+      const dupSnapshots = createMockProject({
+        status: 'published',
+        snapshots: [url, url],
+        snapshotMedia: [
+          { url, altText: SNAPSHOT_ALT },
+          { url, altText: SNAPSHOT_ALT },
+        ],
+      });
+      assert(!validatePublicFeed([dupSnapshots]).valid, 'Duplicate snapshot URLs in snapshots passed validation.');
+
+      const dupMedia = createMockProject({
+        status: 'published',
+        snapshots: [url, 'https://cdn.invalid/published/runtime/snapshot-2.png'],
+        snapshotMedia: [
+          { url, altText: 'First' },
+          { url, altText: 'Duplicate' },
+        ],
+      });
+      assert(!validatePublicFeed([dupMedia]).valid, 'Duplicate URLs in snapshotMedia passed validation.');
+    });
+
+    await scenario(61, 'The verifier created no public media and no published rows', () => {
       const leakage = queryLocalJson<{ publicMedia: number; published: number; snapshots: number }>(`
         SELECT pg_catalog.jsonb_build_object(
           'publicMedia', (SELECT pg_catalog.count(*) FROM public.media_assets ma JOIN public.projects p ON p.id = ma.project_id

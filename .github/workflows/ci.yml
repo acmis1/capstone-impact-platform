@@ -140,10 +140,10 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify twenty-five migrations and local integrity
+      - name: Verify twenty-six migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 25
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 26
 
       - name: Verify staff role and session governance runtime behavior
         run: npm exec --workspace=apps/admin-cms -- tsx src/scripts/verifyStaffRoleSessionGovernanceRuntime.ts

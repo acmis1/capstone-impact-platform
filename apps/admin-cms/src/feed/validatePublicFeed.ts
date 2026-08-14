@@ -1,5 +1,6 @@
 import { PublicFeedRecord } from '../domain/publicFeed';
 import { ACCESSIBLE_CONTENT_LIMITS, getAccessibleContentProblem } from '../domain/accessibleContent';
+import { STORAGE_POLICIES } from '../storage/storageRules';
 
 export interface FeedValidationResult {
   valid: boolean;
@@ -10,36 +11,83 @@ export interface FeedValidationResult {
 const SNAPSHOT_MEDIA_KEYS = new Set(['url', 'altText']);
 
 /**
- * Enforces the additive `snapshotMedia` contract: an array that corresponds exactly to `snapshots`,
- * one entry per public snapshot URL, each carrying a bounded non-blank text alternative.
- *
- * Correspondence is checked by URL rather than by position, and each `snapshots` entry may be
- * claimed only once, so neither reordering nor a duplicated entry can satisfy the pairing. The
- * public-safety rules that already apply to `snapshots` therefore apply here too — a private or
- * draft URL cannot appear in `snapshotMedia` without also appearing in `snapshots`, where the
- * existing artifact-level private-reference check rejects it.
+ * Validates that a public snapshot URL is a legitimate, public-safe, absolute HTTP(S) URL.
+ * Rejects malformed URLs, relative paths, non-http(s) schemes (javascript:, data:, etc.),
+ * private draft paths (/drafts/), authenticated/signed storage endpoints, and references
+ * to the private ingestion bucket.
+ */
+function isPublicSafeUrl(urlStr: string): { valid: boolean; reason?: string } {
+  if (typeof urlStr !== 'string' || urlStr.trim() === '') {
+    return { valid: false, reason: 'URL must be a non-empty string.' };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(urlStr);
+  } catch {
+    return { valid: false, reason: 'URL is malformed or not an absolute URL.' };
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { valid: false, reason: `URL protocol "${parsed.protocol}" is not public-safe (must be http: or https:).` };
+  }
+  if (urlStr.includes('/drafts/')) {
+    return { valid: false, reason: 'URL contains private draft path segment "/drafts/".' };
+  }
+  if (urlStr.includes(STORAGE_POLICIES.privateIngestionBucket)) {
+    return { valid: false, reason: `URL references private storage bucket "${STORAGE_POLICIES.privateIngestionBucket}".` };
+  }
+  if (
+    parsed.pathname.includes('/storage/v1/object/sign/') ||
+    parsed.pathname.includes('/storage/v1/object/authenticated/')
+  ) {
+    return { valid: false, reason: 'URL references private or signed storage endpoint.' };
+  }
+  return { valid: true };
+}
+
+/**
+ * Enforces the exact additive `snapshotMedia` contract:
+ * 1. snapshots is an array of public-safe string URLs without duplicates.
+ * 2. snapshotMedia is an array of exact { url, altText } objects without duplicates.
+ * 3. snapshotMedia length equals snapshots length.
+ * 4. Every snapshotMedia URL corresponds to exactly one snapshots URL (order-independent).
+ * 5. Every snapshots URL is claimed by exactly one snapshotMedia entry.
+ * 6. Every altText is a string, non-blank after trim, <= 2,000 characters.
  */
 function validateSnapshotMedia(record: Record<string, unknown>, prefix: string, errors: string[]): void {
   const snapshotMedia = record.snapshotMedia;
   const snapshots = record.snapshots;
 
-  if (!Array.isArray(snapshotMedia)) {
-    errors.push(`${prefix} Type error: "snapshotMedia" must be an array.`);
-    return;
-  }
-  if (!Array.isArray(snapshots)) {
-    // The snapshots type error is reported by the caller's required-field pass; without it there is
-    // nothing to pair against, so pairing is not additionally re-reported here.
+  if (!Array.isArray(snapshots) || !Array.isArray(snapshotMedia)) {
     return;
   }
 
+  // 1. Validate each snapshots element: must be string, valid public-safe URL, and unique across snapshots
+  const seenSnapshotUrls = new Set<string>();
+  snapshots.forEach((url, i) => {
+    if (typeof url !== 'string') {
+      errors.push(`${prefix} Snapshot URL at index [${i}] must be a string.`);
+      return;
+    }
+    const safety = isPublicSafeUrl(url);
+    if (!safety.valid) {
+      errors.push(`${prefix} Snapshot URL at index [${i}] is not public-safe: ${safety.reason}`);
+    }
+    if (seenSnapshotUrls.has(url)) {
+      errors.push(`${prefix} Duplicate snapshot URL detected in "snapshots": "${url}".`);
+    }
+    seenSnapshotUrls.add(url);
+  });
+
+  // 2. Validate array length equivalence
   if (snapshotMedia.length !== snapshots.length) {
     errors.push(
       `${prefix} Snapshot media error: "snapshotMedia" has ${snapshotMedia.length} entr${snapshotMedia.length === 1 ? 'y' : 'ies'} but "snapshots" has ${snapshots.length}. Every snapshot image must be paired with a text alternative.`,
     );
   }
 
-  const unclaimedUrls = [...snapshots];
+  // 3. Validate each snapshotMedia item
+  const seenMediaUrls = new Set<string>();
+  const unclaimedSnapshotUrls = new Set(seenSnapshotUrls);
 
   snapshotMedia.forEach((untypedItem, itemIndex) => {
     const itemPrefix = `${prefix} Snapshot media [${itemIndex}]`;
@@ -59,11 +107,19 @@ function validateSnapshotMedia(record: Record<string, unknown>, prefix: string, 
     if (typeof item.url !== 'string' || item.url.trim() === '') {
       errors.push(`${itemPrefix} is missing a valid "url".`);
     } else {
-      const claimedAt = unclaimedUrls.indexOf(item.url);
-      if (claimedAt === -1) {
-        errors.push(`${itemPrefix} URL does not match any remaining entry in "snapshots".`);
+      const safety = isPublicSafeUrl(item.url);
+      if (!safety.valid) {
+        errors.push(`${itemPrefix} URL is not public-safe: ${safety.reason}`);
+      }
+      if (seenMediaUrls.has(item.url)) {
+        errors.push(`${itemPrefix} Duplicate URL detected in "snapshotMedia": "${item.url}".`);
+      }
+      seenMediaUrls.add(item.url);
+
+      if (!seenSnapshotUrls.has(item.url)) {
+        errors.push(`${itemPrefix} URL does not match any remaining entry in "snapshots": "${item.url}".`);
       } else {
-        unclaimedUrls.splice(claimedAt, 1);
+        unclaimedSnapshotUrls.delete(item.url);
       }
     }
 
@@ -81,8 +137,8 @@ function validateSnapshotMedia(record: Record<string, unknown>, prefix: string, 
     }
   });
 
-  unclaimedUrls.forEach((url) => {
-    errors.push(`${prefix} Snapshot image is published without a text alternative: "${String(url)}".`);
+  unclaimedSnapshotUrls.forEach((url) => {
+    errors.push(`${prefix} Snapshot image is published without a text alternative: "${url}".`);
   });
 }
 
@@ -140,7 +196,7 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
     const requiredFields: (keyof PublicFeedRecord)[] = [
       'id', 'publicId', 'title', 'summary', 'year', 'program', 'studyProgram',
       'discipline', 'groupName', 'teamMembers', 'poster', 'posterPdf',
-      'posterText', 'accessibilityText', 'layoutConfig'
+      'posterText', 'accessibilityText', 'snapshots', 'snapshotMedia', 'layoutConfig'
     ];
 
     /**
@@ -163,6 +219,12 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
       }
       if (field === 'teamMembers' && !Array.isArray(val)) {
         errors.push(`${prefix} Type error: "teamMembers" must be a string array.`);
+      }
+      if (field === 'snapshots' && !Array.isArray(val)) {
+        errors.push(`${prefix} Type error: "snapshots" must be a string array.`);
+      }
+      if (field === 'snapshotMedia' && !Array.isArray(val)) {
+        errors.push(`${prefix} Type error: "snapshotMedia" must be an array.`);
       }
       if (accessibleContentFields.includes(field)) {
         // A public artifact must carry accessible content, and it must stay bounded — an unbounded

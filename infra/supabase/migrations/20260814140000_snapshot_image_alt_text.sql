@@ -64,8 +64,9 @@ ALTER TABLE public.media_assets
   ADD CONSTRAINT check_media_asset_alt_text_public CHECK (
     alt_text_public IS NULL
     OR (
-      pg_catalog.btrim(alt_text_public) <> ''
-      AND pg_catalog.length(pg_catalog.btrim(alt_text_public)) <= 2000
+      alt_text_public = pg_catalog.btrim(alt_text_public)
+      AND alt_text_public <> ''
+      AND pg_catalog.length(alt_text_public) <= 2000
     )
   );
 
