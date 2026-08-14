@@ -141,6 +141,10 @@ export class SupabaseParticipantPreviewNotificationRepositoryCore {
         throw new ParticipantPreviewExecutionError('NO_CORRECTION_IN_PROGRESS');
       case 'AMBIGUOUS_CORRECTION_REQUEST':
         throw new ParticipantPreviewExecutionError('AMBIGUOUS_CORRECTION_REQUEST');
+      // The notification generator composes the ordinary preview generator, so it inherits the
+      // snapshot-alt gate rather than reimplementing it; this only surfaces the same outcome.
+      case 'MEDIA_ACCESSIBILITY_REQUIRED':
+        throw new ParticipantPreviewExecutionError('MEDIA_ACCESSIBILITY_REQUIRED');
       default:
         throw new ParticipantPreviewExecutionError('INPUT_INVALID');
     }

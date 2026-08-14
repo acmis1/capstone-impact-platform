@@ -501,8 +501,8 @@ export async function verifyAccessibilityFullTextRuntime(): Promise<void> {
         posterText: null, accessibilityText: null, snapshots: [], validationErrors: [], validationWarnings: [],
         validationFlags: [], status: 'draft', disciplineMappingCount: 1, industryMappingCount: 1,
         mediaAssets: [
-          { assetType: 'poster_image', isPublicApproved: false, publicUrl: null },
-          { assetType: 'poster_pdf', isPublicApproved: false, publicUrl: null },
+          { assetType: 'poster_image', isPublicApproved: false, publicUrl: null, altText: null },
+          { assetType: 'poster_pdf', isPublicApproved: false, publicUrl: null, altText: null },
         ],
       });
       assert(!readiness.ready, 'Application readiness accepted a project with no accessible content.');

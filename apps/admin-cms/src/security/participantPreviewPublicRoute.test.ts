@@ -224,13 +224,15 @@ describe('Public participant-preview route', () => {
         groupName: null,
         teamMembers: ['Synthetic Member A'],
         posterText: null,
-        accessibilityText: null,
+        // A preview can only be issued for a project that has accessible poster content, and the
+        // poster image's participant-facing alt attribute is this snapshotted value.
+        accessibilityText: 'Poster showing a synthetic system architecture diagram.',
         citations: [],
         externalLinks: [],
         industryCategories: [],
       },
       mediaSnapshot: [
-        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png' },
+        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png', altText: null },
       ],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });
@@ -281,11 +283,11 @@ describe('Public participant-preview route', () => {
         industryCategories: [],
       },
       mediaSnapshot: [
-        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png' },
+        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png', altText: null },
         // Anomalous reference pointing at the public bucket — createSignedDraftMediaUrl's own
         // bucket check refuses to sign it, and the route must fail closed rather than silently
         // omit it and still return 200.
-        { mediaAssetId: 'm2', assetType: 'poster_image', fileName: 'other-project-poster.png', storageBucket: 'project-public-assets', storagePath: 'approved/other-project/poster_image/poster.png', mimeType: 'image/png' },
+        { mediaAssetId: 'm2', assetType: 'poster_image', fileName: 'other-project-poster.png', storageBucket: 'project-public-assets', storagePath: 'approved/other-project/poster_image/poster.png', mimeType: 'image/png', altText: null },
       ],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });
@@ -331,7 +333,7 @@ describe('Public participant-preview route', () => {
         industryCategories: [],
       },
       mediaSnapshot: [
-        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png' },
+        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png', altText: null },
       ],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });

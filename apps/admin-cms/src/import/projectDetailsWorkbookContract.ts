@@ -33,6 +33,18 @@ export interface ProjectDetailsWorkbookMetadata {
   posterText: string;
   /** Concise descriptive text alternative/context for the poster image. Required. */
   accessibilityText: string;
+  /**
+   * Staff-authored text alternative describing the meaningful content of `snapshot-1.png`.
+   *
+   * Conditionally required, and therefore not a required *column*: the workbook parser cannot see
+   * which files the package contains, so it only enforces the rules it can evaluate on its own
+   * (readable cell, bounded length). Whether a blank value is acceptable is decided at the
+   * package-aware boundary, which knows whether `snapshot-1.png` is actually present.
+   *
+   * Empty string means "absent column or blank cell". Nothing derives this value from the filename,
+   * the project title, the poster accessibility text, OCR, or AI.
+   */
+  snapshotAltText: string;
   layoutConfig: {
     templateId: string;
     featuredMedia: string;
@@ -230,6 +242,20 @@ export const COLUMN_DEFINITIONS: ColumnDefinition[] = [
     internalField: 'accessibilityText',
     required: true,
     aliases: ['accessibility text', 'accessibilitytext']
+  },
+  {
+    // Not a required column: required only when the package actually contains snapshot-1.png,
+    // which is decided at the package-aware boundary rather than here.
+    canonicalName: 'Snapshot image alt text',
+    internalField: 'snapshotAltText',
+    required: false,
+    aliases: [
+      'snapshot image alt text',
+      'snapshot alt text',
+      'snapshot accessibility text',
+      'snapshotimagealttext',
+      'snapshotalttext'
+    ]
   }
 ];
 

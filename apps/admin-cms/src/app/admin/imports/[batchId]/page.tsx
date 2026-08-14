@@ -88,6 +88,7 @@ export default async function ImportBatchDetailPage({
       assetType: a.asset_type,
       isPublicApproved: a.is_public_approved,
       publicUrl: a.public_url,
+      altText: a.alt_text_public,
     }));
     const posterPresent = isPrivateAssetPresent(mediaAssets, 'poster_image');
     const posterPdfPresent = isPrivateAssetPresent(mediaAssets, 'poster_pdf');

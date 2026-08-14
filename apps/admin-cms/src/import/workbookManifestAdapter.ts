@@ -42,6 +42,7 @@ export function buildImportPackageManifestFromWorkbook(
     teamMembers: [...metadata.teamMembers],
     ...(resolvedPosterText ? { posterText: resolvedPosterText } : {}),
     ...(metadata.accessibilityText ? { accessibilityText: metadata.accessibilityText } : {}),
+    ...(metadata.snapshotAltText ? { snapshotAltText: metadata.snapshotAltText } : {}),
     layoutConfig: {
       templateId: metadata.layoutConfig.templateId,
       featuredMedia: metadata.layoutConfig.featuredMedia,

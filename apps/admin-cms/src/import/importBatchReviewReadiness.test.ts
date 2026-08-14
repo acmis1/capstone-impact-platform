@@ -22,8 +22,8 @@ const baseInput: ImportBatchReviewProjectInput = {
   disciplineMappingCount: 1,
   industryMappingCount: 1,
   mediaAssets: [
-    { assetType: 'poster_image', isPublicApproved: false, publicUrl: null },
-    { assetType: 'poster_pdf', isPublicApproved: false, publicUrl: null },
+    { assetType: 'poster_image', isPublicApproved: false, publicUrl: null, altText: null },
+    { assetType: 'poster_pdf', isPublicApproved: false, publicUrl: null, altText: null },
   ],
 };
 

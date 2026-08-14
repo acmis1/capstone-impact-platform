@@ -155,6 +155,11 @@ export interface CanonicalExpectedMediaFile {
   assetType: string;
   fileName: string;
   fileSizeBytes: number;
+  /**
+   * Authoritative snapshot alt text for this file, or null when it has none. Part of the canonical
+   * intent, not display metadata — see the binding note on `computeCanonicalMediaIntentHash`.
+   */
+  snapshotAltText?: string | null;
 }
 
 /**
@@ -162,6 +167,11 @@ export interface CanonicalExpectedMediaFile {
  * the metadata intent it was staged from, and the exact expected media file set. Reproducing
  * this hash requires resubmitting the identical manifest/intent/batch that produced it, which
  * is what allows exact retries to converge and prevents attaching unrelated files to a batch.
+ *
+ * The snapshot alt text is part of that canonical set. Because the value is re-derived server-side
+ * from the resubmitted package on every attempt, changing it changes this hash, so an alt text can
+ * never be smuggled into an already-completed batch under an older intent — the mismatch is
+ * rejected exactly like any other change to the expected media set.
  */
 export function computeCanonicalMediaIntentHash(params: {
   batchId: string;
@@ -176,6 +186,7 @@ export function computeCanonicalMediaIntentHash(params: {
       assetType: f.assetType,
       fileName: f.fileName,
       fileSizeBytes: f.fileSizeBytes,
+      snapshotAltText: f.snapshotAltText ?? null,
     }));
 
   const canonicalObj = {

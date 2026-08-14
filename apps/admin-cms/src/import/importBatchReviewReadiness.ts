@@ -1,12 +1,18 @@
 import { WorkflowStatus } from '../domain/workflowStatus';
 import { getSubmissionEligibility, SubmissionEligibility } from '../workflow/importBatchSubmission';
 import { ImportBatchReviewProjectRow } from '../repositories/ImportBatchRepositoryCore';
-import { describeAccessibleContentProblem, getAccessibleContentProblem } from '../domain/accessibleContent';
+import {
+  describeAccessibleContentProblem,
+  getAccessibleContentProblem,
+  getSnapshotAltTextProblem,
+} from '../domain/accessibleContent';
 
 export interface ImportBatchReviewMediaAssetInput {
   assetType: string;
   isPublicApproved: boolean | null;
   publicUrl: string | null;
+  /** Stored text alternative for this asset; null when none is recorded. */
+  altText: string | null;
 }
 
 export interface ImportBatchReviewValidationFlagInput {
@@ -123,6 +129,17 @@ export function computeProjectReviewReadiness(input: ImportBatchReviewProjectInp
     blockingReasons.push('Poster PDF is missing or is not registered as private staged media.');
   }
 
+  // Snapshot media accessibility. Mirrors MISSING_SNAPSHOT_ALT_TEXT / SNAPSHOT_ALT_TEXT_TOO_LONG in
+  // submit_import_projects_for_review. Conditional by design: the snapshot image itself stays
+  // optional, so its absence adds no blocker and the existing empty-gallery warning below is
+  // unchanged. Once the image exists it is bound for a public page, so a usable text alternative is
+  // a blocker rather than an acknowledgeable warning.
+  const snapshotAsset = input.mediaAssets.find((asset) => asset.assetType === 'snapshot_image');
+  if (snapshotAsset) {
+    const problem = getSnapshotAltTextProblem(snapshotAsset.altText, { snapshotPresent: true });
+    if (problem) blockingReasons.push(describeAccessibleContentProblem(problem, 'snapshotAltText'));
+  }
+
   if (!input.snapshots || input.snapshots.length === 0) {
     warnings.push('Snapshot gallery is empty.');
   }
@@ -175,6 +192,7 @@ export function computeReadinessForImportBatchRow(row: ImportBatchReviewProjectR
       assetType: asset.asset_type,
       isPublicApproved: asset.is_public_approved,
       publicUrl: asset.public_url,
+      altText: asset.alt_text_public,
     })),
   });
 }

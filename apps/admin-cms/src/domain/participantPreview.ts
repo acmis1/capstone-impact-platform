@@ -42,6 +42,15 @@ export interface ParticipantPreviewMediaRef {
   storageBucket: string;
   storagePath: string;
   mimeType: string | null;
+  /**
+   * The text alternative captured at issuance, immutable for the life of this preview version.
+   *
+   * A non-empty string for `snapshot_image` — preview generation fails closed rather than issuing a
+   * preview of an undescribed image — and null for `poster_image` and `poster_pdf`. The poster's
+   * text alternative is the snapshotted project-level `accessibilityText`, deliberately not
+   * duplicated onto the media asset.
+   */
+  altText: string | null;
 }
 
 export interface ParticipantPreviewMediaViewRef {
@@ -49,6 +58,8 @@ export interface ParticipantPreviewMediaViewRef {
   assetType: string;
   fileName: string;
   mimeType: string | null;
+  /** Carried through from the immutable snapshot; never re-read from current media state. */
+  altText: string | null;
   signedUrl: string | null;
 }
 

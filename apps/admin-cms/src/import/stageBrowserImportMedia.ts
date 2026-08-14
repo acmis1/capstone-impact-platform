@@ -18,6 +18,12 @@ export interface MediaFileToStage {
   fileName: string;
   fileSizeBytes: number;
   canonicalMimeType: string;
+  /**
+   * Server-derived text alternative for a `snapshot_image`; null for all other asset types and for
+   * a legacy snapshot with no supplied alt text. The caller must take this from the reparsed
+   * package manifest — it is never accepted from the browser as an independent value.
+   */
+  snapshotAltText: string | null;
   content: Buffer;
 }
 
@@ -155,6 +161,7 @@ export async function stageBrowserImportMedia(params: {
       assetType: f.assetType,
       fileName: f.fileName,
       fileSizeBytes: f.fileSizeBytes,
+      snapshotAltText: f.snapshotAltText,
     })),
   });
 
@@ -222,6 +229,7 @@ export async function stageBrowserImportMedia(params: {
     storagePath: buildStoragePath(f.projectPublicId, f.assetType, f.fileName),
     mimeType: f.canonicalMimeType,
     fileSizeBytes: f.fileSizeBytes,
+    snapshotAltText: f.snapshotAltText,
   }));
 
   const { data, error } = await supabase.rpc('finalize_browser_import_media_stage', {

@@ -127,24 +127,36 @@ export function createValidationFlags(index: number): ValidationFlagRecord {
   }
 }
 
+/** Deterministic synthetic description, paired with its URL so the two can never drift apart. */
+function createSyntheticSnapshotMedia(publicId: string, urls: string[]): Project['snapshotMedia'] {
+  return urls.map((url, position) => ({
+    url,
+    altText: `Synthetic snapshot ${position + 1} for ${publicId}: a generated placeholder image used for repeatable local checks.`,
+  }));
+}
+
 function createOptionalMedia(index: number, publicId: string): Pick<
   Project,
-  'snapshots' | 'videoUrl' | 'demoUrl' | 'repositoryUrl' | 'externalLinks'
+  'snapshots' | 'snapshotMedia' | 'videoUrl' | 'demoUrl' | 'repositoryUrl' | 'externalLinks'
 > {
   const posterUrl = createAssetUrl(publicId, 'snapshot-01.png');
 
   switch (index % 4) {
-    case 0:
+    case 0: {
+      const snapshots = [posterUrl, createAssetUrl(publicId, 'snapshot-02.png')];
       return {
-        snapshots: [posterUrl, createAssetUrl(publicId, 'snapshot-02.png')],
+        snapshots,
+        snapshotMedia: createSyntheticSnapshotMedia(publicId, snapshots),
         videoUrl: `https://video.synthetic.invalid/${publicId}`,
         demoUrl: `https://demo.synthetic.invalid/${publicId}`,
         repositoryUrl: `https://code.synthetic.invalid/${publicId}`,
         externalLinks: [{ label: 'Synthetic reference', url: `https://links.synthetic.invalid/${publicId}` }],
       };
+    }
     case 1:
       return {
         snapshots: [posterUrl],
+        snapshotMedia: createSyntheticSnapshotMedia(publicId, [posterUrl]),
         videoUrl: '',
         demoUrl: '',
         repositoryUrl: '',
@@ -153,6 +165,7 @@ function createOptionalMedia(index: number, publicId: string): Pick<
     case 2:
       return {
         snapshots: [],
+        snapshotMedia: [],
         videoUrl: '',
         demoUrl: '',
         repositoryUrl: '',
@@ -161,6 +174,7 @@ function createOptionalMedia(index: number, publicId: string): Pick<
     default:
       return {
         snapshots: [],
+        snapshotMedia: [],
         videoUrl: `https://video.synthetic.invalid/${publicId}`,
         demoUrl: '',
         repositoryUrl: '',

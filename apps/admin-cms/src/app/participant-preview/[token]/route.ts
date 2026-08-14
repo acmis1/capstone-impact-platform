@@ -118,6 +118,7 @@ export async function GET(
       assetType: asset.assetType,
       fileName: asset.fileName,
       mimeType: asset.mimeType,
+      altText: asset.altText,
       signedUrl: await createSignedDraftMediaUrl({
         storageBucket: asset.storageBucket,
         storagePath: asset.storagePath,
@@ -140,7 +141,15 @@ export async function GET(
     return unavailableResponse(500);
   }
 
-  const html = renderParticipantPreviewPage({ snapshot: resolved.snapshot, media: mediaViews, responseState });
+  // Fail closed for the same reason as an unsignable asset: if the immutable snapshot cannot supply
+  // an authoritative text alternative for an image, the participant gets the generic unavailable
+  // page rather than a page that shows them an image nobody can describe.
+  let html: string;
+  try {
+    html = renderParticipantPreviewPage({ snapshot: resolved.snapshot, media: mediaViews, responseState });
+  } catch {
+    return unavailableResponse(404);
+  }
   return new Response(html, { status: 200, headers: RESPONSE_HEADERS });
 }
 

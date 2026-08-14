@@ -15,6 +15,7 @@ export interface ProjectMediaAssetPreviewRow {
   mime_type: string | null;
   file_size_bytes: number | string | null;
   is_public_approved: boolean | null;
+  alt_text_public: string | null;
 }
 
 export class ProjectMediaPreviewReadError extends Error {
@@ -29,10 +30,24 @@ function fileSizeBytes(value: ProjectMediaAssetPreviewRow['file_size_bytes']): n
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
-function fallbackAltText(row: ProjectMediaAssetPreviewRow, projectTitle: string, accessibilityText?: string): string | undefined {
-  if (row.asset_type === 'poster_image' && accessibilityText?.trim()) return accessibilityText.trim();
-  if (row.mime_type?.toLowerCase().startsWith('image/')) {
-    return `${row.file_name || 'Image'} preview for ${projectTitle || 'this project'}`;
+/**
+ * The authoritative text alternative for one media asset, or undefined when none is stored.
+ *
+ * A snapshot image uses its own stored `alt_text_public`; the poster image uses the project-level
+ * accessibility text. There is deliberately no filename-derived fallback any more: a string like
+ * "snapshot-1.png preview for Project X" describes the file, not the image, and rendering it as
+ * saved alt text told staff an image was described when it was not. When nothing is stored the
+ * value is undefined and the UI states plainly that the alt text is missing.
+ */
+function authoritativeAltText(
+  row: ProjectMediaAssetPreviewRow,
+  accessibilityText?: string,
+): string | undefined {
+  if (row.asset_type === 'poster_image') {
+    return accessibilityText?.trim() || undefined;
+  }
+  if (row.asset_type === 'snapshot_image') {
+    return row.alt_text_public?.trim() || undefined;
   }
   return undefined;
 }
@@ -52,7 +67,7 @@ export async function toProjectMediaPreviewItem(
     fileName: row.file_name || 'Unnamed media file',
     mimeType: row.mime_type || 'application/octet-stream',
     fileSize: fileSizeBytes(row.file_size_bytes),
-    altText: fallbackAltText(row, params.projectTitle, params.accessibilityText),
+    altText: authoritativeAltText(row, params.accessibilityText),
     previewSource: 'unavailable',
   };
 
@@ -92,7 +107,7 @@ export async function loadProjectMediaPreviewItems(params: {
   const privateBucket = params.privateBucket ?? getStagingBuckets().DRAFT_PRIVATE;
   const { data, error } = await params.supabase
     .from('media_assets')
-    .select('id,asset_type,file_name,storage_bucket,storage_path,public_url,mime_type,file_size_bytes,is_public_approved')
+    .select('id,asset_type,file_name,storage_bucket,storage_path,public_url,mime_type,file_size_bytes,is_public_approved,alt_text_public')
     .eq('project_id', params.projectId)
     .order('asset_type', { ascending: true })
     .order('created_at', { ascending: true })

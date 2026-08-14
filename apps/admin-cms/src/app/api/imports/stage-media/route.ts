@@ -353,6 +353,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         fileName: expected.fileName,
         fileSizeBytes: expected.fileSizeBytes,
         canonicalMimeType: expected.canonicalMimeType,
+        // Taken from the server-reparsed package, never from the multipart request. The browser has
+        // no field through which it could supply or override this value.
+        snapshotAltText: expected.snapshotAltText,
         content: buf,
       });
     }

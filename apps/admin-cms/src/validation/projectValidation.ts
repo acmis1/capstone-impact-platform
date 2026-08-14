@@ -2,6 +2,7 @@ import { Project } from '../domain/project';
 import {
   describeAccessibleContentProblem,
   getAccessibleContentProblem,
+  getSnapshotAltTextProblem,
   isAccessibleContentPresent,
 } from '../domain/accessibleContent';
 
@@ -60,7 +61,23 @@ export function validateProjectForReview(project: Project): ValidationOutput {
  * Validates a CMS record prior to transition to the 'Approved' state.
  * Required fields are strictly blocking for showcase compiling.
  */
-export function validateProjectForApproval(project: Project): ValidationOutput {
+/**
+ * The staged snapshot media an approval decision must account for, supplied alongside the project
+ * because it lives on `media_assets` rather than on the project row.
+ *
+ * `null` (and an omitted option) means "this project has no snapshot image", which is a perfectly
+ * valid state and adds no blocker. This mirrors the authoritative gate inside
+ * perform_project_review_action; that gate remains the sole authority, and this exists so the CMS
+ * can show staff the blocker before they attempt the action.
+ */
+export interface ApprovalSnapshotMediaInput {
+  altText: string | null;
+}
+
+export function validateProjectForApproval(
+  project: Project,
+  options: { snapshotMedia?: ApprovalSnapshotMediaInput | null } = {},
+): ValidationOutput {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -98,6 +115,15 @@ export function validateProjectForApproval(project: Project): ValidationOutput {
     const problem = getAccessibleContentProblem(project[field], field);
     if (problem) {
       errors.push(`${prefix} ${describeAccessibleContentProblem(problem, field)} Approval blocked.`);
+    }
+  }
+
+  // Snapshot media accessibility. Only evaluated when a snapshot image actually exists, because
+  // the image itself is optional and nobody should be asked to describe one that is not there.
+  if (options.snapshotMedia) {
+    const problem = getSnapshotAltTextProblem(options.snapshotMedia.altText, { snapshotPresent: true });
+    if (problem) {
+      errors.push(`${prefix} ${describeAccessibleContentProblem(problem, 'snapshotAltText')} Approval blocked.`);
     }
   }
 

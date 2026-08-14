@@ -16,6 +16,10 @@ export type ReviewActionExecutionErrorCode =
   | 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED'
   | 'ACCESSIBILITY_CONTENT_REQUIRED'
   | 'ACCESSIBILITY_CONTENT_INVALID'
+  /** The project's snapshot image has no usable text alternative; approval is blocked. */
+  | 'MEDIA_ACCESSIBILITY_REQUIRED'
+  /** The snapshot image's text alternative exceeds its bounded ceiling; approval is blocked. */
+  | 'MEDIA_ACCESSIBILITY_INVALID'
   | 'INPUT_INVALID'
   | 'RESPONSE_INVALID'
   | 'INTERNAL_FAILURE';
