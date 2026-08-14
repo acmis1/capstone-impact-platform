@@ -55,7 +55,7 @@ async function main() {
   };
   const appAllowsMetadata = async (role: 'admin' | 'reviewer' | 'editor') => {
     const permissions = getPermissionsForRoles([role]); let invoked = false;
-    const input = { publicId: 'boundary', title: 'Boundary', summary: 'Boundary', background: 'Boundary', solution: 'Boundary', year: '2027', programId: ids.program, disciplineIds: [ids.discipline], industryCategoryIds: [ids.industry], expectedUpdatedAt: new Date().toISOString() };
+    const input = { publicId: 'boundary', title: 'Boundary', summary: 'Boundary', background: 'Boundary', solution: 'Boundary', posterText: 'Boundary poster full text', accessibilityText: 'Boundary accessibility text', year: '2027', programId: ids.program, disciplineIds: [ids.discipline], industryCategoryIds: [ids.industry], expectedUpdatedAt: new Date().toISOString() };
     const result = await saveAuthorizedProjectMetadata(permissions, { loadOptions: async () => ({ programs: [{ id: ids.program, name: 'Program' }], disciplines: [{ id: ids.discipline, name: 'Discipline' }], industryCategories: [{ id: ids.industry, name: 'Industry' }] }), loadProject: async () => null, updateMetadataAtomically: async () => { invoked = true; return { resultCode: 'SUCCESS', metadata: input }; } }, input, ids.admin);
     return { permissions, result, invoked };
   };
