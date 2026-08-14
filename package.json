@@ -56,7 +56,9 @@
     "verify:participant-preview-reminder-runtime": "npm run verify:participant-preview-reminder-runtime --workspace=apps/admin-cms",
     "run:participant-preview-reminders": "npm run run:participant-preview-reminders --workspace=apps/admin-cms",
     "verify:controlled-publication-runtime": "npm run verify:controlled-publication-runtime --workspace=apps/admin-cms",
-    "verify:controlled-public-removal-runtime": "npm run verify:controlled-public-removal-runtime --workspace=apps/admin-cms"
+    "verify:controlled-public-removal-runtime": "npm run verify:controlled-public-removal-runtime --workspace=apps/admin-cms",
+    "verify:scaling-runtime": "npm run verify:scaling-runtime --workspace=apps/admin-cms",
+    "benchmark:local-scaling": "npm run benchmark:local-scaling --workspace=apps/admin-cms --"
   },
   "devDependencies": {
     "server-only": "^0.0.1",

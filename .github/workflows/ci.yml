@@ -210,6 +210,9 @@ jobs:
       - name: Admin Application Smoke Test (/api/health & /login 200 OK)
         run: npm run check:app-smoke
 
+      - name: Verify Local Supabase performance and scaling runtime behavior
+        run: npm run verify:scaling-runtime --workspace=apps/admin-cms
+
       - name: Safely rerun local developer setup
         run: npm run setup:local
 
