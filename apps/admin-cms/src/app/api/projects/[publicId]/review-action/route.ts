@@ -141,6 +141,16 @@ export async function POST(
             { success: false, error: 'Poster full text or accessibility text exceeds its character safety limit. Shorten it in the project metadata editor, then approve.' },
             { status: 409 }
           );
+        case 'MEDIA_ACCESSIBILITY_REQUIRED':
+          return NextResponse.json(
+            { success: false, error: 'The snapshot image needs alt text before approval. Add it in the project media section, then approve.' },
+            { status: 409 }
+          );
+        case 'MEDIA_ACCESSIBILITY_INVALID':
+          return NextResponse.json(
+            { success: false, error: 'The snapshot image alt text exceeds its character safety limit. Shorten it in the project media section, then approve.' },
+            { status: 409 }
+          );
         case 'RESPONSE_INVALID':
         case 'INTERNAL_FAILURE':
         default: {

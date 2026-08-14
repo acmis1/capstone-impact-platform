@@ -121,7 +121,7 @@ export class SupabasePublicationExecutionRepositoryCore {
     if (project.error) throw new Error('Publication project media lookup failed.');
     if (!project.data) return [];
     const result = await this.supabase.from('media_assets').select(
-      'id,project_id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved',
+      'id,project_id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public',
     ).eq('project_id', project.data.id).order('asset_type', { ascending: true });
     if (result.error) throw new Error('Publication media lookup failed.');
     return (result.data ?? []).map((row) => ({
@@ -137,6 +137,7 @@ export class SupabasePublicationExecutionRepositoryCore {
       mimeType: String(row.mime_type || ''),
       fileSizeBytes: Number(row.file_size_bytes),
       isPublicApproved: row.is_public_approved === true,
+      altTextPublic: row.alt_text_public === null ? null : String(row.alt_text_public),
     }));
   }
 

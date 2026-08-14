@@ -507,7 +507,7 @@ export async function analyzeBrowserImportServer(
             : null,
         };
 
-        const valResult = validateImportPackage(descriptorParseResult);
+        const valResult = validateImportPackage(descriptorParseResult, { metadataSource });
 
         valResult.errors.forEach((e) =>
           errors.push({

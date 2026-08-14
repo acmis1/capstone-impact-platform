@@ -9,6 +9,11 @@ export type ParticipantPreviewExecutionErrorCode =
   | 'NO_OPEN_CORRECTION'
   | 'AMBIGUOUS_CORRECTION_REQUEST'
   | 'CONFLICTING_ACTIVE_PREVIEW'
+  /**
+   * The project's snapshot image has no usable text alternative, so no confirmable preview may be
+   * issued. Applies identically to an ordinary preview and a correction reissue.
+   */
+  | 'MEDIA_ACCESSIBILITY_REQUIRED'
   | 'PUBLICATION_IN_PROGRESS'
   | 'READINESS_UNAVAILABLE'
   | 'INPUT_INVALID'

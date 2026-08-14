@@ -50,6 +50,7 @@
     "verify:review-actions-runtime": "npm run verify:review-actions-runtime --workspace=apps/admin-cms",
     "verify:browser-media-stage-runtime": "npm run verify:browser-media-stage-runtime --workspace=apps/admin-cms",
     "verify:import-batch-review-submit-runtime": "npm run verify:import-batch-review-submit-runtime --workspace=apps/admin-cms",
+    "verify:snapshot-image-alt-text-runtime": "npm run verify:snapshot-image-alt-text-runtime --workspace=apps/admin-cms",
     "verify:participant-preview-runtime": "npm run verify:participant-preview-runtime --workspace=apps/admin-cms",
     "verify:participant-preview-notification-runtime": "npm run verify:participant-preview-notification-runtime --workspace=apps/admin-cms",
     "verify:participant-preview-reminder-runtime": "npm run verify:participant-preview-reminder-runtime --workspace=apps/admin-cms",

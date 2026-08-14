@@ -7,6 +7,85 @@ export interface FeedValidationResult {
   warnings: string[];
 }
 
+const SNAPSHOT_MEDIA_KEYS = new Set(['url', 'altText']);
+
+/**
+ * Enforces the additive `snapshotMedia` contract: an array that corresponds exactly to `snapshots`,
+ * one entry per public snapshot URL, each carrying a bounded non-blank text alternative.
+ *
+ * Correspondence is checked by URL rather than by position, and each `snapshots` entry may be
+ * claimed only once, so neither reordering nor a duplicated entry can satisfy the pairing. The
+ * public-safety rules that already apply to `snapshots` therefore apply here too — a private or
+ * draft URL cannot appear in `snapshotMedia` without also appearing in `snapshots`, where the
+ * existing artifact-level private-reference check rejects it.
+ */
+function validateSnapshotMedia(record: Record<string, unknown>, prefix: string, errors: string[]): void {
+  const snapshotMedia = record.snapshotMedia;
+  const snapshots = record.snapshots;
+
+  if (!Array.isArray(snapshotMedia)) {
+    errors.push(`${prefix} Type error: "snapshotMedia" must be an array.`);
+    return;
+  }
+  if (!Array.isArray(snapshots)) {
+    // The snapshots type error is reported by the caller's required-field pass; without it there is
+    // nothing to pair against, so pairing is not additionally re-reported here.
+    return;
+  }
+
+  if (snapshotMedia.length !== snapshots.length) {
+    errors.push(
+      `${prefix} Snapshot media error: "snapshotMedia" has ${snapshotMedia.length} entr${snapshotMedia.length === 1 ? 'y' : 'ies'} but "snapshots" has ${snapshots.length}. Every snapshot image must be paired with a text alternative.`,
+    );
+  }
+
+  const unclaimedUrls = [...snapshots];
+
+  snapshotMedia.forEach((untypedItem, itemIndex) => {
+    const itemPrefix = `${prefix} Snapshot media [${itemIndex}]`;
+    if (!untypedItem || typeof untypedItem !== 'object' || Array.isArray(untypedItem)) {
+      errors.push(`${itemPrefix} is not a valid object.`);
+      return;
+    }
+
+    const item = untypedItem as Record<string, unknown>;
+    const keys = Object.keys(item);
+    keys.forEach((key) => {
+      if (!SNAPSHOT_MEDIA_KEYS.has(key)) {
+        errors.push(`${itemPrefix} contains unknown field: "${key}".`);
+      }
+    });
+
+    if (typeof item.url !== 'string' || item.url.trim() === '') {
+      errors.push(`${itemPrefix} is missing a valid "url".`);
+    } else {
+      const claimedAt = unclaimedUrls.indexOf(item.url);
+      if (claimedAt === -1) {
+        errors.push(`${itemPrefix} URL does not match any remaining entry in "snapshots".`);
+      } else {
+        unclaimedUrls.splice(claimedAt, 1);
+      }
+    }
+
+    if (typeof item.altText !== 'string') {
+      errors.push(`${itemPrefix} is missing a valid "altText".`);
+      return;
+    }
+    const problem = getAccessibleContentProblem(item.altText, 'snapshotAltText');
+    if (problem === 'MISSING') {
+      errors.push(`${itemPrefix} has an empty "altText". A published snapshot image must be described.`);
+    } else if (problem === 'TOO_LONG') {
+      errors.push(
+        `${itemPrefix} "altText" exceeds the ${ACCESSIBLE_CONTENT_LIMITS.snapshotAltText.toLocaleString('en-US')} character safety limit.`,
+      );
+    }
+  });
+
+  unclaimedUrls.forEach((url) => {
+    errors.push(`${prefix} Snapshot image is published without a text alternative: "${String(url)}".`);
+  });
+}
+
 /**
  * Validates compiled public showcase feed payloads against the approved data contract.
  */
@@ -26,6 +105,7 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
     'program', 'studyProgram', 'discipline', 'disciplines', 'industry',
     'industryPartner', 'academicSupervisor', 'groupName', 'teamMembers',
     'poster', 'posterPdf', 'posterText', 'accessibilityText', 'snapshots',
+    'snapshotMedia',
     'videoUrl', 'demoUrl', 'repositoryUrl', 'externalLinks', 'citations',
     'layoutConfig'
   ]);
@@ -107,6 +187,12 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
         }
       }
     });
+
+    // 3b. Structured snapshot media. Every published snapshot image must reach the public feed
+    // paired with a usable text alternative, and the pairing must be exact — an image described by
+    // the wrong entry is no better than an undescribed one, so URL correspondence is verified
+    // rather than assumed from array order.
+    validateSnapshotMedia(record, prefix, errors);
 
     // 4. Recommend Fields for Accessibility & Indexing (Non-blocking warnings)
     const recommendedFields = [

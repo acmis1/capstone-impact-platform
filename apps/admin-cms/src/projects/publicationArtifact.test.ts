@@ -8,12 +8,18 @@ const UUIDS = [
   '33333333-3333-4333-8333-333333333333',
 ];
 
-function source(index: number, assetType: string, fileName: string, mimeType: string): PublicationMediaSource {
+function source(
+  index: number,
+  assetType: string,
+  fileName: string,
+  mimeType: string,
+  altTextPublic: string | null = assetType === 'snapshot_image' ? 'Mock snapshot description.' : null,
+): PublicationMediaSource {
   return {
     id: UUIDS[index], projectId: 'project-db-id', assetType, fileName,
     storageBucket: 'project-drafts-private', storagePath: `drafts/target/${assetType}/${fileName}`,
     publicUrl: null, publicStorageBucket: null, publicStoragePath: null,
-    mimeType, fileSizeBytes: 100, isPublicApproved: false,
+    mimeType, fileSizeBytes: 100, isPublicApproved: false, altTextPublic,
   };
 }
 

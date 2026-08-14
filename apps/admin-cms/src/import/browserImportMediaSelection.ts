@@ -11,6 +11,16 @@ export interface ExpectedBrowserImportMediaFile {
   fileName: string;
   fileSizeBytes: number;
   canonicalMimeType: string;
+  /**
+   * Text alternative for a `snapshot_image`, derived here from the server-reparsed package manifest
+   * and never from anything the browser sends. `null` for every other asset type, and for a legacy
+   * `project.json` snapshot whose manifest carries no alt text — that row is registered with a NULL
+   * alt and held by the downstream workflow gates until staff supply one.
+   *
+   * The poster image keeps its project-level `accessibilityText`; it is deliberately not duplicated
+   * onto the media asset.
+   */
+  snapshotAltText: string | null;
 }
 
 const RECOGNIZED_MEDIA_FILENAMES: Record<string, BrowserImportMediaAssetType> = {
@@ -18,6 +28,19 @@ const RECOGNIZED_MEDIA_FILENAMES: Record<string, BrowserImportMediaAssetType> = 
   'poster.pdf': 'poster_pdf',
   'snapshot-1.png': 'snapshot_image',
 };
+
+/**
+ * Reads the snapshot alt text out of the authoritative server-reparsed package manifest. Returns
+ * `null` rather than a placeholder when the manifest carries nothing usable: a filename, the
+ * project title, or the poster accessibility text would all be fabricated accessibility evidence,
+ * so a genuinely absent value stays absent and the workflow gates hold the project instead.
+ */
+function resolveSnapshotAltText(pkg: BrowserImportServerPackage): string | null {
+  const raw = pkg.manifest?.snapshotAltText;
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return trimmed === '' ? null : trimmed;
+}
 
 export type ResolveExpectedMediaResult =
   | { success: true; files: ExpectedBrowserImportMediaFile[] }
@@ -86,6 +109,7 @@ export function resolveExpectedBrowserImportMedia(params: {
         fileName: desc.fileName,
         fileSizeBytes: desc.fileSizeBytes,
         canonicalMimeType: desc.canonicalMimeType,
+        snapshotAltText: assetType === 'snapshot_image' ? resolveSnapshotAltText(pkg) : null,
       });
     }
   }

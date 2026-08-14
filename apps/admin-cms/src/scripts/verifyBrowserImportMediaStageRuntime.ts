@@ -212,6 +212,10 @@ async function stageFixtureMetadataBatch(params: {
   return { batchId: res.batchId, metadataIntentHash: computeCanonicalIntentHash(intent) };
 }
 
+/** Synthetic staff-authored description used by this suite's snapshot fixtures. */
+const MEDIA_STAGE_SNAPSHOT_ALT_TEXT =
+  'Synthetic snapshot image used by the browser media staging runtime verifier.';
+
 function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
   const files: MediaFileToStage[] = [];
   for (const pkg of packages) {
@@ -222,6 +226,8 @@ function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
       fileName: 'poster.png',
       fileSizeBytes: PNG_BYTES.length,
       canonicalMimeType: 'image/png',
+      // The poster's text alternative stays the project-level accessibility text.
+      snapshotAltText: null,
       content: PNG_BYTES,
     });
     files.push({
@@ -231,6 +237,7 @@ function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
       fileName: 'poster.pdf',
       fileSizeBytes: PDF_BYTES.length,
       canonicalMimeType: 'application/pdf',
+      snapshotAltText: null,
       content: PDF_BYTES,
     });
     files.push({
@@ -240,6 +247,7 @@ function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
       fileName: 'snapshot-1.png',
       fileSizeBytes: PNG_BYTES.length,
       canonicalMimeType: 'image/png',
+      snapshotAltText: MEDIA_STAGE_SNAPSHOT_ALT_TEXT,
       content: PNG_BYTES,
     });
   }

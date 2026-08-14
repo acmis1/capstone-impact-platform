@@ -398,6 +398,35 @@ export async function parseProjectDetailsWorkbook(
     ACCESSIBLE_CONTENT_LIMITS.accessibilityText
   );
 
+  // Snapshot image alt text. The parser cannot see the package's files, so it deliberately does not
+  // decide whether a blank value is acceptable — that is the package-aware boundary's job, because
+  // the value is required only when snapshot-1.png actually exists. What the parser can decide is
+  // enforced here and is unconditional: a formula cell with no usable cached result is unreadable
+  // rather than blank, and an oversized value is rejected instead of being silently truncated.
+  const snapshotAltCell = extractFieldValue('snapshotAltText');
+  let snapshotAltText = '';
+  if (snapshotAltCell.isFormula && !snapshotAltCell.hasUsableResult) {
+    errors.push({
+      code: 'WORKBOOK_UNUSABLE_FORMULA',
+      message: 'Formula cell does not contain a usable cached result.',
+      severity: 'error',
+      fieldName: 'snapshotAltText',
+      columnName: snapshotAltCell.colInfo?.rawHeader,
+      rowNumber: projectRowObj.rowNumber
+    });
+  } else if (snapshotAltCell.rawString.length > ACCESSIBLE_CONTENT_LIMITS.snapshotAltText) {
+    errors.push({
+      code: 'WORKBOOK_VALUE_TOO_LONG',
+      message: `Required field exceeds the maximum of ${ACCESSIBLE_CONTENT_LIMITS.snapshotAltText} characters.`,
+      severity: 'error',
+      fieldName: 'snapshotAltText',
+      columnName: snapshotAltCell.colInfo?.rawHeader,
+      rowNumber: projectRowObj.rowNumber
+    });
+  } else {
+    snapshotAltText = snapshotAltCell.rawString;
+  }
+
   // Year validation
   const yearCell = extractFieldValue('year');
   let year = '';
@@ -574,6 +603,7 @@ export async function parseProjectDetailsWorkbook(
     year,
     posterText,
     accessibilityText,
+    snapshotAltText,
     layoutConfig: {
       templateId,
       featuredMedia,

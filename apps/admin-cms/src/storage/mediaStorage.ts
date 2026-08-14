@@ -137,6 +137,7 @@ export async function uploadDraftMediaAsset(params: {
     mimeType: dbAsset.mime_type || undefined,
     fileSizeBytes: dbAsset.file_size_bytes ? parseInt(dbAsset.file_size_bytes, 10) : undefined,
     isPublicApproved: dbAsset.is_public_approved,
+    altTextPublic: dbAsset.alt_text_public ?? null,
     createdAt: dbAsset.created_at
   };
 }
@@ -240,6 +241,7 @@ export async function promoteDraftMediaAssetToPublic(assetId: string): Promise<M
     mimeType: updatedAsset.mime_type || undefined,
     fileSizeBytes: updatedAsset.file_size_bytes ? parseInt(updatedAsset.file_size_bytes, 10) : undefined,
     isPublicApproved: updatedAsset.is_public_approved,
+    altTextPublic: updatedAsset.alt_text_public ?? null,
     createdAt: updatedAsset.created_at
   };
 }

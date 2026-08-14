@@ -108,8 +108,8 @@ describe('ImageMediaPreview', () => {
     expect(screen.getByText('2.0 KB')).toBeTruthy();
   });
 
-  it('uses fallback alternative text when altText is missing', () => {
-    render(
+  it('never substitutes a filename-derived alternative when no alt text is stored', () => {
+    const { container } = render(
       <ImageMediaPreview
         media={{
           ...validImage,
@@ -118,8 +118,41 @@ describe('ImageMediaPreview', () => {
       />,
     );
 
+    // The old behaviour rendered "Preview of project.png", which described the file rather than the
+    // image and made an undescribed asset look described. An empty alt is the honest representation
+    // for this internal preview; the absence is reported separately for snapshot media.
+    expect(screen.queryByAltText('Preview of project.png')).toBeNull();
+    expect(container.querySelector('img')?.getAttribute('alt')).toBe('');
+  });
+
+  it('states plainly when a snapshot image has no stored alt text', () => {
+    render(
+      <ImageMediaPreview
+        media={{
+          ...validImage,
+          assetType: 'snapshot_image',
+          altText: undefined,
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Snapshot alt text missing.')).toBeTruthy();
+  });
+
+  it('renders the stored snapshot alt text as the image alternative when one exists', () => {
+    render(
+      <ImageMediaPreview
+        media={{
+          ...validImage,
+          assetType: 'snapshot_image',
+          altText: 'Dashboard comparing queue lengths before and after adaptive signal timing.',
+        }}
+      />,
+    );
+
     expect(
-      screen.getByAltText('Preview of project.png'),
+      screen.getByAltText('Dashboard comparing queue lengths before and after adaptive signal timing.'),
     ).toBeTruthy();
+    expect(screen.queryByText('Snapshot alt text missing.')).toBeNull();
   });
 });

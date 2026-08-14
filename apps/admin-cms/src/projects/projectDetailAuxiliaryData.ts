@@ -60,6 +60,25 @@ const metadataEventDetailsSchema = z.object({
   }
 });
 
+/**
+ * Media-level accessibility edits carry their own event_details contract rather than being squeezed
+ * into `project_metadata`: they change a specific media asset, not a project column, and the
+ * history needs to say which asset truthfully. Both contracts are written under the existing
+ * `update_metadata` action, which every current reader already understands.
+ */
+const mediaAccessibilityEventDetailsSchema = z.object({
+  version: z.literal(1),
+  type: z.literal('media_accessibility'),
+  mediaAssetId: postgresUuidSchema,
+  assetType: z.literal('snapshot_image'),
+  changedFields: z.array(z.literal('snapshotAltText')).min(1)
+    .refine((fields) => new Set(fields).size === fields.length, 'changedFields must be unique'),
+  // `before` is nullable: the first time staff describe a snapshot, there was genuinely nothing
+  // there before, and recording that as an empty string would misstate the history.
+  before: z.object({ snapshotAltText: z.string().nullable() }).strict(),
+  after: z.object({ snapshotAltText: z.string() }).strict(),
+}).strict();
+
 const auditHistoryRowSchema = z.object({
   id: postgresUuidSchema,
   admin_id: postgresUuidSchema.nullable(),
@@ -78,6 +97,7 @@ const auditHistoryRowSchema = z.object({
 }).strict();
 
 export type ProjectMetadataEventDetails = z.infer<typeof metadataEventDetailsSchema>;
+export type MediaAccessibilityEventDetails = z.infer<typeof mediaAccessibilityEventDetailsSchema>;
 
 export interface AuditHistoryView {
   id: string;
@@ -89,6 +109,8 @@ export interface AuditHistoryView {
   actorFullName: string;
   actorEmail: string | null;
   metadataEventDetails: ProjectMetadataEventDetails | null;
+  /** Populated instead of `metadataEventDetails` when the edit changed media accessibility. */
+  mediaAccessibilityEventDetails: MediaAccessibilityEventDetails | null;
 }
 
 function nonEmptyString(value: string | null): string | null {
@@ -99,10 +121,16 @@ function nonEmptyString(value: string | null): string | null {
 export function parseAuditHistoryRow(input: unknown): AuditHistoryView {
   const row = auditHistoryRowSchema.parse(input);
   let metadataEventDetails: ProjectMetadataEventDetails | null = null;
+  let mediaAccessibilityEventDetails: MediaAccessibilityEventDetails | null = null;
   if (row.event_details) {
-    const parsed = metadataEventDetailsSchema.safeParse(row.event_details);
-    if (parsed.success) {
-      metadataEventDetails = parsed.data;
+    // Discriminated on the stored `type`, so a media-accessibility record is never mistaken for a
+    // malformed project-metadata one, and an unrecognised shape still degrades safely.
+    const metadata = metadataEventDetailsSchema.safeParse(row.event_details);
+    const mediaAccessibility = mediaAccessibilityEventDetailsSchema.safeParse(row.event_details);
+    if (metadata.success) {
+      metadataEventDetails = metadata.data;
+    } else if (mediaAccessibility.success) {
+      mediaAccessibilityEventDetails = mediaAccessibility.data;
     } else {
       console.warn('[AuditHistory] Malformed event_details, degrading safely');
     }
@@ -123,6 +151,7 @@ export function parseAuditHistoryRow(input: unknown): AuditHistoryView {
     actorFullName: snapshotName ?? fallbackName ?? 'Unknown staff member',
     actorEmail: snapshotEmail ?? fallbackEmail,
     metadataEventDetails,
+    mediaAccessibilityEventDetails,
   };
 }
 

@@ -20,7 +20,7 @@ import { SupabaseParticipantPreviewReminderRepository } from '../../../../reposi
 import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetadataEditor';
 import { GuardedProjectBackLink, ProjectMetadataNavigationProvider } from '../../../../components/admin/ProjectMetadataNavigation';
 import { SupabaseProjectMetadataGateway, loadProjectMetadataEditorData } from '../../../../projects/projectMetadataService';
-import { saveProjectMetadataAction } from './actions';
+import { saveProjectMetadataAction, saveSnapshotAltTextAction } from './actions';
 import { ImportBatchRepository } from '../../../../repositories/ImportBatchRepository';
 import { computeReadinessForImportBatchRow } from '../../../../import/importBatchReviewReadiness';
 import { SubmitForReviewButton } from '../../../../components/admin/SubmitForReviewButton';
@@ -600,7 +600,18 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
         {/* D. Media Review */}
         <ProjectDetailSection title="Staging Media Review" borderColor="#10B981">
-          <ProjectMediaSummary project={project} mediaItems={mediaItems} mediaAvailable={mediaAvailable} />
+          <ProjectMediaSummary
+            project={project}
+            mediaItems={mediaItems}
+            mediaAvailable={mediaAvailable}
+            snapshotAltText={metadataEditorData ? {
+              canEdit: canEditMetadata,
+              // The same project version the metadata editor holds, so whichever surface saves
+              // second is told the view is stale instead of silently overwriting the other.
+              expectedUpdatedAt: metadataEditorData.metadata.expectedUpdatedAt,
+              saveAction: saveSnapshotAltTextAction,
+            } : undefined}
+          />
         </ProjectDetailSection>
 
         {/* E. Layout Review */}
@@ -816,6 +827,27 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                                       </div>
                                     );
                                   })}
+                                </div>
+                              </details>
+                            </div>
+                          )}
+
+                          {rec.action === 'update_metadata' && rec.mediaAccessibilityEventDetails && (
+                            <div style={{ marginTop: '0.75rem', backgroundColor: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '6px' }}>
+                              <div style={{ color: '#9CA3AF', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+                                <strong>Changed:</strong> Snapshot image alt text
+                              </div>
+                              <details style={{ cursor: 'pointer', fontSize: '0.8rem', color: '#60A5FA' }}>
+                                <summary>View Changes</summary>
+                                <div style={{ marginTop: '0.5rem', paddingLeft: '0.5rem', borderLeft: '2px solid #3B82F6', color: '#D1D5DB' }}>
+                                  <div style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>Previous:</div>
+                                  <div style={{ maxHeight: '80px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', opacity: 0.7, padding: '0.25rem', backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: '4px', fontSize: '0.75rem' }}>
+                                    {rec.mediaAccessibilityEventDetails.before.snapshotAltText ?? 'Not previously provided'}
+                                  </div>
+                                  <div style={{ color: '#10B981', fontSize: '0.75rem', marginTop: '0.25rem' }}>New:</div>
+                                  <div style={{ maxHeight: '80px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', padding: '0.25rem', backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: '4px', fontSize: '0.75rem' }}>
+                                    {rec.mediaAccessibilityEventDetails.after.snapshotAltText}
+                                  </div>
                                 </div>
                               </details>
                             </div>

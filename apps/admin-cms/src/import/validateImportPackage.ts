@@ -1,7 +1,20 @@
 import { ImportPackageFileMetadata, ImportPackageParseResult, ImportPackageValidationResult } from './importTypes';
 import { validateMediaAsset } from '../storage/mediaValidation';
+import { ACCESSIBLE_CONTENT_LIMITS, getSnapshotAltTextProblem } from '../domain/accessibleContent';
 
-export function validateImportPackage(parsed: ImportPackageParseResult<ImportPackageFileMetadata>): ImportPackageValidationResult {
+export interface ValidateImportPackageOptions {
+  /**
+   * Which metadata source produced the manifest. The standard `project-details.xlsx` contract
+   * carries the snapshot-alt column and is held to it; legacy `project.json` packages predate the
+   * field and are deliberately not blocked at import for its absence alone.
+   */
+  metadataSource?: 'xlsx' | 'json' | null;
+}
+
+export function validateImportPackage(
+  parsed: ImportPackageParseResult<ImportPackageFileMetadata>,
+  options: ValidateImportPackageOptions = {}
+): ImportPackageValidationResult {
   const errors: ImportPackageValidationResult['errors'] = [];
   const warnings: ImportPackageValidationResult['warnings'] = [];
 
@@ -110,6 +123,33 @@ export function validateImportPackage(parsed: ImportPackageParseResult<ImportPac
     });
     vResult.errors.forEach(e => errors.push({ ruleCode: 'FILE_INVALID_SNAPSHOT', message: `snapshot-1.png error: ${e}` }));
     vResult.warnings.forEach(w => warnings.push({ ruleCode: 'FILE_WARNING_SNAPSHOT', message: `snapshot-1.png warning: ${w}` }));
+  }
+
+  // 4. Snapshot image alt text. This is the package-aware boundary: unlike the individual metadata
+  // parsers, it can see both the manifest and whether snapshot-1.png is actually in the package.
+  //
+  // A snapshot image stays optional. When one IS present, the standard xlsx contract must carry a
+  // usable text alternative for it, because an image published with no accessible equivalent is the
+  // exact gap this rule exists to close. Legacy project.json packages predate the field, so a
+  // missing value there is not an import error — such a package can still be staged into private
+  // draft media, and the downstream review/approval/preview/publication gates hold it until staff
+  // supply the text. An oversized value is always rejected, from either source.
+  const snapshotAltProblem = getSnapshotAltTextProblem(parsed.manifest.snapshotAltText, {
+    snapshotPresent: parsed.snapshot1 !== null && options.metadataSource === 'xlsx',
+  });
+  if (snapshotAltProblem === 'MISSING') {
+    errors.push({
+      ruleCode: 'METADATA_MISSING_SNAPSHOT_ALT_TEXT',
+      message:
+        'Required manifest field "snapshotAltText" is missing or empty. A package that includes snapshot-1.png must describe it.',
+      fieldName: 'snapshotAltText',
+    });
+  } else if (snapshotAltProblem === 'TOO_LONG') {
+    errors.push({
+      ruleCode: 'METADATA_SNAPSHOT_ALT_TEXT_TOO_LONG',
+      message: `Manifest field "snapshotAltText" exceeds the maximum of ${ACCESSIBLE_CONTENT_LIMITS.snapshotAltText} characters.`,
+      fieldName: 'snapshotAltText',
+    });
   }
 
   return {

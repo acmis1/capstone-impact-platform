@@ -22,6 +22,12 @@ export const ACCESSIBLE_CONTENT_LIMITS = {
   posterText: 20_000,
   /** A text alternative is a description, not a transcription. */
   accessibilityText: 2_000,
+  /**
+   * Text alternative for the snapshot image, stored per media asset rather than per project.
+   * Same reasoning as `accessibilityText`: it describes one image, so it is a description rather
+   * than a transcription and shares the same ceiling.
+   */
+  snapshotAltText: 2_000,
 } as const;
 
 export type AccessibleContentField = keyof typeof ACCESSIBLE_CONTENT_LIMITS;
@@ -30,7 +36,14 @@ export type AccessibleContentField = keyof typeof ACCESSIBLE_CONTENT_LIMITS;
 export const ACCESSIBLE_CONTENT_LABELS: Record<AccessibleContentField, string> = {
   posterText: 'Poster full text',
   accessibilityText: 'Accessibility text',
+  snapshotAltText: 'Snapshot image alt text',
 };
+
+/**
+ * The single authoritative ceiling for snapshot media alt text, mirrored by the workbook parser,
+ * the package boundary, the `media_assets` check constraint and every SQL gate in Migration 0026.
+ */
+export const SNAPSHOT_ALT_TEXT_MAX_LENGTH = ACCESSIBLE_CONTENT_LIMITS.snapshotAltText;
 
 /**
  * The authoritative presence rule for accessible content, mirrored by every workflow gate
@@ -77,6 +90,23 @@ export function getAccessibleContentProblem(
   if (!isAccessibleContentPresent(value)) return required ? 'MISSING' : null;
   if (!isAccessibleContentWithinLimit(value, field)) return 'TOO_LONG';
   return null;
+}
+
+/**
+ * The conditional snapshot-alt rule, named once so every boundary that evaluates it — the import
+ * package boundary, review readiness, approval validation, and the mirrored SQL gates — applies the
+ * identical condition.
+ *
+ * The snapshot image itself stays optional. Alt text is required exactly when a snapshot image
+ * exists: nobody is asked to describe an image that is not there. A value that is present is always
+ * bounded, whether or not the image exists, because an oversized value must never be persisted and
+ * must never be silently truncated to fit.
+ */
+export function getSnapshotAltTextProblem(
+  value: string | null | undefined,
+  options: { snapshotPresent: boolean },
+): AccessibleContentProblem | null {
+  return getAccessibleContentProblem(value, 'snapshotAltText', { required: options.snapshotPresent });
 }
 
 /** Bounded staff-facing reason for a problem, used verbatim by readiness and approval blockers. */

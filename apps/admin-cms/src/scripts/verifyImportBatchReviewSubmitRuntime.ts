@@ -240,6 +240,7 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
           assetType: a.asset_type as string,
           isPublicApproved: a.is_public_approved as boolean | null,
           publicUrl: a.public_url as string | null,
+          altText: (a.alt_text_public as string | null) ?? null,
         })),
       });
     };

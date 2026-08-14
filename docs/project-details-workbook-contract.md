@@ -62,6 +62,7 @@ Header matching is case-insensitive, order-independent, trims surrounding whites
 | `Main media to feature` | `layoutConfig.featuredMedia` | Optional | `main media to feature`, `mainmediatofeature`, `featuredmedia`, `featured media` |
 | `Poster full text` | `posterText` | **Required** | `poster full text`, `poster text`, `postertext`, `posterfulltext` |
 | `Accessibility text` | `accessibilityText` | **Required** | `accessibility text`, `accessibilitytext` |
+| `Snapshot image alt text` | `snapshotAltText` | Conditional — required when the package contains `snapshot-1.png` | `snapshot image alt text`, `snapshot alt text`, `snapshot accessibility text`, `snapshotimagealttext`, `snapshotalttext` |
 
 ### Participant Contact Email
 
@@ -99,6 +100,33 @@ must carry a full text version of its image content plus a text alternative for 
 - A legacy `project.json` package may still be staged without either value, but it cannot be
   submitted for review, approved, or published until staff supply both through the Project Metadata
   editor in the Admin/CMS.
+
+### Snapshot Image Alt Text
+
+`Snapshot image alt text` (`snapshotAltText`) is the text alternative describing the meaningful
+content of the package's snapshot image. It is **conditionally required**: the snapshot image itself
+stays optional, but a package that includes one must describe it.
+
+- **Package contains `snapshot-1.png`** — the value must be present and non-blank. An absent column,
+  a blank value after trim, or a formula cell with no usable cached result each block the import.
+- **Package contains no `snapshot-1.png`** — the column and value may be absent. Nobody is asked to
+  describe an image that is not there, and the existing "snapshot recommended" warning is unchanged.
+- The value is bounded at 2,000 characters and enforced as `WORKBOOK_VALUE_TOO_LONG`. An oversized
+  value is rejected outright and is **never** silently truncated.
+- Because the workbook parser cannot see which files a package contains, it enforces only what it
+  can evaluate alone (readable cell, bounded length). The conditional presence rule is applied at
+  the package-aware boundary, which reports `METADATA_MISSING_SNAPSHOT_ALT_TEXT` or
+  `METADATA_SNAPSHOT_ALT_TEXT_TOO_LONG`.
+- This value is per media asset, not per project, and is stored on `media_assets.alt_text_public`.
+  The poster image keeps `accessibilityText` as its text alternative; it is never duplicated here.
+- **Nothing derives this value** from the filename, the project title, the poster accessibility
+  text, OCR, or AI. A filename is file information, not a text alternative.
+- A legacy `project.json` package may supply `snapshotAltText`, and an oversized value there is
+  rejected. A legacy package with a snapshot and no alt text may still be staged into private draft
+  media, but it cannot be submitted for review, approved, given a participant preview, or published
+  until staff supply the text in the project media section of the Admin/CMS.
+- Only the single current snapshot image (`snapshot-1.png`) is supported. Arbitrary multi-image
+  galleries and gallery ordering are **not** implemented.
 
 ### Public ID Separation
 

@@ -178,6 +178,11 @@ jobs:
       - name: Verify accessible poster full-text gate runtime behavior
         run: npm run verify:accessibility-full-text-runtime --workspace=apps/admin-cms
 
+      # Runs after the media staging and import-review foundations it builds on, and before the
+      # participant preview suite, which consumes the snapshot-alt invariant.
+      - name: Verify snapshot image alt text runtime behavior
+        run: npm run verify:snapshot-image-alt-text-runtime --workspace=apps/admin-cms
+
       - name: Verify participant preview links runtime behavior
         run: npm run verify:participant-preview-runtime --workspace=apps/admin-cms
 
