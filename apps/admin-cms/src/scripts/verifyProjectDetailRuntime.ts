@@ -147,6 +147,8 @@ async function createAuditAcceptanceFixture(serviceClient: SupabaseClient) {
       discipline: discipline.name,
       industry: industry.name,
       status: 'submitted',
+      poster_text_public: 'Detail audit poster full text',
+      accessibility_text_public: 'Detail audit accessibility text',
     }).select('id').single();
     if (projectResult.error || !projectResult.data) throw new Error('Project-detail audit verifier project could not be created.');
     projectId = projectResult.data.id;
