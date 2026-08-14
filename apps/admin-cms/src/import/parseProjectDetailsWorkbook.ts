@@ -13,6 +13,7 @@ import {
   normalizeFeaturedMedia
 } from './projectDetailsWorkbookContract';
 import { validateParticipantContactEmail } from '../domain/participantContactEmail';
+import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
 
 interface CellExtractionResult {
   rawString: string;
@@ -333,6 +334,28 @@ export async function parseProjectDetailsWorkbook(
     return cellExt.rawString;
   };
 
+  // Required accessible-content fields follow the same cached-formula-result and blank-value policy
+  // as every other required field, and additionally reject values beyond the bounded technical
+  // ceiling so an oversized cell can never be staged and then become uneditable in the CMS.
+  const processBoundedAccessibleTextField = (
+    field: 'posterText' | 'accessibilityText',
+    maximumLength: number
+  ): string => {
+    const value = processTextField(field, true);
+    if (value.length > maximumLength) {
+      errors.push({
+        code: 'WORKBOOK_VALUE_TOO_LONG',
+        message: `Required field exceeds the maximum of ${maximumLength} characters.`,
+        severity: 'error',
+        fieldName: field,
+        columnName: extractFieldValue(field).colInfo?.rawHeader,
+        rowNumber: projectRowObj.rowNumber
+      });
+      return '';
+    }
+    return value;
+  };
+
   const title = processTextField('title', true);
   const summary = processTextField('summary', true);
   const background = processTextField('background', false);
@@ -365,7 +388,15 @@ export async function parseProjectDetailsWorkbook(
   const program = processTextField('program', true);
   const studyProgram = program;
   const discipline = processTextField('discipline', true);
-  const accessibilityText = processTextField('accessibilityText', false);
+
+  // Required accessible poster content. Both values are staff-authored in the workbook — nothing
+  // here derives, transcribes, or generates them. The only rules applied are presence after trim
+  // and a transport/storage safety ceiling; the prose itself is never judged.
+  const posterText = processBoundedAccessibleTextField('posterText', ACCESSIBLE_CONTENT_LIMITS.posterText);
+  const accessibilityText = processBoundedAccessibleTextField(
+    'accessibilityText',
+    ACCESSIBLE_CONTENT_LIMITS.accessibilityText
+  );
 
   // Year validation
   const yearCell = extractFieldValue('year');
@@ -541,6 +572,7 @@ export async function parseProjectDetailsWorkbook(
     studyProgram,
     discipline,
     year,
+    posterText,
     accessibilityText,
     layoutConfig: {
       templateId,

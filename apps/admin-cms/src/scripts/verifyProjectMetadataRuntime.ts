@@ -48,6 +48,8 @@ type MetadataRpcParameters = {
   p_industry_category_ids: string[];
   p_expected_updated_at: string;
   p_admin_id: string;
+  p_poster_text: string;
+  p_accessibility_text: string;
 };
 
 type LookupFixture = {
@@ -176,8 +178,8 @@ function seedProject(publicId: string, fixture: LookupFixture, title: string): v
     DO $$
     DECLARE project_id uuid;
     BEGIN
-      INSERT INTO public.projects (public_id, title, summary, background, solution, year, program_id, program_name, discipline, industry, group_name)
-      VALUES ('${publicId}', '${title}', 'Before summary', 'Before background', 'Before solution', 2025, '${fixture.programId}'::uuid, 'legacy', 'legacy', 'legacy', 'unrelated field')
+      INSERT INTO public.projects (public_id, title, summary, background, solution, poster_text_public, accessibility_text_public, year, program_id, program_name, discipline, industry, group_name)
+      VALUES ('${publicId}', '${title}', 'Before summary', 'Before background', 'Before solution', 'Before poster full text', 'Before accessibility text', 2025, '${fixture.programId}'::uuid, 'legacy', 'legacy', 'legacy', 'unrelated field')
       RETURNING id INTO project_id;
       INSERT INTO public.project_disciplines (project_id, discipline_id) VALUES (project_id, '${fixture.disciplineIds[0]}'::uuid);
       INSERT INTO public.project_industry_categories (project_id, industry_category_id) VALUES (project_id, '${fixture.industryCategoryIds[0]}'::uuid);
@@ -198,6 +200,10 @@ function makeParameters(publicId: string, fixture: LookupFixture, expectedUpdate
     p_industry_category_ids: industryCategoryIds,
     p_expected_updated_at: expectedUpdatedAt,
     p_admin_id: adminUserId,
+    // Accessible poster content is required by the authoritative RPC. These synthetic values keep
+    // this verifier focused on atomicity/concurrency rather than on the accessibility gate.
+    p_poster_text: `${title} poster full text`,
+    p_accessibility_text: `${title} accessibility text`,
   };
 }
 
@@ -359,7 +365,7 @@ export async function verifyProjectMetadataRuntime(): Promise<void> {
     assertSnapshotEqual(concurrentCommitted, snapshotFromSuccessfulResponse(concurrentOutcome.successfulResponse, beforeConcurrent), 'Concurrent save winner');
 
     const privilegeParameters = makeParameters(successId, fixture, committedSuccess.updatedAt, 'Forbidden role invocation');
-    const privilegeSql = `SELECT public.update_project_metadata('${privilegeParameters.p_public_id}', '${privilegeParameters.p_title}', '${privilegeParameters.p_summary}', '${privilegeParameters.p_background}', '${privilegeParameters.p_solution}', ${privilegeParameters.p_year}, '${privilegeParameters.p_program_id}'::uuid, ARRAY[${privilegeParameters.p_discipline_ids.map((id) => `'${id}'::uuid`).join(', ')}], ARRAY[${privilegeParameters.p_industry_category_ids.map((id) => `'${id}'::uuid`).join(', ')}], '${privilegeParameters.p_expected_updated_at}'::timestamptz, '${privilegeParameters.p_admin_id}'::uuid);`;
+    const privilegeSql = `SELECT public.update_project_metadata('${privilegeParameters.p_public_id}', '${privilegeParameters.p_title}', '${privilegeParameters.p_summary}', '${privilegeParameters.p_background}', '${privilegeParameters.p_solution}', ${privilegeParameters.p_year}, '${privilegeParameters.p_program_id}'::uuid, ARRAY[${privilegeParameters.p_discipline_ids.map((id) => `'${id}'::uuid`).join(', ')}], ARRAY[${privilegeParameters.p_industry_category_ids.map((id) => `'${id}'::uuid`).join(', ')}], '${privilegeParameters.p_expected_updated_at}'::timestamptz, '${privilegeParameters.p_admin_id}'::uuid, '${privilegeParameters.p_poster_text}', '${privilegeParameters.p_accessibility_text}');`;
     let anonDenied = false;
     let authenticatedDenied = false;
     executeLocalSqlExpectingPermissionDenial('anon', privilegeSql); anonDenied = true;

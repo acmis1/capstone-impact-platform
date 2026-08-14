@@ -1,4 +1,5 @@
 import { PublicFeedRecord } from '../domain/publicFeed';
+import { ACCESSIBLE_CONTENT_LIMITS, getAccessibleContentProblem } from '../domain/accessibleContent';
 
 export interface FeedValidationResult {
   valid: boolean;
@@ -59,8 +60,15 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
     const requiredFields: (keyof PublicFeedRecord)[] = [
       'id', 'publicId', 'title', 'summary', 'year', 'program', 'studyProgram',
       'discipline', 'groupName', 'teamMembers', 'poster', 'posterPdf',
-      'layoutConfig'
+      'posterText', 'accessibilityText', 'layoutConfig'
     ];
+
+    /**
+     * A public project page must carry a full text version of its image content and a text
+     * alternative for the poster image. A record that reaches the feed without either is invalid,
+     * not merely suboptimal — an empty string would publish an image with no accessible equivalent.
+     */
+    const accessibleContentFields: (keyof PublicFeedRecord)[] = ['posterText', 'accessibilityText'];
 
     requiredFields.forEach((field) => {
       const val = record[field];
@@ -75,6 +83,17 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
       }
       if (field === 'teamMembers' && !Array.isArray(val)) {
         errors.push(`${prefix} Type error: "teamMembers" must be a string array.`);
+      }
+      if (accessibleContentFields.includes(field)) {
+        // A public artifact must carry accessible content, and it must stay bounded — an unbounded
+        // value would bloat the compiled feed the Duda showcase consumes.
+        const accessibleField = field as 'posterText' | 'accessibilityText';
+        const problem = getAccessibleContentProblem(typeof val === 'string' ? val : String(val), accessibleField);
+        if (problem === 'MISSING') {
+          errors.push(`${prefix} Required field "${field}" is empty. Public records must include accessible poster content.`);
+        } else if (problem === 'TOO_LONG') {
+          errors.push(`${prefix} Required field "${field}" exceeds the ${ACCESSIBLE_CONTENT_LIMITS[accessibleField].toLocaleString('en-US')} character safety limit.`);
+        }
       }
       if (field === 'layoutConfig') {
         if (typeof val !== 'object') {
@@ -93,8 +112,6 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
     const recommendedFields = [
       { name: 'background', desc: 'problem background' },
       { name: 'solution', desc: 'project solution details' },
-      { name: 'accessibilityText', desc: 'poster accessibility description' },
-      { name: 'posterText', desc: 'poster text content for search indexing' },
       { name: 'academicSupervisor', desc: 'supervisor signature name' },
       { name: 'industryPartner', desc: 'industry corporate partner' },
       { name: 'industry', desc: 'industry categorization tag' },

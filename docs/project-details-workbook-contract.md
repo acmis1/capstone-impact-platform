@@ -60,7 +60,8 @@ Header matching is case-insensitive, order-independent, trims surrounding whites
 | `Project year` | `year` | **Required** | `project year`, `projectyear`, `year` |
 | `Showcase layout` | `templateId` | Optional | `showcase layout`, `showcaselayout`, `templateid`, `template id` |
 | `Main media to feature` | `layoutConfig.featuredMedia` | Optional | `main media to feature`, `mainmediatofeature`, `featuredmedia`, `featured media` |
-| `Accessibility text` | `accessibilityText` | Optional | `accessibility text`, `accessibilitytext` |
+| `Poster full text` | `posterText` | **Required** | `poster full text`, `poster text`, `postertext`, `posterfulltext` |
+| `Accessibility text` | `accessibilityText` | **Required** | `accessibility text`, `accessibilitytext` |
 
 ### Participant Contact Email
 
@@ -75,6 +76,29 @@ leave it blank — an ordinary participant preview never requires one.
   error. The raw cell value is never echoed into the issue message.
 - The browser never supplies or overrides this address at send time; the server resolves it from
   persisted project data at execution time.
+
+### Accessible Poster Content
+
+`Poster full text` and `Accessibility text` are both **required**, because a published project page
+must carry a full text version of its image content plus a text alternative for the poster image.
+
+- `Poster full text` (`posterText`) is the searchable/selectable full textual version of the
+  meaningful content on the poster. Multiline content is preserved exactly; only outer whitespace is
+  trimmed.
+- `Accessibility text` (`accessibilityText`) is a concise descriptive text alternative for the poster
+  image. It describes what the poster shows and is deliberately **not** required to match
+  `posterText`.
+- A missing column, a blank value after trim, or a formula cell with no usable cached result is a
+  blocking `error` for either field, following the same policy as every other required field.
+- Each value is bounded by a transport/storage safety ceiling — 20,000 characters for `posterText`
+  and 2,000 for `accessibilityText` — enforced as `WORKBOOK_VALUE_TOO_LONG`. These are size limits,
+  **not** content-quality rules.
+- Nothing judges whether the prose is complete, accurate, or well written. There is no word count,
+  no keyword check, no comparison against the title, and no OCR or AI. Both values are authored by
+  staff or supplied in the workbook.
+- A legacy `project.json` package may still be staged without either value, but it cannot be
+  submitted for review, approved, or published until staff supply both through the Project Metadata
+  editor in the Admin/CMS.
 
 ### Public ID Separation
 
@@ -150,6 +174,7 @@ Unrecognized non-empty values emit a generic `WORKBOOK_UNKNOWN_FEATURED_MEDIA` w
 | `WORKBOOK_INVALID_YEAR` | `error` | Project year is not a valid 4-digit year between 1900 and 2100. |
 | `WORKBOOK_UNUSABLE_FORMULA` | `error` | Formula cell in a required field has no usable cached result. |
 | `WORKBOOK_INVALID_PARTICIPANT_CONTACT_EMAIL` | `error` | Participant contact email is present but is not a valid single email address. |
+| `WORKBOOK_VALUE_TOO_LONG` | `error` | An accessible-content value exceeds its bounded technical ceiling. |
 | `WORKBOOK_UNEXPECTED_SHEET_NAME` | `warning` | Preferred sheet `Project details` was absent; processed fallback sheet. |
 | `WORKBOOK_EXTRA_SHEET` | `warning` | Additional non-empty worksheet detected and ignored. |
 | `WORKBOOK_UNKNOWN_COLUMN` | `warning` | Non-empty header column not recognized in canonical/alias dictionary. |

@@ -479,7 +479,13 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     }
 
     const res = data as Record<string, unknown>;
-    if (res.resultCode === 'CORRECTION_RESOLUTION_REQUIRED' || res.resultCode === 'AMBIGUOUS_ACTIVE_PREVIEW' || res.resultCode === 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED') {
+    if (
+      res.resultCode === 'CORRECTION_RESOLUTION_REQUIRED' ||
+      res.resultCode === 'AMBIGUOUS_ACTIVE_PREVIEW' ||
+      res.resultCode === 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED' ||
+      res.resultCode === 'ACCESSIBILITY_CONTENT_REQUIRED' ||
+      res.resultCode === 'ACCESSIBILITY_CONTENT_INVALID'
+    ) {
       throw new ReviewActionExecutionError(res.resultCode);
     }
     const resPublicId = res.publicId;

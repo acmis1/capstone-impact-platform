@@ -211,6 +211,7 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
   if (!program || !discipline || !industry) throw new Error('[Verifier] Missing seed taxonomy rows.');
 
   const createdBatchIds: string[] = [];
+  let primaryScenariosPassed = false;
   const databaseBaseline = await captureDatabaseCounts(supabase);
   const sideEffectBaseline = await captureSideEffectCounts(supabase);
   await assertVerifierResidueAbsent(supabase);
@@ -789,6 +790,8 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
       'Study program',
       'Primary discipline',
       'Project year',
+      'Poster full text',
+      'Accessibility text',
     ]);
     sheet28.addRow([
       'XLSX Project Title',
@@ -799,6 +802,8 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
       program.name,
       discipline.name,
       2026,
+      'Synthetic XLSX poster full text for Admin reconciliation runtime.',
+      'Synthetic XLSX accessibility description for Admin reconciliation runtime.',
     ]);
     const xlsxBuf28 = Buffer.from(await wb28.xlsx.writeBuffer());
 
@@ -860,9 +865,12 @@ export async function verifyAdminExcelReconciliationRuntime(): Promise<void> {
     // Scenario 33: Cleanup Restores Baseline
     // -------------------------------------------------------------------------
     process.stdout.write('[Scenario 33] Performing cleanup and baseline restoration...\n');
+    primaryScenariosPassed = true;
   } finally {
     await cleanupVerifierResidue(supabase, createdBatchIds, databaseBaseline);
-    process.stdout.write('  ✓ Scenario 33 PASSED!\n\n');
+    if (primaryScenariosPassed) {
+      process.stdout.write('  ✓ Scenario 33 PASSED!\n\n');
+    }
   }
 
   process.stdout.write('====================================================\n');

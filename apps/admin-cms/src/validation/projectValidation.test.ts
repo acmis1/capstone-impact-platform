@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { validateProjectForReview, validateProjectForApproval } from './projectValidation';
 import { createMockProject } from '../test/projectFixtures';
+import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
 
 describe('projectValidation', () => {
   describe('validateProjectForReview', () => {
@@ -73,13 +74,48 @@ describe('projectValidation', () => {
       expect(result.errors[0]).toContain('Missing public poster PDF URL');
     });
 
-    it('produces a warning (not error) if accessibilityText is missing', () => {
+    it('blocks approval if accessibilityText is missing', () => {
       const project = createMockProject({ accessibilityText: '' });
       const result = validateProjectForApproval(project);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((error) => error.includes('Accessibility text is missing'))).toBe(true);
+      expect(result.warnings.length).toBe(0);
+    });
+
+    it('blocks approval if posterText is missing', () => {
+      const project = createMockProject({ posterText: '' });
+      const result = validateProjectForApproval(project);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((error) => error.includes('Poster full text is missing'))).toBe(true);
+      expect(result.warnings.length).toBe(0);
+    });
+
+    it('blocks approval when whitespace-only accessible content is supplied', () => {
+      const result = validateProjectForApproval(createMockProject({ posterText: '   ', accessibilityText: '\n\t ' }));
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((error) => error.includes('Poster full text is missing'))).toBe(true);
+      expect(result.errors.some((error) => error.includes('Accessibility text is missing'))).toBe(true);
+    });
+
+    it('blocks approval when accessible content exceeds its safety limit', () => {
+      const result = validateProjectForApproval(createMockProject({
+        posterText: 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText + 1),
+        accessibilityText: 'y'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText + 1),
+      }));
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((error) => error.includes('Poster full text exceeds the 20,000 character safety limit'))).toBe(true);
+      expect(result.errors.some((error) => error.includes('Accessibility text exceeds the 2,000 character safety limit'))).toBe(true);
+      // Oversized content is an error, never a warning.
+      expect(result.warnings.length).toBe(0);
+    });
+
+    it('allows approval with accessible content exactly at each ceiling', () => {
+      const result = validateProjectForApproval(createMockProject({
+        posterText: 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText),
+        accessibilityText: 'y'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText),
+      }));
       expect(result.valid).toBe(true);
-      expect(result.errors.length).toBe(0);
-      expect(result.warnings.length).toBe(1);
-      expect(result.warnings[0]).toContain('Accessibility text is missing');
+      expect(result.errors).toEqual([]);
     });
 
     it('does not mutate the project object', () => {

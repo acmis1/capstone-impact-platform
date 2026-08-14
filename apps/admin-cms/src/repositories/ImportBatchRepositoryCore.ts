@@ -60,6 +60,7 @@ export interface ImportBatchReviewProjectRow {
   discipline: string | null;
   group_name: string | null;
   team_members: string[] | null;
+  poster_text_public: string | null;
   accessibility_text_public: string | null;
   snapshots: string[] | null;
   validation_errors: string[] | null;
@@ -148,7 +149,7 @@ export class ImportBatchRepositoryCore {
       .from('projects')
       .select(
         `id, public_id, title, summary, status, program_id, program_name, study_program,
-         discipline, group_name, team_members, accessibility_text_public, snapshots,
+         discipline, group_name, team_members, poster_text_public, accessibility_text_public, snapshots,
          validation_errors, validation_warnings,
          project_disciplines(discipline_id),
          project_industry_categories(industry_category_id),
@@ -174,7 +175,7 @@ export class ImportBatchRepositoryCore {
       .from('projects')
       .select(
         `id, public_id, title, summary, status, program_id, program_name, study_program,
-         discipline, group_name, team_members, accessibility_text_public, snapshots,
+         discipline, group_name, team_members, poster_text_public, accessibility_text_public, snapshots,
          validation_errors, validation_warnings,
          project_disciplines(discipline_id),
          project_industry_categories(industry_category_id),

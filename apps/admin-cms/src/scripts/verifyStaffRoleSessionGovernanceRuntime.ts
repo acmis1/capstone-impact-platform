@@ -322,6 +322,10 @@ async function main(): Promise<void> {
       summary: 'Synthetic governance runtime fixture.',
       year: 2026,
       status: 'submitted',
+      // Approval requires accessible poster content. This verifier is about audit actor
+      // attribution, not the accessibility gate, so the fixture is compliant by construction.
+      poster_text_public: 'Governance runtime synthetic poster full text.',
+      accessibility_text_public: 'Governance runtime synthetic accessibility text.',
     }).select('id').single();
     assert.ifError(reviewProject.error);
     const reviewProjectId = String(reviewProject.data.id);

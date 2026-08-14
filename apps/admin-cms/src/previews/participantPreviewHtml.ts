@@ -190,6 +190,7 @@ export function renderParticipantPreviewPage(params: {
   ${renderParagraph('Summary', snapshot.summary)}
   ${renderParagraph('Background', snapshot.background)}
   ${renderParagraph('Solution', snapshot.solution)}
+  ${renderParagraph('Poster Full Text', snapshot.posterText)}
   ${renderParagraph('Accessibility Description', snapshot.accessibilityText)}
 
   ${renderMedia(media)}

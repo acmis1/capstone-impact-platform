@@ -20,12 +20,9 @@ export function ProjectValidationSummary({ project }: ProjectValidationSummaryPr
     localErrors.push(`[Layout] Invalid layout templateId "${templateId}". Supported: ${allowedTemplates.join(', ')}.`);
   }
 
-  // Check accessibility text & poster text warnings specifically
-  if (!project.posterText || project.posterText.trim() === '') {
-    if (!localWarnings.some(w => w.includes('posterText') || w.includes('poster text'))) {
-      localWarnings.push('[Quality Check] Missing OCR poster text index (posterText). Recommended for search indices.');
-    }
-  }
+  // Missing poster full text and accessibility text are blocking errors, raised by
+  // validateProjectForApproval above — they are not quality suggestions and are never listed
+  // among the acknowledgeable warnings.
 
   const isEligible = project.status === 'approved' || project.status === 'published';
   const hasBlockingErrors = localErrors.length > 0;

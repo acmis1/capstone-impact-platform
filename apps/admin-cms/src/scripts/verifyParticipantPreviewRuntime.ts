@@ -69,6 +69,10 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
           summary: 'Synthetic summary for runtime verification.',
           year: 2026,
           status,
+          // Approval requires accessible poster content. This verifier exercises preview issuance,
+          // snapshot stability and participant responses, so its fixture is compliant.
+          poster_text_public: 'Synthetic runtime poster full text.',
+          accessibility_text_public: 'Synthetic runtime accessibility text.',
         })
         .select()
         .single();

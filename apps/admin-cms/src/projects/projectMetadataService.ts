@@ -17,6 +17,7 @@ type MetadataOptions = { programs: MetadataOption[]; disciplines: MetadataOption
 const uuidArray = z.array(postgresUuidSchema);
 export const metadataResponseSchema = z.object({
   publicId: z.string().min(1), title: z.string(), summary: z.string(), background: z.string(), solution: z.string(),
+  posterText: z.string(), accessibilityText: z.string(),
   year: z.string().regex(/^\d{4}$/), programId: postgresUuidSchema, disciplineIds: uuidArray, industryCategoryIds: uuidArray,
   expectedUpdatedAt: z.string().refine((value) => !Number.isNaN(Date.parse(value))),
 }).strict();
@@ -58,6 +59,8 @@ export async function loadProjectMetadataEditorData(gateway: ProjectMetadataGate
     summary: snapshot.summary,
     background: snapshot.background,
     solution: snapshot.solution,
+    posterText: snapshot.posterText,
+    accessibilityText: snapshot.accessibilityText,
     year: snapshot.year,
     programId: snapshot.programId,
     disciplineIds: snapshot.disciplineIds,
@@ -125,7 +128,7 @@ export class SupabaseProjectMetadataGateway implements ProjectMetadataGateway {
 
   async loadProject(publicId: string, options?: MetadataOptions): Promise<ProjectSnapshot | null> {
     const { data, error } = await this.supabase.from('projects').select(
-      'id, public_id, title, summary, background, solution, year, program_id, program_name, discipline, industry, updated_at, project_disciplines(discipline_id), project_industry_categories(industry_category_id)',
+      'id, public_id, title, summary, background, solution, poster_text_public, accessibility_text_public, year, program_id, program_name, discipline, industry, updated_at, project_disciplines(discipline_id), project_industry_categories(industry_category_id)',
     ).eq('public_id', publicId).is('deleted_at', null).maybeSingle();
     if (error) throw new Error('Project load failed');
     if (!data) return null;
@@ -133,6 +136,7 @@ export class SupabaseProjectMetadataGateway implements ProjectMetadataGateway {
     const industryCategoryIds = (data.project_industry_categories || []).map((row: { industry_category_id: string }) => row.industry_category_id);
     return {
       id: data.id, publicId: data.public_id, title: data.title || '', summary: data.summary || '', background: data.background || '', solution: data.solution || '',
+      posterText: data.poster_text_public || '', accessibilityText: data.accessibility_text_public || '',
       year: String(data.year || ''), programId: data.program_id || resolveUniqueLookupId(options?.programs || [], data.program_name),
       disciplineIds: disciplineIds.length ? disciplineIds : [resolveUniqueLookupId(options?.disciplines || [], data.discipline)].filter(Boolean),
       industryCategoryIds: industryCategoryIds.length ? industryCategoryIds : [resolveUniqueLookupId(options?.industryCategories || [], data.industry)].filter(Boolean),
@@ -146,6 +150,7 @@ export class SupabaseProjectMetadataGateway implements ProjectMetadataGateway {
       p_year: input.year, p_program_id: input.programId, p_discipline_ids: input.disciplineIds,
       p_industry_category_ids: input.industryCategoryIds, p_expected_updated_at: input.expectedUpdatedAt,
       p_admin_id: actorAdminUserId,
+      p_poster_text: input.posterText, p_accessibility_text: input.accessibilityText,
     });
     if (error) throw new Error('Metadata update RPC failed');
     return data;

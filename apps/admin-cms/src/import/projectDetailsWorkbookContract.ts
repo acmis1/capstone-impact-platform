@@ -26,6 +26,12 @@ export interface ProjectDetailsWorkbookMetadata {
   studyProgram: string;
   discipline: string;
   year: string;
+  /**
+   * Searchable/selectable full textual version of the meaningful poster content. Required: the
+   * public project page must carry a full text version of its image content.
+   */
+  posterText: string;
+  /** Concise descriptive text alternative/context for the poster image. Required. */
   accessibilityText: string;
   layoutConfig: {
     templateId: string;
@@ -214,9 +220,15 @@ export const COLUMN_DEFINITIONS: ColumnDefinition[] = [
     aliases: ['main media to feature', 'mainmediatofeature', 'featuredmedia', 'featured media']
   },
   {
+    canonicalName: 'Poster full text',
+    internalField: 'posterText',
+    required: true,
+    aliases: ['poster full text', 'poster text', 'postertext', 'posterfulltext']
+  },
+  {
     canonicalName: 'Accessibility text',
     internalField: 'accessibilityText',
-    required: false,
+    required: true,
     aliases: ['accessibility text', 'accessibilitytext']
   }
 ];

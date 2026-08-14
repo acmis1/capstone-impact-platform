@@ -10,6 +10,7 @@ import type { createSupabaseAdminClientCore } from '../../lib/supabase/adminCore
 import type { BrowserImportCommitIntent } from '../browserImportCommitIntentContract';
 import type { AuthenticatedAdminContext } from '../../auth/authTypes';
 import ExcelJS from 'exceljs';
+import { ACCESSIBLE_CONTENT_LIMITS } from '../../domain/accessibleContent';
 
 // Mock requireAdmin auth helper
 vi.mock('../../auth/requireAdmin', () => ({
@@ -820,5 +821,157 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
     expect(result.success).toBe(false);
     if (!result.success) expect(result.code).toBe('INVALID_SELECTION');
     expect(createClientSpy).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The standard XLSX parser already rejects oversized accessible content, but the legacy
+   * project.json path is deliberately permissive. Without a bound at this boundary an unbounded
+   * string would be persisted straight into the project row, the participant-preview snapshot and
+   * the compiled public feed, and every later gate only checks blankness — so the declared safety
+   * ceilings would not actually hold. These tests prove the staging boundary closes that bypass
+   * before any database access occurs.
+   */
+  describe('accessible content bounds at the staging persistence boundary', () => {
+    const stageLegacyPackage = async (
+      folder: string,
+      accessible: Record<string, unknown>,
+      options: { stubClient?: boolean } = {},
+    ) => {
+      const { refBuf, refMapping } = await createRefFixture('Group A', 'Valid Title');
+      const jsonContent = JSON.stringify({
+        publicId: folder,
+        title: 'Valid Title',
+        summary: 'Legacy package summary',
+        year: 2026,
+        program: 'Software Engineering',
+        studyProgram: 'Software Engineering',
+        discipline: 'Software Engineering',
+        industry: 'Software Industry',
+        groupName: 'Group A',
+        teamMembers: ['Alice'],
+        layoutConfig: { templateId: 'poster_showcase', featuredMedia: 'poster' },
+        ...accessible,
+      });
+      const jsonBytes = Buffer.from(jsonContent, 'utf8').length;
+      const manifest: SelectionManifest = {
+        selectedRootName: folder,
+        fileCount: 3,
+        declaredTotalBytes: jsonBytes + 800,
+        ignoredSystemFilesCount: 0,
+        descriptors: [
+          { uploadKey: generateUploadKey(`${folder}/project.json`), originalPath: `${folder}/project.json`, fileSizeBytes: jsonBytes, browserMimeType: 'application/json' },
+          { uploadKey: generateUploadKey(`${folder}/poster.png`), originalPath: `${folder}/poster.png`, fileSizeBytes: 300, browserMimeType: 'image/png' },
+          { uploadKey: generateUploadKey(`${folder}/poster.pdf`), originalPath: `${folder}/poster.pdf`, fileSizeBytes: 500, browserMimeType: 'application/pdf' },
+        ],
+      };
+      const { analyzeBrowserImportServer } = await import('../parseBrowserImportPreview');
+      const analysis = await analyzeBrowserImportServer(
+        manifest,
+        new Map([[generateUploadKey(`${folder}/project.json`), Buffer.from(jsonContent, 'utf8')]]),
+        { referenceFileBuffer: refBuf, mapping: refMapping }
+      );
+      const { prepareBrowserImportCommitIntent } = await import('../prepareBrowserImportCommitIntent');
+      const prepared = prepareBrowserImportCommitIntent({
+        manifest,
+        preview: analysis.preview.batch,
+        selectedPackagePaths: [folder],
+        acknowledgedWarningPackagePaths: [folder],
+        expectedPreviewFingerprint: analysis.preview.batch.previewFingerprint,
+      });
+      if (!prepared.success) throw new Error(`Preparation failed: ${prepared.code}`);
+
+      const createClientSpy = vi.spyOn(
+        await import('../../lib/supabase/adminCore'),
+        'createSupabaseAdminClientCore'
+      );
+      const mockRpc = vi.fn().mockResolvedValue({
+        data: {
+          resultCode: 'SUCCESS', result: 'created',
+          batchId: '11111111-1111-1111-1111-111111111111',
+          projectCount: 1, warningCount: 0, batchStatus: 'metadata_staged',
+        },
+        error: null,
+      });
+      if (options.stubClient) {
+        createClientSpy.mockReturnValue({ rpc: mockRpc } as unknown as ReturnType<typeof createSupabaseAdminClientCore>);
+      }
+
+      const { stageBrowserImportMetadata } = await import('../stageBrowserImportMetadata');
+      const result = await stageBrowserImportMetadata({
+        authContext: makeMockAuthContext(),
+        serverAnalysis: analysis,
+        intent: prepared.intent,
+      });
+      return { result, createClientSpy, mockRpc };
+    };
+
+    it('17. rejects an oversized legacy posterText without reaching the database', async () => {
+      const { result, createClientSpy } = await stageLegacyPackage('legacy-big-poster', {
+        posterText: 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText + 1),
+        accessibilityText: 'Valid accessibility text',
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.code).toBe('INVALID_SELECTION');
+        expect(result.error).toContain('Poster full text');
+        expect(result.error).toContain('safety limit');
+      }
+      expect(createClientSpy).not.toHaveBeenCalled();
+    });
+
+    it('18. rejects an oversized legacy accessibilityText without reaching the database', async () => {
+      const { result, createClientSpy } = await stageLegacyPackage('legacy-big-a11y', {
+        posterText: 'Valid poster full text',
+        accessibilityText: 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText + 1),
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.code).toBe('INVALID_SELECTION');
+        expect(result.error).toContain('Accessibility text');
+        expect(result.error).toContain('safety limit');
+      }
+      expect(createClientSpy).not.toHaveBeenCalled();
+    });
+
+    it('19. rejects a value that is only oversized after outer whitespace is trimmed away', async () => {
+      const { result, createClientSpy } = await stageLegacyPackage('legacy-trim-boundary', {
+        posterText: `   ${'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText + 1)}   `,
+        accessibilityText: 'Valid accessibility text',
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.code).toBe('INVALID_SELECTION');
+      expect(createClientSpy).not.toHaveBeenCalled();
+    });
+
+    it('20. accepts values exactly at the ceiling and stages them unchanged', async () => {
+      const posterText = 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText);
+      const accessibilityText = 'y'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText);
+      const { result, createClientSpy, mockRpc } = await stageLegacyPackage('legacy-at-limit', {
+        posterText, accessibilityText,
+      }, { stubClient: true });
+
+      expect(result.success).toBe(true);
+      expect(createClientSpy).toHaveBeenCalled();
+      const staged = mockRpc.mock.calls[0][1].p_packages[0];
+      // Exactly at the limit is valid, and nothing is silently truncated on the way through.
+      expect(staged.posterText).toBe(posterText);
+      expect(staged.accessibilityText).toBe(accessibilityText);
+    });
+
+    it('21. still permits a legacy package that omits both values entirely', async () => {
+      const { result, createClientSpy, mockRpc } = await stageLegacyPackage('legacy-absent', {}, { stubClient: true });
+
+      // Absence remains stageable by design — later review/approval/publication gates block it,
+      // which is the staff correction path. It must not be rejected here, and it must not be
+      // silently synthesized either.
+      expect(result.success).toBe(true);
+      expect(createClientSpy).toHaveBeenCalled();
+      const staged = mockRpc.mock.calls[0][1].p_packages[0];
+      expect(staged.posterText).toBeNull();
+      expect(staged.accessibilityText).toBeNull();
+    });
   });
 });

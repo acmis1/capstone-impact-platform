@@ -147,6 +147,8 @@ async function createAuditAcceptanceFixture(serviceClient: SupabaseClient) {
       discipline: discipline.name,
       industry: industry.name,
       status: 'submitted',
+      poster_text_public: 'Detail audit poster full text',
+      accessibility_text_public: 'Detail audit accessibility text',
     }).select('id').single();
     if (projectResult.error || !projectResult.data) throw new Error('Project-detail audit verifier project could not be created.');
     projectId = projectResult.data.id;
@@ -177,6 +179,8 @@ async function createAuditAcceptanceFixture(serviceClient: SupabaseClient) {
       p_industry_category_ids: [industry.id],
       p_expected_updated_at: current.data.updated_at,
       p_admin_id: metadataActor.id,
+      p_poster_text: 'Detail audit poster full text',
+      p_accessibility_text: 'Detail audit accessibility text',
     });
     if (metadataUpdate.error || metadataUpdate.data?.resultCode !== 'SUCCESS' || !metadataUpdate.data.auditRecordId) {
       throw new Error('Project-detail metadata audit could not be created.');
