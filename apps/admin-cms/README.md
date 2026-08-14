@@ -158,6 +158,7 @@ Read-only staging checks require validated staging runtime identity (`CAPSTONE_R
 | Staging media check | `npm run check:admin-media` | `npm run check:staging-media` | Authorized read-only database/storage check |
 | Auth check | `npm run check:admin-auth` | `npm run check:staging-auth` | Authorized read-only database check |
 | Import-batch check | `npm run check:admin-imports` | `npm run check:import-batches` | Authorized read-only database check |
+| Deployment readiness check | `npm run check:admin-deployment-readiness` | `npm run check:deployment-readiness` | Authorized read-only schema & migration check |
 
 ### State-changing staging operations
 
@@ -194,6 +195,7 @@ The migration set is manually governed for authorized isolated environments. It 
 - [`20260813002154_project_metadata_audit_history.sql`](../../infra/supabase/migrations/20260813002154_project_metadata_audit_history.sql) introduces the comprehensive project metadata audit trail, recording granular diffs, actor identity, and change intent directly into `approval_records` on every atomic metadata save. *(Repository/local-only; not applied to hosted staging.)*
 - [`20260813120000_staff_identity_provisioning.sql`](../../infra/supabase/migrations/20260813120000_staff_identity_provisioning.sql) establishes the durable staff provisioning state machine and a two-minute, token-fenced execution lease for the service-role-only functions that converge Supabase Auth with PostgreSQL. Only the current execution owner may invite, bind, finalize, fail or begin compensation; expired work is recovered by rotating hashed ownership credentials. *(Repository/local-only; not applied to hosted staging.)*
 - [`20260814090000_accessible_full_text_gate.sql`](../../infra/supabase/migrations/20260814090000_accessible_full_text_gate.sql) forward-redefines `public.update_project_metadata` (gaining bounded `p_poster_text` / `p_accessibility_text`, and dropping the obsolete signature), `public.submit_import_projects_for_review`, `public.perform_project_review_action` and `public.get_project_publication_readiness` so a blank poster full text or accessibility text blocks review submission, approval and publication readiness. It reuses the existing `projects.poster_text_public` and `projects.accessibility_text_public` columns and adds no schema. *(Repository/local-only; not applied to hosted staging.)*
+- [`20260814140000_snapshot_image_alt_text.sql`](../../infra/supabase/migrations/20260814140000_snapshot_image_alt_text.sql) establishes authoritative staff-authored alt text (`media_assets.alt_text_public`) for snapshot images, establishes `public.update_snapshot_image_alt_text`, and enforces snapshot alt text across media staging, review submission, approval, participant preview generation, and publication readiness. *(Repository/local-only; not applied to hosted staging.)*
 
 See the [Supabase migration overview](../../infra/supabase/README.md), [manual apply guide](../../infra/supabase/manual-apply-guide.md), [staging reconciliation runbook](../../infra/supabase/staging-reconciliation-runbook.md) and [staging authentication verification runbook](../../infra/supabase/staging-auth-verification.md) before authorized operations.
 
@@ -314,7 +316,7 @@ The authoritative rule is presence after trim plus a bounded technical ceiling (
 
 A legacy `project.json` package may still be staged without either value, but it cannot progress to review, approval, or publication until staff supply both through the metadata editor. Values are never silently synthesized.
 
-This supplies required accessibility content. It is **not** a WCAG conformance certification, a professional accessibility audit, or final Duda accessibility acceptance. Per-snapshot/gallery image alt text is separate outstanding work: `media_assets` has no authoritative per-image alt-text field today.
+This supplies required accessibility content. It is **not** a WCAG conformance certification, a professional accessibility audit, or final Duda accessibility acceptance. Snapshot image alt text is enforced via `media_assets.alt_text_public` (Migration 0026), while broader multi-image gallery support and formal human accessibility UAT remain future scope.
 
 ## Project dashboard and index
 
@@ -375,7 +377,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - Participant confirmation, integrated preview, publishing history and rollback UI are pending.
 - Live Duda cutover is pending.
 - Authenticated browser, responsive, accessibility and screen-reader validation remain incomplete.
-- Poster full text and poster accessibility text are required end to end, but per-snapshot/gallery image alt text is not: `media_assets` carries no authoritative per-image alt-text field. Formal WCAG conformance evaluation, final Duda accessibility acceptance and human accessibility UAT remain pending.
+- Poster full text, poster accessibility text, and snapshot image alt text are required across core workflows. Formal WCAG conformance evaluation, multi-image gallery alt text, final Duda accessibility acceptance and human accessibility UAT remain pending.
 - Production deployment hardening and readiness certification remain pending.
 
 ## Troubleshooting

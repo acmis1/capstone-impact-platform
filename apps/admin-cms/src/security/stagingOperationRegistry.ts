@@ -98,6 +98,15 @@ export const STAGING_OPERATIONS_REGISTRY: Record<string, StagingOperationDefinit
     touchesAuth: false,
     changesDatabaseRows: false,
   },
+  'check-hosted-deployment-readiness': {
+    id: 'check-hosted-deployment-readiness',
+    type: 'read_only',
+    expectedEffect: 'Reads hosted schema metadata, table presence, RPC registration, storage buckets, and migration history tracking in read-only mode without mutation',
+    usesFileInput: false,
+    touchesStorage: false,
+    touchesAuth: false,
+    changesDatabaseRows: false,
+  },
 };
 
 export function getStagingOperation(id: string): StagingOperationDefinition {
