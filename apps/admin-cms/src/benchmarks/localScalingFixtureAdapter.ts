@@ -1,17 +1,16 @@
 import { createHash } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 import { Project } from '../domain/project';
 
 export interface AdaptedProjectDbRecord {
   projectRow: Record<string, unknown>;
   mediaRows: Array<Record<string, unknown>>;
-  disciplineName: string;
-  industryName: string;
 }
 
 /**
  * Transforms a domain Project (from generateSyntheticProjects) into production-compliant
  * database rows suitable for direct insertion into Local Supabase tables.
- * 
+ *
  * Enforces:
  * - Isolated per-run public_id prefix (`${runPrefix}-${project.publicId}`).
  * - Safe synthetic contact emails with no real stakeholder identity.
@@ -108,8 +107,6 @@ export function adaptSyntheticProjectForDb(
   return {
     projectRow,
     mediaRows,
-    disciplineName: project.discipline || 'Synthetic General Discipline',
-    industryName: project.industry || 'Synthetic General Industry',
   };
 }
 
@@ -119,26 +116,72 @@ export interface DeterministicStoragePayload {
   sha256: string;
 }
 
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+function crc32(buffer: Buffer): number {
+  let crc = 0xFFFFFFFF;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) {
+      crc = (crc >>> 1) ^ ((crc & 1) ? 0xEDB88320 : 0);
+    }
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const typeBuffer = Buffer.from(type, 'ascii');
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const checksum = Buffer.alloc(4);
+  checksum.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])));
+  return Buffer.concat([length, typeBuffer, data, checksum]);
+}
+
 /**
- * Creates a deterministic synthetic binary buffer of exact sizeBytes with its SHA-256 hash.
+ * Creates a valid deterministic PNG of exactly sizeBytes with its SHA-256 hash. A private
+ * ancillary chunk carries deterministic padding so the benchmark truthfully uploads image/png.
  */
 export function createDeterministicStoragePayload(
   sizeBytes: number,
   seedTag: string,
 ): DeterministicStoragePayload {
-  const buffer = Buffer.alloc(sizeBytes);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(1, 0);
+  ihdr.writeUInt32BE(1, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+
+  const idat = deflateSync(Buffer.from([0, 0, 0, 0, 0]));
+  const fixedSize = PNG_SIGNATURE.length
+    + pngChunk('IHDR', ihdr).length
+    + pngChunk('IDAT', idat).length
+    + pngChunk('IEND', Buffer.alloc(0)).length
+    + 12;
+  const paddingSize = sizeBytes - fixedSize;
+  if (paddingSize < 0) {
+    throw new Error(`Synthetic PNG size must be at least ${fixedSize} bytes.`);
+  }
+
+  const padding = Buffer.alloc(paddingSize);
   const baseTag = Buffer.from(`CAPSTONE_BENCHMARK_PAYLOAD_${seedTag}_`, 'utf8');
 
-  // Fill buffer with repeating patterned bytes derived from seedTag
-  for (let offset = 0; offset < sizeBytes; offset += baseTag.length) {
-    const chunkLen = Math.min(baseTag.length, sizeBytes - offset);
-    baseTag.copy(buffer, offset, 0, chunkLen);
+  for (let offset = 0; offset < padding.length; offset += baseTag.length) {
+    const chunkLen = Math.min(baseTag.length, padding.length - offset);
+    baseTag.copy(padding, offset, 0, chunkLen);
   }
 
-  // XOR with offset-based pseudo-entropy for realistic compressibility
-  for (let i = 0; i < sizeBytes; i++) {
-    buffer[i] = buffer[i] ^ (i & 0xFF);
+  for (let i = 0; i < padding.length; i++) {
+    padding[i] = padding[i] ^ (i & 0xFF);
   }
+
+  const buffer = Buffer.concat([
+    PNG_SIGNATURE,
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', idat),
+    pngChunk('pADd', padding),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
 
   const sha256 = createHash('sha256').update(buffer).digest('hex');
 

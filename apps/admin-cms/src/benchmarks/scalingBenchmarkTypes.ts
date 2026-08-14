@@ -1,4 +1,5 @@
 import { SYNTHETIC_PROJECT_COUNTS, SyntheticProjectCount } from '../fixtures/syntheticProjects';
+import { ProjectDashboardMetrics, ProjectFilterOptions } from '../domain/projectQuery';
 
 export { SYNTHETIC_PROJECT_COUNTS };
 export type { SyntheticProjectCount };
@@ -8,6 +9,9 @@ export const BENCHMARK_STORAGE_SIZES = [
   { label: '1 MiB', bytes: 1024 * 1024 },
   { label: '5 MiB', bytes: 5 * 1024 * 1024 },
 ] as const;
+
+export const BENCHMARK_STORAGE_MIME_TYPE = 'image/png';
+export const BENCHMARK_STORAGE_EXTENSION = 'png';
 
 export type BenchmarkStorageSizeLabel = (typeof BENCHMARK_STORAGE_SIZES)[number]['label'];
 
@@ -26,7 +30,16 @@ export interface SeedBenchmarkResult {
 
 export interface DatabaseBenchmarkResult {
   operation: string;
-  category: 'pagination' | 'search' | 'filtering' | 'sorting' | 'metrics' | 'filter-options' | 'feed-query';
+  category:
+    | 'pagination'
+    | 'search'
+    | 'filtering'
+    | 'sorting'
+    | 'metrics'
+    | 'filter-options'
+    | 'feed-query'
+    | 'feed-compile'
+    | 'feed-validation';
   iterations: number;
   resultCount: number;
   timings: TimingDistribution;
@@ -48,15 +61,34 @@ export interface LocalScalingReport {
   datasetSize: SyntheticProjectCount;
   seed: number;
   environment: 'Local Supabase (loopback)';
+  population: {
+    baselineTotalProjects: number;
+    postSeedTotalProjects: number;
+    baselinePublishedProjects: number;
+    postSeedPublishedProjects: number;
+    syntheticPublishedProjects: number;
+    baselineVerifierProjects: number;
+    baselineStorageObjects: number;
+    baselineDashboard: ProjectDashboardMetrics;
+    postSeedDashboard: ProjectDashboardMetrics;
+    baselineFilterOptions: ProjectFilterOptions;
+  };
   seeding: SeedBenchmarkResult;
   database: DatabaseBenchmarkResult[];
   storage: StorageBenchmarkResult[];
   cleanup: {
+    projectsCreated: number;
+    mediaAssetsCreated: number;
+    storageObjectsCreated: number;
+    projectDeletionAttempted: boolean;
+    mediaAssetDeletionAttempted: boolean;
+    storageDeletionAttempted: boolean;
     projectsRemoved: number;
     mediaAssetsRemoved: number;
     storageObjectsRemoved: number;
-    residualVerifierProjects: number;
-    residualVerifierStorageObjects: number;
+    residualVerifierProjects: number | null;
+    residualVerifierStorageObjects: number | null;
+    errors: string[];
     clean: boolean;
   };
 }
@@ -135,7 +167,7 @@ export function formatReportTable(report: LocalScalingReport): string {
   lines.push(` Timestamp:      ${report.timestamp}`);
   lines.push(` Bulk Seeding:   ${report.seeding.projectCount} projects in ${formatMs(report.seeding.durationMs)} (${report.seeding.projectsPerSecond.toFixed(1)} proj/sec)`);
   lines.push('--------------------------------------------------------------------------------');
-  lines.push(' DATABASE QUERY OPERATIONS:');
+  lines.push(' DATABASE & PUBLIC FEED OPERATIONS:');
   lines.push('--------------------------------------------------------------------------------');
   lines.push(
     ' Operation'.padEnd(36) +
@@ -161,7 +193,15 @@ export function formatReportTable(report: LocalScalingReport): string {
   }
 
   lines.push('--------------------------------------------------------------------------------');
+  lines.push(' LOCAL POPULATION BASELINE & VERIFIED DELTA:');
+  lines.push('--------------------------------------------------------------------------------');
+  lines.push(` Total Projects:          ${report.population.baselineTotalProjects} baseline + ${report.datasetSize} synthetic = ${report.population.postSeedTotalProjects} Local total`);
+  lines.push(` Published Projects:      ${report.population.baselinePublishedProjects} baseline + ${report.population.syntheticPublishedProjects} synthetic = ${report.population.postSeedPublishedProjects} Local total`);
+  lines.push(` Fresh Namespace Check:   ${report.population.baselineVerifierProjects} projects, ${report.population.baselineStorageObjects} storage files`);
+
+  lines.push('--------------------------------------------------------------------------------');
   lines.push(' LOCAL STORAGE BANDWIDTH (project-drafts-private):');
+  lines.push(' One transfer per size keeps CI bounded; byte length, SHA-256, removal, and final residue are correctness gates.');
   lines.push('--------------------------------------------------------------------------------');
   lines.push(
     ' Payload Size'.padEnd(16) +
@@ -187,11 +227,14 @@ export function formatReportTable(report: LocalScalingReport): string {
   lines.push('--------------------------------------------------------------------------------');
   lines.push(' VERIFIER CLEANUP & ISOLATION:');
   lines.push('--------------------------------------------------------------------------------');
-  lines.push(` Projects Cleaned:        ${report.cleanup.projectsRemoved}`);
-  lines.push(` Media Assets Cleaned:    ${report.cleanup.mediaAssetsRemoved}`);
-  lines.push(` Storage Objects Cleaned: ${report.cleanup.storageObjectsRemoved}`);
-  lines.push(` Residual Verifier Rows:  ${report.cleanup.residualVerifierProjects} projects, ${report.cleanup.residualVerifierStorageObjects} storage files`);
-  lines.push(` Isolation Status:        ${report.cleanup.clean ? 'CLEAN (0 RESIDUE)' : 'WARNING (RESIDUE DETECTED)'}`);
+  lines.push(` Created:                 ${report.cleanup.projectsCreated} projects, ${report.cleanup.mediaAssetsCreated} media assets, ${report.cleanup.storageObjectsCreated} storage objects`);
+  lines.push(` Deletion Attempted:      projects=${report.cleanup.projectDeletionAttempted}, media=${report.cleanup.mediaAssetDeletionAttempted}, storage=${report.cleanup.storageDeletionAttempted}`);
+  lines.push(` Confirmed Removed:       ${report.cleanup.projectsRemoved} projects, ${report.cleanup.mediaAssetsRemoved} media assets, ${report.cleanup.storageObjectsRemoved} storage objects`);
+  const projectResidue = report.cleanup.residualVerifierProjects === null ? 'UNPROVEN' : String(report.cleanup.residualVerifierProjects);
+  const storageResidue = report.cleanup.residualVerifierStorageObjects === null ? 'UNPROVEN' : String(report.cleanup.residualVerifierStorageObjects);
+  lines.push(` Final Residue:           ${projectResidue} projects, ${storageResidue} storage files`);
+  lines.push(` Cleanup Errors:          ${report.cleanup.errors.length}`);
+  lines.push(` Isolation Status:        ${report.cleanup.clean ? 'CLEAN (0 RESIDUE PROVEN)' : 'FAILED (ZERO RESIDUE NOT PROVEN)'}`);
   lines.push('================================================================================');
 
   return lines.join('\n');

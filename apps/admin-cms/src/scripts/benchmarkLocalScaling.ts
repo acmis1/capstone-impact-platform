@@ -17,28 +17,65 @@ export interface CliBenchmarkOptions {
   measuredIterations: number;
 }
 
+function parseIntegerFlag(
+  args: string[],
+  index: number,
+  flag: string,
+  minimum: number,
+  maximum: number,
+): number {
+  const rawValue = args[index + 1];
+  if (rawValue === undefined || rawValue.startsWith('--')) {
+    throw new Error(`Missing value for ${flag}.`);
+  }
+  if (!/^\d+$/.test(rawValue)) {
+    throw new Error(`Invalid ${flag} [${rawValue}]. Expected a whole decimal integer.`);
+  }
+  const value = Number(rawValue);
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`Invalid ${flag} [${rawValue}]. Expected an integer from ${minimum} to ${maximum}.`);
+  }
+  return value;
+}
+
 export function parseCliArgs(args: string[]): CliBenchmarkOptions {
   let counts: SyntheticProjectCount[] = [100];
   let seed = 0xD4072026;
   let warmupIterations = 2;
   let measuredIterations = 5;
+  const seen = new Set<string>();
+  let countMode: '--count' | '--all' | null = null;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--all') {
+      if (countMode || seen.has(arg)) {
+        throw new Error('Specify exactly one of --count or --all.');
+      }
+      countMode = '--all';
+      seen.add(arg);
       counts = [...SYNTHETIC_PROJECT_COUNTS];
-    } else if (arg === '--count' && i + 1 < args.length) {
-      const parsedCount = parseInt(args[++i], 10) as SyntheticProjectCount;
+    } else if (arg === '--count') {
+      if (countMode || seen.has(arg)) {
+        throw new Error('Specify exactly one of --count or --all.');
+      }
+      countMode = '--count';
+      seen.add(arg);
+      const parsedCount = parseIntegerFlag(args, i, arg, 0, 1000) as SyntheticProjectCount;
       if (!SYNTHETIC_PROJECT_COUNTS.includes(parsedCount)) {
         throw new Error(`Invalid --count [${parsedCount}]. Supported values: ${SYNTHETIC_PROJECT_COUNTS.join(', ')}.`);
       }
       counts = [parsedCount];
-    } else if (arg === '--seed' && i + 1 < args.length) {
-      seed = parseInt(args[++i], 10);
-    } else if (arg === '--warmup' && i + 1 < args.length) {
-      warmupIterations = parseInt(args[++i], 10);
-    } else if (arg === '--iterations' && i + 1 < args.length) {
-      measuredIterations = parseInt(args[++i], 10);
+      i++;
+    } else if (arg === '--seed' || arg === '--warmup' || arg === '--iterations') {
+      if (seen.has(arg)) throw new Error(`Duplicate option ${arg}.`);
+      seen.add(arg);
+      if (arg === '--seed') seed = parseIntegerFlag(args, i, arg, 0, 0xFFFFFFFF);
+      if (arg === '--warmup') warmupIterations = parseIntegerFlag(args, i, arg, 0, 1000);
+      if (arg === '--iterations') measuredIterations = parseIntegerFlag(args, i, arg, 1, 1000);
+      i++;
+    } else {
+      throw new Error(`Unknown benchmark option [${arg}].`);
     }
   }
 
