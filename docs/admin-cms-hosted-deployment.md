@@ -16,7 +16,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 | **Instance Status** | Active / Separate (Never touch) | **ACTIVE_HEALTHY** (Active Target) | **PAUSED / INACTIVE** (Do not modify) |
 | **Region** | `ap-southeast-1` | `ap-southeast-1` | `ap-southeast-1` |
 | **Hosting Service** | Existing Render static/web service | **Separate** Render/Cloud Web Service | — |
-| **Database State** | Prohibited from mutation | Clean 26-migration schema (0001–0026) | Historical 6-migration manual baseline |
+| **Database State** | Prohibited from mutation | Clean 26-migration schema (0001–0026) | Historical manually evolved baseline; migration history untracked |
 
 > [!IMPORTANT]
 > The existing Render service configured for `Prototype/` must **NEVER** be repurposed or pointed to `apps/admin-cms`. The Admin/CMS requires an independent web service with its own environment variables and deployment pipeline. Furthermore, the Prototype Supabase project (`capstone-prototype-recovery-2026`) is completely isolated and must never be targeted by Admin/CMS operations.
@@ -148,20 +148,49 @@ The procedures detailed in the [staging reconciliation runbook](../infra/supabas
 
 ## 6. Pre-Deployment Readiness Verification
 
-Before hosted deployment activation, the operator can execute the read-only deployment readiness checker:
+### A. Automated Readiness Inspection Contract
+The read-only deployment readiness checker inspects the target endpoint without performing mutations:
 
 ```bash
 npm run check:admin-deployment-readiness
 ```
 
-And verify Auth readiness:
+**Automated Inspection Boundaries & Expected Output**:
+The automated checker queries the PostgREST Data API and OpenAPI schema. It intentionally reports `DEPLOYMENT_CLASSIFICATION = MANUAL_EVIDENCE_REQUIRED` (with exit code `2`) when evaluating hosted environments because:
+- **Migration Tracking**: The Supabase Data API does not expose `supabase_migrations.schema_migrations`, so migration history is unreadable via standard client queries.
+- **Constraints & Grants**: Exact foreign key constraints, check constraints, and RLS grants cannot be proven by PostgREST inspection alone.
+- **RPC Signatures**: OpenAPI metadata proves RPC names, but may collapse or omit full overloaded parameter signatures.
+- **Fail-Closed Design**: The checker deliberately refuses to synthesize `SCHEMA_BASELINE = MATCH` or `READY_FOR_MUTATION_DECISION` without explicit, governed Gate 3/4 manual verification inputs.
+
+Expected automated inspection output on the clean v2 staging target:
+- `TARGET_IDENTITY_MATCH = YES`
+- `MIGRATION_HISTORY_READABLE = NO`
+- `SCHEMA_BASELINE = UNVERIFIED`
+- `REQUIRED_TABLE_SET = PRESENT` (All 23 public application tables detected)
+- `REQUIRED_RPC_NAMES = PRESENT` (All 41 application RPC names detected)
+- `REQUIRED_STORAGE_BUCKETS = PRESENT` (All 3 buckets detected)
+- `AUTH_FOUNDATION = READY`
+- `MANUAL_EVIDENCE_REQUIRED = YES`
+- `DEPLOYMENT_CLASSIFICATION = MANUAL_EVIDENCE_REQUIRED`
+
+### B. Governed Staged Activation Evidence (Clean v2 Baseline)
+The active staging environment (`capstone-admin-cms-staging-v2-2026`) was cleared through the governed activation process (Groups D–F), providing the independent contract evidence that automated inspection cannot synthesize:
+- **Migration History (Gate 3)**: All 26 authoritative repository migrations (`0001` through `0026`) applied sequentially and verified in remote migration history via the Supabase CLI (`supabase migration list --linked`).
+- **Schema & Grants (Gate 4)**: Exact 23 public tables, 42 service-role application RPC signatures across 41 names, and least-privilege Data API grants verified against migration definitions.
+- **Storage Infrastructure (Group E)**: All 3 Storage buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) created and configured; 0 storage objects.
+- **Administrator Auth Linkage (Group F)**: Single Auth identity linked to `admin_users` profile with `admin` role in `user_roles`.
+
+Auth readiness is verified via:
 
 ```bash
 npm run check:admin-auth
 ```
 
-Expected readiness output on the clean v2 staging environment:
-- `TARGET_IDENTITY_MATCH = YES`
-- `SCHEMA_BASELINE = MATCH`
-- `check:admin-auth` classification: `READY_FOR_MANUAL_LOGIN_TEST`
-- All 23 public tables, 41 RPC names (42 signatures), and 3 Storage buckets detected.
+Expected output:
+- `classification = READY_FOR_MANUAL_LOGIN_TEST`
+- `admin_users_count = 1`
+- `linked_auth_users_count = 1`
+- `recognized_role_assignments = 1` (Role: `admin`)
+- `error_codes = NONE`
+
+With both automated object detection and governed activation evidence complete, the clean v2 environment is verified and cleared for standalone Admin/CMS web service deployment.
