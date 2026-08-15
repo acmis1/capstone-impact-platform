@@ -10,7 +10,7 @@ import { ProjectDetailsWorkbookError } from '../import/projectDetailsWorkbookCon
 import { buildImportPackageManifestFromWorkbook } from '../import/workbookManifestAdapter';
 import { parseProjectDetailsJson, ProjectDetailsJsonError } from '../import/parseProjectDetailsJson';
 import { validateImportPackage } from '../import/validateImportPackage';
-import { computeCanonicalMediaIntentHash } from '../import/browserImportMediaStageContract';
+import { computeCanonicalMediaIntentHash } from '../import/browserImportMediaStageServerCore';
 import { computeProjectReviewReadiness } from '../import/importBatchReviewReadiness';
 import { validateProjectForApproval } from '../validation/projectValidation';
 import { createMockProject } from '../test/projectFixtures';

@@ -3,12 +3,14 @@ import {
   isIgnoredSystemFile,
   normalizeRelativePath,
 } from './browserSelection';
-import { SelectionManifest } from './browserImportPreviewContract';
-import { BrowserImportCommitIntent } from './browserImportCommitIntentContract';
+import type { SelectionManifest } from './browserImportPreviewContract';
+import type { BrowserImportCommitIntent } from './browserImportCommitIntentContract';
 import {
+  validateBrowserImportMediaStageResponse,
+} from './browserImportMediaStageContract';
+import type {
   BrowserImportMediaStageErrorCode,
   BrowserImportMediaStageResponse,
-  validateBrowserImportMediaStageResponse,
 } from './browserImportMediaStageContract';
 
 export interface BrowserImportMediaStagingLock {

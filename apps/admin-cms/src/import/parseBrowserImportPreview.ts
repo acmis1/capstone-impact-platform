@@ -18,7 +18,7 @@ import {
   ProjectDetailsJsonError,
 } from './parseProjectDetailsJson';
 import { validateImportPackage } from './validateImportPackage';
-import { generateBrowserPreviewFingerprint } from './prepareBrowserImportCommitIntent';
+import { generateBrowserPreviewFingerprint } from './prepareBrowserImportCommitIntentCore';
 import {
   ImportPackageFileMetadata,
   ImportPackageManifest,
@@ -30,7 +30,7 @@ import {
   computeAdminReferenceWorkbookFingerprint,
   parseAdminReferenceWorksheet,
   reconcilePackagesAgainstAdminReference,
-} from './adminReferenceReconciliation';
+} from './adminReferenceReconciliationCore';
 import { AdminReferenceIntent } from './browserImportCommitIntentContract';
 
 export class BrowserImportPreviewLimitError extends Error {

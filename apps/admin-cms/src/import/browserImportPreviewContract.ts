@@ -1,11 +1,12 @@
 import { z } from 'zod';
-import { MEDIA_VALIDATION_LIMITS } from '../storage/mediaValidation';
+import { MEDIA_VALIDATION_LIMITS } from '../storage/mediaValidationSharedContract';
 import {
   deriveMimeType,
   generateUploadKey,
   normalizeRelativePath,
 } from './browserSelection';
-import type { AdminReferenceIntent } from './browserImportCommitIntentContract';
+import { adminReferenceIntentSchema } from './adminReferenceSharedContract';
+import type { AdminReferenceIntent } from './adminReferenceSharedContract';
 
 /**
  * Shared Server & Client Limits
@@ -629,8 +630,6 @@ export function validateBrowserImportPreviewResponse(raw: unknown): BrowserImpor
 
   let adminReference: AdminReferenceIntent | undefined = undefined;
   if (batch.adminReference !== undefined && batch.adminReference !== null) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { adminReferenceIntentSchema } = require('./browserImportCommitIntentContract');
     const parsedRef = adminReferenceIntentSchema.safeParse(batch.adminReference);
     if (!parsedRef.success) return null;
     adminReference = parsedRef.data;

@@ -5,8 +5,8 @@ import { AuthenticatedAdminContext } from '../auth/authTypes';
 import {
   BrowserImportMediaStageErrorCode,
   BrowserImportMediaStageResponse,
-  computeCanonicalMediaIntentHash,
 } from './browserImportMediaStageContract';
+import { computeCanonicalMediaIntentHash } from './browserImportMediaStageServerCore';
 import { BrowserImportMediaAssetType } from './browserImportMediaSelection';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

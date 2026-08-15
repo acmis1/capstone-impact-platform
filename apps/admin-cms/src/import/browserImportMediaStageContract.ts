@@ -1,5 +1,3 @@
-import { createHash } from 'crypto';
-
 /**
  * Media-stage-specific limits. Metadata (xlsx/json) limits continue to live in
  * BROWSER_IMPORT_LIMITS; these bound the additional binary media payload.
@@ -160,40 +158,4 @@ export interface CanonicalExpectedMediaFile {
    * intent, not display metadata — see the binding note on `computeCanonicalMediaIntentHash`.
    */
   snapshotAltText?: string | null;
-}
-
-/**
- * Computes a deterministic SHA-256 hash binding a media-stage attempt to a specific batch,
- * the metadata intent it was staged from, and the exact expected media file set. Reproducing
- * this hash requires resubmitting the identical manifest/intent/batch that produced it, which
- * is what allows exact retries to converge and prevents attaching unrelated files to a batch.
- *
- * The snapshot alt text is part of that canonical set. Because the value is re-derived server-side
- * from the resubmitted package on every attempt, changing it changes this hash, so an alt text can
- * never be smuggled into an already-completed batch under an older intent — the mismatch is
- * rejected exactly like any other change to the expected media set.
- */
-export function computeCanonicalMediaIntentHash(params: {
-  batchId: string;
-  metadataIntentHash: string;
-  files: CanonicalExpectedMediaFile[];
-}): string {
-  const sortedFiles = [...params.files]
-    .sort((a, b) => a.packagePath.localeCompare(b.packagePath) || a.assetType.localeCompare(b.assetType))
-    .map((f) => ({
-      packagePath: f.packagePath,
-      projectPublicId: f.projectPublicId,
-      assetType: f.assetType,
-      fileName: f.fileName,
-      fileSizeBytes: f.fileSizeBytes,
-      snapshotAltText: f.snapshotAltText ?? null,
-    }));
-
-  const canonicalObj = {
-    batchId: params.batchId,
-    metadataIntentHash: params.metadataIntentHash,
-    files: sortedFiles,
-  };
-
-  return createHash('sha256').update(JSON.stringify(canonicalObj), 'utf8').digest('hex');
 }

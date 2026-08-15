@@ -1,6 +1,3 @@
-import { createHash } from 'crypto';
-import { BrowserImportCommitIntent } from './browserImportCommitIntentContract';
-
 export type BrowserImportMetadataStageErrorCode =
   | 'UNAUTHENTICATED'
   | 'PERMISSION_DENIED'
@@ -122,23 +119,4 @@ export function validateBrowserImportMetadataStageResponse(data: unknown): Brows
   }
 
   return null;
-}
-
-/**
- * Computes a deterministic SHA-256 intent hash from the canonical BrowserImportCommitIntent.
- * Returns a lowercase 64-character hex string.
- */
-export function computeCanonicalIntentHash(intent: BrowserImportCommitIntent): string {
-  const canonicalObj = {
-    version: intent.version,
-    previewFingerprint: intent.previewFingerprint,
-    selectedRootName: intent.selectedRootName,
-    fileCount: intent.fileCount,
-    declaredTotalBytes: intent.declaredTotalBytes,
-    selectedPackagePaths: [...intent.selectedPackagePaths].sort((a, b) => a.localeCompare(b)),
-    acknowledgedWarningPackagePaths: [...intent.acknowledgedWarningPackagePaths].sort((a, b) => a.localeCompare(b)),
-    ...(intent.adminReference ? { adminReference: intent.adminReference } : {}),
-  };
-
-  return createHash('sha256').update(JSON.stringify(canonicalObj), 'utf8').digest('hex');
 }

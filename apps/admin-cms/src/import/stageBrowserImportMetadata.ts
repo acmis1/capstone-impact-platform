@@ -13,15 +13,15 @@ import {
 import {
   BrowserImportMetadataStageErrorCode,
   BrowserImportMetadataStageResponse,
-  computeCanonicalIntentHash,
 } from './browserImportMetadataStageContract';
+import { computeCanonicalIntentHash } from './browserImportMetadataStageServerCore';
 import { BrowserImportServerAnalysis } from './parseBrowserImportPreview';
 import { validateFolderDerivedPublicId } from './publicIdValidation';
 import { normalizeParticipantContactEmail } from '../domain/participantContactEmail';
 import {
   adminReferenceIntentsSemanticallyEqual,
   canonicalizeAdminReferenceIntent,
-} from './adminReferenceReconciliation';
+} from './adminReferenceReconciliationCore';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

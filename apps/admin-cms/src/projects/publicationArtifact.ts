@@ -2,7 +2,7 @@ import { Project } from '../domain/project';
 import { compilePublicationCandidateFeed } from '../feed/compilePublicFeed';
 import { serializePublicFeedArtifact } from '../feed/serializePublicFeedArtifact';
 import { validatePublicFeed } from '../feed/validatePublicFeed';
-import { validateMediaAsset } from '../storage/mediaValidation';
+import { validateMediaAsset } from '../storage/mediaValidationCore';
 import { getAccessibleContentProblem } from '../domain/accessibleContent';
 
 export type PublicationMediaAssetType = 'poster_image' | 'poster_pdf' | 'snapshot_image';

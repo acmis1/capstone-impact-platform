@@ -49,6 +49,24 @@ export const adminReferenceFieldMappingSchema = z
 
 export type AdminReferenceFieldMapping = z.infer<typeof adminReferenceFieldMappingSchema>;
 
+export const adminReferenceIntentSchema = z
+  .object({
+    workbookFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    worksheet: z.string().min(1).max(100),
+    matchMappings: z
+      .array(adminReferenceFieldMappingSchema)
+      .min(1)
+      .max(ADMIN_REFERENCE_LIMITS.MAX_MATCH_FIELDS),
+    comparisonMappings: z
+      .array(adminReferenceFieldMappingSchema)
+      .min(1)
+      .max(ADMIN_REFERENCE_LIMITS.MAX_COMPARISON_FIELDS),
+    reconciliationContractVersion: z.literal('admin-reference-reconciliation-v1'),
+  })
+  .strict();
+
+export type AdminReferenceIntent = z.infer<typeof adminReferenceIntentSchema>;
+
 export const adminReferenceMappingConfigSchema = z
   .object({
     worksheet: z.string().min(1).max(100),

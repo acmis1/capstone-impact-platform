@@ -3,13 +3,16 @@ import {
   isIgnoredSystemFile,
   normalizeRelativePath,
 } from './browserSelection';
-import { SelectionManifest } from './browserImportPreviewContract';
-import { BrowserImportCommitIntent } from './browserImportCommitIntentContract';
+import type { SelectionManifest } from './browserImportPreviewContract';
+import type { BrowserImportCommitIntent } from './browserImportCommitIntentContract';
 import {
-  BrowserImportMetadataStageErrorCode,
-  BrowserImportMetadataStageResponse,
   validateBrowserImportMetadataStageResponse,
 } from './browserImportMetadataStageContract';
+import type {
+  BrowserImportMetadataStageErrorCode,
+  BrowserImportMetadataStageResponse,
+} from './browserImportMetadataStageContract';
+import type { AdminReferenceMappingConfig } from './adminReferenceSharedContract';
 
 export interface BrowserImportStagingLock {
   current: boolean;
@@ -22,7 +25,7 @@ export interface RunBrowserImportMetadataStagingParams {
   manifestCache: SelectionManifest | null;
   selectedFiles: File[];
   adminReferenceFile?: File | null;
-  adminReferenceMappingConfig?: import('./adminReferenceReconciliation').AdminReferenceMappingConfig | null;
+  adminReferenceMappingConfig?: AdminReferenceMappingConfig | null;
   setIsStaging: (val: boolean) => void;
   setStagingError: (error: string | null) => void;
   setStagedResult: (result: {

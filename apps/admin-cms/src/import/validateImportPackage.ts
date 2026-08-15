@@ -1,5 +1,5 @@
 import { ImportPackageFileMetadata, ImportPackageParseResult, ImportPackageValidationResult } from './importTypes';
-import { validateMediaAsset } from '../storage/mediaValidation';
+import { validateMediaAsset } from '../storage/mediaValidationCore';
 import { ACCESSIBLE_CONTENT_LIMITS, getSnapshotAltTextProblem } from '../domain/accessibleContent';
 
 export interface ValidateImportPackageOptions {

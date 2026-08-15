@@ -2,7 +2,7 @@ import { Project, ValidationFlagRecord } from '../domain/project';
 import { WORKFLOW_STATUSES, WorkflowStatus } from '../domain/workflowStatus';
 import { isSafeExternalPreviewUrl } from '../previews/participantPreviewHtml';
 import { PROJECT_METADATA_LIMITS, projectMetadataInputSchema } from '../projects/projectMetadata';
-import { validateMediaAsset } from '../storage/mediaValidation';
+import { validateMediaAsset } from '../storage/mediaValidationCore';
 import { validateProjectForApproval } from '../validation/projectValidation';
 
 export const DEFAULT_SYNTHETIC_SEED = 0xD4072026;
