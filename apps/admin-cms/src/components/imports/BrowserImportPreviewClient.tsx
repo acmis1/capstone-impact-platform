@@ -360,6 +360,8 @@ export default function BrowserImportPreviewClient() {
       manifestCache,
       selectedPackagePaths: selectionStateRef.current.selectedPackagePaths,
       selectedFiles,
+      adminReferenceFile: adminReferenceData?.referenceFile,
+      adminReferenceMappingConfig: adminReferenceData?.mappingConfig,
       setIsCompletingMedia,
       setMediaCompleteError,
       setMediaCompleteResult,

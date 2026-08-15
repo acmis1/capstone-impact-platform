@@ -152,6 +152,61 @@ describe('Browser Import Media Staging Controller Unit Tests', () => {
     expect(keys).not.toContain(generateUploadKey('root/pkg-b/poster.png'));
   });
 
+  it('2b. Attaches referenceFile and adminReferenceMapping when provided', async () => {
+    const lock = { current: false };
+    const setIsCompletingMedia = vi.fn();
+    const setMediaCompleteError = vi.fn();
+    const setMediaCompleteResult = vi.fn();
+
+    let capturedFormData: FormData | null = null;
+    const fetchFn = vi.fn().mockImplementation((_url, opts) => {
+      capturedFormData = opts.body as FormData;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            success: true,
+            result: 'completed',
+            batchId: '11111111-1111-1111-1111-111111111111',
+            mediaAssetCount: 1,
+            batchStatus: 'completed',
+          }),
+          { status: 200 }
+        )
+      );
+    });
+
+    const refFile = new File(['fake xlsx bytes'], 'ref.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const refMapping = {
+      worksheet: 'REFERENCE',
+      matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Group Name' }],
+      comparisonMappings: [{ canonicalField: 'title', referenceColumn: 'Official Project Title' }],
+      reconciliationContractVersion: 'admin-reference-reconciliation-v1' as const,
+    };
+
+    await runBrowserImportMediaStaging({
+      lock,
+      isCompletingMedia: false,
+      batchId: '11111111-1111-1111-1111-111111111111',
+      preparedIntent: dummyIntent,
+      manifestCache: dummyManifest,
+      selectedPackagePaths: ['root/pkg-a'],
+      selectedFiles: allFiles,
+      adminReferenceFile: refFile,
+      adminReferenceMappingConfig: refMapping,
+      setIsCompletingMedia,
+      setMediaCompleteError,
+      setMediaCompleteResult,
+      fetchFn,
+    });
+
+    expect(capturedFormData).not.toBeNull();
+    const fd = capturedFormData!;
+    expect(fd.get('referenceFile')).toBe(refFile);
+    expect(fd.get('adminReferenceMapping')).toBe(JSON.stringify(refMapping));
+  });
+
   it('3. Does not call fetch when batchId is missing (metadata not yet staged)', async () => {
     const lock = { current: false };
     const fetchFn = vi.fn();

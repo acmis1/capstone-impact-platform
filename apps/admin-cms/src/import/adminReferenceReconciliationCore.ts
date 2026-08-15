@@ -1,7 +1,10 @@
 import { createHash } from 'crypto';
 import ExcelJS from 'exceljs';
 import { normalizeParticipantContactEmail } from '../domain/participantContactEmail';
-import type { BrowserImportIssue } from './browserImportPreviewContract';
+import {
+  BROWSER_IMPORT_LIMITS,
+  type BrowserImportIssue,
+} from './browserImportPreviewContract';
 import type { AdminReferenceIntent } from './adminReferenceSharedContract';
 import {
   ADMIN_REFERENCE_LIMITS,
@@ -9,18 +12,117 @@ import {
   CanonicalMatchableField,
   CANONICAL_COMPARABLE_FIELDS,
   CanonicalComparableField,
-  adminReferenceFieldMappingSchema,
-  AdminReferenceFieldMapping,
   adminReferenceMappingConfigSchema,
   AdminReferenceMappingConfig,
   WorksheetStructureSummary,
   AdminReferenceInspectionResult,
-  AdminReferenceReconciliationStatus,
   AdminReferencePackageResult,
   AdminReferenceReconciliationBatchResult,
 } from './adminReferenceSharedContract';
 
 export * from './adminReferenceSharedContract';
+
+export interface AdminReferenceAnalysisOptions {
+  referenceFileBuffer: Buffer;
+  mapping: AdminReferenceMappingConfig;
+}
+
+export interface ResolveServerAdminReferenceOptionsParams {
+  adminReferenceFile: File | null;
+  adminReferenceMappingJsonStr: string | null;
+  submittedAdminReferenceIntent?: AdminReferenceIntent;
+}
+
+export type ResolveServerAdminReferenceOptionsResult =
+  | {
+      success: true;
+      adminReferenceOptions: AdminReferenceAnalysisOptions;
+      canonicalRefIntent: AdminReferenceIntent;
+    }
+  | {
+      success: false;
+      code: 'INVALID_INTENT' | 'MISSING_METADATA_UPLOAD' | 'PREVIEW_FINGERPRINT_MISMATCH';
+    };
+
+export async function resolveServerAdminReferenceAnalysisOptions(
+  params: ResolveServerAdminReferenceOptionsParams
+): Promise<ResolveServerAdminReferenceOptionsResult> {
+  const { adminReferenceFile, adminReferenceMappingJsonStr, submittedAdminReferenceIntent } = params;
+
+  if (!submittedAdminReferenceIntent) {
+    return { success: false, code: 'INVALID_INTENT' };
+  }
+
+  if (!adminReferenceFile || !adminReferenceMappingJsonStr) {
+    return { success: false, code: 'MISSING_METADATA_UPLOAD' };
+  }
+
+  if (
+    !adminReferenceFile.name.toLowerCase().endsWith('.xlsx') ||
+    adminReferenceFile.size === 0 ||
+    adminReferenceFile.size > BROWSER_IMPORT_LIMITS.MAX_XLSX_SIZE_BYTES
+  ) {
+    return { success: false, code: 'PREVIEW_FINGERPRINT_MISMATCH' };
+  }
+
+  let arrayBuf: ArrayBuffer;
+  const fileObj = adminReferenceFile as unknown as {
+    arrayBuffer?: () => Promise<ArrayBuffer>;
+    buffer?: ArrayBuffer;
+  };
+  if (typeof fileObj.arrayBuffer === 'function') {
+    arrayBuf = await fileObj.arrayBuffer();
+  } else {
+    arrayBuf = fileObj.buffer || (adminReferenceFile as unknown as ArrayBuffer);
+  }
+  const refBuf = Buffer.from(arrayBuf);
+
+  const recomputedRefFingerprint = computeAdminReferenceWorkbookFingerprint(refBuf);
+  if (recomputedRefFingerprint !== submittedAdminReferenceIntent.workbookFingerprint) {
+    return { success: false, code: 'PREVIEW_FINGERPRINT_MISMATCH' };
+  }
+
+  let parsedMapping: unknown;
+  try {
+    parsedMapping = JSON.parse(adminReferenceMappingJsonStr);
+  } catch {
+    return { success: false, code: 'PREVIEW_FINGERPRINT_MISMATCH' };
+  }
+
+  const inspection = await inspectAdminReferenceWorkbook(refBuf);
+  const targetSheet = inspection.worksheets.find(
+    (w: WorksheetStructureSummary) => w.name === submittedAdminReferenceIntent.worksheet
+  );
+  if (!targetSheet) {
+    return { success: false, code: 'PREVIEW_FINGERPRINT_MISMATCH' };
+  }
+
+  const mapVal = validateAdminReferenceMapping(parsedMapping, targetSheet.headers);
+  if (!mapVal.valid) {
+    return { success: false, code: 'PREVIEW_FINGERPRINT_MISMATCH' };
+  }
+
+  const canonicalRefIntent: AdminReferenceIntent = {
+    workbookFingerprint: recomputedRefFingerprint,
+    worksheet: mapVal.canonicalMapping.worksheet,
+    matchMappings: mapVal.canonicalMapping.matchMappings,
+    comparisonMappings: mapVal.canonicalMapping.comparisonMappings,
+    reconciliationContractVersion: mapVal.canonicalMapping.reconciliationContractVersion,
+  };
+
+  if (JSON.stringify(canonicalRefIntent) !== JSON.stringify(submittedAdminReferenceIntent)) {
+    return { success: false, code: 'PREVIEW_FINGERPRINT_MISMATCH' };
+  }
+
+  return {
+    success: true,
+    adminReferenceOptions: {
+      referenceFileBuffer: refBuf,
+      mapping: mapVal.canonicalMapping,
+    },
+    canonicalRefIntent,
+  };
+}
 
 export function computeAdminReferenceWorkbookFingerprint(buffer: Buffer): string {
   return createHash('sha256').update(buffer).digest('hex');
