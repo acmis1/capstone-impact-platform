@@ -1,16 +1,20 @@
+import 'server-only';
+
 import { createHash } from 'crypto';
 import {
-  BrowserImportCommitIntent,
   browserImportCommitIntentSchema,
+} from './browserImportCommitIntentContract';
+import type {
+  BrowserImportCommitIntentResult,
 } from './browserImportCommitIntentContract';
 import {
   adminReferenceIntentsSemanticallyEqual,
 } from './adminReferenceReconciliation';
-import {
+import { runBrowserImportManifestPreflight } from './browserImportPreviewContract';
+import type {
   BrowserImportPackagePreview,
   BrowserImportPreviewBatch,
   SelectionManifest,
-  runBrowserImportManifestPreflight,
 } from './browserImportPreviewContract';
 
 /**
@@ -58,40 +62,10 @@ export function generateBrowserPreviewFingerprint(input: {
   return createHash('sha256').update(JSON.stringify(canonicalObj), 'utf8').digest('hex');
 }
 
-export type BrowserImportCommitIntentErrorCode =
-  | 'INVALID_PREVIEW_STRUCTURE'
-  | 'INVALID_MANIFEST'
-  | 'ROOT_NAME_MISMATCH'
-  | 'FILE_COUNT_MISMATCH'
-  | 'DECLARED_BYTES_MISMATCH'
-  | 'PREVIEW_FINGERPRINT_MISMATCH'
-  | 'DUPLICATE_PACKAGE_PATHS'
-  | 'DUPLICATE_ACKNOWLEDGEMENT_PATHS'
-  | 'EMPTY_SELECTION'
-  | 'UNKNOWN_SELECTED_PACKAGE_PATH'
-  | 'UNKNOWN_ACKNOWLEDGEMENT_PACKAGE_PATH'
-  | 'INVALID_PACKAGE_SELECTED'
-  | 'UNACKNOWLEDGED_WARNING_PACKAGE_SELECTED'
-  | 'ACKNOWLEDGEMENT_REJECTED_FOR_NON_WARNING'
-  | 'MISSING_ADMIN_REFERENCE'
-  | 'ADMIN_REFERENCE_EVIDENCE_MISMATCH'
-  | 'ADMIN_REFERENCE_INVALID'
-  | 'INVALID_COMMIT_INTENT';
-
-export type BrowserImportCommitIntentResult =
-  | {
-      success: true;
-      intent: BrowserImportCommitIntent;
-      summary: {
-        selectedPackageCount: number;
-        warningPackageCount: number;
-      };
-    }
-  | {
-      success: false;
-      code: BrowserImportCommitIntentErrorCode;
-      message: string;
-    };
+export type {
+  BrowserImportCommitIntentErrorCode,
+  BrowserImportCommitIntentResult,
+} from './browserImportCommitIntentContract';
 
 export function prepareBrowserImportCommitIntent(params: {
   manifest: unknown;

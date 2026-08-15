@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { computeCanonicalMediaIntentHash } from '../browserImportMediaStageContract';
+import { computeCanonicalMediaIntentHash } from '../browserImportMediaStageServer';
 import { resolveExpectedBrowserImportMedia } from '../browserImportMediaSelection';
 import type { ManifestPreflightSuccess, ServerDerivedDescriptor } from '../browserImportPreviewContract';
 import type { BrowserImportServerPackage } from '../parseBrowserImportPreview';

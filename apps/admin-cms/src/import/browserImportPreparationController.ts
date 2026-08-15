@@ -1,15 +1,15 @@
-import {
+import type {
   BrowserImportPreparationErrorCode,
   BrowserImportSelectionState,
+  BrowserImportCommitIntentResult,
+} from './browserImportCommitIntentContract';
+import {
   setPreparedFailure,
   setPreparedSuccess,
   setPreparing,
 } from './browserImportCommitIntentContract';
-import {
-  BrowserImportCommitIntentResult,
-  prepareBrowserImportCommitIntent,
-} from './prepareBrowserImportCommitIntent';
-import { BrowserImportPreviewBatch } from './browserImportPreviewContract';
+import { prepareBrowserImportCommitIntentClient } from './prepareBrowserImportCommitIntentClient';
+import type { BrowserImportPreviewBatch } from './browserImportPreviewContract';
 
 export interface BrowserImportPreparationSnapshot {
   previewFingerprint: string;
@@ -70,7 +70,7 @@ export async function runBrowserImportPreparation(
     getCurrentState,
     setSelectionState,
     yieldControl = defaultYieldControl,
-    prepareOverride = prepareBrowserImportCommitIntent,
+    prepareOverride = prepareBrowserImportCommitIntentClient,
   } = params;
 
   if (!previewResult || !manifestCache || currentState.isPreparing || lock.current) {

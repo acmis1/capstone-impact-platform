@@ -16,7 +16,7 @@ import {
   BrowserImportPreviewLimitError,
 } from '../../../../import/parseBrowserImportPreview';
 import { prepareBrowserImportCommitIntent } from '../../../../import/prepareBrowserImportCommitIntent';
-import { computeCanonicalIntentHash } from '../../../../import/browserImportMetadataStageContract';
+import { computeCanonicalIntentHash } from '../../../../import/browserImportMetadataStageServer';
 import { resolveExpectedBrowserImportMedia } from '../../../../import/browserImportMediaSelection';
 import { stageBrowserImportMedia, MediaFileToStage } from '../../../../import/stageBrowserImportMedia';
 import {

@@ -1,14 +1,14 @@
+import 'server-only';
+
+import { MEDIA_VALIDATION_LIMITS } from './mediaValidationSharedContract';
+
+export { MEDIA_VALIDATION_LIMITS } from './mediaValidationSharedContract';
+
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
   warnings: string[];
 }
-
-export const MEDIA_VALIDATION_LIMITS = {
-  MAX_IMAGE_SIZE_BYTES: 5 * 1024 * 1024,  // 5 MB
-  MAX_PDF_SIZE_BYTES: 20 * 1024 * 1024,   // 20 MB
-  DEFAULT_MAX_SIZE_BYTES: 5 * 1024 * 1024, // 5 MB
-} as const;
 
 const ALLOWED_MIME_TYPES = new Set([
   'image/png',

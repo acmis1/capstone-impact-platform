@@ -1,8 +1,10 @@
+import 'server-only';
+
 import { createHash } from 'crypto';
 import ExcelJS from 'exceljs';
 import { normalizeParticipantContactEmail } from '../domain/participantContactEmail';
 import type { BrowserImportIssue } from './browserImportPreviewContract';
-import type { AdminReferenceIntent } from './browserImportCommitIntentContract';
+import type { AdminReferenceIntent } from './adminReferenceSharedContract';
 import {
   ADMIN_REFERENCE_LIMITS,
   CANONICAL_MATCHABLE_FIELDS,

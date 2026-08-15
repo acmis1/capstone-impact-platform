@@ -13,8 +13,8 @@ import {
 import {
   BrowserImportMetadataStageErrorCode,
   BrowserImportMetadataStageResponse,
-  computeCanonicalIntentHash,
 } from './browserImportMetadataStageContract';
+import { computeCanonicalIntentHash } from './browserImportMetadataStageServer';
 import { BrowserImportServerAnalysis } from './parseBrowserImportPreview';
 import { validateFolderDerivedPublicId } from './publicIdValidation';
 import { normalizeParticipantContactEmail } from '../domain/participantContactEmail';

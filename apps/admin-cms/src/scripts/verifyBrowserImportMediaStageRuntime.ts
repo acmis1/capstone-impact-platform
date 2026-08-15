@@ -6,7 +6,7 @@ import { getStagingBuckets } from '../lib/supabase/buckets';
 import { analyzeBrowserImportServer } from '../import/parseBrowserImportPreview';
 import { stageBrowserImportMetadata } from '../import/stageBrowserImportMetadata';
 import { stageBrowserImportMedia, MediaFileToStage } from '../import/stageBrowserImportMedia';
-import { computeCanonicalIntentHash } from '../import/browserImportMetadataStageContract';
+import { computeCanonicalIntentHash } from '../import/browserImportMetadataStageServer';
 import { generateUploadKey } from '../import/browserSelection';
 import { AuthenticatedAdminContext } from '../auth/authTypes';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';

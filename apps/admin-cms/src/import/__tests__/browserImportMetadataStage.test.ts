@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { POST as rawStagePOST } from '../../app/api/imports/stage-metadata/route';
 import {
   computeCanonicalIntentHash,
-} from '../browserImportMetadataStageContract';
+} from '../browserImportMetadataStageServer';
 import { SelectionManifest } from '../browserImportPreviewContract';
 import { generateUploadKey } from '../browserSelection';
 import type { createSupabaseAdminClientCore } from '../../lib/supabase/adminCore';
