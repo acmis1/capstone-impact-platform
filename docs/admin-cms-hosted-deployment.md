@@ -8,16 +8,18 @@ This document defines the deployment contract, service architecture, environment
 
 The Capstone platform enforces strict architectural and operational isolation between the feasibility Prototype and the production-oriented Admin/CMS application:
 
-| Attribute | Prototype Service | Admin/CMS Service |
-| :--- | :--- | :--- |
-| **Directory** | `Prototype/` | `apps/admin-cms/` |
-| **Service Role** | Historical feasibility & public Duda presentation support | Authenticated school administration & CMS source of truth |
-| **Supabase Instance** | Prototype recovery project | Isolated staging project (`capstone-admin-cms-staging-2026`) |
-| **Hosting Service** | Existing Render static/web service | **Separate** Render/Cloud Web Service |
-| **Database Mutations** | Prohibited | Controlled via 7-gate reconciliation governance |
+| Attribute | Prototype Service | Active Admin/CMS Staging | Paused Admin/CMS Fallback |
+| :--- | :--- | :--- | :--- |
+| **Directory** | `Prototype/` | `apps/admin-cms/` | `apps/admin-cms/` (historical) |
+| **Service Role** | Historical feasibility & public Duda presentation support | Authenticated school administration & CMS source of truth | Temporary rollback & historical evidence fallback |
+| **Supabase Instance** | `capstone-prototype-recovery-2026` (`bpnmrgmzgbisvykppuwp`) | `capstone-admin-cms-staging-v2-2026` (`sqkpceeltukbzxpsvinb`) | `capstone-admin-cms-staging-2026` (`fewcbklmbgzglfgedtvt`) |
+| **Instance Status** | Active / Separate (Never touch) | **ACTIVE_HEALTHY** (Active Target) | **PAUSED / INACTIVE** (Do not modify) |
+| **Region** | `ap-southeast-1` | `ap-southeast-1` | `ap-southeast-1` |
+| **Hosting Service** | Existing Render static/web service | **Separate** Render/Cloud Web Service | — |
+| **Database State** | Prohibited from mutation | Clean 26-migration schema (0001–0026) | Historical 6-migration manual baseline |
 
 > [!IMPORTANT]
-> The existing Render service configured for `Prototype/` must **NEVER** be repurposed or pointed to `apps/admin-cms`. The Admin/CMS requires an independent web service with its own environment variables and deployment pipeline.
+> The existing Render service configured for `Prototype/` must **NEVER** be repurposed or pointed to `apps/admin-cms`. The Admin/CMS requires an independent web service with its own environment variables and deployment pipeline. Furthermore, the Prototype Supabase project (`capstone-prototype-recovery-2026`) is completely isolated and must never be targeted by Admin/CMS operations.
 
 ---
 
@@ -44,7 +46,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 
 | Variable | Required | Description |
 | :--- | :--- | :--- |
-| `NEXT_PUBLIC_SUPABASE_URL` | **Yes** | Secure HTTPS endpoint of the isolated staging Supabase instance (e.g. `https://<staging-ref>.supabase.co`). |
+| `NEXT_PUBLIC_SUPABASE_URL` | **Yes** | Secure HTTPS endpoint of the active staging Supabase instance (e.g. `https://sqkpceeltukbzxpsvinb.supabase.co`). |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | **Yes** | Modern publishable API key (or legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY`). |
 
 ### B. Required Server-Only Variables
@@ -63,8 +65,9 @@ The Capstone platform enforces strict architectural and operational isolation be
 
 | Variable | Value | Description |
 | :--- | :--- | :--- |
-| `CAPSTONE_RUNTIME_ENV` | `staging` | Runtime identity flag. |
-| `CAPSTONE_EXPECTED_SUPABASE_HOST` | `<staging-ref>.supabase.co` | Expected hostname used to verify target identity match. |
+| `CAPSTONE_RUNTIME_ENV` | `staging` | Runtime identity flag ensuring staging execution context. |
+| `CAPSTONE_EXPECTED_SUPABASE_HOST` | `sqkpceeltukbzxpsvinb.supabase.co` | Technical exact-host target boundary. Mismatches block client creation. |
+| `CAPSTONE_STAGING_MUTATION_CONFIRMATION` | `capstone-admin-cms-staging-v2-2026` | Environment-portable, non-secret human mutation acknowledgement label. Configured per environment without code changes; required by `--confirm-staging=<label>`. Does not replace technical hostname verification. |
 
 ### D. Optional Features (Default: Fail-Closed / Disabled)
 *The core Admin/CMS workflow functions completely without external AI or email services. All optional integrations fail closed by default:*
@@ -80,7 +83,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 
 ## 4. Synthetic Stakeholder Demo Workflow
 
-Following hosted staging database reconciliation, stakeholders can execute the complete end-to-end management workflow using synthetic test data:
+Following hosted staging database setup and administrator linking, stakeholders can execute the complete end-to-end management workflow using synthetic test data:
 
 ```mermaid
 sequenceDiagram
@@ -90,53 +93,75 @@ sequenceDiagram
     participant CMS as Admin/CMS Service
     participant DB as Hosted Supabase
 
-    Staff->>CMS: 1. Sign in via /login (Synthetic credentials)
+    Staff->>CMS: 1. Sign in via /login (Verified admin account)
     Staff->>CMS: 2. Import synthetic project package (.zip / folder)
     Staff->>CMS: 3. Cross-check against Admin Excel reference dataset
-    Staff->>CMS: 4. Stage & verify private draft media
+    Staff->>CMS: 4. Stage & verify private draft media (alt text & accessibility)
     Staff->>CMS: 5. Submit batch projects to review
-    Staff->>CMS: 6. Review & approve metadata (Reviewer role)
-    Staff->>CMS: 7. Generate secure participant preview link
-    Participant->>CMS: 8. Confirm exact preview version
-    Staff->>CMS: 9. Grant final project approval
-    Staff->>CMS: 10. Prepare publication snapshot
+    Staff->>CMS: 6. Review & approve metadata (Project status -> approved)
+    Staff->>CMS: 7. Generate secure participant preview link (Approved version)
+    Participant->>CMS: 8. Access preview URL & confirm exact version
+    Staff->>CMS: 9. Execute publication readiness verification
+    Staff->>CMS: 10. Prepare publication snapshot & compile public feed
 ```
 
 1. **Staff Sign-In**: Authenticate using the verified initial administrator account at `/login`.
 2. **Package Ingestion**: Upload a synthetic project folder package containing `project-details.xlsx`, poster image, poster PDF, and snapshot image.
 3. **Admin Reference Reconciliation**: Cross-check imported metadata against the synthetic Admin Reference workbook to verify reconciliation logic.
-4. **Media Staging**: Stage private draft assets; verify image dimensions and alt text requirements.
+4. **Media Staging**: Stage private draft assets; verify image dimensions, poster full text, poster accessibility text, and snapshot image alt text.
 5. **Batch Submission**: Submit batch to review; database enforces accessibility validation gates.
-6. **Review Action**: As a reviewer, inspect project fields and transition status to `approved`.
-7. **Participant Preview**: Generate a secure preview link (token hash persisted; raw token shown once).
-8. **Participant Confirmation**: Access preview URL and submit confirmation for the exact version.
-9. **Final Approval**: Review confirmed status and grant approval.
-10. **Publication Preparation**: Compile and validate public feed snapshot. *(Note: Live public Duda cutover remains separately governed).*
+6. **Review & Approve**: As a reviewer, inspect project fields and transition project status to `approved`.
+7. **Participant Preview Generation**: Generate a secure preview link for the approved project version (token hash persisted; raw token shown once).
+8. **Participant Confirmation**: Participant accesses preview URL and submits confirmation for the exact approved version.
+9. **Publication Readiness Check**: Execute `get_project_publication_readiness` verification (the database contract requires the project to already be in `approved` status, with confirmed preview evidence and complete accessibility texts).
+10. **Publication Preparation**: Compile and validate public feed snapshot via the controlled publication workflow.
+
+> [!NOTE]
+> There is no ordinary second "final approval" step after participant confirmation. The domain model and database contract require the project to be reviewed and transitioned to `approved` status prior to preview generation and publication readiness checks.
+
+### Publication Safety Boundary
+Stakeholder staging testing does **NOT** automatically authorize:
+- Live Duda platform mutation or content publishing;
+- Production or public-feed cutover;
+- Outgoing email delivery to real participant addresses.
+
+Controlled staging preparation and synthetic demonstration remain strictly isolated from live public systems.
 
 ---
 
-## 5. Next Operator Decision Paths
+## 5. Current Clean-Staging Lifecycle State vs Historical Reconciliation
 
-Before hosted deployment activation, the operator must execute the read-only deployment readiness checker:
+### A. Current v2 Clean Staging Environment State
+The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpceeltukbzxpsvinb`) was initialized via clean baseline migration deployment:
+- **Migration Inventory**: Exactly 26 migrations (`0001` through `0026`) applied sequentially and recorded in `supabase_migrations.schema_migrations`.
+- **Relational Schema**: All 23 public application tables and 42 service-role application RPC signatures across 41 names verified.
+- **Storage Buckets**: All 3 buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) created and configured; 0 storage objects.
+- **Administrator Identity**: Initial staging administrator bootstrap completed; single Auth identity linked to `admin_users` profile with verified `admin` role in `user_roles` (`check:admin-auth` classification: `READY_FOR_MANUAL_LOGIN_TEST`).
+- **Next Lifecycle Action**: Standalone Admin/CMS hosted web service deployment and manual authenticated login verification.
+
+Operators should **NOT** run `supabase migration repair` or replay migrations against this clean v2 environment.
+
+### B. Legacy Reconciliation Reference
+The procedures detailed in the [staging reconciliation runbook](../infra/supabase/staging-reconciliation-runbook.md) were designed specifically for diagnosing and reconciling the historical drifted staging instance (`fewcbklmbgzglfgedtvt`). That documentation is preserved as an audit trail and fallback procedure, but does not apply to routine maintenance of the clean v2 environment.
+
+---
+
+## 6. Pre-Deployment Readiness Verification
+
+Before hosted deployment activation, the operator can execute the read-only deployment readiness checker:
 
 ```bash
 npm run check:admin-deployment-readiness
 ```
 
-Based on the output classification, select the appropriate path:
+And verify Auth readiness:
 
-### PATH A: Manual Evidence Completion (`MANUAL_EVIDENCE_REQUIRED`)
-- **Condition**: The automated GET/HEAD inspection finds all 23 public application tables, all 41 application RPC names represented by 42 authoritative signatures, and all 3 buckets, with no visible unexpected public relations. The Data API cannot read `supabase_migrations.schema_migrations`, and PostgREST OpenAPI may collapse overloads, so exact migrations, signatures, constraints, and grants remain unverified.
-- **Next Step**: Complete read-only Gates 3 and 4 in the [staging reconciliation runbook](../infra/supabase/staging-reconciliation-runbook.md). Only their combined evidence can support a human `READY_FOR_MUTATION_DECISION`.
+```bash
+npm run check:admin-auth
+```
 
-### PATH B: Full Match (`READY_FOR_MUTATION_DECISION`)
-- **Condition**: All automated evidence plus governed Gate 3/4 evidence proves all 26 migrations, 23 tables, 42 RPC signatures, exact constraints/grants, and no unexpected schema objects.
-- **Next Step**: Authorize deployment of the Admin/CMS web service.
-
-### PATH C: Migration Reconciliation Required (`RECONCILIATION_REQUIRED`)
-- **Condition**: Hosted database has baseline migrations 0001–0006 applied, but tracking history is unpopulated or forward migrations 0007–0026 are pending.
-- **Next Step**: Follow [staging-reconciliation-runbook.md](../infra/supabase/staging-reconciliation-runbook.md) Gate 6 to repair baseline tracking and apply forward migrations under explicit authorization.
-
-### PATH D: Schema Drift or Guard Failure (`DRIFT_REQUIRES_REVIEW` or `BLOCKED`)
-- **Condition**: Hostname mismatch, conflicting schema evidence, or OpenAPI-visible unexpected public relations.
-- **Next Step**: STOP immediately. Do NOT run `db push`. Formulate an explicit schema remediation plan.
+Expected readiness output on the clean v2 staging environment:
+- `TARGET_IDENTITY_MATCH = YES`
+- `SCHEMA_BASELINE = MATCH`
+- `check:admin-auth` classification: `READY_FOR_MANUAL_LOGIN_TEST`
+- All 23 public tables, 41 RPC names (42 signatures), and 3 Storage buckets detected.
