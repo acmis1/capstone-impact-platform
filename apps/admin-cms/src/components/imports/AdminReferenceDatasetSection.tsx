@@ -6,7 +6,7 @@ import {
   CANONICAL_COMPARABLE_FIELDS,
   AdminReferenceInspectionResult,
   AdminReferenceMappingConfig,
-} from '../../import/adminReferenceReconciliation';
+} from '../../import/adminReferenceSharedContract';
 
 interface AdminReferenceDatasetSectionProps {
   onMappingConfigured: (data: {
