@@ -22,7 +22,7 @@ import { runBrowserImportPreparation } from '../../import/browserImportPreparati
 import { runBrowserImportMetadataStaging } from '../../import/browserImportStagingController';
 import { runBrowserImportMediaStaging } from '../../import/browserImportMediaStagingController';
 import { AdminReferenceDatasetSection } from './AdminReferenceDatasetSection';
-import type { AdminReferenceMappingConfig } from '../../import/adminReferenceReconciliation';
+import type { AdminReferenceMappingConfig } from '../../import/adminReferenceSharedContract';
 
 export default function BrowserImportPreviewClient() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
