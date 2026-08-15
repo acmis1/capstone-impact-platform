@@ -9,9 +9,9 @@ import {
   reconcilePackagesAgainstAdminReference,
   computeAdminReferenceWorkbookFingerprint,
   AdminReferenceMappingConfig,
-} from '../import/adminReferenceReconciliation';
+} from '../import/adminReferenceReconciliationCore';
 import { analyzeBrowserImportServer } from '../import/parseBrowserImportPreview';
-import { prepareBrowserImportCommitIntent } from '../import/prepareBrowserImportCommitIntent';
+import { prepareBrowserImportCommitIntent } from '../import/prepareBrowserImportCommitIntentCore';
 import { stageBrowserImportMetadata } from '../import/stageBrowserImportMetadata';
 import { BrowserImportCommitIntent } from '../import/browserImportCommitIntentContract';
 import { generateUploadKey } from '../import/browserSelection';

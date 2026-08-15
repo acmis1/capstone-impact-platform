@@ -8,6 +8,20 @@ const ENTRY_PATH = path.resolve(
   '../../components/imports/BrowserImportPreviewClient.tsx'
 );
 
+const STANDALONE_RUNTIME_ENTRY_PATHS = [
+  'verifyBrowserImportMetadataStageRuntime.ts',
+  'verifyAdminExcelReconciliationRuntime.ts',
+  'verifyBrowserImportMediaStageRuntime.ts',
+  'verifyImportBatchReviewSubmitRuntime.ts',
+  'verifyAccessibilityFullTextRuntime.ts',
+  'verifySnapshotImageAltTextRuntime.ts',
+  'verifyParticipantPreviewRuntime.ts',
+  'verifyPublicationReadinessRuntime.ts',
+  'verifyPublicationPreparationRuntime.ts',
+  'verifyControlledPublicationRuntime.ts',
+  'verifyControlledPublicRemovalRuntime.ts',
+].map((fileName) => path.resolve(__dirname, '../../scripts', fileName));
+
 const PROHIBITED_EXTERNAL_IMPORTS = new Set([
   'crypto',
   'node:crypto',
@@ -20,9 +34,11 @@ const PROHIBITED_EXTERNAL_IMPORTS = new Set([
 ]);
 
 const PROHIBITED_LOCAL_MODULES = [
-  /(?:^|\/)adminReferenceReconciliation$/,
-  /(?:^|\/)prepareBrowserImportCommitIntent$/,
-  /(?:^|\/)mediaValidation$/,
+  /(?:^|\/)adminReferenceReconciliation(?:Core)?$/,
+  /(?:^|\/)prepareBrowserImportCommitIntent(?:Core)?$/,
+  /(?:^|\/)browserImportMetadataStageServer(?:Core)?$/,
+  /(?:^|\/)browserImportMediaStageServer(?:Core)?$/,
+  /(?:^|\/)mediaValidation(?:Core)?$/,
   /\.server$/,
   /(?:^|\/)repositories\//,
   /(?:^|\/)lib\/supabase\/(?:admin|adminCore|server)$/,
@@ -152,6 +168,43 @@ function auditClientRuntimeGraph(entryPath: string): {
   return { visited, violations };
 }
 
+function auditStandaloneRuntimeGraph(entryPath: string): string[] {
+  const visited = new Set<string>();
+  const violations: string[] = [];
+
+  const walk = (filePath: string, chain: string[]) => {
+    const normalizedPath = path.normalize(filePath);
+    if (visited.has(normalizedPath)) return;
+    visited.add(normalizedPath);
+
+    const sourceText = fs.readFileSync(normalizedPath, 'utf8');
+    const sourceFile = ts.createSourceFile(
+      normalizedPath,
+      sourceText,
+      ts.ScriptTarget.Latest,
+      true,
+      normalizedPath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+    );
+
+    for (const specifier of collectRuntimeSpecifiers(sourceFile)) {
+      if (!specifier.startsWith('.')) {
+        if (specifier === 'server-only') {
+          violations.push(`${[...chain, specifier].join(' -> ')} (Next-only guard)`);
+        }
+        continue;
+      }
+
+      const resolvedPath = resolveLocalModule(normalizedPath, specifier);
+      if (resolvedPath) {
+        walk(resolvedPath, [...chain, displayName(resolvedPath)]);
+      }
+    }
+  };
+
+  walk(entryPath, [displayName(entryPath)]);
+  return violations;
+}
+
 describe('BrowserImportPreviewClient transitive runtime boundary', () => {
   it('contains only browser-safe local runtime modules', () => {
     const result = auditClientRuntimeGraph(ENTRY_PATH);
@@ -161,6 +214,17 @@ describe('BrowserImportPreviewClient transitive runtime boundary', () => {
       result.violations,
       result.violations.length > 0
         ? `Server-only dependencies are reachable from the client:\n${result.violations.join('\n')}`
+        : undefined
+    ).toEqual([]);
+  });
+
+  it('keeps standalone runtime verifier graphs free of Next-only guards', () => {
+    const violations = STANDALONE_RUNTIME_ENTRY_PATHS.flatMap(auditStandaloneRuntimeGraph);
+
+    expect(
+      violations,
+      violations.length > 0
+        ? `Next-only guards are reachable from standalone runtime verifiers:\n${violations.join('\n')}`
         : undefined
     ).toEqual([]);
   });
