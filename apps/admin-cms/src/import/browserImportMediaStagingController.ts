@@ -12,6 +12,7 @@ import type {
   BrowserImportMediaStageErrorCode,
   BrowserImportMediaStageResponse,
 } from './browserImportMediaStageContract';
+import type { AdminReferenceMappingConfig } from './adminReferenceSharedContract';
 
 export interface BrowserImportMediaStagingLock {
   current: boolean;
@@ -25,6 +26,8 @@ export interface RunBrowserImportMediaStagingParams {
   manifestCache: SelectionManifest | null;
   selectedPackagePaths: string[];
   selectedFiles: File[];
+  adminReferenceFile?: File | null;
+  adminReferenceMappingConfig?: AdminReferenceMappingConfig | null;
   setIsCompletingMedia: (val: boolean) => void;
   setMediaCompleteError: (error: string | null) => void;
   setMediaCompleteResult: (result: {
@@ -87,6 +90,8 @@ export async function runBrowserImportMediaStaging(
     manifestCache,
     selectedPackagePaths,
     selectedFiles,
+    adminReferenceFile,
+    adminReferenceMappingConfig,
     setIsCompletingMedia,
     setMediaCompleteError,
     setMediaCompleteResult,
@@ -107,6 +112,11 @@ export async function runBrowserImportMediaStaging(
     formData.append('batchId', batchId);
     formData.append('manifest', JSON.stringify(manifestCache));
     formData.append('intent', JSON.stringify(preparedIntent));
+
+    if (adminReferenceFile && adminReferenceMappingConfig) {
+      formData.append('referenceFile', adminReferenceFile);
+      formData.append('adminReferenceMapping', JSON.stringify(adminReferenceMappingConfig));
+    }
 
     for (const file of selectedFiles) {
       const relPath = file.webkitRelativePath || file.name;
