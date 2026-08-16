@@ -1,6 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
+import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
+import { Label } from '../ui/label';
+import { Alert } from '../ui/alert';
+import { CheckCircle2 } from 'lucide-react';
 
 interface StagingReviewActionsProps {
   publicId: string;
@@ -16,8 +21,8 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
 
   if (allowedActions.length === 0 || currentStatus.toLowerCase() === 'deleted') {
     return (
-      <div style={{ color: '#9CA3AF', fontSize: '0.85rem', fontStyle: 'italic' }}>
-        No administrative staging review actions are allowed from current status &quot;{currentStatus}&quot;.
+      <div className="text-xs text-muted-foreground italic">
+        No administrative review actions are allowed from current status &quot;{currentStatus}&quot;.
       </div>
     );
   }
@@ -31,18 +36,18 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
       const response = await fetch(`/api/projects/${publicId}/review-action`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           action,
-          comments: comments.trim() || undefined
-        })
+          comments: comments.trim() || undefined,
+        }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({ success: false }));
 
       if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Staging transition failed');
+        throw new Error('Status transition could not be completed.');
       }
 
       setSuccess(true);
@@ -51,121 +56,81 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
       setTimeout(() => {
         window.location.reload();
       }, 1000);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'An unexpected error occurred during status transition.';
-      setError(message);
+    } catch {
+      setError('Status transition could not be completed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const getButtonStyles = (action: string) => {
-    let backgroundColor = '#4B5563';
-    if (action === 'approve') backgroundColor = '#10B981';
-    if (action === 'request_changes') backgroundColor = '#EF4444';
-    if (action === 'archive') backgroundColor = '#6B7280';
+  const getActionButtonVariant = (action: string): 'default' | 'destructive' | 'outline' | 'secondary' => {
+    if (action === 'approve') return 'default';
+    if (action === 'request_changes') return 'destructive';
+    if (action === 'archive') return 'secondary';
+    return 'outline';
+  };
 
-    return {
-      backgroundColor,
-      color: '#FFFFFF',
-      border: 'none',
-      padding: '0.5rem 1rem',
-      borderRadius: '6px',
-      cursor: 'pointer',
-      fontWeight: 'bold',
-      fontSize: '0.85rem',
-      marginRight: '0.75rem',
-      opacity: loading ? 0.6 : 1,
-      transition: 'opacity 0.2s',
-    };
+  const formatActionLabel = (action: string) => {
+    if (action === 'approve') return 'Approve project';
+    if (action === 'request_changes') return 'Request changes';
+    if (action === 'archive') return 'Archive project';
+    return action.replace('_', ' ');
   };
 
   return (
-    <div style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
-      
-      {/* Disclaimer details */}
-      <div style={{
-        fontSize: '0.8rem',
-        color: '#9CA3AF',
-        backgroundColor: '#0F172A',
-        borderRadius: '6px',
-        padding: '0.5rem 0.75rem',
-        border: '1px solid rgba(255, 255, 255, 0.05)',
-        marginBottom: '1rem',
-        lineHeight: '1.4'
-      }}>
-        💡 <strong>Review Action Scope:</strong> These generic review transitions do not rewrite the showcase feed. Published projects require the separate controlled Local archive workflow. Hosted publication and Duda remain disconnected.
+    <div className="flex flex-col gap-4 text-xs sm:text-sm">
+      {/* Review Scope note */}
+      <div className="p-3 rounded-md bg-muted/50 border border-border text-xs text-muted-foreground leading-relaxed">
+        <strong>Review scope:</strong> Standard review actions update the project lifecycle status in the test environment. Published projects require the controlled Local archive workflow. Hosted public feeds and external integrations remain disconnected.
       </div>
 
       {success && (
-        <div style={{
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          color: '#10B981',
-          border: '1px solid rgba(16, 185, 129, 0.2)',
-          borderRadius: '6px',
-          padding: '0.5rem 0.75rem',
-          fontSize: '0.85rem',
-          fontWeight: 'bold',
-          marginBottom: '1rem'
-        }}>
-          ✅ Transition Successful! Reloading staging details...
+        <div className="p-3 rounded-md bg-success/10 border border-success/30 text-success text-xs font-semibold flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>Status transition successful. Refreshing project details…</span>
         </div>
       )}
 
       {error && (
-        <div style={{
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          color: '#EF4444',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
-          borderRadius: '6px',
-          padding: '0.5rem 0.75rem',
-          fontSize: '0.85rem',
-          fontWeight: 'bold',
-          marginBottom: '1rem'
-        }}>
-          ❌ Error: {error}
-        </div>
+        <Alert
+          variant="destructive"
+          title="Review Action Failed"
+          description={error}
+        />
       )}
 
-      {/* Comment Input */}
-      <div style={{ marginBottom: '1rem' }}>
-        <label style={{ display: 'block', fontSize: '0.8rem', color: '#9CA3AF', marginBottom: '0.25rem' }}>
-          Staging Action Comments / Audit Reason:
-        </label>
-        <textarea
+      {/* Review Comment Input */}
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="review-action-comments" className="text-xs font-medium text-foreground">
+          Review comments:
+        </Label>
+        <Textarea
+          id="review-action-comments"
           rows={3}
           value={comments}
           onChange={(e) => setComments(e.target.value)}
-          placeholder="e.g. Approved layout configuration; Poster document satisfies schema criteria; Staging archival test"
+          placeholder="Add optional notes or instructions regarding this review decision…"
           disabled={loading || success}
-          style={{
-            width: '100%',
-            backgroundColor: '#0F172A',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '6px',
-            color: '#FFFFFF',
-            padding: '0.5rem',
-            fontFamily: 'inherit',
-            fontSize: '0.85rem',
-            resize: 'vertical'
-          }}
+          className="text-xs"
         />
       </div>
 
-      {/* Button Controls */}
-      <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+      {/* Action Buttons */}
+      <div className="flex flex-wrap items-center gap-2.5 pt-1">
         {allowedActions.map((action) => (
-          <button
+          <Button
             key={action}
+            type="button"
+            variant={getActionButtonVariant(action)}
+            size="sm"
             onClick={() => handleAction(action)}
             disabled={loading || success}
-            style={getButtonStyles(action)}
+            className="font-semibold capitalize"
           >
-            {action.replace('_', ' ').toUpperCase()}
-          </button>
+            {formatActionLabel(action)}
+          </Button>
         ))}
       </div>
-
     </div>
   );
 }

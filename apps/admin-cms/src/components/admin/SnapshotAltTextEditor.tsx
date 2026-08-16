@@ -1,9 +1,13 @@
 'use client';
 
 import React, { useId, useState } from 'react';
-
+import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
+import { Label } from '../ui/label';
+import { Alert } from '../ui/alert';
 import { ACCESSIBLE_CONTENT_LIMITS } from '../../domain/accessibleContent';
 import type { SnapshotAltTextActionResult } from '../../projects/snapshotAltText';
+import { CheckCircle2, AlertTriangle, Edit3, Plus } from 'lucide-react';
 
 interface SnapshotAltTextEditorProps {
   publicId: string;
@@ -81,66 +85,108 @@ export function SnapshotAltTextEditor({
   }
 
   return (
-    <div style={{ marginTop: '0.75rem' }}>
-      <h4 style={{ margin: '0 0 0.25rem', fontSize: '0.85rem', color: '#9CA3AF', fontWeight: 'normal' }}>
-        Snapshot image alt text
-      </h4>
+    <div className="flex flex-col gap-2.5 text-xs sm:text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
+          Snapshot image alt text
+        </h4>
+        {!isEditing && canEdit && !isLockedByStatus && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsEditing(true)}
+            className="h-7 text-xs font-medium"
+          >
+            {savedAltText === '' ? (
+              <>
+                <Plus className="h-3 w-3 mr-1" aria-hidden="true" />
+                Add alt text
+              </>
+            ) : (
+              <>
+                <Edit3 className="h-3 w-3 mr-1" aria-hidden="true" />
+                Edit alt text
+              </>
+            )}
+          </Button>
+        )}
+      </div>
 
       {!isEditing && (
-        <>
+        <div className="flex flex-col gap-2">
           {savedAltText === '' ? (
-            <p style={{ margin: '0 0 0.5rem', color: '#F59E0B' }} role="status">
-              Snapshot alt text missing. This project cannot be submitted for review, approved, previewed
-              by participants, or published until it is provided.
-            </p>
+            <div className="p-3 rounded-md bg-warning/10 border border-warning/30 text-warning text-xs flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+              <span>
+                Snapshot alt text missing. This project cannot be submitted for review, approved, previewed by participants, or published until it is provided.
+              </span>
+            </div>
           ) : (
-            <p style={{ margin: '0 0 0.5rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{savedAltText}</p>
+            <p className="text-foreground text-xs leading-relaxed whitespace-pre-wrap break-words bg-muted/30 p-3 rounded-md border border-border">
+              {savedAltText}
+            </p>
           )}
 
-          {canEdit && !isLockedByStatus && (
-            <button type="button" onClick={() => setIsEditing(true)}>
-              {savedAltText === '' ? 'Add alt text' : 'Edit alt text'}
-            </button>
-          )}
           {canEdit && isLockedByStatus && (
-            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9CA3AF' }}>{lockedReason}</p>
+            <p className="text-xs text-muted-foreground">{lockedReason}</p>
           )}
-        </>
+        </div>
       )}
 
       {isEditing && (
-        <div>
-          <label htmlFor={fieldId} style={{ display: 'block', fontSize: '0.8rem', marginBottom: '0.25rem' }}>
+        <div className="flex flex-col gap-2.5 p-3.5 rounded-lg bg-muted/40 border border-border">
+          <Label htmlFor={fieldId} className="text-xs font-medium text-foreground">
             Describe the meaningful content of the snapshot image
-          </label>
-          <textarea
+          </Label>
+          <Textarea
             id={fieldId}
             value={draft}
             rows={4}
-            maxLength={undefined}
             disabled={isSaving}
             aria-describedby={`${fieldId}-help`}
             aria-invalid={errorMessage ? true : undefined}
             onChange={(event) => setDraft(event.target.value)}
-            style={{ width: '100%', fontFamily: 'inherit', fontSize: '0.85rem' }}
+            className="text-xs font-normal"
           />
-          <p id={`${fieldId}-help`} style={{ margin: '0.25rem 0', fontSize: '0.75rem', color: '#9CA3AF' }}>
+          <p id={`${fieldId}-help`} className="text-[11px] text-muted-foreground">
             {`Up to ${ACCESSIBLE_CONTENT_LIMITS.snapshotAltText.toLocaleString('en-US')} characters. Currently ${draft.trim().length.toLocaleString('en-US')}.`}
           </p>
-          <button type="button" onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save alt text'}
-          </button>
-          <button type="button" onClick={handleCancel} disabled={isSaving}>
-            Cancel
-          </button>
+          <div className="flex items-center gap-2 pt-1">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="font-semibold"
+            >
+              {isSaving ? 'Saving…' : 'Save alt text'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCancel}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+          </div>
         </div>
       )}
 
       {errorMessage && (
-        <p role="alert" style={{ margin: '0.5rem 0 0', color: '#F87171' }}>{errorMessage}</p>
+        <Alert
+          variant="destructive"
+          title="Save Failed"
+          description={errorMessage}
+        />
       )}
       {statusMessage && !errorMessage && (
-        <p role="status" style={{ margin: '0.5rem 0 0', color: '#10B981' }}>{statusMessage}</p>
+        <div className="p-2.5 rounded-md bg-success/10 border border-success/30 text-success text-xs font-semibold flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{statusMessage}</span>
+        </div>
       )}
     </div>
   );
