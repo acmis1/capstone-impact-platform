@@ -57,12 +57,12 @@ describe('ParticipantPreviewPanel core workflow', () => {
         responseState={{
           type: 'correction_requested',
           requestedAt: '2026-08-16T09:00:00.000Z',
-          comment: 'Please update the student team names.',
+          comment: 'Please update the participant names.',
         }}
         notification={{
           kind: 'initial',
           status: 'sent',
-          recipient: 'student.lead@example.edu',
+          recipient: 'participant.lead@example.edu',
           requestedAt: '2026-08-16T08:00:00.000Z',
           sentAt: '2026-08-16T08:00:05.000Z',
           failureCode: null,
@@ -74,7 +74,7 @@ describe('ParticipantPreviewPanel core workflow', () => {
             previewExpiresAt: '2026-08-23T08:00:00.000Z',
             status: 'scheduled',
             scheduledFor: '2026-08-20T08:00:00.000Z',
-            recipient: 'student.lead@example.edu',
+            recipient: 'participant.lead@example.edu',
             scheduledBy: 'Admin User',
             currentPreview: true,
             skipReason: null,
@@ -93,11 +93,11 @@ describe('ParticipantPreviewPanel core workflow', () => {
     expect(screen.getByText('Active preview')).toBeTruthy();
     expect(screen.getByText('Participant response')).toBeTruthy();
     expect(screen.getByText(/Correction requested on/i)).toBeTruthy();
-    expect(screen.getByText('Please update the student team names.')).toBeTruthy();
+    expect(screen.getByText('Please update the participant names.')).toBeTruthy();
 
     // Email delivery evidence visible with neutral recipient and sent labels
     expect(screen.getByText(/Recipient:/i)).toBeTruthy();
-    expect(screen.getAllByText('student.lead@example.edu').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('participant.lead@example.edu').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Sent at:/i)).toBeTruthy();
 
     // Reminder history visible
