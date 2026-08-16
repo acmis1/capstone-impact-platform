@@ -9,12 +9,12 @@
 
 1. **Historical Staging Origin**: Initial database DDL statements (`0001` through `0006`) were applied manually to the isolated hosted Supabase instance (`capstone-admin-cms-staging-2026`) using the dashboard SQL Editor.
 2. **Migration Tracking State**: Because early migrations were manually applied, remote migration tracking (`supabase_migrations.schema_migrations`) may be unpopulated or contain legacy version numbers. Running `supabase db push` without prior reconciliation risks re-executing DDL against existing tables (`relation already exists`).
-3. **Repository State vs Hosted State**: Current repository `main` contains **exactly 26 migrations** defining 23 public application tables, 3 storage buckets, and 42 service-role application RPC signatures across 41 names. The separate `canonical_staff_roles(text[])` grant is an internal helper, not an application RPC contract. Hosted staging is documented as having only early baseline migrations (`0001`–`0006`) applied. Migrations `0007` through `0026` are repository/local-only until reconciled.
+3. **Repository State vs Hosted State**: The repository contains **exactly 27 migrations** defining 23 public application tables, 3 storage buckets, and 43 service-role application RPC signatures across 42 names. The separate `canonical_staff_roles(text[])` grant is an internal helper, not an application RPC contract. Hosted evidence predates Migration `0027`; migrations `0007` through `0027` remain repository/local-only until separately authorized reconciliation.
 4. **Scope of Migration Repair**: `supabase migration repair` modifies **only the tracking history table** (`supabase_migrations.schema_migrations`). It does not alter database tables, columns, constraints, or RPC functions.
 
 ---
 
-## 2. Expected Repository State (26 Migrations)
+## 2. Expected Repository State (27 Migrations)
 
 ### A. Authoritative Migration Inventory
 
@@ -46,6 +46,7 @@
 | 24 | `20260813190000_participant_preview_reminder_schedules.sql` | `participant_preview_reminder_schedules` table and reminder scheduling RPCs |
 | 25 | `20260814090000_accessible_full_text_gate.sql` | Mandatory poster full text (`poster_text_public`) and accessibility text (`accessibility_text_public`) gates |
 | 26 | `20260814140000_snapshot_image_alt_text.sql` | Mandatory snapshot image alt text (`media_assets.alt_text_public`) column and gates |
+| 27 | `20260816144917_staging_uat_direct_account_finalization.sql` | Atomic staging UAT staff-account finalization with exact identity ownership and non-admin role enforcement |
 
 ### B. Expected Tables (23 Total)
 - **Core Relational (13)**: `programs`, `disciplines`, `industry_categories`, `admin_users`, `user_roles`, `import_batches`, `projects`, `project_disciplines`, `project_industry_categories`, `media_assets`, `validation_flags`, `approval_records`, `published_snapshots`
@@ -61,7 +62,7 @@
 - `public-feeds`: Schema-validated public JSON showcase feed (`capstones-latest.json`).
 
 ### D. RPC Contract Basis
-The authoritative migration contract contains **42 service-role application RPC signatures across 41 names**. `generate_participant_preview` has distinct five- and six-parameter overloads. Controlled publication and removal each use six phase-specific functions; there is no `execute_controlled_publication` or `execute_controlled_public_removal` function. Later `DROP FUNCTION` statements remove obsolete `update_project_metadata` signatures. The exact names, parameter names, and PostgreSQL types are enforced by `hostedDeploymentReadiness.test.ts` against final migration grants and definitions.
+The authoritative migration contract contains **43 service-role application RPC signatures across 42 names**. `generate_participant_preview` has distinct five- and six-parameter overloads. Controlled publication and removal each use six phase-specific functions; there is no `execute_controlled_publication` or `execute_controlled_public_removal` function. Later `DROP FUNCTION` statements remove obsolete `update_project_metadata` signatures. The exact names, parameter names, and PostgreSQL types are enforced by `hostedDeploymentReadiness.test.ts` against final migration grants and definitions.
 
 ### E. Key Column & Constraint Requirements
 - `projects.participant_contact_email`: Normalized nullable email address (Migration 0023).
@@ -120,7 +121,7 @@ SELECT version, inserted_at
   FROM supabase_migrations.schema_migrations
  ORDER BY version ASC;
 ```
-Record exact count and missing timestamps against the 26 repository migrations.
+Record exact count and missing timestamps against the 27 repository migrations.
 
 The configured Data API exposes `public`, `graphql_public`, and `storage`, not `supabase_migrations`. Therefore the automated checker truthfully reports `MIGRATION_HISTORY_READABLE = NO` and `HOSTED_RECORDED_MIGRATIONS = UNKNOWN`; this separately governed read-only evidence is mandatory and must not be replaced with a `public.schema_migrations` fallback.
 
@@ -129,7 +130,7 @@ Perform read-only inspection of hosted tables, columns, and RPC functions:
 1. Verify presence of 13 core tables vs 10 post-0006 extended tables.
 2. Verify presence of `alt_text_public` column in `media_assets`.
 3. Verify presence of `poster_text_public` and `accessibility_text_public` in `projects`.
-4. Verify all 42 service-role application RPC signatures, including both preview overloads and both six-phase publication/removal protocols.
+4. Verify all 43 service-role application RPC signatures, including both preview overloads, both six-phase publication/removal protocols, and direct UAT staff-account finalization.
 5. Verify exact constraints, grants, Row Level Security, and the absence of unexpected schema objects across all existing tables.
 
 ---
@@ -141,14 +142,14 @@ Evaluate empirical evidence from Gates 1–4 to determine the required path:
 ```mermaid
 flowchart TD
     G[Gates 1-4 Evidence] --> C{Schema & History State}
-    C -->|All 26 migrations applied & history matches| PA[Path A: Ready for Deployment Decision]
-    C -->|0001-0006 applied, 0007-0026 pending| PB[Path B: Phased Reconciliation & Push]
+    C -->|All 27 migrations applied & history matches| PA[Path A: Ready for Deployment Decision]
+    C -->|Hosted baseline predates 0027| PB[Path B: Phased Reconciliation & Push]
     C -->|Unexpected column/table drift| PC[Path C: Drift Resolution Required]
     C -->|Target mismatch or unauthorized| PD[Path D: Stop & Abort]
 ```
 
-- **Path A (Full Match / Ready)**: All 26 migrations, 23 public application tables, 42 service-role application RPC signatures, exact constraints/grants, and absence of unexpected schema objects are verified by combined automated and governed manual evidence. Proceed directly to Gate 7 verification.
-- **Path B (Phased Reconciliation / Staging Standard)**: Hosted staging contains baseline migrations 0001–0006; migration tracking history needs repair for 0001–0006, followed by separately authorized application of forward migrations 0007–0026. Proceed to Gate 6.
+- **Path A (Full Match / Ready)**: All 27 migrations, 23 public application tables, 43 service-role application RPC signatures, exact constraints/grants, and absence of unexpected schema objects are verified by combined automated and governed manual evidence. Proceed directly to Gate 7 verification.
+- **Path B (Phased Reconciliation / Staging Standard)**: Hosted migration evidence predates Migration `0027`; any missing forward migrations through `0027` require separately authorized application. Proceed to Gate 6.
 - **Path C (Drift Detected)**: Unrecognized columns, conflicting constraint names, or manual schema changes detected. STOP. Document drift and formulate an explicit resolution plan.
 - **Path D (Abort)**: Target identity mismatch or lack of operator authorization. STOP immediately.
 
@@ -175,7 +176,7 @@ supabase migration repair --status applied 20260719165118 --workdir infra
 supabase migration repair --status applied 20260719165119 --workdir infra
 ```
 
-#### Step 6.2: Apply Forward Migrations (0007–0026) (Conditional)
+#### Step 6.2: Apply Forward Migrations (0007–0027) (Conditional)
 Once baseline tracking is aligned, apply forward migrations in deterministic sequence:
 ```bash
 # REQUIRES EXPLICIT AUTHORIZATION

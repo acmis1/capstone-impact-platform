@@ -6,12 +6,14 @@ import { ASSIGNABLE_STAFF_ROLES, readStaffDirectory } from '../../../staff/staff
 import { isStaffProvisioningEnabled } from '../../../staff/staffProvisioningEnablement';
 import { StaffDirectoryTable } from '../../../components/admin-staff/StaffDirectoryTable';
 import { StaffInvitationForm } from '../../../components/admin-staff/StaffInvitationForm';
+import { StaffTestAccountForm } from '../../../components/admin-staff/StaffTestAccountForm';
 import { Alert } from '../../../components/ui/alert';
 import { ErrorState } from '../../../components/ui/error-state';
 import type {
   StaffDirectoryEntry,
   StaffProvisioningIncident,
 } from '../../../staff/staffProvisioningRepository';
+import { isVerifiedStagingRuntime } from '../../../security/stagingRuntimeIdentity';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +43,8 @@ export default async function StaffAccessPage() {
   let staff: StaffDirectoryEntry[] = [];
   let incidents: StaffProvisioningIncident[] = [];
   let directoryFailed = false;
+  const provisioningEnabled = isStaffProvisioningEnabled();
+  const testAccountAvailable = provisioningEnabled && isVerifiedStagingRuntime();
 
   try {
     const directory = await readStaffDirectory(createSupabaseAdminClient());
@@ -62,8 +66,10 @@ export default async function StaffAccessPage() {
 
       <StaffInvitationForm
         assignableRoles={ASSIGNABLE_STAFF_ROLES}
-        provisioningEnabled={isStaffProvisioningEnabled()}
+        provisioningEnabled={provisioningEnabled}
       />
+
+      <StaffTestAccountForm available={testAccountAvailable} />
 
       {directoryFailed ? (
         <ErrorState

@@ -1,4 +1,5 @@
 import { getStagingOperation, StagingOperationDefinition } from './stagingOperationRegistry';
+import { assertVerifiedStagingRuntime } from './stagingRuntimeIdentity';
 
 export interface GuardAuthorizationResult {
   isAuthorized: boolean;
@@ -21,11 +22,6 @@ export function isValidMutationConfirmationLabel(label: string): boolean {
   return STAGING_MUTATION_CONFIRMATION_PATTERN.test(label);
 }
 
-function isLoopbackHost(hostname: string): boolean {
-  const norm = hostname.toLowerCase().trim();
-  return norm === 'localhost' || norm === '127.0.0.1' || norm === '::1' || norm === '[::1]';
-}
-
 /**
  * Shared execution guard for shared-staging administrative commands.
  * Enforces strict environment identity, hostname matching, loopback rejection,
@@ -37,48 +33,8 @@ export function validateStagingGuard(options: GuardOptions): GuardAuthorizationR
 
   const operation = getStagingOperation(operationId);
 
-  // 1. Verify runtime environment identity flag
-  const runtimeEnv = customEnv.CAPSTONE_RUNTIME_ENV;
-  if (!runtimeEnv || runtimeEnv.trim().toLowerCase() !== 'staging') {
-    throw new Error('Staging Execution Refused: Environment identity is not configured for staging operations.');
-  }
-
-  // 2. Verify expected target hostname configuration
-  const expectedHost = customEnv.CAPSTONE_EXPECTED_SUPABASE_HOST;
-  if (!expectedHost || !expectedHost.trim()) {
-    throw new Error('Staging Execution Refused: Expected target hostname is not configured.');
-  }
-
-  // 3. Parse target Supabase URL from environment
-  const supabaseUrlRaw = customEnv.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrlRaw || !supabaseUrlRaw.trim()) {
-    throw new Error('Staging Execution Refused: Required Supabase URL variable is missing.');
-  }
-
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(supabaseUrlRaw);
-  } catch {
-    throw new Error('Staging Execution Refused: Invalid target Supabase URL structure.');
-  }
-
-  // 4. Require secure HTTPS protocol for hosted staging
-  if (parsedUrl.protocol !== 'https:') {
-    throw new Error('Staging Execution Refused: Target URL must use secure HTTPS protocol.');
-  }
-
-  // 5. Reject loopback hosts for staging operations
-  if (isLoopbackHost(parsedUrl.hostname)) {
-    throw new Error('Staging Execution Refused: Staging operations cannot target loopback endpoints.');
-  }
-
-  // 6. Compare actual hostname with expected target identity exactly
-  const actualHostNorm = parsedUrl.hostname.toLowerCase().trim();
-  const expectedHostNorm = expectedHost.toLowerCase().trim();
-
-  if (actualHostNorm !== expectedHostNorm) {
-    throw new Error('Staging Execution Refused: Target hostname does not match expected staging target identity.');
-  }
+  // 1-6. Reuse the environment/target identity boundary shared with web-runtime staging features.
+  assertVerifiedStagingRuntime(customEnv);
 
   // 7. Check operation type & mutation flags
   if (operation.type === 'read_only') {
