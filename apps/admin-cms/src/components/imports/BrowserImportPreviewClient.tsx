@@ -412,8 +412,10 @@ export default function BrowserImportPreviewClient() {
     currentStep = 5;
   } else if (previewResult) {
     currentStep = 4;
-  } else if (selectedRootName) {
-    currentStep = adminReferenceData ? 3 : 2;
+  } else if (selectedRootName || adminReferenceData) {
+    currentStep = 3;
+  } else {
+    currentStep = 2;
   }
 
   return (
@@ -430,7 +432,19 @@ export default function BrowserImportPreviewClient() {
         />
       )}
 
-      {/* Step 1 & 2: Folder Selection & Reference Dataset Card */}
+      {/* Step 2: Admin Reference Dataset Section */}
+      <AdminReferenceDatasetSection
+        onMappingConfigured={(data) => {
+          setAdminReferenceData(data);
+          setPreviewResult(null);
+          setManifestCache(null);
+          invalidateStagingResult();
+          updateSelectionState(resetSelectionState());
+        }}
+        disabled={isPreparingOrLocked}
+      />
+
+      {/* Step 3: Choose project folder */}
       <Card className="bg-card border-border shadow-xs">
         <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
           <div className="flex items-center gap-2">
@@ -527,20 +541,6 @@ export default function BrowserImportPreviewClient() {
                 </span>
               </div>
             </div>
-          )}
-
-          {/* Admin Reference Spreadsheet Section */}
-          {selectedRootName && (
-            <AdminReferenceDatasetSection
-              onMappingConfigured={(data) => {
-                setAdminReferenceData(data);
-                setPreviewResult(null);
-                setManifestCache(null);
-                invalidateStagingResult();
-                updateSelectionState(resetSelectionState());
-              }}
-              disabled={isPreparingOrLocked}
-            />
           )}
         </CardContent>
       </Card>
@@ -642,184 +642,10 @@ export default function BrowserImportPreviewClient() {
                   ))}
                 </div>
               )}
-
-              {/* Package Selection Controls & Action Toolbar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-muted/50 border border-border">
-                <div className="flex flex-col gap-0.5">
-                  <div className="text-xs font-semibold text-foreground">
-                    Project selection: {totalSelectedCount} of {previewResult.packageCount} selected ({selectedValidCount} ready, {selectedWarningCount} warning)
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {unacknowledgedWarningCount > 0
-                      ? `${unacknowledgedWarningCount} warning project(s) require acknowledgement before import`
-                      : 'All selected projects are ready for preparation'}
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={handlePrepareImport}
-                  disabled={selectionState.isPreparing || totalSelectedCount === 0}
-                  className="font-semibold shrink-0"
-                >
-                  <CheckSquare className="h-4 w-4 mr-1.5" aria-hidden="true" />
-                  {selectionState.isPreparing ? 'Preparing import…' : 'Prepare import'}
-                </Button>
-              </div>
-
-              {/* Preparation Error Feedback */}
-              {selectionState.preparationErrorCode && (
-                <Alert
-                  variant="destructive"
-                  title="Import Preparation Failed"
-                  description={
-                    selectionState.preparationErrorCode === 'EMPTY_SELECTION'
-                      ? 'At least one project must be selected.'
-                      : selectionState.preparationErrorCode === 'PREVIEW_FINGERPRINT_MISMATCH'
-                        ? 'Project file state has changed. Please re-check the files.'
-                        : 'The selection could not be prepared as an import intent. Please check acknowledgements and try again.'
-                  }
-                />
-              )}
-
-              {/* Step: Prepared Intent Banner */}
-              {selectionState.preparedIntent && (
-                <div className="p-4 rounded-lg bg-success/10 border border-success/30 flex flex-col gap-3 text-xs">
-                  <div className="flex items-center gap-2 text-success font-semibold text-sm">
-                    <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                    <span>Import prepared successfully</span>
-                  </div>
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    The selected project details are verified and ready to be saved as draft records in the test environment.
-                  </p>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-2.5 rounded bg-background border border-border text-[11px]">
-                    <div>
-                      <span className="text-muted-foreground block">Projects to save:</span>
-                      <strong className="text-foreground">{selectionState.preparedIntent.selectedPackagePaths.length}</strong>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block">Files to stage:</span>
-                      <strong className="text-foreground">{selectionState.preparedIntent.fileCount}</strong>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block">Total size:</span>
-                      <strong className="text-foreground">{formatMB(selectionState.preparedIntent.declaredTotalBytes)} MB</strong>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block">Environment:</span>
-                      <strong className="text-foreground">Test / Staging</strong>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-                    <span className="text-[11px] text-muted-foreground">
-                      Saving project details creates draft records. Media files are imported in the next step.
-                    </span>
-
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={handleStageMetadata}
-                      disabled={isStaging || selectionState.isPreparing || isCompletingMedia}
-                      className="font-semibold shrink-0"
-                    >
-                      <Layers className="h-4 w-4 mr-1.5" aria-hidden="true" />
-                      {isStaging ? 'Importing project details…' : 'Import project details'}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Staging Failure Feedback */}
-              {stagingError && (
-                <Alert
-                  variant="destructive"
-                  title="Project Details Import Failed"
-                  description={stagingError}
-                />
-              )}
-
-              {/* Step: Metadata Staged Success & Media Action Card */}
-              {stagedResult && (
-                <div className="p-4 rounded-lg bg-information/10 border border-information/30 flex flex-col gap-4 text-xs">
-                  <div className="flex items-center gap-2 text-information font-semibold text-sm">
-                    <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                    <span>
-                      {stagedResult.result === 'already_staged'
-                        ? 'Project details already saved (Idempotent)'
-                        : 'Project details imported successfully'}
-                    </span>
-                  </div>
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    {stagedResult.projectCount} project draft(s) have been created in the test environment. Complete the import by uploading media files below.
-                  </p>
-
-                  {/* Media Completion Action */}
-                  {!mediaCompleteResult && (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-background border border-border">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-xs font-semibold text-foreground">
-                          Next step: Import media files
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          Uploads poster, PDF, and snapshot images to private draft storage. Nothing is published publicly.
-                        </span>
-                      </div>
-
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleCompleteMedia}
-                        disabled={isCompletingMedia}
-                        className="font-semibold shrink-0"
-                      >
-                        <Upload className="h-4 w-4 mr-1.5" aria-hidden="true" />
-                        {isCompletingMedia ? 'Importing media…' : 'Import media & complete'}
-                      </Button>
-                    </div>
-                  )}
-
-                  {mediaCompleteError && (
-                    <Alert
-                      variant="destructive"
-                      title="Media Import Failed"
-                      description={`${mediaCompleteError} You can safely retry without losing saved project details.`}
-                    />
-                  )}
-                </div>
-              )}
-
-              {/* Step: Import Completed Success Card */}
-              {mediaCompleteResult && (
-                <div className="p-5 rounded-lg bg-success/10 border border-success/30 flex flex-col gap-4 text-xs">
-                  <div className="flex items-center gap-2 text-success font-bold text-base">
-                    <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
-                    <span>
-                      {mediaCompleteResult.result === 'already_completed'
-                        ? 'Import already completed'
-                        : 'Import completed successfully!'}
-                    </span>
-                  </div>
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    All project details and {mediaCompleteResult.mediaAssetCount} media files were imported into private draft storage. Projects remain in draft status for review.
-                  </p>
-
-                  <div className="flex items-center gap-3 pt-1">
-                    <Button asChild className="font-semibold">
-                      <Link href={`/admin/imports/${mediaCompleteResult.batchId}`}>
-                        Open import details
-                        <ArrowRight className="h-4 w-4 ml-1.5" aria-hidden="true" />
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
 
-          {/* Project Packages List Section */}
+          {/* Project Packages List Section (Reviewed BEFORE Prepare Import) */}
           <div className="flex flex-col gap-3">
             <h3 className="text-sm font-semibold text-foreground">
               Projects in this folder ({previewResult.packages.length})
@@ -1061,6 +887,180 @@ export default function BrowserImportPreviewClient() {
               })}
             </div>
           </div>
+
+          {/* Package Selection Controls & Prepare Import Action Toolbar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-muted/50 border border-border">
+            <div className="flex flex-col gap-0.5">
+              <div className="text-xs font-semibold text-foreground">
+                Project selection: {totalSelectedCount} of {previewResult.packageCount} selected ({selectedValidCount} ready, {selectedWarningCount} warning)
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                {unacknowledgedWarningCount > 0
+                  ? `${unacknowledgedWarningCount} warning project(s) require acknowledgement before import`
+                  : 'All selected projects are ready for preparation'}
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              size="sm"
+              onClick={handlePrepareImport}
+              disabled={selectionState.isPreparing || totalSelectedCount === 0}
+              className="font-semibold shrink-0"
+            >
+              <CheckSquare className="h-4 w-4 mr-1.5" aria-hidden="true" />
+              {selectionState.isPreparing ? 'Preparing import…' : 'Prepare import'}
+            </Button>
+          </div>
+
+          {/* Preparation Error Feedback */}
+          {selectionState.preparationErrorCode && (
+            <Alert
+              variant="destructive"
+              title="Import Preparation Failed"
+              description={
+                selectionState.preparationErrorCode === 'EMPTY_SELECTION'
+                  ? 'At least one project must be selected.'
+                  : selectionState.preparationErrorCode === 'PREVIEW_FINGERPRINT_MISMATCH'
+                    ? 'Project file state has changed. Please re-check the files.'
+                    : 'The selection could not be prepared as an import intent. Please check acknowledgements and try again.'
+              }
+            />
+          )}
+
+          {/* Step: Prepared Intent Banner */}
+          {selectionState.preparedIntent && (
+            <div className="p-4 rounded-lg bg-success/10 border border-success/30 flex flex-col gap-3 text-xs">
+              <div className="flex items-center gap-2 text-success font-semibold text-sm">
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                <span>Import prepared successfully</span>
+              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                The selected project details are verified and ready to be saved as draft records in the test environment.
+              </p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-2.5 rounded bg-background border border-border text-[11px]">
+                <div>
+                  <span className="text-muted-foreground block">Projects to save:</span>
+                  <strong className="text-foreground">{selectionState.preparedIntent.selectedPackagePaths.length}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Selected files:</span>
+                  <strong className="text-foreground">{selectionState.preparedIntent.fileCount}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Total size:</span>
+                  <strong className="text-foreground">{formatMB(selectionState.preparedIntent.declaredTotalBytes)} MB</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Environment:</span>
+                  <strong className="text-foreground">Test / Staging</strong>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                <span className="text-[11px] text-muted-foreground">
+                  Saving project details creates draft records. Media files are imported in the next step.
+                </span>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleStageMetadata}
+                  disabled={isStaging || selectionState.isPreparing || isCompletingMedia}
+                  className="font-semibold shrink-0"
+                >
+                  <Layers className="h-4 w-4 mr-1.5" aria-hidden="true" />
+                  {isStaging ? 'Importing project details…' : 'Import project details'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Staging Failure Feedback */}
+          {stagingError && (
+            <Alert
+              variant="destructive"
+              title="Project Details Import Failed"
+              description={stagingError}
+            />
+          )}
+
+          {/* Step: Metadata Staged Success & Media Action Card */}
+          {stagedResult && (
+            <div className="p-4 rounded-lg bg-information/10 border border-information/30 flex flex-col gap-4 text-xs">
+              <div className="flex items-center gap-2 text-information font-semibold text-sm">
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                <span>
+                  {stagedResult.result === 'already_staged'
+                    ? 'Project details already saved (Idempotent)'
+                    : 'Project details imported successfully'}
+                </span>
+              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                {stagedResult.projectCount} project draft(s) have been created in the test environment. Complete the import by uploading media files below.
+              </p>
+
+              {/* Media Completion Action */}
+              {!mediaCompleteResult && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-background border border-border">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs font-semibold text-foreground">
+                      Next step: Import media files
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Uploads poster, PDF, and snapshot images to private draft storage. Nothing is published publicly.
+                    </span>
+                  </div>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleCompleteMedia}
+                    disabled={isCompletingMedia}
+                    className="font-semibold shrink-0"
+                  >
+                    <Upload className="h-4 w-4 mr-1.5" aria-hidden="true" />
+                    {isCompletingMedia ? 'Importing media…' : 'Import media & complete'}
+                  </Button>
+                </div>
+              )}
+
+              {mediaCompleteError && (
+                <Alert
+                  variant="destructive"
+                  title="Media Import Failed"
+                  description={`${mediaCompleteError} You can safely retry without losing saved project details.`}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Step: Import Completed Success Card */}
+          {mediaCompleteResult && (
+            <div className="p-5 rounded-lg bg-success/10 border border-success/30 flex flex-col gap-4 text-xs">
+              <div className="flex items-center gap-2 text-success font-bold text-base">
+                <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+                <span>
+                  {mediaCompleteResult.result === 'already_completed'
+                    ? 'Import already completed'
+                    : 'Import completed successfully!'}
+                </span>
+              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                All project details and {mediaCompleteResult.mediaAssetCount} media files were imported into private draft storage. Projects remain in draft status for review.
+              </p>
+
+              <div className="flex items-center gap-3 pt-1">
+                <Button asChild className="font-semibold">
+                  <Link href={`/admin/imports/${mediaCompleteResult.batchId}`}>
+                    Open import details
+                    <ArrowRight className="h-4 w-4 ml-1.5" aria-hidden="true" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -24,26 +24,48 @@ describe('PR2A Guided Import Workflow Components', () => {
       expect(screen.getByText('Import')).toBeTruthy();
     });
 
-    it('expands and collapses the folder and file preparation guide', () => {
+    it('expands and collapses via semantic button and aria-expanded', () => {
       render(<ImportWorkflowGuide currentStep={1} />);
 
       // Initially guide is collapsed
       expect(screen.queryByText(/Expected Files per Project/i)).toBeNull();
 
-      // Click guide header to expand
-      const guideToggle = screen.getByRole('heading', {
-        name: /Before you start: Folder and file preparation guide/i,
+      // Click semantic toggle button to expand
+      const toggleButton = screen.getByRole('button', {
+        name: /show.*guide/i,
       });
-      fireEvent.click(guideToggle);
+      expect(toggleButton.getAttribute('aria-expanded')).toBe('false');
 
+      fireEvent.click(toggleButton);
+
+      expect(toggleButton.getAttribute('aria-expanded')).toBe('true');
       expect(screen.getByText(/Expected Files per Project/i)).toBeTruthy();
       expect(screen.getByText('project-details.xlsx')).toBeTruthy();
       expect(screen.getByText('poster.png')).toBeTruthy();
       expect(screen.getByText('poster.pdf')).toBeTruthy();
 
       // Click again to collapse
-      fireEvent.click(guideToggle);
+      fireEvent.click(toggleButton);
+      expect(toggleButton.getAttribute('aria-expanded')).toBe('false');
       expect(screen.queryByText(/Expected Files per Project/i)).toBeNull();
+    });
+
+    it('advertises poster.png as PNG only (max 5 MB) without advertising JPEG or WEBP', () => {
+      render(<ImportWorkflowGuide currentStep={1} />);
+
+      // Expand guide
+      const toggleButton = screen.getByRole('button', {
+        name: /show.*guide/i,
+      });
+      fireEvent.click(toggleButton);
+
+      // Verify exact PNG description
+      expect(screen.getByText(/Required poster image \(PNG; maximum 5 MB\)\./i)).toBeTruthy();
+
+      // Verify JPEG and WEBP are not advertised for poster.png or anywhere in the guide
+      const guideContainer = screen.getByText(/Expected Files per Project/i).closest('div');
+      expect(guideContainer?.textContent).not.toContain('JPEG');
+      expect(guideContainer?.textContent).not.toContain('WEBP');
     });
   });
 
@@ -59,12 +81,22 @@ describe('PR2A Guided Import Workflow Components', () => {
     });
   });
 
-  describe('BrowserImportPreviewClient', () => {
-    it('renders folder selection card, guide, and buttons without errors', () => {
+  describe('BrowserImportPreviewClient Presentation Hierarchy', () => {
+    it('renders Admin Reference section before folder selection controls', () => {
       render(<BrowserImportPreviewClient />);
 
-      expect(screen.getByRole('heading', { name: 'Choose project folder' })).toBeTruthy();
+      // Admin Reference heading exists before folder selection
+      const refHeading = screen.getByRole('heading', { name: 'Admin Reference file' });
+      expect(refHeading).toBeTruthy();
+
+      // Folder selection heading and button exist
+      const folderHeading = screen.getByRole('heading', { name: 'Choose project folder' });
+      expect(folderHeading).toBeTruthy();
       expect(screen.getByRole('button', { name: /Choose project folder/i })).toBeTruthy();
+
+      // Verify DOM document order: refHeading precedes folderHeading
+      const position = refHeading.compareDocumentPosition(folderHeading);
+      expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
   });
 });

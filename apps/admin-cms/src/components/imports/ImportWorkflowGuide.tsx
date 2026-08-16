@@ -58,7 +58,7 @@ export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProp
 
       {/* Before You Start Onboarding & Folder Guide Card */}
       <Card className="bg-card border-border shadow-xs">
-        <CardHeader className="py-3 px-4 sm:px-6 cursor-pointer select-none" onClick={() => setIsGuideOpen(!isGuideOpen)}>
+        <CardHeader className="py-3 px-4 sm:px-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <HelpCircle className="h-4 w-4 text-primary" aria-hidden="true" />
@@ -68,8 +68,10 @@ export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProp
             </div>
             <button
               type="button"
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium"
+              onClick={() => setIsGuideOpen((prev) => !prev)}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium focus:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-1.5 py-0.5"
               aria-expanded={isGuideOpen}
+              aria-label={isGuideOpen ? 'Hide folder and file preparation guide' : 'Show folder and file preparation guide'}
             >
               <span>{isGuideOpen ? 'Hide guide' : 'Show guide'}</span>
               {isGuideOpen ? (
@@ -104,7 +106,7 @@ export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProp
                   <ImageIcon className="h-4 w-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
                     <strong className="text-foreground block font-mono text-xs">poster.png</strong>
-                    <span>Required poster image (PNG, JPEG, or WEBP; maximum 5 MB).</span>
+                    <span>Required poster image (PNG; maximum 5 MB).</span>
                   </div>
                 </div>
 
@@ -120,7 +122,7 @@ export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProp
                   <ImageIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
                     <strong className="text-foreground block font-mono text-xs">snapshot-1.png <span className="font-normal text-muted-foreground font-sans">(optional)</span></strong>
-                    <span>Optional showcase image (max 5 MB). When included, image alt text must be provided in the metadata spreadsheet.</span>
+                    <span>Optional showcase image (PNG; maximum 5 MB). When included, image alt text must be provided in the metadata spreadsheet.</span>
                   </div>
                 </div>
               </div>
