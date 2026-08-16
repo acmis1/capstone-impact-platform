@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { escapeHtml, renderParticipantPreviewPage, renderParticipantPreviewUnavailablePage, isSafeExternalPreviewUrl } from '../previews/participantPreviewHtml';
 import { hashPreviewToken } from '../previews/participantPreviewToken';
@@ -572,6 +572,62 @@ describe('Public participant-preview route', () => {
     resolveSpy.mockRestore();
     confirmationSpy.mockRestore();
     correctionSpy.mockRestore();
+  });
+});
+
+describe('Public participant-preview Render CSRF protection', () => {
+  const externalOrigin = 'https://capstone-admin-cms-staging-v2.onrender.com';
+  let originalRender: string | undefined;
+  let originalRenderExternalUrl: string | undefined;
+
+  beforeEach(() => {
+    originalRender = process.env.RENDER;
+    originalRenderExternalUrl = process.env.RENDER_EXTERNAL_URL;
+    process.env.RENDER = 'true';
+    process.env.RENDER_EXTERNAL_URL = externalOrigin;
+  });
+
+  afterEach(() => {
+    if (originalRender === undefined) delete process.env.RENDER;
+    else process.env.RENDER = originalRender;
+
+    if (originalRenderExternalUrl === undefined) delete process.env.RENDER_EXTERNAL_URL;
+    else process.env.RENDER_EXTERNAL_URL = originalRenderExternalUrl;
+  });
+
+  it('allows the authoritative Render external Origin to progress beyond CSRF', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const req = new NextRequest('http://internal-render:10000/participant-preview/not-a-valid-token', {
+      method: 'POST',
+      ...formRequestInit(externalOrigin, { action: 'confirm' }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ token: 'not-a-valid-token' }) });
+
+    expect(res.status).toBe(404);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it('rejects an attacker Origin before processing the participant response', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const token = 'a'.repeat(64);
+    const req = new NextRequest(`http://internal-render:10000/participant-preview/${token}`, {
+      method: 'POST',
+      ...formRequestInit('https://evil.example', { action: 'confirm' }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(403);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
   });
 });
 
