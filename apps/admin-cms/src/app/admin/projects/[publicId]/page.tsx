@@ -58,6 +58,7 @@ import {
   AlertTriangle,
   FolderArchive,
   ExternalLink,
+  UserCheck,
 } from 'lucide-react';
 
 // Force dynamic server rendering for real-time detail load
@@ -632,8 +633,12 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           />
         </ProjectReviewSection>
 
-        {/* F. PARTICIPANT CONFIRMATION (Untouched Component Wrapped in ProjectDetailSection) */}
-        <ProjectDetailSection title="🔗 Participant Preview" borderColor="#3B82F6">
+        {/* F. PARTICIPANT CONFIRMATION */}
+        <ProjectReviewSection
+          title="Participant Confirmation"
+          description="Share the approved project with participants, track their response, and resolve requested corrections before publication."
+          icon={UserCheck}
+        >
           <ParticipantPreviewPanel
             publicId={project.publicId || ''}
             canManage={canManagePreview}
@@ -651,7 +656,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             canResolveCorrection={canResolveCorrection}
             projectStatus={project.status}
           />
-        </ProjectDetailSection>
+        </ProjectReviewSection>
 
         {/* G. PUBLICATION / ARCHIVE (Untouched Components Wrapped in ProjectDetailSection) */}
         <ProjectDetailSection title="🚀 Publication Readiness Gate" borderColor="#10B981">

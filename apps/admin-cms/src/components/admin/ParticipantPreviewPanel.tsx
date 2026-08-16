@@ -11,6 +11,18 @@ import {
   participantPreviewReminderStatusLabel,
   type ParticipantPreviewReminderView,
 } from '../../reminders/participantPreviewReminder';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Badge } from '../ui/badge';
+import {
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  Copy,
+  Check,
+  Clock,
+} from 'lucide-react';
 
 interface ActivePreviewState {
   createdAt: string;
@@ -113,10 +125,13 @@ export function ParticipantPreviewPanel({
 
   if (!stateAvailable) {
     return (
-      <div role="status" style={{ fontSize: '0.85rem', color: '#D1D5DB' }}>
-        <strong style={{ color: '#F59E0B' }}>Participant Preview status unavailable.</strong>
-        <div style={{ marginTop: '0.35rem', color: '#9CA3AF' }}>
-          Preview actions are temporarily disabled because the current preview state could not be verified.
+      <div role="status" className="p-3.5 rounded-lg bg-warning/10 border border-warning/30 text-xs sm:text-sm text-foreground flex items-start gap-2.5">
+        <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" aria-hidden="true" />
+        <div>
+          <strong className="font-semibold block text-warning">Participant Preview status unavailable.</strong>
+          <span className="text-muted-foreground text-xs block mt-0.5">
+            Preview actions are temporarily disabled because the current preview state could not be verified.
+          </span>
         </div>
       </div>
     );
@@ -124,10 +139,13 @@ export function ParticipantPreviewPanel({
 
   if (!resolutionStateAvailable) {
     return (
-      <div role="status" style={{ fontSize: '0.85rem', color: '#D1D5DB' }}>
-        <strong style={{ color: '#F59E0B' }}>Correction-resolution status unavailable.</strong>
-        <div style={{ marginTop: '0.35rem', color: '#9CA3AF' }}>
-          Preview and correction-resolution actions are temporarily disabled until authoritative state can be verified.
+      <div role="status" className="p-3.5 rounded-lg bg-warning/10 border border-warning/30 text-xs sm:text-sm text-foreground flex items-start gap-2.5">
+        <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" aria-hidden="true" />
+        <div>
+          <strong className="font-semibold block text-warning">Correction-resolution status unavailable.</strong>
+          <span className="text-muted-foreground text-xs block mt-0.5">
+            Preview and correction-resolution actions are temporarily disabled until authoritative state can be verified.
+          </span>
         </div>
       </div>
     );
@@ -315,9 +333,9 @@ export function ParticipantPreviewPanel({
 
   if (!canManage) {
     return (
-      <div style={{ fontSize: '0.85rem', color: '#9CA3AF', fontStyle: 'italic' }}>
+      <p className="text-xs text-muted-foreground italic">
         You do not have permission to generate or revoke participant preview links.
-      </div>
+      </p>
     );
   }
 
@@ -340,224 +358,269 @@ export function ParticipantPreviewPanel({
    * preview: the secure link is deliberately not stored, so there is nothing left to send once the
    * request that created it has finished.
    */
-  const renderGenerateActions = (isCorrectionReissue: boolean, primaryLabel: string, primaryColor: string) => (
-    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-      <button
-        type="button"
-        onClick={() => handleGenerate(isCorrectionReissue, false)}
-        disabled={pending}
-        style={{
-          backgroundColor: primaryColor, color: '#FFFFFF', border: 'none', padding: '0.5rem 1rem',
-          borderRadius: '6px', cursor: pending ? 'not-allowed' : 'pointer', fontWeight: 'bold',
-          fontSize: '0.85rem', opacity: pending ? 0.6 : 1,
-        }}
-      >
-        {pending ? 'Working…' : primaryLabel}
-      </button>
-      {canSendEmail && (
-        <button
+  const renderGenerateActions = (isCorrectionReissue: boolean, primaryLabel: string) => (
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <Button
           type="button"
-          onClick={() => handleGenerate(isCorrectionReissue, true)}
+          onClick={() => handleGenerate(isCorrectionReissue, false)}
           disabled={pending}
-          style={{
-            backgroundColor: '#0F766E', color: '#FFFFFF', border: 'none', padding: '0.5rem 1rem',
-            borderRadius: '6px', cursor: pending ? 'not-allowed' : 'pointer', fontWeight: 'bold',
-            fontSize: '0.85rem', opacity: pending ? 0.6 : 1,
-          }}
         >
-          {pending ? 'Working…' : `${primaryLabel} and send email`}
-        </button>
-      )}
-      {emailDeliveryEnabled && participantContactEmail && (
-        <span style={{ color: '#9CA3AF', fontSize: '0.78rem' }}>
-          Email would be sent to <strong style={{ color: '#D1D5DB' }}>{participantContactEmail}</strong>
-        </span>
-      )}
-      {emailDeliveryEnabled && !participantContactEmail && (
-        <span style={{ color: '#9CA3AF', fontSize: '0.78rem', fontStyle: 'italic' }}>
-          No participant contact email is recorded for this project, so the link cannot be emailed.
-        </span>
-      )}
-      {!emailDeliveryEnabled && (
-        <span style={{ color: '#9CA3AF', fontSize: '0.78rem', fontStyle: 'italic' }}>
-          Email delivery is not enabled on this server.
-        </span>
-      )}
+          {pending ? 'Working…' : primaryLabel}
+        </Button>
+        {canSendEmail && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleGenerate(isCorrectionReissue, true)}
+            disabled={pending}
+          >
+            {pending ? 'Working…' : `${primaryLabel} and send email`}
+          </Button>
+        )}
+      </div>
+      <div>
+        {emailDeliveryEnabled && participantContactEmail && (
+          <span className="text-xs text-muted-foreground">
+            Email would be sent to <strong className="font-semibold text-foreground">{participantContactEmail}</strong>
+          </span>
+        )}
+        {emailDeliveryEnabled && !participantContactEmail && (
+          <span className="text-xs text-muted-foreground italic">
+            No participant contact email is recorded for this project, so the link cannot be emailed.
+          </span>
+        )}
+        {!emailDeliveryEnabled && (
+          <span className="text-xs text-muted-foreground italic">
+            Email delivery is not enabled on this server.
+          </span>
+        )}
+      </div>
     </div>
   );
 
   return (
-    <div style={{ fontSize: '0.85rem' }}>
+    <div className="space-y-4 text-xs sm:text-sm">
       {error && (
-        <div style={{
-          backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', border: '1px solid rgba(239, 68, 68, 0.2)',
-          borderRadius: '6px', padding: '0.5rem 0.75rem', fontWeight: 'bold', marginBottom: '0.75rem',
-        }}>
-          ❌ {error}
+        <div role="alert" className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-xs font-semibold flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
         </div>
       )}
 
       {deliveryNotice && (
         <div
           role="status"
-          style={{
-            backgroundColor: 'rgba(13, 148, 136, 0.08)', border: '1px solid rgba(13, 148, 136, 0.3)',
-            borderRadius: '8px', padding: '0.6rem 0.9rem', marginBottom: '0.75rem', color: '#5EEAD4',
-          }}
+          className="p-3 rounded-md bg-success/10 border border-success/30 text-success text-xs font-medium flex items-center gap-2"
         >
-          {deliveryNotice}
+          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{deliveryNotice}</span>
         </div>
       )}
 
       {reminderNotice && (
-        <div role="status" style={{
-          backgroundColor: 'rgba(13, 148, 136, 0.08)', border: '1px solid rgba(13, 148, 136, 0.3)',
-          borderRadius: '8px', padding: '0.6rem 0.9rem', marginBottom: '0.75rem', color: '#5EEAD4',
-        }}>
-          {reminderNotice}
+        <div
+          role="status"
+          className="p-3 rounded-md bg-success/10 border border-success/30 text-success text-xs font-medium flex items-center gap-2"
+        >
+          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{reminderNotice}</span>
         </div>
       )}
 
       {justGeneratedUrl && (
-        <div style={{
-          backgroundColor: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)',
-          borderRadius: '8px', padding: '0.85rem 1rem', marginBottom: '1rem',
-        }}>
-          <div style={{ color: '#10B981', fontWeight: 'bold', marginBottom: '0.4rem' }}>
-            ✅ Preview link generated
+        <div className="p-4 rounded-lg bg-success/10 border border-success/30 space-y-2.5">
+          <div className="flex items-center gap-2 text-success font-semibold text-xs sm:text-sm">
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>Preview link generated</span>
           </div>
-          <div style={{ color: '#F59E0B', fontSize: '0.78rem', marginBottom: '0.5rem' }}>
+          <p className="text-xs text-muted-foreground">
             This is the only time the full link is shown. It cannot be recovered later — copy it now.
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <code style={{
-              backgroundColor: '#1E293B', padding: '0.35rem 0.6rem', borderRadius: '4px', color: '#93C5FD',
-              wordBreak: 'break-all', fontSize: '0.78rem', flex: '1 1 320px',
-            }}>
+          </p>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <code className="bg-background border border-border px-3 py-1.5 rounded text-xs font-mono text-foreground break-all flex-1 select-all">
               {justGeneratedUrl}
             </code>
-            <button
+            <Button
               type="button"
+              size="sm"
+              variant="outline"
               onClick={handleCopy}
-              style={{
-                backgroundColor: '#3B82F6', color: '#FFFFFF', border: 'none', padding: '0.4rem 0.8rem',
-                borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.78rem',
-              }}
+              className="shrink-0 gap-1.5"
             >
-              {copyState === 'copied' ? 'Copied!' : copyState === 'failed' ? 'Copy failed' : 'Copy'}
-            </button>
+              {copyState === 'copied' ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+                  <span>Copied!</span>
+                </>
+              ) : copyState === 'failed' ? (
+                <>
+                  <XCircle className="h-3.5 w-3.5 text-destructive" aria-hidden="true" />
+                  <span>Copy failed</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Copy</span>
+                </>
+              )}
+            </Button>
           </div>
+          {copyState === 'copied' && (
+            <span role="status" className="sr-only">Preview link copied to clipboard</span>
+          )}
         </div>
       )}
 
       {/* CASE A: Active preview exists */}
       {activePreview ? (
-        <div style={{
-          backgroundColor: 'rgba(59, 130, 246, 0.06)', border: '1px solid rgba(59, 130, 246, 0.2)',
-          borderRadius: '8px', padding: '0.85rem 1rem',
-        }}>
-          <div style={{ color: '#60A5FA', fontWeight: 'bold', marginBottom: '0.4rem' }}>Active preview</div>
-          <div style={{ color: '#D1D5DB', fontSize: '0.8rem' }}>
-            <div>Created: {activePreview.createdAt ? new Date(activePreview.createdAt).toLocaleString() : 'N/A'}</div>
-            <div>Expires: {activePreview.expiresAt ? new Date(activePreview.expiresAt).toLocaleString() : 'N/A'}</div>
+        <div className="p-4 rounded-lg bg-card border border-border space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap pb-3 border-b border-border">
+            <div className="flex items-center gap-2">
+              <Badge variant="information" className="font-semibold">Active preview</Badge>
+            </div>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleRevoke}
+              disabled={pending}
+            >
+              {pending ? 'Revoking…' : 'Revoke preview'}
+            </Button>
           </div>
-          <div style={{ marginTop: '0.6rem', fontSize: '0.8rem' }} role="status">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <dl className="space-y-2">
+              <div>
+                <dt className="text-muted-foreground font-medium">Created</dt>
+                <dd className="font-semibold text-foreground mt-0.5">
+                  {activePreview.createdAt ? new Date(activePreview.createdAt).toLocaleString() : 'N/A'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground font-medium">Expires</dt>
+                <dd className="font-semibold text-foreground mt-0.5">
+                  {activePreview.expiresAt ? new Date(activePreview.expiresAt).toLocaleString() : 'N/A'}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="space-y-2">
+              <span className="text-muted-foreground font-medium block">Participant response</span>
+              <div role="status">
+                {previewResponseState.type === 'confirmed' ? (
+                  <div className="p-2.5 rounded-md bg-success/10 border border-success/30 text-success text-xs font-semibold flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>Participant confirmed on {new Date(previewResponseState.confirmedAt).toLocaleString()}</span>
+                  </div>
+                ) : previewResponseState.type === 'correction_requested' ? (
+                  <div className="p-3 rounded-md bg-warning/10 border border-warning/30 text-warning text-xs space-y-2">
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span>Correction requested on {new Date(previewResponseState.requestedAt).toLocaleString()}</span>
+                    </div>
+                    <div className="text-foreground bg-background p-2 rounded border border-border font-normal whitespace-pre-wrap">
+                      {previewResponseState.comment}
+                    </div>
+                    {canResolveCorrection && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleStartResolution}
+                        disabled={pending}
+                        className="text-warning border-warning/30 hover:bg-warning/10 hover:text-warning font-semibold mt-1"
+                      >
+                        {pending ? 'Starting resolution…' : 'Start correction resolution'}
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground italic text-xs">Not yet responded by the participant.</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-border space-y-2" role="status">
+            <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">Email delivery</h4>
             {notification ? (
-              <div style={{ color: '#D1D5DB' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-muted/40 p-3 rounded-md border border-border">
                 <div>
-                  <strong style={{ color: '#93C5FD' }}>Email delivery:</strong>{' '}
-                  {participantPreviewNotificationStatusLabel(notification.status)}
+                  <span className="text-muted-foreground">Status: </span>
+                  <span className="font-semibold text-foreground">{participantPreviewNotificationStatusLabel(notification.status)}</span>
                 </div>
-                <div>Sent to: {notification.recipient}</div>
-                <div>Requested: {new Date(notification.requestedAt).toLocaleString()}</div>
-                {notification.sentAt && <div>Delivered: {new Date(notification.sentAt).toLocaleString()}</div>}
-                {notification.failureCode && <div>Reason: {notification.failureCode}</div>}
+                <div>
+                  <span className="text-muted-foreground">Sent to: </span>
+                  <span className="font-semibold text-foreground">{notification.recipient}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Requested: </span>
+                  <span className="text-foreground">{new Date(notification.requestedAt).toLocaleString()}</span>
+                </div>
+                {notification.sentAt && (
+                  <div>
+                    <span className="text-muted-foreground">Delivered: </span>
+                    <span className="text-foreground">{new Date(notification.sentAt).toLocaleString()}</span>
+                  </div>
+                )}
+                {notification.failureCode && (
+                  <div className="sm:col-span-2 text-destructive">
+                    <span className="font-semibold">Reason: </span>
+                    <span>{notification.failureCode}</span>
+                  </div>
+                )}
                 {notification.status === 'delivery_unknown' && (
-                  <div style={{ color: '#F59E0B', marginTop: '0.25rem' }}>
+                  <div className="sm:col-span-2 text-warning font-medium mt-1">
                     The message may or may not have reached the participant. It has not been sent again
                     automatically. Revoke this preview and issue a new one if you need to be certain.
                   </div>
                 )}
               </div>
             ) : (
-              <div style={{ color: '#9CA3AF', fontStyle: 'italic' }}>
+              <p className="text-xs text-muted-foreground italic">
                 This preview was generated without email delivery. Its secure link is intentionally not
                 stored and cannot be recovered for later sending — revoke it and generate a new preview
                 to email a link.
-              </div>
+              </p>
             )}
           </div>
-          <div className="mt-2 text-sm" role="status">
-            {previewResponseState.type === 'confirmed' ? (
-              <span className="font-semibold text-emerald-500" style={{ color: '#10B981', fontWeight: 'bold' }}>
-                Participant confirmed on {new Date(previewResponseState.confirmedAt).toLocaleString()}
-              </span>
-            ) : previewResponseState.type === 'correction_requested' ? (
-              <div className="font-semibold text-amber-500" style={{ color: '#F59E0B', fontWeight: 'bold' }}>
-                <div>Correction requested on {new Date(previewResponseState.requestedAt).toLocaleString()}</div>
-                <div style={{ marginTop: '0.25rem', color: '#D1D5DB', fontWeight: 'normal', whiteSpace: 'pre-wrap' }}>
-                  {previewResponseState.comment}
-                </div>
-                {canResolveCorrection && (
-                  <button
-                    type="button"
-                    onClick={handleStartResolution}
-                    disabled={pending}
-                    style={{
-                      marginTop: '0.6rem', backgroundColor: '#F59E0B', color: '#000000', border: 'none',
-                      padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: pending ? 'not-allowed' : 'pointer',
-                      fontWeight: 'bold', fontSize: '0.8rem', opacity: pending ? 0.6 : 1, display: 'block',
-                    }}
-                  >
-                    {pending ? 'Starting resolution…' : 'Start correction resolution'}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Not yet responded by the participant.</span>
-            )}
-          </div>
-          <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid rgba(59, 130, 246, 0.2)' }}>
-            <div style={{ color: '#93C5FD', fontWeight: 'bold', marginBottom: '0.35rem' }}>
-              Schedule reminder
+
+          <div className="pt-3 border-t border-border space-y-2.5">
+            <div>
+              <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">Schedule reminder</h4>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Reminder emails contain no secure link. The participant must use the link from the
+                original preview email.
+              </p>
             </div>
-            <div style={{ color: '#9CA3AF', fontSize: '0.78rem', marginBottom: '0.5rem' }}>
-              Reminder emails contain no secure link. The participant must use the link from the
-              original preview email.
-            </div>
+
             {canScheduleReminder ? (
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                <input
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <Input
                   type="datetime-local"
                   value={scheduledFor}
                   max={toLocalDateTimeInputValue(activePreview.expiresAt)}
                   onChange={(event) => setScheduledFor(event.target.value)}
                   disabled={pending}
                   aria-label="Reminder date and time"
-                  style={{
-                    backgroundColor: '#111827', color: '#F3F4F6', border: '1px solid #374151',
-                    borderRadius: '6px', padding: '0.4rem 0.55rem', colorScheme: 'dark',
-                  }}
+                  className="w-full sm:w-auto text-xs"
                 />
-                <button
+                <Button
                   type="button"
+                  size="sm"
                   onClick={handleScheduleReminder}
                   disabled={pending || !scheduledFor}
-                  style={{
-                    backgroundColor: '#0F766E', color: '#FFFFFF', border: 'none',
-                    padding: '0.4rem 0.8rem', borderRadius: '6px',
-                    cursor: pending || !scheduledFor ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold', fontSize: '0.8rem', opacity: pending || !scheduledFor ? 0.6 : 1,
-                  }}
                 >
                   {pending ? 'Working…' : 'Schedule reminder'}
-                </button>
-                <span style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>
+                </Button>
+                <span className="text-xs text-muted-foreground">
                   Must be before {new Date(activePreview.expiresAt).toLocaleString()}.
                 </span>
               </div>
             ) : (
-              <div style={{ color: '#9CA3AF', fontSize: '0.78rem', fontStyle: 'italic' }}>
+              <p className="text-xs text-muted-foreground italic">
                 {!reminderSchedulingEnabled
                   ? 'Reminder scheduling is not enabled on this server.'
                   : notification?.status !== 'sent'
@@ -567,123 +630,110 @@ export function ParticipantPreviewPanel({
                       : previewResponseState.type !== 'unresponded'
                         ? 'This preview already has a participant response.'
                         : 'This preview is no longer eligible for a future reminder.'}
-              </div>
+              </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={handleRevoke}
-            disabled={pending}
-            style={{
-              marginTop: '0.6rem', backgroundColor: '#EF4444', color: '#FFFFFF', border: 'none',
-              padding: '0.4rem 0.8rem', borderRadius: '6px', cursor: pending ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold', fontSize: '0.8rem', opacity: pending ? 0.6 : 1,
-            }}
-          >
-            {pending ? 'Revoking…' : 'Revoke preview'}
-          </button>
         </div>
       ) : isInProgress ? (
         /* CASE B: Correction in progress (Preview A revoked) */
-        <div style={{
-          backgroundColor: 'rgba(245, 158, 11, 0.06)', border: '1px solid rgba(245, 158, 11, 0.25)',
-          borderRadius: '8px', padding: '0.85rem 1rem',
-        }}>
-          <div style={{ color: '#F59E0B', fontWeight: 'bold', marginBottom: '0.4rem' }}>
-            🛠️ Correction resolution in progress
+        <div className="p-4 rounded-lg bg-warning/10 border border-warning/30 space-y-3">
+          <div className="flex items-center gap-2 text-warning font-semibold text-xs sm:text-sm">
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>Correction resolution in progress</span>
           </div>
           {resolutionStatus?.comment && (
-            <div style={{ color: '#D1D5DB', fontSize: '0.8rem', marginBottom: '0.5rem', whiteSpace: 'pre-wrap' }}>
-              <strong>Participant comment:</strong> {resolutionStatus.comment}
+            <div className="text-xs text-foreground bg-background p-2.5 rounded border border-border whitespace-pre-wrap">
+              <strong className="text-foreground">Participant comment:</strong> {resolutionStatus.comment}
             </div>
           )}
           {projectStatus === 'changes_requested' ? (
-            <div style={{ color: '#9CA3AF', fontSize: '0.8rem', fontStyle: 'italic' }}>
-              Project is currently in <code>changes_requested</code>. Update project metadata below, then use the review actions to re-approve the project before issuing a corrected preview.
-            </div>
+            <p className="text-xs text-muted-foreground italic">
+              Project is currently in <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-foreground">changes_requested</code>. Update project metadata below, then use the review actions to re-approve the project before issuing a corrected preview.
+            </p>
           ) : projectStatus === 'approved' && canResolveCorrection ? (
-            <div>
-              <div style={{ color: '#10B981', fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                Project re-approved! You may now issue a corrected participant preview.
-              </div>
-              {renderGenerateActions(true, 'Generate corrected participant preview', '#10B981')}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-success flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>Project re-approved! You may now issue a corrected participant preview.</span>
+              </p>
+              {renderGenerateActions(true, 'Generate corrected participant preview')}
             </div>
           ) : (
-            <div style={{ color: '#9CA3AF', fontSize: '0.8rem', fontStyle: 'italic' }}>
+            <p className="text-xs text-muted-foreground italic">
               Correction resolution is active.
-            </div>
+            </p>
           )}
         </div>
       ) : resolutionStatus?.status === 'resolved' ? (
         /* CASE C: Correction resolved historical info */
-        <div>
-          <div style={{
-            backgroundColor: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.15)',
-            borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', color: '#D1D5DB', fontSize: '0.8rem',
-          }}>
-            <span style={{ color: '#10B981', fontWeight: 'bold' }}>✓ Participant correction resolved</span>
+        <div className="space-y-3">
+          <div className="p-3 rounded-lg bg-success/10 border border-success/30 text-xs sm:text-sm flex items-center gap-2 text-foreground">
+            <CheckCircle2 className="h-4 w-4 text-success shrink-0" aria-hidden="true" />
+            <span className="font-semibold text-success">Participant correction resolved</span>
             {resolutionStatus.resolvedAt && (
-              <span style={{ color: '#9CA3AF', marginLeft: '0.5rem' }}>
+              <span className="text-xs text-muted-foreground">
                 on {new Date(resolutionStatus.resolvedAt).toLocaleString()}
               </span>
             )}
           </div>
-          {isApprovedEligible && renderGenerateActions(false, 'Generate participant preview', '#3B82F6')}
+          {isApprovedEligible && renderGenerateActions(false, 'Generate participant preview')}
         </div>
       ) : isApprovedEligible ? (
         /* CASE D: Normal approved state, no active preview */
-        renderGenerateActions(false, 'Generate participant preview', '#3B82F6')
+        renderGenerateActions(false, 'Generate participant preview')
       ) : (
-        <div style={{ color: '#9CA3AF', fontStyle: 'italic' }}>
+        <p className="text-xs text-muted-foreground italic">
           Available once the project reaches the approved state.
-        </div>
+        </p>
       )}
 
       {reminders.length > 0 && (
-        <div style={{ marginTop: '1rem' }}>
-          <div style={{ color: '#93C5FD', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-            Reminder history
-          </div>
-          <div style={{ display: 'grid', gap: '0.5rem' }}>
+        <div className="pt-4 border-t border-border space-y-3">
+          <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">Reminder history</h4>
+          <div className="grid gap-2.5">
             {reminders.map((reminder) => (
-              <div key={reminder.reference} style={{
-                backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '6px',
-                padding: '0.6rem 0.75rem', color: '#D1D5DB', fontSize: '0.78rem',
-              }}>
-                <div>
-                  <strong>{participantPreviewReminderStatusLabel(reminder.status)}</strong>
-                  {!reminder.currentPreview && <span style={{ color: '#9CA3AF' }}> · earlier preview</span>}
+              <div
+                key={reminder.reference}
+                className="p-3 rounded-md bg-muted/40 border border-border text-xs space-y-1.5 text-foreground"
+              >
+                <div className="flex items-center justify-between gap-2 flex-wrap font-semibold">
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                    <span>{participantPreviewReminderStatusLabel(reminder.status)}</span>
+                    {!reminder.currentPreview && (
+                      <span className="text-muted-foreground font-normal"> · earlier preview</span>
+                    )}
+                  </span>
+                  {reminder.status === 'scheduled' && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleCancelReminder(reminder.reference)}
+                      disabled={pending}
+                      className="h-7 px-2.5 text-xs"
+                    >
+                      Cancel reminder
+                    </Button>
+                  )}
                 </div>
-                <div>Scheduled for: {new Date(reminder.scheduledFor).toLocaleString()}</div>
-                <div>Recipient snapshot: {reminder.recipient}</div>
-                <div>Scheduled by: {reminder.scheduledBy}</div>
-                <div>Preview expires: {new Date(reminder.previewExpiresAt).toLocaleString()}</div>
-                {reminder.triggeredAt && <div>Triggered: {new Date(reminder.triggeredAt).toLocaleString()}</div>}
-                {reminder.cancelledAt && <div>Cancelled: {new Date(reminder.cancelledAt).toLocaleString()}</div>}
-                {reminder.skipReason && <div>Skip reason: {reminder.skipReason}</div>}
-                {reminder.delivery && (
-                  <div>
-                    Delivery: {participantPreviewNotificationStatusLabel(reminder.delivery.status)}
-                    {reminder.delivery.sentAt
-                      ? ` on ${new Date(reminder.delivery.sentAt).toLocaleString()}`
-                      : ''}
-                    {reminder.delivery.failureCode ? ` (${reminder.delivery.failureCode})` : ''}
-                  </div>
-                )}
-                {reminder.status === 'scheduled' && (
-                  <button
-                    type="button"
-                    onClick={() => handleCancelReminder(reminder.reference)}
-                    disabled={pending}
-                    style={{
-                      marginTop: '0.4rem', backgroundColor: '#7F1D1D', color: '#FFFFFF', border: 'none',
-                      padding: '0.3rem 0.6rem', borderRadius: '5px', cursor: pending ? 'not-allowed' : 'pointer',
-                      fontWeight: 'bold', fontSize: '0.75rem', opacity: pending ? 0.6 : 1,
-                    }}
-                  >
-                    Cancel reminder
-                  </button>
-                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground pt-1">
+                  <div><span className="text-foreground font-medium">Scheduled for:</span> {new Date(reminder.scheduledFor).toLocaleString()}</div>
+                  <div><span className="text-foreground font-medium">Recipient snapshot:</span> {reminder.recipient}</div>
+                  <div><span className="text-foreground font-medium">Scheduled by:</span> {reminder.scheduledBy}</div>
+                  <div><span className="text-foreground font-medium">Preview expires:</span> {new Date(reminder.previewExpiresAt).toLocaleString()}</div>
+                  {reminder.triggeredAt && <div><span className="text-foreground font-medium">Triggered:</span> {new Date(reminder.triggeredAt).toLocaleString()}</div>}
+                  {reminder.cancelledAt && <div><span className="text-foreground font-medium">Cancelled:</span> {new Date(reminder.cancelledAt).toLocaleString()}</div>}
+                  {reminder.skipReason && <div><span className="text-foreground font-medium">Skip reason:</span> {reminder.skipReason}</div>}
+                  {reminder.delivery && (
+                    <div className="sm:col-span-2">
+                      <span className="text-foreground font-medium">Delivery:</span>{' '}
+                      {participantPreviewNotificationStatusLabel(reminder.delivery.status)}
+                      {reminder.delivery.sentAt ? ` on ${new Date(reminder.delivery.sentAt).toLocaleString()}` : ''}
+                      {reminder.delivery.failureCode ? ` (${reminder.delivery.failureCode})` : ''}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
