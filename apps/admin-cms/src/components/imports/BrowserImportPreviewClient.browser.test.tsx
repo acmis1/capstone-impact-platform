@@ -17,8 +17,8 @@ describe('BrowserImportPreviewClient browser evaluation', () => {
     render(<BrowserImportPreviewClient />);
 
     expect(
-      screen.getByRole('heading', { name: '1. Select Project Folder or Batch Directory' })
+      screen.getByRole('heading', { name: 'Choose project folder' })
     ).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Choose Project Folder/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Choose project folder/i })).toBeTruthy();
   });
 });
