@@ -1,9 +1,8 @@
-import React from 'react';
-
 import { Project } from '../../domain/project';
-import { MediaPreview } from '@/components/admin-media/MediaPreview';
-import type { ProjectMediaPreviewItem } from '@/components/admin-media/mediaPreviewTypes';
-import { isValidMediaUrl } from '@/components/admin-media/mediaPreviewUtils';
+import { MediaPreview } from '../admin-media/MediaPreview';
+import type { ProjectMediaPreviewItem } from '../admin-media/mediaPreviewTypes';
+import { isValidMediaUrl } from '../admin-media/mediaPreviewUtils';
+import { MediaAccessibilityReview } from '../admin-media/MediaAccessibilityReview';
 import { SnapshotAltTextEditor } from './SnapshotAltTextEditor';
 import type { SnapshotAltTextActionResult } from '../../projects/snapshotAltText';
 
@@ -36,9 +35,28 @@ export function ProjectMediaSummary({ project, mediaItems, mediaAvailable, snaps
 
   return (
     <div style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
-      {!mediaAvailable ? <p role="status">Media preview temporarily unavailable.</p>
-        : mediaItems.length === 0 ? <p>No media attached.</p>
-          : mediaItems.map((media) => <MediaPreview key={media.id} media={media} />)}
+      {!mediaAvailable ? (
+        <p role="status">Media preview temporarily unavailable.</p>
+      ) : mediaItems.length === 0 ? (
+        <p>No media attached.</p>
+      ) : (
+        mediaItems.map((media) => {
+          const fullText =
+            media.role === 'poster' || media.role === 'poster-pdf'
+              ? project.posterText
+              : undefined;
+
+          return (
+            <div key={media.id}>
+              <MediaPreview media={media} />
+              <MediaAccessibilityReview
+                media={media}
+                fullText={fullText}
+              />
+            </div>
+          );
+        })
+      )}
 
       {mediaAvailable && snapshotMedia && snapshotAltText && (
         <SnapshotAltTextEditor
