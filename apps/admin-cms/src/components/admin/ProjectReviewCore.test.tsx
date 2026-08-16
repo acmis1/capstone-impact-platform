@@ -147,7 +147,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       expect(screen.queryByText(/❌/)).toBeNull();
     });
 
-    it('renders ready for publication indicator when approved/published with no blocking errors', () => {
+    it('renders validation passed indicator when approved/published with no blocking errors', () => {
       const readyProject: Project = {
         ...mockProject,
         status: 'approved',
@@ -155,8 +155,10 @@ describe('PR2B1 Core Project Review Experience Components', () => {
 
       render(<ProjectValidationSummary project={readyProject} />);
 
-      expect(screen.getByText(/Ready for publication/i)).toBeTruthy();
-      expect(screen.getByText(/This project record is approved\/published and has no blocking validation errors/i)).toBeTruthy();
+      expect(screen.getByText(/Validation passed/i)).toBeTruthy();
+      expect(screen.getByText(/This project has no blocking validation issues/i)).toBeTruthy();
+      expect(screen.queryByText(/Ready for publication/i)).toBeNull();
+      expect(screen.queryByText(/Publication ready/i)).toBeNull();
     });
   });
 

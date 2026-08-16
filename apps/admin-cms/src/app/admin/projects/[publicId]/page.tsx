@@ -42,7 +42,7 @@ import {
 import { loadProjectMediaPreviewItems } from '../../../../projects/projectMediaPreview';
 import type { ProjectMediaPreviewItem } from '../../../../components/admin-media/mediaPreviewTypes';
 import { Button } from '../../../../components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../../components/ui/card';
+import { Card, CardHeader, CardDescription, CardContent } from '../../../../components/ui/card';
 import { ErrorState } from '../../../../components/ui/error-state';
 import {
   ArrowLeft,
@@ -244,6 +244,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center max-w-lg mx-auto">
         <ErrorState
+          headingLevel="h2"
           title="Project Details Unavailable"
           description="Project details could not be loaded. Please try again shortly."
           action={
@@ -261,7 +262,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center max-w-lg mx-auto">
         <Card className="bg-card border-border shadow-xs p-6 text-center w-full">
           <CardHeader className="p-0 pb-3">
-            <CardTitle className="text-base sm:text-lg font-bold text-foreground">Project Not Found</CardTitle>
+            <h2 className="text-base sm:text-lg font-bold text-foreground">Project Not Found</h2>
             <CardDescription className="text-xs text-muted-foreground mt-1">
               No project record was found matching the identifier <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-foreground">{publicId}</code>.
             </CardDescription>
@@ -337,7 +338,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
         {/* B. REVIEW AND EDIT PROJECT INFORMATION */}
         <ProjectReviewSection
-          title="Project Metadata"
+          title="Review & Edit Project Information"
           description="Core public project information including program, disciplines, categories, and accessibility text."
           icon={FileText}
         >
@@ -350,6 +351,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               canEdit={canEditMetadata}
               projectStatus={project.status}
               saveAction={saveProjectMetadataAction}
+              headingLevel="h4"
             />
           ) : (
             <p className="text-xs text-muted-foreground">
@@ -431,15 +433,15 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               </div>
 
               <div>
-                <dt className="text-xs font-semibold text-muted-foreground">Public Showcase Eligibility</dt>
+                <dt className="text-xs font-semibold text-muted-foreground">Public feed status eligibility</dt>
                 <dd className="mt-0.5">
                   {isEligible ? (
                     <span className="text-success font-semibold text-xs inline-flex items-center gap-1">
-                      Eligible for Approved Feed
+                      Eligible
                     </span>
                   ) : (
                     <span className="text-muted-foreground text-xs">
-                      Draft / In Review (Not eligible for public feed)
+                      Not eligible
                     </span>
                   )}
                 </dd>

@@ -19,11 +19,21 @@ interface Props {
   canEdit: boolean;
   projectStatus: string;
   saveAction: (input: unknown) => Promise<ProjectMetadataActionResult>;
+  headingLevel?: 'h2' | 'h3' | 'h4';
 }
 
 const selectValues = (event: React.ChangeEvent<HTMLSelectElement>) => Array.from(event.currentTarget.selectedOptions, (option) => option.value);
 
-export function ProjectMetadataEditor({ initialMetadata, programs, disciplines, industryCategories, canEdit, projectStatus, saveAction }: Props) {
+export function ProjectMetadataEditor({
+  initialMetadata,
+  programs,
+  disciplines,
+  industryCategories,
+  canEdit,
+  projectStatus,
+  saveAction,
+  headingLevel: Heading = 'h4',
+}: Props) {
   const router = useRouter();
   const { setDirty, confirmDiscard } = useProjectMetadataNavigation();
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -66,11 +76,11 @@ export function ProjectMetadataEditor({ initialMetadata, programs, disciplines, 
   const message = (name: string) => fieldErrors[name]?.[0];
   const protectedNotice = projectStatus === 'approved' ? 'This project is approved. Request changes before editing metadata.' : projectStatus === 'published' ? 'Published project metadata is locked until a controlled revision workflow is available.' : null;
   if (mode === 'view') return <section aria-labelledby="metadata-editor-title">
-    <div className="flex items-center justify-between gap-4"><div><h2 id="metadata-editor-title" className="text-lg font-semibold">Project metadata</h2><p className="text-sm text-muted-foreground">Core public project information.</p></div>{canEdit && !protectedNotice ? <Button type="button" onClick={() => { setNotice(null); setMode('edit'); }}>Edit metadata</Button> : <p role="status" className="text-sm">{protectedNotice || 'Read-only: your role cannot edit project metadata.'}</p>}</div>
+    <div className="flex items-center justify-between gap-4"><div><Heading id="metadata-editor-title" className="text-base sm:text-lg font-semibold">Project metadata</Heading><p className="text-sm text-muted-foreground">Core public project information.</p></div>{canEdit && !protectedNotice ? <Button type="button" onClick={() => { setNotice(null); setMode('edit'); }}>Edit metadata</Button> : <p role="status" className="text-sm">{protectedNotice || 'Read-only: your role cannot edit project metadata.'}</p>}</div>
     {notice && <p role="status" className="mt-3 text-sm">{notice}</p>}
   </section>;
 
-  return <section aria-labelledby="metadata-editor-title"><div className="flex items-center justify-between gap-4"><div><h2 id="metadata-editor-title" className="text-lg font-semibold">Edit project metadata</h2>{dirty && <p role="status" className="text-sm">Unsaved changes</p>}</div></div>
+  return <section aria-labelledby="metadata-editor-title"><div className="flex items-center justify-between gap-4"><div><Heading id="metadata-editor-title" className="text-base sm:text-lg font-semibold">Edit project metadata</Heading>{dirty && <p role="status" className="text-sm">Unsaved changes</p>}</div></div>
     {notice && <p id="metadata-form-error" ref={summaryRef} tabIndex={-1} role="alert" className="mt-3 text-sm">{notice}</p>}
     <form className="mt-4 space-y-4" onSubmit={submit} noValidate aria-describedby={notice ? 'metadata-form-error' : undefined}>
       <Field id="metadata-title" label="Project title" error={message('title')}><Input id="metadata-title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} aria-invalid={Boolean(message('title'))} aria-describedby={message('title') ? 'metadata-title-error' : undefined} /></Field>

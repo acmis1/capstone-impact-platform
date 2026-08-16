@@ -183,7 +183,7 @@ export function SnapshotAltTextEditor({
         />
       )}
       {statusMessage && !errorMessage && (
-        <div className="p-2.5 rounded-md bg-success/10 border border-success/30 text-success text-xs font-semibold flex items-center gap-2">
+        <div role="status" className="p-2.5 rounded-md bg-success/10 border border-success/30 text-success text-xs font-semibold flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{statusMessage}</span>
         </div>

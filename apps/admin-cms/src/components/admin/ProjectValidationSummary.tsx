@@ -35,9 +35,9 @@ export function ProjectValidationSummary({ project }: ProjectValidationSummaryPr
         <div className="p-3.5 rounded-lg bg-success/10 border border-success/30 text-success text-xs sm:text-sm flex items-start gap-2.5">
           <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
           <div>
-            <span className="font-semibold block">Ready for publication</span>
+            <span className="font-semibold block">Validation passed</span>
             <span className="text-muted-foreground text-xs">
-              This project record is approved/published and has no blocking validation errors.
+              This project has no blocking validation issues.
             </span>
           </div>
         </div>
@@ -47,9 +47,9 @@ export function ProjectValidationSummary({ project }: ProjectValidationSummaryPr
         <div className="p-3.5 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-xs sm:text-sm flex items-start gap-2.5">
           <XCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
           <div>
-            <span className="font-semibold block">Publication blocked</span>
+            <span className="font-semibold block">Validation needs attention</span>
             <span className="text-muted-foreground text-xs">
-              Project has approved/published status but fails compliance due to blocking issues below.
+              Project has blocking validation issues that must be addressed.
             </span>
           </div>
         </div>

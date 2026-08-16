@@ -363,7 +363,7 @@ async function run(): Promise<void> {
       const body = await response.text();
       if (response.status !== 200 || response.url.includes('/login')) throw new Error(`Authenticated project navigation failed: ${project.publicId}`);
       if (body.includes('Project Details Unavailable')) throw new Error(`Project detail fallback rendered: ${project.publicId}`);
-      if (!body.includes(project.title) || !body.includes('Workflow State:') || !body.includes('Project Metadata')) {
+      if (!body.includes(project.title) || !body.includes('Public ID:') || !body.includes('Project Overview')) {
         throw new Error(`Required project detail markers missing: ${project.publicId}`);
       }
       const evidence = projectEvidence.find((item) => item.publicId === project.publicId)!;
@@ -392,7 +392,7 @@ async function run(): Promise<void> {
       if (isolatedResponse.status !== 200
         || isolatedBody.includes('Project Details Unavailable')
         || !isolatedBody.includes(auditFixture.title)
-        || !isolatedBody.includes('Project Metadata')
+        || !isolatedBody.includes('Project metadata')
         || !isolatedBody.includes('Audit history is temporarily unavailable.')) {
         throw new Error('Audit query failure erased the base project or independently healthy metadata editor.');
       }
