@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileSpreadsheet, Image as ImageIcon, FileText, Folder, CheckCircle2, ChevronDown, ChevronRight, HelpCircle } from 'lucide-react';
+import { FileSpreadsheet, Image as ImageIcon, FileText, Folder, ChevronDown, ChevronRight, HelpCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 
 export interface ImportWorkflowGuideProps {
@@ -24,16 +24,13 @@ export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProp
         <ol className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
           {STEPS.map(({ step, label }) => {
             const isCurrent = step === currentStep;
-            const isCompleted = step < currentStep;
             return (
               <li
                 key={step}
-                className={`flex items-center gap-2 p-2 rounded-md ${
+                className={`flex items-center gap-2 p-2 rounded-md transition-colors ${
                   isCurrent
                     ? 'bg-primary/10 text-primary font-semibold border border-primary/20'
-                    : isCompleted
-                      ? 'text-foreground font-medium'
-                      : 'text-muted-foreground'
+                    : 'text-muted-foreground'
                 }`}
                 aria-current={isCurrent ? 'step' : undefined}
               >
@@ -41,13 +38,11 @@ export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProp
                   className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
                     isCurrent
                       ? 'bg-primary text-primary-foreground'
-                      : isCompleted
-                        ? 'bg-muted text-foreground'
-                        : 'bg-muted/60 text-muted-foreground'
+                      : 'bg-muted text-muted-foreground'
                   }`}
                   aria-hidden="true"
                 >
-                  {isCompleted ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> : step}
+                  {step}
                 </span>
                 <span className="truncate">{label}</span>
               </li>

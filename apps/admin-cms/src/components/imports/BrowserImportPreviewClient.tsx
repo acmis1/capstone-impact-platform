@@ -408,11 +408,11 @@ export default function BrowserImportPreviewClient() {
 
   // Determine current active workflow step for orientation
   let currentStep: 1 | 2 | 3 | 4 | 5 = 1;
-  if (mediaCompleteResult || stagedResult) {
+  if (mediaCompleteResult || stagedResult || selectionState.preparedIntent) {
     currentStep = 5;
-  } else if (previewResult) {
+  } else if (previewResult && adminReferenceData) {
     currentStep = 4;
-  } else if (selectedRootName || adminReferenceData) {
+  } else if (adminReferenceData) {
     currentStep = 3;
   } else {
     currentStep = 2;
@@ -993,7 +993,7 @@ export default function BrowserImportPreviewClient() {
                 <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                 <span>
                   {stagedResult.result === 'already_staged'
-                    ? 'Project details already saved (Idempotent)'
+                    ? 'Project details already saved'
                     : 'Project details imported successfully'}
                 </span>
               </div>
@@ -1009,7 +1009,7 @@ export default function BrowserImportPreviewClient() {
                       Next step: Import media files
                     </span>
                     <span className="text-[11px] text-muted-foreground">
-                      Uploads poster, PDF, and snapshot images to private draft storage. Nothing is published publicly.
+                      Adds the poster, PDF, and snapshot images to the draft projects in the test environment. Nothing is published to the public showcase.
                     </span>
                   </div>
 
@@ -1048,7 +1048,7 @@ export default function BrowserImportPreviewClient() {
                 </span>
               </div>
               <p className="text-muted-foreground text-xs leading-relaxed">
-                All project details and {mediaCompleteResult.mediaAssetCount} media files were imported into private draft storage. Projects remain in draft status for review.
+                All project details and {mediaCompleteResult.mediaAssetCount} media files were imported into the test environment. Projects remain in draft status for review.
               </p>
 
               <div className="flex items-center gap-3 pt-1">

@@ -29,12 +29,16 @@ interface AdminReferenceDatasetSectionProps {
 }
 
 const FIELD_LABELS: Record<string, string> = {
-  groupName: 'Group name',
-  title: 'Project title',
-  program: 'Study program',
-  discipline: 'Discipline',
-  year: 'Academic year',
   publicId: 'Public ID',
+  title: 'Project title',
+  groupName: 'Group name',
+  year: 'Academic year',
+  program: 'Program',
+  studyProgram: 'Study program',
+  academicSupervisor: 'Academic supervisor',
+  industryPartner: 'Industry partner',
+  participantContactEmail: 'Participant contact email',
+  teamMembers: 'Team members',
 };
 
 function formatFieldLabel(field: string): string {
@@ -446,7 +450,7 @@ export function AdminReferenceDatasetSection({
                 ) : (
                   <span className="text-warning font-medium flex items-center gap-1.5">
                     <AlertCircle className="h-4 w-4 text-warning" aria-hidden="true" />
-                    Mapping not confirmed (Staff confirmation required before checking project files)
+                    Mapping not confirmed — confirm the mapping before preparing projects for import.
                   </span>
                 )}
               </div>
