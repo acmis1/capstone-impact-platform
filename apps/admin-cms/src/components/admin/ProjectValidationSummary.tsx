@@ -1,6 +1,7 @@
 import React from 'react';
 import { Project } from '../../domain/project';
 import { validateProjectForApproval } from '../../validation/projectValidation';
+import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 
 interface ProjectValidationSummaryProps {
   project: Project;
@@ -8,8 +9,8 @@ interface ProjectValidationSummaryProps {
 
 export function ProjectValidationSummary({ project }: ProjectValidationSummaryProps) {
   const validation = validateProjectForApproval(project);
-  
-  // Custom staging checks based on the prompts requirements
+
+  // Custom staging checks based on the prompt requirements
   const localErrors: string[] = [...validation.errors];
   const localWarnings: string[] = [...validation.warnings];
 
@@ -29,64 +30,64 @@ export function ProjectValidationSummary({ project }: ProjectValidationSummaryPr
   const showReadyMessage = isEligible && !hasBlockingErrors;
 
   return (
-    <div style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
+    <div className="flex flex-col gap-4 text-xs sm:text-sm">
       {showReadyMessage && (
-        <div style={{
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          border: '1px solid rgba(16, 185, 129, 0.2)',
-          borderRadius: '8px',
-          padding: '0.75rem 1rem',
-          color: '#10B981',
-          fontWeight: 'bold',
-          marginBottom: '1rem',
-          fontSize: '0.85rem'
-        }}>
-          ✅ READY FOR PUBLIC FEED: This project record is approved/published and has no blocking validation errors.
+        <div className="p-3.5 rounded-lg bg-success/10 border border-success/30 text-success text-xs sm:text-sm flex items-start gap-2.5">
+          <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <div>
+            <span className="font-semibold block">Validation passed</span>
+            <span className="text-muted-foreground text-xs">
+              This project has no blocking validation issues.
+            </span>
+          </div>
         </div>
       )}
 
       {!showReadyMessage && isEligible && hasBlockingErrors && (
-        <div style={{
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
-          borderRadius: '8px',
-          padding: '0.75rem 1rem',
-          color: '#EF4444',
-          fontWeight: 'bold',
-          marginBottom: '1rem',
-          fontSize: '0.85rem'
-        }}>
-          ❌ BLOCKED: Project has approved/published status but fails compliance due to blocking errors.
+        <div className="p-3.5 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-xs sm:text-sm flex items-start gap-2.5">
+          <XCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <div>
+            <span className="font-semibold block">Validation needs attention</span>
+            <span className="text-muted-foreground text-xs">
+              Project has blocking validation issues that must be addressed.
+            </span>
+          </div>
         </div>
       )}
 
       {/* Errors Section */}
-      <div>
-        <h4 style={{ margin: '0 0 0.5rem 0', color: '#EF4444', fontSize: '0.95rem' }}>
-          Blocking Errors ({localErrors.length})
-        </h4>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+          <XCircle className="h-3.5 w-3.5 text-destructive" aria-hidden="true" />
+          <span>Blocking issues ({localErrors.length})</span>
+        </div>
         {localErrors.length === 0 ? (
-          <p style={{ margin: '0 0 1rem 0', color: '#9CA3AF', fontSize: '0.85rem' }}>No blocking errors found.</p>
+          <p className="text-xs text-muted-foreground pl-5">No blocking errors found.</p>
         ) : (
-          <ul style={{ margin: '0 0 1rem 0', paddingLeft: '1.25rem', color: '#F87171', fontSize: '0.85rem' }}>
+          <ul className="flex flex-col gap-1.5 pl-5 list-disc text-xs text-destructive">
             {localErrors.map((err, i) => (
-              <li key={i}>{err}</li>
+              <li key={i} className="leading-relaxed">
+                {err}
+              </li>
             ))}
           </ul>
         )}
       </div>
 
       {/* Warnings Section */}
-      <div style={{ marginTop: '1rem' }}>
-        <h4 style={{ margin: '0 0 0.5rem 0', color: '#F59E0B', fontSize: '0.95rem' }}>
-          Compliance Warnings ({localWarnings.length})
-        </h4>
+      <div className="flex flex-col gap-2 pt-2 border-t border-border">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+          <AlertTriangle className="h-3.5 w-3.5 text-warning" aria-hidden="true" />
+          <span>Quality warnings ({localWarnings.length})</span>
+        </div>
         {localWarnings.length === 0 ? (
-          <p style={{ margin: 0, color: '#9CA3AF', fontSize: '0.85rem' }}>No compliance warnings.</p>
+          <p className="text-xs text-muted-foreground pl-5">No compliance warnings.</p>
         ) : (
-          <ul style={{ margin: 0, paddingLeft: '1.25rem', color: '#FBBF24', fontSize: '0.85rem' }}>
+          <ul className="flex flex-col gap-1.5 pl-5 list-disc text-xs text-warning">
             {localWarnings.map((warn, i) => (
-              <li key={i}>{warn}</li>
+              <li key={i} className="leading-relaxed">
+                {warn}
+              </li>
             ))}
           </ul>
         )}

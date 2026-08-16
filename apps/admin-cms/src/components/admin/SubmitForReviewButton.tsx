@@ -4,6 +4,9 @@ import React, { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProjectMetadataNavigation } from './ProjectMetadataNavigation';
 import { canSubmitForReview } from './submitForReviewButtonState';
+import { Button } from '../ui/button';
+import { Alert } from '../ui/alert';
+import { Send, CheckCircle2 } from 'lucide-react';
 
 interface SubmitForReviewButtonProps {
   batchId: string;
@@ -46,16 +49,18 @@ export function SubmitForReviewButton({ batchId, publicId, currentStatus }: Subm
       const data: SubmitResponse = await response.json().catch(() => ({ success: false, error: 'Invalid server response.' }));
 
       if (!response.ok || !data.success) {
-        const reasons = data.blockingReasons && data.blockingReasons.length > 0
-          ? ` (${data.blockingReasons.join('; ')})`
-          : '';
-        throw new Error(`${data.error || 'Submission failed.'}${reasons}`);
+        if (data.blockingReasons && data.blockingReasons.length > 0) {
+          throw new Error(`Submission blocked: ${data.blockingReasons.join('; ')}`);
+        }
+        throw new Error('Project could not be submitted for review. Please try again.');
       }
 
       setSuccess(true);
       router.refresh();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'An unexpected error occurred while submitting for review.';
+      const message = err instanceof Error && err.message.startsWith('Submission blocked:')
+        ? err.message
+        : 'Project could not be submitted for review. Please try again.';
       setError(message);
     } finally {
       setPending(false);
@@ -64,49 +69,40 @@ export function SubmitForReviewButton({ batchId, publicId, currentStatus }: Subm
   };
 
   return (
-    <div style={{ fontSize: '0.85rem' }}>
+    <div className="flex flex-col gap-2.5 text-xs sm:text-sm">
       {error && (
-        <div style={{
-          backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', border: '1px solid rgba(239, 68, 68, 0.2)',
-          borderRadius: '6px', padding: '0.5rem 0.75rem', fontWeight: 'bold', marginBottom: '0.75rem',
-        }}>
-          ❌ {error}
-        </div>
+        <Alert
+          variant="destructive"
+          title="Submission Failed"
+          description={error}
+        />
       )}
       {success && (
-        <div style={{
-          backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10B981', border: '1px solid rgba(16, 185, 129, 0.2)',
-          borderRadius: '6px', padding: '0.5rem 0.75rem', fontWeight: 'bold', marginBottom: '0.75rem',
-        }}>
-          ✅ Submitted for review.
+        <div className="p-3 rounded-md bg-success/10 border border-success/30 text-success text-xs font-semibold flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>Submitted for review successfully.</span>
         </div>
       )}
       {dirty && !success && (
-        <div style={{
-          backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.2)',
-          borderRadius: '6px', padding: '0.5rem 0.75rem', fontWeight: 'bold', marginBottom: '0.75rem',
-        }}>
-          ⚠️ Save or Cancel the metadata edits before submitting for review.
+        <div className="p-3 rounded-md bg-warning/10 border border-warning/30 text-warning text-xs font-medium">
+          Save or Cancel your metadata edits before submitting for review.
         </div>
       )}
-      <button
-        type="button"
-        onClick={handleSubmit}
-        disabled={!canSubmitForReview(pending, success, dirty)}
-        style={{
-          backgroundColor: '#10B981',
-          color: '#FFFFFF',
-          border: 'none',
-          padding: '0.5rem 1rem',
-          borderRadius: '6px',
-          cursor: !canSubmitForReview(pending, success, dirty) ? 'not-allowed' : 'pointer',
-          fontWeight: 'bold',
-          fontSize: '0.85rem',
-          opacity: !canSubmitForReview(pending, success, dirty) ? 0.6 : 1,
-        }}
-      >
-        {pending ? 'Submitting…' : currentStatus === 'changes_requested' ? 'Resubmit for review' : 'Submit for review'}
-      </button>
+      <div>
+        <Button
+          type="button"
+          onClick={handleSubmit}
+          disabled={!canSubmitForReview(pending, success, dirty)}
+          className="font-semibold"
+        >
+          <Send className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+          {pending
+            ? 'Submitting…'
+            : currentStatus === 'changes_requested'
+              ? 'Resubmit for review'
+              : 'Submit for review'}
+        </Button>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { SupabaseProjectRepository } from '../../../../repositories/SupabaseProjectRepository';
 import { ProjectStatusBadge } from '../../../../components/admin/ProjectStatusBadge';
 import { ProjectDetailSection } from '../../../../components/admin/ProjectDetailSection';
+import { ProjectReviewSection } from '../../../../components/admin/ProjectReviewSection';
 import { ProjectMediaSummary } from '../../../../components/admin/ProjectMediaSummary';
 import { ProjectValidationSummary } from '../../../../components/admin/ProjectValidationSummary';
 import { StagingReviewActions } from '../../../../components/admin/StagingReviewActions';
@@ -40,6 +41,24 @@ import {
 } from '../../../../projects/projectDetailAuxiliaryData';
 import { loadProjectMediaPreviewItems } from '../../../../projects/projectMediaPreview';
 import type { ProjectMediaPreviewItem } from '../../../../components/admin-media/mediaPreviewTypes';
+import { Button } from '../../../../components/ui/button';
+import { Card, CardHeader, CardDescription, CardContent } from '../../../../components/ui/card';
+import { ErrorState } from '../../../../components/ui/error-state';
+import {
+  ArrowLeft,
+  FileText,
+  Layers,
+  Sparkles,
+  Image as ImageIcon,
+  ShieldCheck,
+  CheckSquare,
+  Sliders,
+  Info,
+  History,
+  AlertTriangle,
+  FolderArchive,
+  ExternalLink,
+} from 'lucide-react';
 
 // Force dynamic server rendering for real-time detail load
 export const dynamic = 'force-dynamic';
@@ -186,10 +205,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         },
         loadResolutionStatus: async () => previewRepository.getCorrectionResolutionStatus(await projectDbId),
         loadPublicationReadiness: async () => previewRepository.getPublicationReadiness({
-            publicId,
-            adminId: adminContext.adminUserId,
-            privateBucket: env.SUPABASE_DRAFT_BUCKET,
-          }),
+          publicId,
+          adminId: adminContext.adminUserId,
+          privateBucket: env.SUPABASE_DRAFT_BUCKET,
+        }),
       });
 
       auditRecords = auxiliary.auditRecords;
@@ -223,82 +242,37 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
   if (loadError) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        backgroundColor: '#0B0F19',
-        color: '#EF4444',
-        fontFamily: 'Inter, system-ui, sans-serif',
-        padding: '3rem',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}>
-        <div style={{
-          maxWidth: '600px',
-          width: '100%',
-          backgroundColor: '#161F30',
-          borderRadius: '12px',
-          padding: '2.5rem',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
-          textAlign: 'center',
-        }}>
-          <h3 style={{ margin: '0 0 1rem 0' }}>Project Details Unavailable</h3>
-          <p style={{ color: '#D1D5DB', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '2rem' }}>
-            Project details could not be loaded. Please try again shortly.
-          </p>
-          <Link href="/admin" style={{
-            color: '#FFFFFF',
-            backgroundColor: '#3B82F6',
-            padding: '0.6rem 1.5rem',
-            borderRadius: '6px',
-            textDecoration: 'none',
-            fontWeight: '600',
-            fontSize: '0.9rem'
-          }}>
-            Back to Dashboard
-          </Link>
-        </div>
+      <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center max-w-lg mx-auto">
+        <ErrorState
+          headingLevel="h2"
+          title="Project Details Unavailable"
+          description="Project details could not be loaded. Please try again shortly."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/admin">Return to projects</Link>
+            </Button>
+          }
+        />
       </div>
     );
   }
 
   if (!project) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        backgroundColor: '#0B0F19',
-        color: '#F3F4F6',
-        fontFamily: 'Inter, system-ui, sans-serif',
-        padding: '3rem',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}>
-        <div style={{
-          maxWidth: '500px',
-          width: '100%',
-          backgroundColor: '#161F30',
-          borderRadius: '12px',
-          padding: '2.5rem',
-          border: '1px dashed rgba(255, 255, 255, 0.1)',
-          textAlign: 'center',
-        }}>
-          <h2 style={{ margin: '0 0 0.5rem 0', color: '#F59E0B' }}>🔍 Project Not Found</h2>
-          <p style={{ color: '#9CA3AF', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '2rem' }}>
-            Staging project public ID <code>&quot;{publicId}&quot;</code> was not found. Seed records or check search key formats.
-          </p>
-          <Link href="/admin" style={{
-            color: '#FFFFFF',
-            backgroundColor: '#3B82F6',
-            padding: '0.6rem 1.5rem',
-            borderRadius: '6px',
-            textDecoration: 'none',
-            fontWeight: '600',
-            fontSize: '0.9rem'
-          }}>
-            Return to Dashboard
-          </Link>
-        </div>
+      <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center max-w-lg mx-auto">
+        <Card className="bg-card border-border shadow-xs p-6 text-center w-full">
+          <CardHeader className="p-0 pb-3">
+            <h2 className="text-base sm:text-lg font-bold text-foreground">Project Not Found</h2>
+            <CardDescription className="text-xs text-muted-foreground mt-1">
+              No project record was found matching the identifier <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-foreground">{publicId}</code>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0 pt-4">
+            <Button asChild>
+              <Link href="/admin">Return to projects</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -308,77 +282,330 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
   return (
     <ProjectMetadataNavigationProvider>
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: '#0B0F19',
-      color: '#F3F4F6',
-      fontFamily: 'Inter, system-ui, sans-serif',
-      padding: '2rem',
-    }}>
-      <div style={{
-        maxWidth: '1000px',
-        margin: '0 auto',
-      }}>
-
-        {/* Navigation header */}
-        <header style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '2rem',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-          paddingBottom: '1rem',
-        }}>
+      <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full pb-12">
+        {/* Top Navigation & Project Header */}
+        <div className="flex flex-col gap-3">
           <div>
-            <GuardedProjectBackLink href="/admin" style={{
-              color: '#3B82F6',
-              textDecoration: 'none',
-              fontSize: '0.9rem',
-              fontWeight: '600',
-              display: 'inline-flex',
-              alignItems: 'center',
-              marginBottom: '0.5rem'
-            }}>
-              ← Back to Staging Dashboard
+            <GuardedProjectBackLink
+              href="/admin"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Back to projects</span>
             </GuardedProjectBackLink>
-            <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>Project Ingestion Review</h1>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '0.8rem', color: '#9CA3AF', display: 'block', marginBottom: '0.25rem' }}>Workflow State:</span>
-            <ProjectStatusBadge status={project.status} />
-          </div>
-        </header>
 
-        {/* ⚠️ Staging Warning Banner */}
-        <div style={{
-          backgroundColor: 'rgba(245, 158, 11, 0.1)',
-          border: '1px solid rgba(245, 158, 11, 0.2)',
-          borderRadius: '12px',
-          padding: '1.25rem 1.5rem',
-          marginBottom: '2rem',
-          color: '#F59E0B',
-        }}>
-          <h4 style={{ margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', fontSize: '1rem', fontWeight: 'bold' }}>
-            ⚠️ ADMINISTRATIVE REVIEW STAGING SANDBOX
-          </h4>
-          <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: '1.5', color: '#D1D5DB' }}>
-            Hosted and production public-feed operations remain disabled, and Duda stays disconnected. Explicit Local test publication and removal controls may be available only when this Admin CMS is connected to proven loopback Local Supabase.
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 sm:p-5 rounded-lg bg-card border border-border shadow-xs">
+            <div className="flex flex-col gap-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h2 className="text-lg sm:text-xl font-bold text-foreground tracking-tight break-words">
+                  {project.title}
+                </h2>
+                <ProjectStatusBadge status={project.status} />
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  <strong className="text-foreground">Public ID:</strong>{' '}
+                  <code className="font-mono bg-muted px-1.5 py-0.5 rounded text-foreground">{project.publicId}</code>
+                </span>
+                {project.year && (
+                  <span>
+                    <strong className="text-foreground">Year:</strong> {project.year}
+                  </span>
+                )}
+                {project.program && (
+                  <span>
+                    <strong className="text-foreground">Program:</strong> {project.program}
+                  </span>
+                )}
+                {project.discipline && (
+                  <span>
+                    <strong className="text-foreground">Discipline:</strong> {project.discipline}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Dynamic Action Trigger Panel */}
-        {submitForReviewUnavailable && (
-          <div style={{
-            maxWidth: '1000px', margin: '0 auto 1rem', fontSize: '0.8rem', color: '#F59E0B',
-            backgroundColor: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.15)',
-            borderRadius: '6px', padding: '0.5rem 0.75rem',
-          }}>
-            Submission readiness is temporarily unavailable. Submit-for-review is disabled until readiness can be verified.
+        {/* Sandbox Safety Notice Banner */}
+        <div className="p-3.5 rounded-lg bg-warning/10 border border-warning/30 text-warning text-xs leading-relaxed flex items-start gap-2.5">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <div>
+            <strong>Administrative review staging sandbox:</strong> Hosted and production public-feed operations remain disabled, and external integrations stay disconnected. Local test publication controls are available only when connected to loopback Local Supabase.
           </div>
-        )}
-        <ProjectDetailSection title="⚡ Staging Review Actions" borderColor="#EC4899">
+        </div>
+
+        {/* B. REVIEW AND EDIT PROJECT INFORMATION */}
+        <ProjectReviewSection
+          title="Review & Edit Project Information"
+          description="Core public project information including program, disciplines, categories, and accessibility text."
+          icon={FileText}
+        >
+          {metadataEditorData && metadataEditorAvailable ? (
+            <ProjectMetadataEditor
+              initialMetadata={metadataEditorData.metadata}
+              programs={metadataEditorData.programs}
+              disciplines={metadataEditorData.disciplines}
+              industryCategories={metadataEditorData.industryCategories}
+              canEdit={canEditMetadata}
+              projectStatus={project.status}
+              saveAction={saveProjectMetadataAction}
+              headingLevel="h4"
+            />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Project metadata editing is temporarily unavailable. Read-only project metadata remains visible below.
+            </p>
+          )}
+        </ProjectReviewSection>
+
+        {/* Project Overview */}
+        <ProjectReviewSection
+          title="Project Overview"
+          description="Detailed academic and industry identification for this project record."
+          icon={Layers}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs sm:text-sm">
+            <dl className="flex flex-col gap-3">
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">Project Title</dt>
+                <dd className="font-semibold text-foreground text-sm mt-0.5">{project.title}</dd>
+              </div>
+
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">Public Showcase ID</dt>
+                <dd className="mt-0.5">
+                  <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-xs text-foreground">
+                    {project.publicId}
+                  </code>
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">Academic Term (Year)</dt>
+                <dd className="text-foreground mt-0.5">{project.year || 'Not provided'}</dd>
+              </div>
+
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">Study Program & Code</dt>
+                <dd className="text-foreground mt-0.5">
+                  {project.program ? `${project.program} (${project.studyProgram || 'Not provided'})` : 'Not provided'}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">Primary Discipline</dt>
+                <dd className="text-foreground mt-0.5">{project.discipline || 'Not provided'}</dd>
+              </div>
+            </dl>
+
+            <dl className="flex flex-col gap-3">
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">Mapped Showcase Disciplines</dt>
+                <dd className="text-foreground mt-0.5">
+                  {project.disciplines && project.disciplines.length > 0 ? project.disciplines.join(', ') : 'None'}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">Industry Partner / Area</dt>
+                <dd className="text-foreground mt-0.5">
+                  {project.industryPartner ? `${project.industryPartner} (${project.industry || 'Not provided'})` : 'Not provided'}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">Group Name</dt>
+                <dd className="text-foreground mt-0.5">{project.groupName || 'Not provided'}</dd>
+              </div>
+
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">Team Roster</dt>
+                <dd className="text-foreground mt-0.5">
+                  {project.teamMembers && project.teamMembers.length > 0 ? project.teamMembers.join(', ') : 'None'}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">Academic Supervisor</dt>
+                <dd className="text-foreground mt-0.5">{project.academicSupervisor || 'Not provided'}</dd>
+              </div>
+
+              <div>
+                <dt className="text-xs font-semibold text-muted-foreground">Public feed status eligibility</dt>
+                <dd className="mt-0.5">
+                  {isEligible ? (
+                    <span className="text-success font-semibold text-xs inline-flex items-center gap-1">
+                      Eligible
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">
+                      Not eligible
+                    </span>
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </div>
+
+          {project.importBatchId && (
+            <div className="mt-4 pt-3 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-md bg-muted/40 text-xs">
+              <div className="flex items-center gap-2">
+                <FolderArchive className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
+                <span className="text-muted-foreground">
+                  Imported via folder: <code className="font-mono text-foreground font-semibold">{project.sourceFolder}</code>
+                </span>
+              </div>
+              <Button asChild variant="outline" size="sm" className="h-7 text-xs font-medium shrink-0">
+                <Link href={`/admin/imports/${project.importBatchId}`}>
+                  View Import Batch
+                  <ExternalLink className="h-3 w-3 ml-1" aria-hidden="true" />
+                </Link>
+              </Button>
+            </div>
+          )}
+        </ProjectReviewSection>
+
+        {/* Public Showcase Content */}
+        <ProjectReviewSection
+          title="Public Showcase Content"
+          description="Content displayed on the public project card and detail views."
+          icon={Sparkles}
+        >
+          <div className="flex flex-col gap-4 text-xs sm:text-sm">
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                Short Summary
+              </h4>
+              <p className="text-foreground leading-relaxed">
+                {project.summary || 'Not provided'}
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-border">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                Problem Background
+              </h4>
+              <p className="text-foreground leading-relaxed whitespace-pre-wrap">
+                {project.background || 'Not provided'}
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-border">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                Developed Solution
+              </h4>
+              <p className="text-foreground leading-relaxed whitespace-pre-wrap">
+                {project.solution || 'Not provided'}
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-border">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                Accessibility Description (accessibility.txt)
+              </h4>
+              <p className="text-foreground leading-relaxed">
+                {project.accessibilityText || 'Not provided'}
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-border">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                Poster Full Text Index
+              </h4>
+              <p className="text-xs text-muted-foreground italic leading-relaxed whitespace-pre-wrap bg-muted/30 p-3 rounded-md border border-border">
+                {project.posterText || 'Not provided'}
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-border grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                  External Citations
+                </h4>
+                {project.citations && project.citations.length > 0 ? (
+                  <ul className="list-disc pl-4 space-y-1 text-xs text-foreground">
+                    {project.citations.map((c: string, i: number) => (
+                      <li key={i}>{c}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">None</p>
+                )}
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                  External Web Links
+                </h4>
+                {project.externalLinks && project.externalLinks.length > 0 ? (
+                  <ul className="space-y-1.5 text-xs">
+                    {project.externalLinks.map((link: { label?: string; url: string }, i: number) => (
+                      <li key={i}>
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-primary hover:underline font-medium break-all"
+                        >
+                          <span>{link.label || link.url}</span>
+                          <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">None</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </ProjectReviewSection>
+
+        {/* C. REVIEW MEDIA AND ACCESSIBILITY */}
+        <ProjectReviewSection
+          title="Media & Accessibility Review"
+          description="Uploaded project images and documents, plus snapshot image alt text."
+          icon={ImageIcon}
+        >
+          <ProjectMediaSummary
+            project={project}
+            mediaItems={mediaItems}
+            mediaAvailable={mediaAvailable}
+            snapshotAltText={metadataEditorData ? {
+              canEdit: canEditMetadata,
+              // The same project version the metadata editor holds, so whichever surface saves
+              // second is told the view is stale instead of silently overwriting the other.
+              expectedUpdatedAt: metadataEditorData.metadata.expectedUpdatedAt,
+              saveAction: saveSnapshotAltTextAction,
+            } : undefined}
+          />
+        </ProjectReviewSection>
+
+        {/* D. CHECK VALIDATION */}
+        <ProjectReviewSection
+          title="Compliance & Validation"
+          description="Approval readiness gates, blocking issues, and compliance warnings."
+          icon={ShieldCheck}
+        >
+          <ProjectValidationSummary project={project} />
+        </ProjectReviewSection>
+
+        {/* E. REVIEW / SUBMISSION ACTIONS */}
+        <ProjectReviewSection
+          title="Review & Submission Actions"
+          description="Submit project for review or execute administrative workflow transitions."
+          icon={CheckSquare}
+        >
+          {submitForReviewUnavailable && (
+            <div className="mb-3 p-2.5 rounded-md bg-warning/10 border border-warning/30 text-xs text-warning">
+              Submission readiness is temporarily unavailable. Submit-for-review is disabled until readiness can be verified.
+            </div>
+          )}
+
           {submitForReview && canEditMetadata && (
-            <div style={{ marginBottom: allowedActions.length > 0 ? '1.25rem' : 0 }}>
+            <div className="mb-4 pb-4 border-b border-border">
               {submitForReview.ready ? (
                 <SubmitForReviewButton
                   batchId={project.importBatchId || ''}
@@ -386,31 +613,26 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                   currentStatus={project.status}
                 />
               ) : (
-                <div style={{
-                  fontSize: '0.8rem', color: '#F59E0B', backgroundColor: 'rgba(245, 158, 11, 0.05)',
-                  border: '1px solid rgba(245, 158, 11, 0.15)', borderRadius: '6px', padding: '0.5rem 0.75rem',
-                }}>
-                  <strong>Not ready to submit for review:</strong>
-                  <ul style={{ margin: '0.25rem 0 0 0', paddingLeft: '1.1rem' }}>
-                    {submitForReview.blockingReasons.map((reason) => <li key={reason}>{reason}</li>)}
+                <div className="p-3 rounded-md bg-warning/10 border border-warning/30 text-xs text-warning flex flex-col gap-1">
+                  <strong className="text-foreground">Not ready to submit for review:</strong>
+                  <ul className="list-disc pl-4 space-y-0.5 text-warning">
+                    {submitForReview.blockingReasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
                   </ul>
                 </div>
               )}
             </div>
           )}
+
           <StagingReviewActions
             publicId={project.publicId || ''}
             currentStatus={project.status}
             allowedActions={allowedActions}
           />
-          {project.status === 'published' && canExecuteLocalArchive && <LocalArchivePanel publicId={project.publicId || ''} />}
-        </ProjectDetailSection>
+        </ProjectReviewSection>
 
-        <ProjectDetailSection title="🚀 Publication Readiness Gate" borderColor="#10B981">
-          <PublicationReadinessPanel readiness={publicationReadiness} />
-          <PublicationPreparationPanel publicId={project.publicId || ''} ready={publicationActionsAvailable} canPrepare={canPreparePublicationPlan} localExecutionAvailable={localPublicationExecutionAvailable} />
-        </ProjectDetailSection>
-
+        {/* F. PARTICIPANT CONFIRMATION (Untouched Component Wrapped in ProjectDetailSection) */}
         <ProjectDetailSection title="🔗 Participant Preview" borderColor="#3B82F6">
           <ParticipantPreviewPanel
             publicId={project.publicId || ''}
@@ -431,439 +653,268 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           />
         </ProjectDetailSection>
 
-        <ProjectDetailSection title="Project Metadata" borderColor="#3B82F6">
-          {metadataEditorData && metadataEditorAvailable ? (
-            <ProjectMetadataEditor
-              initialMetadata={metadataEditorData.metadata}
-              programs={metadataEditorData.programs}
-              disciplines={metadataEditorData.disciplines}
-              industryCategories={metadataEditorData.industryCategories}
-              canEdit={canEditMetadata}
-              projectStatus={project.status}
-              saveAction={saveProjectMetadataAction}
-            />
-          ) : (
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#9CA3AF' }}>
-              Project metadata editing is temporarily unavailable. Read-only project metadata remains visible below.
-            </p>
+        {/* G. PUBLICATION / ARCHIVE (Untouched Components Wrapped in ProjectDetailSection) */}
+        <ProjectDetailSection title="🚀 Publication Readiness Gate" borderColor="#10B981">
+          <PublicationReadinessPanel readiness={publicationReadiness} />
+          <PublicationPreparationPanel
+            publicId={project.publicId || ''}
+            ready={publicationActionsAvailable}
+            canPrepare={canPreparePublicationPlan}
+            localExecutionAvailable={localPublicationExecutionAvailable}
+          />
+          {project.status === 'published' && canExecuteLocalArchive && (
+            <div className="mt-4 pt-4 border-t border-border/20">
+              <LocalArchivePanel publicId={project.publicId || ''} />
+            </div>
           )}
         </ProjectDetailSection>
 
-        {/* B. Project Overview */}
-        <ProjectDetailSection title="Project Overview" borderColor="#3B82F6">
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: '1.5rem',
-            fontSize: '0.9rem',
-            lineHeight: '1.6'
-          }}>
-            <div>
-              <div style={{ color: '#9CA3AF' }}><strong>Project Title:</strong></div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#FFFFFF' }}>{project.title}</div>
-
-              <div style={{ color: '#9CA3AF', marginTop: '1rem' }}><strong>Public Showcase ID:</strong></div>
-              <div><code style={{ backgroundColor: '#1E293B', padding: '0.15rem 0.35rem', borderRadius: '4px', color: '#F59E0B' }}>{project.publicId}</code></div>
-
-              <div style={{ color: '#9CA3AF', marginTop: '1rem' }}><strong>Academic Term (Year):</strong></div>
-              <div>{project.year || 'N/A'}</div>
-
-              <div style={{ color: '#9CA3AF', marginTop: '1rem' }}><strong>Study Program & Code:</strong></div>
-              <div>{project.program ? `${project.program} (${project.studyProgram || 'N/A'})` : 'N/A'}</div>
-            </div>
-
-            <div>
-              <div style={{ color: '#9CA3AF' }}><strong>Primary Discipline:</strong></div>
-              <div>{project.discipline || 'N/A'}</div>
-
-              <div style={{ color: '#9CA3AF', marginTop: '1rem' }}><strong>Mapped Showcase Disciplines:</strong></div>
-              <div>{project.disciplines && project.disciplines.length > 0 ? project.disciplines.join(', ') : 'None'}</div>
-
-              <div style={{ color: '#9CA3AF', marginTop: '1rem' }}><strong>Industry Partner / Area:</strong></div>
-              <div>{project.industryPartner ? `${project.industryPartner} (${project.industry || 'N/A'})` : 'N/A'}</div>
-
-              <div style={{ color: '#9CA3AF', marginTop: '1rem' }}><strong>Public Showcase Eligibility:</strong></div>
-              <div>
-                {isEligible ? (
-                  <span style={{ color: '#10B981', fontWeight: 'bold' }}>YES (Eligible for Approved Feed)</span>
-                ) : (
-                  <span style={{ color: '#EF4444', fontWeight: 'bold' }}>NO (Draft/Reviewing/Archived)</span>
-                )}
+        {/* H. TECHNICAL / AUDIT DETAILS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Layout Settings */}
+          <ProjectReviewSection
+            title="Layout Settings"
+            description="Active showcase template configuration."
+            icon={Sliders}
+          >
+            <dl className="flex flex-col gap-2.5 text-xs">
+              <div className="flex items-center justify-between py-1 border-b border-border">
+                <dt className="text-muted-foreground">Active Template ID</dt>
+                <dd>
+                  <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-primary font-semibold">
+                    {project.layoutConfig?.templateId || 'default'}
+                  </code>
+                </dd>
               </div>
-            </div>
-          </div>
 
-          <div style={{ marginTop: '1.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '1rem' }}>
-            <div style={{ color: '#9CA3AF', fontSize: '0.85rem' }}><strong>Group Name:</strong> {project.groupName || 'N/A'}</div>
-            <div style={{ color: '#9CA3AF', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-              <strong>Team Roster:</strong> {project.teamMembers && project.teamMembers.length > 0 ? project.teamMembers.join(', ') : 'None'}
-            </div>
-            <div style={{ color: '#9CA3AF', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-              <strong>Academic Supervisor:</strong> {project.academicSupervisor || 'N/A'}
-            </div>
-            {project.importBatchId && (
-              <div style={{
-                marginTop: '1rem',
-                backgroundColor: 'rgba(59, 130, 246, 0.05)',
-                border: '1px solid rgba(59, 130, 246, 0.1)',
-                borderRadius: '8px',
-                padding: '0.75rem 1rem',
-                fontSize: '0.85rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <div>
-                  <strong style={{ color: '#60A5FA', display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', marginBottom: '0.15rem' }}>📦 Ingestion Import Source</strong>
-                  <span style={{ color: '#D1D5DB' }}>Imported via folder <code>{project.sourceFolder}</code></span>
-                </div>
-                <div>
-                  <Link href={`/admin/imports/${project.importBatchId}`} style={{
-                    color: '#3B82F6',
-                    textDecoration: 'none',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    padding: '0.3rem 0.6rem',
-                    borderRadius: '4px',
-                    border: '1px solid rgba(59, 130, 246, 0.2)'
-                  }}>
-                    View Import Batch →
-                  </Link>
-                </div>
+              <div className="flex items-center justify-between py-1 border-b border-border">
+                <dt className="text-muted-foreground">Featured Media Focus</dt>
+                <dd className="font-medium text-foreground capitalize">
+                  {project.layoutConfig?.featuredMedia || 'None'}
+                </dd>
               </div>
-            )}
-          </div>
-        </ProjectDetailSection>
 
-        {/* C. Public Showcase Content */}
-        <ProjectDetailSection title="Public Showcase Content" borderColor="#8B5CF6">
-          <div style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
-            <div style={{ marginBottom: '1rem' }}>
-              <div style={{ color: '#9CA3AF', fontWeight: 'bold' }}>Short Summary:</div>
-              <p style={{ margin: '0.25rem 0 0 0', color: '#D1D5DB' }}>{project.summary || 'N/A'}</p>
-            </div>
-
-            <div style={{ marginBottom: '1rem' }}>
-              <div style={{ color: '#9CA3AF', fontWeight: 'bold' }}>Problem Background:</div>
-              <p style={{ margin: '0.25rem 0 0 0', color: '#D1D5DB', whiteSpace: 'pre-wrap' }}>{project.background || 'N/A'}</p>
-            </div>
-
-            <div style={{ marginBottom: '1rem' }}>
-              <div style={{ color: '#9CA3AF', fontWeight: 'bold' }}>Developed Solution:</div>
-              <p style={{ margin: '0.25rem 0 0 0', color: '#D1D5DB', whiteSpace: 'pre-wrap' }}>{project.solution || 'N/A'}</p>
-            </div>
-
-            <div style={{ marginBottom: '1rem' }}>
-              <div style={{ color: '#9CA3AF', fontWeight: 'bold' }}>Accessibility Description (accessibility.txt):</div>
-              <p style={{ margin: '0.25rem 0 0 0', color: '#D1D5DB' }}>{project.accessibilityText || 'N/A'}</p>
-            </div>
-
-            <div style={{ marginBottom: '1rem' }}>
-              <div style={{ color: '#9CA3AF', fontWeight: 'bold' }}>Poster Text Index (OCR / Full Text):</div>
-              <p style={{ margin: '0.25rem 0 0 0', color: '#9CA3AF', fontSize: '0.85rem', fontStyle: 'italic' }}>
-                {project.posterText || 'N/A'}
-              </p>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
-              <div>
-                <div style={{ color: '#9CA3AF', fontWeight: 'bold' }}>External Citations:</div>
-                <ul style={{ margin: '0.25rem 0 0 0', paddingLeft: '1.25rem', color: '#D1D5DB' }}>
-                  {project.citations && project.citations.length > 0 ? (
-                    project.citations.map((c: string, i: number) => <li key={i}>{c}</li>)
+              <div className="flex items-center justify-between py-1 border-b border-border">
+                <dt className="text-muted-foreground">Section Ordering</dt>
+                <dd className="font-medium text-foreground">
+                  {project.layoutConfig?.sectionOrder ? (
+                    project.layoutConfig.sectionOrder.join(' → ')
                   ) : (
-                    <li>None</li>
+                    <span className="text-muted-foreground">Default order</span>
                   )}
-                </ul>
+                </dd>
               </div>
 
-              <div>
-                <div style={{ color: '#9CA3AF', fontWeight: 'bold' }}>External Web Links:</div>
-                <ul style={{ margin: '0.25rem 0 0 0', paddingLeft: '1.25rem', color: '#D1D5DB' }}>
-                  {project.externalLinks && project.externalLinks.length > 0 ? (
-                    project.externalLinks.map((link: { label?: string; url: string }, i: number) => (
-                      <li key={i}>
-                        <a href={link.url} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6', textDecoration: 'none' }}>
-                          {link.label || link.url}
-                        </a>
-                      </li>
-                    ))
+              {project.layoutConfig?.hiddenSections && (
+                <div className="flex items-center justify-between py-1">
+                  <dt className="text-muted-foreground">Hidden Sections</dt>
+                  <dd className="font-medium text-destructive">
+                    {project.layoutConfig.hiddenSections.join(', ')}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </ProjectReviewSection>
+
+          {/* System Details */}
+          <ProjectReviewSection
+            title="System Details"
+            description="Staging diagnostics and record timestamps."
+            icon={Info}
+          >
+            <dl className="flex flex-col gap-2.5 text-xs">
+              <div className="flex items-center justify-between py-1 border-b border-border">
+                <dt className="text-muted-foreground">Validation Errors (Cached)</dt>
+                <dd className="font-semibold text-foreground">
+                  {project.validationErrors?.length || 0}
+                </dd>
+              </div>
+
+              <div className="flex items-center justify-between py-1 border-b border-border">
+                <dt className="text-muted-foreground">Validation Warnings (Cached)</dt>
+                <dd className="font-semibold text-foreground">
+                  {project.validationWarnings?.length || 0}
+                </dd>
+              </div>
+
+              <div className="flex items-center justify-between py-1 border-b border-border">
+                <dt className="text-muted-foreground">Pending Showcase Removal</dt>
+                <dd className="font-semibold">
+                  {project.pendingRemovalFromPublic ? (
+                    <span className="text-destructive font-bold">Yes</span>
                   ) : (
-                    <li>None</li>
+                    <span className="text-success font-semibold">No</span>
                   )}
-                </ul>
-              </div>
-            </div>
-          </div>
-        </ProjectDetailSection>
-
-        {/* D. Media Review */}
-        <ProjectDetailSection title="Staging Media Review" borderColor="#10B981">
-          <ProjectMediaSummary
-            project={project}
-            mediaItems={mediaItems}
-            mediaAvailable={mediaAvailable}
-            snapshotAltText={metadataEditorData ? {
-              canEdit: canEditMetadata,
-              // The same project version the metadata editor holds, so whichever surface saves
-              // second is told the view is stale instead of silently overwriting the other.
-              expectedUpdatedAt: metadataEditorData.metadata.expectedUpdatedAt,
-              saveAction: saveSnapshotAltTextAction,
-            } : undefined}
-          />
-        </ProjectDetailSection>
-
-        {/* E. Layout Review */}
-        <ProjectDetailSection title="Showcase Grid Layout & Config" borderColor="#F59E0B">
-          <div style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <tbody>
-                <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <th style={{ padding: '0.5rem 0', color: '#9CA3AF', fontWeight: 'normal', width: '200px' }}>Active Template ID</th>
-                  <td style={{ padding: '0.5rem 0' }}>
-                    <code style={{ backgroundColor: '#1E293B', padding: '0.15rem 0.35rem', borderRadius: '4px', color: '#3B82F6' }}>
-                      {project.layoutConfig?.templateId || 'default'}
-                    </code>
-                  </td>
-                </tr>
-
-                <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <th style={{ padding: '0.5rem 0', color: '#9CA3AF', fontWeight: 'normal' }}>Featured Media Focus</th>
-                  <td style={{ padding: '0.5rem 0' }}>
-                    <span style={{ textTransform: 'capitalize' }}>
-                      {project.layoutConfig?.featuredMedia || 'None'}
-                    </span>
-                  </td>
-                </tr>
-
-                <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <th style={{ padding: '0.5rem 0', color: '#9CA3AF', fontWeight: 'normal' }}>Section Ordering</th>
-                  <td style={{ padding: '0.5rem 0' }}>
-                    {project.layoutConfig?.sectionOrder ? (
-                      project.layoutConfig.sectionOrder.join(' → ')
-                    ) : (
-                      <span style={{ color: '#9CA3AF' }}>Default order</span>
-                    )}
-                  </td>
-                </tr>
-
-                {project.layoutConfig?.hiddenSections && (
-                  <tr>
-                    <th style={{ padding: '0.5rem 0', color: '#9CA3AF', fontWeight: 'normal' }}>Hidden Sections</th>
-                    <td style={{ padding: '0.5rem 0', color: '#EF4444' }}>
-                      {project.layoutConfig.hiddenSections.join(', ')}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </ProjectDetailSection>
-
-        {/* F. Internal/Staging Diagnostics & Compliance */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))',
-          gap: '1.5rem'
-        }}>
-          {/* Validation card */}
-          <ProjectDetailSection title="Staging Compliance & Validation Summary" borderColor="#EC4899">
-            <ProjectValidationSummary project={project} />
-          </ProjectDetailSection>
-
-          {/* System Audit card */}
-          <ProjectDetailSection title="Staging Internal System Audit" borderColor="#6B7280">
-            <div style={{ fontSize: '0.85rem', lineHeight: '1.6', color: '#D1D5DB' }}>
-              <div><strong>Validation Errors (Cached):</strong> {project.validationErrors?.length || 0}</div>
-              <div><strong>Validation Warnings (Cached):</strong> {project.validationWarnings?.length || 0}</div>
-
-              <div style={{ marginTop: '0.75rem' }}>
-                <strong>Pending Showcase Removal:</strong>{' '}
-                <span style={{ color: project.pendingRemovalFromPublic ? '#EF4444' : '#10B981', fontWeight: 'bold' }}>
-                  {project.pendingRemovalFromPublic ? '⚠️ YES' : 'NO'}
-                </span>
+                </dd>
               </div>
 
               {project.status === 'archived' && (
-                <div style={{
-                  marginTop: '0.75rem',
-                  backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                  borderRadius: '6px',
-                  padding: '0.5rem 0.75rem',
-                  border: '1px solid rgba(255, 255, 255, 0.05)'
-                }}>
-                  <div><strong>Archived Timestamp:</strong> {project.archivedAt || 'N/A'}</div>
-                  <div style={{ marginTop: '0.25rem' }}><strong>Archival Reason:</strong> {project.archiveReason || 'N/A'}</div>
+                <div className="p-2 rounded bg-muted/40 border border-border text-xs">
+                  <div><strong>Archived:</strong> {project.archivedAt || 'Not recorded'}</div>
+                  <div className="mt-0.5"><strong>Reason:</strong> {project.archiveReason || 'Not recorded'}</div>
                 </div>
               )}
 
-              <div style={{
-                marginTop: '1rem',
-                borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-                paddingTop: '0.75rem',
-                fontSize: '0.8rem',
-                color: '#9CA3AF'
-              }}>
-                <div><strong>System Created At:</strong> {project.created_at || 'N/A'}</div>
-                <div><strong>System Updated At:</strong> {project.updated_at || 'N/A'}</div>
+              <div className="pt-2 border-t border-border text-[11px] text-muted-foreground flex flex-col gap-1">
+                <div>Created: {project.created_at || 'Not recorded'}</div>
+                <div>Updated: {project.updated_at || 'Not recorded'}</div>
               </div>
-            </div>
-          </ProjectDetailSection>
+            </dl>
+          </ProjectReviewSection>
         </div>
 
-        {/* Audit Log / Change History */}
-        <div style={{ marginTop: '1.5rem' }}>
-          <ProjectDetailSection title="📜 Staging Change & Audit Logs" borderColor="#6B7280">
-            {auditRecords === null ? (
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#9CA3AF', fontStyle: 'italic' }}>
-                Audit history is temporarily unavailable.
-              </p>
-            ) : auditRecords.length === 0 ? (
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#9CA3AF', fontStyle: 'italic' }}>
-                No review action logs recorded for this staging project.
-              </p>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: '#9CA3AF' }}>
-                      <th style={{ padding: '0.5rem', fontWeight: '600' }}>Timestamp</th>
-                      <th style={{ padding: '0.5rem', fontWeight: '600' }}>Action Taken</th>
-                      <th style={{ padding: '0.5rem', fontWeight: '600' }}>Transition</th>
-                      <th style={{ padding: '0.5rem', fontWeight: '600' }}>Comments/Audit Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditRecords.map((rec) => (
-                      <tr key={rec.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', color: '#D1D5DB' }}>
-                        <td style={{ padding: '0.5rem', fontSize: '0.8rem', color: '#9CA3AF', verticalAlign: 'top' }}>
-                          {rec.timestamp ? new Date(rec.timestamp).toLocaleString() : 'N/A'}
-                        </td>
-                        <td style={{ padding: '0.5rem', fontWeight: 'bold', verticalAlign: 'top' }}>
-                          <span style={{
-                            display: 'inline-block',
-                            padding: '0.15rem 0.4rem',
-                            borderRadius: '4px',
-                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                            fontSize: '0.75rem',
-                            textTransform: 'uppercase'
-                          }}>
-                            {rec.action.replace('_', ' ')}
-                          </span>
-
-                          <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', fontWeight: 'normal' }}>
-                            <div style={{ color: '#9CA3AF' }}>Actor:</div>
-                            <div style={{ color: '#D1D5DB' }}>
-                              {rec.actorFullName} {rec.actorEmail ? `(${rec.actorEmail})` : ''}
-                            </div>
+        {/* Change History & Audit Logs */}
+        <ProjectReviewSection
+          title="Change History & Audit Logs"
+          description="Recorded administrative transitions, metadata updates, and audit notes."
+          icon={History}
+        >
+          {auditRecords === null ? (
+            <p className="text-xs text-muted-foreground italic">
+              Audit history is temporarily unavailable.
+            </p>
+          ) : auditRecords.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">
+              No review action logs recorded for this project.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-border text-muted-foreground">
+                    <th className="py-2 px-2 font-semibold">Timestamp</th>
+                    <th className="py-2 px-2 font-semibold">Action Taken</th>
+                    <th className="py-2 px-2 font-semibold">Transition</th>
+                    <th className="py-2 px-2 font-semibold">Comments / Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {auditRecords.map((rec) => (
+                    <tr key={rec.id} className="text-foreground align-top">
+                      <td className="py-2.5 px-2 text-muted-foreground text-[11px] whitespace-nowrap">
+                        {rec.timestamp ? new Date(rec.timestamp).toLocaleString() : 'Not recorded'}
+                      </td>
+                      <td className="py-2.5 px-2">
+                        <span className="inline-block px-1.5 py-0.5 rounded bg-muted font-semibold text-[11px] uppercase tracking-wider text-foreground">
+                          {rec.action.replace('_', ' ')}
+                        </span>
+                        <div className="mt-1 text-[11px] text-muted-foreground">
+                          Actor: <strong className="text-foreground">{rec.actorFullName}</strong>
+                          {rec.actorEmail && <span> ({rec.actorEmail})</span>}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-2 whitespace-nowrap">
+                        <code className="text-xs font-mono">{rec.fromStatus || 'None'}</code>
+                        {' → '}
+                        <code className="text-xs font-mono font-semibold text-primary">{rec.toStatus || 'None'}</code>
+                      </td>
+                      <td className="py-2.5 px-2 text-xs">
+                        {rec.comments && (
+                          <div className="text-foreground font-medium mb-1">
+                            {rec.comments}
                           </div>
-                        </td>
-                        <td style={{ padding: '0.5rem', verticalAlign: 'top' }}>
-                          <code>{rec.fromStatus || 'N/A'}</code> → <code>{rec.toStatus || 'N/A'}</code>
-                        </td>
-                        <td style={{ padding: '0.5rem', color: '#F59E0B', verticalAlign: 'top' }}>
-                          {rec.comments || 'N/A'}
+                        )}
 
-                          {rec.action === 'update_metadata' && rec.metadataEventDetails && (
-                            <div style={{ marginTop: '0.75rem', backgroundColor: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '6px' }}>
-                              <div style={{ color: '#9CA3AF', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
-                                <strong>Changed:</strong> {rec.metadataEventDetails.changedFields.join(', ')}
-                              </div>
-                              <details style={{ cursor: 'pointer', fontSize: '0.8rem', color: '#60A5FA' }}>
-                                <summary>View Changes</summary>
-                                <div style={{ marginTop: '0.5rem', paddingLeft: '0.5rem', borderLeft: '2px solid #3B82F6', color: '#D1D5DB' }}>
-                                  {rec.metadataEventDetails.changedFields.map(field => {
-                                    const before = rec.metadataEventDetails!.before[field];
-                                    const after = rec.metadataEventDetails!.after[field];
+                        {rec.action === 'update_metadata' && rec.metadataEventDetails && (
+                          <div className="mt-1.5 p-2 rounded bg-muted/40 border border-border text-[11px]">
+                            <div className="text-muted-foreground mb-1">
+                              <strong>Changed fields:</strong> {rec.metadataEventDetails.changedFields.join(', ')}
+                            </div>
+                            <details className="cursor-pointer text-primary">
+                              <summary className="font-medium hover:underline">View details</summary>
+                              <div className="mt-2 pl-2 border-l-2 border-primary space-y-2 text-foreground">
+                                {rec.metadataEventDetails.changedFields.map((field) => {
+                                  const before = rec.metadataEventDetails!.before[field];
+                                  const after = rec.metadataEventDetails!.after[field];
 
-                                    let changeView;
-                                    if (field === 'background' || field === 'solution' || field === 'posterText' || field === 'accessibilityText') {
-                                      changeView = (
-                                        <div style={{ marginTop: '0.25rem' }}>
-                                          <div style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>Previous:</div>
-                                          <div style={{ maxHeight: '80px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', opacity: 0.7, padding: '0.25rem', backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: '4px', fontSize: '0.75rem' }}>
-                                            {before ? String(before) : 'N/A'}
-                                          </div>
-                                          <div style={{ color: '#10B981', fontSize: '0.75rem', marginTop: '0.25rem' }}>New:</div>
-                                          <div style={{ maxHeight: '80px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', padding: '0.25rem', backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: '4px', fontSize: '0.75rem' }}>
-                                            {after ? String(after) : 'N/A'}
-                                          </div>
+                                  let changeView;
+                                  if (field === 'background' || field === 'solution' || field === 'posterText' || field === 'accessibilityText') {
+                                    changeView = (
+                                      <div className="mt-1">
+                                        <div className="text-muted-foreground text-[10px]">Previous:</div>
+                                        <div className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words opacity-70 p-1.5 bg-muted rounded text-[11px]">
+                                          {before ? String(before) : 'Not provided'}
                                         </div>
-                                      );
-                                    } else if (field === 'program') {
-                                      changeView = (
-                                        <div style={{ marginTop: '0.25rem' }}>
-                                          <span style={{ color: '#9CA3AF', textDecoration: 'line-through' }}>{(before as Record<string, unknown>)?.name as string || 'N/A'}</span>
-                                          {' → '}
-                                          <span style={{ color: '#10B981' }}>{(after as Record<string, unknown>)?.name as string || 'N/A'}</span>
+                                        <div className="text-success text-[10px] mt-1">New:</div>
+                                        <div className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words p-1.5 bg-muted rounded text-[11px]">
+                                          {after ? String(after) : 'Not provided'}
                                         </div>
-                                      );
-                                    } else if (field === 'disciplines' || field === 'industryCategories') {
-                                      const beforeSet = new Set(((before as Record<string, unknown>[]) || []).map(x => x.name as string));
-                                      const afterSet = new Set(((after as Record<string, unknown>[]) || []).map(x => x.name as string));
-                                      const added = [...afterSet].filter(x => !beforeSet.has(x));
-                                      const removed = [...beforeSet].filter(x => !afterSet.has(x));
-                                      changeView = (
-                                        <div style={{ marginTop: '0.25rem' }}>
-                                          {added.length > 0 && <div style={{ color: '#10B981' }}>Added: {added.join(', ')}</div>}
-                                          {removed.length > 0 && <div style={{ color: '#EF4444' }}>Removed: {removed.join(', ')}</div>}
-                                        </div>
-                                      );
-                                    } else {
-                                      changeView = (
-                                        <div style={{ marginTop: '0.25rem' }}>
-                                          <span style={{ color: '#9CA3AF', textDecoration: 'line-through' }}>{String(before)}</span>
-                                          {' → '}
-                                          <span style={{ color: '#10B981' }}>{String(after)}</span>
-                                        </div>
-                                      );
-                                    }
-
-                                    return (
-                                      <div key={field} style={{ marginBottom: '0.75rem' }}>
-                                        <strong style={{ color: '#E5E7EB', textTransform: 'capitalize' }}>{field}</strong>
-                                        {changeView}
                                       </div>
                                     );
-                                  })}
-                                </div>
-                              </details>
-                            </div>
-                          )}
+                                  } else if (field === 'program') {
+                                    changeView = (
+                                      <div className="mt-0.5">
+                                        <span className="text-muted-foreground line-through">
+                                          {(before as Record<string, unknown>)?.name as string || 'Not provided'}
+                                        </span>
+                                        {' → '}
+                                        <span className="text-success font-medium">
+                                          {(after as Record<string, unknown>)?.name as string || 'Not provided'}
+                                        </span>
+                                      </div>
+                                    );
+                                  } else if (field === 'disciplines' || field === 'industryCategories') {
+                                    const beforeSet = new Set(((before as Record<string, unknown>[]) || []).map((x) => x.name as string));
+                                    const afterSet = new Set(((after as Record<string, unknown>[]) || []).map((x) => x.name as string));
+                                    const added = [...afterSet].filter((x) => !beforeSet.has(x));
+                                    const removed = [...beforeSet].filter((x) => !afterSet.has(x));
+                                    changeView = (
+                                      <div className="mt-0.5 space-y-0.5">
+                                        {added.length > 0 && <div className="text-success">Added: {added.join(', ')}</div>}
+                                        {removed.length > 0 && <div className="text-destructive">Removed: {removed.join(', ')}</div>}
+                                      </div>
+                                    );
+                                  } else {
+                                    changeView = (
+                                      <div className="mt-0.5">
+                                        <span className="text-muted-foreground line-through">{String(before)}</span>
+                                        {' → '}
+                                        <span className="text-success font-medium">{String(after)}</span>
+                                      </div>
+                                    );
+                                  }
 
-                          {rec.action === 'update_metadata' && rec.mediaAccessibilityEventDetails && (
-                            <div style={{ marginTop: '0.75rem', backgroundColor: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '6px' }}>
-                              <div style={{ color: '#9CA3AF', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
-                                <strong>Changed:</strong> Snapshot image alt text
+                                  return (
+                                    <div key={field}>
+                                      <strong className="capitalize text-muted-foreground">{field}:</strong>
+                                      {changeView}
+                                    </div>
+                                  );
+                                })}
                               </div>
-                              <details style={{ cursor: 'pointer', fontSize: '0.8rem', color: '#60A5FA' }}>
-                                <summary>View Changes</summary>
-                                <div style={{ marginTop: '0.5rem', paddingLeft: '0.5rem', borderLeft: '2px solid #3B82F6', color: '#D1D5DB' }}>
-                                  <div style={{ color: '#9CA3AF', fontSize: '0.75rem' }}>Previous:</div>
-                                  <div style={{ maxHeight: '80px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', opacity: 0.7, padding: '0.25rem', backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: '4px', fontSize: '0.75rem' }}>
-                                    {rec.mediaAccessibilityEventDetails.before.snapshotAltText ?? 'Not previously provided'}
-                                  </div>
-                                  <div style={{ color: '#10B981', fontSize: '0.75rem', marginTop: '0.25rem' }}>New:</div>
-                                  <div style={{ maxHeight: '80px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', padding: '0.25rem', backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: '4px', fontSize: '0.75rem' }}>
-                                    {rec.mediaAccessibilityEventDetails.after.snapshotAltText}
-                                  </div>
-                                </div>
-                              </details>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </ProjectDetailSection>
-        </div>
+                            </details>
+                          </div>
+                        )}
 
+                        {rec.action === 'update_metadata' && rec.mediaAccessibilityEventDetails && (
+                          <div className="mt-1.5 p-2 rounded bg-muted/40 border border-border text-[11px]">
+                            <div className="text-muted-foreground mb-1">
+                              <strong>Changed:</strong> Snapshot image alt text
+                            </div>
+                            <details className="cursor-pointer text-primary">
+                              <summary className="font-medium hover:underline">View details</summary>
+                              <div className="mt-2 pl-2 border-l-2 border-primary text-foreground">
+                                <div className="text-muted-foreground text-[10px]">Previous:</div>
+                                <div className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words opacity-70 p-1.5 bg-muted rounded text-[11px]">
+                                  {rec.mediaAccessibilityEventDetails.before.snapshotAltText ?? 'Not previously provided'}
+                                </div>
+                                <div className="text-success text-[10px] mt-1">New:</div>
+                                <div className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words p-1.5 bg-muted rounded text-[11px]">
+                                  {rec.mediaAccessibilityEventDetails.after.snapshotAltText}
+                                </div>
+                              </div>
+                            </details>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </ProjectReviewSection>
       </div>
-    </div>
     </ProjectMetadataNavigationProvider>
   );
 }
