@@ -8,6 +8,7 @@ import {
 import { validateFolderDerivedPublicId } from '../publicIdValidation';
 import {
   parseBrowserImportPreview,
+  analyzeBrowserImportServer,
   BrowserImportPreviewLimitError,
 } from '../parseBrowserImportPreview';
 import { parseProjectDetailsJson } from '../parseProjectDetailsJson';
@@ -87,8 +88,6 @@ async function buildTestWorkbookBuffer(overrides: Record<string, string> = {}): 
     'Accessibility text',
   ];
 
-  sheet.addRow(headers);
-
   const dataRow = [
     overrides.title ?? 'Autonomous Drone Navigation',
     overrides.summary ?? 'AI-powered flight control system.',
@@ -108,8 +107,27 @@ async function buildTestWorkbookBuffer(overrides: Record<string, string> = {}): 
     overrides.accessibilityText ?? 'Poster showing drone system architecture.',
   ];
 
+  if (overrides.snapshotAltText !== undefined) {
+    headers.push('Snapshot image alt text');
+    dataRow.push(overrides.snapshotAltText);
+  }
+
+  sheet.addRow(headers);
   sheet.addRow(dataRow);
 
+  const arrayBuf = await workbook.xlsx.writeBuffer();
+  return Buffer.from(arrayBuf);
+}
+
+async function buildTestAdminReferenceWorkbookBuffer(
+  rows: Array<{ groupName: string; year: number; title: string; program: string }>
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('ROSTER_2026');
+  sheet.addRow(['Group Name', 'Academic Year', 'Official Project Title', 'Degree Program']);
+  for (const r of rows) {
+    sheet.addRow([r.groupName, r.year, r.title, r.program]);
+  }
   const arrayBuf = await workbook.xlsx.writeBuffer();
   return Buffer.from(arrayBuf);
 }
@@ -1684,6 +1702,184 @@ describe('Browser Import Preview Suite', () => {
       const response = await previewRouteHandler(new NextRequest('http://localhost:3000/api/imports/preview', { method: 'POST' }));
       expect(response.status).toBe(500);
       expect((await response.json()).code).toBe('UNEXPECTED_INTERNAL_ERROR');
+    });
+  });
+
+  describe('Issue #118: Admin Reference Reconciliation Response Consistency', () => {
+    it('reproduces UAT scenario: 1 valid, 1 package-validation error, 1 reference mismatch -> totalErrors=2, no duplicate errors, passes client validation', async () => {
+      // 1. AccessPath: has snapshot-1.png but snapshotAltText is empty in xlsx -> METADATA_MISSING_SNAPSHOT_ALT_TEXT (1 error)
+      const wbAccessPath = await buildTestWorkbookBuffer({
+        groupName: 'AccessPath',
+        title: 'AccessPath Title',
+        program: 'Bachelor of Software Engineering',
+        year: '2026',
+        accessibilityText: 'Poster showing system architecture.',
+        snapshotAltText: '',
+      });
+
+      // 2. GreenPulse: valid and matches reference perfectly (0 errors, 0 warnings)
+      const wbGreenPulse = await buildTestWorkbookBuffer({
+        groupName: 'GreenPulse',
+        title: 'GreenPulse Title',
+        program: 'Bachelor of Software Engineering',
+        year: '2026',
+        posterText: 'Full poster text for GreenPulse with sufficient content.',
+        accessibilityText: 'Poster showing sensor architecture.',
+        snapshotAltText: 'GreenPulse diagram describing sensor architecture.',
+      });
+
+      // 3. HarborWatch: valid metadata, but program in xlsx is IT while in reference it is CS (1 mismatch error)
+      const wbHarborWatch = await buildTestWorkbookBuffer({
+        groupName: 'HarborWatch',
+        title: 'HarborWatch Title',
+        program: 'Bachelor of Information Technology',
+        year: '2026',
+        posterText: 'Full poster text for HarborWatch with sufficient content.',
+        accessibilityText: 'Poster showing ocean buoy system.',
+        snapshotAltText: 'HarborWatch diagram describing ocean buoy system.',
+      });
+
+      const refBuf = await buildTestAdminReferenceWorkbookBuffer([
+        { groupName: 'AccessPath', year: 2026, title: 'AccessPath Title', program: 'Bachelor of Software Engineering' },
+        { groupName: 'GreenPulse', year: 2026, title: 'GreenPulse Title', program: 'Bachelor of Software Engineering' },
+        { groupName: 'HarborWatch', year: 2026, title: 'HarborWatch Title', program: 'Bachelor of Computer Science' },
+      ]);
+
+      const mapping = {
+        worksheet: 'ROSTER_2026',
+        matchMappings: [
+          { canonicalField: 'groupName', referenceColumn: 'Group Name' },
+          { canonicalField: 'year', referenceColumn: 'Academic Year' },
+        ],
+        comparisonMappings: [
+          { canonicalField: 'title', referenceColumn: 'Official Project Title' },
+          { canonicalField: 'program', referenceColumn: 'Degree Program' },
+        ],
+        reconciliationContractVersion: 'admin-reference-reconciliation-v1' as const,
+      };
+
+      const xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      const descriptors: SelectedFileDescriptor[] = [
+        makeDesc('root/accesspath/project-details.xlsx', 1000, xlsxMime),
+        makeDesc('root/accesspath/poster.png', 500, 'image/png'),
+        makeDesc('root/accesspath/poster.pdf', 500, 'application/pdf'),
+        makeDesc('root/accesspath/snapshot-1.png', 500, 'image/png'),
+
+        makeDesc('root/greenpulse/project-details.xlsx', 1000, xlsxMime),
+        makeDesc('root/greenpulse/poster.png', 500, 'image/png'),
+        makeDesc('root/greenpulse/poster.pdf', 500, 'application/pdf'),
+        makeDesc('root/greenpulse/snapshot-1.png', 500, 'image/png'),
+
+        makeDesc('root/harborwatch/project-details.xlsx', 1000, xlsxMime),
+        makeDesc('root/harborwatch/poster.png', 500, 'image/png'),
+        makeDesc('root/harborwatch/poster.pdf', 500, 'application/pdf'),
+        makeDesc('root/harborwatch/snapshot-1.png', 500, 'image/png'),
+      ];
+
+      const manifest: SelectionManifest = {
+        selectedRootName: 'root',
+        fileCount: descriptors.length,
+        declaredTotalBytes: descriptors.reduce((acc, d) => acc + d.fileSizeBytes, 0),
+        ignoredSystemFilesCount: 0,
+        descriptors,
+      };
+
+      const uploads = new Map<string, Buffer>([
+        [generateUploadKey('root/accesspath/project-details.xlsx'), wbAccessPath],
+        [generateUploadKey('root/greenpulse/project-details.xlsx'), wbGreenPulse],
+        [generateUploadKey('root/harborwatch/project-details.xlsx'), wbHarborWatch],
+      ]);
+
+      const serverAnalysis = await analyzeBrowserImportServer(manifest, uploads, {
+        referenceFileBuffer: refBuf,
+        mapping,
+      });
+
+      expect(serverAnalysis.preview.success).toBe(true);
+      const batch = serverAnalysis.preview.batch;
+      expect(batch.packageCount).toBe(3);
+      expect(batch.validPackageCount).toBe(1);
+      expect(batch.invalidPackageCount).toBe(2);
+
+      // AccessPath has exactly 1 package validation error (METADATA_MISSING_SNAPSHOT_ALT_TEXT)
+      const accessPath = batch.packages.find((p) => p.folderName === 'accesspath')!;
+      expect(accessPath.errors).toHaveLength(1);
+      expect(accessPath.errors[0].code).toBe('METADATA_MISSING_SNAPSHOT_ALT_TEXT');
+
+      // GreenPulse is valid with 0 errors
+      const greenPulse = batch.packages.find((p) => p.folderName === 'greenpulse')!;
+      expect(greenPulse.errors).toHaveLength(0);
+
+      // HarborWatch has exactly 1 error (ADMIN_REFERENCE_FIELD_MISMATCH), NOT duplicated
+      const harborWatch = batch.packages.find((p) => p.folderName === 'harborwatch')!;
+      expect(harborWatch.errors).toHaveLength(1);
+      expect(harborWatch.errors[0].code).toBe('ADMIN_REFERENCE_FIELD_MISMATCH');
+      expect(harborWatch.reconciliation?.mismatchedFields).toEqual(['program']);
+
+      // Total errors is strictly 2 (1 AccessPath + 0 GreenPulse + 1 HarborWatch)
+      expect(batch.totalErrors).toBe(2);
+
+      // Verify packagePreviews and serverPackages do not share mutable error array references
+      const serverHarborWatch = serverAnalysis.packages.find((p) => p.folderName === 'harborwatch')!;
+      expect(serverHarborWatch.errors).toHaveLength(1);
+      expect(serverHarborWatch.errors).not.toBe(harborWatch.errors);
+
+      // Verify client contract validator accepts the server response without rejecting it
+      const validatedClientResponse = validateBrowserImportPreviewResponse(serverAnalysis.preview);
+      expect(validatedClientResponse).not.toBeNull();
+      expect(validatedClientResponse?.batch.totalErrors).toBe(2);
+    });
+
+    it('ensures independent reconciliation error push without duplicate array entry for single package mismatch', async () => {
+      const wb = await buildTestWorkbookBuffer({
+        groupName: 'SingleMismatch',
+        title: 'Title in Package',
+        program: 'IT',
+        year: '2026',
+        posterText: 'Full poster text with sufficient length.',
+      });
+
+      const refBuf = await buildTestAdminReferenceWorkbookBuffer([
+        { groupName: 'SingleMismatch', year: 2026, title: 'Title in Reference', program: 'IT' },
+      ]);
+
+      const mapping = {
+        worksheet: 'ROSTER_2026',
+        matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Group Name' }],
+        comparisonMappings: [{ canonicalField: 'title', referenceColumn: 'Official Project Title' }],
+        reconciliationContractVersion: 'admin-reference-reconciliation-v1' as const,
+      };
+
+      const descriptors: SelectedFileDescriptor[] = [
+        makeDesc('root/single/project-details.xlsx', 1000),
+        makeDesc('root/single/poster.png', 500, 'image/png'),
+        makeDesc('root/single/poster.pdf', 500, 'application/pdf'),
+      ];
+
+      const manifest: SelectionManifest = {
+        selectedRootName: 'root',
+        fileCount: descriptors.length,
+        declaredTotalBytes: 2000,
+        ignoredSystemFilesCount: 0,
+        descriptors,
+      };
+
+      const uploads = new Map<string, Buffer>([
+        [generateUploadKey('root/single/project-details.xlsx'), wb],
+      ]);
+
+      const preview = await parseBrowserImportPreview(manifest, uploads, {
+        referenceFileBuffer: refBuf,
+        mapping,
+      });
+
+      expect(preview.batch.packages[0].errors).toHaveLength(1);
+      expect(preview.batch.packages[0].errors[0].code).toBe('ADMIN_REFERENCE_FIELD_MISMATCH');
+      expect(preview.batch.totalErrors).toBe(1);
+
+      const clientValidation = validateBrowserImportPreviewResponse(preview);
+      expect(clientValidation).not.toBeNull();
+      expect(clientValidation?.batch.totalErrors).toBe(1);
     });
   });
 });
