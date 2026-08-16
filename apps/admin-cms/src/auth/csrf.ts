@@ -3,39 +3,33 @@
  * 
  * Rules:
  * - Checks incoming Origin header against the authoritative request origin (request.nextUrl.origin).
- * - Scheme, hostname, and port must match exactly.
+ * - On Render only, also accepts the canonical origin from RENDER_EXTERNAL_URL.
+ * - Scheme, hostname, and effective port must match exactly.
  * - Missing, empty, or malformed origin headers are rejected (returns false).
- * - Case-normalized comparisons prevent encoding bypasses.
+ * - Forwarding headers are never trusted.
  */
-export function validateSameOrigin(originHeader: string | null, requestOrigin: string): boolean {
-  if (!originHeader || originHeader.trim() === '') {
-    return false;
-  }
+function parseHttpOrigin(value: string | null | undefined): string | null {
+  if (!value || !/^https?:\/\/[^/?#\\\s]+\/?$/i.test(value)) return null;
 
   try {
-    const originUrl = new URL(originHeader);
-    const reqOriginUrl = new URL(requestOrigin);
-
-    const originScheme = originUrl.protocol.toLowerCase();
-    const reqScheme = reqOriginUrl.protocol.toLowerCase();
-
-    const originHostname = originUrl.hostname.toLowerCase();
-    const reqHostname = reqOriginUrl.hostname.toLowerCase();
-
-    const getPort = (url: URL) => {
-      if (url.port) return url.port;
-      return url.protocol === 'https:' ? '443' : '80';
-    };
-
-    const originPort = getPort(originUrl);
-    const reqPort = getPort(reqOriginUrl);
-
-    return (
-      originScheme === reqScheme &&
-      originHostname === reqHostname &&
-      originPort === reqPort
-    );
+    const url = new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (url.href !== `${url.origin}/`) return null;
+    return url.origin;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function validateSameOrigin(originHeader: string | null, requestOrigin: string): boolean {
+  const submittedOrigin = parseHttpOrigin(originHeader);
+  if (!submittedOrigin) return false;
+
+  const directOrigin = parseHttpOrigin(requestOrigin);
+  if (directOrigin === submittedOrigin) return true;
+
+  if (process.env.RENDER !== 'true') return false;
+
+  const renderExternalOrigin = parseHttpOrigin(process.env.RENDER_EXTERNAL_URL);
+  return renderExternalOrigin !== null && renderExternalOrigin === submittedOrigin;
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect } from 'vitest';
 import { getPermissionsForRoles, hasPermission, canPerformReviewAction, canResolveParticipantCorrection, canManageStaff, canonicalizeRoles } from './permissions';
 import { validateSameOrigin } from './csrf';
 import { AdminAuthError, AdminRole } from './authTypes';
@@ -240,32 +240,110 @@ describe('Authentication & Authorization Tests (Offline)', () => {
   });
 
   describe('5. Hardened CSRF Validation (C)', () => {
-    const authorative = 'http://localhost:3000';
+    const authoritative = 'http://localhost:3000';
+    const renderExternalOrigin = 'https://capstone-admin-cms-staging-v2.onrender.com';
+    let originalRender: string | undefined;
+    let originalRenderExternalUrl: string | undefined;
+
+    beforeEach(() => {
+      originalRender = process.env.RENDER;
+      originalRenderExternalUrl = process.env.RENDER_EXTERNAL_URL;
+      delete process.env.RENDER;
+      delete process.env.RENDER_EXTERNAL_URL;
+    });
+
+    afterEach(() => {
+      if (originalRender === undefined) delete process.env.RENDER;
+      else process.env.RENDER = originalRender;
+
+      if (originalRenderExternalUrl === undefined) delete process.env.RENDER_EXTERNAL_URL;
+      else process.env.RENDER_EXTERNAL_URL = originalRenderExternalUrl;
+    });
 
     it('passes for exact same origin', () => {
-      expect(validateSameOrigin('http://localhost:3000', authorative)).toBe(true);
+      expect(validateSameOrigin('http://localhost:3000', authoritative)).toBe(true);
     });
 
     it('fails for different scheme', () => {
-      expect(validateSameOrigin('https://localhost:3000', authorative)).toBe(false);
+      expect(validateSameOrigin('https://localhost:3000', authoritative)).toBe(false);
     });
 
     it('fails for different hostname', () => {
-      expect(validateSameOrigin('http://differenthost:3000', authorative)).toBe(false);
+      expect(validateSameOrigin('http://differenthost:3000', authoritative)).toBe(false);
     });
 
     it('fails for different port', () => {
-      expect(validateSameOrigin('http://localhost:8080', authorative)).toBe(false);
+      expect(validateSameOrigin('http://localhost:8080', authoritative)).toBe(false);
     });
 
     it('fails for malformed origins', () => {
-      expect(validateSameOrigin('not-a-valid-origin-url', authorative)).toBe(false);
+      expect(validateSameOrigin('not-a-valid-origin-url', authoritative)).toBe(false);
+      expect(validateSameOrigin('ftp://localhost:3000', authoritative)).toBe(false);
+      expect(validateSameOrigin('http://user@localhost:3000', authoritative)).toBe(false);
+      expect(validateSameOrigin('http://localhost:3000/path', authoritative)).toBe(false);
+      expect(validateSameOrigin('http:////localhost:3000', authoritative)).toBe(false);
+      expect(validateSameOrigin('http:\\\\localhost:3000', authoritative)).toBe(false);
+      expect(validateSameOrigin('http://local\thost:3000', authoritative)).toBe(false);
     });
 
     it('fails for missing or empty origin', () => {
-      expect(validateSameOrigin(null, authorative)).toBe(false);
-      expect(validateSameOrigin('', authorative)).toBe(false);
-      expect(validateSameOrigin('   ', authorative)).toBe(false);
+      expect(validateSameOrigin(null, authoritative)).toBe(false);
+      expect(validateSameOrigin('', authoritative)).toBe(false);
+      expect(validateSameOrigin('   ', authoritative)).toBe(false);
+    });
+
+    it('accepts the exact authoritative Render external origin behind the proxy', () => {
+      process.env.RENDER = 'true';
+      process.env.RENDER_EXTERNAL_URL = renderExternalOrigin;
+
+      expect(validateSameOrigin(renderExternalOrigin, 'http://internal-render:10000')).toBe(true);
+    });
+
+    it.each([
+      'https://evil.example',
+      'https://capstone-admin-cms-staging-v2.onrender.com.evil.example',
+      'https://evil-capstone-admin-cms-staging-v2.onrender.com',
+      'https://sub.capstone-admin-cms-staging-v2.onrender.com',
+      'https://evil.example@capstone-admin-cms-staging-v2.onrender.com',
+    ])('rejects Render near-match or attacker origin %s', (origin) => {
+      process.env.RENDER = 'true';
+      process.env.RENDER_EXTERNAL_URL = renderExternalOrigin;
+
+      expect(validateSameOrigin(origin, 'http://internal-render:10000')).toBe(false);
+    });
+
+    it('rejects a non-default Render external port mismatch', () => {
+      process.env.RENDER = 'true';
+      process.env.RENDER_EXTERNAL_URL = renderExternalOrigin;
+
+      expect(
+        validateSameOrigin(`${renderExternalOrigin}:8443`, 'http://internal-render:10000'),
+      ).toBe(false);
+    });
+
+    it.each([
+      'not-a-url',
+      'ftp://capstone-admin-cms-staging-v2.onrender.com',
+      'https://user@capstone-admin-cms-staging-v2.onrender.com',
+      'https://capstone-admin-cms-staging-v2.onrender.com/path',
+    ])('does not grant trust from malformed RENDER_EXTERNAL_URL %s', (externalUrl) => {
+      process.env.RENDER = 'true';
+      process.env.RENDER_EXTERNAL_URL = externalUrl;
+
+      expect(validateSameOrigin(renderExternalOrigin, 'http://internal-render:10000')).toBe(false);
+    });
+
+    it('does not grant trust when RENDER_EXTERNAL_URL is missing', () => {
+      process.env.RENDER = 'true';
+
+      expect(validateSameOrigin(renderExternalOrigin, 'http://internal-render:10000')).toBe(false);
+    });
+
+    it('does not grant trust when RENDER is not exactly true', () => {
+      process.env.RENDER = 'TRUE';
+      process.env.RENDER_EXTERNAL_URL = renderExternalOrigin;
+
+      expect(validateSameOrigin(renderExternalOrigin, 'http://internal-render:10000')).toBe(false);
     });
   });
 
