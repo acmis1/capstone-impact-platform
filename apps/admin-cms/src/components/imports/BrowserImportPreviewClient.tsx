@@ -2,6 +2,22 @@
 
 import React, { useState, useRef } from 'react';
 import Link from 'next/link';
+import {
+  FolderOpen,
+  Search,
+  RotateCcw,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Layers,
+  FileCheck,
+  Upload,
+  ArrowRight,
+  ChevronDown,
+  ChevronRight,
+  CheckSquare,
+  ShieldCheck,
+} from 'lucide-react';
 import { generateUploadKey, isIgnoredSystemFile, normalizeRelativePath } from '../../import/browserSelection';
 import {
   BrowserImportPreviewBatch,
@@ -22,7 +38,12 @@ import { runBrowserImportPreparation } from '../../import/browserImportPreparati
 import { runBrowserImportMetadataStaging } from '../../import/browserImportStagingController';
 import { runBrowserImportMediaStaging } from '../../import/browserImportMediaStagingController';
 import { AdminReferenceDatasetSection } from './AdminReferenceDatasetSection';
+import { ImportWorkflowGuide } from './ImportWorkflowGuide';
 import type { AdminReferenceMappingConfig } from '../../import/adminReferenceSharedContract';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { Alert } from '../ui/alert';
+import { Badge } from '../ui/badge';
 
 export default function BrowserImportPreviewClient() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -91,7 +112,6 @@ export default function BrowserImportPreviewClient() {
 
   const isPreparingOrLocked = selectionState.isPreparing || isStaging || isCompletingMedia;
 
-
   const handleFolderSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
 
@@ -123,7 +143,7 @@ export default function BrowserImportPreviewClient() {
     }
 
     if (descriptors.length === 0) {
-      setApiError('The selected folder contains no valid project package files.');
+      setApiError('The selected folder contains no valid project files.');
       setSelectedFiles([]);
       setSelectedRootName(null);
       return;
@@ -386,775 +406,661 @@ export default function BrowserImportPreviewClient() {
     ? previewResult.packages.filter((p) => p.status === 'warning' && !selectionState.acknowledgedWarningPackagePaths.includes(p.packagePath)).length
     : 0;
 
-  return (
-    <div style={{ maxWidth: '1100px', margin: '0 auto', color: '#F3F4F6', fontFamily: 'system-ui, sans-serif' }}>
-      {/* Permanent Preview Banners */}
-      <div style={{
-        backgroundColor: '#1E293B',
-        borderRadius: '12px',
-        padding: '1.25rem 1.5rem',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        marginBottom: '1.5rem',
-      }}>
-        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#60A5FA', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          🔒 Preview only — nothing has been saved
-        </div>
-        <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem', color: '#9CA3AF', lineHeight: 1.5 }}>
-          Selecting a project folder or batch directory parses metadata and validates layout specs entirely in memory.
-          Zero database rows are written, zero storage objects are uploaded, and zero public feed records are published.
-        </p>
-      </div>
+  // Determine current active workflow step for orientation
+  let currentStep: 1 | 2 | 3 | 4 | 5 = 1;
+  if (mediaCompleteResult || stagedResult || selectionState.preparedIntent) {
+    currentStep = 5;
+  } else if (previewResult && adminReferenceData) {
+    currentStep = 4;
+  } else if (adminReferenceData) {
+    currentStep = 3;
+  } else {
+    currentStep = 2;
+  }
 
+  return (
+    <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
+      {/* Workflow Steps Indicator & Onboarding Guide */}
+      <ImportWorkflowGuide currentStep={currentStep} />
+
+      {/* Browser Support Check Warning */}
       {!isSupported && (
-        <div style={{
-          backgroundColor: 'rgba(239, 68, 68, 0.15)',
-          border: '1px solid rgba(239, 68, 68, 0.3)',
-          borderRadius: '12px',
-          padding: '1rem 1.25rem',
-          marginBottom: '1.5rem',
-          color: '#EF4444',
-        }}>
-          ⚠️ Your current web browser does not support directory folder selection. Please use Chromium, Google Chrome, or Microsoft Edge.
-        </div>
+        <Alert
+          variant="destructive"
+          title="Unsupported Browser"
+          description="Folder selection is not supported by your current browser. Please use Google Chrome, Microsoft Edge, or another modern Chromium browser to import project folders."
+        />
       )}
 
-      {/* Selection Control Card */}
-      <div style={{
-        backgroundColor: '#161F30',
-        borderRadius: '12px',
-        padding: '1.75rem',
-        border: '1px solid rgba(255, 255, 255, 0.05)',
-        marginBottom: '2rem',
-      }}>
-        <h2 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', color: '#FFFFFF' }}>1. Select Project Folder or Batch Directory</h2>
+      {/* Step 2: Admin Reference Dataset Section */}
+      <AdminReferenceDatasetSection
+        onMappingConfigured={(data) => {
+          setAdminReferenceData(data);
+          setPreviewResult(null);
+          setManifestCache(null);
+          invalidateStagingResult();
+          updateSelectionState(resetSelectionState());
+        }}
+        disabled={isPreparingOrLocked}
+      />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+      {/* Step 3: Choose project folder */}
+      <Card className="bg-card border-border shadow-xs">
+        <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
+          <div className="flex items-center gap-2">
+            <FolderOpen className="h-4 w-4 text-primary" aria-hidden="true" />
+            <CardTitle className="text-sm font-semibold text-foreground">
+              Choose project folder
+            </CardTitle>
+          </div>
+          <CardDescription className="text-xs text-muted-foreground">
+            Choose one project folder, or choose a parent folder that contains several project folders.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="p-4 sm:p-6 flex flex-col gap-5">
           <input
             type="file"
             ref={fileInputRef}
             onChange={handleFolderSelection}
             disabled={isLoading || !isSupported || isPreparingOrLocked}
             {...({ webkitdirectory: '', directory: '' } as unknown as React.InputHTMLAttributes<HTMLInputElement>)}
-            style={{ display: 'none' }}
+            className="hidden"
+            aria-label="Upload project directory"
           />
 
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading || !isSupported || isPreparingOrLocked}
-            style={{
-              backgroundColor: '#3B82F6',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '0.75rem 1.5rem',
-              fontWeight: 600,
-              fontSize: '0.95rem',
-              cursor: isLoading || !isSupported || isPreparingOrLocked ? 'not-allowed' : 'pointer',
-              opacity: isLoading || !isSupported || isPreparingOrLocked ? 0.6 : 1,
-            }}
-          >
-            📁 Choose Project Folder
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading || !isSupported || isPreparingOrLocked}
+              className="font-semibold"
+            >
+              <FolderOpen className="h-4 w-4 mr-2" aria-hidden="true" />
+              {selectedFiles.length > 0 ? 'Change project folder' : 'Choose project folder'}
+            </Button>
 
-          {selectedFiles.length > 0 && (
-            <>
-              <button
-                type="button"
-                onClick={handleRequestPreview}
-                disabled={isLoading || isPreparingOrLocked}
-                style={{
-                  backgroundColor: '#10B981',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '0.75rem 1.5rem',
-                  fontWeight: 600,
-                  fontSize: '0.95rem',
-                  cursor: isLoading || isPreparingOrLocked ? 'not-allowed' : 'pointer',
-                  opacity: isLoading || isPreparingOrLocked ? 0.6 : 1,
-                }}
-              >
-                {isLoading ? '⏳ Generating Preview...' : '🔍 Generate Batch Preview'}
-              </button>
+            {selectedFiles.length > 0 && (
+              <>
+                <Button
+                  type="button"
+                  onClick={handleRequestPreview}
+                  disabled={isLoading || isPreparingOrLocked}
+                  className="bg-primary hover:bg-primary/90 font-semibold"
+                >
+                  <Search className="h-4 w-4 mr-2" aria-hidden="true" />
+                  {isLoading ? 'Checking files…' : 'Check project files'}
+                </Button>
 
-              <button
-                type="button"
-                onClick={handleClearSelection}
-                disabled={isLoading || isPreparingOrLocked}
-                style={{
-                  backgroundColor: 'transparent',
-                  color: '#9CA3AF',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '8px',
-                  padding: '0.75rem 1.25rem',
-                  fontSize: '0.9rem',
-                  cursor: isLoading || isPreparingOrLocked ? 'not-allowed' : 'pointer',
-                  opacity: isLoading || isPreparingOrLocked ? 0.6 : 1,
-                }}
-              >
-                Clear Selection
-              </button>
-            </>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleClearSelection}
+                  disabled={isLoading || isPreparingOrLocked}
+                >
+                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+                  Clear selection
+                </Button>
+              </>
+            )}
+          </div>
+
+          {/* Selected Folder Metrics Summary */}
+          {selectedRootName && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-lg bg-muted/40 border border-border text-xs">
+              <div>
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                  Selected folder
+                </span>
+                <span className="font-semibold text-foreground truncate block mt-0.5" title={selectedRootName}>
+                  {selectedRootName}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                  Projects detected
+                </span>
+                <span className="font-semibold text-foreground block mt-0.5">
+                  {detectedPackageCount}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                  Files selected
+                </span>
+                <span className="font-semibold text-foreground block mt-0.5">
+                  {selectedFiles.length}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                  Total size
+                </span>
+                <span className="font-semibold text-foreground block mt-0.5">
+                  {formatMB(declaredTotalBytes)} MB
+                </span>
+              </div>
+            </div>
           )}
-        </div>
-
-        {/* Selected Folder Metrics Summary */}
-        {selectedRootName && (
-          <div style={{
-            marginTop: '1.5rem',
-            paddingTop: '1.25rem',
-            borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-            gap: '1rem',
-          }}>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', textTransform: 'uppercase' }}>Root Folder</div>
-              <div style={{ fontSize: '1rem', fontWeight: 700, color: '#60A5FA', marginTop: '0.25rem' }}>{selectedRootName}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', textTransform: 'uppercase' }}>Selected Files</div>
-              <div style={{ fontSize: '1rem', fontWeight: 700, color: '#FFFFFF', marginTop: '0.25rem' }}>{selectedFiles.length}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', textTransform: 'uppercase' }}>Total Declared Size</div>
-              <div style={{ fontSize: '1rem', fontWeight: 700, color: '#FFFFFF', marginTop: '0.25rem' }}>{formatMB(declaredTotalBytes)} MB</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', textTransform: 'uppercase' }}>Detected Packages</div>
-              <div style={{ fontSize: '1rem', fontWeight: 700, color: '#10B981', marginTop: '0.25rem' }}>{detectedPackageCount}</div>
-            </div>
-          </div>
-        )}
-
-        {selectedRootName && (
-          <div style={{ marginTop: '1.25rem' }}>
-            <AdminReferenceDatasetSection
-              onMappingConfigured={(data) => {
-                setAdminReferenceData(data);
-                setPreviewResult(null);
-                setManifestCache(null);
-                invalidateStagingResult();
-                updateSelectionState(resetSelectionState());
-              }}
-              disabled={isPreparingOrLocked}
-            />
-          </div>
-        )}
-      </div>
+        </CardContent>
+      </Card>
 
       {/* API Error Message */}
       {apiError && (
-        <div style={{
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
-          borderRadius: '12px',
-          padding: '1.25rem 1.5rem',
-          marginBottom: '2rem',
-          color: '#EF4444',
-        }}>
-          <h4 style={{ margin: '0 0 0.5rem 0', fontWeight: 700 }}>Preview Request Failed</h4>
-          <p style={{ margin: 0, fontSize: '0.9rem', color: '#D1D5DB' }}>{apiError}</p>
-        </div>
+        <Alert
+          variant="destructive"
+          title="File Check Failed"
+          description={apiError}
+        />
       )}
 
-      {/* Preview Results Section */}
+      {/* Preview & Validation Results Section */}
       {previewResult && (
-        <div>
-          {/* Descriptor Mode Banner */}
-          <div style={{
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            border: '1px solid rgba(59, 130, 246, 0.2)',
-            borderRadius: '12px',
-            padding: '1rem 1.25rem',
-            marginBottom: '1.5rem',
-            color: '#60A5FA',
-            fontSize: '0.85rem',
-          }}>
-            ℹ️ <strong>Media validation mode:</strong> filename, MIME, and declared file-size preview only. Actual media bytes will require validation again during a future import step.
-          </div>
+        <div className="flex flex-col gap-6">
+          {/* Validation Results Card */}
+          <Card className="bg-card border-border shadow-xs">
+            <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
+              <div className="flex items-center gap-2">
+                <FileCheck className="h-4 w-4 text-primary" aria-hidden="true" />
+                <CardTitle className="text-sm font-semibold text-foreground">
+                  Validation results
+                </CardTitle>
+              </div>
+              <CardDescription className="text-xs text-muted-foreground">
+                Review check results below. Projects with blocking issues cannot be imported until resolved.
+              </CardDescription>
+            </CardHeader>
 
-          {/* Batch Metrics Cards */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '1rem',
-            marginBottom: '2rem',
-          }}>
-            <div style={{ backgroundColor: '#161F30', borderRadius: '10px', padding: '1rem', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', textTransform: 'uppercase' }}>Import Mode</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#3B82F6', marginTop: '0.25rem', textTransform: 'capitalize' }}>{previewResult.mode}</div>
-            </div>
-            <div style={{ backgroundColor: '#161F30', borderRadius: '10px', padding: '1rem', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', textTransform: 'uppercase' }}>Total Packages</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#FFFFFF', marginTop: '0.25rem' }}>{previewResult.packageCount}</div>
-            </div>
-            <div style={{ backgroundColor: '#161F30', borderRadius: '10px', padding: '1rem', border: '1px solid rgba(255, 255, 255, 0.05)', borderLeft: '4px solid #10B981' }}>
-              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', textTransform: 'uppercase' }}>Valid Packages</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#10B981', marginTop: '0.25rem' }}>{previewResult.validPackageCount}</div>
-            </div>
-            <div style={{ backgroundColor: '#161F30', borderRadius: '10px', padding: '1rem', border: '1px solid rgba(255, 255, 255, 0.05)', borderLeft: '4px solid #F59E0B' }}>
-              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', textTransform: 'uppercase' }}>With Warnings</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#F59E0B', marginTop: '0.25rem' }}>{previewResult.warningPackageCount}</div>
-            </div>
-            <div style={{ backgroundColor: '#161F30', borderRadius: '10px', padding: '1rem', border: '1px solid rgba(255, 255, 255, 0.05)', borderLeft: '4px solid #EF4444' }}>
-              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', textTransform: 'uppercase' }}>Invalid Packages</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#EF4444', marginTop: '0.25rem' }}>{previewResult.invalidPackageCount}</div>
-            </div>
-          </div>
-
-          {/* Batch-Level Issues */}
-          {previewResult.batchIssues && previewResult.batchIssues.length > 0 && (
-            <div style={{
-              backgroundColor: 'rgba(245, 158, 11, 0.1)',
-              border: '1px solid rgba(245, 158, 11, 0.2)',
-              borderRadius: '12px',
-              padding: '1rem 1.25rem',
-              marginBottom: '1.5rem',
-            }}>
-              <h4 style={{ margin: '0 0 0.5rem 0', color: '#F59E0B', fontWeight: 700 }}>Batch Root Folder Warnings</h4>
-              {previewResult.batchIssues.map((issue, idx) => (
-                <div key={`batch-issue-${idx}`} style={{ fontSize: '0.85rem', color: '#D1D5DB' }}>
-                  ⚠️ <strong>[{issue.code}]</strong> {issue.message} {issue.fileName && `(file: ${issue.fileName})`}
+            <CardContent className="p-4 sm:p-6 flex flex-col gap-5">
+              {/* Batch Metrics Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3 rounded-lg bg-card border border-border shadow-xs">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                    Total projects
+                  </span>
+                  <span className="text-xl font-bold text-foreground block mt-1">
+                    {previewResult.packageCount}
+                  </span>
                 </div>
-              ))}
-            </div>
-          )}
 
-          {/* Package Selection Controls & Action Bar */}
-          <div style={{
-            backgroundColor: '#161F30',
-            borderRadius: '12px',
-            padding: '1.25rem 1.5rem',
-            border: '1px solid rgba(255, 255, 255, 0.05)',
-            marginBottom: '1.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '1rem',
-          }}>
-            <div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#FFFFFF' }}>
-                Package Selection ({totalSelectedCount} selected: {selectedValidCount} valid, {selectedWarningCount} warning)
+                <div className="p-3 rounded-lg bg-card border border-border shadow-xs">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                    Ready to import
+                  </span>
+                  <span className="text-xl font-bold text-success block mt-1">
+                    {previewResult.validPackageCount}
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-lg bg-card border border-border shadow-xs">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                    With warnings
+                  </span>
+                  <span className="text-xl font-bold text-warning block mt-1">
+                    {previewResult.warningPackageCount}
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-lg bg-card border border-border shadow-xs">
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                    Needs attention
+                  </span>
+                  <span className="text-xl font-bold text-destructive block mt-1">
+                    {previewResult.invalidPackageCount}
+                  </span>
+                </div>
               </div>
-              <div style={{ fontSize: '0.8rem', color: '#9CA3AF', marginTop: '0.25rem' }}>
+
+              {/* Validation Status Legend */}
+              <div className="flex flex-wrap items-center gap-4 text-xs p-2.5 rounded-md bg-muted/40 border border-border text-muted-foreground">
+                <span className="font-semibold text-foreground">Status key:</span>
+                <span className="inline-flex items-center gap-1">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+                  <strong className="text-foreground font-medium">Ready:</strong> No blocking issues found
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <AlertTriangle className="h-3.5 w-3.5 text-warning" aria-hidden="true" />
+                  <strong className="text-foreground font-medium">Warning:</strong> Importable after acknowledgement
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <XCircle className="h-3.5 w-3.5 text-destructive" aria-hidden="true" />
+                  <strong className="text-foreground font-medium">Needs attention:</strong> Blocking issues must be fixed
+                </span>
+              </div>
+
+              {/* Batch-Level Issues Banner */}
+              {previewResult.batchIssues && previewResult.batchIssues.length > 0 && (
+                <div className="p-3.5 rounded-lg bg-warning/10 border border-warning/30 text-xs flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5 font-semibold text-warning">
+                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                    <span>Batch Folder Warnings</span>
+                  </div>
+                  {previewResult.batchIssues.map((issue, idx) => (
+                    <p key={`batch-issue-${idx}`} className="text-foreground text-[11px]">
+                      {issue.message} {issue.fileName && `(file: ${issue.fileName})`}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Project Packages List Section (Reviewed BEFORE Prepare Import) */}
+          <div className="flex flex-col gap-3">
+            <h3 className="text-sm font-semibold text-foreground">
+              Projects in this folder ({previewResult.packages.length})
+            </h3>
+
+            <div className="flex flex-col gap-3">
+              {previewResult.packages.map((pkg) => {
+                const isExpanded = expandedPackages[pkg.packagePath] || false;
+                const isSelected = selectionState.selectedPackagePaths.includes(pkg.packagePath);
+                const isAcked = selectionState.acknowledgedWarningPackagePaths.includes(pkg.packagePath);
+
+                return (
+                  <Card
+                    key={pkg.packagePath}
+                    className={`bg-card border-border shadow-xs transition-colors ${
+                      pkg.status === 'invalid'
+                        ? 'opacity-85 border-destructive/30'
+                        : pkg.status === 'warning'
+                          ? 'border-warning/30'
+                          : 'border-border'
+                    }`}
+                  >
+                    <CardContent className="p-4 sm:p-5 flex flex-col gap-3">
+                      {/* Top Header Row */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-start sm:items-center gap-3">
+                          {/* Selection Checkbox by Status */}
+                          {pkg.status === 'valid' && (
+                            <label className="flex items-center gap-2 cursor-pointer select-none mt-0.5 sm:mt-0">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                disabled={isPreparingOrLocked}
+                                onChange={() => handleToggleValid(pkg.packagePath)}
+                                aria-label={`Select package ${pkg.folderName} for import`}
+                                className="h-4 w-4 rounded border-input text-primary focus:ring-ring disabled:opacity-50 cursor-pointer"
+                              />
+                              <span className="text-xs text-muted-foreground font-medium">Select</span>
+                            </label>
+                          )}
+
+                          {pkg.status === 'warning' && (
+                            <div className="flex items-center gap-3 select-none">
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isAcked}
+                                  disabled={isPreparingOrLocked}
+                                  onChange={() => handleToggleWarningAck(pkg.packagePath)}
+                                  aria-label={`Acknowledge warnings for package ${pkg.folderName}`}
+                                  className="h-4 w-4 rounded border-input text-warning focus:ring-ring disabled:opacity-50 cursor-pointer"
+                                />
+                                <span className="text-xs text-warning font-semibold">Acknowledge warning</span>
+                              </label>
+
+                              <label className={`flex items-center gap-1.5 ${isAcked && !isPreparingOrLocked ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  disabled={!isAcked || isPreparingOrLocked}
+                                  onChange={() => handleToggleWarningSelect(pkg.packagePath)}
+                                  aria-label={`Select warning package ${pkg.folderName} for import after acknowledgement`}
+                                  className="h-4 w-4 rounded border-input text-primary focus:ring-ring disabled:opacity-50"
+                                />
+                                <span className="text-xs text-muted-foreground font-medium">Select</span>
+                              </label>
+                            </div>
+                          )}
+
+                          {pkg.status === 'invalid' && (
+                            <div className="flex items-center gap-1.5 opacity-50 cursor-not-allowed select-none">
+                              <input
+                                type="checkbox"
+                                checked={false}
+                                disabled
+                                aria-label={`Package ${pkg.folderName} is invalid and cannot be selected`}
+                                className="h-4 w-4 rounded border-input cursor-not-allowed"
+                              />
+                              <span className="text-xs text-destructive font-medium">Cannot import</span>
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-foreground text-sm">
+                              {pkg.folderName}
+                            </span>
+
+                            {pkg.status === 'valid' ? (
+                              <Badge variant="success" className="text-[11px]">
+                                <CheckCircle2 className="h-3 w-3 mr-1" aria-hidden="true" />
+                                Ready
+                                <span className="sr-only">{pkg.status.toUpperCase()}</span>
+                              </Badge>
+                            ) : pkg.status === 'warning' ? (
+                              <Badge variant="warning" className="text-[11px]">
+                                <AlertTriangle className="h-3 w-3 mr-1" aria-hidden="true" />
+                                Warning
+                                <span className="sr-only">{pkg.status.toUpperCase()}</span>
+                              </Badge>
+                            ) : (
+                              <Badge variant="destructive" className="text-[11px]">
+                                <XCircle className="h-3 w-3 mr-1" aria-hidden="true" />
+                                Needs attention
+                                <span className="sr-only">{pkg.status.toUpperCase()}</span>
+                              </Badge>
+                            )}
+
+                            {/* Reference Reconciliation Status Badge */}
+                            {pkg.reconciliation && (
+                              <Badge
+                                variant={pkg.reconciliation.status === 'RECONCILED' ? 'success' : 'neutral'}
+                                className="text-[11px]"
+                              >
+                                {pkg.reconciliation.status === 'RECONCILED' ? (
+                                  <>
+                                    <ShieldCheck className="h-3 w-3 mr-1" aria-hidden="true" />
+                                    Matched in reference (Row #{pkg.reconciliation.matchedRowNumber})
+                                  </>
+                                ) : pkg.reconciliation.status === 'ADMIN_REFERENCE_FIELD_MISMATCH' ? (
+                                  `Mismatch (${pkg.reconciliation.mismatchedFields.join(', ')})`
+                                ) : pkg.reconciliation.status === 'ADMIN_REFERENCE_NO_MATCH' ? (
+                                  'Not found in reference'
+                                ) : pkg.reconciliation.status === 'ADMIN_REFERENCE_AMBIGUOUS_MATCH' ? (
+                                  'Ambiguous reference match'
+                                ) : (
+                                  'Invalid match key'
+                                )}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        {(pkg.errors.length > 0 || pkg.warnings.length > 0) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => togglePackageExpand(pkg.packagePath)}
+                            className="h-8 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                          >
+                            {isExpanded ? (
+                              <>
+                                <span>Hide issues</span>
+                                <ChevronDown className="h-3.5 w-3.5 ml-1" aria-hidden="true" />
+                              </>
+                            ) : (
+                              <>
+                                <span>Show issues ({pkg.errors.length} error{pkg.errors.length !== 1 ? 's' : ''}, {pkg.warnings.length} warning{pkg.warnings.length !== 1 ? 's' : ''})</span>
+                                <ChevronRight className="h-3.5 w-3.5 ml-1" aria-hidden="true" />
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Metadata Summary Details Grid */}
+                      {pkg.previewMetadata ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-border text-xs text-muted-foreground">
+                          <div>
+                            <span className="text-[11px] block text-muted-foreground">Title:</span>
+                            <span className="font-semibold text-foreground truncate block">{pkg.previewMetadata.title}</span>
+                          </div>
+                          <div>
+                            <span className="text-[11px] block text-muted-foreground">Program & Discipline:</span>
+                            <span className="text-foreground truncate block">{pkg.previewMetadata.program} · {pkg.previewMetadata.discipline}</span>
+                          </div>
+                          <div>
+                            <span className="text-[11px] block text-muted-foreground">Group name:</span>
+                            <span className="text-foreground truncate block">{pkg.previewMetadata.groupName}</span>
+                          </div>
+                          <div>
+                            <span className="text-[11px] block text-muted-foreground">Roster:</span>
+                            <span className="text-foreground truncate block">{pkg.previewMetadata.teamMemberCount} member(s)</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-destructive pt-1">
+                          No project details spreadsheet could be parsed for this project.
+                        </div>
+                      )}
+
+                      {/* Media File Presence Indicators */}
+                      <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground text-[11px]">Media files:</span>
+                        <span className="inline-flex items-center gap-1">
+                          {pkg.filePresence.posterImagePresent ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+                          ) : (
+                            <XCircle className="h-3.5 w-3.5 text-destructive" aria-hidden="true" />
+                          )}
+                          poster.png
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          {pkg.filePresence.posterPdfPresent ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+                          ) : (
+                            <XCircle className="h-3.5 w-3.5 text-destructive" aria-hidden="true" />
+                          )}
+                          poster.pdf
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          {pkg.filePresence.snapshotPresent ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+                          ) : (
+                            <span className="text-muted-foreground">○</span>
+                          )}
+                          snapshot-1.png {pkg.filePresence.snapshotPresent ? '' : '(optional)'}
+                        </span>
+                      </div>
+
+                      {/* Expandable Issues Drawer */}
+                      {isExpanded && (
+                        <div className="flex flex-col gap-2 pt-2 border-t border-border text-xs">
+                          {pkg.errors.map((err, idx) => (
+                            <div
+                              key={`err-${idx}`}
+                              className="p-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-[11px] leading-relaxed"
+                            >
+                              <strong>Issue:</strong> {err.message}
+                              {err.fieldName && <span className="text-muted-foreground"> (field: {err.fieldName})</span>}
+                              {err.fileName && <span className="text-muted-foreground"> (file: {err.fileName})</span>}
+                            </div>
+                          ))}
+                          {pkg.warnings.map((warn, idx) => (
+                            <div
+                              key={`warn-${idx}`}
+                              className="p-2.5 rounded-md bg-warning/10 border border-warning/20 text-warning text-[11px] leading-relaxed"
+                            >
+                              <strong>Warning:</strong> {warn.message}
+                              {warn.fieldName && <span className="text-muted-foreground"> (field: {warn.fieldName})</span>}
+                              {warn.fileName && <span className="text-muted-foreground"> (file: {warn.fileName})</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Package Selection Controls & Prepare Import Action Toolbar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-muted/50 border border-border">
+            <div className="flex flex-col gap-0.5">
+              <div className="text-xs font-semibold text-foreground">
+                Project selection: {totalSelectedCount} of {previewResult.packageCount} selected ({selectedValidCount} ready, {selectedWarningCount} warning)
+              </div>
+              <div className="text-[11px] text-muted-foreground">
                 {unacknowledgedWarningCount > 0
-                  ? `⚠️ ${unacknowledgedWarningCount} warning package(s) awaiting acknowledgement`
-                  : '✓ All warning packages acknowledged or excluded'}
+                  ? `${unacknowledgedWarningCount} warning project(s) require acknowledgement before import`
+                  : 'All selected projects are ready for preparation'}
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-              <div style={{ fontSize: '0.8rem', color: '#9CA3AF', fontStyle: 'italic' }}>
-                Preparation only — no projects or files will be saved.
-              </div>
-
-              <button
-                type="button"
-                onClick={handlePrepareImport}
-                disabled={selectionState.isPreparing || totalSelectedCount === 0}
-                style={{
-                  backgroundColor: '#8B5CF6',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '0.65rem 1.25rem',
-                  fontWeight: 700,
-                  fontSize: '0.9rem',
-                  cursor: selectionState.isPreparing || totalSelectedCount === 0 ? 'not-allowed' : 'pointer',
-                  opacity: selectionState.isPreparing || totalSelectedCount === 0 ? 0.5 : 1,
-                }}
-              >
-                {selectionState.isPreparing ? '⏳ Preparing...' : 'Prepare Import'}
-              </button>
-            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handlePrepareImport}
+              disabled={selectionState.isPreparing || totalSelectedCount === 0}
+              className="font-semibold shrink-0"
+            >
+              <CheckSquare className="h-4 w-4 mr-1.5" aria-hidden="true" />
+              {selectionState.isPreparing ? 'Preparing import…' : 'Prepare import'}
+            </Button>
           </div>
 
           {/* Preparation Error Feedback */}
           {selectionState.preparationErrorCode && (
-            <div style={{
-              backgroundColor: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
-              borderRadius: '10px',
-              padding: '1rem 1.25rem',
-              marginBottom: '1.5rem',
-              color: '#EF4444',
-              fontSize: '0.9rem',
-            }}>
-              ❌ <strong>Import preparation failed:</strong>{' '}
-              {selectionState.preparationErrorCode === 'EMPTY_SELECTION'
-                ? 'At least one package must be selected.'
-                : selectionState.preparationErrorCode === 'PREVIEW_FINGERPRINT_MISMATCH'
-                  ? 'Preview state has changed or fingerprint does not match.'
-                  : 'The selection could not be prepared as an import intent. Please check acknowledgements and try again.'}
-            </div>
+            <Alert
+              variant="destructive"
+              title="Import Preparation Failed"
+              description={
+                selectionState.preparationErrorCode === 'EMPTY_SELECTION'
+                  ? 'At least one project must be selected.'
+                  : selectionState.preparationErrorCode === 'PREVIEW_FINGERPRINT_MISMATCH'
+                    ? 'Project file state has changed. Please re-check the files.'
+                    : 'The selection could not be prepared as an import intent. Please check acknowledgements and try again.'
+              }
+            />
           )}
 
-          {/* Prepared Intent Summary Card */}
+          {/* Step: Prepared Intent Banner */}
           {selectionState.preparedIntent && (
-            <div style={{
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
-              borderRadius: '12px',
-              padding: '1.25rem 1.5rem',
-              marginBottom: '1.5rem',
-              color: '#10B981',
-            }}>
-              <h4 style={{ margin: '0 0 0.5rem 0', fontWeight: 800, fontSize: '1rem', color: '#10B981' }}>
-                ✓ Import Intent Prepared Successfully
-              </h4>
-              <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: '#D1D5DB' }}>
-                A deterministic import intent contract has been constructed in memory for future persistence. No database or storage writes occurred.
+            <div className="p-4 rounded-lg bg-success/10 border border-success/30 flex flex-col gap-3 text-xs">
+              <div className="flex items-center gap-2 text-success font-semibold text-sm">
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                <span>Import prepared successfully</span>
+              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                The selected project details are verified and ready to be saved as draft records in the test environment.
               </p>
 
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: '0.75rem',
-                fontSize: '0.85rem',
-                backgroundColor: '#161F30',
-                padding: '1rem',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 255, 255, 0.05)',
-              }}>
-                <div><span style={{ color: '#9CA3AF' }}>Fingerprint:</span> <code style={{ color: '#60A5FA' }}>{selectionState.preparedIntent.previewFingerprint.slice(0, 12)}...</code></div>
-                <div><span style={{ color: '#9CA3AF' }}>Selected Root:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.selectedRootName}</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Selected Package Count:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.selectedPackagePaths.length}</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Selected Valid Count:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.selectedPackagePaths.filter((p) => previewResult.packages.find((pkg) => pkg.packagePath === p)?.status === 'valid').length}</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Selected Warning Count:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.selectedPackagePaths.filter((p) => previewResult.packages.find((pkg) => pkg.packagePath === p)?.status === 'warning').length}</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Declared File Count:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.fileCount}</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Declared Total Bytes:</span> <strong style={{ color: '#F3F4F6' }}>{formatMB(selectionState.preparedIntent.declaredTotalBytes)} MB</strong></div>
-                {selectionState.preparedIntent.acknowledgedWarningPackagePaths.length > selectionState.preparedIntent.selectedPackagePaths.filter((p) => previewResult.packages.find((pkg) => pkg.packagePath === p)?.status === 'warning').length && (
-                  <div><span style={{ color: '#9CA3AF' }}>Acknowledged Unselected Warnings:</span> <strong style={{ color: '#F3F4F6' }}>{selectionState.preparedIntent.acknowledgedWarningPackagePaths.length - selectionState.preparedIntent.selectedPackagePaths.filter((p) => previewResult.packages.find((pkg) => pkg.packagePath === p)?.status === 'warning').length}</strong></div>
-                )}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-2.5 rounded bg-background border border-border text-[11px]">
+                <div>
+                  <span className="text-muted-foreground block">Projects to save:</span>
+                  <strong className="text-foreground">{selectionState.preparedIntent.selectedPackagePaths.length}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Selected files:</span>
+                  <strong className="text-foreground">{selectionState.preparedIntent.fileCount}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Total size:</span>
+                  <strong className="text-foreground">{formatMB(selectionState.preparedIntent.declaredTotalBytes)} MB</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Environment:</span>
+                  <strong className="text-foreground">Test / Staging</strong>
+                </div>
               </div>
 
-              <div style={{
-                marginTop: '1.25rem',
-                paddingTop: '1rem',
-                borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '1rem',
-              }}>
-                <div style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>
-                  ℹ️ This creates draft project metadata and an import batch. Media files are not uploaded in this step.
-                </div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                <span className="text-[11px] text-muted-foreground">
+                  Saving project details creates draft records. Media files are imported in the next step.
+                </span>
 
-                <button
+                <Button
                   type="button"
+                  size="sm"
                   onClick={handleStageMetadata}
                   disabled={isStaging || selectionState.isPreparing || isCompletingMedia}
-                  style={{
-                    backgroundColor: '#10B981',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '0.65rem 1.25rem',
-                    fontWeight: 700,
-                    fontSize: '0.9rem',
-                    cursor: isStaging || selectionState.isPreparing || isCompletingMedia ? 'not-allowed' : 'pointer',
-                    opacity: isStaging || selectionState.isPreparing || isCompletingMedia ? 0.5 : 1,
-                  }}
+                  className="font-semibold shrink-0"
                 >
-                  {isStaging ? '⏳ Staging Metadata...' : '💾 Stage Selected Metadata'}
-                </button>
+                  <Layers className="h-4 w-4 mr-1.5" aria-hidden="true" />
+                  {isStaging ? 'Importing project details…' : 'Import project details'}
+                </Button>
               </div>
             </div>
           )}
 
           {/* Staging Failure Feedback */}
           {stagingError && (
-            <div style={{
-              backgroundColor: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
-              borderRadius: '10px',
-              padding: '1rem 1.25rem',
-              marginBottom: '1.5rem',
-              color: '#EF4444',
-              fontSize: '0.9rem',
-            }}>
-              ❌ <strong>Metadata Staging Failed:</strong> {stagingError}
-            </div>
+            <Alert
+              variant="destructive"
+              title="Project Details Import Failed"
+              description={stagingError}
+            />
           )}
 
-          {/* Staged Success Card */}
+          {/* Step: Metadata Staged Success & Media Action Card */}
           {stagedResult && (
-            <div style={{
-              backgroundColor: 'rgba(59, 130, 246, 0.1)',
-              border: '1px solid rgba(59, 130, 246, 0.3)',
-              borderRadius: '12px',
-              padding: '1.25rem 1.5rem',
-              marginBottom: '1.5rem',
-              color: '#60A5FA',
-            }}>
-              <h4 style={{ margin: '0 0 0.5rem 0', fontWeight: 800, fontSize: '1rem', color: '#60A5FA' }}>
-                🎉 {stagedResult.result === 'already_staged' ? 'Import Batch Already Staged (Idempotent Retry)' : 'Import Metadata Staged Successfully'}
-              </h4>
-              <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: '#D1D5DB' }}>
-                Draft project metadata and batch record have been atomically created in local Supabase. Upload the selected packages&apos; media below to complete the import.
+            <div className="p-4 rounded-lg bg-information/10 border border-information/30 flex flex-col gap-4 text-xs">
+              <div className="flex items-center gap-2 text-information font-semibold text-sm">
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                <span>
+                  {stagedResult.result === 'already_staged'
+                    ? 'Project details already saved'
+                    : 'Project details imported successfully'}
+                </span>
+              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                {stagedResult.projectCount} project draft(s) have been created in the test environment. Complete the import by uploading media files below.
               </p>
 
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: '0.75rem',
-                fontSize: '0.85rem',
-                backgroundColor: '#161F30',
-                padding: '1rem',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 255, 255, 0.05)',
-                marginBottom: '1rem',
-              }}>
-                <div><span style={{ color: '#9CA3AF' }}>Batch Status:</span> <strong style={{ color: '#A78BFA' }}>metadata_staged</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Staged Projects:</span> <strong style={{ color: '#F3F4F6' }}>{stagedResult.projectCount} draft(s)</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Warnings Logged:</span> <strong style={{ color: '#F3F4F6' }}>{stagedResult.warningCount}</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Batch UUID:</span> <code style={{ color: '#E5E7EB' }}>{stagedResult.batchId}</code></div>
-              </div>
+              {/* Media Completion Action */}
+              {!mediaCompleteResult && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-background border border-border">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs font-semibold text-foreground">
+                      Next step: Import media files
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Adds the poster, PDF, and snapshot images to the draft projects in the test environment. Nothing is published to the public showcase.
+                    </span>
+                  </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <Link
-                  href={`/admin/imports/${stagedResult.batchId}`}
-                  style={{
-                    color: '#FFFFFF',
-                    backgroundColor: '#3B82F6',
-                    textDecoration: 'none',
-                    fontWeight: 700,
-                    fontSize: '0.85rem',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '6px',
-                    display: 'inline-block',
-                  }}
-                >
-                  View Import Batch Detail Page →
-                </Link>
-              </div>
-            </div>
-          )}
-
-          {/* Media Completion Action Card */}
-          {stagedResult && !mediaCompleteResult && (
-            <div style={{
-              backgroundColor: '#111827',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '12px',
-              padding: '1.25rem 1.5rem',
-              marginBottom: '1.5rem',
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '1rem',
-              }}>
-                <div style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>
-                  ℹ️ Uploads poster/PDF/snapshot media for the selected packages into private draft storage and completes the import batch. Nothing is made public.
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleCompleteMedia}
+                    disabled={isCompletingMedia}
+                    className="font-semibold shrink-0"
+                  >
+                    <Upload className="h-4 w-4 mr-1.5" aria-hidden="true" />
+                    {isCompletingMedia ? 'Importing media…' : 'Import media & complete'}
+                  </Button>
                 </div>
+              )}
 
-                <button
-                  type="button"
-                  onClick={handleCompleteMedia}
-                  disabled={isCompletingMedia}
-                  style={{
-                    backgroundColor: '#3B82F6',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '0.65rem 1.25rem',
-                    fontWeight: 700,
-                    fontSize: '0.9rem',
-                    cursor: isCompletingMedia ? 'not-allowed' : 'pointer',
-                    opacity: isCompletingMedia ? 0.5 : 1,
-                  }}
-                >
-                  {isCompletingMedia ? '⏳ Uploading Media...' : '📤 Upload Media & Complete Import'}
-                </button>
-              </div>
+              {mediaCompleteError && (
+                <Alert
+                  variant="destructive"
+                  title="Media Import Failed"
+                  description={`${mediaCompleteError} You can safely retry without losing saved project details.`}
+                />
+              )}
             </div>
           )}
 
-          {/* Media Completion Failure Feedback */}
-          {mediaCompleteError && (
-            <div style={{
-              backgroundColor: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
-              borderRadius: '10px',
-              padding: '1rem 1.25rem',
-              marginBottom: '1.5rem',
-              color: '#EF4444',
-              fontSize: '0.9rem',
-            }}>
-              ❌ <strong>Media Upload Failed:</strong> {mediaCompleteError} You can safely retry without re-staging metadata.
-            </div>
-          )}
-
-          {/* Media Completion Success Card */}
+          {/* Step: Import Completed Success Card */}
           {mediaCompleteResult && (
-            <div style={{
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
-              borderRadius: '12px',
-              padding: '1.25rem 1.5rem',
-              marginBottom: '1.5rem',
-              color: '#10B981',
-            }}>
-              <h4 style={{ margin: '0 0 0.5rem 0', fontWeight: 800, fontSize: '1rem', color: '#10B981' }}>
-                ✅ {mediaCompleteResult.result === 'already_completed' ? 'Import Already Completed (Idempotent Retry)' : 'Import Completed Successfully'}
-              </h4>
-              <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: '#D1D5DB' }}>
-                Media files were uploaded to private draft storage and registered. Projects remain in draft status.
+            <div className="p-5 rounded-lg bg-success/10 border border-success/30 flex flex-col gap-4 text-xs">
+              <div className="flex items-center gap-2 text-success font-bold text-base">
+                <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+                <span>
+                  {mediaCompleteResult.result === 'already_completed'
+                    ? 'Import already completed'
+                    : 'Import completed successfully!'}
+                </span>
+              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                All project details and {mediaCompleteResult.mediaAssetCount} media files were imported into the test environment. Projects remain in draft status for review.
               </p>
 
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: '0.75rem',
-                fontSize: '0.85rem',
-                backgroundColor: '#161F30',
-                padding: '1rem',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 255, 255, 0.05)',
-                marginBottom: '1rem',
-              }}>
-                <div><span style={{ color: '#9CA3AF' }}>Batch Status:</span> <strong style={{ color: '#10B981' }}>completed</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Media Assets Registered:</span> <strong style={{ color: '#F3F4F6' }}>{mediaCompleteResult.mediaAssetCount}</strong></div>
-                <div><span style={{ color: '#9CA3AF' }}>Batch UUID:</span> <code style={{ color: '#E5E7EB' }}>{mediaCompleteResult.batchId}</code></div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <Link
-                  href={`/admin/imports/${mediaCompleteResult.batchId}`}
-                  style={{
-                    color: '#FFFFFF',
-                    backgroundColor: '#10B981',
-                    textDecoration: 'none',
-                    fontWeight: 700,
-                    fontSize: '0.85rem',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '6px',
-                    display: 'inline-block',
-                  }}
-                >
-                  View Completed Import Batch →
-                </Link>
+              <div className="flex items-center gap-3 pt-1">
+                <Button asChild className="font-semibold">
+                  <Link href={`/admin/imports/${mediaCompleteResult.batchId}`}>
+                    Open import details
+                    <ArrowRight className="h-4 w-4 ml-1.5" aria-hidden="true" />
+                  </Link>
+                </Button>
               </div>
             </div>
           )}
-
-          {/* Package Preview List */}
-          <h3 style={{ fontSize: '1.2rem', margin: '0 0 1rem 0', color: '#FFFFFF' }}>2. Isolated Package Previews</h3>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {previewResult.packages.map((pkg) => {
-              const isExpanded = expandedPackages[pkg.packagePath] || false;
-              const statusColor = pkg.status === 'valid' ? '#10B981' : pkg.status === 'warning' ? '#F59E0B' : '#EF4444';
-
-              const isSelected = selectionState.selectedPackagePaths.includes(pkg.packagePath);
-              const isAcked = selectionState.acknowledgedWarningPackagePaths.includes(pkg.packagePath);
-
-              return (
-                <div
-                  key={pkg.packagePath}
-                  style={{
-                    backgroundColor: '#161F30',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                    borderLeft: `4px solid ${statusColor}`,
-                    padding: '1.25rem',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      {/* Package Selection Controls */}
-                      {pkg.status === 'valid' && (
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isPreparingOrLocked ? 'not-allowed' : 'pointer', opacity: isPreparingOrLocked ? 0.5 : 1 }}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            disabled={isPreparingOrLocked}
-                            onChange={() => handleToggleValid(pkg.packagePath)}
-                            aria-label={`Select package ${pkg.folderName} for import`}
-                            style={{ width: '1.1rem', height: '1.1rem', cursor: isPreparingOrLocked ? 'not-allowed' : 'pointer' }}
-                          />
-                          <span style={{ fontSize: '0.8rem', color: '#9CA3AF' }}>Select</span>
-                        </label>
-                      )}
-
-                      {pkg.status === 'warning' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: isPreparingOrLocked ? 'not-allowed' : 'pointer', opacity: isPreparingOrLocked ? 0.5 : 1 }}>
-                            <input
-                              type="checkbox"
-                              checked={isAcked}
-                              disabled={isPreparingOrLocked}
-                              onChange={() => handleToggleWarningAck(pkg.packagePath)}
-                              aria-label={`Acknowledge warnings for package ${pkg.folderName}`}
-                              style={{ width: '1rem', height: '1rem', cursor: isPreparingOrLocked ? 'not-allowed' : 'pointer' }}
-                            />
-                            <span style={{ fontSize: '0.8rem', color: '#F59E0B' }}>Ack Warnings</span>
-                          </label>
-
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: isAcked && !isPreparingOrLocked ? 'pointer' : 'not-allowed', opacity: isAcked && !isPreparingOrLocked ? 1 : 0.4 }}>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              disabled={!isAcked || isPreparingOrLocked}
-                              onChange={() => handleToggleWarningSelect(pkg.packagePath)}
-                              aria-label={`Select warning package ${pkg.folderName} for import after acknowledgement`}
-                              style={{ width: '1rem', height: '1rem', cursor: isAcked && !isPreparingOrLocked ? 'pointer' : 'not-allowed' }}
-                            />
-                            <span style={{ fontSize: '0.8rem', color: isAcked ? '#FFFFFF' : '#9CA3AF' }}>Select</span>
-                          </label>
-                        </div>
-                      )}
-
-                      {pkg.status === 'invalid' && (
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: 0.4, cursor: 'not-allowed' }}>
-                          <input
-                            type="checkbox"
-                            checked={false}
-                            disabled
-                            aria-label={`Package ${pkg.folderName} is invalid and cannot be selected`}
-                            style={{ width: '1.1rem', height: '1.1rem', cursor: 'not-allowed' }}
-                          />
-                          <span style={{ fontSize: '0.8rem', color: '#EF4444' }}>Invalid (Disabled)</span>
-                        </label>
-                      )}
-
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#FFFFFF' }}>{pkg.folderName}</span>
-                          <span style={{
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            padding: '0.2rem 0.6rem',
-                            borderRadius: '12px',
-                            backgroundColor: `${statusColor}20`,
-                            color: statusColor,
-                            border: `1px solid ${statusColor}40`,
-                          }}>
-                            {pkg.status.toUpperCase()}
-                          </span>
-
-                          {pkg.reconciliation && (
-                            <span style={{
-                              fontSize: '0.75rem',
-                              fontWeight: 700,
-                              padding: '0.2rem 0.6rem',
-                              borderRadius: '12px',
-                              backgroundColor: pkg.reconciliation.status === 'RECONCILED' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                              color: pkg.reconciliation.status === 'RECONCILED' ? '#10B981' : '#EF4444',
-                              border: `1px solid ${pkg.reconciliation.status === 'RECONCILED' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-                            }}>
-                              {pkg.reconciliation.status === 'RECONCILED'
-                                ? `✓ Reconciled (Row #${pkg.reconciliation.matchedRowNumber})`
-                                : pkg.reconciliation.status === 'ADMIN_REFERENCE_FIELD_MISMATCH'
-                                  ? `✕ Mismatch (${pkg.reconciliation.mismatchedFields.join(', ')})`
-                                  : pkg.reconciliation.status === 'ADMIN_REFERENCE_NO_MATCH'
-                                    ? '✕ No matching reference row'
-                                    : pkg.reconciliation.status === 'ADMIN_REFERENCE_AMBIGUOUS_MATCH'
-                                      ? '✕ Ambiguous reference match'
-                                      : '✕ Invalid match key'}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#9CA3AF', marginTop: '0.25rem' }}>
-                          Public ID: <code style={{ color: '#60A5FA' }}>{pkg.proposedPublicId}</code> | Metadata Source: <strong>{pkg.metadataSource || 'None'}</strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    {(pkg.errors.length > 0 || pkg.warnings.length > 0) && (
-                      <button
-                        type="button"
-                        onClick={() => togglePackageExpand(pkg.packagePath)}
-                        style={{
-                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                          color: '#D1D5DB',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: '6px',
-                          padding: '0.4rem 0.8rem',
-                          fontSize: '0.8rem',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {isExpanded ? 'Hide Details' : `Show Issues (${pkg.errors.length}E / ${pkg.warnings.length}W)`}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Metadata Summary */}
-                  {pkg.previewMetadata ? (
-                    <div style={{
-                      marginTop: '1rem',
-                      paddingTop: '0.75rem',
-                      borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                      gap: '0.75rem',
-                      fontSize: '0.85rem',
-                    }}>
-                      <div><span style={{ color: '#9CA3AF' }}>Title:</span> <strong style={{ color: '#F3F4F6' }}>{pkg.previewMetadata.title}</strong></div>
-                      <div><span style={{ color: '#9CA3AF' }}>Year:</span> <strong style={{ color: '#F3F4F6' }}>{pkg.previewMetadata.year}</strong></div>
-                      <div><span style={{ color: '#9CA3AF' }}>Program:</span> <strong style={{ color: '#F3F4F6' }}>{pkg.previewMetadata.program}</strong></div>
-                      <div><span style={{ color: '#9CA3AF' }}>Discipline:</span> <strong style={{ color: '#F3F4F6' }}>{pkg.previewMetadata.discipline}</strong></div>
-                      <div><span style={{ color: '#9CA3AF' }}>Group:</span> <strong style={{ color: '#F3F4F6' }}>{pkg.previewMetadata.groupName}</strong></div>
-                      <div><span style={{ color: '#9CA3AF' }}>Roster Count:</span> <strong style={{ color: '#F3F4F6' }}>{pkg.previewMetadata.teamMemberCount} members</strong></div>
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: '0.75rem', fontSize: '0.85rem', color: '#EF4444' }}>
-                      No valid project metadata parsed for this package.
-                    </div>
-                  )}
-
-                  {/* File Presence Badges */}
-                  <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.75rem' }}>
-                    <span style={{ color: pkg.filePresence.posterImagePresent ? '#10B981' : '#EF4444' }}>
-                      {pkg.filePresence.posterImagePresent ? '✓' : '✗'} poster.png
-                    </span>
-                    <span style={{ color: pkg.filePresence.posterPdfPresent ? '#10B981' : '#EF4444' }}>
-                      {pkg.filePresence.posterPdfPresent ? '✓' : '✗'} poster.pdf
-                    </span>
-                    <span style={{ color: pkg.filePresence.snapshotPresent ? '#10B981' : '#F59E0B' }}>
-                      {pkg.filePresence.snapshotPresent ? '✓' : '○'} snapshot-1.png
-                    </span>
-                  </div>
-
-                  {/* Expandable Issues Drawer */}
-                  {isExpanded && (
-                    <div style={{
-                      marginTop: '1rem',
-                      paddingTop: '1rem',
-                      borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.5rem',
-                    }}>
-                      {pkg.errors.map((err, idx) => (
-                        <div key={`err-${idx}`} style={{ color: '#EF4444', fontSize: '0.85rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '0.5rem 0.75rem', borderRadius: '6px' }}>
-                          <strong>[{err.code}]</strong> {err.message}
-                          {err.fieldName && <span style={{ color: '#9CA3AF' }}> (field: {err.fieldName})</span>}
-                          {err.fileName && <span style={{ color: '#9CA3AF' }}> (file: {err.fileName})</span>}
-                        </div>
-                      ))}
-                      {pkg.warnings.map((warn, idx) => (
-                        <div key={`warn-${idx}`} style={{ color: '#F59E0B', fontSize: '0.85rem', backgroundColor: 'rgba(245, 158, 11, 0.1)', padding: '0.5rem 0.75rem', borderRadius: '6px' }}>
-                          <strong>[{warn.code}]</strong> {warn.message}
-                          {warn.fieldName && <span style={{ color: '#9CA3AF' }}> (field: {warn.fieldName})</span>}
-                          {warn.fileName && <span style={{ color: '#9CA3AF' }}> (file: {warn.fileName})</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
         </div>
       )}
     </div>

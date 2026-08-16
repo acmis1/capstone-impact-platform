@@ -5,6 +5,8 @@ import { requireAdmin } from '../../../../auth/requireAdmin';
 import { hasPermission } from '../../../../auth/permissions';
 import { AdminAuthError, AuthenticatedAdminContext } from '../../../../auth/authTypes';
 import BrowserImportPreviewClient from '../../../../components/imports/BrowserImportPreviewClient';
+import { Button } from '../../../../components/ui/button';
+import { ErrorState } from '../../../../components/ui/error-state';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,26 +21,44 @@ export default async function NewImportPreviewPage() {
       }
       if (err.type === 'CONFIGURATION_FAILURE') {
         return (
-          <div style={{ padding: '3rem', textAlign: 'center', color: '#EF4444', backgroundColor: '#0B0F19', minHeight: '100vh' }}>
-            <h2>System Error</h2>
-            <p>Authentication service is temporarily unavailable. Please try again.</p>
-            <Link href="/admin/imports" style={{ color: '#3B82F6', textDecoration: 'underline' }}>Return to Staging Imports</Link>
+          <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
+            <ErrorState
+              title="Import service unavailable"
+              description="Authentication service is temporarily unavailable. Please try again."
+              action={
+                <Button asChild variant="outline">
+                  <Link href="/admin/imports">Return to Imports</Link>
+                </Button>
+              }
+            />
           </div>
         );
       }
       return (
-        <div style={{ padding: '3rem', textAlign: 'center', color: '#EF4444', backgroundColor: '#0B0F19', minHeight: '100vh' }}>
-          <h2>Access Denied</h2>
-          <p>You do not have permission to access project import previews.</p>
-          <Link href="/admin/imports" style={{ color: '#3B82F6', textDecoration: 'underline' }}>Return to Staging Imports</Link>
+        <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
+          <ErrorState
+            title="Import access required"
+            description="Your account does not have permission to import projects."
+            action={
+              <Button asChild variant="outline">
+                <Link href="/admin/imports">Return to Imports</Link>
+              </Button>
+            }
+          />
         </div>
       );
     }
     return (
-      <div style={{ padding: '3rem', textAlign: 'center', color: '#EF4444', backgroundColor: '#0B0F19', minHeight: '100vh' }}>
-        <h2>System Error</h2>
-        <p>An unexpected system error occurred while verifying credentials. Please try again.</p>
-        <Link href="/admin/imports" style={{ color: '#3B82F6', textDecoration: 'underline' }}>Return to Staging Imports</Link>
+      <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
+        <ErrorState
+          title="Import unavailable"
+          description="An unexpected error occurred while verifying credentials. Please try again."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/admin/imports">Return to Imports</Link>
+            </Button>
+          }
+        />
       </div>
     );
   }
@@ -47,62 +67,44 @@ export default async function NewImportPreviewPage() {
 
   if (!canEdit) {
     return (
-      <div style={{ padding: '3rem', textAlign: 'center', color: '#EF4444', backgroundColor: '#0B0F19', minHeight: '100vh' }}>
-        <h2>Access Denied</h2>
-        <p>You do not have permission to access project import previews.</p>
-        <Link href="/admin/imports" style={{ color: '#3B82F6', textDecoration: 'underline' }}>Return to Import Batches</Link>
+      <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
+        <ErrorState
+          title="Import access required"
+          description="Your account does not have permission to import projects."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/admin/imports">Return to Imports</Link>
+            </Button>
+          }
+        />
       </div>
     );
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: '#0B0F19',
-      color: '#F3F4F6',
-      fontFamily: 'Inter, system-ui, sans-serif',
-      padding: '2rem',
-    }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        {/* Navigation header */}
-        <header style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '2rem',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-          paddingBottom: '1rem',
-        }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <Link href="/admin/imports" style={{ color: '#9CA3AF', textDecoration: 'none', fontSize: '0.9rem' }}>
-                ← Staging Import Batches
-              </Link>
-            </div>
-            <h1 style={{ margin: '0.5rem 0 0 0', fontSize: '1.75rem', fontWeight: 800 }}>Project Package Import Preview</h1>
-            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: '#9CA3AF' }}>
-              Browser Folder Selection & Server-Side Batch Validation Foundation
-            </p>
-          </div>
+    <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+            Import projects
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Check project files and import them into the test environment.
+          </p>
+        </div>
 
-          <div>
-            <Link href="/admin/imports" style={{
-              color: '#9CA3AF',
-              textDecoration: 'none',
-              fontSize: '0.9rem',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-            }}>
-              Back to Ingestion Batches
+        <div className="shrink-0">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/imports">
+              All imports
             </Link>
-          </div>
-        </header>
-
-        {/* Client Component */}
-        <BrowserImportPreviewClient />
+          </Button>
+        </div>
       </div>
+
+      {/* Main Guided Import Client Workflow */}
+      <BrowserImportPreviewClient />
     </div>
   );
 }
