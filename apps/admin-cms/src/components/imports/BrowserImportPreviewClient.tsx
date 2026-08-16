@@ -489,7 +489,7 @@ export default function BrowserImportPreviewClient() {
                   className="bg-primary hover:bg-primary/90 font-semibold"
                 >
                   <Search className="h-4 w-4 mr-2" aria-hidden="true" />
-                  {isLoading ? 'Checking files…' : 'Check project files'}
+                  {isLoading ? 'Checking files…' : 'Check files and continue'}
                 </Button>
 
                 <Button

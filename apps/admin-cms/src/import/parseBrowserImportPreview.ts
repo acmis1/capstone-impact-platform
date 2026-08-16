@@ -561,8 +561,8 @@ export async function analyzeBrowserImportServer(
       status: packageStatus,
       previewMetadata,
       filePresence,
-      errors,
-      warnings,
+      errors: [...errors],
+      warnings: [...warnings],
     });
 
     serverPackages.push({
@@ -573,8 +573,8 @@ export async function analyzeBrowserImportServer(
       metadataSource,
       manifest: currentManifest,
       filePresence,
-      errors,
-      warnings,
+      errors: [...errors],
+      warnings: [...warnings],
     });
   }
 
