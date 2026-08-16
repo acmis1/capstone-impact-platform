@@ -8,8 +8,10 @@ import { ProjectMediaSummary } from './ProjectMediaSummary';
 import { ProjectValidationSummary } from './ProjectValidationSummary';
 import { SubmitForReviewButton } from './SubmitForReviewButton';
 import { StagingReviewActions } from './StagingReviewActions';
+import { ProjectMetadataEditor } from './ProjectMetadataEditor';
 import { ProjectMetadataNavigationProvider } from './ProjectMetadataNavigation';
 import { Project } from '../../domain/project';
+import { ProjectMetadataView } from '../../projects/projectMetadata';
 import { Layers } from 'lucide-react';
 
 vi.mock('next/navigation', () => ({
@@ -281,6 +283,60 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       fireEvent.click(approveButton);
 
       expect(await screen.findByText(/Status transition could not be completed\. Please try again\./i)).toBeTruthy();
+    });
+  });
+
+  describe('ProjectMetadataEditor heading level', () => {
+    const mockMetadataView: ProjectMetadataView = {
+      publicId: '2026-proj-01',
+      title: 'Autonomous Drone Navigation',
+      summary: 'A project exploring drone autonomy.',
+      background: 'Problem background details.',
+      solution: 'Developed solution details.',
+      posterText: 'Full poster text content index.',
+      accessibilityText: 'Poster showing autonomous drone architecture diagram.',
+      year: '2026',
+      programId: 'a0000000-0000-4000-8000-000000000001',
+      disciplineIds: ['b0000000-0000-4000-8000-000000000001'],
+      industryCategoryIds: ['c0000000-0000-4000-8000-000000000001'],
+      expectedUpdatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('renders heading level 2 by default when headingLevel prop is omitted', () => {
+      render(
+        <ProjectMetadataNavigationProvider>
+          <ProjectMetadataEditor
+            initialMetadata={mockMetadataView}
+            programs={[]}
+            disciplines={[]}
+            industryCategories={[]}
+            canEdit={true}
+            projectStatus="draft"
+            saveAction={vi.fn()}
+          />
+        </ProjectMetadataNavigationProvider>
+      );
+
+      expect(screen.getByRole('heading', { name: /project metadata/i, level: 2 })).toBeTruthy();
+    });
+
+    it('renders heading level 4 when explicit headingLevel="h4" is provided', () => {
+      render(
+        <ProjectMetadataNavigationProvider>
+          <ProjectMetadataEditor
+            initialMetadata={mockMetadataView}
+            programs={[]}
+            disciplines={[]}
+            industryCategories={[]}
+            canEdit={true}
+            projectStatus="draft"
+            saveAction={vi.fn()}
+            headingLevel="h4"
+          />
+        </ProjectMetadataNavigationProvider>
+      );
+
+      expect(screen.getByRole('heading', { name: /project metadata/i, level: 4 })).toBeTruthy();
     });
   });
 });

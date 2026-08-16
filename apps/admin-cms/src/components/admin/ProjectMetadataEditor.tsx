@@ -32,7 +32,7 @@ export function ProjectMetadataEditor({
   canEdit,
   projectStatus,
   saveAction,
-  headingLevel: Heading = 'h4',
+  headingLevel: Heading = 'h2',
 }: Props) {
   const router = useRouter();
   const { setDirty, confirmDiscard } = useProjectMetadataNavigation();
