@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function ImportBatchesPage() {
   let batches: ImportBatchRow[] = [];
-  let databaseError: string | null = null;
+  let loadError = false;
   let canEdit = false;
 
   try {
@@ -29,9 +29,9 @@ export default async function ImportBatchesPage() {
     const repository = new ImportBatchRepository();
     batches = await repository.listRecentImportBatches(50);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown database connection error';
+    const message = error instanceof Error ? error.message : 'Unknown import batch load error';
     console.error('[Staging Import Batches Load Failure]:', message);
-    databaseError = message;
+    loadError = true;
   }
 
   // Summary aggregation metrics
@@ -66,10 +66,10 @@ export default async function ImportBatchesPage() {
         )}
       </div>
 
-      {databaseError ? (
+      {loadError ? (
         <ErrorState
           title="Import records could not be loaded"
-          description={`The database query failed: ${databaseError}`}
+          description="Import records are temporarily unavailable. Please try again."
           action={
             <Button asChild variant="outline">
               <Link href="/admin/imports">Retry</Link>

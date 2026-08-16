@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { Folder, Calendar, ChevronRight, CheckCircle2, Clock, XCircle, Info } from 'lucide-react';
+import { Folder, Calendar, ChevronRight, CheckCircle2, XCircle, Info } from 'lucide-react';
 import { ImportBatchRepository } from '../../../../repositories/ImportBatchRepository';
 import ImportBatchStatusBadge from '../../../../components/admin/ImportBatchStatusBadge';
 import { ImportBatchReviewPanel, ImportBatchReviewProjectView } from '../../../../components/admin/ImportBatchReviewPanel';
@@ -47,13 +47,30 @@ export default async function ImportBatchDetailPage({
     errorMsg = message;
   }
 
-  // Safe error card for missing batch parameters
-  if (!batch || errorMsg) {
+  // Safe error card for load failure
+  if (errorMsg) {
     return (
       <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
         <ErrorState
-          title="Import batch not found"
-          description="The requested batch ID does not match any logged import records in the database."
+          title="Import details unavailable"
+          description="The requested import details could not be retrieved. Please try again."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/admin/imports">Return to Imports</Link>
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  // Safe error card for missing batch
+  if (!batch) {
+    return (
+      <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
+        <ErrorState
+          title="Import not found"
+          description="The requested import batch does not exist or has been removed."
           action={
             <Button asChild variant="outline">
               <Link href="/admin/imports">Return to Imports</Link>
@@ -87,11 +104,10 @@ export default async function ImportBatchDetailPage({
     };
   });
 
-  // Derived plain-language outcome summary metrics from existing data
-  const totalImported = reviewProjects.length;
-  const readyCount = reviewProjects.filter((p) => p.eligibility === 'eligible' && p.ready).length;
-  const blockedCount = reviewProjects.filter((p) => p.eligibility === 'eligible' && !p.ready).length;
-  const alreadySubmittedCount = reviewProjects.filter((p) => p.eligibility === 'already_submitted').length;
+  // Authoritative summary metrics: batch total projects and actionable review counts
+  const totalImported = batch.total_projects;
+  const readyToSubmitCount = reviewProjects.filter((p) => p.eligibility === 'eligible' && p.ready).length;
+  const needsFixesCount = reviewProjects.filter((p) => p.eligibility === 'eligible' && !p.ready).length;
 
   // Reset client-side selection whenever the authoritative selectable project set or workflow state changes.
   // A React key remount avoids synchronously setting state from an effect while still guaranteeing stale
@@ -135,15 +151,15 @@ export default async function ImportBatchDetailPage({
         </div>
       </div>
 
-      {/* Outcome Summary Banner */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Outcome Summary Banner (3 actionable summary cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card className="bg-card border-border shadow-xs">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
               <Folder className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Imported</p>
+              <p className="text-xs font-medium text-muted-foreground">Projects imported</p>
               <p className="text-xl font-bold text-foreground">{totalImported}</p>
             </div>
           </CardContent>
@@ -155,8 +171,8 @@ export default async function ImportBatchDetailPage({
               <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Ready for review</p>
-              <p className="text-xl font-bold text-success">{readyCount}</p>
+              <p className="text-xs font-medium text-muted-foreground">Ready to submit</p>
+              <p className="text-xl font-bold text-success">{readyToSubmitCount}</p>
             </div>
           </CardContent>
         </Card>
@@ -167,20 +183,8 @@ export default async function ImportBatchDetailPage({
               <XCircle className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Needs attention</p>
-              <p className="text-xl font-bold text-warning">{blockedCount}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card border-border shadow-xs">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-information/10 text-information shrink-0">
-              <Clock className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Submitted</p>
-              <p className="text-xl font-bold text-information">{alreadySubmittedCount}</p>
+              <p className="text-xs font-medium text-muted-foreground">Need fixes</p>
+              <p className="text-xl font-bold text-warning">{needsFixesCount}</p>
             </div>
           </CardContent>
         </Card>
@@ -267,8 +271,8 @@ export default async function ImportBatchDetailPage({
               <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" aria-hidden="true" />
               <span>
                 {batch.status === 'metadata_staged'
-                  ? 'Metadata is stored in local Supabase and projects remain in draft state. Media file uploads have not occurred, full binary validation is pending, and no approval or publication has been performed.'
-                  : 'Imported package resources are stored inside private drafts buckets. Media assets do not promote to public URLs, keeping staging showcase records cleanly separated from active public distributions.'}
+                  ? 'Project details have been saved in the test environment. Media files have not finished importing yet, so these projects cannot be submitted for review.'
+                  : 'Project files are stored privately in the test environment. Nothing from this import is published to the public showcase website.'}
               </span>
             </div>
           </CardContent>
