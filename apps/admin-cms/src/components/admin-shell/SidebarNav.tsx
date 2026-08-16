@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { FolderKanban, FileSpreadsheet, Users } from 'lucide-react';
 import { NavigationItem, getNavigationItems, getRouteDescriptor } from './navigation';
 import { cn } from '../../lib/utils';
-import { Badge } from '../ui/badge';
+import { AppMark } from '../ui/app-mark';
 
 interface SidebarProps {
   onNavClick?: () => void;
@@ -32,12 +32,16 @@ export function SidebarNav({ onNavClick, className, canManageStaff = false }: Si
   return (
     <div className={cn('flex flex-col h-full bg-background border-r', className)}>
       {/* Brand header */}
-      <div className="flex h-14 items-center gap-2 border-b px-4">
-        <span className="font-extrabold text-base tracking-wider text-primary">
-          RMIT CAPSTONE
-        </span>
-        <span className="text-muted-foreground/40 font-light">|</span>
-        <span className="text-xs font-semibold text-muted-foreground">Admin</span>
+      <div className="flex h-14 items-center gap-2.5 border-b px-4">
+        <AppMark size="sm" />
+        <div className="flex flex-col min-w-0">
+          <span className="font-bold text-sm leading-tight tracking-tight text-foreground truncate">
+            Capstone Impact
+          </span>
+          <span className="text-[11px] font-medium leading-none text-muted-foreground">
+            Admin
+          </span>
+        </div>
       </div>
 
       {/* Primary navigation */}
@@ -65,14 +69,6 @@ export function SidebarNav({ onNavClick, className, canManageStaff = false }: Si
           );
         })}
       </nav>
-
-      {/* Footer environment label */}
-      <div className="border-t p-4 flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">Environment</span>
-        <Badge variant="neutral" className="text-xs font-semibold uppercase">
-          Staging
-        </Badge>
-      </div>
     </div>
   );
 }

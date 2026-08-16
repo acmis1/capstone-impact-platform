@@ -3,6 +3,10 @@
 import React, { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Check, X, ArrowRight } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Alert } from '../ui/alert';
+import { ProjectStatusBadge } from './ProjectStatusBadge';
 
 export interface ImportBatchReviewProjectView {
   publicId: string;
@@ -111,142 +115,180 @@ export function ImportBatchReviewPanel({ batchId, batchStatus, projects, canSubm
 
   if (batchStatus !== 'completed') {
     return (
-      <div style={{ color: '#9CA3AF', fontSize: '0.85rem', fontStyle: 'italic' }}>
+      <div className="text-sm text-muted-foreground italic py-4">
         Review submission becomes available once this import batch reaches the &quot;completed&quot; state.
       </div>
     );
   }
 
   return (
-    <div style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
+    <div className="flex flex-col gap-4 text-sm">
       {!canSubmit && (
-        <div style={{
-          fontSize: '0.8rem', color: '#9CA3AF', backgroundColor: '#0F172A', borderRadius: '6px',
-          padding: '0.5rem 0.75rem', border: '1px solid rgba(255, 255, 255, 0.05)', marginBottom: '1rem',
-        }}>
-          Your account does not have permission to submit projects for review.
-        </div>
+        <Alert
+          variant="default"
+          description="Your account does not have permission to submit projects for review."
+        />
       )}
 
       {successMessage && (
-        <div style={{
-          backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10B981', border: '1px solid rgba(16, 185, 129, 0.2)',
-          borderRadius: '6px', padding: '0.5rem 0.75rem', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '1rem',
-        }}>
-          ✅ {successMessage}
-        </div>
+        <Alert
+          variant="success"
+          description={successMessage}
+        />
       )}
 
       {error && (
-        <div style={{
-          backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', border: '1px solid rgba(239, 68, 68, 0.2)',
-          borderRadius: '6px', padding: '0.5rem 0.75rem', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '1rem',
-        }}>
-          ❌ Error: {error}
-        </div>
+        <Alert
+          variant="destructive"
+          title="Submission Failed"
+          description={error}
+        />
       )}
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginBottom: '1rem' }}>
-        <button
+      {/* Action Controls Toolbar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={selectAllReady}
           disabled={!canSubmit || pending || readyProjects.length === 0}
-          style={selectorButtonStyle(!canSubmit || pending || readyProjects.length === 0)}
         >
           Select all ready ({readyProjects.length})
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           onClick={clearSelection}
           disabled={!canSubmit || pending || selected.size === 0}
-          style={selectorButtonStyle(!canSubmit || pending || selected.size === 0)}
         >
           Clear selection
-        </button>
-        <span style={{ color: '#9CA3AF', fontSize: '0.85rem' }}>
+        </Button>
+        <span className="text-xs text-muted-foreground ml-1">
           {selected.size} selected
         </span>
-        <button
+        <Button
           type="button"
+          size="sm"
           onClick={handleSubmit}
           disabled={!canSubmit || pending || selected.size === 0}
-          style={{
-            backgroundColor: '#10B981',
-            color: '#FFFFFF',
-            border: 'none',
-            padding: '0.5rem 1rem',
-            borderRadius: '6px',
-            cursor: !canSubmit || pending || selected.size === 0 ? 'not-allowed' : 'pointer',
-            fontWeight: 'bold',
-            fontSize: '0.85rem',
-            opacity: !canSubmit || pending || selected.size === 0 ? 0.5 : 1,
-            marginLeft: 'auto',
-          }}
+          className="ml-auto font-semibold"
         >
           {pending ? 'Submitting…' : 'Submit selected for review'}
-        </button>
+        </Button>
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+      {/* Projects Table */}
+      <div className="overflow-x-auto w-full border border-border rounded-lg bg-card">
+        <table className="w-full text-left text-sm border-collapse">
           <thead>
-            <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: '#9CA3AF' }}>
-              <th style={{ padding: '0.5rem', fontWeight: 600 }}></th>
-              <th style={{ padding: '0.5rem', fontWeight: 600 }}>Title</th>
-              <th style={{ padding: '0.5rem', fontWeight: 600 }}>Public ID</th>
-              <th style={{ padding: '0.5rem', fontWeight: 600 }}>Status</th>
-              <th style={{ padding: '0.5rem', fontWeight: 600 }}>Readiness</th>
-              <th style={{ padding: '0.5rem', fontWeight: 600 }}>Staged media</th>
-              <th style={{ padding: '0.5rem', fontWeight: 600 }}></th>
+            <tr className="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <th className="py-2.5 px-3 w-10 text-center">
+                <span className="sr-only">Select</span>
+              </th>
+              <th className="py-2.5 px-3">Title</th>
+              <th className="py-2.5 px-3">Public ID</th>
+              <th className="py-2.5 px-3">Status</th>
+              <th className="py-2.5 px-3">Readiness</th>
+              <th className="py-2.5 px-3">Staged media</th>
+              <th className="py-2.5 px-3 text-right">
+                <span className="sr-only">Inspect</span>
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border">
             {projects.map((project) => {
               const selectable = canSubmit && project.eligibility === 'eligible' && project.ready && !pending;
               const isChecked = selected.has(project.publicId);
               return (
-                <tr key={project.publicId} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', color: '#D1D5DB' }}>
-                  <td style={{ padding: '0.5rem' }}>
+                <tr
+                  key={project.publicId}
+                  className="hover:bg-muted/50 transition-colors"
+                >
+                  <td className="py-3 px-3 text-center">
                     <input
                       type="checkbox"
                       checked={isChecked}
                       disabled={!selectable}
                       onChange={() => toggleSelected(project.publicId)}
+                      aria-label={`Select project ${project.title || project.publicId}`}
+                      className="h-4 w-4 rounded border-input text-primary focus:ring-ring disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                     />
                   </td>
-                  <td style={{ padding: '0.5rem', fontWeight: 600 }}>{project.title}</td>
-                  <td style={{ padding: '0.5rem' }}><code>{project.publicId}</code></td>
-                  <td style={{ padding: '0.5rem' }}>{project.status}</td>
-                  <td style={{ padding: '0.5rem' }}>
+                  <td className="py-3 px-3 font-semibold text-foreground max-w-xs">
+                    {project.title}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                    <code>{project.publicId}</code>
+                  </td>
+                  <td className="py-3 px-3 whitespace-nowrap">
+                    <ProjectStatusBadge status={project.status} />
+                  </td>
+                  <td className="py-3 px-3 text-xs leading-relaxed max-w-sm">
                     {project.eligibility === 'already_submitted' ? (
-                      <span style={{ color: '#3B82F6', fontWeight: 600 }}>Already submitted</span>
+                      <span className="text-information font-medium">Already submitted</span>
                     ) : project.eligibility === 'ineligible' ? (
-                      <span style={{ color: '#6B7280', fontWeight: 600 }}>Not eligible from &quot;{project.status}&quot;</span>
+                      <span className="text-muted-foreground font-medium">Not eligible from &quot;{project.status}&quot;</span>
                     ) : project.ready ? (
-                      <span style={{ color: '#10B981', fontWeight: 600 }}>Ready</span>
+                      <span className="text-success font-semibold flex items-center gap-1">
+                        <Check className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+                        Ready
+                      </span>
                     ) : (
-                      <span style={{ color: '#F59E0B', fontWeight: 600 }}>Blocked</span>
+                      <span className="text-warning font-semibold flex items-center gap-1">
+                        <X className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+                        Blocked
+                      </span>
                     )}
                     {project.blockingReasons.length > 0 && (
-                      <ul style={{ margin: '0.25rem 0 0 0', paddingLeft: '1.1rem', color: '#F87171' }}>
-                        {project.blockingReasons.map((reason) => <li key={reason}>{reason}</li>)}
+                      <ul className="mt-1 space-y-0.5 text-destructive text-[11px] list-disc list-inside">
+                        {project.blockingReasons.map((reason) => (
+                          <li key={reason}>{reason}</li>
+                        ))}
                       </ul>
                     )}
                     {project.warnings.length > 0 && (
-                      <ul style={{ margin: '0.25rem 0 0 0', paddingLeft: '1.1rem', color: '#F59E0B' }}>
-                        {project.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                      <ul className="mt-1 space-y-0.5 text-warning text-[11px] list-disc list-inside">
+                        {project.warnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
                       </ul>
                     )}
                   </td>
-                  <td style={{ padding: '0.5rem' }}>
-                    Poster: {project.posterPresent ? '✅' : '❌'} · PDF: {project.posterPdfPresent ? '✅' : '❌'}
+                  <td className="py-3 px-3 text-xs whitespace-nowrap text-muted-foreground">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="inline-flex items-center gap-1">
+                        Poster: {project.posterPresent ? (
+                          <span className="text-success font-medium inline-flex items-center gap-0.5">
+                            <Check className="h-3 w-3" aria-hidden="true" /> Present
+                          </span>
+                        ) : (
+                          <span className="text-destructive font-medium inline-flex items-center gap-0.5">
+                            <X className="h-3 w-3" aria-hidden="true" /> Missing
+                          </span>
+                        )}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        PDF: {project.posterPdfPresent ? (
+                          <span className="text-success font-medium inline-flex items-center gap-0.5">
+                            <Check className="h-3 w-3" aria-hidden="true" /> Present
+                          </span>
+                        ) : (
+                          <span className="text-destructive font-medium inline-flex items-center gap-0.5">
+                            <X className="h-3 w-3" aria-hidden="true" /> Missing
+                          </span>
+                        )}
+                      </span>
+                    </div>
                   </td>
-                  <td style={{ padding: '0.5rem' }}>
-                    <Link href={`/admin/projects/${project.publicId}`} style={{
-                      color: '#3B82F6', textDecoration: 'none', fontSize: '0.8rem', fontWeight: 600,
-                    }}>
-                      Inspect →
-                    </Link>
+                  <td className="py-3 px-3 text-right whitespace-nowrap">
+                    <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-xs">
+                      <Link href={`/admin/projects/${project.publicId}`}>
+                        Inspect
+                        <ArrowRight className="ml-1 h-3 w-3" aria-hidden="true" />
+                      </Link>
+                    </Button>
                   </td>
                 </tr>
               );
@@ -256,18 +298,4 @@ export function ImportBatchReviewPanel({ batchId, batchStatus, projects, canSubm
       </div>
     </div>
   );
-}
-
-function selectorButtonStyle(disabled: boolean): React.CSSProperties {
-  return {
-    backgroundColor: '#1E293B',
-    color: '#E5E7EB',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    padding: '0.4rem 0.8rem',
-    borderRadius: '6px',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    opacity: disabled ? 0.5 : 1,
-  };
 }

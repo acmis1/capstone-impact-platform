@@ -44,7 +44,7 @@ describe('navigation module', () => {
   it('maps exact /admin/imports to Imports descriptor and activeHref', () => {
     const descriptor = getRouteDescriptor('/admin/imports');
     expect(descriptor).toEqual({
-      title: 'Import history',
+      title: 'Imports',
       breadcrumbs: [{ label: 'Imports' }],
       activeHref: '/admin/imports',
     });
@@ -53,8 +53,20 @@ describe('navigation module', () => {
   it('maps /admin/imports/ with trailing slash to Imports descriptor', () => {
     const descriptor = getRouteDescriptor('/admin/imports/');
     expect(descriptor).toEqual({
-      title: 'Import history',
+      title: 'Imports',
       breadcrumbs: [{ label: 'Imports' }],
+      activeHref: '/admin/imports',
+    });
+  });
+
+  it('maps /admin/imports/new to Import projects descriptor and breadcrumbs', () => {
+    const descriptor = getRouteDescriptor('/admin/imports/new');
+    expect(descriptor).toEqual({
+      title: 'Import projects',
+      breadcrumbs: [
+        { label: 'Imports', href: '/admin/imports' },
+        { label: 'Import projects' },
+      ],
       activeHref: '/admin/imports',
     });
   });
@@ -62,10 +74,10 @@ describe('navigation module', () => {
   it('maps import detail routes to Imports descriptor and activeHref', () => {
     const descriptor = getRouteDescriptor('/admin/imports/batch-789');
     expect(descriptor).toEqual({
-      title: 'Import batch',
+      title: 'Import details',
       breadcrumbs: [
         { label: 'Imports', href: '/admin/imports' },
-        { label: 'Import batch' },
+        { label: 'Import details' },
       ],
       activeHref: '/admin/imports',
     });

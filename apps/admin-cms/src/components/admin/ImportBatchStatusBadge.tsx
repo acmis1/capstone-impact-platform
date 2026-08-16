@@ -1,40 +1,43 @@
 import React from 'react';
+import { Badge, type BadgeProps } from '../ui/badge';
 
-export default function ImportBatchStatusBadge({ status }: { status: string }) {
-  let backgroundColor = '#4B5563';
-  let color = '#FFFFFF';
-  let label = status.toUpperCase();
+export interface ImportBatchStatusBadgeProps {
+  status: string;
+  className?: string;
+}
+
+export default function ImportBatchStatusBadge({ status, className }: ImportBatchStatusBadgeProps) {
+  let label: string;
+  let variant: NonNullable<BadgeProps['variant']> = 'neutral';
+
   switch (status) {
-    case 'metadata_staged':
-      backgroundColor = 'rgba(139, 92, 246, 0.15)';
-      color = '#A78BFA';
-      label = 'METADATA STAGED';
-      break;
     case 'completed':
-      backgroundColor = 'rgba(16, 185, 129, 0.1)';
-      color = '#10B981';
+      label = 'Import complete';
+      variant = 'success';
+      break;
+    case 'metadata_staged':
+      label = 'Details imported';
+      variant = 'information';
       break;
     case 'processing':
-      backgroundColor = 'rgba(59, 130, 246, 0.1)';
-      color = '#3B82F6';
+      label = 'Processing';
+      variant = 'information';
       break;
     case 'failed':
-      backgroundColor = 'rgba(239, 110, 110, 0.1)';
-      color = '#EF4444';
+      label = 'Import failed';
+      variant = 'destructive';
+      break;
+    default:
+      label = status
+        ? status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+        : 'Unknown';
+      variant = 'neutral';
       break;
   }
 
   return (
-    <span style={{
-      backgroundColor,
-      color,
-      padding: '0.25rem 0.6rem',
-      borderRadius: '6px',
-      fontSize: '0.8rem',
-      fontWeight: 600,
-      display: 'inline-block'
-    }}>
+    <Badge variant={variant} className={className}>
       {label}
-    </span>
+    </Badge>
   );
 }

@@ -3,10 +3,18 @@
 import React, { useActionState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { loginAction } from './actions';
+import { AppMark } from '../../components/ui/app-mark';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import { Alert } from '../../components/ui/alert';
+import { Card, CardContent } from '../../components/ui/card';
 
 function LoginForm() {
   const searchParams = useSearchParams();
-  const redirectTo = searchParams ? (searchParams.get('next') || searchParams.get('redirectTo') || '/admin') : '/admin';
+  const redirectTo = searchParams
+    ? searchParams.get('next') || searchParams.get('redirectTo') || '/admin'
+    : '/admin';
   const urlError = searchParams ? searchParams.get('error') : null;
   const urlStatus = searchParams ? searchParams.get('status') : null;
 
@@ -43,143 +51,92 @@ function LoginForm() {
   const displayStatus = getUrlStatusMessage(urlStatus);
 
   return (
-    <form action={formAction} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    <form action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="redirectTo" value={redirectTo} />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        <label htmlFor="email" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#9CA3AF' }}>
-          Administrative Email
-        </label>
-        <input
+      <div className="flex flex-col gap-1.5 text-left">
+        <Label htmlFor="email" isRequired>
+          Email
+        </Label>
+        <Input
           id="email"
           name="email"
           type="email"
           required
           autoComplete="email"
-          placeholder="admin@example.local"
-          style={{
-            backgroundColor: '#1F2937',
-            border: '1px solid #374151',
-            borderRadius: '6px',
-            color: '#F9FAFB',
-            padding: '0.75rem',
-            fontSize: '0.95rem',
-            outline: 'none',
-            transition: 'border-color 0.2s',
-          }}
+          placeholder="staff@rmit.edu.au"
+          disabled={isPending}
         />
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        <label htmlFor="password" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#9CA3AF' }}>
-          Security Password
-        </label>
-        <input
+      <div className="flex flex-col gap-1.5 text-left">
+        <Label htmlFor="password" isRequired>
+          Password
+        </Label>
+        <Input
           id="password"
           name="password"
           type="password"
           required
           autoComplete="current-password"
           placeholder="••••••••"
-          style={{
-            backgroundColor: '#1F2937',
-            border: '1px solid #374151',
-            borderRadius: '6px',
-            color: '#F9FAFB',
-            padding: '0.75rem',
-            fontSize: '0.95rem',
-            outline: 'none',
-            transition: 'border-color 0.2s',
-          }}
+          disabled={isPending}
         />
       </div>
 
       {displayError && (
-        <div style={{
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
-          color: '#F87171',
-          padding: '0.75rem',
-          borderRadius: '6px',
-          fontSize: '0.85rem',
-          textAlign: 'center',
-        }}>
-          {displayError}
-        </div>
+        <Alert variant="destructive" description={displayError} />
       )}
 
       {displayStatus && (
-        <div style={{
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          border: '1px solid rgba(16, 185, 129, 0.2)',
-          color: '#34D399',
-          padding: '0.75rem',
-          borderRadius: '6px',
-          fontSize: '0.85rem',
-          textAlign: 'center',
-        }}>
-          {displayStatus}
-        </div>
+        <Alert variant="success" description={displayStatus} />
       )}
 
-      <button
+      <Button
         type="submit"
         disabled={isPending}
-        style={{
-          backgroundColor: '#E61E2A',
-          color: '#FFFFFF',
-          border: 'none',
-          borderRadius: '6px',
-          padding: '0.75rem',
-          fontSize: '0.95rem',
-          fontWeight: 700,
-          cursor: isPending ? 'not-allowed' : 'pointer',
-          opacity: isPending ? 0.7 : 1,
-          transition: 'background-color 0.2s',
-        }}
+        className="w-full font-semibold mt-2"
+        size="lg"
       >
-        {isPending ? 'Authenticating...' : 'Sign In to Console'}
-      </button>
+        {isPending ? 'Signing in…' : 'Sign in'}
+      </Button>
     </form>
   );
 }
 
 export default function LoginPage() {
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: '#0B0F19',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontFamily: 'Inter, system-ui, sans-serif',
-      padding: '1.5rem',
-    }}>
-      <div style={{
-        backgroundColor: '#111827',
-        border: '1px solid #1F2937',
-        borderRadius: '12px',
-        width: '100%',
-        maxWidth: '440px',
-        padding: '2.5rem',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4)',
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h2 style={{ color: '#F3F4F6', fontSize: '1.5rem', fontWeight: 800, margin: '0 0 0.5rem 0' }}>
-            Admin/CMS Gateway
-          </h2>
-          <p style={{ color: '#9CA3AF', fontSize: '0.85rem', margin: 0 }}>
-            Capstone Impact Platform — Staging Console Identity
+    <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-md flex flex-col items-center">
+        {/* Brand Header */}
+        <div className="mb-6 flex flex-col items-center text-center">
+          <AppMark size="lg" className="mb-3" />
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Capstone Impact Platform
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Staff sign-in
           </p>
         </div>
 
-        <Suspense fallback={<div style={{ color: '#9CA3AF', textAlign: 'center' }}>Loading form...</div>}>
-          <LoginForm />
-        </Suspense>
+        {/* Login Form Container Card */}
+        <Card className="w-full border-border bg-card shadow-sm">
+          <CardContent className="pt-6">
+            <Suspense
+              fallback={
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  Loading form…
+                </div>
+              }
+            >
+              <LoginForm />
+            </Suspense>
 
-        <div style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.75rem', color: '#6B7280' }}>
-          Restricted administrative access channel. Self-registration is disabled.
-        </div>
+            <p className="mt-6 text-center text-xs text-muted-foreground leading-normal">
+              Access is provided to authorised School staff.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -67,14 +67,14 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   );
 
   return (
-    <div className="flex flex-col gap-6 p-4 sm:p-6 max-w-7xl mx-auto w-full">
+    <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full">
       {/* Page Header */}
       <div className="flex flex-col gap-1">
         <h2 className="text-2xl font-bold tracking-tight text-foreground">
-          Project Index & Operational Dashboard
+          Projects
         </h2>
         <p className="text-sm text-muted-foreground">
-          Manage capstone project records, review state transitions, and showcase validation status.
+          Manage capstone project records and review workflows.
         </p>
       </div>
 
