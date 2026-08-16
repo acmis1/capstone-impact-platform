@@ -44,10 +44,80 @@ describe('ParticipantPreviewPanel core workflow', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('renders read-only notice and no mutation controls when canManage is false', () => {
-    render(<ParticipantPreviewPanel {...BASE_PROPS} canManage={false} />);
-    expect(screen.getByText(/You do not have permission to generate or revoke participant preview links/i)).toBeTruthy();
-    expect(screen.queryByRole('button')).toBeNull();
+  it('preserves read-only status and evidence for canManage=false without mutation controls', () => {
+    render(
+      <ParticipantPreviewPanel
+        {...BASE_PROPS}
+        canManage={false}
+        canResolveCorrection={false}
+        initialActivePreview={{
+          createdAt: '2026-08-16T08:00:00.000Z',
+          expiresAt: '2026-08-23T08:00:00.000Z',
+        }}
+        responseState={{
+          type: 'correction_requested',
+          requestedAt: '2026-08-16T09:00:00.000Z',
+          comment: 'Please update the student team names.',
+        }}
+        notification={{
+          kind: 'initial',
+          status: 'sent',
+          recipient: 'student.lead@example.edu',
+          requestedAt: '2026-08-16T08:00:00.000Z',
+          sentAt: '2026-08-16T08:00:05.000Z',
+          failureCode: null,
+        }}
+        reminders={[
+          {
+            reference: 'rem-1',
+            previewCreatedAt: '2026-08-16T08:00:00.000Z',
+            previewExpiresAt: '2026-08-23T08:00:00.000Z',
+            status: 'scheduled',
+            scheduledFor: '2026-08-20T08:00:00.000Z',
+            recipient: 'student.lead@example.edu',
+            scheduledBy: 'Admin User',
+            currentPreview: true,
+            skipReason: null,
+            triggeredAt: null,
+            cancelledAt: null,
+            delivery: null,
+          },
+        ]}
+      />,
+    );
+
+    // Read-only neutral notice
+    expect(screen.getByText(/You can view participant confirmation status, but you do not have permission to manage preview links or reminders/i)).toBeTruthy();
+
+    // Active preview state visible
+    expect(screen.getByText('Active preview')).toBeTruthy();
+    expect(screen.getByText('Participant response')).toBeTruthy();
+    expect(screen.getByText(/Correction requested on/i)).toBeTruthy();
+    expect(screen.getByText('Please update the student team names.')).toBeTruthy();
+
+    // Email delivery evidence visible with neutral recipient and sent labels
+    expect(screen.getByText(/Recipient:/i)).toBeTruthy();
+    expect(screen.getAllByText('student.lead@example.edu').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Sent at:/i)).toBeTruthy();
+
+    // Reminder history visible
+    expect(screen.getByText('Reminder history')).toBeTruthy();
+    expect(screen.getByText(/Admin User/)).toBeTruthy();
+
+    // Mutation controls MUST NOT be rendered
+    expect(screen.queryByRole('button', { name: /generate participant preview/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /revoke preview/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /schedule reminder/i })).toBeNull();
+    expect(screen.queryByLabelText(/reminder date and time/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /cancel reminder/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /start correction resolution/i })).toBeNull();
+  });
+
+  it('renders calm message when canManage=false and approved with no active preview', () => {
+    render(<ParticipantPreviewPanel {...BASE_PROPS} canManage={false} initialActivePreview={null} />);
+    expect(screen.getByText(/You can view participant confirmation status, but you do not have permission to manage preview links or reminders/i)).toBeTruthy();
+    expect(screen.getByText(/No active participant preview link has been generated/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /generate participant preview/i })).toBeNull();
   });
 
   it('generates preview via POST with exact payload (isCorrectionReissue=false, sendEmail=false)', async () => {

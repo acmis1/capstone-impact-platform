@@ -154,7 +154,7 @@ export function ParticipantPreviewPanel({
   // The in-flight guard stops an ordinary accidental double click. It is a convenience, not the
   // safety boundary: the server and database converge duplicate requests on their own.
   const handleGenerate = async (isCorrectionReissue = false, sendEmail = false) => {
-    if (inFlightRef.current || pending) return;
+    if (!canManage || inFlightRef.current || pending) return;
     inFlightRef.current = true;
     setPending(true);
     setError(null);
@@ -190,7 +190,7 @@ export function ParticipantPreviewPanel({
   };
 
   const handleStartResolution = async () => {
-    if (inFlightRef.current || pending) return;
+    if (!canResolveCorrection || inFlightRef.current || pending) return;
     if (!window.confirm('Start correction resolution? This will revoke the current preview link and move the project status back to changes_requested so metadata can be edited.')) {
       return;
     }
@@ -220,7 +220,7 @@ export function ParticipantPreviewPanel({
   };
 
   const handleRevoke = async () => {
-    if (inFlightRef.current || pending) return;
+    if (!canManage || inFlightRef.current || pending) return;
     if (!window.confirm('Revoke this participant preview? The current link will stop working immediately.')) {
       return;
     }
@@ -261,7 +261,7 @@ export function ParticipantPreviewPanel({
   };
 
   const handleScheduleReminder = async () => {
-    if (inFlightRef.current || pending || !scheduledFor) return;
+    if (!canManage || inFlightRef.current || pending || !scheduledFor) return;
     const instant = new Date(scheduledFor);
     if (!Number.isFinite(instant.getTime())) {
       setError('Choose a valid reminder date and time.');
@@ -299,7 +299,7 @@ export function ParticipantPreviewPanel({
   };
 
   const handleCancelReminder = async (reference: string) => {
-    if (inFlightRef.current || pending) return;
+    if (!canManage || inFlightRef.current || pending) return;
     if (!window.confirm('Cancel this future participant preview reminder?')) return;
     inFlightRef.current = true;
     setPending(true);
@@ -331,14 +331,6 @@ export function ParticipantPreviewPanel({
     }
   };
 
-  if (!canManage) {
-    return (
-      <p className="text-xs text-muted-foreground italic">
-        You do not have permission to generate or revoke participant preview links.
-      </p>
-    );
-  }
-
   // Determine current resolution state if any
   const resStatus = resolutionStatus?.status;
   const isInProgress = resStatus === 'in_progress' || (projectStatus === 'changes_requested' && resolutionStatus?.status === 'in_progress');
@@ -358,49 +350,58 @@ export function ParticipantPreviewPanel({
    * preview: the secure link is deliberately not stored, so there is nothing left to send once the
    * request that created it has finished.
    */
-  const renderGenerateActions = (isCorrectionReissue: boolean, primaryLabel: string) => (
-    <div className="space-y-2.5">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <Button
-          type="button"
-          onClick={() => handleGenerate(isCorrectionReissue, false)}
-          disabled={pending}
-        >
-          {pending ? 'Working…' : primaryLabel}
-        </Button>
-        {canSendEmail && (
+  const renderGenerateActions = (isCorrectionReissue: boolean, primaryLabel: string) => {
+    if (!canManage) return null;
+    return (
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <Button
             type="button"
-            variant="outline"
-            onClick={() => handleGenerate(isCorrectionReissue, true)}
+            onClick={() => handleGenerate(isCorrectionReissue, false)}
             disabled={pending}
           >
-            {pending ? 'Working…' : `${primaryLabel} and send email`}
+            {pending ? 'Working…' : primaryLabel}
           </Button>
-        )}
+          {canSendEmail && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleGenerate(isCorrectionReissue, true)}
+              disabled={pending}
+            >
+              {pending ? 'Working…' : `${primaryLabel} and send email`}
+            </Button>
+          )}
+        </div>
+        <div>
+          {emailDeliveryEnabled && participantContactEmail && (
+            <span className="text-xs text-muted-foreground">
+              Email would be sent to <strong className="font-semibold text-foreground">{participantContactEmail}</strong>
+            </span>
+          )}
+          {emailDeliveryEnabled && !participantContactEmail && (
+            <span className="text-xs text-muted-foreground italic">
+              No participant contact email is recorded for this project, so the link cannot be emailed.
+            </span>
+          )}
+          {!emailDeliveryEnabled && (
+            <span className="text-xs text-muted-foreground italic">
+              Email delivery is not enabled on this server.
+            </span>
+          )}
+        </div>
       </div>
-      <div>
-        {emailDeliveryEnabled && participantContactEmail && (
-          <span className="text-xs text-muted-foreground">
-            Email would be sent to <strong className="font-semibold text-foreground">{participantContactEmail}</strong>
-          </span>
-        )}
-        {emailDeliveryEnabled && !participantContactEmail && (
-          <span className="text-xs text-muted-foreground italic">
-            No participant contact email is recorded for this project, so the link cannot be emailed.
-          </span>
-        )}
-        {!emailDeliveryEnabled && (
-          <span className="text-xs text-muted-foreground italic">
-            Email delivery is not enabled on this server.
-          </span>
-        )}
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-4 text-xs sm:text-sm">
+      {!canManage && (
+        <p className="text-xs text-muted-foreground italic">
+          You can view participant confirmation status, but you do not have permission to manage preview links or reminders.
+        </p>
+      )}
+
       {error && (
         <div role="alert" className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-xs font-semibold flex items-center gap-2">
           <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -479,15 +480,17 @@ export function ParticipantPreviewPanel({
             <div className="flex items-center gap-2">
               <Badge variant="information" className="font-semibold">Active preview</Badge>
             </div>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={handleRevoke}
-              disabled={pending}
-            >
-              {pending ? 'Revoking…' : 'Revoke preview'}
-            </Button>
+            {canManage && (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={handleRevoke}
+                disabled={pending}
+              >
+                {pending ? 'Revoking…' : 'Revoke preview'}
+              </Button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -552,7 +555,7 @@ export function ParticipantPreviewPanel({
                   <span className="font-semibold text-foreground">{participantPreviewNotificationStatusLabel(notification.status)}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Sent to: </span>
+                  <span className="text-muted-foreground">Recipient: </span>
                   <span className="font-semibold text-foreground">{notification.recipient}</span>
                 </div>
                 <div>
@@ -561,7 +564,7 @@ export function ParticipantPreviewPanel({
                 </div>
                 {notification.sentAt && (
                   <div>
-                    <span className="text-muted-foreground">Delivered: </span>
+                    <span className="text-muted-foreground">Sent at: </span>
                     <span className="text-foreground">{new Date(notification.sentAt).toLocaleString()}</span>
                   </div>
                 )}
@@ -587,52 +590,54 @@ export function ParticipantPreviewPanel({
             )}
           </div>
 
-          <div className="pt-3 border-t border-border space-y-2.5">
-            <div>
-              <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">Schedule reminder</h4>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Reminder emails contain no secure link. The participant must use the link from the
-                original preview email.
-              </p>
-            </div>
-
-            {canScheduleReminder ? (
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                <Input
-                  type="datetime-local"
-                  value={scheduledFor}
-                  max={toLocalDateTimeInputValue(activePreview.expiresAt)}
-                  onChange={(event) => setScheduledFor(event.target.value)}
-                  disabled={pending}
-                  aria-label="Reminder date and time"
-                  className="w-full sm:w-auto text-xs"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={handleScheduleReminder}
-                  disabled={pending || !scheduledFor}
-                >
-                  {pending ? 'Working…' : 'Schedule reminder'}
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  Must be before {new Date(activePreview.expiresAt).toLocaleString()}.
-                </span>
+          {canManage && (
+            <div className="pt-3 border-t border-border space-y-2.5">
+              <div>
+                <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">Schedule reminder</h4>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Reminder emails contain no secure link. The participant must use the link from the
+                  original preview email.
+                </p>
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground italic">
-                {!reminderSchedulingEnabled
-                  ? 'Reminder scheduling is not enabled on this server.'
-                  : notification?.status !== 'sent'
-                    ? 'A confirmed successful original preview email is required.'
-                    : !currentContactMatchesInitial
-                      ? 'The current contact does not match the original email recipient.'
-                      : previewResponseState.type !== 'unresponded'
-                        ? 'This preview already has a participant response.'
-                        : 'This preview is no longer eligible for a future reminder.'}
-              </p>
-            )}
-          </div>
+
+              {canScheduleReminder ? (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                  <Input
+                    type="datetime-local"
+                    value={scheduledFor}
+                    max={toLocalDateTimeInputValue(activePreview.expiresAt)}
+                    onChange={(event) => setScheduledFor(event.target.value)}
+                    disabled={pending}
+                    aria-label="Reminder date and time"
+                    className="w-full sm:w-auto text-xs"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleScheduleReminder}
+                    disabled={pending || !scheduledFor}
+                  >
+                    {pending ? 'Working…' : 'Schedule reminder'}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Must be before {new Date(activePreview.expiresAt).toLocaleString()}.
+                  </span>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  {!reminderSchedulingEnabled
+                    ? 'Reminder scheduling is not enabled on this server.'
+                    : notification?.status !== 'sent'
+                      ? 'A confirmed successful original preview email is required.'
+                      : !currentContactMatchesInitial
+                        ? 'The current contact does not match the original email recipient.'
+                        : previewResponseState.type !== 'unresponded'
+                          ? 'This preview already has a participant response.'
+                          : 'This preview is no longer eligible for a future reminder.'}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       ) : isInProgress ? (
         /* CASE B: Correction in progress (Preview A revoked) */
@@ -648,7 +653,7 @@ export function ParticipantPreviewPanel({
           )}
           {projectStatus === 'changes_requested' ? (
             <p className="text-xs text-muted-foreground italic">
-              Project is currently in <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-foreground">changes_requested</code>. Update project metadata below, then use the review actions to re-approve the project before issuing a corrected preview.
+              Project is currently in <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-foreground">changes_requested</code>. Update project metadata in Review & Edit Project Information, then use the review actions to re-approve the project before issuing a corrected preview.
             </p>
           ) : projectStatus === 'approved' && canResolveCorrection ? (
             <div className="space-y-3">
@@ -680,7 +685,13 @@ export function ParticipantPreviewPanel({
         </div>
       ) : isApprovedEligible ? (
         /* CASE D: Normal approved state, no active preview */
-        renderGenerateActions(false, 'Generate participant preview')
+        canManage ? (
+          renderGenerateActions(false, 'Generate participant preview')
+        ) : (
+          <p className="text-xs text-muted-foreground italic">
+            No active participant preview link has been generated.
+          </p>
+        )
       ) : (
         <p className="text-xs text-muted-foreground italic">
           Available once the project reaches the approved state.
@@ -704,7 +715,7 @@ export function ParticipantPreviewPanel({
                       <span className="text-muted-foreground font-normal"> · earlier preview</span>
                     )}
                   </span>
-                  {reminder.status === 'scheduled' && (
+                  {canManage && reminder.status === 'scheduled' && (
                     <Button
                       type="button"
                       variant="destructive"
