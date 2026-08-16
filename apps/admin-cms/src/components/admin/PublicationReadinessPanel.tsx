@@ -1,121 +1,87 @@
 import React from 'react';
+import { AlertCircle, CheckCircle2, Clock3, FileWarning, ShieldAlert } from 'lucide-react';
 import { PublicationReadinessResult } from '../../domain/publicationReadiness';
+import { Alert } from '../ui/alert';
+import { Badge } from '../ui/badge';
 
 interface PublicationReadinessPanelProps {
   readiness: PublicationReadinessResult | null;
 }
 
+type ReadinessPresentation = {
+  title: string;
+  description: string;
+  variant: 'success' | 'warning' | 'destructive' | 'information';
+  icon: typeof CheckCircle2;
+};
+
+function getPresentation(readiness: PublicationReadinessResult): ReadinessPresentation {
+  if (readiness.ready && readiness.resultCode === 'READY') {
+    return { title: 'Ready for publication', description: 'The confirmed participant snapshot matches the current project information and private media.', variant: 'success', icon: CheckCircle2 };
+  }
+
+  switch (readiness.resultCode) {
+    case 'NO_ACTIVE_PREVIEW':
+      return { title: 'Participant preview required', description: 'Generate a participant preview before preparing publication.', variant: 'warning', icon: Clock3 };
+    case 'PREVIEW_NOT_CONFIRMED':
+      return { title: 'Waiting for participant confirmation', description: 'Publication remains blocked until the participant confirms the active preview.', variant: 'warning', icon: Clock3 };
+    case 'CORRECTION_UNRESOLVED':
+      return { title: 'Participant correction requires resolution', description: 'Resolve the participant correction before preparing publication.', variant: 'destructive', icon: AlertCircle };
+    case 'CORRECTED_PREVIEW_AWAITING_CONFIRMATION':
+      return { title: 'Corrected preview awaiting confirmation', description: 'The participant must confirm the corrected preview before publication can proceed.', variant: 'warning', icon: Clock3 };
+    case 'PROJECT_SNAPSHOT_STALE':
+      return { title: 'Project information changed after confirmation', description: 'A new participant confirmation is required for the current project information.', variant: 'destructive', icon: FileWarning };
+    case 'MEDIA_SNAPSHOT_STALE':
+      return { title: 'Project media changed after confirmation', description: 'A new participant confirmation is required for the current project media.', variant: 'destructive', icon: FileWarning };
+    case 'INVALID_PROJECT_STATE':
+      return { title: 'Project must be approved', description: 'Publication preparation is available only for an approved project.', variant: 'information', icon: ShieldAlert };
+    case 'PROJECT_NOT_FOUND':
+      return { title: 'Project unavailable', description: 'Publication readiness cannot be verified for this project.', variant: 'destructive', icon: AlertCircle };
+    case 'READINESS_PERMISSION_DENIED':
+      return { title: 'Readiness permission required', description: 'Publication readiness cannot be verified with the current access.', variant: 'destructive', icon: ShieldAlert };
+    case 'INVALID_SELECTION':
+    case 'INVALID_PRIVATE_BUCKET':
+    case 'READINESS_UNAVAILABLE':
+      return { title: 'Readiness unavailable', description: 'Publication preparation and local publication remain unavailable until readiness can be verified.', variant: 'information', icon: ShieldAlert };
+    default:
+      return { title: 'Not ready for publication', description: 'Publication readiness has not been satisfied.', variant: 'destructive', icon: AlertCircle };
+  }
+}
+
 export function PublicationReadinessPanel({ readiness }: PublicationReadinessPanelProps) {
   if (!readiness) {
-    return (
-      <div style={{
-        backgroundColor: '#1E293B',
-        borderRadius: '8px',
-        padding: '1.25rem',
-        border: '1px solid rgba(255, 255, 255, 0.05)',
-      }}>
-        <div style={{ color: '#9CA3AF', fontSize: '0.85rem' }}>
-          <strong style={{ color: '#F59E0B' }}>Publication readiness unavailable.</strong>
-          <div style={{ marginTop: '0.35rem' }}>
-            Publication preparation and Local publication are disabled until readiness can be verified.
-          </div>
-        </div>
-      </div>
-    );
+    return <Alert variant="information" icon={ShieldAlert} title="Publication readiness unavailable." description="Publication preparation and Local publication are disabled until readiness can be verified." />;
   }
 
-  const { ready, resultCode, blockers, confirmedAt } = readiness;
-
-  let headerColor = '#EF4444';
-  let headerBg = 'rgba(239, 68, 68, 0.1)';
-  let headerBorder = 'rgba(239, 68, 68, 0.2)';
-  let titleText = 'NOT READY FOR PUBLICATION';
-
-  if (ready && resultCode === 'READY') {
-    headerColor = '#10B981';
-    headerBg = 'rgba(16, 185, 129, 0.1)';
-    headerBorder = 'rgba(16, 185, 129, 0.2)';
-    titleText = 'READY FOR PUBLICATION';
-  } else if (resultCode === 'NO_ACTIVE_PREVIEW') {
-    titleText = 'PARTICIPANT PREVIEW REQUIRED';
-    headerColor = '#F59E0B';
-    headerBg = 'rgba(245, 158, 11, 0.1)';
-    headerBorder = 'rgba(245, 158, 11, 0.2)';
-  } else if (resultCode === 'PREVIEW_NOT_CONFIRMED') {
-    titleText = 'WAITING FOR PARTICIPANT CONFIRMATION';
-    headerColor = '#F59E0B';
-    headerBg = 'rgba(245, 158, 11, 0.1)';
-    headerBorder = 'rgba(245, 158, 11, 0.2)';
-  } else if (resultCode === 'CORRECTION_UNRESOLVED') {
-    titleText = 'PARTICIPANT CORRECTION MUST BE RESOLVED';
-  } else if (resultCode === 'CORRECTED_PREVIEW_AWAITING_CONFIRMATION') {
-    titleText = 'CORRECTED PREVIEW AWAITING PARTICIPANT CONFIRMATION';
-    headerColor = '#F59E0B';
-    headerBg = 'rgba(245, 158, 11, 0.1)';
-    headerBorder = 'rgba(245, 158, 11, 0.2)';
-  } else if (resultCode === 'PROJECT_SNAPSHOT_STALE') {
-    titleText = 'PROJECT INFORMATION CHANGED AFTER PARTICIPANT CONFIRMATION';
-  } else if (resultCode === 'MEDIA_SNAPSHOT_STALE') {
-    titleText = 'PROJECT MEDIA CHANGED AFTER PARTICIPANT CONFIRMATION';
-  } else if (resultCode === 'INVALID_PROJECT_STATE') {
-    titleText = 'PROJECT MUST BE IN APPROVED STATUS';
-    headerColor = '#6B7280';
-    headerBg = 'rgba(107, 114, 128, 0.1)';
-    headerBorder = 'rgba(107, 114, 128, 0.2)';
-  } else if (resultCode === 'READINESS_UNAVAILABLE') {
-    titleText = 'PUBLICATION READINESS UNAVAILABLE';
-    headerColor = '#6B7280';
-    headerBg = 'rgba(107, 114, 128, 0.1)';
-    headerBorder = 'rgba(107, 114, 128, 0.2)';
-  }
+  const presentation = getPresentation(readiness);
 
   return (
-    <div style={{
-      backgroundColor: '#161F30',
-      borderRadius: '8px',
-      padding: '1.25rem',
-      border: '1px solid rgba(255, 255, 255, 0.05)',
-    }}>
-      <div style={{
-        backgroundColor: headerBg,
-        border: `1px solid ${headerBorder}`,
-        borderRadius: '6px',
-        padding: '0.75rem 1rem',
-        marginBottom: '1rem',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
-        <span style={{ color: headerColor, fontWeight: 'bold', fontSize: '0.9rem' }}>
-          {ready ? '✅' : '🔒'} {titleText}
-        </span>
-        <code style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>{resultCode}</code>
+    <div className="flex flex-col gap-4 text-xs sm:text-sm">
+      <div className="flex flex-col gap-2">
+        <h4 className="text-sm font-semibold text-foreground">Publication status</h4>
+        <Alert variant={presentation.variant} icon={presentation.icon} title={presentation.title} description={presentation.description} />
       </div>
 
-      {confirmedAt && (
-        <div style={{ fontSize: '0.8rem', color: '#9CA3AF', marginBottom: '0.75rem' }}>
-          <strong>Participant Confirmation Timestamp:</strong> {new Date(confirmedAt).toLocaleString()}
-        </div>
-      )}
-
-      {blockers.length > 0 && (
-        <div>
-          <div style={{ fontSize: '0.8rem', color: '#EF4444', fontWeight: 'bold', marginBottom: '0.35rem' }}>
-            Publication Gate Blockers:
-          </div>
-          <ul style={{ margin: 0, paddingLeft: '1.25rem', color: '#D1D5DB', fontSize: '0.85rem' }}>
-            {blockers.map((blocker, i) => (
-              <li key={i}>{blocker}</li>
-            ))}
+      {readiness.blockers.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h4 className="text-sm font-semibold text-foreground">What is blocking publication</h4>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-foreground marker:text-destructive">
+            {readiness.blockers.map((blocker, index) => <li key={index}>{blocker}</li>)}
           </ul>
         </div>
       )}
 
-      {ready && (
-        <p style={{ margin: 0, color: '#10B981', fontSize: '0.85rem' }}>
-          All publication readiness invariants are satisfied. Project metadata and private media match the confirmed participant snapshot.
-        </p>
+      {readiness.confirmedAt && (
+        <div className="border-t border-border pt-3">
+          <h4 className="text-sm font-semibold text-foreground">Participant confirmation evidence</h4>
+          <p className="mt-1 text-sm text-muted-foreground">Confirmed {new Date(readiness.confirmedAt).toLocaleString()}</p>
+        </div>
       )}
+
+      <details className="border-t border-border pt-3 text-xs text-muted-foreground">
+        <summary className="cursor-pointer font-medium text-foreground">Technical readiness evidence</summary>
+        <div className="mt-2 flex items-center gap-2"><span>Result code</span><Badge variant="neutral" className="font-mono">{readiness.resultCode}</Badge></div>
+      </details>
     </div>
   );
 }

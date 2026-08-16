@@ -2,7 +2,6 @@ import React from 'react';
 import Link from 'next/link';
 import { SupabaseProjectRepository } from '../../../../repositories/SupabaseProjectRepository';
 import { ProjectStatusBadge } from '../../../../components/admin/ProjectStatusBadge';
-import { ProjectDetailSection } from '../../../../components/admin/ProjectDetailSection';
 import { ProjectReviewSection } from '../../../../components/admin/ProjectReviewSection';
 import { ProjectMediaSummary } from '../../../../components/admin/ProjectMediaSummary';
 import { ProjectValidationSummary } from '../../../../components/admin/ProjectValidationSummary';
@@ -59,6 +58,7 @@ import {
   FolderArchive,
   ExternalLink,
   UserCheck,
+  Rocket,
 } from 'lucide-react';
 
 // Force dynamic server rendering for real-time detail load
@@ -658,8 +658,12 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           />
         </ProjectReviewSection>
 
-        {/* G. PUBLICATION / ARCHIVE (Untouched Components Wrapped in ProjectDetailSection) */}
-        <ProjectDetailSection title="🚀 Publication Readiness Gate" borderColor="#10B981">
+        {/* G. PUBLICATION / ARCHIVE */}
+        <ProjectReviewSection
+          title="Publication & Archive"
+          description="Check publication readiness, prepare publishing evidence, and manage the project's local showcase lifecycle. This interface does not perform live Duda publication."
+          icon={Rocket}
+        >
           <PublicationReadinessPanel readiness={publicationReadiness} />
           <PublicationPreparationPanel
             publicId={project.publicId || ''}
@@ -672,7 +676,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               <LocalArchivePanel publicId={project.publicId || ''} />
             </div>
           )}
-        </ProjectDetailSection>
+        </ProjectReviewSection>
 
         {/* H. TECHNICAL / AUDIT DETAILS */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
