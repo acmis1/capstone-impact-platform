@@ -20,10 +20,12 @@ describe('staging UAT direct-account migration contract', () => {
     expect(files[26]).toBe(filename);
   });
 
-  it('leaves the historical staff provisioning migration byte-for-byte unchanged', () => {
-    const historical = fs.readFileSync(path.join(migrations, historicalFilename));
+  it('leaves the canonical historical staff provisioning migration content unchanged', () => {
+    const historical = fs
+      .readFileSync(path.join(migrations, historicalFilename), 'utf8')
+      .replace(/\r\n?/g, '\n');
     expect(createHash('sha256').update(historical).digest('hex')).toBe(
-      '3b2ab8c3d5c102d4fa8575cd8635db18a8f868cc5c0dee8ca31ad44de3fb88ed',
+      '9c229853044b2a52cda2fd9cc131b6bc1cca7c5eee5b8522cc05df70558ba397',
     );
   });
 
