@@ -3,13 +3,16 @@ import {
   isIgnoredSystemFile,
   normalizeRelativePath,
 } from './browserSelection';
-import { SelectionManifest } from './browserImportPreviewContract';
-import { BrowserImportCommitIntent } from './browserImportCommitIntentContract';
+import type { SelectionManifest } from './browserImportPreviewContract';
+import type { BrowserImportCommitIntent } from './browserImportCommitIntentContract';
 import {
-  BrowserImportMetadataStageErrorCode,
-  BrowserImportMetadataStageResponse,
   validateBrowserImportMetadataStageResponse,
 } from './browserImportMetadataStageContract';
+import type {
+  BrowserImportMetadataStageErrorCode,
+  BrowserImportMetadataStageResponse,
+} from './browserImportMetadataStageContract';
+import type { AdminReferenceMappingConfig } from './adminReferenceSharedContract';
 
 export interface BrowserImportStagingLock {
   current: boolean;
@@ -21,6 +24,8 @@ export interface RunBrowserImportMetadataStagingParams {
   preparedIntent: BrowserImportCommitIntent | null;
   manifestCache: SelectionManifest | null;
   selectedFiles: File[];
+  adminReferenceFile?: File | null;
+  adminReferenceMappingConfig?: AdminReferenceMappingConfig | null;
   setIsStaging: (val: boolean) => void;
   setStagingError: (error: string | null) => void;
   setStagedResult: (result: {
@@ -65,6 +70,8 @@ export async function runBrowserImportMetadataStaging(
     preparedIntent,
     manifestCache,
     selectedFiles,
+    adminReferenceFile,
+    adminReferenceMappingConfig,
     setIsStaging,
     setStagingError,
     setStagedResult,
@@ -83,6 +90,11 @@ export async function runBrowserImportMetadataStaging(
     const formData = new FormData();
     formData.append('manifest', JSON.stringify(manifestCache));
     formData.append('intent', JSON.stringify(preparedIntent));
+
+    if (adminReferenceFile && adminReferenceMappingConfig) {
+      formData.append('referenceFile', adminReferenceFile);
+      formData.append('adminReferenceMapping', JSON.stringify(adminReferenceMappingConfig));
+    }
 
     // Filter and attach ONLY metadata files (project-details.xlsx or project.json).
     // Poster/PDF/snapshot asset files are strictly excluded from staging upload.

@@ -37,6 +37,8 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     '20260813120000_staff_identity_provisioning.sql',
     '20260813180000_participant_preview_email_notifications.sql',
     '20260813190000_participant_preview_reminder_schedules.sql',
+    '20260814090000_accessible_full_text_gate.sql',
+    '20260814140000_snapshot_image_alt_text.sql',
   ];
 
   const defaultMockExec = (cmd: string): string => {
@@ -233,7 +235,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const shuffled = [...validMigrations].reverse();
     const result = validateMigrationsList(shuffled);
     expect(result.passed).toBe(true);
-    expect(result.message).toContain('24 timestamped migrations');
+    expect(result.message).toContain('26 timestamped migrations');
   });
 
   it('10. Duplicate migration timestamps fail', () => {
@@ -262,6 +264,8 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260813120000_staff_identity_provisioning.sql',
       '20260813180000_participant_preview_email_notifications.sql',
       '20260813190000_participant_preview_reminder_schedules.sql',
+      '20260814090000_accessible_full_text_gate.sql',
+      '20260814140000_snapshot_image_alt_text.sql',
     ];
     const result = validateMigrationsList(duplicateMigrations);
     expect(result.passed).toBe(false);
@@ -294,6 +298,8 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260813120000_staff_identity_provisioning.sql',
       '20260813180000_participant_preview_email_notifications.sql',
       '20260813190000_participant_preview_reminder_schedules.sql',
+      '20260814090000_accessible_full_text_gate.sql',
+      '20260814140000_snapshot_image_alt_text.sql',
     ];
     const result = validateMigrationsList(missing0008);
     expect(result.passed).toBe(false);
@@ -551,6 +557,8 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260813120000_staff_identity_provisioning.sql',
       '20260813180000_participant_preview_email_notifications.sql',
       '20260813190000_participant_preview_reminder_schedules.sql',
+      '20260814090000_accessible_full_text_gate.sql',
+      '20260814140000_snapshot_image_alt_text.sql',
     ];
     const result = validateMigrationsList(invalidMigrationNames);
     expect(result.passed).toBe(false);

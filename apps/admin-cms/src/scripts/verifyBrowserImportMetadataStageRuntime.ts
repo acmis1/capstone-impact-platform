@@ -1,5 +1,6 @@
 import { execFileSync, execSync } from 'node:child_process';
 import path from 'node:path';
+import ExcelJS from 'exceljs';
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { analyzeBrowserImportServer } from '../import/parseBrowserImportPreview';
 import { stageBrowserImportMetadata } from '../import/stageBrowserImportMetadata';
@@ -9,6 +10,24 @@ import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEn
 import { getStagingBuckets } from '../lib/supabase/buckets';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
+
+async function createSyntheticReferenceOptions(
+  rows: Array<{ publicId: string; title: string }>
+) {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('REFERENCE');
+  worksheet.addRow(['Public ID', 'Official Project Title']);
+  for (const row of rows) worksheet.addRow([row.publicId, row.title]);
+  return {
+    referenceFileBuffer: Buffer.from(await workbook.xlsx.writeBuffer()),
+    mapping: {
+      worksheet: 'REFERENCE',
+      matchMappings: [{ canonicalField: 'publicId', referenceColumn: 'Public ID' }],
+      comparisonMappings: [{ canonicalField: 'title', referenceColumn: 'Official Project Title' }],
+      reconciliationContractVersion: 'admin-reference-reconciliation-v1' as const,
+    },
+  };
+}
 
 function ensureLocalEnvironmentVariables(): void {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -197,7 +216,11 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       ],
     };
     const metaFiles1 = new Map<string, Buffer>([[key1, Buffer.from(json1, 'utf8')]]);
-    const analysis1 = await analyzeBrowserImportServer(manifest1, metaFiles1);
+    const analysis1 = await analyzeBrowserImportServer(
+      manifest1,
+      metaFiles1,
+      await createSyntheticReferenceOptions([{ publicId: pkg1Id, title: 'Scenario 1 Title' }])
+    );
     const intent1 = {
       version: 1 as const,
       previewFingerprint: analysis1.preview.batch.previewFingerprint,
@@ -206,6 +229,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       declaredTotalBytes: manifest1.declaredTotalBytes,
       selectedPackagePaths: [pkg1Id],
       acknowledgedWarningPackagePaths: [pkg1Id],
+      adminReference: analysis1.preview.batch.adminReference,
     };
 
     const res1 = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysis1, intent: intent1 });
@@ -305,7 +329,14 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       [k2b, Buffer.from(json2b, 'utf8')],
     ]);
 
-    const analysis2 = await analyzeBrowserImportServer(manifest2, metaFiles2);
+    const analysis2 = await analyzeBrowserImportServer(
+      manifest2,
+      metaFiles2,
+      await createSyntheticReferenceOptions([
+        { publicId: 'pkg-a', title: 'Batch Pkg A' },
+        { publicId: 'pkg-b', title: 'Batch Pkg B' },
+      ])
+    );
     const intent2 = {
       version: 1 as const,
       previewFingerprint: analysis2.preview.batch.previewFingerprint,
@@ -314,6 +345,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       declaredTotalBytes: manifest2.declaredTotalBytes,
       selectedPackagePaths: [p1Path, p2Path].sort(),
       acknowledgedWarningPackagePaths: [p1Path, p2Path].sort(),
+      adminReference: analysis2.preview.batch.adminReference,
     };
 
     const res2a = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysis2, intent: intent2 });
@@ -363,7 +395,11 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       ],
     };
     const metaFiles3 = new Map<string, Buffer>([[k3, Buffer.from(json3, 'utf8')]]);
-    const analysis3 = await analyzeBrowserImportServer(manifest3, metaFiles3);
+    const analysis3 = await analyzeBrowserImportServer(
+      manifest3,
+      metaFiles3,
+      await createSyntheticReferenceOptions([{ publicId: pkg3Id, title: 'Scenario 3 Title' }])
+    );
     const intent3 = {
       version: 1 as const,
       previewFingerprint: analysis3.preview.batch.previewFingerprint,
@@ -372,6 +408,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       declaredTotalBytes: manifest3.declaredTotalBytes,
       selectedPackagePaths: [pkg3Id],
       acknowledgedWarningPackagePaths: [pkg3Id],
+      adminReference: analysis3.preview.batch.adminReference,
     };
 
     const [c3a, c3b] = await Promise.all([
@@ -411,12 +448,14 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
     };
     const conflictAnalysis = await analyzeBrowserImportServer(
       conflictManifest,
-      new Map([[conflictKey, Buffer.from(conflictJson, 'utf8')]])
+      new Map([[conflictKey, Buffer.from(conflictJson, 'utf8')]]),
+      await createSyntheticReferenceOptions([{ publicId: pkg1Id, title: 'Scenario 4 Conflict Title' }])
     );
     const failIntentDuplicatePubId = {
       ...intent1,
       previewFingerprint: conflictAnalysis.preview.batch.previewFingerprint,
       declaredTotalBytes: conflictManifest.declaredTotalBytes,
+      adminReference: conflictAnalysis.preview.batch.adminReference,
     };
     const resFail1 = await stageBrowserImportMetadata({
       authContext,
@@ -451,7 +490,11 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
         { uploadKey: generateUploadKey('bad-prog-1/poster.pdf'), originalPath: 'bad-prog-1/poster.pdf', fileSizeBytes: 500, browserMimeType: 'application/pdf' },
       ],
     };
-    const analysisBadProg = await analyzeBrowserImportServer(manifestBadProg, new Map([[kBadProg, Buffer.from(jsonBadProgram, 'utf8')]]));
+    const analysisBadProg = await analyzeBrowserImportServer(
+      manifestBadProg,
+      new Map([[kBadProg, Buffer.from(jsonBadProgram, 'utf8')]]),
+      await createSyntheticReferenceOptions([{ publicId: 'bad-prog-1', title: 'Bad Prog Title' }])
+    );
     const intentBadProg = {
       version: 1 as const,
       previewFingerprint: analysisBadProg.preview.batch.previewFingerprint,
@@ -460,6 +503,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
       declaredTotalBytes: manifestBadProg.declaredTotalBytes,
       selectedPackagePaths: ['bad-prog-1'],
       acknowledgedWarningPackagePaths: ['bad-prog-1'],
+      adminReference: analysisBadProg.preview.batch.adminReference,
     };
     const resFail2 = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysisBadProg, intent: intentBadProg });
     if (resFail2.success || resFail2.code !== 'LOOKUP_NOT_FOUND') {
@@ -514,7 +558,11 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
           { uploadKey: generateUploadKey(`${rollbackPkgId}/poster.pdf`), originalPath: `${rollbackPkgId}/poster.pdf`, fileSizeBytes: 500, browserMimeType: 'application/pdf' },
         ],
       };
-      const analysisRollback = await analyzeBrowserImportServer(manifestRollback, new Map([[kRollback, Buffer.from(jsonRollback, 'utf8')]]));
+      const analysisRollback = await analyzeBrowserImportServer(
+        manifestRollback,
+        new Map([[kRollback, Buffer.from(jsonRollback, 'utf8')]]),
+        await createSyntheticReferenceOptions([{ publicId: rollbackPkgId, title: 'Rollback Title' }])
+      );
 
       // Inject a fake warning flag into analysis package so insertion hits validation_flags
       analysisRollback.packages[0].warnings.push({
@@ -532,6 +580,7 @@ export async function verifyBrowserImportMetadataStageRuntime(): Promise<void> {
         declaredTotalBytes: manifestRollback.declaredTotalBytes,
         selectedPackagePaths: [rollbackPkgId],
         acknowledgedWarningPackagePaths: [rollbackPkgId],
+        adminReference: analysisRollback.preview.batch.adminReference,
       };
 
         const resRollback = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysisRollback, intent: intentRollback });

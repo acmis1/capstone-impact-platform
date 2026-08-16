@@ -60,13 +60,14 @@ export interface ImportBatchReviewProjectRow {
   discipline: string | null;
   group_name: string | null;
   team_members: string[] | null;
+  poster_text_public: string | null;
   accessibility_text_public: string | null;
   snapshots: string[] | null;
   validation_errors: string[] | null;
   validation_warnings: string[] | null;
   project_disciplines?: Array<{ discipline_id: string }>;
   project_industry_categories?: Array<{ industry_category_id: string }>;
-  media_assets?: Array<{ asset_type: string; is_public_approved: boolean | null; public_url: string | null }>;
+  media_assets?: Array<{ asset_type: string; is_public_approved: boolean | null; public_url: string | null; alt_text_public: string | null }>;
   validation_flags?: ImportBatchReviewValidationFlagRow[];
 }
 
@@ -148,11 +149,11 @@ export class ImportBatchRepositoryCore {
       .from('projects')
       .select(
         `id, public_id, title, summary, status, program_id, program_name, study_program,
-         discipline, group_name, team_members, accessibility_text_public, snapshots,
+         discipline, group_name, team_members, poster_text_public, accessibility_text_public, snapshots,
          validation_errors, validation_warnings,
          project_disciplines(discipline_id),
          project_industry_categories(industry_category_id),
-         media_assets(asset_type, is_public_approved, public_url),
+         media_assets(asset_type, is_public_approved, public_url, alt_text_public),
          validation_flags(severity, resolved, message)`
       )
       .eq('import_batch_id', batchId)
@@ -174,11 +175,11 @@ export class ImportBatchRepositoryCore {
       .from('projects')
       .select(
         `id, public_id, title, summary, status, program_id, program_name, study_program,
-         discipline, group_name, team_members, accessibility_text_public, snapshots,
+         discipline, group_name, team_members, poster_text_public, accessibility_text_public, snapshots,
          validation_errors, validation_warnings,
          project_disciplines(discipline_id),
          project_industry_categories(industry_category_id),
-         media_assets(asset_type, is_public_approved, public_url),
+         media_assets(asset_type, is_public_approved, public_url, alt_text_public),
          validation_flags(severity, resolved, message)`
       )
       .eq('public_id', publicId)

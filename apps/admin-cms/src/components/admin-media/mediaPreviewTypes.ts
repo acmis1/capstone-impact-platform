@@ -1,8 +1,4 @@
-export type MediaKind =
-  | 'image'
-  | 'pdf'
-  | 'video'
-  | 'unsupported';
+export type MediaKind = 'image' | 'pdf' | 'video' | 'unsupported';
 
 export type MediaRole =
   | 'poster'
@@ -22,14 +18,21 @@ export interface MediaPreviewItem {
   fileName: string;
   mimeType: string;
   fileSize?: number;
+
+  /**
+   * The authoritative saved text alternative, when one exists. Never a filename-derived
+   * substitute — absence means no alt text is stored, and surfaces are expected to say so.
+   */
   altText?: string;
 
   role?: MediaRole;
   position?: number;
+
+  /** Known for project media; absent for standalone preview samples. */
+  assetType?: string;
 }
 
-export interface ProjectMediaPreviewItem
-  extends MediaPreviewItem {
+export interface ProjectMediaPreviewItem extends MediaPreviewItem {
   id: string;
   assetType: string;
   previewSource: MediaPreviewSource;

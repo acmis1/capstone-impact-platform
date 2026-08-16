@@ -83,6 +83,8 @@ export async function runParticipantPreviewReminderRuntimeVerification(options?:
         title: `Reminder Runtime ${name}`,
         summary: 'Synthetic reminder runtime fixture.', year: 2026, status: 'approved',
         participant_contact_email: recipient,
+        poster_text_public: 'Synthetic reminder runtime poster full text.',
+        accessibility_text_public: 'Synthetic reminder runtime accessibility text.',
       }).select('id,public_id,title,status,participant_contact_email').single();
       if (error || !data) throw new Error('Project fixture creation failed.');
       return data;

@@ -83,11 +83,22 @@ function makeMockPreviewBatch(overrides: Partial<BrowserImportPreviewBatch> = {}
     },
   ];
 
+  const defaultAdminRef = overrides.adminReference !== undefined
+    ? (overrides.adminReference === null ? undefined : overrides.adminReference)
+    : {
+        workbookFingerprint: 'a'.repeat(64),
+        worksheet: 'Sheet1',
+        matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Group Name' }],
+        comparisonMappings: [{ canonicalField: 'title', referenceColumn: 'Title' }],
+        reconciliationContractVersion: 'admin-reference-reconciliation-v1' as const,
+      };
+
   const baseInput = {
     selectedRootName: overrides.selectedRootName || 'root',
     fileCount: overrides.selectedFileCount ?? 6,
     declaredTotalBytes: overrides.declaredTotalBytes ?? 1200,
     packages,
+    ...(defaultAdminRef ? { adminReference: defaultAdminRef } : {}),
   };
 
   const fingerprint = generateBrowserPreviewFingerprint(baseInput);
@@ -107,6 +118,7 @@ function makeMockPreviewBatch(overrides: Partial<BrowserImportPreviewBatch> = {}
     mediaValidationMode: 'descriptor_only',
     batchIssues: [],
     packages,
+    ...(defaultAdminRef ? { adminReference: defaultAdminRef } : {}),
     ...overrides,
   };
 }
@@ -634,6 +646,30 @@ describe('Browser Import Commit Intent & Planner Suite', () => {
       if (res.success) {
         expect(res.intent.selectedPackagePaths).toEqual(['root/p-alpha', 'root/p-zebra']);
       }
+    });
+
+    it('blocks preparation when the authoritative preview has an Admin-reference batch error', () => {
+      const preview = makeMockPreviewBatch({
+        batchIssues: [{
+          code: 'ADMIN_REFERENCE_DUPLICATE_MATCH_KEY',
+          message: 'The official reference keyspace contains a duplicate key.',
+          severity: 'error',
+        }],
+      });
+
+      const res = prepareBrowserImportCommitIntent({
+        manifest: makeMockManifest(),
+        preview,
+        selectedPackagePaths: ['root/p1'],
+        acknowledgedWarningPackagePaths: [],
+        expectedPreviewFingerprint: preview.previewFingerprint,
+      });
+
+      expect(res).toEqual({
+        success: false,
+        code: 'ADMIN_REFERENCE_INVALID',
+        message: 'The Admin reference dataset is invalid for this reconciliation operation.',
+      });
     });
 
     it('22. Unexpected contract fields fail schema validation', () => {

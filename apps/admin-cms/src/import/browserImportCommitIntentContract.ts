@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { BROWSER_IMPORT_LIMITS, BrowserImportPackagePreview, BrowserImportPreviewBatch } from './browserImportPreviewContract';
+import { BROWSER_IMPORT_LIMITS } from './browserImportPreviewContract';
+import type { BrowserImportPackagePreview, BrowserImportPreviewBatch } from './browserImportPreviewContract';
+import { adminReferenceIntentSchema } from './adminReferenceSharedContract';
+
+export { adminReferenceIntentSchema } from './adminReferenceSharedContract';
+export type { AdminReferenceIntent } from './adminReferenceSharedContract';
 
 /**
  * Strict Zod Schema and TypeScript Contract for BrowserImportCommitIntent
@@ -34,6 +39,7 @@ export const browserImportCommitIntentSchema = z
         (arr) => [...arr].sort((a, b) => a.localeCompare(b)).every((v, i) => v === arr[i]),
         { message: 'Acknowledged warning package paths must be sorted deterministically.' }
       ),
+    adminReference: adminReferenceIntentSchema.optional(),
   })
   .strict();
 
@@ -45,6 +51,41 @@ export type BrowserImportPreparationErrorCode =
   | 'INVALID_SELECTION'
   | 'PREPARATION_ALREADY_PENDING'
   | 'UNEXPECTED_PREPARATION_FAILURE';
+
+export type BrowserImportCommitIntentErrorCode =
+  | 'INVALID_PREVIEW_STRUCTURE'
+  | 'INVALID_MANIFEST'
+  | 'ROOT_NAME_MISMATCH'
+  | 'FILE_COUNT_MISMATCH'
+  | 'DECLARED_BYTES_MISMATCH'
+  | 'PREVIEW_FINGERPRINT_MISMATCH'
+  | 'DUPLICATE_PACKAGE_PATHS'
+  | 'DUPLICATE_ACKNOWLEDGEMENT_PATHS'
+  | 'EMPTY_SELECTION'
+  | 'UNKNOWN_SELECTED_PACKAGE_PATH'
+  | 'UNKNOWN_ACKNOWLEDGEMENT_PACKAGE_PATH'
+  | 'INVALID_PACKAGE_SELECTED'
+  | 'UNACKNOWLEDGED_WARNING_PACKAGE_SELECTED'
+  | 'ACKNOWLEDGEMENT_REJECTED_FOR_NON_WARNING'
+  | 'MISSING_ADMIN_REFERENCE'
+  | 'ADMIN_REFERENCE_EVIDENCE_MISMATCH'
+  | 'ADMIN_REFERENCE_INVALID'
+  | 'INVALID_COMMIT_INTENT';
+
+export type BrowserImportCommitIntentResult =
+  | {
+      success: true;
+      intent: BrowserImportCommitIntent;
+      summary: {
+        selectedPackageCount: number;
+        warningPackageCount: number;
+      };
+    }
+  | {
+      success: false;
+      code: BrowserImportCommitIntentErrorCode;
+      message: string;
+    };
 
 export interface BrowserImportSelectionState {
   previewFingerprint: string;

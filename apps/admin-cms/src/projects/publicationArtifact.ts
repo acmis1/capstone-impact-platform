@@ -2,7 +2,8 @@ import { Project } from '../domain/project';
 import { compilePublicationCandidateFeed } from '../feed/compilePublicFeed';
 import { serializePublicFeedArtifact } from '../feed/serializePublicFeedArtifact';
 import { validatePublicFeed } from '../feed/validatePublicFeed';
-import { validateMediaAsset } from '../storage/mediaValidation';
+import { validateMediaAsset } from '../storage/mediaValidationCore';
+import { getAccessibleContentProblem } from '../domain/accessibleContent';
 
 export type PublicationMediaAssetType = 'poster_image' | 'poster_pdf' | 'snapshot_image';
 
@@ -19,6 +20,8 @@ export interface PublicationMediaSource {
   mimeType: string;
   fileSizeBytes: number;
   isPublicApproved: boolean;
+  /** Authoritative staff-authored text alternative; null for assets that carry none. */
+  altTextPublic: string | null;
 }
 
 export interface PublicationMediaPromotion {
@@ -32,6 +35,11 @@ export interface PublicationMediaPromotion {
   publicBucket: string;
   publicPath: string;
   publicUrl: string;
+  /**
+   * Carried alongside the URL on the same object, so the public URL and its description are
+   * produced, sorted and consumed as one unit and cannot drift apart.
+   */
+  altTextPublic: string | null;
 }
 
 /**
@@ -119,6 +127,14 @@ export function planPublicationArtifact(params: {
       throw new Error('Publication media source is invalid.');
     }
     const assetType = asset.assetType as PublicationMediaAssetType;
+    // A snapshot image must not reach a public artifact undescribed. The workflow gates already
+    // block this well before publication; failing here too means a caller that somehow assembled a
+    // plan around an undescribed snapshot gets no artifact at all rather than a silently
+    // inaccessible one.
+    if (assetType === 'snapshot_image') {
+      const problem = getAccessibleContentProblem(asset.altTextPublic, 'snapshotAltText');
+      if (problem) throw new Error('Publication snapshot media is missing usable alt text.');
+    }
     const publicPath = buildDeterministicPublicMediaPath(targetPublicId, assetType, asset.fileName);
     const publicUrl = getPublicUrl(publicBucket, publicPath);
     assertPublicUrl(publicUrl, privateBucket);
@@ -133,6 +149,7 @@ export function planPublicationArtifact(params: {
       publicBucket,
       publicPath,
       publicUrl,
+      altTextPublic: asset.altTextPublic,
     });
   }
 
@@ -143,16 +160,24 @@ export function planPublicationArtifact(params: {
     const poster = mediaPromotions.find((item) => item.assetType === 'poster_image');
     const posterPdf = mediaPromotions.find((item) => item.assetType === 'poster_pdf');
     if (!poster || !posterPdf) throw new Error('Required publication media is missing.');
+    // Both arrays are projected from the same ordered promotion list in one pass, so the URL and
+    // its description stay index-aligned by construction rather than by convention.
+    const snapshotPromotions = mediaPromotions.filter((item) => item.assetType === 'snapshot_image');
     projectedTarget = {
       ...target,
       poster: poster.publicUrl,
       posterPdf: posterPdf.publicUrl,
-      snapshots: mediaPromotions.filter((item) => item.assetType === 'snapshot_image').map((item) => item.publicUrl),
+      snapshots: snapshotPromotions.map((item) => item.publicUrl),
+      snapshotMedia: snapshotPromotions.map((item) => ({
+        url: item.publicUrl,
+        altText: item.altTextPublic ?? '',
+      })),
     };
   } else {
     assertPublicUrl(target.poster, privateBucket);
     assertPublicUrl(target.posterPdf, privateBucket);
     target.snapshots.forEach((url) => assertPublicUrl(url, privateBucket));
+    target.snapshotMedia?.forEach((item) => assertPublicUrl(item.url, privateBucket));
   }
 
   const projectedProjects = projects.map((project) => project.publicId === targetPublicId ? projectedTarget : project);

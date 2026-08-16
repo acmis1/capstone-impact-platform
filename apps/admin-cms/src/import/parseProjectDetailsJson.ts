@@ -1,5 +1,6 @@
 import { ImportPackageManifest } from './importTypes';
 import { validateParticipantContactEmail } from '../domain/participantContactEmail';
+import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
 
 export interface ProjectDetailsJsonWarning {
   code: string;
@@ -101,6 +102,20 @@ export function parseProjectDetailsJson(
   const participantContactEmail = contactEmailValidation.valid ? contactEmailValidation.email : '';
   const posterText = getString('posterText');
   const accessibilityText = getString('accessibilityText');
+  // Legacy JSON manifests predate the snapshot-alt contract, so an absent value is not an error
+  // here — a legacy package may still be staged into private draft media, and staff supply the alt
+  // text through the project media surface before the project can progress any further. A value
+  // that IS supplied must be usable, so an oversized one is rejected outright rather than
+  // truncated: nothing in this codebase invents or shortens accessibility text.
+  const snapshotAltText = getString('snapshotAltText');
+  if (snapshotAltText.length > ACCESSIBLE_CONTENT_LIMITS.snapshotAltText) {
+    errors.push({
+      code: 'JSON_VALUE_TOO_LONG',
+      message: `The "snapshotAltText" value exceeds the maximum of ${ACCESSIBLE_CONTENT_LIMITS.snapshotAltText} characters.`,
+      severity: 'error',
+      fieldName: 'snapshotAltText',
+    });
+  }
   const teamMembers = getArrayStrings('teamMembers');
 
   const rawLayout = obj.layoutConfig && typeof obj.layoutConfig === 'object' ? (obj.layoutConfig as Record<string, unknown>) : {};
@@ -131,6 +146,7 @@ export function parseProjectDetailsJson(
     teamMembers,
     ...(posterText ? { posterText } : {}),
     ...(accessibilityText ? { accessibilityText } : {}),
+    ...(snapshotAltText ? { snapshotAltText } : {}),
     layoutConfig: {
       templateId,
       featuredMedia,

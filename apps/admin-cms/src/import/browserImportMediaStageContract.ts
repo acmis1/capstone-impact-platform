@@ -1,5 +1,3 @@
-import { createHash } from 'crypto';
-
 /**
  * Media-stage-specific limits. Metadata (xlsx/json) limits continue to live in
  * BROWSER_IMPORT_LIMITS; these bound the additional binary media payload.
@@ -155,34 +153,9 @@ export interface CanonicalExpectedMediaFile {
   assetType: string;
   fileName: string;
   fileSizeBytes: number;
-}
-
-/**
- * Computes a deterministic SHA-256 hash binding a media-stage attempt to a specific batch,
- * the metadata intent it was staged from, and the exact expected media file set. Reproducing
- * this hash requires resubmitting the identical manifest/intent/batch that produced it, which
- * is what allows exact retries to converge and prevents attaching unrelated files to a batch.
- */
-export function computeCanonicalMediaIntentHash(params: {
-  batchId: string;
-  metadataIntentHash: string;
-  files: CanonicalExpectedMediaFile[];
-}): string {
-  const sortedFiles = [...params.files]
-    .sort((a, b) => a.packagePath.localeCompare(b.packagePath) || a.assetType.localeCompare(b.assetType))
-    .map((f) => ({
-      packagePath: f.packagePath,
-      projectPublicId: f.projectPublicId,
-      assetType: f.assetType,
-      fileName: f.fileName,
-      fileSizeBytes: f.fileSizeBytes,
-    }));
-
-  const canonicalObj = {
-    batchId: params.batchId,
-    metadataIntentHash: params.metadataIntentHash,
-    files: sortedFiles,
-  };
-
-  return createHash('sha256').update(JSON.stringify(canonicalObj), 'utf8').digest('hex');
+  /**
+   * Authoritative snapshot alt text for this file, or null when it has none. Part of the canonical
+   * intent, not display metadata — see the binding note on `computeCanonicalMediaIntentHash`.
+   */
+  snapshotAltText?: string | null;
 }

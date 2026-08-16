@@ -26,12 +26,12 @@ async function main() {
   const projectIds: string[] = [];
   const project = (name: string, status: string) => {
     const publicId = `${prefix}-${name}`;
-    sql(`INSERT INTO public.projects(public_id,title,summary,background,solution,year,program_id,program_name,discipline,industry,status) VALUES ('${publicId}','Before','Before','Background','Solution',2026,'${ids.program}'::uuid,'Program','Discipline','Industry','${status}')`);
+    sql(`INSERT INTO public.projects(public_id,title,summary,background,solution,poster_text_public,accessibility_text_public,year,program_id,program_name,discipline,industry,status) VALUES ('${publicId}','Before','Before','Background','Solution','Before poster full text','Before accessibility text',2026,'${ids.program}'::uuid,'Program','Discipline','Industry','${status}')`);
     projectIds.push(sql(`SELECT id::text FROM public.projects WHERE public_id='${publicId}'`));
     return publicId;
   };
   const snapshot = (publicId: string) => one<Record<string, unknown>>(`SELECT p.title,p.summary,p.background,p.solution,p.year,p.program_id::text,p.status,p.updated_at::text,(SELECT json_agg(discipline_id::text ORDER BY discipline_id) FROM public.project_disciplines WHERE project_id=p.id) disciplines,(SELECT json_agg(industry_category_id::text ORDER BY industry_category_id) FROM public.project_industry_categories WHERE project_id=p.id) industries,(SELECT count(*) FROM public.approval_records WHERE project_id=p.id) audits FROM public.projects p WHERE public_id='${publicId}'`);
-  const args = (publicId: string, title: string, updatedAt: string, adminId = ids.admin) => ({ p_public_id: publicId, p_title: title, p_summary: `${title} summary`, p_background: `${title} background`, p_solution: `${title} solution`, p_year: 2027, p_program_id: ids.program, p_discipline_ids: [ids.discipline], p_industry_category_ids: [ids.industry], p_expected_updated_at: updatedAt, p_admin_id: adminId });
+  const args = (publicId: string, title: string, updatedAt: string, adminId = ids.admin) => ({ p_public_id: publicId, p_title: title, p_summary: `${title} summary`, p_background: `${title} background`, p_solution: `${title} solution`, p_year: 2027, p_program_id: ids.program, p_discipline_ids: [ids.discipline], p_industry_category_ids: [ids.industry], p_expected_updated_at: updatedAt, p_admin_id: adminId, p_poster_text: `${title} poster full text`, p_accessibility_text: `${title} accessibility text` });
   const metadata = async (publicId: string, title: string) => { const row = snapshot(publicId); return service.rpc('update_project_metadata', args(publicId, title, String(row.updated_at))); };
   const review = (publicId: string, adminId = ids.admin, comments = 'runtime request changes') => service.rpc('perform_project_review_action', { p_public_id: publicId, p_action: 'request_changes', p_comments: comments, p_admin_id: adminId });
   const token = () => crypto.randomBytes(32).toString('hex');
@@ -55,7 +55,7 @@ async function main() {
   };
   const appAllowsMetadata = async (role: 'admin' | 'reviewer' | 'editor') => {
     const permissions = getPermissionsForRoles([role]); let invoked = false;
-    const input = { publicId: 'boundary', title: 'Boundary', summary: 'Boundary', background: 'Boundary', solution: 'Boundary', year: '2027', programId: ids.program, disciplineIds: [ids.discipline], industryCategoryIds: [ids.industry], expectedUpdatedAt: new Date().toISOString() };
+    const input = { publicId: 'boundary', title: 'Boundary', summary: 'Boundary', background: 'Boundary', solution: 'Boundary', posterText: 'Boundary poster full text', accessibilityText: 'Boundary accessibility text', year: '2027', programId: ids.program, disciplineIds: [ids.discipline], industryCategoryIds: [ids.industry], expectedUpdatedAt: new Date().toISOString() };
     const result = await saveAuthorizedProjectMetadata(permissions, { loadOptions: async () => ({ programs: [{ id: ids.program, name: 'Program' }], disciplines: [{ id: ids.discipline, name: 'Discipline' }], industryCategories: [{ id: ids.industry, name: 'Industry' }] }), loadProject: async () => null, updateMetadataAtomically: async () => { invoked = true; return { resultCode: 'SUCCESS', metadata: input }; } }, input, ids.admin);
     return { permissions, result, invoked };
   };

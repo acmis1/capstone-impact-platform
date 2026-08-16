@@ -9,6 +9,7 @@ import {
   ParticipantPreviewResponseState,
   ParticipantPreviewSnapshot,
 } from '../domain/participantPreview';
+import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
 
 export const DEFAULT_PREVIEW_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
@@ -41,6 +42,62 @@ export interface ResolvedParticipantPreview {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+/**
+ * Validates the immutable media snapshot stored on a participant preview, returning null if any
+ * element is malformed so the caller can fail closed.
+ *
+ * `altText` must be structurally present on every element. A `snapshot_image` must carry a usable
+ * string, since that value becomes the participant-facing alt attribute and there is no acceptable
+ * fallback for it. Any other asset type must carry null: the poster's text alternative is the
+ * project-level accessibilityText in the project snapshot, and a value here would mean the stored
+ * evidence disagrees with the contract that produced it.
+ */
+function parseMediaSnapshot(raw: unknown[]): ParticipantPreviewMediaRef[] | null {
+  const parsed: ParticipantPreviewMediaRef[] = [];
+
+  for (const element of raw) {
+    if (!element || typeof element !== 'object' || Array.isArray(element)) return null;
+    const item = element as Record<string, unknown>;
+
+    if (
+      !isNonEmptyString(item.mediaAssetId) ||
+      !isNonEmptyString(item.assetType) ||
+      !isNonEmptyString(item.fileName) ||
+      !isNonEmptyString(item.storageBucket) ||
+      !isNonEmptyString(item.storagePath)
+    ) {
+      return null;
+    }
+
+    const mimeType = item.mimeType === null || item.mimeType === undefined ? null : item.mimeType;
+    if (mimeType !== null && typeof mimeType !== 'string') return null;
+
+    if (!('altText' in item)) return null;
+    let altText: string | null;
+    if (item.assetType === 'snapshot_image') {
+      if (typeof item.altText !== 'string') return null;
+      const trimmed = item.altText.trim();
+      if (trimmed === '' || trimmed.length > ACCESSIBLE_CONTENT_LIMITS.snapshotAltText) return null;
+      altText = item.altText;
+    } else {
+      if (item.altText !== null) return null;
+      altText = null;
+    }
+
+    parsed.push({
+      mediaAssetId: item.mediaAssetId,
+      assetType: item.assetType,
+      fileName: item.fileName,
+      storageBucket: item.storageBucket,
+      storagePath: item.storagePath,
+      mimeType,
+      altText,
+    });
+  }
+
+  return parsed;
 }
 
 export class SupabaseParticipantPreviewRepositoryCore {
@@ -109,6 +166,8 @@ export class SupabaseParticipantPreviewRepositoryCore {
         throw new ParticipantPreviewExecutionError('NO_CORRECTION_IN_PROGRESS');
       case 'AMBIGUOUS_CORRECTION_REQUEST':
         throw new ParticipantPreviewExecutionError('AMBIGUOUS_CORRECTION_REQUEST');
+      case 'MEDIA_ACCESSIBILITY_REQUIRED':
+        throw new ParticipantPreviewExecutionError('MEDIA_ACCESSIBILITY_REQUIRED');
       default:
         throw new ParticipantPreviewExecutionError('INPUT_INVALID');
     }
@@ -249,10 +308,19 @@ export class SupabaseParticipantPreviewRepositoryCore {
       return null;
     }
 
+    // The stored media snapshot is participant-facing evidence, so it is validated element by
+    // element rather than cast. A snapshot image whose alt text is missing or unusable makes the
+    // whole preview unresolvable — the participant sees the generic unavailable page and staff
+    // reissue — because the alternative is rendering an image the participant cannot perceive.
+    const mediaSnapshot = parseMediaSnapshot(res.mediaSnapshot);
+    if (!mediaSnapshot) {
+      return null;
+    }
+
     return {
       previewId: res.previewId,
       snapshot: res.snapshot as ParticipantPreviewSnapshot,
-      mediaSnapshot: res.mediaSnapshot as ParticipantPreviewMediaRef[],
+      mediaSnapshot,
       expiresAt: res.expiresAt,
     };
   }

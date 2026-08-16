@@ -283,6 +283,11 @@ function handleParticipantPreviewError(error: unknown, actionLabel: 'Generate' |
           { success: false, error: 'Multiple unresolved correction requests exist. Action cannot be completed unambiguously.', code: 'AMBIGUOUS_CORRECTION_REQUEST' },
           { status: 409, headers: NO_STORE }
         );
+      case 'MEDIA_ACCESSIBILITY_REQUIRED':
+        return NextResponse.json(
+          { success: false, error: 'The snapshot image needs alt text before a participant preview can be generated. Request changes, add it in the project media section, then approve again.', code: 'MEDIA_ACCESSIBILITY_REQUIRED' },
+          { status: 409, headers: NO_STORE }
+        );
       case 'PUBLICATION_IN_PROGRESS':
         return NextResponse.json(
           { success: false, error: 'Publication is currently in progress for this project.', code: 'PUBLICATION_IN_PROGRESS' },

@@ -1,6 +1,18 @@
 import { ParticipantPreviewMediaViewRef, ParticipantPreviewResponseState, ParticipantPreviewSnapshot } from '../domain/participantPreview';
 import { MAX_CORRECTION_COMMENT_LENGTH } from './participantPreviewCorrectionComment';
 
+/**
+ * Raised when stored preview state cannot supply an authoritative text alternative for an image the
+ * participant would otherwise be shown. The route turns this into the same generic unavailable
+ * response as any other unresolvable preview.
+ */
+export class ParticipantPreviewMediaAccessibilityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ParticipantPreviewMediaAccessibilityError';
+  }
+}
+
 export function escapeHtml(input: string): string {
   return input
     .replace(/&/g, '&amp;')
@@ -53,7 +65,30 @@ function renderExternalLinks(links: ParticipantPreviewSnapshot['externalLinks'])
     .join('')}</ul>`;
 }
 
-function renderMedia(media: ParticipantPreviewMediaViewRef[]): string {
+/**
+ * The participant-facing alt attribute for one image, taken only from immutably snapshotted
+ * accessibility evidence.
+ *
+ * A poster image uses the snapshotted project-level accessibilityText; a snapshot image uses its
+ * own snapshotted altText. There is deliberately no fallback to the filename, the project title, or
+ * a "Preview of ..." construction: those describe the file, not the image, and presenting one as a
+ * text alternative would misrepresent an undescribed image as an accessible one.
+ *
+ * The workflow gates guarantee both values exist by the time a preview can be issued, so a missing
+ * one means the stored preview state is malformed. Returning null makes the caller fail closed
+ * rather than render a plausible-looking but false alt.
+ */
+function resolveParticipantImageAlt(
+  media: ParticipantPreviewMediaViewRef,
+  accessibilityText: string | null,
+): string | null {
+  const value = media.assetType === 'poster_image' ? accessibilityText : media.altText;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+function renderMedia(media: ParticipantPreviewMediaViewRef[], accessibilityText: string | null): string {
   const withUrl = media.filter((m) => m.signedUrl);
   if (withUrl.length === 0) return '';
 
@@ -61,7 +96,15 @@ function renderMedia(media: ParticipantPreviewMediaViewRef[]): string {
   const documents = withUrl.filter((m) => m.assetType !== 'poster_image' && m.assetType !== 'snapshot_image');
 
   const imagesHtml = images
-    .map((m) => `<img src="${escapeHtml(m.signedUrl as string)}" alt="${escapeHtml(m.fileName)}" loading="lazy" />`)
+    .map((m) => {
+      const altText = resolveParticipantImageAlt(m, accessibilityText);
+      if (altText === null) {
+        throw new ParticipantPreviewMediaAccessibilityError(
+          'Participant preview media is missing its authoritative text alternative.',
+        );
+      }
+      return `<img src="${escapeHtml(m.signedUrl as string)}" alt="${escapeHtml(altText)}" loading="lazy" />`;
+    })
     .join('');
   const documentsHtml = documents
     .map(
@@ -190,9 +233,10 @@ export function renderParticipantPreviewPage(params: {
   ${renderParagraph('Summary', snapshot.summary)}
   ${renderParagraph('Background', snapshot.background)}
   ${renderParagraph('Solution', snapshot.solution)}
+  ${renderParagraph('Poster Full Text', snapshot.posterText)}
   ${renderParagraph('Accessibility Description', snapshot.accessibilityText)}
 
-  ${renderMedia(media)}
+  ${renderMedia(media, snapshot.accessibilityText)}
 
   <div class="field">
     <h3>Disciplines</h3>

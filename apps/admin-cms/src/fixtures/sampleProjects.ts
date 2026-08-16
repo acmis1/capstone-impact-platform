@@ -32,6 +32,16 @@ export const SAMPLE_PROJECTS: Project[] = [
       'https://placeholder-storage.supabase.co/storage/v1/object/public/project-public-assets/2026/traffic-engine/snapshot1.png',
       'https://placeholder-storage.supabase.co/storage/v1/object/public/project-public-assets/2026/traffic-engine/snapshot2.png',
     ],
+    snapshotMedia: [
+      {
+        url: 'https://placeholder-storage.supabase.co/storage/v1/object/public/project-public-assets/2026/traffic-engine/snapshot1.png',
+        altText: 'Simulation dashboard comparing mock queue lengths at a four-way intersection before and after adaptive signal timing.',
+      },
+      {
+        url: 'https://placeholder-storage.supabase.co/storage/v1/object/public/project-public-assets/2026/traffic-engine/snapshot2.png',
+        altText: 'Line chart of mock average wait time per vehicle across a twenty-four hour cycle.',
+      },
+    ],
     videoUrl: 'https://www.youtube.com/watch?v=mocktraffic',
     demoUrl: 'https://staging-demo.greenlighttraffic.com',
     repositoryUrl: 'https://github.com/mockuser/greenlight-traffic',
@@ -72,6 +82,12 @@ export const SAMPLE_PROJECTS: Project[] = [
     snapshots: [
       'https://placeholder-storage.supabase.co/storage/v1/object/public/project-public-assets/2026/aeromed/snapshot1.png',
     ],
+    snapshotMedia: [
+      {
+        url: 'https://placeholder-storage.supabase.co/storage/v1/object/public/project-public-assets/2026/aeromed/snapshot1.png',
+        altText: 'Mock delivery drone on a mountain landing pad with its insulated cargo compartment open.',
+      },
+    ],
     videoUrl: '',
     demoUrl: '',
     repositoryUrl: '',
@@ -109,6 +125,7 @@ export const SAMPLE_PROJECTS: Project[] = [
     posterText: 'LoRa Soil Valve Control.',
     accessibilityText: 'Poster showcasing LoRa node hardware diagrams.',
     snapshots: [],
+    snapshotMedia: [],
     videoUrl: '',
     demoUrl: '',
     repositoryUrl: '',
@@ -147,6 +164,12 @@ export const SAMPLE_PROJECTS: Project[] = [
     accessibilityText: 'Poster showcasing headset configuration models.',
     snapshots: [
       'https://placeholder-storage.supabase.co/storage/v1/object/public/project-public-assets/2026/neurovr/snapshot1.png',
+    ],
+    snapshotMedia: [
+      {
+        url: 'https://placeholder-storage.supabase.co/storage/v1/object/public/project-public-assets/2026/neurovr/snapshot1.png',
+        altText: 'Participant wearing a mock VR headset performing a seated upper-limb reaching exercise.',
+      },
     ],
     videoUrl: '',
     demoUrl: '',

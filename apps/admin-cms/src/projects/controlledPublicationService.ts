@@ -12,7 +12,7 @@ import {
   PublishAuditRecord,
   PublishedSnapshotRecord,
 } from '../repositories/SupabasePublicationExecutionRepositoryCore';
-import { validateMediaAssetBytes } from '../storage/mediaValidation';
+import { validateMediaAssetBytes } from '../storage/mediaValidationCore';
 import {
   planPublicationArtifact,
   PublicationArtifactPlan,

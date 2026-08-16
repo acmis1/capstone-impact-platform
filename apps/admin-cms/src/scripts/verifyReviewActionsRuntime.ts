@@ -190,6 +190,10 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
           summary: 'Synthetic test project for runtime verification',
           status: status,
           year: 2026,
+          // Approval requires accessible poster content. This verifier exercises review-action
+          // transitions and atomicity, so its standard fixture is compliant by construction.
+          poster_text_public: 'Synthetic runtime poster full text.',
+          accessibility_text_public: 'Synthetic runtime accessibility text.',
         })
         .select()
         .single();

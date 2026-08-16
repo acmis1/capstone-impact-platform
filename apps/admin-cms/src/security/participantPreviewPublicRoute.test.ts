@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { escapeHtml, renderParticipantPreviewPage, renderParticipantPreviewUnavailablePage, isSafeExternalPreviewUrl } from '../previews/participantPreviewHtml';
 import { hashPreviewToken } from '../previews/participantPreviewToken';
+import { ParticipantPreviewSnapshot } from '../domain/participantPreview';
 
 vi.mock('server-only', () => ({}));
 vi.mock('../lib/supabase/admin', () => ({
@@ -78,6 +79,84 @@ describe('participantPreviewHtml escaping', () => {
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
   });
 
+  /**
+   * Participants confirm the exact public-facing accessible content, so both values must be
+   * visible on the preview page before the confirmation controls — never confirmed sight unseen.
+   */
+  describe('accessible poster content rendering', () => {
+    const snapshotWith = (overrides: Partial<ParticipantPreviewSnapshot>): ParticipantPreviewSnapshot => ({
+      title: 'Solar Power Optimizer',
+      summary: 'AI-powered solar optimizer.',
+      background: null,
+      solution: null,
+      year: 2026,
+      program: null,
+      studyProgram: null,
+      discipline: null,
+      disciplines: [],
+      industry: null,
+      industryPartner: null,
+      academicSupervisor: null,
+      groupName: null,
+      teamMembers: [],
+      posterText: 'Aim: reduce distributed solar loss. Result: 12% yield improvement.',
+      accessibilityText: 'Poster showing an inverter architecture diagram beside a results table.',
+      citations: [],
+      externalLinks: [],
+      industryCategories: [],
+      ...overrides,
+    });
+
+    const render = (overrides: Partial<ParticipantPreviewSnapshot> = {}) => renderParticipantPreviewPage({
+      snapshot: snapshotWith(overrides),
+      media: [],
+      responseState: { type: 'unresponded' },
+    });
+
+    it('renders both accessible content values before the confirmation controls', () => {
+      const html = render();
+
+      expect(html).toContain('Poster Full Text');
+      expect(html).toContain('Aim: reduce distributed solar loss. Result: 12% yield improvement.');
+      expect(html).toContain('Accessibility Description');
+      expect(html).toContain('Poster showing an inverter architecture diagram beside a results table.');
+
+      // Anchor on the response section heading, not the button class, which also appears in the
+      // stylesheet in <head>.
+      const responseSection = html.indexOf('<h3>Your Response</h3>');
+      expect(responseSection).toBeGreaterThan(-1);
+      expect(html.indexOf('Poster Full Text')).toBeLessThan(responseSection);
+      expect(html.indexOf('Accessibility Description')).toBeLessThan(responseSection);
+    });
+
+    it('escapes markup inside either accessible content value', () => {
+      const html = render({
+        posterText: '<script>evil()</script>',
+        accessibilityText: '<img src=x onerror=alert(1)>',
+      });
+
+      expect(html).not.toContain('<script>evil()</script>');
+      expect(html).not.toContain('<img src=x onerror=alert(1)>');
+      expect(html).toContain('&lt;script&gt;evil()&lt;/script&gt;');
+      expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    });
+
+    it('renders newlines as line breaks rather than raw markup', () => {
+      const html = render({ posterText: 'Aim\nMeasure wake.', accessibilityText: 'Poster.\nTwo columns.' });
+
+      expect(html).toContain('Aim<br/>Measure wake.');
+      expect(html).toContain('Poster.<br/>Two columns.');
+    });
+
+    it('never leaks internal or private project state alongside the accessible content', () => {
+      const html = render();
+
+      expect(html).not.toMatch(/poster_text_public|accessibility_text_public/);
+      expect(html).not.toMatch(/import_batch|internalStaffNotes|validation_flags|admin_id/i);
+      expect(html).toContain('noindex, nofollow');
+    });
+  });
+
   it('renderParticipantPreviewUnavailablePage renders a generic message with no project detail', () => {
     const html = renderParticipantPreviewUnavailablePage();
     expect(html).toContain('Preview Unavailable');
@@ -145,13 +224,15 @@ describe('Public participant-preview route', () => {
         groupName: null,
         teamMembers: ['Synthetic Member A'],
         posterText: null,
-        accessibilityText: null,
+        // A preview can only be issued for a project that has accessible poster content, and the
+        // poster image's participant-facing alt attribute is this snapshotted value.
+        accessibilityText: 'Poster showing a synthetic system architecture diagram.',
         citations: [],
         externalLinks: [],
         industryCategories: [],
       },
       mediaSnapshot: [
-        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png' },
+        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png', altText: null },
       ],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });
@@ -202,11 +283,11 @@ describe('Public participant-preview route', () => {
         industryCategories: [],
       },
       mediaSnapshot: [
-        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png' },
+        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png', altText: null },
         // Anomalous reference pointing at the public bucket — createSignedDraftMediaUrl's own
         // bucket check refuses to sign it, and the route must fail closed rather than silently
         // omit it and still return 200.
-        { mediaAssetId: 'm2', assetType: 'poster_image', fileName: 'other-project-poster.png', storageBucket: 'project-public-assets', storagePath: 'approved/other-project/poster_image/poster.png', mimeType: 'image/png' },
+        { mediaAssetId: 'm2', assetType: 'poster_image', fileName: 'other-project-poster.png', storageBucket: 'project-public-assets', storagePath: 'approved/other-project/poster_image/poster.png', mimeType: 'image/png', altText: null },
       ],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });
@@ -252,7 +333,7 @@ describe('Public participant-preview route', () => {
         industryCategories: [],
       },
       mediaSnapshot: [
-        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png' },
+        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png', altText: null },
       ],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });
@@ -491,6 +572,62 @@ describe('Public participant-preview route', () => {
     resolveSpy.mockRestore();
     confirmationSpy.mockRestore();
     correctionSpy.mockRestore();
+  });
+});
+
+describe('Public participant-preview Render CSRF protection', () => {
+  const externalOrigin = 'https://capstone-admin-cms-staging-v2.onrender.com';
+  let originalRender: string | undefined;
+  let originalRenderExternalUrl: string | undefined;
+
+  beforeEach(() => {
+    originalRender = process.env.RENDER;
+    originalRenderExternalUrl = process.env.RENDER_EXTERNAL_URL;
+    process.env.RENDER = 'true';
+    process.env.RENDER_EXTERNAL_URL = externalOrigin;
+  });
+
+  afterEach(() => {
+    if (originalRender === undefined) delete process.env.RENDER;
+    else process.env.RENDER = originalRender;
+
+    if (originalRenderExternalUrl === undefined) delete process.env.RENDER_EXTERNAL_URL;
+    else process.env.RENDER_EXTERNAL_URL = originalRenderExternalUrl;
+  });
+
+  it('allows the authoritative Render external Origin to progress beyond CSRF', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const req = new NextRequest('http://internal-render:10000/participant-preview/not-a-valid-token', {
+      method: 'POST',
+      ...formRequestInit(externalOrigin, { action: 'confirm' }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ token: 'not-a-valid-token' }) });
+
+    expect(res.status).toBe(404);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it('rejects an attacker Origin before processing the participant response', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const token = 'a'.repeat(64);
+    const req = new NextRequest(`http://internal-render:10000/participant-preview/${token}`, {
+      method: 'POST',
+      ...formRequestInit('https://evil.example', { action: 'confirm' }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(403);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
   });
 });
 

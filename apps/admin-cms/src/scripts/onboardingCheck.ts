@@ -38,6 +38,8 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260813120000_staff_identity_provisioning.sql',
   '20260813180000_participant_preview_email_notifications.sql',
   '20260813190000_participant_preview_reminder_schedules.sql',
+  '20260814090000_accessible_full_text_gate.sql',
+  '20260814140000_snapshot_image_alt_text.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {
@@ -70,8 +72,10 @@ export function isVersionInNpm11Range(versionStr: string): boolean {
 
 export function validateMigrationsList(filenames: string[]): { passed: boolean; message: string } {
   const sqlFiles = filenames.filter((f) => f.endsWith('.sql'));
-  if (sqlFiles.length !== 24) {
-    return { passed: false, message: `FAIL: Expected exactly 24 migration files, found ${sqlFiles.length}` };
+  // The expected inventory is the single source of truth for both the assertion and every
+  // human-readable count, so a new migration can never leave a stale number behind in the output.
+  if (sqlFiles.length !== EXPECTED_MIGRATION_FILENAMES.length) {
+    return { passed: false, message: `FAIL: Expected exactly ${EXPECTED_MIGRATION_FILENAMES.length} migration files, found ${sqlFiles.length}` };
   }
 
   const timestampRegex = /^(\d{14})_.+\.sql$/;
@@ -97,7 +101,7 @@ export function validateMigrationsList(filenames: string[]): { passed: boolean; 
     }
   }
 
-  return { passed: true, message: 'PASS: Exactly 24 timestamped migrations exist with exact expected filenames in ascending order' };
+  return { passed: true, message: `PASS: Exactly ${EXPECTED_MIGRATION_FILENAMES.length} timestamped migrations exist with exact expected filenames in ascending order` };
 }
 
 export function sanitizePublicSafeMessage(msg: string): string {
@@ -278,13 +282,13 @@ export function performOnboardingCheck(options?: {
     const rawFiles = readdirSync(migrationsDir);
     const migrationsResult = validateMigrationsList(rawFiles);
     items.push({
-      name: 'Timestamped Database Migrations (24 ascending)',
+      name: `Timestamped Database Migrations (${EXPECTED_MIGRATION_FILENAMES.length} ascending)`,
       passed: migrationsResult.passed,
       message: migrationsResult.message,
     });
   } else {
     items.push({
-      name: 'Timestamped Database Migrations (24 ascending)',
+      name: `Timestamped Database Migrations (${EXPECTED_MIGRATION_FILENAMES.length} ascending)`,
       passed: false,
       message: 'FAIL: Migrations directory missing',
     });
@@ -303,6 +307,7 @@ export function performOnboardingCheck(options?: {
     'provisionLocalSupabaseUsers.ts',
     'verifyLocalSupabase.ts',
     'seedLocalSupabaseFixtures.ts',
+    'verifyAdminExcelReconciliationRuntime.ts',
   ];
   const scriptsExist = requiredScripts.every((s) => existsSync(path.join(scriptsDir, s)));
   items.push({

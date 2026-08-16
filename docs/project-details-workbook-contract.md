@@ -60,7 +60,9 @@ Header matching is case-insensitive, order-independent, trims surrounding whites
 | `Project year` | `year` | **Required** | `project year`, `projectyear`, `year` |
 | `Showcase layout` | `templateId` | Optional | `showcase layout`, `showcaselayout`, `templateid`, `template id` |
 | `Main media to feature` | `layoutConfig.featuredMedia` | Optional | `main media to feature`, `mainmediatofeature`, `featuredmedia`, `featured media` |
-| `Accessibility text` | `accessibilityText` | Optional | `accessibility text`, `accessibilitytext` |
+| `Poster full text` | `posterText` | **Required** | `poster full text`, `poster text`, `postertext`, `posterfulltext` |
+| `Accessibility text` | `accessibilityText` | **Required** | `accessibility text`, `accessibilitytext` |
+| `Snapshot image alt text` | `snapshotAltText` | Conditional — required when the package contains `snapshot-1.png` | `snapshot image alt text`, `snapshot alt text`, `snapshot accessibility text`, `snapshotimagealttext`, `snapshotalttext` |
 
 ### Participant Contact Email
 
@@ -75,6 +77,56 @@ leave it blank — an ordinary participant preview never requires one.
   error. The raw cell value is never echoed into the issue message.
 - The browser never supplies or overrides this address at send time; the server resolves it from
   persisted project data at execution time.
+
+### Accessible Poster Content
+
+`Poster full text` and `Accessibility text` are both **required**, because a published project page
+must carry a full text version of its image content plus a text alternative for the poster image.
+
+- `Poster full text` (`posterText`) is the searchable/selectable full textual version of the
+  meaningful content on the poster. Multiline content is preserved exactly; only outer whitespace is
+  trimmed.
+- `Accessibility text` (`accessibilityText`) is a concise descriptive text alternative for the poster
+  image. It describes what the poster shows and is deliberately **not** required to match
+  `posterText`.
+- A missing column, a blank value after trim, or a formula cell with no usable cached result is a
+  blocking `error` for either field, following the same policy as every other required field.
+- Each value is bounded by a transport/storage safety ceiling — 20,000 characters for `posterText`
+  and 2,000 for `accessibilityText` — enforced as `WORKBOOK_VALUE_TOO_LONG`. These are size limits,
+  **not** content-quality rules.
+- Nothing judges whether the prose is complete, accurate, or well written. There is no word count,
+  no keyword check, no comparison against the title, and no OCR or AI. Both values are authored by
+  staff or supplied in the workbook.
+- A legacy `project.json` package may still be staged without either value, but it cannot be
+  submitted for review, approved, or published until staff supply both through the Project Metadata
+  editor in the Admin/CMS.
+
+### Snapshot Image Alt Text
+
+`Snapshot image alt text` (`snapshotAltText`) is the text alternative describing the meaningful
+content of the package's snapshot image. It is **conditionally required**: the snapshot image itself
+stays optional, but a package that includes one must describe it.
+
+- **Package contains `snapshot-1.png`** — the value must be present and non-blank. An absent column,
+  a blank value after trim, or a formula cell with no usable cached result each block the import.
+- **Package contains no `snapshot-1.png`** — the column and value may be absent. Nobody is asked to
+  describe an image that is not there, and the existing "snapshot recommended" warning is unchanged.
+- The value is bounded at 2,000 characters and enforced as `WORKBOOK_VALUE_TOO_LONG`. An oversized
+  value is rejected outright and is **never** silently truncated.
+- Because the workbook parser cannot see which files a package contains, it enforces only what it
+  can evaluate alone (readable cell, bounded length). The conditional presence rule is applied at
+  the package-aware boundary, which reports `METADATA_MISSING_SNAPSHOT_ALT_TEXT` or
+  `METADATA_SNAPSHOT_ALT_TEXT_TOO_LONG`.
+- This value is per media asset, not per project, and is stored on `media_assets.alt_text_public`.
+  The poster image keeps `accessibilityText` as its text alternative; it is never duplicated here.
+- **Nothing derives this value** from the filename, the project title, the poster accessibility
+  text, OCR, or AI. A filename is file information, not a text alternative.
+- A legacy `project.json` package may supply `snapshotAltText`, and an oversized value there is
+  rejected. A legacy package with a snapshot and no alt text may still be staged into private draft
+  media, but it cannot be submitted for review, approved, given a participant preview, or published
+  until staff supply the text in the project media section of the Admin/CMS.
+- Only the single current snapshot image (`snapshot-1.png`) is supported. Arbitrary multi-image
+  galleries and gallery ordering are **not** implemented.
 
 ### Public ID Separation
 
@@ -150,9 +202,22 @@ Unrecognized non-empty values emit a generic `WORKBOOK_UNKNOWN_FEATURED_MEDIA` w
 | `WORKBOOK_INVALID_YEAR` | `error` | Project year is not a valid 4-digit year between 1900 and 2100. |
 | `WORKBOOK_UNUSABLE_FORMULA` | `error` | Formula cell in a required field has no usable cached result. |
 | `WORKBOOK_INVALID_PARTICIPANT_CONTACT_EMAIL` | `error` | Participant contact email is present but is not a valid single email address. |
+| `WORKBOOK_VALUE_TOO_LONG` | `error` | An accessible-content value exceeds its bounded technical ceiling. |
 | `WORKBOOK_UNEXPECTED_SHEET_NAME` | `warning` | Preferred sheet `Project details` was absent; processed fallback sheet. |
 | `WORKBOOK_EXTRA_SHEET` | `warning` | Additional non-empty worksheet detected and ignored. |
 | `WORKBOOK_UNKNOWN_COLUMN` | `warning` | Non-empty header column not recognized in canonical/alias dictionary. |
 | `WORKBOOK_DUPLICATE_TEAM_MEMBER` | `warning` | Duplicate participant name detected and omitted. |
 | `WORKBOOK_UNKNOWN_LAYOUT` | `warning` | Unknown layout value defaulted to `poster_showcase`. |
 | `WORKBOOK_UNKNOWN_FEATURED_MEDIA` | `warning` | Unknown featured media option defaulted to `poster`. |
+
+---
+
+## 10. Admin Excel Reference Dataset Reconciliation
+
+Distinct from `project-details.xlsx` (which is submitted inside each project folder representing package metadata), staff may optionally supply a separate **Admin Reference Dataset** `.xlsx` workbook during browser import.
+
+- **Purpose**: Cross-checks submitted project packages against official administrative records (e.g. School master roster).
+- **Inspection**: Endpoint `POST /api/imports/admin-reference/inspect` inspects sheets, row counts, and headers safely without returning or persisting raw cell data.
+- **Mapping-Driven**: Mappings are user-configured (1–3 composite match key fields, 1–20 comparison fields) and validated server-side (`validateAdminReferenceMapping`).
+- **Rules-First Matching**: Reconciles normalized package values against reference rows. Packages with field mismatches, missing reference rows, or ambiguous/duplicate matches are marked `invalid` and blocked from staging.
+- **TOCTOU & Staging Replay**: The reference workbook SHA-256 fingerprint and canonicalized mapping are bound into the preview fingerprint (`previewFingerprint`) and commitment intent (`adminReference`). Staging re-verifies the uploaded reference workbook and mapping, re-running reconciliation server-side before persisting metadata.

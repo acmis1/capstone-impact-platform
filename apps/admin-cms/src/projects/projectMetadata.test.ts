@@ -8,7 +8,7 @@ const ids = {
 };
 
 function validInput() {
-  return { publicId: '2026-synthetic-project', title: '  Synthetic title  ', summary: '  Synthetic summary  ', background: ' Background ', solution: ' Solution ', year: '2026', programId: ids.program, disciplineIds: [ids.discipline], industryCategoryIds: [ids.category], expectedUpdatedAt: '2026-01-01T00:00:00.000Z' };
+  return { publicId: '2026-synthetic-project', title: '  Synthetic title  ', summary: '  Synthetic summary  ', background: ' Background ', solution: ' Solution ', posterText: ' Poster full text ', accessibilityText: ' Accessibility text ', year: '2026', programId: ids.program, disciplineIds: [ids.discipline], industryCategoryIds: [ids.category], expectedUpdatedAt: '2026-01-01T00:00:00.000Z' };
 }
 
 describe('project metadata contract', () => {
@@ -32,10 +32,30 @@ describe('project metadata contract', () => {
     ['title', { title: '   ' }], ['summary', { summary: '   ' }], ['year', { year: '20x6' }], ['program UUID', { programId: 'not-a-uuid' }],
     ['duplicate discipline', { disciplineIds: [ids.discipline, ids.discipline] }], ['duplicate category', { industryCategoryIds: [ids.category, ids.category] }],
     ['empty disciplines', { disciplineIds: [] }], ['empty categories', { industryCategoryIds: [] }], ['unexpected field', { unexpected: true }],
+    ['blank poster text', { posterText: '   ' }], ['blank accessibility text', { accessibilityText: '\n\t ' }],
   ])('rejects %s', (_name, patch) => expect(projectMetadataInputSchema.safeParse({ ...validInput(), ...patch }).success).toBe(false));
+
+  it('requires both accessible content values and normalizes their outer whitespace', () => {
+    const parsed = projectMetadataInputSchema.parse(validInput());
+    expect(parsed.posterText).toBe('Poster full text');
+    expect(parsed.accessibilityText).toBe('Accessibility text');
+
+    for (const field of ['posterText', 'accessibilityText'] as const) {
+      const omitted = { ...validInput() } as Record<string, unknown>;
+      delete omitted[field];
+      expect(projectMetadataInputSchema.safeParse(omitted).success).toBe(false);
+    }
+  });
+
+  it('preserves multiline accessible content rather than collapsing it', () => {
+    const posterText = 'Aim\nMeasure turbine wake.\n\nMethod\nCFD across six layouts.';
+    const parsed = projectMetadataInputSchema.parse({ ...validInput(), posterText: `  ${posterText}  ` });
+    expect(parsed.posterText).toBe(posterText);
+  });
 
   it.each([
     ['title', PROJECT_METADATA_LIMITS.title], ['summary', PROJECT_METADATA_LIMITS.summary], ['background', PROJECT_METADATA_LIMITS.background], ['solution', PROJECT_METADATA_LIMITS.solution],
+    ['posterText', PROJECT_METADATA_LIMITS.posterText], ['accessibilityText', PROJECT_METADATA_LIMITS.accessibilityText],
   ])('accepts the %s maximum and rejects one additional character', (field, maximum) => {
     const atBoundary = { ...validInput(), [field]: 'x'.repeat(maximum) };
     const overBoundary = { ...validInput(), [field]: 'x'.repeat(maximum + 1) };

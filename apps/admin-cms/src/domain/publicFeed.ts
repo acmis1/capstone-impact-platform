@@ -1,4 +1,4 @@
-import { ExternalLink, LayoutConfig } from './project';
+import { ExternalLink, LayoutConfig, PublicSnapshotMedia } from './project';
 
 /**
  * Public Data Contract representing a verified showcase record.
@@ -25,7 +25,16 @@ export interface PublicFeedRecord {
   posterPdf: string;
   posterText: string;
   accessibilityText: string;
+  /**
+   * Canonical public snapshot URL array. Unchanged and deliberately retained: the existing Duda
+   * showcase consumes this exact shape.
+   */
   snapshots: string[];
+  /**
+   * Additive structured pairing of each `snapshots` URL with its text alternative. Consuming this
+   * in the Duda template is a separate later slice; publishing it here establishes the contract.
+   */
+  snapshotMedia: PublicSnapshotMedia[];
   videoUrl?: string;
   demoUrl?: string;
   repositoryUrl?: string;

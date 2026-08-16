@@ -93,6 +93,25 @@ function hashStringToNumber(str: string): number {
   return Math.abs(hash);
 }
 
+function mapSnapshotMedia(row: Record<string, unknown>): Project['snapshotMedia'] {
+  const snapshots = Array.isArray(row.snapshots) ? (row.snapshots as string[]) : [];
+  const assets = Array.isArray(row.media_assets) ? (row.media_assets as Array<Record<string, unknown>>) : [];
+  if (snapshots.length === 0 || assets.length === 0) return [];
+
+  const altByUrl = new Map<string, string>();
+  for (const asset of assets) {
+    if (asset.asset_type !== 'snapshot_image' || asset.is_public_approved !== true) continue;
+    const url = typeof asset.public_url === 'string' ? asset.public_url : '';
+    const altText = typeof asset.alt_text_public === 'string' ? asset.alt_text_public.trim() : '';
+    if (url === '' || altText === '') continue;
+    altByUrl.set(url, altText);
+  }
+
+  return snapshots
+    .filter((url) => altByUrl.has(url))
+    .map((url) => ({ url, altText: altByUrl.get(url) as string }));
+}
+
 function mapDbRowToProject(row: Record<string, unknown>): Project {
   const publicId = String(row.public_id || row.id || '');
   const numericId = hashStringToNumber(publicId || '1');
@@ -129,6 +148,9 @@ function mapDbRowToProject(row: Record<string, unknown>): Project {
     posterText: String(row.poster_text_public || ''),
     accessibilityText: String(row.accessibility_text_public || ''),
     snapshots: Array.isArray(row.snapshots) ? (row.snapshots as string[]) : [],
+    // Mirrors the authoritative repository mapping: each public snapshot URL is paired with the alt
+    // text stored on the media asset that owns it, matched by URL rather than by array position.
+    snapshotMedia: mapSnapshotMedia(row),
     videoUrl: String(row.video_url || ''),
     demoUrl: String(row.demo_url || ''),
     repositoryUrl: String(row.repository_url || ''),
@@ -611,7 +633,9 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
   console.log('✔ Storage buckets & required local fixture objects verified (exact visibility, limits, MIME, objects).');
 
   // 5. Synthetic project seed & Feed verification
-  const { data: dbProjects, error: projErr } = await adminClient.from('projects').select('*');
+  const { data: dbProjects, error: projErr } = await adminClient
+    .from('projects')
+    .select('*, media_assets(asset_type,public_url,alt_text_public,is_public_approved)');
   if (projErr || !dbProjects || dbProjects.length === 0) {
     console.error('❌ Synthetic project verification failed: No project rows found.');
     return false;

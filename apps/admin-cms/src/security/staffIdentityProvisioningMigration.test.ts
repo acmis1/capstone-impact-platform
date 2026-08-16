@@ -24,7 +24,7 @@ describe('staff identity provisioning migration contract', () => {
   it('is the exact twenty-second migration in the authoritative inventory', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(24);
+    expect(files).toHaveLength(26);
     expect(files[21]).toBe(filename);
   });
 

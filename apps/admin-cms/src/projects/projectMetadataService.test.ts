@@ -3,7 +3,7 @@ import { ProjectMetadataInput, ProjectMetadataView } from './projectMetadata';
 import { ProjectMetadataGateway, SupabaseProjectMetadataGateway, loadProjectMetadataEditorData, resolveUniqueLookupId, saveProjectMetadata } from './projectMetadataService';
 
 const ids = { program: 'a0000000-0000-4000-8000-000000000001', discipline: 'b0000000-0000-4000-8000-000000000001', category: 'c0000000-0000-4000-8000-000000000001' };
-const input: ProjectMetadataInput = { publicId: 'synthetic-project', title: 'Updated title', summary: 'Updated summary', background: 'Updated background', solution: 'Updated solution', year: 2026, programId: ids.program, disciplineIds: [ids.discipline], industryCategoryIds: [ids.category], expectedUpdatedAt: '2026-01-01T00:00:00.000Z' };
+const input: ProjectMetadataInput = { publicId: 'synthetic-project', title: 'Updated title', summary: 'Updated summary', background: 'Updated background', solution: 'Updated solution', posterText: 'Updated poster full text', accessibilityText: 'Updated accessibility text', year: 2026, programId: ids.program, disciplineIds: [ids.discipline], industryCategoryIds: [ids.category], expectedUpdatedAt: '2026-01-01T00:00:00.000Z' };
 const metadata: ProjectMetadataView = { ...input, year: '2026' };
 
 class FakeGateway implements ProjectMetadataGateway {
@@ -91,7 +91,8 @@ describe('project metadata atomic persistence workflow', () => {
     expect(rpc).toHaveBeenCalledWith('update_project_metadata', {
       p_public_id: input.publicId, p_title: input.title, p_summary: input.summary, p_background: input.background, p_solution: input.solution,
       p_year: input.year, p_program_id: input.programId, p_discipline_ids: input.disciplineIds, p_industry_category_ids: input.industryCategoryIds,
-      p_expected_updated_at: input.expectedUpdatedAt, p_admin_id: 'test-admin-user'
+      p_expected_updated_at: input.expectedUpdatedAt, p_admin_id: 'test-admin-user',
+      p_poster_text: input.posterText, p_accessibility_text: input.accessibilityText
     });
   });
   it('uses scalar-name fallback only for an exact unique lookup match', () => {

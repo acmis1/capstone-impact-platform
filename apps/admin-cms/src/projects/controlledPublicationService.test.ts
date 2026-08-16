@@ -20,8 +20,8 @@ const approved = createMockProject({ publicId: 'target', status: 'approved' });
 const otherPublished = createMockProject({ id: 987654, publicId: 'other', status: 'published' });
 
 const mediaSources: PublicationMediaSource[] = [
-  { id: '22222222-2222-4222-8222-222222222222', projectId: 'project', assetType: 'poster_image', fileName: 'poster.png', storageBucket: PRIVATE_BUCKET, storagePath: 'drafts/target/poster_image/poster.png', publicUrl: null, publicStorageBucket: null, publicStoragePath: null, mimeType: 'image/png', fileSizeBytes: PNG.length, isPublicApproved: false },
-  { id: '33333333-3333-4333-8333-333333333333', projectId: 'project', assetType: 'poster_pdf', fileName: 'poster.pdf', storageBucket: PRIVATE_BUCKET, storagePath: 'drafts/target/poster_pdf/poster.pdf', publicUrl: null, publicStorageBucket: null, publicStoragePath: null, mimeType: 'application/pdf', fileSizeBytes: PDF.length, isPublicApproved: false },
+  { id: '22222222-2222-4222-8222-222222222222', projectId: 'project', assetType: 'poster_image', fileName: 'poster.png', storageBucket: PRIVATE_BUCKET, storagePath: 'drafts/target/poster_image/poster.png', publicUrl: null, publicStorageBucket: null, publicStoragePath: null, mimeType: 'image/png', fileSizeBytes: PNG.length, isPublicApproved: false, altTextPublic: null },
+  { id: '33333333-3333-4333-8333-333333333333', projectId: 'project', assetType: 'poster_pdf', fileName: 'poster.pdf', storageBucket: PRIVATE_BUCKET, storagePath: 'drafts/target/poster_pdf/poster.pdf', publicUrl: null, publicStorageBucket: null, publicStoragePath: null, mimeType: 'application/pdf', fileSizeBytes: PDF.length, isPublicApproved: false, altTextPublic: null },
 ];
 const sourceBytesByPath = new Map<string, Buffer>([
   ['drafts/target/poster_image/poster.png', PNG],
@@ -311,7 +311,7 @@ describe('controlled publication coordinator', () => {
   it('rejects recovered execution whose private source bytes no longer match the bound evidence', async () => {
     const recovered = completedAttempt({
       state: 'prepared', publishedSnapshotId: null, publishAuditRecordId: null, leaseExpiresAt: '2000-01-01T00:00:00Z',
-      mediaManifest: [{ mediaAssetId: '22222222-2222-4222-8222-222222222222', assetType: 'poster_image', fileName: 'poster.png', mimeType: 'image/png', fileSizeBytes: PNG.length, sourceBucket: PRIVATE_BUCKET, sourcePath: 'drafts/target/poster_image/poster.png', publicBucket: PUBLIC_ASSETS_BUCKET, publicPath: 'published/target/poster_image/poster.png', publicUrl: `http://127.0.0.1/public/published/target/poster_image/poster.png`, preExisting: false, sourceSha256: 'f'.repeat(64) }],
+      mediaManifest: [{ mediaAssetId: '22222222-2222-4222-8222-222222222222', assetType: 'poster_image', fileName: 'poster.png', mimeType: 'image/png', fileSizeBytes: PNG.length, sourceBucket: PRIVATE_BUCKET, sourcePath: 'drafts/target/poster_image/poster.png', publicBucket: PUBLIC_ASSETS_BUCKET, publicPath: 'published/target/poster_image/poster.png', publicUrl: `http://127.0.0.1/public/published/target/poster_image/poster.png`, preExisting: false, sourceSha256: 'f'.repeat(64), altTextPublic: null }],
     });
     const { deps } = harness({
       getRecoverableAttempt: vi.fn().mockResolvedValue(recovered),

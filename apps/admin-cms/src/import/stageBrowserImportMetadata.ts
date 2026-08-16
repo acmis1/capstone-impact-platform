@@ -1,14 +1,27 @@
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
+import {
+  ACCESSIBLE_CONTENT_LABELS,
+  ACCESSIBLE_CONTENT_LIMITS,
+  getAccessibleContentProblem,
+} from '../domain/accessibleContent';
 import { AuthenticatedAdminContext } from '../auth/authTypes';
-import { BrowserImportCommitIntent } from './browserImportCommitIntentContract';
+import {
+  adminReferenceIntentSchema,
+  BrowserImportCommitIntent,
+  browserImportCommitIntentSchema,
+} from './browserImportCommitIntentContract';
 import {
   BrowserImportMetadataStageErrorCode,
   BrowserImportMetadataStageResponse,
-  computeCanonicalIntentHash,
 } from './browserImportMetadataStageContract';
+import { computeCanonicalIntentHash } from './browserImportMetadataStageServerCore';
 import { BrowserImportServerAnalysis } from './parseBrowserImportPreview';
 import { validateFolderDerivedPublicId } from './publicIdValidation';
 import { normalizeParticipantContactEmail } from '../domain/participantContactEmail';
+import {
+  adminReferenceIntentsSemanticallyEqual,
+  canonicalizeAdminReferenceIntent,
+} from './adminReferenceReconciliationCore';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -19,7 +32,50 @@ export async function stageBrowserImportMetadata(params: {
 }): Promise<BrowserImportMetadataStageResponse> {
   const { authContext, serverAnalysis, intent } = params;
 
-  const intentHash = computeCanonicalIntentHash(intent);
+  if (!browserImportCommitIntentSchema.safeParse(intent).success) {
+    return {
+      success: false,
+      code: 'INVALID_INTENT',
+      error: 'Commit intent is invalid.',
+    };
+  }
+
+  const intentAdminReference = adminReferenceIntentSchema.safeParse(intent.adminReference);
+  const previewAdminReference = adminReferenceIntentSchema.safeParse(
+    serverAnalysis.preview.batch.adminReference
+  );
+  if (!intentAdminReference.success || !previewAdminReference.success) {
+    return {
+      success: false,
+      code: 'INVALID_INTENT',
+      error: 'Admin reference reconciliation evidence is required for staging.',
+    };
+  }
+
+  if (
+    !adminReferenceIntentsSemanticallyEqual(
+      intentAdminReference.data,
+      previewAdminReference.data
+    )
+  ) {
+    return {
+      success: false,
+      code: 'PREVIEW_FINGERPRINT_MISMATCH',
+      error: 'Admin reference evidence does not match the authoritative preview.',
+    };
+  }
+
+  if (
+    serverAnalysis.preview.batch.batchIssues.some(
+      (issue) => issue.severity === 'error' && issue.code.startsWith('ADMIN_REFERENCE_')
+    )
+  ) {
+    return {
+      success: false,
+      code: 'INVALID_SELECTION',
+      error: 'The Admin reference dataset is invalid for staging.',
+    };
+  }
 
   const selectedPathsSet = new Set(intent.selectedPackagePaths);
   if (selectedPathsSet.size !== intent.selectedPackagePaths.length) {
@@ -65,6 +121,14 @@ export async function stageBrowserImportMetadata(params: {
         success: false,
         code: 'INVALID_SELECTION',
         error: 'Invalid packages cannot be staged.',
+      };
+    }
+
+    if (!pkg.reconciliation || pkg.reconciliation.status !== 'RECONCILED') {
+      return {
+        success: false,
+        code: 'INVALID_SELECTION',
+        error: 'Selected packages must be reconciled against the Admin reference dataset.',
       };
     }
 
@@ -130,7 +194,31 @@ export async function stageBrowserImportMetadata(params: {
     if (!m.layoutConfig || typeof m.layoutConfig !== 'object' || Array.isArray(m.layoutConfig)) {
       return { success: false, code: 'INVALID_SELECTION', error: 'Layout config must be an object.' };
     }
+
+    // Accessible poster content bounds. The standard XLSX parser already rejects oversized values,
+    // but the legacy project.json path is deliberately permissive and would otherwise persist an
+    // unbounded string straight into the project row, the participant-preview snapshot and the
+    // compiled public feed. Absence stays permitted here — a legacy package may still be staged and
+    // is blocked later by the review/approval/publication gates, which is the staff correction
+    // path. Only a value that is present and over the ceiling is rejected, and it is rejected
+    // before intent hashing, before the admin client is created and before any RPC call, so an
+    // oversized package causes zero persistence attempt.
+    for (const field of ['posterText', 'accessibilityText'] as const) {
+      if (getAccessibleContentProblem(m[field], field, { required: false }) === 'TOO_LONG') {
+        return {
+          success: false,
+          code: 'INVALID_SELECTION',
+          error: `${ACCESSIBLE_CONTENT_LABELS[field]} exceeds the ${ACCESSIBLE_CONTENT_LIMITS[field].toLocaleString('en-US')} character safety limit.`,
+        };
+      }
+    }
   }
+
+  const canonicalIntent: BrowserImportCommitIntent = {
+    ...intent,
+    adminReference: canonicalizeAdminReferenceIntent(intentAdminReference.data),
+  };
+  const intentHash = computeCanonicalIntentHash(canonicalIntent);
 
   // Format packages payload for RPC with zero defaults or fallbacks
   const payloadPackages = selectedPackages.map((pkg) => {
@@ -186,7 +274,7 @@ export async function stageBrowserImportMetadata(params: {
   const { data, error } = await supabase.rpc('stage_browser_import_metadata', {
     p_intent_hash: intentHash,
     p_preview_fingerprint: intent.previewFingerprint,
-    p_canonical_intent: intent,
+    p_canonical_intent: canonicalIntent,
     p_mode: serverAnalysis.preview.batch.mode,
     p_source_folder: intent.selectedRootName,
     p_imported_by_id: authContext.adminUserId,

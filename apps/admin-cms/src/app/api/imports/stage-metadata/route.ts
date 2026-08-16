@@ -18,6 +18,9 @@ import {
 import { prepareBrowserImportCommitIntent } from '../../../../import/prepareBrowserImportCommitIntent';
 import { stageBrowserImportMetadata } from '../../../../import/stageBrowserImportMetadata';
 import { BrowserImportMetadataStageErrorCode } from '../../../../import/browserImportMetadataStageContract';
+import {
+  resolveServerAdminReferenceAnalysisOptions,
+} from '../../../../import/adminReferenceReconciliation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -151,8 +154,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const pendingFileReads: Array<{ key: string; file: File; expectedBytes: number }> = [];
     let actualMetadataBytes = 0;
 
+    let adminReferenceFile: File | null = null;
+    let adminReferenceMappingJsonStr: string | null = null;
+
     for (const [key, value] of formData.entries()) {
       if (key === 'manifest' || key === 'intent') continue;
+      if (key === 'referenceFile') {
+        if (adminReferenceFile !== null) return stageError('DUPLICATE_UPLOAD_FIELD', 400);
+        if (!(value instanceof File)) return stageError('UNEXPECTED_UPLOAD_FIELD', 400);
+        adminReferenceFile = value as File;
+        continue;
+      }
+      if (key === 'adminReferenceMapping') {
+        if (adminReferenceMappingJsonStr !== null) return stageError('DUPLICATE_UPLOAD_FIELD', 400);
+        if (typeof value !== 'string') return stageError('UNEXPECTED_UPLOAD_FIELD', 400);
+        adminReferenceMappingJsonStr = value;
+        continue;
+      }
 
       if (seenFormKeys.has(key)) return stageError('DUPLICATE_UPLOAD_FIELD', 400);
       seenFormKeys.add(key);
@@ -198,8 +216,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       uploadedMetadataFiles.set(key, buf);
     }
 
+    const adminRefResolution = await resolveServerAdminReferenceAnalysisOptions({
+      adminReferenceFile,
+      adminReferenceMappingJsonStr,
+      submittedAdminReferenceIntent: submittedIntent.adminReference,
+    });
+    if (!adminRefResolution.success) {
+      return stageError(adminRefResolution.code, 400);
+    }
+    const { adminReferenceOptions } = adminRefResolution;
+
     // Step 8: Re-run authoritative server parsing and preview generation
-    const serverAnalysis = await analyzeBrowserImportServer(preflight, uploadedMetadataFiles);
+    const serverAnalysis = await analyzeBrowserImportServer(preflight, uploadedMetadataFiles, adminReferenceOptions);
 
     // Step 9: Re-run server-side commit intent planning to get canonical server intent
     const serverPlannerResult = prepareBrowserImportCommitIntent({
@@ -208,6 +236,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       selectedPackagePaths: submittedIntent.selectedPackagePaths,
       acknowledgedWarningPackagePaths: submittedIntent.acknowledgedWarningPackagePaths,
       expectedPreviewFingerprint: submittedIntent.previewFingerprint,
+      adminReference: submittedIntent.adminReference,
     });
 
     if (!serverPlannerResult.success) {

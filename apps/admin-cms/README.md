@@ -23,13 +23,13 @@ It includes a project metadata editor backed by one atomic, service-role-only da
 | Reviewer/editor roles | Yes | Permission definitions and helper tests | Permission-matrix UAT pending |
 | Protected Admin routes | Yes | Auth guard and route behavior covered by source/tests | Authenticated browser and screen-reader testing pending |
 | Project dashboard and server-side index | Yes | Query helpers and repository behavior covered by tests | Manual responsive QA remains pending |
-| Import workflow | Foundations | Import validation and batch views implemented | Browser intake UX and spreadsheet upload are not complete |
+| Import workflow | Yes | Browser import preview, metadata/media staging, and mapping-driven Admin Excel reference reconciliation foundation verified | Server-side reconciliation and replay verified; multi-batch analytics pending |
 | Review transitions | Yes | Workflow tests, static contract tests, and atomic RPC performReviewAction route implemented | Full reviewer/editor UAT pending |
 | Project metadata editing | Yes | Editor route/UI and one atomic metadata RPC are implemented locally | Hosted deployment and broader staff acceptance remain separate |
 | Media validation/storage | Foundations | Offline media validation tests; private-to-public storage functions exist | End-to-end staging and production verification pending |
 | Public-eligible feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled public cutover pending |
 | Duda integration | Design boundary | Stable-feed consumer is documented | Live Duda connection remains isolated |
-| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (24 timestamped migrations; migrations 0007 through 0024 repository/local-only) | Full production RLS verification pending |
+| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (26 timestamped migrations; migrations 0007 through 0026 repository/local-only) | Full production RLS verification pending |
 | Automated testing | Yes | Vitest offline suite and onboarding precheck | No hosted CI evidence is asserted here |
 | Production deployment | No | Not production-verified | Hardening and controlled cutover pending |
 
@@ -158,21 +158,23 @@ Read-only staging checks require validated staging runtime identity (`CAPSTONE_R
 | Staging media check | `npm run check:admin-media` | `npm run check:staging-media` | Authorized read-only database/storage check |
 | Auth check | `npm run check:admin-auth` | `npm run check:staging-auth` | Authorized read-only database check |
 | Import-batch check | `npm run check:admin-imports` | `npm run check:import-batches` | Authorized read-only database check |
+| Deployment readiness check | `npm run check:admin-deployment-readiness` | `npm run check:deployment-readiness` | Authorized GET/HEAD expected-object check; migration history and exact Gate 3/4 schema evidence remain manual |
 
 ### State-changing staging operations
 
 > [!WARNING]
 > DO NOT RUN UNTIL THE PROJECT OWNER APPROVES THE SPECIFIC OPERATION.
-> State-changing operations require explicit operator authorization, target environment identity validation (`CAPSTONE_RUNTIME_ENV=staging`), and double-acknowledgment flags (`--apply` and `--confirm-staging=capstone-admin-cms-staging-2026`). Missing acknowledgment flags cause refusal before Supabase admin-client creation.
+> State-changing operations require explicit operator authorization, target environment identity validation (`CAPSTONE_RUNTIME_ENV=staging`), target hostname validation (`CAPSTONE_EXPECTED_SUPABASE_HOST`), staging mutation confirmation configuration (`CAPSTONE_STAGING_MUTATION_CONFIRMATION=<label>`), and double-acknowledgment flags (`--apply` and `--confirm-staging=<label>`). Missing or mismatched acknowledgment flags cause refusal before Supabase admin-client creation.
+> The confirmation label (e.g. `capstone-admin-cms-staging-v2-2026`) is a non-secret human acknowledgment label configured per environment without code changes.
 > Administrator linking additionally requires process environment variable `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN`.
 
 | Purpose | Complete Root Command | App Command | Classification |
 | --- | --- | --- | --- |
-| Seed fake projects | `npm run seed:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run seed:staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; synthetic data only |
-| Seed/promote fake media | `npm run seed:admin-media -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run seed:staging-media -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; synthetic data only |
-| Import local package | `npm run import:admin-package -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run import:staging-package -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; authorized fixture operation |
-| Publish staging feed | `npm run publish:admin-feed -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run publish:staging-feed -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; authorized staging operation |
-| Link initial administrator | `npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | `npm run link:staging-admin -- --apply --confirm-staging=capstone-admin-cms-staging-2026` | State-changing; requires `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN` |
+| Seed fake projects | `npm run seed:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | `npm run seed:staging -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | State-changing; synthetic data only |
+| Seed/promote fake media | `npm run seed:admin-media -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | `npm run seed:staging-media -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | State-changing; synthetic data only |
+| Import local package | `npm run import:admin-package -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | `npm run import:staging-package -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | State-changing; authorized fixture operation |
+| Publish staging feed | `npm run publish:admin-feed -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | `npm run publish:staging-feed -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | State-changing; authorized staging operation |
+| Link initial administrator | `npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | `npm run link:staging-admin -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026` | State-changing; requires `CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN` |
 
 Do not blindly reinitialize an already-applied environment. Use the [Supabase migration guide](../../infra/supabase/manual-apply-guide.md) for a genuinely new authorized isolated environment and never target `Prototype/` or a recovery environment.
 
@@ -193,6 +195,8 @@ The migration set is manually governed for authorized isolated environments. It 
 - [`20260810120000_atomic_browser_import_media_stage.sql`](../../infra/supabase/migrations/20260810120000_atomic_browser_import_media_stage.sql) establishes `media_assets` idempotency uniqueness, the `browser_import_media_commits` ledger, and the atomic, service-role-only `public.finalize_browser_import_media_stage` transaction that registers private draft media and completes an import batch. *(Repository/local-only; not applied to hosted staging.)*
 - [`20260813002154_project_metadata_audit_history.sql`](../../infra/supabase/migrations/20260813002154_project_metadata_audit_history.sql) introduces the comprehensive project metadata audit trail, recording granular diffs, actor identity, and change intent directly into `approval_records` on every atomic metadata save. *(Repository/local-only; not applied to hosted staging.)*
 - [`20260813120000_staff_identity_provisioning.sql`](../../infra/supabase/migrations/20260813120000_staff_identity_provisioning.sql) establishes the durable staff provisioning state machine and a two-minute, token-fenced execution lease for the service-role-only functions that converge Supabase Auth with PostgreSQL. Only the current execution owner may invite, bind, finalize, fail or begin compensation; expired work is recovered by rotating hashed ownership credentials. *(Repository/local-only; not applied to hosted staging.)*
+- [`20260814090000_accessible_full_text_gate.sql`](../../infra/supabase/migrations/20260814090000_accessible_full_text_gate.sql) forward-redefines `public.update_project_metadata` (gaining bounded `p_poster_text` / `p_accessibility_text`, and dropping the obsolete signature), `public.submit_import_projects_for_review`, `public.perform_project_review_action` and `public.get_project_publication_readiness` so a blank poster full text or accessibility text blocks review submission, approval and publication readiness. It reuses the existing `projects.poster_text_public` and `projects.accessibility_text_public` columns and adds no schema. *(Repository/local-only; not applied to hosted staging.)*
+- [`20260814140000_snapshot_image_alt_text.sql`](../../infra/supabase/migrations/20260814140000_snapshot_image_alt_text.sql) establishes authoritative staff-authored alt text (`media_assets.alt_text_public`) for snapshot images, establishes `public.update_snapshot_image_alt_text`, and enforces snapshot alt text across media staging, review submission, approval, participant preview generation, and publication readiness. *(Repository/local-only; not applied to hosted staging.)*
 
 See the [Supabase migration overview](../../infra/supabase/README.md), [manual apply guide](../../infra/supabase/manual-apply-guide.md), [staging reconciliation runbook](../../infra/supabase/staging-reconciliation-runbook.md) and [staging authentication verification runbook](../../infra/supabase/staging-auth-verification.md) before authorized operations.
 
@@ -290,6 +294,31 @@ The domain represents `draft`, `submitted`, `in_review`, `changes_requested`, `a
 
 The review action mutation invokes PostgreSQL RPC `public.perform_project_review_action`, which row-locks the project (`FOR UPDATE`), validates workflow transition targets and RBAC role permissions, updates project status and side effects, and inserts an audit row into `approval_records` in a single atomic transaction.
 
+### Accessible poster content
+
+A published project page must carry a full text version of its image content plus a text alternative for the poster image. Two existing project fields hold that content, and both are required end to end:
+
+- `posterText` — the searchable/selectable full textual version of the meaningful poster content.
+- `accessibilityText` — a concise descriptive text alternative for the poster image. It is deliberately not required to match `posterText`.
+
+| Boundary | Behaviour when either value is blank |
+| --- | --- |
+| `project-details.xlsx` import | Blocking workbook error on a missing column, a blank value after trim, an unusable formula cell, or a value beyond its bounded ceiling |
+| Project Metadata editor | Both fields are editable multiline inputs; a blank value is rejected, so a save always moves the project toward compliance |
+| Submit for review | Blocked in the application readiness derivation and again by `submit_import_projects_for_review` (`MISSING_POSTER_TEXT` / `MISSING_ACCESSIBILITY_TEXT`), with zero status or audit mutation |
+| Approve | Blocked by `perform_project_review_action` (`ACCESSIBILITY_CONTENT_REQUIRED`), with zero status mutation and zero approval audit. `request_changes` and `archive` stay available |
+| Participant preview | Both values render before the confirmation controls, so participants confirm the exact public-facing accessible content |
+| Publication readiness | Blocked by `get_project_publication_readiness` independently of any stored preview evidence |
+| Public feed validation | The record is invalid, not merely flagged |
+
+The authoritative rule is presence after trim plus a bounded technical ceiling (20,000 characters for `posterText`, 2,000 for `accessibilityText`, centralized in `src/domain/accessibleContent.ts`). Those are transport/storage safety limits, not content-quality rules — nothing scores the prose by word count, keywords, or similarity to any other field.
+
+**No OCR and no AI.** Both values are staff-authored or imported from the workbook; nothing in this application derives, transcribes, or generates them. OCR remains optional future assistance subject to institutional privacy and cost approval, and could only ever populate a draft suggestion for staff to accept — never publication authority.
+
+A legacy `project.json` package may still be staged without either value, but it cannot progress to review, approval, or publication until staff supply both through the metadata editor. Values are never silently synthesized.
+
+This supplies required accessibility content. It is **not** a WCAG conformance certification, a professional accessibility audit, or final Duda accessibility acceptance. Snapshot image alt text is enforced via `media_assets.alt_text_public` (Migration 0026), while broader multi-image gallery support and formal human accessibility UAT remain future scope.
+
 ## Project dashboard and index
 
 The dashboard uses count-only metrics for total, public-eligible, in-review and archived records. Its project index parses bounded search input, supports server-side status/year/program/discipline filters, whitelisted sorting, exact-count pagination with page sizes of 10, 25 or 50, and deterministic `public_id` secondary ordering. The UI has separate loading, empty and failure states and maintains a client-safe row boundary for interactive index controls.
@@ -349,6 +378,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - Participant confirmation, integrated preview, publishing history and rollback UI are pending.
 - Live Duda cutover is pending.
 - Authenticated browser, responsive, accessibility and screen-reader validation remain incomplete.
+- Poster full text, poster accessibility text, and snapshot image alt text are required across core workflows. Formal WCAG conformance evaluation, multi-image gallery alt text, final Duda accessibility acceptance and human accessibility UAT remain pending.
 - Production deployment hardening and readiness certification remain pending.
 
 ## Troubleshooting

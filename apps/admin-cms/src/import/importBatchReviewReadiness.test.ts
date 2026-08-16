@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeProjectReviewReadiness, ImportBatchReviewProjectInput } from './importBatchReviewReadiness';
+import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
 
 const baseInput: ImportBatchReviewProjectInput = {
   publicId: 'synthetic-1',
@@ -11,6 +12,7 @@ const baseInput: ImportBatchReviewProjectInput = {
   discipline: 'Discipline',
   groupName: 'Group',
   teamMembers: ['Member A'],
+  posterText: 'Full textual version of the poster content.',
   accessibilityText: 'Accessible description',
   snapshots: ['snap.png'],
   validationErrors: [],
@@ -20,8 +22,8 @@ const baseInput: ImportBatchReviewProjectInput = {
   disciplineMappingCount: 1,
   industryMappingCount: 1,
   mediaAssets: [
-    { assetType: 'poster_image', isPublicApproved: false, publicUrl: null },
-    { assetType: 'poster_pdf', isPublicApproved: false, publicUrl: null },
+    { assetType: 'poster_image', isPublicApproved: false, publicUrl: null, altText: null },
+    { assetType: 'poster_pdf', isPublicApproved: false, publicUrl: null, altText: null },
   ],
 };
 
@@ -83,9 +85,76 @@ describe('computeProjectReviewReadiness — validation_flags', () => {
     expect(result.warnings).toContain('New flag warning');
   });
 
-  it('preserves existing accessibility/snapshot warning behavior', () => {
-    const result = computeProjectReviewReadiness({ ...baseInput, accessibilityText: '', snapshots: [] });
-    expect(result.warnings).toContain('Accessibility text is missing.');
+  it('preserves the existing snapshot warning behavior', () => {
+    const result = computeProjectReviewReadiness({ ...baseInput, snapshots: [] });
     expect(result.warnings).toContain('Snapshot gallery is empty.');
+    expect(result.ready).toBe(true);
+  });
+
+  it('blocks submission when poster full text is missing', () => {
+    const result = computeProjectReviewReadiness({ ...baseInput, posterText: null });
+    expect(result.ready).toBe(false);
+    expect(result.blockingReasons).toContain('Poster full text is missing.');
+    expect(result.warnings).not.toContain('Poster full text is missing.');
+  });
+
+  it('blocks submission when accessibility text is missing', () => {
+    const result = computeProjectReviewReadiness({ ...baseInput, accessibilityText: null });
+    expect(result.ready).toBe(false);
+    expect(result.blockingReasons).toContain('Accessibility text is missing.');
+    expect(result.warnings).not.toContain('Accessibility text is missing.');
+  });
+
+  it('treats whitespace-only accessible content as absent', () => {
+    const result = computeProjectReviewReadiness({ ...baseInput, posterText: '   ', accessibilityText: '\n\t' });
+    expect(result.ready).toBe(false);
+    expect(result.blockingReasons).toContain('Poster full text is missing.');
+    expect(result.blockingReasons).toContain('Accessibility text is missing.');
+  });
+
+  it('is ready when both accessible content values are present', () => {
+    const result = computeProjectReviewReadiness(baseInput);
+    expect(result.ready).toBe(true);
+    expect(result.blockingReasons).toEqual([]);
+  });
+
+  it('blocks submission when poster full text exceeds its safety limit', () => {
+    const result = computeProjectReviewReadiness({
+      ...baseInput,
+      posterText: 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText + 1),
+    });
+    expect(result.ready).toBe(false);
+    expect(result.blockingReasons).toContain('Poster full text exceeds the 20,000 character safety limit.');
+    // Oversized is never downgraded to an acknowledgeable warning.
+    expect(result.warnings).not.toContain('Poster full text exceeds the 20,000 character safety limit.');
+  });
+
+  it('blocks submission when accessibility text exceeds its safety limit', () => {
+    const result = computeProjectReviewReadiness({
+      ...baseInput,
+      accessibilityText: 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText + 1),
+    });
+    expect(result.ready).toBe(false);
+    expect(result.blockingReasons).toContain('Accessibility text exceeds the 2,000 character safety limit.');
+  });
+
+  it('accepts accessible content exactly at each ceiling', () => {
+    const result = computeProjectReviewReadiness({
+      ...baseInput,
+      posterText: 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText),
+      accessibilityText: 'y'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText),
+    });
+    expect(result.ready).toBe(true);
+    expect(result.blockingReasons).toEqual([]);
+  });
+
+  it('reports absence and oversize as distinct blockers rather than one generic reason', () => {
+    const result = computeProjectReviewReadiness({
+      ...baseInput,
+      posterText: null,
+      accessibilityText: 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText + 1),
+    });
+    expect(result.blockingReasons).toContain('Poster full text is missing.');
+    expect(result.blockingReasons).toContain('Accessibility text exceeds the 2,000 character safety limit.');
   });
 });

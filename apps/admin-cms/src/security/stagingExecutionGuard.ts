@@ -13,7 +13,13 @@ export interface GuardOptions {
   customEnv?: Record<string, string | undefined>;
 }
 
-export const REQUIRED_MUTATION_CONFIRMATION = 'capstone-admin-cms-staging-2026';
+export const STAGING_MUTATION_CONFIRMATION_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+
+export function isValidMutationConfirmationLabel(label: string): boolean {
+  if (!label || typeof label !== 'string') return false;
+  if (label.length < 1 || label.length > 64) return false;
+  return STAGING_MUTATION_CONFIRMATION_PATTERN.test(label);
+}
 
 function isLoopbackHost(hostname: string): boolean {
   const norm = hostname.toLowerCase().trim();
@@ -23,7 +29,8 @@ function isLoopbackHost(hostname: string): boolean {
 /**
  * Shared execution guard for shared-staging administrative commands.
  * Enforces strict environment identity, hostname matching, loopback rejection,
- * and double-acknowledgement flags for mutating operations.
+ * environment-configured mutation confirmation label validation, and double-acknowledgement
+ * CLI flags for mutating operations.
  */
 export function validateStagingGuard(options: GuardOptions): GuardAuthorizationResult {
   const { operationId, args = process.argv.slice(2), customEnv = process.env } = options;
@@ -87,18 +94,32 @@ export function validateStagingGuard(options: GuardOptions): GuardAuthorizationR
     };
   }
 
-  // Mutating operation check
+  // 8. Mutating operation: validate environment mutation confirmation label
+  const configuredConfirmation = customEnv.CAPSTONE_STAGING_MUTATION_CONFIRMATION;
+  if (!configuredConfirmation || configuredConfirmation.trim() === '') {
+    throw new Error(
+      'Staging Execution Refused: Staging mutation confirmation environment variable (CAPSTONE_STAGING_MUTATION_CONFIRMATION) is not configured.'
+    );
+  }
+
+  if (!isValidMutationConfirmationLabel(configuredConfirmation)) {
+    throw new Error(
+      'Staging Execution Refused: Staging mutation confirmation environment variable (CAPSTONE_STAGING_MUTATION_CONFIRMATION) format is invalid.'
+    );
+  }
+
+  // 9. Mutating operation: check CLI acknowledgment flags
   const hasApplyFlag = args.includes('--apply');
   const confirmArg = args.find((a) => a.startsWith('--confirm-staging='));
-  const confirmValue = confirmArg ? confirmArg.split('=')[1] : null;
-  const hasValidConfirm = confirmValue === REQUIRED_MUTATION_CONFIRMATION;
+  const confirmValue = confirmArg ? confirmArg.slice('--confirm-staging='.length) : null;
+  const hasValidConfirm = confirmValue === configuredConfirmation;
 
   if (!hasApplyFlag || !hasValidConfirm) {
     return {
       isAuthorized: false,
       isMutating: true,
       operation,
-      dryRunReason: `Dry-run execution: Missing required mutation acknowledgement flags (--apply and --confirm-staging=${REQUIRED_MUTATION_CONFIRMATION}).`,
+      dryRunReason: `Dry-run execution: Missing required mutation acknowledgement flags (--apply and --confirm-staging=${configuredConfirmation}).`,
     };
   }
 

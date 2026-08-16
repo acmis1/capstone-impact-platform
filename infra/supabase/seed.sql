@@ -256,4 +256,30 @@ INSERT INTO public.media_assets (id, project_id, asset_type, file_name, storage_
   )
 ON CONFLICT (id) DO NOTHING;
 
+-- 5b. Snapshot media for the published synthetic project.
+--
+-- The published project's projects.snapshots array already advertised a public snapshot URL with no
+-- backing media_assets row, which is not a state controlled publication can produce: it writes the
+-- projects.snapshots array and the corresponding media_assets public columns in one transaction.
+-- This row makes the seed represent that real shape, and carries the staff-authored text
+-- alternative the public feed now pairs with the URL.
+--
+-- Poster rows deliberately keep a NULL alt_text_public: the poster's text alternative is the
+-- project-level accessibility_text_public and is never duplicated onto the media asset.
+INSERT INTO public.media_assets (id, project_id, asset_type, file_name, storage_bucket, storage_path, public_url, mime_type, file_size_bytes, is_public_approved, alt_text_public) VALUES
+  (
+    'f0000000-0000-0000-0000-000000000003',
+    'e0000000-0000-0000-0000-000000000001',
+    'snapshot_image',
+    'snapshot1.png',
+    'project-public-assets',
+    '2026/traffic-engine/snapshot1.png',
+    'http://127.0.0.1:54321/storage/v1/object/public/project-public-assets/2026/traffic-engine/snapshot1.png',
+    'image/png',
+    524288,
+    true,
+    'Synthetic simulation dashboard comparing queue lengths at a four-way intersection before and after adaptive signal timing.'
+  )
+ON CONFLICT (id) DO NOTHING;
+
 COMMIT;

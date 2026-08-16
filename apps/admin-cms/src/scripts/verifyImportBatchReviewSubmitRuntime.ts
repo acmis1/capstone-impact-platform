@@ -122,6 +122,11 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
           discipline: lookups.disciplineName,
           group_name: `Group ${params.suffix}`,
           team_members: ['Synthetic Member A', 'Synthetic Member B'],
+          // Review submission and approval both require accessible poster content. This verifier
+          // exercises batch submission atomicity/idempotency, so its fixture is compliant; the
+          // dedicated accessibility runtime verifier owns the missing-content scenarios.
+          poster_text_public: 'Synthetic runtime poster full text.',
+          accessibility_text_public: 'Synthetic runtime accessibility text.',
           status: params.status,
           import_batch_id: params.batchId,
           validation_errors: params.validationErrors || [],
@@ -196,7 +201,7 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
       .from('projects')
       .select(
         `id, public_id, title, summary, status, program_id, program_name, study_program, discipline,
-         group_name, team_members, accessibility_text_public, snapshots, validation_errors,
+         group_name, team_members, poster_text_public, accessibility_text_public, snapshots, validation_errors,
          validation_warnings,
          project_disciplines(discipline_id), project_industry_categories(industry_category_id),
          media_assets(asset_type, is_public_approved, public_url),
@@ -218,6 +223,7 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
         discipline: row.discipline as string | null,
         groupName: row.group_name as string | null,
         teamMembers: row.team_members as string[] | null,
+        posterText: row.poster_text_public as string | null,
         accessibilityText: row.accessibility_text_public as string | null,
         snapshots: row.snapshots as string[] | null,
         validationErrors: row.validation_errors as string[] | null,
@@ -234,6 +240,7 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
           assetType: a.asset_type as string,
           isPublicApproved: a.is_public_approved as boolean | null,
           publicUrl: a.public_url as string | null,
+          altText: (a.alt_text_public as string | null) ?? null,
         })),
       });
     };

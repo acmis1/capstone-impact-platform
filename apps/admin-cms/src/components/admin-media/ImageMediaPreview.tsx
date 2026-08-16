@@ -34,9 +34,11 @@ export function ImageMediaPreview({
     );
   }
 
-  const altText =
-    media.altText?.trim() ||
-    `Preview of ${media.fileName}`;
+  // The authoritative saved text alternative, or nothing at all. A filename-derived string was
+  // previously substituted here, which made an undescribed image look described in the Admin view.
+  // When no alt text is stored the image is marked decorative for this internal preview and the
+  // absence is stated explicitly below, so staff can see there is something to fix.
+  const savedAltText = media.altText?.trim() ?? '';
 
   return (
     <div>
@@ -53,7 +55,7 @@ export function ImageMediaPreview({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
         src={media.url}
-        alt={altText}
+        alt={savedAltText}
         onLoad={() => {
             setIsLoading(false);
         }}
@@ -64,6 +66,10 @@ export function ImageMediaPreview({
           style={{ display: 'block', maxWidth: '100%', height: 'auto', maxHeight: '32rem', objectFit: 'contain' }}
         />
     </>
+    )}
+
+    {savedAltText === '' && media.assetType === 'snapshot_image' && (
+      <p role="status">Snapshot alt text missing.</p>
     )}
 
     <MediaFileInfo media={media} />

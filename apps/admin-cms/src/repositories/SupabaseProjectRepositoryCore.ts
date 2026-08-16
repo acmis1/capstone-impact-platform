@@ -13,6 +13,14 @@ import {
   ReviewActionExecutionErrorCode,
 } from './ProjectRepository';
 
+/**
+ * Project row plus the related rows the domain mapping needs. The snapshot media join supplies the
+ * text alternative for each public snapshot URL; only public columns are selected, so no private
+ * bucket or draft path is ever read into a project the feed is compiled from.
+ */
+const PROJECT_WITH_RELATIONS_SELECT =
+  '*, project_disciplines(disciplines(name)), media_assets(asset_type,public_url,alt_text_public,is_public_approved)';
+
 /** Maximum number of lightweight filter-option rows fetched per database round-trip. */
 const PROJECT_FILTER_OPTION_CHUNK_SIZE = 500;
 /** Safety limit to prevent an infinite pagination loop for filter options. */
@@ -66,6 +74,45 @@ export interface DatabaseProjectRow {
       name?: string;
     };
   }>;
+  /**
+   * Joined snapshot media, present only on the queries that request it. Publication writes
+   * `projects.snapshots` and the corresponding `media_assets` public columns in one transaction, so
+   * these rows are the authoritative source of each public snapshot URL's text alternative.
+   */
+  media_assets?: Array<{
+    asset_type?: string;
+    public_url?: string | null;
+    alt_text_public?: string | null;
+    is_public_approved?: boolean | null;
+  }>;
+}
+
+/**
+ * Pairs each public snapshot URL on the project row with the alt text stored on the media asset
+ * that owns it, matching on the public URL itself rather than on array position.
+ *
+ * Only public, approved snapshot rows can contribute, so nothing private is ever surfaced. A URL
+ * with no matching media row, or a matching row with no alt text, is deliberately left out rather
+ * than emitted with a fabricated description — the feed validator then reports that snapshot as
+ * published without a text alternative instead of the record passing silently.
+ */
+function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
+  const snapshots = row.snapshots || [];
+  if (snapshots.length === 0 || !Array.isArray(row.media_assets)) return [];
+
+  const altByUrl = new Map<string, string>();
+  for (const asset of row.media_assets) {
+    if (asset.asset_type !== 'snapshot_image') continue;
+    if (asset.is_public_approved !== true) continue;
+    const url = typeof asset.public_url === 'string' ? asset.public_url : '';
+    const altText = typeof asset.alt_text_public === 'string' ? asset.alt_text_public.trim() : '';
+    if (url === '' || altText === '') continue;
+    altByUrl.set(url, altText);
+  }
+
+  return snapshots
+    .filter((url) => altByUrl.has(url))
+    .map((url) => ({ url, altText: altByUrl.get(url) as string }));
 }
 
 export class SupabaseProjectRepositoryCore implements ProjectRepository {
@@ -100,6 +147,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       posterText: row.poster_text_public || '',
       accessibilityText: row.accessibility_text_public || '',
       snapshots: row.snapshots || [],
+      snapshotMedia: mapSnapshotMedia(row),
       videoUrl: row.video_url || '',
       demoUrl: row.demo_url || '',
       repositoryUrl: row.repository_url || '',
@@ -179,7 +227,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
   async listProjects(): Promise<Project[]> {
     const { data, error } = await this.supabase
       .from('projects')
-      .select('*, project_disciplines(disciplines(name))')
+      .select(PROJECT_WITH_RELATIONS_SELECT)
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
 
@@ -193,7 +241,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
   private buildFilteredQuery(query: ProjectListQuery, selectOpts?: { count?: 'exact' }) {
     let dbQuery = this.supabase
       .from('projects')
-      .select('*, project_disciplines(disciplines(name))', selectOpts)
+      .select(PROJECT_WITH_RELATIONS_SELECT, selectOpts)
       .is('deleted_at', null);
 
     // Apply search
@@ -399,7 +447,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
   async getProjectByPublicId(publicId: string): Promise<Project | null> {
     const { data, error } = await this.supabase
       .from('projects')
-      .select('*, project_disciplines(disciplines(name))')
+      .select(PROJECT_WITH_RELATIONS_SELECT)
       .eq('public_id', publicId)
       .is('deleted_at', null)
       .maybeSingle();
@@ -418,7 +466,7 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     const { data, error } = await this.supabase
       .from('projects')
       .insert(dbRow)
-      .select('*, project_disciplines(disciplines(name))')
+      .select(PROJECT_WITH_RELATIONS_SELECT)
       .single();
 
     if (error) {
@@ -479,7 +527,15 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
     }
 
     const res = data as Record<string, unknown>;
-    if (res.resultCode === 'CORRECTION_RESOLUTION_REQUIRED' || res.resultCode === 'AMBIGUOUS_ACTIVE_PREVIEW' || res.resultCode === 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED') {
+    if (
+      res.resultCode === 'CORRECTION_RESOLUTION_REQUIRED' ||
+      res.resultCode === 'AMBIGUOUS_ACTIVE_PREVIEW' ||
+      res.resultCode === 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED' ||
+      res.resultCode === 'ACCESSIBILITY_CONTENT_REQUIRED' ||
+      res.resultCode === 'ACCESSIBILITY_CONTENT_INVALID' ||
+      res.resultCode === 'MEDIA_ACCESSIBILITY_REQUIRED' ||
+      res.resultCode === 'MEDIA_ACCESSIBILITY_INVALID'
+    ) {
       throw new ReviewActionExecutionError(res.resultCode);
     }
     const resPublicId = res.publicId;

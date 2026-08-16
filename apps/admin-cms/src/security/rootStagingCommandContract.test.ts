@@ -42,6 +42,8 @@ describe('Root Staging Command Contract & Argument Forwarding Tests', () => {
     expect(scripts['check:admin-media']).toBe('npm run check:staging-media --workspace=apps/admin-cms');
     expect(scripts['check:admin-imports']).toBe('npm run check:import-batches --workspace=apps/admin-cms');
     expect(scripts['check:admin-auth']).toBe('npm run check:staging-auth --workspace=apps/admin-cms');
+    expect(scripts['check:admin-deployment-readiness']).toBe('npm run check:deployment-readiness --workspace=apps/admin-cms');
+    expect(scripts['check:admin-staging-readiness']).toBe('npm run check:staging-readiness --workspace=apps/admin-cms');
     expect(scripts['check:feed']).toBe('npm run check:sample-feed --workspace=apps/admin-cms');
   });
 
@@ -90,13 +92,15 @@ describe('Root Staging Command Contract & Argument Forwarding Tests', () => {
 
       // Must contain CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN
       expect(docContent).toContain('LINK_EXISTING_STAGING_ADMIN');
-      // Must contain CLI flags --apply and --confirm-staging=capstone-admin-cms-staging-2026
+      // Must contain CLI flags --apply and --confirm-staging=
       expect(docContent).toContain('--apply');
-      expect(docContent).toContain('--confirm-staging=capstone-admin-cms-staging-2026');
+      expect(docContent).toContain('--confirm-staging=');
 
-      // No runbook must assign capstone-admin-cms-staging-2026 to CAPSTONE_BOOTSTRAP_CONFIRM
+      // No runbook must assign confirmation label to CAPSTONE_BOOTSTRAP_CONFIRM
       expect(docContent).not.toContain('CAPSTONE_BOOTSTRAP_CONFIRM="capstone-admin-cms-staging-2026"');
       expect(docContent).not.toContain('CAPSTONE_BOOTSTRAP_CONFIRM=capstone-admin-cms-staging-2026');
+      expect(docContent).not.toContain('CAPSTONE_BOOTSTRAP_CONFIRM="capstone-admin-cms-staging-v2-2026"');
+      expect(docContent).not.toContain('CAPSTONE_BOOTSTRAP_CONFIRM=capstone-admin-cms-staging-v2-2026');
     });
 
     // 3. Historical activation evidence check

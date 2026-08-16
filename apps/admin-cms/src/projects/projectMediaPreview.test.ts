@@ -10,7 +10,7 @@ import {
 const privateRow: ProjectMediaAssetPreviewRow = {
   id: 'asset-private', asset_type: 'poster_image', file_name: 'poster.png',
   storage_bucket: 'draft-media', storage_path: 'drafts/private/poster.png', public_url: null,
-  mime_type: 'image/png', file_size_bytes: 2048, is_public_approved: false,
+  mime_type: 'image/png', file_size_bytes: 2048, is_public_approved: false, alt_text_public: null,
 };
 
 describe('project media preview read model', () => {

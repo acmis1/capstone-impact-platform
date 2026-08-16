@@ -1,11 +1,12 @@
 import { execFileSync, execSync } from 'node:child_process';
 import path from 'node:path';
+import ExcelJS from 'exceljs';
 import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { getStagingBuckets } from '../lib/supabase/buckets';
 import { analyzeBrowserImportServer } from '../import/parseBrowserImportPreview';
 import { stageBrowserImportMetadata } from '../import/stageBrowserImportMetadata';
 import { stageBrowserImportMedia, MediaFileToStage } from '../import/stageBrowserImportMedia';
-import { computeCanonicalIntentHash } from '../import/browserImportMetadataStageContract';
+import { computeCanonicalIntentHash } from '../import/browserImportMetadataStageServerCore';
 import { generateUploadKey } from '../import/browserSelection';
 import { AuthenticatedAdminContext } from '../auth/authTypes';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
@@ -177,7 +178,19 @@ async function stageFixtureMetadataBatch(params: {
     descriptors,
   };
 
-  const analysis = await analyzeBrowserImportServer(manifest, metaFiles);
+  const referenceWorkbook = new ExcelJS.Workbook();
+  const referenceWorksheet = referenceWorkbook.addWorksheet('REFERENCE');
+  referenceWorksheet.addRow(['Public ID', 'Official Project Title']);
+  for (const pkg of packages) referenceWorksheet.addRow([pkg.publicId, `Title ${pkg.publicId}`]);
+  const analysis = await analyzeBrowserImportServer(manifest, metaFiles, {
+    referenceFileBuffer: Buffer.from(await referenceWorkbook.xlsx.writeBuffer()),
+    mapping: {
+      worksheet: 'REFERENCE',
+      matchMappings: [{ canonicalField: 'publicId', referenceColumn: 'Public ID' }],
+      comparisonMappings: [{ canonicalField: 'title', referenceColumn: 'Official Project Title' }],
+      reconciliationContractVersion: 'admin-reference-reconciliation-v1',
+    },
+  });
   const selectedPackagePaths = packages.map((p) => p.packagePath).sort();
 
   const intent = {
@@ -188,6 +201,7 @@ async function stageFixtureMetadataBatch(params: {
     declaredTotalBytes,
     selectedPackagePaths,
     acknowledgedWarningPackagePaths: selectedPackagePaths,
+    adminReference: analysis.preview.batch.adminReference,
   };
 
   const res = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysis, intent });
@@ -197,6 +211,10 @@ async function stageFixtureMetadataBatch(params: {
 
   return { batchId: res.batchId, metadataIntentHash: computeCanonicalIntentHash(intent) };
 }
+
+/** Synthetic staff-authored description used by this suite's snapshot fixtures. */
+const MEDIA_STAGE_SNAPSHOT_ALT_TEXT =
+  'Synthetic snapshot image used by the browser media staging runtime verifier.';
 
 function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
   const files: MediaFileToStage[] = [];
@@ -208,6 +226,8 @@ function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
       fileName: 'poster.png',
       fileSizeBytes: PNG_BYTES.length,
       canonicalMimeType: 'image/png',
+      // The poster's text alternative stays the project-level accessibility text.
+      snapshotAltText: null,
       content: PNG_BYTES,
     });
     files.push({
@@ -217,6 +237,7 @@ function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
       fileName: 'poster.pdf',
       fileSizeBytes: PDF_BYTES.length,
       canonicalMimeType: 'application/pdf',
+      snapshotAltText: null,
       content: PDF_BYTES,
     });
     files.push({
@@ -226,6 +247,7 @@ function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
       fileName: 'snapshot-1.png',
       fileSizeBytes: PNG_BYTES.length,
       canonicalMimeType: 'image/png',
+      snapshotAltText: MEDIA_STAGE_SNAPSHOT_ALT_TEXT,
       content: PNG_BYTES,
     });
   }

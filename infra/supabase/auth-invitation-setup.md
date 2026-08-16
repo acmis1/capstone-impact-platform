@@ -109,16 +109,17 @@ GET requests from automated link scanners, prefetchers, or email servers do not 
 Always run canonical root-level commands from the repository root:
 
 * **Link Initial Administrator:**
-  Requires target environment identity variables (`CAPSTONE_RUNTIME_ENV=staging`, `CAPSTONE_EXPECTED_SUPABASE_HOST`), input confirmation variable (`CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN`), and CLI guard flags (`--apply --confirm-staging=capstone-admin-cms-staging-2026`).
+  Requires target environment identity variables (`CAPSTONE_RUNTIME_ENV=staging`, `CAPSTONE_EXPECTED_SUPABASE_HOST`), staging mutation confirmation variable (`CAPSTONE_STAGING_MUTATION_CONFIRMATION`), input confirmation variable (`CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN`), and CLI guard flags (`--apply --confirm-staging=<label>`).
 
   ```bash
   export CAPSTONE_RUNTIME_ENV=staging
   export CAPSTONE_EXPECTED_SUPABASE_HOST=app-staging.supabase.co
+  export CAPSTONE_STAGING_MUTATION_CONFIRMATION=capstone-admin-cms-staging-v2-2026
   export CAPSTONE_BOOTSTRAP_ADMIN_EMAIL="admin@example.com"
   export CAPSTONE_BOOTSTRAP_ADMIN_FULL_NAME="Initial Admin"
   export CAPSTONE_BOOTSTRAP_CONFIRM=LINK_EXISTING_STAGING_ADMIN
 
-  npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-2026
+  npm run link:admin-staging -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026
   ```
 
 * **Verify Staging Readiness:**
@@ -130,6 +131,6 @@ Always run canonical root-level commands from the repository root:
 Only when run inside the `apps/admin-cms` directory context:
 ```bash
 cd apps/admin-cms
-npm run link:staging-admin -- --apply --confirm-staging=capstone-admin-cms-staging-2026
+npm run link:staging-admin -- --apply --confirm-staging=capstone-admin-cms-staging-v2-2026
 npm run check:staging-auth
 ```

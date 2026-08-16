@@ -16,9 +16,12 @@ import {
   BrowserImportPreviewLimitError,
 } from '../../../../import/parseBrowserImportPreview';
 import { prepareBrowserImportCommitIntent } from '../../../../import/prepareBrowserImportCommitIntent';
-import { computeCanonicalIntentHash } from '../../../../import/browserImportMetadataStageContract';
+import { computeCanonicalIntentHash } from '../../../../import/browserImportMetadataStageServer';
 import { resolveExpectedBrowserImportMedia } from '../../../../import/browserImportMediaSelection';
 import { stageBrowserImportMedia, MediaFileToStage } from '../../../../import/stageBrowserImportMedia';
+import {
+  resolveServerAdminReferenceAnalysisOptions,
+} from '../../../../import/adminReferenceReconciliation';
 import {
   BROWSER_IMPORT_MEDIA_LIMITS,
   BrowserImportMediaStageErrorCode,
@@ -197,8 +200,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const candidateMediaEntries: Array<{ key: string; file: File }> = [];
     let actualMetadataBytes = 0;
 
+    let adminReferenceFile: File | null = null;
+    let adminReferenceMappingJsonStr: string | null = null;
+
     for (const [key, value] of formData.entries()) {
       if (key === 'manifest' || key === 'intent' || key === 'batchId') continue;
+
+      if (key === 'referenceFile') {
+        if (adminReferenceFile !== null) return stageError('DUPLICATE_UPLOAD_FIELD', 400);
+        if (!(value instanceof File)) return stageError('UNEXPECTED_UPLOAD_FIELD', 400);
+        adminReferenceFile = value as File;
+        continue;
+      }
+      if (key === 'adminReferenceMapping') {
+        if (adminReferenceMappingJsonStr !== null) return stageError('DUPLICATE_UPLOAD_FIELD', 400);
+        if (typeof value !== 'string') return stageError('UNEXPECTED_UPLOAD_FIELD', 400);
+        adminReferenceMappingJsonStr = value;
+        continue;
+      }
 
       if (seenFormKeys.has(key)) return stageError('DUPLICATE_UPLOAD_FIELD', 400);
       seenFormKeys.add(key);
@@ -240,14 +259,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Step 8: Read metadata bytes only after structural checks pass
     const uploadedMetadataFiles = new Map<string, Buffer>();
     for (const { key, file, expectedBytes } of metadataFileEntries) {
-      const arrayBuf = await file.arrayBuffer();
+      let arrayBuf: ArrayBuffer;
+      const fileObj = file as unknown as { arrayBuffer?: () => Promise<ArrayBuffer>; buffer?: ArrayBuffer };
+      if (typeof fileObj.arrayBuffer === 'function') {
+        arrayBuf = await fileObj.arrayBuffer();
+      } else {
+        arrayBuf = fileObj.buffer || (file as unknown as ArrayBuffer);
+      }
       const buf = Buffer.from(arrayBuf);
       if (buf.length !== expectedBytes) return stageError('METADATA_SIZE_MISMATCH', 400);
       uploadedMetadataFiles.set(key, buf);
     }
 
+    const adminRefResolution = await resolveServerAdminReferenceAnalysisOptions({
+      adminReferenceFile,
+      adminReferenceMappingJsonStr,
+      submittedAdminReferenceIntent: submittedIntent.adminReference,
+    });
+    if (!adminRefResolution.success) {
+      return stageError(adminRefResolution.code, 400);
+    }
+    const { adminReferenceOptions } = adminRefResolution;
+
     // Step 9: Re-run authoritative server parsing and preview generation
-    const serverAnalysis = await analyzeBrowserImportServer(preflight, uploadedMetadataFiles);
+    const serverAnalysis = await analyzeBrowserImportServer(preflight, uploadedMetadataFiles, adminReferenceOptions);
 
     // Step 10: Re-run server-side commit intent planning to get canonical server intent
     const serverPlannerResult = prepareBrowserImportCommitIntent({
@@ -256,6 +291,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       selectedPackagePaths: submittedIntent.selectedPackagePaths,
       acknowledgedWarningPackagePaths: submittedIntent.acknowledgedWarningPackagePaths,
       expectedPreviewFingerprint: submittedIntent.previewFingerprint,
+      adminReference: submittedIntent.adminReference,
     });
 
     if (!serverPlannerResult.success) {
@@ -328,7 +364,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Step 13: Read actual media bytes and validate exact length + real file signature
     const filesToStage: MediaFileToStage[] = [];
     for (const { file, expected } of pendingMediaReads) {
-      const arrayBuf = await file.arrayBuffer();
+      let arrayBuf: ArrayBuffer;
+      const fileObj = file as unknown as { arrayBuffer?: () => Promise<ArrayBuffer>; buffer?: ArrayBuffer };
+      if (typeof fileObj.arrayBuffer === 'function') {
+        arrayBuf = await fileObj.arrayBuffer();
+      } else {
+        arrayBuf = fileObj.buffer || (file as unknown as ArrayBuffer);
+      }
       const buf = Buffer.from(arrayBuf);
 
       if (buf.length !== expected.fileSizeBytes) return stageError('MEDIA_SIZE_MISMATCH', 400);
@@ -353,6 +395,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         fileName: expected.fileName,
         fileSizeBytes: expected.fileSizeBytes,
         canonicalMimeType: expected.canonicalMimeType,
+        // Taken from the server-reparsed package, never from the multipart request. The browser has
+        // no field through which it could supply or override this value.
+        snapshotAltText: expected.snapshotAltText,
         content: buf,
       });
     }

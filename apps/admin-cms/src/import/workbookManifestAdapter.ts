@@ -4,6 +4,11 @@ import { ProjectDetailsWorkbookParseResult } from './projectDetailsWorkbookContr
 export interface BuildImportPackageManifestOptions {
   parsedWorkbook: ProjectDetailsWorkbookParseResult;
   publicId: string;
+  /**
+   * Optional caller-supplied override for poster full text. The workbook is the canonical source
+   * and already guarantees a non-blank value; this remains only for callers that carry the text
+   * out of band. A blank override never erases the workbook value.
+   */
   posterText?: string;
 }
 
@@ -17,6 +22,7 @@ export function buildImportPackageManifestFromWorkbook(
   }
 
   const metadata = parsedWorkbook.metadata;
+  const resolvedPosterText = (posterText && posterText.trim() !== '' ? posterText : metadata.posterText).trim();
 
   return {
     publicId: publicId.trim(),
@@ -34,8 +40,9 @@ export function buildImportPackageManifestFromWorkbook(
     groupName: metadata.groupName,
     participantContactEmail: metadata.participantContactEmail || '',
     teamMembers: [...metadata.teamMembers],
-    ...(posterText ? { posterText: posterText.trim() } : {}),
+    ...(resolvedPosterText ? { posterText: resolvedPosterText } : {}),
     ...(metadata.accessibilityText ? { accessibilityText: metadata.accessibilityText } : {}),
+    ...(metadata.snapshotAltText ? { snapshotAltText: metadata.snapshotAltText } : {}),
     layoutConfig: {
       templateId: metadata.layoutConfig.templateId,
       featuredMedia: metadata.layoutConfig.featuredMedia,

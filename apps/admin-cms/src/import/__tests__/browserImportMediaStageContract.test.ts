@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  computeCanonicalMediaIntentHash,
   validateBrowserImportMediaStageResponse,
 } from '../browserImportMediaStageContract';
+import { computeCanonicalMediaIntentHash } from '../browserImportMediaStageServer';
 
 describe('computeCanonicalMediaIntentHash', () => {
   const baseParams = {
