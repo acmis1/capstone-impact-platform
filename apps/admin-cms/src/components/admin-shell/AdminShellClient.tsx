@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { SidebarNav } from './SidebarNav';
 import { TopBar } from './TopBar';
+import { EnvironmentNotice } from './EnvironmentNotice';
 
 export interface AdminShellClientProps {
   displayName?: string | null;
@@ -54,6 +55,8 @@ export function AdminShellClient({
             canManageStaff={canManageStaff}
             logoutAction={logoutAction}
           />
+
+          <EnvironmentNotice />
 
           <main
             id="admin-main-content"

@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import { Folder, Calendar, ChevronRight, CheckCircle2, Clock, XCircle, Info } from 'lucide-react';
 import { ImportBatchRepository } from '../../../../repositories/ImportBatchRepository';
 import ImportBatchStatusBadge from '../../../../components/admin/ImportBatchStatusBadge';
 import { ImportBatchReviewPanel, ImportBatchReviewProjectView } from '../../../../components/admin/ImportBatchReviewPanel';
@@ -10,6 +11,9 @@ import {
 import { computeReadinessForImportBatchRow, isPrivateAssetPresent } from '../../../../import/importBatchReviewReadiness';
 import { requireAdmin } from '../../../../auth/requireAdmin';
 import { hasPermission } from '../../../../auth/permissions';
+import { Button } from '../../../../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../../components/ui/card';
+import { ErrorState } from '../../../../components/ui/error-state';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,38 +50,16 @@ export default async function ImportBatchDetailPage({
   // Safe error card for missing batch parameters
   if (!batch || errorMsg) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        backgroundColor: '#0B0F19',
-        color: '#F3F4F6',
-        fontFamily: 'Inter, system-ui, sans-serif',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '2rem',
-      }}>
-        <div style={{
-          maxWidth: '500px',
-          width: '100%',
-          backgroundColor: '#161F30',
-          borderRadius: '12px',
-          padding: '2rem',
-          textAlign: 'center',
-          border: '1px solid rgba(239, 68, 68, 0.2)',
-        }}>
-          <h3 style={{ color: '#EF4444', margin: '0 0 1rem 0' }}>Import Batch Not Found</h3>
-          <p style={{ color: '#9CA3AF', fontSize: '0.9rem', lineHeight: '1.6', margin: '0 0 1.5rem 0' }}>
-            The requested batch UUID is invalid or does not match any logged local package ingestion staging runs in the database.
-          </p>
-          <Link href="/admin/imports" style={{
-            color: '#3B82F6',
-            textDecoration: 'none',
-            fontWeight: 600,
-            fontSize: '0.9rem',
-          }}>
-            ← Return to Import Batches
-          </Link>
-        </div>
+      <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
+        <ErrorState
+          title="Import batch not found"
+          description="The requested batch ID does not match any logged import records in the database."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/admin/imports">Return to Imports</Link>
+            </Button>
+          }
+        />
       </div>
     );
   }
@@ -105,6 +87,12 @@ export default async function ImportBatchDetailPage({
     };
   });
 
+  // Derived plain-language outcome summary metrics from existing data
+  const totalImported = reviewProjects.length;
+  const readyCount = reviewProjects.filter((p) => p.eligibility === 'eligible' && p.ready).length;
+  const blockedCount = reviewProjects.filter((p) => p.eligibility === 'eligible' && !p.ready).length;
+  const alreadySubmittedCount = reviewProjects.filter((p) => p.eligibility === 'already_submitted').length;
+
   // Reset client-side selection whenever the authoritative selectable project set or workflow state changes.
   // A React key remount avoids synchronously setting state from an effect while still guaranteeing stale
   // selections cannot survive a server refresh that changes readiness, eligibility, status, or membership.
@@ -116,159 +104,202 @@ export default async function ImportBatchDetailPage({
   ].join('|');
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: '#0B0F19',
-      color: '#F3F4F6',
-      fontFamily: 'Inter, system-ui, sans-serif',
-      padding: '2rem',
-    }}>
-      <div style={{
-        maxWidth: '1200px',
-        margin: '0 auto',
-      }}>
-        {/* Navigation header */}
-        <header style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '2rem',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-          paddingBottom: '1rem',
-        }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <Link href="/admin/imports" style={{ color: '#9CA3AF', textDecoration: 'none', fontSize: '0.9rem' }}>
-                ← Ingestion Batches
-              </Link>
-            </div>
-            <h1 style={{ margin: '0.5rem 0 0 0', fontSize: '1.75rem', fontWeight: 800 }}>Batch: {batch.batch_name}</h1>
-            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: '#9CA3AF', fontFamily: 'monospace' }}>
-              UUID: {batch.id}
-            </p>
+    <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col gap-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground truncate">
+              {batch.batch_name || 'Import batch'}
+            </h2>
+            <ImportBatchStatusBadge status={batch.status} />
           </div>
-          <div>
-            <Link href="/admin/imports" style={{
-              color: '#3B82F6',
-              textDecoration: 'none',
-              fontSize: '0.95rem',
-              fontWeight: 600,
-              backgroundColor: 'rgba(59, 130, 246, 0.1)',
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              border: '1px solid rgba(59, 130, 246, 0.2)',
-            }}>
-              All Batches
-            </Link>
-          </div>
-        </header>
-
-        {/* Layout details grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 2fr',
-          gap: '2rem',
-          alignItems: 'start'
-        }}>
-          {/* A. Batch Overview Details Card */}
-          <div style={{
-            backgroundColor: '#161F30',
-            borderRadius: '12px',
-            padding: '1.5rem',
-            border: '1px solid rgba(255, 255, 255, 0.05)',
-          }}>
-            <h3 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', color: '#3B82F6', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.5rem' }}>
-              Ingestion Metadata
-            </h3>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', fontSize: '0.9rem' }}>
-              <div>
-                <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Ingestion Status</strong>
-                <div style={{ marginTop: '0.25rem' }}>
-                  <ImportBatchStatusBadge status={batch.status} />
-                </div>
-              </div>
-
-              <div>
-                <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Local Source Folder</strong>
-                <div style={{ marginTop: '0.25rem', fontFamily: 'monospace', wordBreak: 'break-all', color: '#E5E7EB' }}>
-                  {batch.source_folder}
-                </div>
-              </div>
-
-              <div>
-                <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Ingestion Mode</strong>
-                <div style={{ marginTop: '0.1rem', color: '#E5E7EB' }}>
-                  {batch.mode}
-                </div>
-              </div>
-
-              <div>
-                <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Imported Projects Count</strong>
-                <div style={{ marginTop: '0.1rem', color: '#E5E7EB', fontWeight: 'bold' }}>
-                  {batch.total_projects} project(s)
-                </div>
-              </div>
-
-              <div>
-                <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Errors / Warnings Caught</strong>
-                <div style={{ marginTop: '0.1rem', color: '#E5E7EB' }}>
-                  {batch.error_count || 0} error(s), {batch.warning_count || 0} warning(s)
-                </div>
-              </div>
-
-              <div>
-                <strong style={{ color: '#9CA3AF', display: 'block', fontSize: '0.8rem', textTransform: 'uppercase' }}>Ingested Timestamp</strong>
-                <div style={{ marginTop: '0.1rem', color: '#E5E7EB' }}>
-                  {new Date(batch.created_at).toLocaleString()}
-                </div>
-              </div>
-            </div>
-
-            {/* Safety Ingestion Footer */}
-            <div style={{
-              marginTop: '1.5rem',
-              paddingTop: '1rem',
-              borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-              fontSize: '0.8rem',
-              color: '#9CA3AF',
-              lineHeight: '1.4'
-            }}>
-              <strong>🔒 Staging Safety Isolation:</strong> {batch.status === 'metadata_staged' ? 'Metadata is stored in local Supabase and projects remain in draft state. Media file uploads have not occurred, full binary validation is pending, and no approval or publication has been performed.' : 'Imported package resources are stored inside private drafts buckets. Media assets do not promote to public URLs, keeping staging showcase records cleanly separated from active public distributions.'}
-            </div>
-          </div>
-
-          {/* Right section: Ingested projects review surface */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-
-            {/* B. Multi-project review & submit-for-review card */}
-            <div style={{
-              backgroundColor: '#161F30',
-              borderRadius: '12px',
-              padding: '1.5rem',
-              border: '1px solid rgba(255, 255, 255, 0.05)',
-            }}>
-              <h3 style={{ fontSize: '1.1rem', margin: '0 0 1rem 0', color: '#3B82F6', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.5rem' }}>
-                Ingested Project Targets ({reviewProjects.length})
-              </h3>
-
-              {reviewProjects.length > 0 ? (
-                <ImportBatchReviewPanel
-                  key={reviewSelectionKey}
-                  batchId={batch.id}
-                  batchStatus={batch.status}
-                  projects={reviewProjects}
-                  canSubmit={canSubmit}
-                />
-              ) : (
-                <div style={{ color: '#9CA3AF', fontSize: '0.9rem' }}>
-                  No projects are registered for this batch ID.
-                </div>
-              )}
-            </div>
-
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Folder className="h-3.5 w-3.5" aria-hidden="true" />
+              <code className="font-mono">{batch.source_folder}</code>
+            </span>
+            <span className="flex items-center gap-1">
+              <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+              {new Date(batch.created_at).toLocaleString()}
+            </span>
           </div>
         </div>
+
+        <div className="shrink-0">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/imports">
+              All imports
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Outcome Summary Banner */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Card className="bg-card border-border shadow-xs">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+              <Folder className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Imported</p>
+              <p className="text-xl font-bold text-foreground">{totalImported}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border shadow-xs">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-success/10 text-success shrink-0">
+              <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Ready for review</p>
+              <p className="text-xl font-bold text-success">{readyCount}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border shadow-xs">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-warning/10 text-warning shrink-0">
+              <XCircle className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Needs attention</p>
+              <p className="text-xl font-bold text-warning">{blockedCount}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border shadow-xs">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-information/10 text-information shrink-0">
+              <Clock className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Submitted</p>
+              <p className="text-xl font-bold text-information">{alreadySubmittedCount}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Content Layout Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* Left Column: Import Summary */}
+        <Card className="bg-card border-border shadow-xs lg:col-span-1">
+          <CardHeader className="border-b border-border pb-3">
+            <CardTitle className="text-base font-semibold text-foreground">
+              Import summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 flex flex-col gap-4 text-xs sm:text-sm">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Status
+              </span>
+              <div>
+                <ImportBatchStatusBadge status={batch.status} />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Source Folder
+              </span>
+              <span className="font-mono text-xs text-foreground bg-muted p-2 rounded-md break-all">
+                {batch.source_folder}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Import Type
+              </span>
+              <span className="text-foreground capitalize">
+                {batch.mode}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Projects Count
+              </span>
+              <span className="font-semibold text-foreground">
+                {batch.total_projects} project(s)
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Validation Issues
+              </span>
+              <span className="text-foreground">
+                {batch.error_count || 0} error(s), {batch.warning_count || 0} warning(s)
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Imported on
+              </span>
+              <span className="text-foreground">
+                {new Date(batch.created_at).toLocaleString()}
+              </span>
+            </div>
+
+            {/* Native Disclosure for Technical Details */}
+            <details className="mt-2 pt-3 border-t border-border group">
+              <summary className="text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer flex items-center justify-between list-none">
+                <span>Advanced details</span>
+                <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
+              </summary>
+              <div className="mt-2 text-xs font-mono text-muted-foreground bg-muted/60 p-2.5 rounded-md break-all">
+                <span className="font-semibold text-foreground block mb-0.5 font-sans">Batch UUID:</span>
+                {batch.id}
+              </div>
+            </details>
+
+            {/* Staging Safety Notice */}
+            <div className="mt-2 pt-3 border-t border-border text-xs text-muted-foreground leading-relaxed flex items-start gap-2">
+              <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" aria-hidden="true" />
+              <span>
+                {batch.status === 'metadata_staged'
+                  ? 'Metadata is stored in local Supabase and projects remain in draft state. Media file uploads have not occurred, full binary validation is pending, and no approval or publication has been performed.'
+                  : 'Imported package resources are stored inside private drafts buckets. Media assets do not promote to public URLs, keeping staging showcase records cleanly separated from active public distributions.'}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Right Column: Ingested Projects Review Surface */}
+        <Card className="bg-card border-border shadow-xs lg:col-span-2">
+          <CardHeader className="border-b border-border pb-3">
+            <CardTitle className="text-base font-semibold text-foreground">
+              Projects in this import ({reviewProjects.length})
+            </CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">
+              Review project readiness and submit verified projects for review.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {reviewProjects.length > 0 ? (
+              <ImportBatchReviewPanel
+                key={reviewSelectionKey}
+                batchId={batch.id}
+                batchStatus={batch.status}
+                projects={reviewProjects}
+                canSubmit={canSubmit}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                No projects are registered for this batch.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

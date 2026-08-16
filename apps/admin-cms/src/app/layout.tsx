@@ -14,10 +14,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    template: "%s | Capstone Impact Platform Admin",
-    default: "Capstone Impact Platform Admin/CMS",
+    template: "%s · Capstone Impact Platform",
+    default: "Capstone Impact Platform",
   },
-  description: "Enterprise editorial operations platform for RMIT Capstone project curation, validation, and publishing governance.",
+  description:
+    "Administrative system for collecting, reviewing, and preparing RMIT capstone projects for publication.",
 };
 
 export default function RootLayout({

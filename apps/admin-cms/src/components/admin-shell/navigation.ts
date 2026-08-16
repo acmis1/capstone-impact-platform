@@ -38,13 +38,25 @@ export function getRouteDescriptor(pathname: string): RouteDescriptor {
     };
   }
 
-  // Check imports detail route first: /admin/imports/{batchId}
-  if (cleanPath.startsWith('/admin/imports/')) {
+  // Check exact imports new route: /admin/imports/new
+  if (cleanPath === '/admin/imports/new') {
     return {
-      title: 'Import batch',
+      title: 'Import projects',
       breadcrumbs: [
         { label: 'Imports', href: '/admin/imports' },
-        { label: 'Import batch' },
+        { label: 'Import projects' },
+      ],
+      activeHref: '/admin/imports',
+    };
+  }
+
+  // Check imports detail route: /admin/imports/{batchId}
+  if (cleanPath.startsWith('/admin/imports/')) {
+    return {
+      title: 'Import details',
+      breadcrumbs: [
+        { label: 'Imports', href: '/admin/imports' },
+        { label: 'Import details' },
       ],
       activeHref: '/admin/imports',
     };
@@ -53,7 +65,7 @@ export function getRouteDescriptor(pathname: string): RouteDescriptor {
   // Check exact imports route: /admin/imports
   if (cleanPath === '/admin/imports') {
     return {
-      title: 'Import history',
+      title: 'Imports',
       breadcrumbs: [{ label: 'Imports' }],
       activeHref: '/admin/imports',
     };

@@ -1,126 +1,49 @@
 import Link from 'next/link';
+import { AppMark } from '../components/ui/app-mark';
+import { Button } from '../components/ui/button';
+import { Card, CardContent } from '../components/ui/card';
+import { ArrowRight, ShieldAlert } from 'lucide-react';
 
 export default function Home() {
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: '#0B0F19',
-      color: '#F3F4F6',
-      fontFamily: 'Inter, system-ui, sans-serif',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: '2rem',
-    }}>
-      <main style={{
-        maxWidth: '800px',
-        width: '100%',
-        backgroundColor: '#161F30',
-        borderRadius: '16px',
-        padding: '3rem',
-        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
-        border: '1px solid rgba(255, 255, 255, 0.05)',
-      }}>
-        <div style={{
-          background: 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          fontSize: '2.5rem',
-          fontWeight: 800,
-          marginBottom: '1rem',
-          textAlign: 'center',
-        }}>
-          Capstone Impact Platform
+    <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4 sm:p-6">
+      <main className="w-full max-w-lg flex flex-col items-center text-center">
+        {/* Brand Identity */}
+        <div className="mb-6 flex flex-col items-center">
+          <AppMark size="lg" className="mb-3" />
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+            Capstone Impact Platform
+          </h1>
+          <p className="text-sm font-medium text-muted-foreground mt-1">
+            Admin System
+          </p>
         </div>
-        <p style={{
-          color: '#9CA3AF',
-          fontSize: '1.1rem',
-          textAlign: 'center',
-          marginBottom: '3rem',
-        }}>
-          Actual Production Staging Foundation — School-Owned Admin/CMS
+
+        {/* Purpose Description */}
+        <p className="text-sm sm:text-base text-muted-foreground mb-6 leading-relaxed max-w-md">
+          An administrative system for collecting, reviewing, and preparing capstone projects for publication.
         </p>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: '1.5rem',
-          marginBottom: '3rem',
-        }}>
-          {/* Status Card 1 */}
-          <div style={{
-            backgroundColor: '#1E293B',
-            padding: '1.5rem',
-            borderRadius: '12px',
-            borderLeft: '4px solid #10B981',
-          }}>
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#10B981' }}>Staging CMS Workspace</h3>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#9CA3AF' }}>Next.js App Router &amp; TypeScript framework initialized safely.</p>
-          </div>
-
-          {/* Status Card 2 */}
-          <div style={{
-            backgroundColor: '#1E293B',
-            padding: '1.5rem',
-            borderRadius: '12px',
-            borderLeft: '4px solid #EF4444',
-          }}>
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#EF4444' }}>Duda Not Connected</h3>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#9CA3AF' }}>Public showcase is isolated; no live synchronization triggers active during staging.</p>
-          </div>
-
-          {/* Status Card 3 */}
-          <div style={{
-            backgroundColor: '#1E293B',
-            padding: '1.5rem',
-            borderRadius: '12px',
-            borderLeft: '4px solid #3B82F6',
-          }}>
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#3B82F6' }}>Supabase Configured</h3>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#9CA3AF' }}>Linked to the &apos;capstone-impact-staging&apos; storage project via environment variables.</p>
-          </div>
-
-          {/* Status Card 4 */}
-          <div style={{
-            backgroundColor: '#1E293B',
-            padding: '1.5rem',
-            borderRadius: '12px',
-            borderLeft: '4px solid #F59E0B',
-          }}>
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#F59E0B' }}>Gemini Extraction</h3>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#9CA3AF' }}>Assistive form-filling model integrated and disabled by default.</p>
-          </div>
+        {/* Primary Action */}
+        <div className="mb-8 w-full max-w-xs">
+          <Button asChild size="lg" className="w-full font-semibold">
+            <Link href="/admin">
+              Open Admin
+              <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+            </Link>
+          </Button>
         </div>
 
-        <div style={{
-          backgroundColor: '#1E293B',
-          padding: '1.5rem',
-          borderRadius: '12px',
-          marginBottom: '3rem',
-          border: '1px dashed rgba(255, 255, 255, 0.1)',
-        }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: '#F3F4F6' }}>🛡️ Safety Boundaries &amp; Protection</h3>
-          <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.9rem', color: '#9CA3AF', lineHeight: '1.6' }}>
-            <li>Existing <strong>Prototype/</strong> folder remains completely untouched and preserved.</li>
-            <li>No database credentials or secret keys are exposed or committed to the public Git repository.</li>
-            <li>All staging tests utilize strictly generated, mock data datasets to satisfy privacy policies.</li>
-          </ul>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <Link href="/admin" style={{
-            backgroundColor: '#3B82F6',
-            color: '#FFFFFF',
-            padding: '0.75rem 2rem',
-            borderRadius: '8px',
-            textDecoration: 'none',
-            fontWeight: '600',
-            transition: 'background-color 0.2s',
-          }}>
-            Go to Admin CMS Panel
-          </Link>
-        </div>
+        {/* Staging Environment Notice Card */}
+        <Card className="w-full border-border bg-card text-left">
+          <CardContent className="pt-6 flex items-start gap-3">
+            <ShieldAlert className="h-5 w-5 text-warning shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="text-xs text-muted-foreground leading-relaxed">
+              <p className="font-semibold text-foreground mb-0.5">Test Environment</p>
+              Work here uses staging data and does not update the public showcase website.
+            </div>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );
