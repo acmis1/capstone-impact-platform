@@ -6,14 +6,24 @@ import { execFileSync, execSync } from 'node:child_process';
 import { createClient } from '@supabase/supabase-js';
 import { resolveAdminContextFromAuthUser } from '../auth/adminContext';
 import { AdminAuthError, type AuthenticatedAdminContext } from '../auth/authTypes';
-import { canManageStaff, getPermissionsForRoles } from '../auth/permissions';
+import {
+  canManageStaff,
+  canPerformReviewAction,
+  getPermissionsForRoles,
+  hasPermission,
+} from '../auth/permissions';
 import { validateCredentialsStructure } from '../local-development/localStaffAuthVerification';
 import { SYNTHETIC_STAFF_DEFINITIONS } from '../local-development/localStaffUsers';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
 import { completeStaffActivation } from '../staff/staffActivation';
 import { provisionStaffMember, type StaffInvitationGateway } from '../staff/staffProvisioningService';
 import {
+  provisionStaffTestAccount,
+  type StaffPasswordIdentityGateway,
+} from '../staff/staffTestAccountService';
+import {
   SupabaseStaffInvitationGateway,
+  SupabaseStaffPasswordIdentityGateway,
   SupabaseStaffProvisioningGateway,
 } from '../staff/staffProvisioningRepository';
 import { readStaffDirectory } from '../staff/staffDirectory';
@@ -34,6 +44,7 @@ interface ProvisioningRow {
   auth_identity_owned: boolean;
   lease_expires_at: string;
   failure_code: string | null;
+  activated_at: string | null;
   requested_by_admin_id: string | null;
   requested_by_email_snapshot: string | null;
 }
@@ -75,6 +86,7 @@ async function main(): Promise<void> {
   const staff = new Map<StaffLabel, AuthenticatedAdminContext>();
   let editorReviewerAdded = false;
   let failureTriggerInstalled = false;
+  let directFailureTriggerInstalled = false;
   let primaryFailure: unknown = null;
   let cleanupFailure: unknown = null;
 
@@ -124,6 +136,24 @@ async function main(): Promise<void> {
         provisioningEnabled: options.enabled ?? true,
         provisioning: new SupabaseStaffProvisioningGateway(service),
         invitations: options.invitations ?? new SupabaseStaffInvitationGateway(service),
+      },
+      input,
+    );
+
+  /** Runs the real direct-account workflow with the real Supabase gateways. */
+  const provisionTestAccount = async (
+    actor: AuthenticatedAdminContext,
+    input: unknown,
+    options: { enabled?: boolean; identities?: StaffPasswordIdentityGateway } = {},
+  ) =>
+    provisionStaffTestAccount(
+      {
+        permissions: actor.permissions,
+        actorAdminUserId: actor.adminUserId,
+        provisioningEnabled: options.enabled ?? true,
+        stagingRuntimeVerified: true,
+        provisioning: new SupabaseStaffProvisioningGateway(service),
+        identities: options.identities ?? new SupabaseStaffPasswordIdentityGateway(service),
       },
       input,
     );
@@ -552,6 +582,7 @@ async function main(): Promise<void> {
       ['recover_staff_provisioning_identity', { p_request_id: crypto.randomUUID(), p_execution_token: crypto.randomUUID() }],
       ['bind_staff_provisioning_identity', { p_request_id: crypto.randomUUID(), p_execution_token: crypto.randomUUID(), p_auth_user_id: crypto.randomUUID() }],
       ['finalize_staff_provisioning', { p_request_id: crypto.randomUUID(), p_execution_token: crypto.randomUUID() }],
+      ['finalize_and_activate_staff_provisioning', { p_request_id: crypto.randomUUID(), p_execution_token: crypto.randomUUID() }],
       ['begin_staff_provisioning_compensation', { p_request_id: crypto.randomUUID(), p_execution_token: crypto.randomUUID(), p_auth_user_id: crypto.randomUUID() }],
       ['activate_staff_provisioning', { p_auth_user_id: crypto.randomUUID() }],
       ['fail_staff_provisioning', { p_request_id: crypto.randomUUID(), p_execution_token: crypto.randomUUID(), p_failure_code: 'X', p_compensation_state: 'not_required' }],
@@ -709,6 +740,7 @@ async function main(): Promise<void> {
         ['recover_staff_provisioning_identity', { p_request_id: staleReservation.data.requestId, p_execution_token: staleReservation.data.executionToken }],
         ['bind_staff_provisioning_identity', { p_request_id: staleReservation.data.requestId, p_execution_token: staleReservation.data.executionToken, p_auth_user_id: crypto.randomUUID() }],
         ['finalize_staff_provisioning', { p_request_id: staleReservation.data.requestId, p_execution_token: staleReservation.data.executionToken }],
+        ['finalize_and_activate_staff_provisioning', { p_request_id: staleReservation.data.requestId, p_execution_token: staleReservation.data.executionToken }],
         ['begin_staff_provisioning_compensation', { p_request_id: staleReservation.data.requestId, p_execution_token: staleReservation.data.executionToken, p_auth_user_id: crypto.randomUUID() }],
         ['fail_staff_provisioning', { p_request_id: staleReservation.data.requestId, p_execution_token: staleReservation.data.executionToken, p_failure_code: 'STALE', p_compensation_state: 'not_required' }],
       ] as const) {
@@ -900,7 +932,209 @@ async function main(): Promise<void> {
       }
     });
 
-    await scenario(44, 'cleanup and residue verification run in the finalizer', () => {
+    // ---- Staging-only direct password account path --------------------------------------
+    const directEmail = targetEmail('direct-ready');
+    const directPassword = `SyntheticOnly_${crypto.randomBytes(18).toString('hex')}!`;
+    const directLogs: string[] = [];
+    const directOriginalError = console.error;
+    console.error = (...args: unknown[]) => { directLogs.push(args.map(String).join(' ')); };
+    let directReady;
+    try {
+      directReady = await provisionTestAccount(admin, {
+        fullName: '  Synthetic Direct UAT Staff  ',
+        email: `  ${directEmail.toUpperCase()}  `,
+        password: directPassword,
+        confirmation: directPassword,
+        roles: ['reviewer', 'editor'],
+      });
+    } finally {
+      console.error = directOriginalError;
+    }
+    await track(directEmail);
+
+    await scenario(44, 'direct createUser produces a ready-to-use account without an invitation', async () => {
+      assert.equal(directReady.code, 'ACCOUNT_READY');
+      assert.equal((await mailbox(directEmail)).length, 0, 'Direct account creation sent an email.');
+      assert(!JSON.stringify(directReady).includes(directPassword));
+      assert(directLogs.every((line) => !line.includes(directPassword)));
+    });
+
+    const directRequest = await requestFor(directEmail);
+    assert(directRequest?.auth_user_id, 'Direct account did not bind an Auth identity.');
+    const directMetadata = psql(
+      `SELECT (raw_user_meta_data ? 'staff_provisioning_request_id')::text || '|' || (raw_user_meta_data ? 'staff_provisioning_ownership_token')::text || '|' || pg_catalog.length(COALESCE(raw_app_meta_data->>'staff_provisioning_marker', ''))::text FROM auth.users WHERE id = '${directRequest.auth_user_id}';`,
+    ).split('|');
+    await scenario(45, 'Auth trigger strips raw ownership credentials and writes only the durable marker', () => {
+      assert.deepEqual(directMetadata, ['false', 'false', '64']);
+    });
+
+    await scenario(46, 'direct finalization atomically creates profile, roles and activated state', async () => {
+      assert.equal(directRequest.status, 'activated');
+      assert(directRequest.activated_at || (await requestFor(directEmail))?.activated_at);
+      const profiles = await profileFor(directEmail);
+      assert.equal(profiles.length, 1);
+      assert.equal(profiles[0].auth_user_id, directRequest.auth_user_id);
+      assert.deepEqual(await rolesFor(profiles[0].id), ['editor', 'reviewer']);
+    });
+
+    const directSignInClient = anonClient();
+    const directLogin = await directSignInClient.auth.signInWithPassword({
+      email: directEmail,
+      password: directPassword,
+    });
+    await scenario(47, 'confirmed direct identity can sign in immediately with its established password', async () => {
+      assert.ifError(directLogin.error);
+      assert(directLogin.data.session);
+      assert.equal(
+        psql(`SELECT (email_confirmed_at IS NOT NULL)::text || '|' || (encrypted_password IS NOT NULL)::text FROM auth.users WHERE id = '${directRequest.auth_user_id}';`),
+        'true|true',
+      );
+    });
+    await directSignInClient.auth.signOut();
+
+    const directContext = await resolveAdminContextFromAuthUser(directRequest.auth_user_id, service);
+    await scenario(48, 'direct Reviewer + Editor resolves the exact non-admin permission union', () => {
+      assert.deepEqual(directContext.roles, ['reviewer', 'editor']);
+      assert.deepEqual(directContext.permissions, ['projects.read', 'projects.review', 'projects.edit']);
+      assert(!canManageStaff(directContext.permissions));
+      assert(!hasPermission(directContext.permissions, 'projects.publish'));
+      assert(!hasPermission(directContext.permissions, 'projects.archive'));
+      assert(!canPerformReviewAction(directContext.permissions, 'archive'));
+    });
+
+    await scenario(49, 'direct account retains the existing projects.edit import path', () => {
+      assert(hasPermission(directContext.permissions, 'projects.edit'));
+      const importPage = fs.readFileSync(
+        path.resolve(root, 'apps/admin-cms/src/app/admin/imports/new/page.tsx'),
+        'utf8',
+      );
+      assert(importPage.includes("hasPermission(authContext.permissions, 'projects.edit')"));
+    });
+
+    const lostEmail = targetEmail('direct-lost-response');
+    const lostPassword = `SyntheticOnly_${crypto.randomBytes(18).toString('hex')}!`;
+    const realDirectGateway = new SupabaseStaffPasswordIdentityGateway(service);
+    const lostResponseGateway: StaffPasswordIdentityGateway = {
+      createPasswordIdentity: async (input) => {
+        const createdId = await realDirectGateway.createPasswordIdentity(input);
+        assert(createdId, 'Lost-response fixture did not create its Auth identity.');
+        createdAuthIds.add(createdId);
+        return null;
+      },
+      deleteAuthIdentity: (authUserId) => realDirectGateway.deleteAuthIdentity(authUserId),
+    };
+    const lostResponse = await provisionTestAccount(
+      admin,
+      {
+        fullName: 'Synthetic Lost Response',
+        email: lostEmail,
+        password: lostPassword,
+        confirmation: lostPassword,
+        roles: ['editor'],
+      },
+      { identities: lostResponseGateway },
+    );
+    await track(lostEmail);
+    await scenario(50, 'lost createUser response recovers only the exact durable ownership marker', async () => {
+      assert.equal(lostResponse.code, 'ACCOUNT_READY');
+      assert.equal((await authUsersFor(lostEmail)).length, 1);
+      assert.equal((await requestFor(lostEmail))?.status, 'activated');
+      assert.equal((await profileFor(lostEmail)).length, 1);
+      assert.equal((await mailbox(lostEmail)).length, 0);
+    });
+
+    const unownedEmail = targetEmail('direct-unowned');
+    const unownedPassword = `SyntheticOnly_${crypto.randomBytes(18).toString('hex')}!`;
+    const unowned = await service.auth.admin.createUser({
+      email: unownedEmail,
+      password: unownedPassword,
+      email_confirm: true,
+    });
+    assert.ifError(unowned.error);
+    assert(unowned.data.user);
+    createdAuthIds.add(unowned.data.user.id);
+    const unownedOutcome = await provisionTestAccount(admin, {
+      fullName: 'Synthetic Unowned Identity',
+      email: unownedEmail,
+      password: unownedPassword,
+      confirmation: unownedPassword,
+      roles: ['reviewer'],
+    });
+    await scenario(51, 'an existing identity without the exact marker is neither claimed nor deleted', async () => {
+      assert.equal(unownedOutcome.code, 'ACCOUNT_CREATION_FAILED');
+      assert.deepEqual(await authUsersFor(unownedEmail), [unowned.data.user.id]);
+      assert.equal((await requestFor(unownedEmail))?.auth_identity_owned, false);
+      assert.equal((await requestFor(unownedEmail))?.status, 'failed');
+      assert.equal((await profileFor(unownedEmail)).length, 0);
+    });
+
+    const atomicEmail = targetEmail('direct-atomic-failure');
+    const atomicPassword = `SyntheticOnly_${crypto.randomBytes(18).toString('hex')}!`;
+    const atomicReservation = await service.rpc('reserve_staff_provisioning', {
+      p_actor_admin_id: admin.adminUserId,
+      p_email: atomicEmail,
+      p_full_name: 'Synthetic Atomic Failure',
+      p_roles: ['reviewer', 'editor'],
+    });
+    assert.ifError(atomicReservation.error);
+    const atomicAuthId = await realDirectGateway.createPasswordIdentity({
+      email: atomicEmail,
+      fullName: 'Synthetic Atomic Failure',
+      password: atomicPassword,
+      requestId: atomicReservation.data.requestId,
+      authOwnershipToken: atomicReservation.data.authOwnershipToken,
+    });
+    assert(atomicAuthId);
+    createdAuthIds.add(atomicAuthId);
+    const atomicBind = await service.rpc('bind_staff_provisioning_identity', {
+      p_request_id: atomicReservation.data.requestId,
+      p_execution_token: atomicReservation.data.executionToken,
+      p_auth_user_id: atomicAuthId,
+    });
+    assert.ifError(atomicBind.error);
+    assert.equal(atomicBind.data.resultCode, 'BOUND');
+
+    psql(`CREATE OR REPLACE FUNCTION public.staffprov_force_direct_activation_failure() RETURNS trigger LANGUAGE plpgsql AS $fn$ BEGIN IF NEW.normalized_email = '${atomicEmail}' AND NEW.status = 'activated' THEN RAISE EXCEPTION 'FORCED_LOCAL_DIRECT_ACTIVATION_FAILURE'; END IF; RETURN NEW; END; $fn$;`);
+    psql('CREATE TRIGGER staffprov_force_direct_activation_failure_trigger BEFORE UPDATE ON public.staff_provisioning_requests FOR EACH ROW EXECUTE FUNCTION public.staffprov_force_direct_activation_failure();');
+    directFailureTriggerInstalled = true;
+    const atomicFinalize = await service.rpc('finalize_and_activate_staff_provisioning', {
+      p_request_id: atomicReservation.data.requestId,
+      p_execution_token: atomicReservation.data.executionToken,
+    });
+
+    await scenario(52, 'forced activation failure rolls profile and roles back to compensatable invited state', async () => {
+      assert(atomicFinalize.error, 'Failure injection did not abort atomic finalization.');
+      assert.equal((await requestFor(atomicEmail))?.status, 'invited');
+      assert.equal((await profileFor(atomicEmail)).length, 0);
+      assert.deepEqual(await authUsersFor(atomicEmail), [atomicAuthId]);
+    });
+
+    psql('DROP TRIGGER IF EXISTS staffprov_force_direct_activation_failure_trigger ON public.staff_provisioning_requests;');
+    psql('DROP FUNCTION IF EXISTS public.staffprov_force_direct_activation_failure();');
+    directFailureTriggerInstalled = false;
+    const atomicCompensation = await service.rpc('begin_staff_provisioning_compensation', {
+      p_request_id: atomicReservation.data.requestId,
+      p_execution_token: atomicReservation.data.executionToken,
+      p_auth_user_id: atomicAuthId,
+    });
+    assert.ifError(atomicCompensation.error);
+    assert.equal(atomicCompensation.data.resultCode, 'COMPENSATION_AUTHORIZED');
+    assert(await realDirectGateway.deleteAuthIdentity(atomicAuthId));
+    const atomicFailure = await service.rpc('fail_staff_provisioning', {
+      p_request_id: atomicReservation.data.requestId,
+      p_execution_token: atomicReservation.data.executionToken,
+      p_failure_code: 'ATOMIC_FINALIZE_FAILED',
+      p_compensation_state: 'succeeded',
+    });
+    await scenario(53, 'exact-marker compensation safely removes the rolled-back direct identity', async () => {
+      assert.ifError(atomicFailure.error);
+      assert.equal(atomicFailure.data.resultCode, 'FAILED');
+      assert.equal((await requestFor(atomicEmail))?.status, 'failed');
+      assert.equal((await authUsersFor(atomicEmail)).length, 0);
+      assert.equal((await profileFor(atomicEmail)).length, 0);
+    });
+
+    await scenario(54, 'cleanup and residue verification run in the finalizer', () => {
       // Executed in the finally block below.
     });
   } catch (error) {
@@ -910,6 +1144,10 @@ async function main(): Promise<void> {
       if (failureTriggerInstalled) {
         psql('DROP TRIGGER IF EXISTS staffprov_force_failure_trigger ON public.admin_users;');
         psql('DROP FUNCTION IF EXISTS public.staffprov_force_failure();');
+      }
+      if (directFailureTriggerInstalled) {
+        psql('DROP TRIGGER IF EXISTS staffprov_force_direct_activation_failure_trigger ON public.staff_provisioning_requests;');
+        psql('DROP FUNCTION IF EXISTS public.staffprov_force_direct_activation_failure();');
       }
       if (editorReviewerAdded && staff.has('local-editor')) {
         await service
@@ -962,6 +1200,14 @@ async function main(): Promise<void> {
         '0',
       );
       assert.equal(
+        psql("SELECT count(*) FROM pg_catalog.pg_proc WHERE proname = 'staffprov_force_direct_activation_failure';"),
+        '0',
+      );
+      assert.equal(
+        psql("SELECT count(*) FROM pg_catalog.pg_trigger WHERE tgname = 'staffprov_force_direct_activation_failure_trigger';"),
+        '0',
+      );
+      assert.equal(
         Number(psql('SELECT count(*) FROM public.staff_provisioning_requests;')),
         provisioningBaselineCount,
       );
@@ -969,7 +1215,7 @@ async function main(): Promise<void> {
       assert.equal(await countOf('admin_users'), adminBaselineCount);
       assert.deepEqual(await workflowBaseline(), beforeWorkflow);
       assert.equal(await storageBaseline(), beforeStorage);
-      console.log('PASS: Scenario 43 - independent residue check confirms the exact pre-verifier baseline');
+      console.log('PASS: Scenario 54 - independent residue check confirms the exact pre-verifier baseline');
     } catch (error) {
       cleanupFailure = error;
     }

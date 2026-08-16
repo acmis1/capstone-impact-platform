@@ -78,6 +78,8 @@ export interface StaffProvisioningRequestContext {
   provisioningEnabled: boolean;
   provisioning: StaffProvisioningGateway;
   invitations: StaffInvitationGateway;
+  /** Bounded durable failure code for the selected Auth identity creation mechanism. */
+  identityCreationFailureCode?: 'INVITATION_FAILED' | 'ACCOUNT_CREATION_FAILED';
 }
 
 export interface StaffProvisioningResult {
@@ -308,7 +310,12 @@ export async function provisionStaffMember(
         authUserId = recovered.authUserId;
         authIdentityOwned = recovered.authIdentityOwned === true;
       } else {
-        return compensate('INVITATION_FAILED', 'INVITATION_FAILED', null, false);
+        return compensate(
+          context.identityCreationFailureCode ?? 'INVITATION_FAILED',
+          'INVITATION_FAILED',
+          null,
+          false,
+        );
       }
     } else {
       authUserId = invited;

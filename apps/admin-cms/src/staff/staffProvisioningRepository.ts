@@ -8,6 +8,7 @@ import type {
   StaffProvisioningGateway,
   TransitionOutcome,
 } from './staffProvisioningService';
+import type { StaffPasswordIdentityGateway } from './staffTestAccountService';
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -112,6 +113,21 @@ export class SupabaseStaffProvisioningGateway implements StaffProvisioningGatewa
     };
   }
 
+  async finalizeAndActivate(requestId: string, executionToken: string): Promise<FinalizeOutcome> {
+    const { data, error } = await this.client.rpc('finalize_and_activate_staff_provisioning', {
+      p_request_id: requestId,
+      p_execution_token: executionToken,
+    });
+    if (error) throw new Error('STAFF_PROVISIONING_FINALIZE_ACTIVATE_FAILED');
+
+    const payload = asRecord(data);
+    return {
+      resultCode: String(payload.resultCode ?? ''),
+      adminUserId: asText(payload.adminUserId),
+      status: asText(payload.status),
+    };
+  }
+
   async beginCompensation(
     requestId: string,
     executionToken: string,
@@ -179,13 +195,54 @@ export class SupabaseStaffInvitationGateway implements StaffInvitationGateway {
   }
 
   async deleteAuthIdentity(authUserId: string): Promise<boolean> {
-    const { error } = await this.client.auth.admin.deleteUser(authUserId);
-    if (error) {
-      console.error('[Staff Provisioning]: COMPENSATION_DELETE_FAILED');
-      return false;
-    }
-    return true;
+    return deleteOwnedAuthIdentity(this.client, authUserId);
   }
+}
+
+/** Server-only direct password identity boundary used exclusively by the staging UAT path. */
+export class SupabaseStaffPasswordIdentityGateway implements StaffPasswordIdentityGateway {
+  constructor(private readonly client: SupabaseClient) {}
+
+  async createPasswordIdentity(input: {
+    email: string;
+    fullName: string;
+    password: string;
+    requestId: string;
+    authOwnershipToken: string;
+  }): Promise<string | null> {
+    const { data, error } = await this.client.auth.admin.createUser({
+      email: input.email,
+      password: input.password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: input.fullName,
+        staff_provisioning_request_id: input.requestId,
+        staff_provisioning_ownership_token: input.authOwnershipToken,
+      },
+    });
+
+    if (error || !data?.user?.id) {
+      console.error('[Staff Test Account]: ACCOUNT_CREATION_FAILED');
+      return null;
+    }
+    return data.user.id;
+  }
+
+  async deleteAuthIdentity(authUserId: string): Promise<boolean> {
+    return deleteOwnedAuthIdentity(this.client, authUserId);
+  }
+}
+
+async function deleteOwnedAuthIdentity(
+  client: SupabaseClient,
+  authUserId: string,
+): Promise<boolean> {
+  const { error } = await client.auth.admin.deleteUser(authUserId);
+  if (error) {
+    console.error('[Staff Provisioning]: COMPENSATION_DELETE_FAILED');
+    return false;
+  }
+  return true;
 }
 
 /** Bounded, non-identifying view of a provisioned or pending staff member for the Admin/CMS. */

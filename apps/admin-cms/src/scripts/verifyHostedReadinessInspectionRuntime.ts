@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     `RPC name evidence incomplete (missing=${evaluation.missingRpcNames.join(',') || 'none'}).`
   );
   assert.equal(evaluation.missingRpcNames.length, 0);
-  assert.equal(REQUIRED_RPC_NAMES.length, 41);
+  assert.equal(REQUIRED_RPC_NAMES.length, 42);
   assert.equal(
     evaluation.requiredStorageBuckets,
     'PRESENT',
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
   );
 
   console.log('Hosted readiness inspection verified against disposable loopback Supabase.');
-  console.log('23 application tables and 41 RPC names recognized; exact overload evidence remains manual.');
+  console.log('23 application tables and 42 RPC names recognized; exact overload evidence remains manual.');
   console.log('Migration history truthfully reported unavailable through the configured Data API.');
   console.log('Zero RPC executions, mutations, identifying rows, or temporary verifier records.');
 }

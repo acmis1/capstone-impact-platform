@@ -77,7 +77,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 | `GEMINI_ASSISTIVE_EXTRACTION_ENABLED` | `false` | AI-assisted metadata extraction disabled. Manual entry and deterministic parsing remain operational. |
 | `PARTICIPANT_PREVIEW_EMAIL_ENABLED` | `false` | Email delivery disabled. Generate-and-send returns `EMAIL_DELIVERY_DISABLED`; manual token generation remains operational. |
 | `PARTICIPANT_PREVIEW_REMINDERS_ENABLED` | `false` | Reminder scheduler disabled. Scheduled reminders are skipped safely. |
-| `STAFF_PROVISIONING_ENABLED` | `false` | New staff invitation creation disabled. Existing pending invitations can still be activated. |
+| `STAFF_PROVISIONING_ENABLED` | `false` | New staff invitations and staging-only direct UAT account creation are disabled. Existing pending invitations can still be activated. Direct creation additionally requires exact staging runtime and Supabase-host identity checks. |
 
 ---
 
@@ -139,6 +139,8 @@ The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpc
 - **Administrator Identity**: Initial staging administrator bootstrap completed; single Auth identity linked to `admin_users` profile with verified `admin` role in `user_roles` (`check:admin-auth` classification: `READY_FOR_MANUAL_LOGIN_TEST`).
 - **Next Lifecycle Action**: Standalone Admin/CMS hosted web service deployment and manual authenticated login verification.
 
+Migration `0027` is newer than the 26-migration hosted evidence above and remains repository/local-only. The staging-only direct UAT account control must remain unavailable until a separately authorized hosted migration and application deployment is completed and independently reviewed.
+
 Operators should **NOT** run `supabase migration repair` or replay migrations against this clean v2 environment.
 
 ### B. Legacy Reconciliation Reference
@@ -175,7 +177,7 @@ Expected automated inspection output on the clean v2 staging target:
 
 ### B. Governed Staged Activation Evidence (Clean v2 Baseline)
 The active staging environment (`capstone-admin-cms-staging-v2-2026`) was cleared through the governed activation process (Groups D–F), providing the independent contract evidence that automated inspection cannot synthesize:
-- **Migration History (Gate 3)**: All 26 authoritative repository migrations (`0001` through `0026`) applied sequentially and verified in remote migration history via the Supabase CLI (`supabase migration list --linked`).
+- **Migration History (Gate 3)**: All 26 migrations in the recorded hosted baseline (`0001` through `0026`) were applied sequentially and verified in remote migration history via the Supabase CLI (`supabase migration list --linked`). Repository migration `0027` was added later and is not part of this hosted evidence.
 - **Schema & Grants (Gate 4)**: Exact 23 public tables, 42 service-role application RPC signatures across 41 names, and least-privilege Data API grants verified against migration definitions.
 - **Storage Infrastructure (Group E)**: All 3 Storage buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) created and configured; 0 storage objects.
 - **Administrator Auth Linkage (Group F)**: Single Auth identity linked to `admin_users` profile with `admin` role in `user_roles`.
