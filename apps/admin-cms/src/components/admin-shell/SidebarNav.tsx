@@ -30,22 +30,22 @@ export function SidebarNav({ onNavClick, className, canManageStaff = false }: Si
   const navigationItems = getNavigationItems(canManageStaff);
 
   return (
-    <div className={cn('flex flex-col h-full bg-background border-r', className)}>
+    <div className={cn('flex flex-col h-full bg-sidebar border-r border-sidebar-border', className)}>
       {/* Brand header */}
-      <div className="flex h-14 items-center gap-2.5 border-b px-4">
+      <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-5 pr-14">
         <AppMark size="sm" />
         <div className="flex flex-col min-w-0">
-          <span className="font-bold text-sm leading-tight tracking-tight text-foreground truncate">
+          <span className="font-bold text-sm leading-tight tracking-tight text-sidebar-foreground truncate">
             Capstone Impact
           </span>
-          <span className="text-[11px] font-medium leading-none text-muted-foreground">
-            Admin
+          <span className="text-xs font-medium leading-none text-muted-foreground mt-0.5">
+            Admin CMS
           </span>
         </div>
       </div>
 
       {/* Primary navigation */}
-      <nav aria-label="Primary administration" className="flex-1 space-y-1 p-3">
+      <nav aria-label="Primary administration" className="flex-1 space-y-1 p-3.5">
         {navigationItems.map((item: NavigationItem) => {
           const Icon = getNavIcon(item.href);
           const isActive = item.href === activeHref;
@@ -57,13 +57,13 @@ export function SidebarNav({ onNavClick, className, canManageStaff = false }: Si
               onClick={onNavClick}
               aria-current={isActive ? 'page' : undefined}
               className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2.5 min-h-[44px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'flex items-center gap-3 rounded-md px-3.5 py-2.5 min-h-[44px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 isActive
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary font-semibold'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  ? 'bg-muted text-foreground font-semibold border-l-[3px] border-primary shadow-2xs'
+                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
               )}
             >
-              <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <Icon className={cn('h-4 w-4 shrink-0', isActive ? 'text-primary' : 'text-muted-foreground')} aria-hidden="true" />
               <span>{item.name}</span>
             </Link>
           );

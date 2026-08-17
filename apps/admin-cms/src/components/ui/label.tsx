@@ -11,7 +11,7 @@ export function Label({ className, isRequired = false, children, ref, ...props }
       data-slot="label"
       ref={ref}
       className={cn(
-        "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+        "text-sm font-medium leading-none text-foreground select-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
         className
       )}
       {...props}
@@ -19,7 +19,7 @@ export function Label({ className, isRequired = false, children, ref, ...props }
       {children}
       {isRequired && (
         <>
-          <span className="ml-0.5 text-destructive" aria-hidden="true">*</span>
+          <span className="ml-1 font-semibold text-destructive" aria-hidden="true">*</span>
           <span className="sr-only"> (required)</span>
         </>
       )}
