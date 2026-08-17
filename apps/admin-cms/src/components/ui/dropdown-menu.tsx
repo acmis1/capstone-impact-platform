@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { DropdownMenu as RadixDropdownMenu } from 'radix-ui';
+import { Check } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export const DropdownMenu = RadixDropdownMenu.Root;
@@ -41,6 +42,28 @@ export const DropdownMenuItem = React.forwardRef<
   />
 ));
 DropdownMenuItem.displayName = RadixDropdownMenu.Item.displayName;
+
+export const DropdownMenuCheckboxItem = React.forwardRef<
+  React.ComponentRef<typeof RadixDropdownMenu.CheckboxItem>,
+  React.ComponentPropsWithoutRef<typeof RadixDropdownMenu.CheckboxItem>
+>(({ className, children, ...props }, ref) => (
+  <RadixDropdownMenu.CheckboxItem
+    ref={ref}
+    className={cn(
+      'relative flex min-h-[40px] cursor-pointer select-none items-center rounded-md py-2 pl-9 pr-2.5 text-sm outline-none transition-colors hover:bg-accent focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      className
+    )}
+    {...props}
+  >
+    <span className="absolute left-2.5 flex size-4 items-center justify-center text-primary">
+      <RadixDropdownMenu.ItemIndicator>
+        <Check className="size-4" aria-hidden="true" />
+      </RadixDropdownMenu.ItemIndicator>
+    </span>
+    {children}
+  </RadixDropdownMenu.CheckboxItem>
+));
+DropdownMenuCheckboxItem.displayName = RadixDropdownMenu.CheckboxItem.displayName;
 
 export const DropdownMenuLabel = React.forwardRef<
   React.ComponentRef<typeof RadixDropdownMenu.Label>,

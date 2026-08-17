@@ -7,50 +7,57 @@ interface ProjectStatusBadgeProps {
   className?: string;
 }
 
+/**
+ * Human-readable labels for the existing workflow statuses. Shared so the status badge,
+ * the status filter options, and active-filter tokens always read identically.
+ * Presentation only: the underlying workflow status values are unchanged.
+ */
+export const WORKFLOW_STATUS_LABELS: Record<WorkflowStatus, string> = {
+  draft: 'Draft',
+  submitted: 'Submitted',
+  in_review: 'In review',
+  changes_requested: 'Changes requested',
+  approved: 'Approved',
+  published: 'Published',
+  archived: 'Archived',
+  deleted: 'Deleted',
+};
+
+export function getWorkflowStatusLabel(status: WorkflowStatus | string): string {
+  const normalized = (status || '').toLowerCase() as WorkflowStatus;
+  return WORKFLOW_STATUS_LABELS[normalized] ?? (status ? status.replace(/_/g, ' ') : 'Unknown');
+}
+
 export function ProjectStatusBadge({ status, className }: ProjectStatusBadgeProps) {
   const normalizedStatus = (status || '').toLowerCase() as WorkflowStatus;
 
   let variant: BadgeProps['variant'] = 'neutral';
-  let label = status || 'Draft';
 
   switch (normalizedStatus) {
-    case 'draft':
-      variant = 'neutral';
-      label = 'Draft';
-      break;
     case 'submitted':
       variant = 'information';
-      label = 'Submitted';
       break;
     case 'in_review':
-      variant = 'warning';
-      label = 'In review';
-      break;
     case 'changes_requested':
       variant = 'warning';
-      label = 'Changes requested';
       break;
     case 'approved':
       variant = 'success';
-      label = 'Approved';
       break;
     case 'published':
       variant = 'primary';
-      label = 'Published';
-      break;
-    case 'archived':
-      variant = 'neutral';
-      label = 'Archived';
       break;
     case 'deleted':
       variant = 'destructive';
-      label = 'Deleted';
       break;
+    case 'draft':
+    case 'archived':
     default:
       variant = 'neutral';
-      label = status ? status.replace(/_/g, ' ') : 'Unknown';
       break;
   }
+
+  const label = getWorkflowStatusLabel(status);
 
   return (
     <Badge variant={variant} className={className}>
