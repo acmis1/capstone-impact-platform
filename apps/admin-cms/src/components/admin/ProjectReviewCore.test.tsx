@@ -12,6 +12,7 @@ import { ProjectMetadataEditor } from './ProjectMetadataEditor';
 import { ProjectMetadataNavigationProvider } from './ProjectMetadataNavigation';
 import { Project } from '../../domain/project';
 import { ProjectMetadataView } from '../../projects/projectMetadata';
+import { ProjectMetadataGateway, saveProjectMetadata } from '../../projects/projectMetadataService';
 import { Layers } from 'lucide-react';
 
 vi.mock('next/navigation', () => ({
@@ -345,6 +346,78 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       );
 
       expect(screen.getByRole('heading', { name: /project metadata/i, level: 4 })).toBeTruthy();
+    });
+  });
+
+  describe('ProjectMetadataEditor save acknowledgement (regression for #128)', () => {
+    const initialMetadata: ProjectMetadataView = {
+      publicId: '2026-proj-01',
+      title: 'Autonomous Drone Navigation',
+      summary: 'A project exploring drone autonomy.',
+      background: 'Problem background details.',
+      solution: 'Developed solution details.',
+      posterText: 'Full poster text content index.',
+      accessibilityText: 'Poster showing autonomous drone architecture diagram.',
+      year: '2026',
+      programId: 'a0000000-0000-4000-8000-000000000001',
+      disciplineIds: ['b0000000-0000-4000-8000-000000000001'],
+      industryCategoryIds: ['c0000000-0000-4000-8000-000000000001'],
+      expectedUpdatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const options = {
+      programs: [{ id: initialMetadata.programId, name: 'Program' }],
+      disciplines: [{ id: initialMetadata.disciplineIds[0], name: 'Discipline' }],
+      industryCategories: [{ id: initialMetadata.industryCategoryIds[0], name: 'Industry' }],
+    };
+
+    const renderEditor = (rpcResponse: unknown) => {
+      const gateway: ProjectMetadataGateway = {
+        loadProject: async () => { throw new Error('Persistence must not be reached'); },
+        loadOptions: async () => options,
+        updateMetadataAtomically: async () => rpcResponse,
+      };
+      const saveAction = (input: unknown) => saveProjectMetadata(gateway, input, 'test-admin-user');
+      return render(
+        <ProjectMetadataNavigationProvider>
+          <ProjectMetadataEditor
+            initialMetadata={initialMetadata}
+            programs={options.programs}
+            disciplines={options.disciplines}
+            industryCategories={options.industryCategories}
+            canEdit={true}
+            projectStatus="changes_requested"
+            saveAction={saveAction}
+          />
+        </ProjectMetadataNavigationProvider>,
+      );
+    };
+
+    const enterEditAndChangeTitle = (title: string) => {
+      fireEvent.click(screen.getByRole('button', { name: /edit metadata/i }));
+      fireEvent.change(screen.getByLabelText(/project title/i), { target: { value: title } });
+    };
+
+    it('exits edit mode and shows the saved confirmation for a committed save matching the authoritative audited RPC contract', async () => {
+      const revisedMetadata = { ...initialMetadata, title: 'Revised title' };
+      renderEditor({ resultCode: 'SUCCESS', metadata: revisedMetadata, auditRecordId: 'e0000000-0000-4000-8000-000000000001' });
+
+      enterEditAndChangeTitle('Revised title');
+      fireEvent.click(screen.getByRole('button', { name: /save metadata/i }));
+
+      expect(await screen.findByText('Project metadata saved.')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /save metadata/i })).toBeNull();
+      expect(screen.getByRole('button', { name: /edit metadata/i })).toBeTruthy();
+    });
+
+    it('stays in edit mode when the RPC response omits the audit record the authoritative contract always returns', async () => {
+      const revisedMetadata = { ...initialMetadata, title: 'Revised title' };
+      renderEditor({ resultCode: 'SUCCESS', metadata: revisedMetadata });
+
+      enterEditAndChangeTitle('Revised title');
+      fireEvent.click(screen.getByRole('button', { name: /save metadata/i }));
+
+      expect(await screen.findByText('We could not save your changes. Please try again.')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /save metadata/i })).toBeTruthy();
     });
   });
 });

@@ -21,10 +21,25 @@ export const metadataResponseSchema = z.object({
   year: z.string().regex(/^\d{4}$/), programId: postgresUuidSchema, disciplineIds: uuidArray, industryCategoryIds: uuidArray,
   expectedUpdatedAt: z.string().refine((value) => !Number.isNaN(Date.parse(value))),
 }).strict();
-const rpcResponseSchema = z.object({
-  resultCode: z.enum(['SUCCESS', 'PROJECT_NOT_FOUND', 'STALE_VERSION', 'VALIDATION_FAILED', 'APPROVAL_REOPEN_REQUIRED', 'PUBLISHED_PROJECT_LOCKED', 'PERMISSION_DENIED', 'NO_CHANGES']),
-  metadata: metadataResponseSchema.optional(),
+
+// Mirrors the authoritative public.update_project_metadata RPC contract (currently
+// infra/supabase/migrations/20260814090000_accessible_full_text_gate.sql): a real mutation
+// SUCCESS always carries the audit record created for it, NO_CHANGES never creates one, and no
+// resultCode ever carries fields outside its own branch.
+const FAILURE_RESULT_CODES = ['PROJECT_NOT_FOUND', 'STALE_VERSION', 'VALIDATION_FAILED', 'APPROVAL_REOPEN_REQUIRED', 'PUBLISHED_PROJECT_LOCKED', 'PERMISSION_DENIED'] as const;
+const successRpcResponseSchema = z.object({
+  resultCode: z.literal('SUCCESS'),
+  metadata: metadataResponseSchema,
+  auditRecordId: postgresUuidSchema,
 }).strict();
+const noChangesRpcResponseSchema = z.object({
+  resultCode: z.literal('NO_CHANGES'),
+  metadata: metadataResponseSchema,
+}).strict();
+const failureRpcResponseSchema = z.object({
+  resultCode: z.enum(FAILURE_RESULT_CODES),
+}).strict();
+const rpcResponseSchema = z.union([successRpcResponseSchema, noChangesRpcResponseSchema, failureRpcResponseSchema]);
 
 export interface ProjectMetadataGateway {
   loadProject(publicId: string, options?: MetadataOptions): Promise<ProjectSnapshot | null>;
@@ -97,7 +112,7 @@ export async function saveProjectMetadata(gateway: ProjectMetadataGateway, rawIn
   switch (response.data.resultCode) {
     case 'SUCCESS':
     case 'NO_CHANGES':
-      return response.data.metadata ? { ok: true, metadata: response.data.metadata } : failure('INTERNAL_FAILURE');
+      return { ok: true, metadata: response.data.metadata };
     case 'PROJECT_NOT_FOUND': return failure('PROJECT_NOT_FOUND');
     case 'STALE_VERSION': return failure('STALE_VERSION');
     case 'APPROVAL_REOPEN_REQUIRED': return failure('APPROVAL_REOPEN_REQUIRED');
