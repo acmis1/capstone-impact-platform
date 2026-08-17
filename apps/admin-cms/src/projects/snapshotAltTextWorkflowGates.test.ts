@@ -84,24 +84,34 @@ describe('review readiness snapshot alt gate', () => {
 
 describe('approval validation snapshot alt gate', () => {
   const approvable = createMockProject({ status: 'in_review' });
+  const media = {
+    posterImage: { rowCount: 1, validPrivateCount: 1 },
+    posterPdf: { rowCount: 1, validPrivateCount: 1 },
+    snapshotMedia: null,
+  };
 
   it('permits approval when the project has no snapshot media', () => {
-    expect(validateProjectForApproval(approvable).valid).toBe(true);
-    expect(validateProjectForApproval(approvable, { snapshotMedia: null }).valid).toBe(true);
+    expect(validateProjectForApproval(approvable, media).valid).toBe(true);
   });
 
   it('permits approval when the snapshot media carries alt text', () => {
-    expect(validateProjectForApproval(approvable, { snapshotMedia: { altText: VALID_ALT } }).valid).toBe(true);
+    expect(validateProjectForApproval(approvable, {
+      ...media, snapshotMedia: { rowCount: 1, validPrivateCount: 1, altText: VALID_ALT },
+    }).valid).toBe(true);
   });
 
   it('blocks approval when the snapshot media has no alt text', () => {
-    const result = validateProjectForApproval(approvable, { snapshotMedia: { altText: null } });
+    const result = validateProjectForApproval(approvable, {
+      ...media, snapshotMedia: { rowCount: 1, validPrivateCount: 1, altText: null },
+    });
     expect(result.valid).toBe(false);
     expect(result.errors.join(' ')).toContain(MISSING_MESSAGE);
   });
 
   it('blocks approval when the snapshot alt exceeds the safety limit', () => {
-    const result = validateProjectForApproval(approvable, { snapshotMedia: { altText: 'a'.repeat(MAX + 1) } });
+    const result = validateProjectForApproval(approvable, {
+      ...media, snapshotMedia: { rowCount: 1, validPrivateCount: 1, altText: 'a'.repeat(MAX + 1) },
+    });
     expect(result.valid).toBe(false);
     expect(result.errors.join(' ')).toContain(TOO_LONG_MESSAGE);
   });
@@ -109,7 +119,7 @@ describe('approval validation snapshot alt gate', () => {
   it('keeps the inherited poster full-text requirement', () => {
     const result = validateProjectForApproval(
       createMockProject({ status: 'in_review', posterText: '' }),
-      { snapshotMedia: { altText: VALID_ALT } },
+      { ...media, snapshotMedia: { rowCount: 1, validPrivateCount: 1, altText: VALID_ALT } },
     );
     expect(result.valid).toBe(false);
     expect(result.errors.join(' ')).toContain('Poster full text is missing.');

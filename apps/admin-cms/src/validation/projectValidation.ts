@@ -70,13 +70,29 @@ export function validateProjectForReview(project: Project): ValidationOutput {
  * perform_project_review_action; that gate remains the sole authority, and this exists so the CMS
  * can show staff the blocker before they attempt the action.
  */
-export interface ApprovalSnapshotMediaInput {
+export interface ApprovalMediaAssetEvidence {
+  rowCount: number;
+  validPrivateCount: number;
+}
+
+export interface ApprovalSnapshotMediaInput extends ApprovalMediaAssetEvidence {
   altText: string | null;
+}
+
+/**
+ * Server-derived evidence for the authoritative media rows used by approval. Counts are retained
+ * instead of flattened booleans so duplicate or contradictory rows fail closed as invalid rather
+ * than being mistaken for one usable asset.
+ */
+export interface ApprovalMediaInput {
+  posterImage: ApprovalMediaAssetEvidence;
+  posterPdf: ApprovalMediaAssetEvidence;
+  snapshotMedia: ApprovalSnapshotMediaInput | null;
 }
 
 export function validateProjectForApproval(
   project: Project,
-  options: { snapshotMedia?: ApprovalSnapshotMediaInput | null } = {},
+  media: ApprovalMediaInput | null,
 ): ValidationOutput {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -99,12 +115,22 @@ export function validateProjectForApproval(
     errors.push(`${prefix} Roster of team members ("teamMembers") is empty. Approval blocked.`);
   }
 
-  // Poster Image & PDF must be present before final approval
-  if (!project.poster || project.poster.trim() === '') {
-    errors.push(`${prefix} Missing public poster preview image URL. Approval blocked.`);
-  }
-  if (!project.posterPdf || project.posterPdf.trim() === '') {
-    errors.push(`${prefix} Missing public poster PDF URL. Approval blocked.`);
+  // Approval is a pre-publication decision. Required poster evidence comes from the authoritative
+  // private media rows, never from project.poster/project.posterPdf public URL projections.
+  if (media === null) {
+    errors.push(`${prefix} Project media could not be verified. Approval blocked.`);
+  } else {
+    if (media.posterImage.rowCount === 0) {
+      errors.push(`${prefix} Poster image is missing from staged project media. Approval blocked.`);
+    } else if (media.posterImage.rowCount !== 1 || media.posterImage.validPrivateCount !== 1) {
+      errors.push(`${prefix} Poster image in staged project media is invalid. Approval blocked.`);
+    }
+
+    if (media.posterPdf.rowCount === 0) {
+      errors.push(`${prefix} Poster PDF is missing from staged project media. Approval blocked.`);
+    } else if (media.posterPdf.rowCount !== 1 || media.posterPdf.validPrivateCount !== 1) {
+      errors.push(`${prefix} Poster PDF in staged project media is invalid. Approval blocked.`);
+    }
   }
 
   // Accessible poster content blocks approval, whether it is absent or beyond its bounded ceiling.
@@ -120,8 +146,11 @@ export function validateProjectForApproval(
 
   // Snapshot media accessibility. Only evaluated when a snapshot image actually exists, because
   // the image itself is optional and nobody should be asked to describe one that is not there.
-  if (options.snapshotMedia) {
-    const problem = getSnapshotAltTextProblem(options.snapshotMedia.altText, { snapshotPresent: true });
+  if (media?.snapshotMedia) {
+    if (media.snapshotMedia.rowCount !== 1 || media.snapshotMedia.validPrivateCount !== 1) {
+      errors.push(`${prefix} Snapshot image in staged project media is invalid. Approval blocked.`);
+    }
+    const problem = getSnapshotAltTextProblem(media.snapshotMedia.altText, { snapshotPresent: true });
     if (problem) {
       errors.push(`${prefix} ${describeAccessibleContentProblem(problem, 'snapshotAltText')} Approval blocked.`);
     }

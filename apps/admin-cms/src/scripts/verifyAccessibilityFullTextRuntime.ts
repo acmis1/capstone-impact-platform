@@ -230,11 +230,11 @@ function seedProject(
     INSERT INTO public.project_industry_categories(project_id, industry_category_id)
       SELECT id, '${fixture.industry.id}'::uuid FROM public.projects WHERE public_id = ${sqlText(publicId)};
     ${options.withMedia ? `
-    INSERT INTO public.media_assets(project_id, asset_type, file_name, storage_bucket, storage_path, is_public_approved, public_url)
-      SELECT id, 'poster_image', 'poster.png', ${sqlText(PRIVATE_BUCKET)}, ${sqlText(`${publicId}/poster.png`)}, false, NULL
+    INSERT INTO public.media_assets(project_id, asset_type, file_name, storage_bucket, storage_path, mime_type, file_size_bytes, is_public_approved, public_url)
+      SELECT id, 'poster_image', 'poster.png', ${sqlText(PRIVATE_BUCKET)}, ${sqlText(`drafts/${publicId}/poster_image/poster.png`)}, 'image/png', 128, false, NULL
       FROM public.projects WHERE public_id = ${sqlText(publicId)};
-    INSERT INTO public.media_assets(project_id, asset_type, file_name, storage_bucket, storage_path, is_public_approved, public_url)
-      SELECT id, 'poster_pdf', 'poster.pdf', ${sqlText(PRIVATE_BUCKET)}, ${sqlText(`${publicId}/poster.pdf`)}, false, NULL
+    INSERT INTO public.media_assets(project_id, asset_type, file_name, storage_bucket, storage_path, mime_type, file_size_bytes, is_public_approved, public_url)
+      SELECT id, 'poster_pdf', 'poster.pdf', ${sqlText(PRIVATE_BUCKET)}, ${sqlText(`drafts/${publicId}/poster_pdf/poster.pdf`)}, 'application/pdf', 256, false, NULL
       FROM public.projects WHERE public_id = ${sqlText(publicId)};` : ''}
   `);
   return publicId;
@@ -566,7 +566,14 @@ export async function verifyAccessibilityFullTextRuntime(): Promise<void> {
 
     // ---------------------------------------------------------------- Approval
     await scenario(25, 'Application approval validation reports both values as blocking errors', () => {
-      const result = validateProjectForApproval(createMockProject({ posterText: '', accessibilityText: '' }));
+      const result = validateProjectForApproval(
+        createMockProject({ posterText: '', accessibilityText: '' }),
+        {
+          posterImage: { rowCount: 1, validPrivateCount: 1 },
+          posterPdf: { rowCount: 1, validPrivateCount: 1 },
+          snapshotMedia: null,
+        },
+      );
       assert(!result.valid, 'Approval validation accepted a project with no accessible content.');
       assert(result.errors.some((error) => error.includes('Poster full text is missing')), 'Poster full text was not an approval error.');
       assert(result.errors.some((error) => error.includes('Accessibility text is missing')), 'Accessibility text was not an approval error.');
@@ -593,7 +600,7 @@ export async function verifyAccessibilityFullTextRuntime(): Promise<void> {
     });
 
     await scenario(28, 'A compliant project approves normally', async () => {
-      const project = seedProject(prefix, 'approve-ready', fixture!, { status: 'submitted' });
+      const project = seedProject(prefix, 'approve-ready', fixture!, { status: 'submitted', withMedia: true });
       const result = await serviceClient.rpc('perform_project_review_action', {
         p_public_id: project, p_action: 'approve', p_comments: null, p_admin_id: fixture!.reviewer.id,
       }) as RpcResult<{ status?: string }>;
@@ -839,7 +846,7 @@ export async function verifyAccessibilityFullTextRuntime(): Promise<void> {
       const atLimitPoster = 'x'.repeat(ACCESSIBLE_CONTENT_LIMITS.posterText);
       const atLimitAccessibility = 'y'.repeat(ACCESSIBLE_CONTENT_LIMITS.accessibilityText);
       const project = seedProject(prefix, 'at-limit', fixture!, {
-        status: 'submitted', posterText: atLimitPoster, accessibilityText: atLimitAccessibility,
+        status: 'submitted', posterText: atLimitPoster, accessibilityText: atLimitAccessibility, withMedia: true,
       });
       const approval = await serviceClient.rpc('perform_project_review_action', {
         p_public_id: project, p_action: 'approve', p_comments: null, p_admin_id: fixture!.reviewer.id,

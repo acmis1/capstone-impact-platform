@@ -1,14 +1,16 @@
 import React from 'react';
 import { Project } from '../../domain/project';
 import { validateProjectForApproval } from '../../validation/projectValidation';
+import type { ApprovalMediaInput } from '../../validation/projectValidation';
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 
 interface ProjectValidationSummaryProps {
   project: Project;
+  approvalMedia: ApprovalMediaInput | null;
 }
 
-export function ProjectValidationSummary({ project }: ProjectValidationSummaryProps) {
-  const validation = validateProjectForApproval(project);
+export function ProjectValidationSummary({ project, approvalMedia }: ProjectValidationSummaryProps) {
+  const validation = validateProjectForApproval(project, approvalMedia);
 
   // Custom staging checks based on the prompt requirements
   const localErrors: string[] = [...validation.errors];

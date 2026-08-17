@@ -129,9 +129,14 @@ describe('invalid synthetic project fixtures', () => {
     );
 
     expect((fixtures['missing-title'].payload as { title: string }).title).toBe('');
-    expect(validateProjectForApproval(fixtures['missing-title'].payload as never).errors.join(' ')).toContain('title');
+    const approvalMedia = {
+      posterImage: { rowCount: 1, validPrivateCount: 1 },
+      posterPdf: { rowCount: 1, validPrivateCount: 1 },
+      snapshotMedia: null,
+    };
+    expect(validateProjectForApproval(fixtures['missing-title'].payload as never, approvalMedia).errors.join(' ')).toContain('title');
     expect((fixtures['missing-year'].payload as { year: string }).year).toBe('');
-    expect(validateProjectForApproval(fixtures['missing-year'].payload as never).errors.join(' ')).toContain('year');
+    expect(validateProjectForApproval(fixtures['missing-year'].payload as never, approvalMedia).errors.join(' ')).toContain('year');
 
     const invalidStatus = (fixtures['invalid-status'].payload as { status: string }).status;
     expect(WORKFLOW_STATUSES).not.toContain(invalidStatus);

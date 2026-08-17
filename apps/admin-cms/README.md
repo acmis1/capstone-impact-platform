@@ -29,7 +29,7 @@ It includes a project metadata editor backed by one atomic, service-role-only da
 | Media validation/storage | Foundations | Offline media validation tests; private-to-public storage functions exist | End-to-end staging and production verification pending |
 | Public-eligible feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled public cutover pending |
 | Duda integration | Design boundary | Stable-feed consumer is documented | Live Duda connection remains isolated |
-| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (27 timestamped migrations; migrations 0007 through 0027 repository/local-only) | Full production RLS verification pending |
+| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (28 timestamped migrations; migrations 0007 through 0028 repository/local-only) | Full production RLS verification pending |
 | Automated testing | Yes | Vitest offline suite and onboarding precheck | No hosted CI evidence is asserted here |
 | Production deployment | No | Not production-verified | Hardening and controlled cutover pending |
 

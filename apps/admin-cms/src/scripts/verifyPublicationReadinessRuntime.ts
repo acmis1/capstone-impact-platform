@@ -80,6 +80,26 @@ export async function runPublicationReadinessRuntimeVerification(): Promise<bool
       return proj;
     }
 
+    async function createRequiredApprovalMedia(project: { id: string; public_id: string }) {
+      const { error } = await client.from('media_assets').insert([
+        {
+          project_id: project.id, asset_type: 'poster_image', file_name: 'poster.png',
+          storage_bucket: PRIVATE_DRAFT_BUCKET,
+          storage_path: `drafts/${project.public_id}/poster_image/poster.png`,
+          public_url: null, public_storage_bucket: null, public_storage_path: null,
+          mime_type: 'image/png', file_size_bytes: 128, is_public_approved: false,
+        },
+        {
+          project_id: project.id, asset_type: 'poster_pdf', file_name: 'poster.pdf',
+          storage_bucket: PRIVATE_DRAFT_BUCKET,
+          storage_path: `drafts/${project.public_id}/poster_pdf/poster.pdf`,
+          public_url: null, public_storage_bucket: null, public_storage_path: null,
+          mime_type: 'application/pdf', file_size_bytes: 256, is_public_approved: false,
+        },
+      ]);
+      if (error) throw new Error('Failed to create publication-readiness approval media fixture.');
+    }
+
     // Helper to generate preview
     async function generatePreview(publicId: string, isReissue = false) {
       const token = `raw-token-${crypto.randomUUID()}`;
@@ -213,6 +233,7 @@ export async function runPublicationReadinessRuntimeVerification(): Promise<bool
     // TEST 9: Correction resolved, Preview B active unresponded -> NOT READY (CORRECTED_PREVIEW_AWAITING_CONFIRMATION)
     console.log('--- TEST 9: Resolved correction + Preview B unresponded ---');
     const p9 = await createProjectFixture('t9', 'approved');
+    await createRequiredApprovalMedia(p9);
     const prev9a = await generatePreview(p9.public_id);
     await repo.requestCorrection(prev9a.tokenHash, 'Fix summary');
     await repo.startCorrectionResolution({ publicId: p9.public_id, adminId });
@@ -232,6 +253,7 @@ export async function runPublicationReadinessRuntimeVerification(): Promise<bool
     // TEST 10: Correction resolved, Preview B active confirmed -> READY
     console.log('--- TEST 10: Resolved correction + Preview B confirmed ---');
     const p10 = await createProjectFixture('t10', 'approved');
+    await createRequiredApprovalMedia(p10);
     const prev10a = await generatePreview(p10.public_id);
     await repo.requestCorrection(prev10a.tokenHash, 'Fix title');
     await repo.startCorrectionResolution({ publicId: p10.public_id, adminId });

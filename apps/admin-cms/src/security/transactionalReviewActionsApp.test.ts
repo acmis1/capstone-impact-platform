@@ -118,7 +118,12 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     ).rejects.toThrow('Review action execution failed: RESPONSE_INVALID');
   });
 
-  it.each(['CORRECTION_RESOLUTION_REQUIRED', 'AMBIGUOUS_ACTIVE_PREVIEW'] as const)('3b. preserves bounded RPC result %s before success-shape parsing', async (resultCode) => {
+  it.each([
+    'CORRECTION_RESOLUTION_REQUIRED',
+    'AMBIGUOUS_ACTIVE_PREVIEW',
+    'PROJECT_MEDIA_REQUIRED',
+    'PROJECT_MEDIA_INVALID',
+  ] as const)('3b. preserves bounded RPC result %s before success-shape parsing', async (resultCode) => {
     const repo = new SupabaseProjectRepositoryCore({ rpc: vi.fn().mockResolvedValue({ data: { resultCode }, error: null }) } as never);
     await expect(repo.performReviewAction({ publicId: '2026-proj1', action: 'request_changes', adminId: '11111111-2222-3333-4444-555555555555' }))
       .rejects.toThrow(`Review action execution failed: ${resultCode}`);
@@ -334,6 +339,8 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
   it.each([
     ['CORRECTION_RESOLUTION_REQUIRED', 'Resolve the participant correction through the correction-resolution workflow before requesting changes.'],
     ['AMBIGUOUS_ACTIVE_PREVIEW', 'Project preview state is inconsistent. Request changes could not be completed safely.'],
+    ['PROJECT_MEDIA_REQUIRED', 'A poster image and poster PDF are required in project media before approval.'],
+    ['PROJECT_MEDIA_INVALID', 'Project media is not valid for approval. Review the uploaded poster files, then approve.'],
   ] as const)('10b. API maps %s to a bounded HTTP 409 response', async (code, message) => {
     const { requireAdmin } = await import('../auth/requireAdmin');
     vi.mocked(requireAdmin).mockResolvedValueOnce({ authUserId: 'auth-uuid-1', adminUserId: 'admin-uuid-1', email: 'admin@capstone.test', fullName: 'Admin User', roles: ['admin'], permissions: ['projects.read', 'projects.review', 'projects.archive', 'projects.edit'] });

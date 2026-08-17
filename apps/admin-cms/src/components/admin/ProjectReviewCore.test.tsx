@@ -142,7 +142,11 @@ describe('PR2B1 Core Project Review Experience Components', () => {
         },
       };
 
-      render(<ProjectValidationSummary project={invalidProject} />);
+      render(<ProjectValidationSummary project={invalidProject} approvalMedia={{
+        posterImage: { rowCount: 1, validPrivateCount: 1 },
+        posterPdf: { rowCount: 1, validPrivateCount: 1 },
+        snapshotMedia: null,
+      }} />);
 
       expect(screen.getByText(/Blocking issues/i)).toBeTruthy();
       expect(screen.queryByText(/✅/)).toBeNull();
@@ -155,7 +159,11 @@ describe('PR2B1 Core Project Review Experience Components', () => {
         status: 'approved',
       };
 
-      render(<ProjectValidationSummary project={readyProject} />);
+      render(<ProjectValidationSummary project={readyProject} approvalMedia={{
+        posterImage: { rowCount: 1, validPrivateCount: 1 },
+        posterPdf: { rowCount: 1, validPrivateCount: 1 },
+        snapshotMedia: null,
+      }} />);
 
       expect(screen.getByText(/Validation passed/i)).toBeTruthy();
       expect(screen.getByText(/This project has no blocking validation issues/i)).toBeTruthy();

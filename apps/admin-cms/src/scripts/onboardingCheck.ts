@@ -41,6 +41,7 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260814090000_accessible_full_text_gate.sql',
   '20260814140000_snapshot_image_alt_text.sql',
   '20260816144917_staging_uat_direct_account_finalization.sql',
+  '20260817090000_private_media_approval_gate.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {

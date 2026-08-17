@@ -5,6 +5,12 @@ import { PROJECT_METADATA_LIMITS, projectMetadataInputSchema } from '../projects
 import { validateMediaAsset } from '../storage/mediaValidationCore';
 import { validateProjectForApproval } from '../validation/projectValidation';
 
+const COMPLETE_PRIVATE_APPROVAL_MEDIA = {
+  posterImage: { rowCount: 1, validPrivateCount: 1 },
+  posterPdf: { rowCount: 1, validPrivateCount: 1 },
+  snapshotMedia: null,
+};
+
 export const DEFAULT_SYNTHETIC_SEED = 0xD4072026;
 export const SYNTHETIC_PROJECT_COUNTS = [100, 500, 1000] as const;
 export type SyntheticProjectCount = (typeof SYNTHETIC_PROJECT_COUNTS)[number];
@@ -377,7 +383,7 @@ export function validateInvalidSyntheticFixture(fixture: InvalidSyntheticFixture
   switch (fixture.kind) {
     case 'missing-title':
     case 'missing-year':
-      return !validateProjectForApproval(fixture.payload as Project).valid;
+      return !validateProjectForApproval(fixture.payload as Project, COMPLETE_PRIVATE_APPROVAL_MEDIA).valid;
     case 'invalid-status':
       return !WORKFLOW_STATUSES.includes((fixture.payload as { status: string }).status as WorkflowStatus);
     case 'duplicate-public-id':
