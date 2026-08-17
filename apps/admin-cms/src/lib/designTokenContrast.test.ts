@@ -1,6 +1,10 @@
 import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
+import {
+  IMPORT_WORKFLOW_STEP_ITEM_CLASSES,
+  IMPORT_WORKFLOW_STEP_SURFACE_TOKEN,
+} from "../components/imports/importWorkflowStepStyles";
 
 function parseHexColor(hex: string): [number, number, number] {
   const cleanHex = hex.trim().replace(/^#/, "");
@@ -129,6 +133,60 @@ describe("Badge rendered alpha-composited contrast (WCAG 2.2 AA)", () => {
         `Badge variant "${variantName}" renders text ${textTokenHex} on composited background ${renderedBgHex} ` +
           `(bg-${bgUtility!.token}${bgUtility!.opacityPercent !== null ? `/${bgUtility!.opacityPercent}` : ""} over card ${badgeUnderlyingSurfaceHex}), ` +
           `contrast ratio ${ratio.toFixed(2)}:1, expected >= 4.5:1`
+      ).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});
+
+describe("Import workflow step-tracker rendered contrast (WCAG 2.2 AA)", () => {
+  const tokens = extractCssTokens();
+  const tokenNames = Object.keys(tokens);
+  // The step tracker `<nav>` is `bg-card`, so any tinted step background composites over it.
+  const trackerSurfaceHex = tokens[IMPORT_WORKFLOW_STEP_SURFACE_TOKEN];
+
+  // Derived from the same exported class map the component renders, so this guard
+  // re-evaluates automatically if the step-tracker styling changes. The `current`
+  // entry is the specific regression guarded here: `bg-primary/10 text-primary`
+  // composited to ~3.90:1 on the card surface, below the 4.5:1 floor for its 12px label.
+  const stepStates = Object.keys(IMPORT_WORKFLOW_STEP_ITEM_CLASSES) as Array<
+    keyof typeof IMPORT_WORKFLOW_STEP_ITEM_CLASSES
+  >;
+
+  for (const stateName of stepStates) {
+    it(`step-tracker "${stateName}" item label achieves >= 4.5:1 on its actual rendered background`, () => {
+      const classString = IMPORT_WORKFLOW_STEP_ITEM_CLASSES[stateName];
+
+      const textUtility = findColorUtility(classString, "text", tokenNames);
+      expect(
+        textUtility,
+        `Could not find a text-<token> utility for step state "${stateName}" in "${classString}"`
+      ).not.toBeNull();
+
+      const textTokenHex = tokens[textUtility!.token];
+      expect(textTokenHex, `Missing token: --${textUtility!.token}`).toBeDefined();
+
+      // A step item either paints its own (possibly alpha-tinted) background, or
+      // inherits the tracker surface. Both cases are resolved to a real rendered hex.
+      const bgUtility = findColorUtility(classString, "bg", tokenNames);
+      let renderedBgHex = trackerSurfaceHex;
+      let bgDescription = `inherited tracker surface --${IMPORT_WORKFLOW_STEP_SURFACE_TOKEN} ${trackerSurfaceHex}`;
+
+      if (bgUtility) {
+        const bgTokenHex = tokens[bgUtility.token];
+        expect(bgTokenHex, `Missing token: --${bgUtility.token}`).toBeDefined();
+        const alpha = bgUtility.opacityPercent !== null ? bgUtility.opacityPercent / 100 : 1;
+        renderedBgHex =
+          alpha < 1 ? compositeOverBackground(bgTokenHex, alpha, trackerSurfaceHex) : bgTokenHex;
+        bgDescription =
+          `bg-${bgUtility.token}${bgUtility.opacityPercent !== null ? `/${bgUtility.opacityPercent}` : ""} ` +
+          `(${bgTokenHex} at alpha ${alpha}) composited over ${trackerSurfaceHex} = ${renderedBgHex}`;
+      }
+
+      const ratio = getContrastRatio(renderedBgHex, textTokenHex);
+      expect(
+        ratio,
+        `Step state "${stateName}" renders text-${textUtility!.token} ${textTokenHex} on ${bgDescription}, ` +
+          `calculated contrast ratio ${ratio.toFixed(2)}:1, expected >= 4.5:1`
       ).toBeGreaterThanOrEqual(4.5);
     });
   }

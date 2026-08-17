@@ -216,7 +216,7 @@ export function AdminReferenceDatasetSection({
           <CardTitle className="text-sm font-semibold text-foreground">
             Admin Reference file
           </CardTitle>
-          <Badge variant="neutral" className="text-[11px]">Required</Badge>
+          <Badge variant="neutral">Required</Badge>
         </div>
         <CardDescription className="text-xs text-muted-foreground">
           Use the School&apos;s reference spreadsheet to match and cross-check the projects you are importing. A confirmed mapping is required before a selection can be confirmed or saved.

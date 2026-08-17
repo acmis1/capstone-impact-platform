@@ -195,7 +195,7 @@ export default async function ImportBatchDetailPage({
           </CardHeader>
           <CardContent className="pt-4 flex flex-col gap-3.5 text-xs">
             <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Source Folder
               </span>
               <span className="font-mono text-xs text-foreground bg-muted p-2 rounded-md break-all">
@@ -204,7 +204,7 @@ export default async function ImportBatchDetailPage({
             </div>
 
             <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Import Type
               </span>
               <span className="text-foreground capitalize">
@@ -213,7 +213,7 @@ export default async function ImportBatchDetailPage({
             </div>
 
             <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Projects Count
               </span>
               <span className="font-semibold text-foreground">
@@ -222,7 +222,7 @@ export default async function ImportBatchDetailPage({
             </div>
 
             <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Validation Issues
               </span>
               <span className="text-foreground">
@@ -231,7 +231,7 @@ export default async function ImportBatchDetailPage({
             </div>
 
             <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Imported on
               </span>
               <span className="text-foreground">

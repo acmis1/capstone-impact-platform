@@ -291,7 +291,7 @@ export function ImportBatchReviewPanel({ batchId, batchStatus, projects, canSubm
                 <MediaPresenceSummary project={project} />
               </div>
 
-              <div className="font-mono text-[11px] text-muted-foreground break-all">
+              <div className="font-mono text-xs text-muted-foreground break-all">
                 <code>{project.publicId}</code>
               </div>
             </div>

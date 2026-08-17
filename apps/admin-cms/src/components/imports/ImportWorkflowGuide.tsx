@@ -1,6 +1,10 @@
 import React from 'react';
 import { FileSpreadsheet, Image as ImageIcon, FileText, Folder, ChevronDown, ChevronRight, HelpCircle, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import {
+  IMPORT_WORKFLOW_STEP_ITEM_CLASSES,
+  IMPORT_WORKFLOW_STEP_MARKER_CLASSES,
+} from './importWorkflowStepStyles';
 
 export interface ImportWorkflowGuideProps {
   currentStep?: 1 | 2 | 3 | 4 | 5;
@@ -11,7 +15,9 @@ export interface ImportWorkflowGuideProps {
 const STEPS = [
   { step: 1, label: 'Reference file' },
   { step: 2, label: 'Project folder' },
-  { step: 3, label: 'Check results' },
+  // Step 3 is current *before and while* the file check runs; once validation
+  // results exist the workflow has already advanced to the confirmation stage.
+  { step: 3, label: 'Check files' },
   { step: 4, label: 'Confirm & save' },
   { step: 5, label: 'Import media' },
 ] as const;
@@ -32,26 +38,28 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
                 key={step}
                 className={`flex items-center gap-2 p-2 rounded-md transition-colors ${
                   isCurrent
-                    ? 'bg-primary/10 text-primary font-semibold border border-primary/20'
+                    ? IMPORT_WORKFLOW_STEP_ITEM_CLASSES.current
                     : isCompleted
-                      ? 'text-foreground font-medium'
-                      : 'text-muted-foreground'
+                      ? IMPORT_WORKFLOW_STEP_ITEM_CLASSES.completed
+                      : IMPORT_WORKFLOW_STEP_ITEM_CLASSES.upcoming
                 }`}
                 aria-current={isCurrent ? 'step' : undefined}
               >
                 <span
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                     isCurrent
-                      ? 'bg-primary text-primary-foreground'
+                      ? IMPORT_WORKFLOW_STEP_MARKER_CLASSES.current
                       : isCompleted
-                        ? 'bg-success text-success-foreground'
-                        : 'bg-muted text-muted-foreground'
+                        ? IMPORT_WORKFLOW_STEP_MARKER_CLASSES.completed
+                        : IMPORT_WORKFLOW_STEP_MARKER_CLASSES.upcoming
                   }`}
                   aria-hidden="true"
                 >
                   {isCompleted ? <Check className="h-3 w-3" strokeWidth={3} /> : step}
                 </span>
-                <span className="truncate">
+                {/* Essential orientation label: never truncated — it wraps instead, so the
+                    full stage name stays readable at narrow widths and at 200% zoom. */}
+                <span className="min-w-0 whitespace-normal break-words leading-tight">
                   {label}
                   {isCompleted && <span className="sr-only"> (completed)</span>}
                   {isCurrent && <span className="sr-only"> (current step)</span>}
@@ -75,7 +83,7 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
             <button
               type="button"
               onClick={() => setIsGuideOpen((prev) => !prev)}
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium focus:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-1.5 py-0.5"
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md px-2 min-h-[40px]"
               aria-expanded={isGuideOpen}
               aria-label={isGuideOpen ? 'Hide folder and file preparation guide' : 'Show folder and file preparation guide'}
             >
@@ -145,7 +153,7 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
                     <Folder className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
                     <span>Single Project Import</span>
                   </div>
-                  <p className="text-[11px] mb-2">Select the individual project folder directly.</p>
+                  <p className="text-xs mb-2">Select the individual project folder directly.</p>
                   <pre className="font-mono text-[11px] text-foreground bg-background p-2 rounded border border-border overflow-x-auto">
 {`project-folder/
   ├── project-details.xlsx
@@ -160,7 +168,7 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
                     <Folder className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
                     <span>Batch Import (Multiple Projects)</span>
                   </div>
-                  <p className="text-[11px] mb-2">Select the parent folder containing one child folder per project.</p>
+                  <p className="text-xs mb-2">Select the parent folder containing one child folder per project.</p>
                   <pre className="font-mono text-[11px] text-foreground bg-background p-2 rounded border border-border overflow-x-auto">
 {`batch-folder/
   ├── project-alpha/
@@ -176,7 +184,7 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
               </div>
             </div>
 
-            <div className="text-[11px] text-muted-foreground bg-muted/30 p-2.5 rounded border border-border leading-relaxed">
+            <div className="text-xs text-muted-foreground bg-muted/30 p-2.5 rounded border border-border leading-relaxed">
               <strong>Tip:</strong> The folder name is used to propose the project&apos;s public identifier. Avoid spaces or special characters in folder names.
             </div>
           </CardContent>
