@@ -12,9 +12,9 @@ describe('participant-preview timestamp normalization', () => {
     ['normal ISO timestamp', ISO, ISO],
     ['legacy JSON-quoted timestamp', LEGACY, ISO],
     ['Postgres UTC offset', '2026-08-17T03:43:43+00:00', '2026-08-17T03:43:43.000Z'],
-    ['Postgres text timestamp', '2026-08-17 03:43:43.849123+00', ISO],
+    ['Postgres text timestamp', '2026-08-17 03:43:43.849123+00', '2026-08-17T03:43:43.849123Z'],
     ['non-UTC offset', '2026-08-17T13:13:43.849+09:30', ISO],
-    ['fractional seconds', '2026-08-17T03:43:43.849123Z', ISO],
+    ['fractional seconds', '2026-08-17T03:43:43.849123Z', '2026-08-17T03:43:43.849123Z'],
   ])('normalizes %s', (_label, value, expected) => {
     expect(normalizeParticipantPreviewTimestamp(value)).toBe(expected);
   });

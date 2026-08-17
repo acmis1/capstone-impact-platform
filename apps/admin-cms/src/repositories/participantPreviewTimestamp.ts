@@ -64,5 +64,11 @@ export function normalizeParticipantPreviewTimestamp(value: unknown): string | n
   }
 
   const instant = Date.parse(parseableCandidate);
-  return Number.isFinite(instant) ? new Date(instant).toISOString() : null;
+  if (!Number.isFinite(instant)) return null;
+
+  const canonical = new Date(instant).toISOString();
+  const fractionalSeconds = /\.(\d+)/.exec(parseableCandidate)?.[1];
+  return fractionalSeconds && fractionalSeconds.length > 3
+    ? canonical.replace(/\.\d{3}Z$/, `.${fractionalSeconds}Z`)
+    : canonical;
 }
