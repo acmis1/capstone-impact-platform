@@ -82,7 +82,7 @@ export default async function NewImportPreviewPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
+    <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col gap-1">

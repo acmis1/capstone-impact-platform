@@ -19,6 +19,7 @@ import {
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Alert } from '../ui/alert';
+import { Badge } from '../ui/badge';
 
 interface AdminReferenceDatasetSectionProps {
   onMappingConfigured: (data: {
@@ -210,14 +211,15 @@ export function AdminReferenceDatasetSection({
   return (
     <Card className="bg-card border-border shadow-xs">
       <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <FileSpreadsheet className="h-4 w-4 text-primary" aria-hidden="true" />
           <CardTitle className="text-sm font-semibold text-foreground">
             Admin Reference file
           </CardTitle>
+          <Badge variant="neutral" className="text-[11px]">Required</Badge>
         </div>
         <CardDescription className="text-xs text-muted-foreground">
-          Use the School&apos;s reference spreadsheet to match and cross-check the projects you are importing.
+          Use the School&apos;s reference spreadsheet to match and cross-check the projects you are importing. A confirmed mapping is required before a selection can be confirmed or saved.
         </CardDescription>
       </CardHeader>
 
@@ -278,7 +280,7 @@ export function AdminReferenceDatasetSection({
                   value={selectedWorksheet}
                   disabled={isControlDisabled}
                   onChange={(e) => handleWorksheetChange(e.target.value)}
-                  className="text-xs border border-input rounded-md px-2.5 py-1 bg-background text-foreground focus:ring-1 focus:ring-ring disabled:opacity-50"
+                  className="h-10 text-sm border border-input rounded-md px-3 bg-background text-foreground focus:ring-2 focus:ring-ring disabled:opacity-50"
                 >
                   {inspectionResult.worksheets.map((ws) => (
                     <option key={ws.name} value={ws.name}>
@@ -309,7 +311,7 @@ export function AdminReferenceDatasetSection({
                   </Button>
                 )}
               </div>
-              <p className="text-[11px] text-muted-foreground -mt-1">
+              <p className="text-xs text-muted-foreground -mt-1">
                 Select the project field and corresponding column in the reference spreadsheet used to uniquely identify each project.
               </p>
 
@@ -321,7 +323,7 @@ export function AdminReferenceDatasetSection({
                       disabled={isControlDisabled}
                       onChange={(e) => handleMatchChange(idx, 'canonicalField', e.target.value)}
                       aria-label={`Match field ${idx + 1} project property`}
-                      className="text-xs border border-input rounded-md px-2.5 py-1.5 bg-background text-foreground flex-1 disabled:opacity-50"
+                      className="h-10 text-sm border border-input rounded-md px-3 bg-background text-foreground flex-1 focus:ring-2 focus:ring-ring disabled:opacity-50"
                     >
                       {CANONICAL_MATCHABLE_FIELDS.map((f) => (
                         <option key={f} value={f}>
@@ -337,7 +339,7 @@ export function AdminReferenceDatasetSection({
                       disabled={isControlDisabled}
                       onChange={(e) => handleMatchChange(idx, 'referenceColumn', e.target.value)}
                       aria-label={`Match field ${idx + 1} reference column`}
-                      className="text-xs border border-input rounded-md px-2.5 py-1.5 bg-background text-foreground flex-1 disabled:opacity-50"
+                      className="h-10 text-sm border border-input rounded-md px-3 bg-background text-foreground flex-1 focus:ring-2 focus:ring-ring disabled:opacity-50"
                     >
                       {currentWorksheetHeaders.map((h) => (
                         <option key={h} value={h}>
@@ -384,7 +386,7 @@ export function AdminReferenceDatasetSection({
                   </Button>
                 )}
               </div>
-              <p className="text-[11px] text-muted-foreground -mt-1">
+              <p className="text-xs text-muted-foreground -mt-1">
                 Select project fields to cross-check against the reference spreadsheet to detect discrepancies before saving.
               </p>
 
@@ -396,7 +398,7 @@ export function AdminReferenceDatasetSection({
                       disabled={isControlDisabled}
                       onChange={(e) => handleCompChange(idx, 'canonicalField', e.target.value)}
                       aria-label={`Comparison field ${idx + 1} project property`}
-                      className="text-xs border border-input rounded-md px-2.5 py-1.5 bg-background text-foreground flex-1 disabled:opacity-50"
+                      className="h-10 text-sm border border-input rounded-md px-3 bg-background text-foreground flex-1 focus:ring-2 focus:ring-ring disabled:opacity-50"
                     >
                       {CANONICAL_COMPARABLE_FIELDS.map((f) => (
                         <option key={f} value={f}>
@@ -412,7 +414,7 @@ export function AdminReferenceDatasetSection({
                       disabled={isControlDisabled}
                       onChange={(e) => handleCompChange(idx, 'referenceColumn', e.target.value)}
                       aria-label={`Comparison field ${idx + 1} reference column`}
-                      className="text-xs border border-input rounded-md px-2.5 py-1.5 bg-background text-foreground flex-1 disabled:opacity-50"
+                      className="h-10 text-sm border border-input rounded-md px-3 bg-background text-foreground flex-1 focus:ring-2 focus:ring-ring disabled:opacity-50"
                     >
                       {currentWorksheetHeaders.map((h) => (
                         <option key={h} value={h}>

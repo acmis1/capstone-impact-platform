@@ -1,20 +1,22 @@
 import React from 'react';
-import { FileSpreadsheet, Image as ImageIcon, FileText, Folder, ChevronDown, ChevronRight, HelpCircle } from 'lucide-react';
+import { FileSpreadsheet, Image as ImageIcon, FileText, Folder, ChevronDown, ChevronRight, HelpCircle, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 
 export interface ImportWorkflowGuideProps {
   currentStep?: 1 | 2 | 3 | 4 | 5;
+  /** True once the entire workflow (including media import) has finished. */
+  isComplete?: boolean;
 }
 
 const STEPS = [
-  { step: 1, label: 'Prepare files' },
-  { step: 2, label: 'Add reference file' },
-  { step: 3, label: 'Choose folder' },
-  { step: 4, label: 'Check results' },
-  { step: 5, label: 'Import' },
+  { step: 1, label: 'Reference file' },
+  { step: 2, label: 'Project folder' },
+  { step: 3, label: 'Check results' },
+  { step: 4, label: 'Confirm & save' },
+  { step: 5, label: 'Import media' },
 ] as const;
 
-export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProps) {
+export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: ImportWorkflowGuideProps) {
   const [isGuideOpen, setIsGuideOpen] = React.useState(false);
 
   return (
@@ -23,14 +25,17 @@ export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProp
       <nav aria-label="Import workflow steps" className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-xs">
         <ol className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
           {STEPS.map(({ step, label }) => {
-            const isCurrent = step === currentStep;
+            const isCompleted = step < currentStep || (isComplete && step <= currentStep);
+            const isCurrent = !isComplete && step === currentStep;
             return (
               <li
                 key={step}
                 className={`flex items-center gap-2 p-2 rounded-md transition-colors ${
                   isCurrent
                     ? 'bg-primary/10 text-primary font-semibold border border-primary/20'
-                    : 'text-muted-foreground'
+                    : isCompleted
+                      ? 'text-foreground font-medium'
+                      : 'text-muted-foreground'
                 }`}
                 aria-current={isCurrent ? 'step' : undefined}
               >
@@ -38,13 +43,19 @@ export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProp
                   className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
                     isCurrent
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground'
+                      : isCompleted
+                        ? 'bg-success text-success-foreground'
+                        : 'bg-muted text-muted-foreground'
                   }`}
                   aria-hidden="true"
                 >
-                  {step}
+                  {isCompleted ? <Check className="h-3 w-3" strokeWidth={3} /> : step}
                 </span>
-                <span className="truncate">{label}</span>
+                <span className="truncate">
+                  {label}
+                  {isCompleted && <span className="sr-only"> (completed)</span>}
+                  {isCurrent && <span className="sr-only"> (current step)</span>}
+                </span>
               </li>
             );
           })}
@@ -88,8 +99,8 @@ export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProp
               <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider mb-2">
                 Expected Files per Project
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="flex items-start gap-2.5 p-2.5 rounded-md bg-muted/40 border border-border">
+              <div className="flex flex-col divide-y divide-border rounded-md bg-muted/30 border border-border">
+                <div className="flex items-start gap-2.5 p-2.5">
                   <FileSpreadsheet className="h-4 w-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
                     <strong className="text-foreground block font-mono text-xs">project-details.xlsx</strong>
@@ -97,7 +108,7 @@ export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProp
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2.5 p-2.5 rounded-md bg-muted/40 border border-border">
+                <div className="flex items-start gap-2.5 p-2.5">
                   <ImageIcon className="h-4 w-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
                     <strong className="text-foreground block font-mono text-xs">poster.png</strong>
@@ -105,7 +116,7 @@ export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProp
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2.5 p-2.5 rounded-md bg-muted/40 border border-border">
+                <div className="flex items-start gap-2.5 p-2.5">
                   <FileText className="h-4 w-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
                     <strong className="text-foreground block font-mono text-xs">poster.pdf</strong>
@@ -113,7 +124,7 @@ export function ImportWorkflowGuide({ currentStep = 1 }: ImportWorkflowGuideProp
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2.5 p-2.5 rounded-md bg-muted/40 border border-border">
+                <div className="flex items-start gap-2.5 p-2.5">
                   <ImageIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
                     <strong className="text-foreground block font-mono text-xs">snapshot-1.png <span className="font-normal text-muted-foreground font-sans">(optional)</span></strong>

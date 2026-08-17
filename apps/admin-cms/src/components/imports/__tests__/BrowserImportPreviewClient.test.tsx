@@ -14,29 +14,34 @@ afterEach(() => {
 
 describe('PR2A Guided Import Workflow Components', () => {
   describe('ImportWorkflowGuide', () => {
-    it('renders all 5 sequential steps with plain step numbers', () => {
-      render(<ImportWorkflowGuide currentStep={2} />);
+    it('renders all 5 sequential steps and distinguishes completed, current, and upcoming', () => {
+      render(<ImportWorkflowGuide currentStep={3} />);
 
-      expect(screen.getByText('Prepare files')).toBeTruthy();
-      expect(screen.getByText('Add reference file')).toBeTruthy();
-      expect(screen.getByText('Choose folder')).toBeTruthy();
+      expect(screen.getByText('Reference file')).toBeTruthy();
+      expect(screen.getByText('Project folder')).toBeTruthy();
       expect(screen.getByText('Check results')).toBeTruthy();
-      expect(screen.getByText('Import')).toBeTruthy();
+      expect(screen.getByText('Confirm & save')).toBeTruthy();
+      expect(screen.getByText('Import media')).toBeTruthy();
 
-      // Step 2 is current
-      const currentItem = screen.getByText('Add reference file').closest('li');
+      // Step 3 is current
+      const currentItem = screen.getByText('Check results').closest('li');
       expect(currentItem?.getAttribute('aria-current')).toBe('step');
+      expect(currentItem?.textContent).toContain('current step');
 
-      // Step 1 does not have aria-current
-      const step1Item = screen.getByText('Prepare files').closest('li');
+      // Steps 1 and 2 are completed (no aria-current, marked completed for assistive tech)
+      const step1Item = screen.getByText('Reference file').closest('li');
       expect(step1Item?.getAttribute('aria-current')).toBeNull();
+      expect(step1Item?.textContent).toContain('completed');
+      const step2Item = screen.getByText('Project folder').closest('li');
+      expect(step2Item?.getAttribute('aria-current')).toBeNull();
+      expect(step2Item?.textContent).toContain('completed');
 
-      // Step numbers 1-5 are present, no completed checkmark is rendered
-      expect(screen.getByText('1')).toBeTruthy();
-      expect(screen.getByText('2')).toBeTruthy();
-      expect(screen.getByText('3')).toBeTruthy();
+      // Upcoming steps show their plain step number and no aria-current
       expect(screen.getByText('4')).toBeTruthy();
       expect(screen.getByText('5')).toBeTruthy();
+      const step5Item = screen.getByText('Import media').closest('li');
+      expect(step5Item?.getAttribute('aria-current')).toBeNull();
+      expect(step5Item?.textContent).not.toContain('completed');
     });
 
     it('expands and collapses via semantic button and aria-expanded', () => {
@@ -160,7 +165,7 @@ describe('PR2A Guided Import Workflow Components', () => {
   });
 
   describe('BrowserImportPreviewClient Presentation Hierarchy & Copy', () => {
-    it('renders Admin Reference section before folder selection controls and sets initial step to Step 2', () => {
+    it('renders Admin Reference section before folder selection controls and sets initial step to Step 1', () => {
       render(<BrowserImportPreviewClient />);
 
       // Admin Reference heading exists before folder selection
@@ -176,9 +181,9 @@ describe('PR2A Guided Import Workflow Components', () => {
       const position = refHeading.compareDocumentPosition(folderHeading);
       expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-      // Step 2 (Add reference file) is initially active
-      const step2 = screen.getByText('Add reference file').closest('li');
-      expect(step2?.getAttribute('aria-current')).toBe('step');
+      // Step 1 (Reference file) is initially active, since it is optional and not yet configured
+      const step1 = screen.getByText('Reference file').closest('li');
+      expect(step1?.getAttribute('aria-current')).toBe('step');
     });
 
     it('does not contain developer jargon like (Idempotent) or private draft storage in rendered strings', () => {
