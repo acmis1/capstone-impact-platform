@@ -43,8 +43,8 @@ export function TopBar({ displayName, email, roles = [], canManageStaff = false,
   const formattedRoles = roles.map((r) => r.toUpperCase()).join(', ');
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b bg-background/95 px-3 sm:px-4 backdrop-blur-xs lg:px-6 gap-2 min-w-0">
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+    <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-border/80 bg-background/95 px-4 lg:px-6 backdrop-blur-xs gap-3 min-w-0">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
         {/* Mobile Navigation Drawer Trigger */}
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger asChild>
@@ -69,7 +69,7 @@ export function TopBar({ displayName, email, roles = [], canManageStaff = false,
         </Sheet>
 
         {/* Route-aware breadcrumbs and title */}
-        <div className="flex flex-col justify-center min-w-0 flex-1">
+        <div className="flex flex-col justify-center min-w-0 flex-1 gap-0.5">
           <Breadcrumbs items={descriptor.breadcrumbs} />
           <h1 className="text-sm sm:text-base font-semibold tracking-tight text-foreground truncate">
             {descriptor.title}
@@ -78,9 +78,9 @@ export function TopBar({ displayName, email, roles = [], canManageStaff = false,
       </div>
 
       {/* Top bar right utilities */}
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+      <div className="flex items-center gap-3 shrink-0">
         {/* Environment Badge */}
-        <Badge variant="neutral" className="inline-flex px-1.5 py-0.5 sm:px-2.5 sm:py-0.5 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">
+        <Badge variant="neutral" className="inline-flex px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider border border-border/80 bg-muted/80 text-foreground">
           Staging
         </Badge>
 
@@ -91,37 +91,37 @@ export function TopBar({ displayName, email, roles = [], canManageStaff = false,
               variant="ghost"
               size="sm"
               aria-label={`Open account menu for ${identityLabel}`}
-              className="gap-2 px-2 focus-visible:ring-2 min-h-[44px]"
+              className="gap-2.5 px-2.5 hover:bg-muted/80 focus-visible:ring-2 min-h-[44px] rounded-lg"
             >
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted border border-border/60 text-foreground">
                 <User className="h-4 w-4" aria-hidden="true" />
               </div>
               <div className="hidden md:flex flex-col text-left">
-                <span className="text-xs font-semibold leading-tight text-foreground">
+                <span className="text-xs font-semibold leading-tight text-foreground truncate max-w-[160px]">
                   {identityLabel}
                 </span>
                 {formattedRoles && (
-                  <span className="text-[10px] text-muted-foreground leading-tight">
+                  <span className="text-[11px] text-muted-foreground font-medium leading-tight mt-0.5">
                     {formattedRoles}
                   </span>
                 )}
               </div>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="font-normal">
+          <DropdownMenuContent align="end" className="w-60">
+            <DropdownMenuLabel className="font-normal p-3">
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-semibold leading-none text-foreground">
                   {identityLabel}
                 </p>
                 {email && (
-                  <p className="text-xs leading-none text-muted-foreground">
+                  <p className="text-xs leading-none text-muted-foreground pt-0.5">
                     {email}
                   </p>
                 )}
                 {formattedRoles && (
-                  <p className="text-[11px] font-medium text-primary pt-1">
-                    Role: {formattedRoles}
+                  <p className="text-xs font-medium text-foreground-subtle pt-1.5">
+                    Role: <span className="font-semibold text-foreground">{formattedRoles}</span>
                   </p>
                 )}
               </div>
@@ -132,7 +132,7 @@ export function TopBar({ displayName, email, roles = [], canManageStaff = false,
                 e.preventDefault();
                 await logoutAction();
               }}
-              className="flex w-full items-center gap-2 text-destructive focus:text-destructive cursor-pointer min-h-[44px] px-2 py-1.5"
+              className="flex w-full items-center gap-2.5 text-destructive focus:text-destructive cursor-pointer min-h-[44px] px-3 py-2 font-medium"
             >
               <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>Log out</span>

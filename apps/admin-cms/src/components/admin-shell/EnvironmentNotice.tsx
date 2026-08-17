@@ -10,12 +10,12 @@ export function EnvironmentNotice({ className, ...props }: EnvironmentNoticeProp
       role="region"
       aria-label="Environment notice"
       className={cn(
-        'bg-muted/60 border-b border-border px-4 py-2 text-xs text-muted-foreground flex items-center gap-2',
+        'bg-warning/8 border-b border-warning/20 px-4 lg:px-6 py-2 text-xs text-foreground/90 flex items-center gap-2',
         className
       )}
       {...props}
     >
-      <ShieldAlert className="h-3.5 w-3.5 text-warning shrink-0" aria-hidden="true" />
+      <ShieldAlert className="h-4 w-4 text-warning shrink-0" aria-hidden="true" />
       <span>
         <strong className="font-semibold text-foreground">Test environment:</strong> Work here uses staging data and does not update the public showcase website.
       </span>

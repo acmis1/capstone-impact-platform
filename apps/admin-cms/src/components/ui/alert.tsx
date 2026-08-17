@@ -4,15 +4,15 @@ import { AlertCircle, AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 export const alertVariants = cva(
-  "relative w-full rounded-lg border p-4 [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground",
+  "relative w-full rounded-lg border p-4 text-sm [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-2px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground",
   {
     variants: {
       variant: {
         default: "bg-background text-foreground border-border",
-        success: "bg-success/10 text-foreground border-success/30 [&>svg]:text-success",
-        warning: "bg-warning/10 text-foreground border-warning/30 [&>svg]:text-warning",
-        information: "bg-information/10 text-foreground border-information/30 [&>svg]:text-information",
-        destructive: "bg-destructive/10 text-foreground border-destructive/30 [&>svg]:text-destructive",
+        success: "bg-success/8 text-foreground border-success/30 [&>svg]:text-success",
+        warning: "bg-warning/8 text-foreground border-warning/30 [&>svg]:text-warning",
+        information: "bg-information/8 text-foreground border-information/30 [&>svg]:text-information",
+        destructive: "bg-destructive/8 text-foreground border-destructive/30 [&>svg]:text-destructive",
       },
     },
     defaultVariants: {
