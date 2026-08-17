@@ -6,6 +6,7 @@ import type {
 } from '../reminders/participantPreviewReminder';
 import type { ParticipantPreviewNotificationStatus } from '../notifications/participantPreviewNotification';
 import { SupabaseParticipantPreviewNotificationRepositoryCore } from './SupabaseParticipantPreviewNotificationRepositoryCore';
+import { normalizeParticipantPreviewTimestamp } from './participantPreviewTimestamp';
 
 const SCHEDULE_STATUSES = new Set(['scheduled', 'triggered', 'skipped', 'cancelled']);
 const SKIP_REASONS = new Set([
@@ -26,6 +27,17 @@ export class ParticipantPreviewReminderRepositoryError extends Error {
     super(code);
     this.name = 'ParticipantPreviewReminderRepositoryError';
   }
+}
+
+function requireTimestamp(value: unknown): string {
+  const timestamp = normalizeParticipantPreviewTimestamp(value);
+  if (!timestamp) throw new ParticipantPreviewReminderRepositoryError('RESPONSE_INVALID');
+  return timestamp;
+}
+
+function optionalTimestamp(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  return requireTimestamp(value);
 }
 
 export interface ReminderScheduleMutationResult {
@@ -63,13 +75,14 @@ export class SupabaseParticipantPreviewReminderRepositoryCore
     adminId: string;
     scheduledFor: string;
   }): Promise<ReminderScheduleMutationResult> {
-    if (!nonEmpty(params.publicId) || !nonEmpty(params.adminId) || !nonEmpty(params.scheduledFor)) {
+    const scheduledFor = normalizeParticipantPreviewTimestamp(params.scheduledFor);
+    if (!nonEmpty(params.publicId) || !nonEmpty(params.adminId) || !scheduledFor) {
       throw new ParticipantPreviewReminderRepositoryError('INPUT_INVALID');
     }
     const { data, error } = await this.supabase.rpc('schedule_participant_preview_reminder', {
       p_public_id: params.publicId,
       p_admin_id: params.adminId,
-      p_scheduled_for: params.scheduledFor,
+      p_scheduled_for: scheduledFor,
     });
     if (error || !data || typeof data !== 'object') {
       throw new ParticipantPreviewReminderRepositoryError('INTERNAL_FAILURE');
@@ -104,11 +117,11 @@ export class SupabaseParticipantPreviewReminderRepositoryCore
     return {
       resultCode: row.resultCode,
       reference: nonEmpty(row.reference) ? row.reference : undefined,
-      scheduledFor: nonEmpty(row.scheduledFor) ? row.scheduledFor : undefined,
+      scheduledFor: optionalTimestamp(row.scheduledFor),
       recipient: nonEmpty(row.recipient) ? row.recipient : undefined,
       status: nonEmpty(row.status) ? row.status : undefined,
-      createdAt: nonEmpty(row.createdAt) ? row.createdAt : undefined,
-      cancelledAt: nonEmpty(row.cancelledAt) ? row.cancelledAt : undefined,
+      createdAt: optionalTimestamp(row.createdAt),
+      cancelledAt: optionalTimestamp(row.cancelledAt),
     };
   }
 
@@ -131,9 +144,10 @@ export class SupabaseParticipantPreviewReminderRepositoryCore
     }
     const items = result.items.map((item) => {
       const row = item as Record<string, unknown>;
+      const expiresAt = normalizeParticipantPreviewTimestamp(row.expiresAt);
       if (
         !nonEmpty(row.notificationId) || !nonEmpty(row.executionToken) ||
-        !nonEmpty(row.recipient) || typeof row.projectTitle !== 'string' || !nonEmpty(row.expiresAt)
+        !nonEmpty(row.recipient) || typeof row.projectTitle !== 'string' || !expiresAt
       ) {
         throw new ParticipantPreviewReminderRepositoryError('RESPONSE_INVALID');
       }
@@ -142,7 +156,7 @@ export class SupabaseParticipantPreviewReminderRepositoryCore
         executionToken: row.executionToken,
         recipient: row.recipient,
         projectTitle: row.projectTitle,
-        expiresAt: row.expiresAt,
+        expiresAt,
       };
     });
     if (items.length !== result.claimedCount) {
@@ -218,10 +232,10 @@ export class SupabaseParticipantPreviewReminderRepositoryCore
 
     let notificationRows = initialNotificationResponse.data ?? [];
     const staleIds = notificationRows
-      .filter((row) =>
-        ['reserved', 'transport_started'].includes(row.status) &&
-        nonEmpty(row.lease_expires_at) && Date.parse(row.lease_expires_at) <= Date.now(),
-      )
+      .filter((row) => {
+        if (!['reserved', 'transport_started'].includes(row.status)) return false;
+        return Date.parse(requireTimestamp(row.lease_expires_at)) <= Date.now();
+      })
       .map((row) => row.id)
       .filter(nonEmpty);
     if (staleIds.length > 0) {
@@ -247,11 +261,32 @@ export class SupabaseParticipantPreviewReminderRepositoryCore
       const row = raw as Record<string, unknown>;
       const preview = previews.get(String(row.participant_preview_id));
       const notification = notifications.get(String(row.id));
+      const previewCreatedAt = preview
+        ? normalizeParticipantPreviewTimestamp(preview.created_at)
+        : null;
+      const previewExpiresAt = preview
+        ? normalizeParticipantPreviewTimestamp(preview.expires_at)
+        : null;
+      const scheduledFor = normalizeParticipantPreviewTimestamp(row.scheduled_for);
+      const triggeredAt = row.triggered_at === null
+        ? null
+        : normalizeParticipantPreviewTimestamp(row.triggered_at);
+      const cancelledAt = row.cancelled_at === null
+        ? null
+        : normalizeParticipantPreviewTimestamp(row.cancelled_at);
+      const deliveryRequestedAt = notification
+        ? normalizeParticipantPreviewTimestamp(notification.requested_at)
+        : null;
+      const deliverySentAt = notification?.sent_at === null || notification?.sent_at === undefined
+        ? null
+        : normalizeParticipantPreviewTimestamp(notification.sent_at);
       if (
         !nonEmpty(row.staff_reference) || !nonEmpty(row.participant_preview_id) ||
-        !nonEmpty(row.recipient_email_snapshot) || !nonEmpty(row.scheduled_for) ||
+        !nonEmpty(row.recipient_email_snapshot) || !scheduledFor ||
         !nonEmpty(row.status) || !SCHEDULE_STATUSES.has(row.status) ||
-        !preview || !nonEmpty(preview.created_at) || !nonEmpty(preview.expires_at) ||
+        !preview || !previewCreatedAt || !previewExpiresAt ||
+        (row.triggered_at !== null && !triggeredAt) ||
+        (row.cancelled_at !== null && !cancelledAt) ||
         (row.skip_reason !== null && (!nonEmpty(row.skip_reason) || !SKIP_REASONS.has(row.skip_reason)))
       ) {
         throw new ParticipantPreviewReminderRepositoryError('RESPONSE_INVALID');
@@ -259,7 +294,8 @@ export class SupabaseParticipantPreviewReminderRepositoryCore
       if (
         notification &&
         (!nonEmpty(notification.status) || !NOTIFICATION_STATUSES.has(notification.status) ||
-          !nonEmpty(notification.requested_at))
+          !deliveryRequestedAt ||
+          (notification.sent_at !== null && !deliverySentAt))
       ) {
         throw new ParticipantPreviewReminderRepositoryError('RESPONSE_INVALID');
       }
@@ -268,20 +304,20 @@ export class SupabaseParticipantPreviewReminderRepositoryCore
         : null;
       return {
         reference: row.staff_reference,
-        previewCreatedAt: preview.created_at,
-        previewExpiresAt: preview.expires_at,
+        previewCreatedAt,
+        previewExpiresAt,
         currentPreview: row.participant_preview_id === currentPreviewId,
         recipient: row.recipient_email_snapshot,
-        scheduledFor: row.scheduled_for,
+        scheduledFor,
         scheduledBy: actorName || 'Unknown staff member',
         status: row.status as ParticipantPreviewReminderScheduleStatus,
         skipReason: (row.skip_reason as ParticipantPreviewReminderSkipReason | null) ?? null,
-        triggeredAt: nonEmpty(row.triggered_at) ? row.triggered_at : null,
-        cancelledAt: nonEmpty(row.cancelled_at) ? row.cancelled_at : null,
+        triggeredAt,
+        cancelledAt,
         delivery: notification ? {
           status: notification.status as ParticipantPreviewNotificationStatus,
-          requestedAt: notification.requested_at,
-          sentAt: nonEmpty(notification.sent_at) ? notification.sent_at : null,
+          requestedAt: deliveryRequestedAt!,
+          sentAt: deliverySentAt,
           failureCode: nonEmpty(notification.failure_code) ? notification.failure_code : null,
         } : null,
       };

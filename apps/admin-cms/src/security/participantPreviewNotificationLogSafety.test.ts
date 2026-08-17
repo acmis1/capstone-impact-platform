@@ -79,8 +79,9 @@ describe('participant preview notification log safety', () => {
     const route = read('src/app/api/projects/[publicId]/participant-preview/route.ts');
     const service = read('src/notifications/participantPreviewNotificationService.ts');
 
-    // The URL is assembled once per branch in the route and never persisted from there.
-    expect(route).toContain('const previewUrl = `${requestOrigin}/participant-preview/${rawToken}`');
+    // Both delivery paths share one assembly point in the route, which is never persisted.
+    expect(route.match(/const previewUrl = `\$\{publicOrigin\}\/participant-preview\/\$\{rawToken\}`/g))
+      .toHaveLength(1);
     expect(route).not.toContain('previewUrl,\n          tokenHash');
 
     // The orchestration service passes it to rendering and to nothing else.

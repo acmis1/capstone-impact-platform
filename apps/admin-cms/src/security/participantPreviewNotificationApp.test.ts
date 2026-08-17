@@ -9,6 +9,7 @@ vi.mock('server-only', () => ({}));
 vi.mock('../lib/supabase/admin', () => ({ createSupabaseAdminClient: vi.fn() }));
 vi.mock('../auth/csrf', () => ({
   validateSameOrigin: vi.fn((origin, reqOrigin) => origin === reqOrigin),
+  resolveCanonicalPublicOrigin: vi.fn((requestOrigin) => requestOrigin),
 }));
 vi.mock('../auth/requireAdmin', () => ({ requireAdmin: vi.fn() }));
 vi.mock('../lib/env', () => ({

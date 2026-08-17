@@ -32,6 +32,30 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('ParticipantPreviewPanel core workflow', () => {
+  it('renders neutral fallbacks instead of Invalid Date for unexpected timestamps', () => {
+    const { container } = render(
+      <ParticipantPreviewPanel
+        {...BASE_PROPS}
+        initialActivePreview={{ createdAt: 'malformed', expiresAt: 'also-malformed' }}
+        responseState={{ type: 'confirmed', confirmedAt: 'malformed' }}
+        notification={{
+          kind: 'initial', status: 'sent', recipient: 'participant@example.edu',
+          requestedAt: 'malformed', sentAt: 'malformed', failureCode: null,
+        }}
+        reminders={[{
+          reference: 'reminder-1', previewCreatedAt: 'malformed', previewExpiresAt: 'malformed',
+          currentPreview: true, recipient: 'participant@example.edu', scheduledFor: 'malformed',
+          scheduledBy: 'Reviewer', status: 'triggered', skipReason: null,
+          triggeredAt: 'malformed', cancelledAt: null,
+          delivery: { status: 'sent', requestedAt: 'malformed', sentAt: 'malformed', failureCode: null },
+        }]}
+      />,
+    );
+
+    expect(container.textContent).not.toContain('Invalid Date');
+    expect(screen.getAllByText('N/A').length).toBeGreaterThan(0);
+  });
+
   it('fails closed when stateAvailable is false with no mutation controls', () => {
     render(<ParticipantPreviewPanel {...BASE_PROPS} stateAvailable={false} />);
     expect(screen.getByText(/Participant Preview status unavailable/i)).toBeTruthy();

@@ -16,6 +16,7 @@ vi.mock('../lib/supabase/admin', () => ({
 
 vi.mock('../auth/csrf', () => ({
   validateSameOrigin: vi.fn((origin, reqOrigin) => origin === reqOrigin),
+  resolveCanonicalPublicOrigin: vi.fn((requestOrigin) => requestOrigin),
 }));
 
 vi.mock('../auth/requireAdmin', () => ({

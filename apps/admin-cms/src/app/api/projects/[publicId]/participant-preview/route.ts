@@ -4,7 +4,7 @@ import { ParticipantPreviewExecutionError } from '../../../../../repositories/Pa
 import { DEFAULT_PREVIEW_EXPIRES_IN_SECONDS } from '../../../../../repositories/SupabaseParticipantPreviewRepositoryCore';
 import { requireAdmin } from '../../../../../auth/requireAdmin';
 import { canManageParticipantPreview, hasPermission } from '../../../../../auth/permissions';
-import { validateSameOrigin } from '../../../../../auth/csrf';
+import { resolveCanonicalPublicOrigin, validateSameOrigin } from '../../../../../auth/csrf';
 import { AdminAuthError } from '../../../../../auth/authTypes';
 import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from '../../../../../auth/authHttp';
 import { validatePreviewPublicId } from '../../../../../auth/participantPreviewInput';
@@ -41,6 +41,11 @@ export async function POST(
       const status = getAuthErrorHttpStatus('PERMISSION_DENIED');
       const error = getPublicAuthErrorMessage('PERMISSION_DENIED');
       return NextResponse.json({ success: false, error }, { status, headers: NO_STORE });
+    }
+
+    const publicOrigin = resolveCanonicalPublicOrigin(requestOrigin);
+    if (!publicOrigin) {
+      throw new ParticipantPreviewExecutionError('INTERNAL_FAILURE');
     }
 
     const adminContext = await requireAdmin();
@@ -106,6 +111,7 @@ export async function POST(
 
     const rawToken = generateRawPreviewToken();
     const tokenHash = hashPreviewToken(rawToken);
+    const previewUrl = `${publicOrigin}/participant-preview/${rawToken}`;
     const privateBucket = getStagingBuckets().DRAFT_PRIVATE;
 
     if (sendEmail && emailConfig.enabled) {
@@ -135,8 +141,6 @@ export async function POST(
       // The secure URL is assembled here, in server memory, and handed only to the transport. It is
       // never persisted, never logged, and leaves this process only in the outgoing message and in
       // the existing one-time response below.
-      const previewUrl = `${requestOrigin}/participant-preview/${rawToken}`;
-
       const notification = await executeParticipantPreviewNotification(
         {
           notifications: notificationRepository,
@@ -192,7 +196,7 @@ export async function POST(
         success: true,
         publicId: result.publicId,
         previewToken: rawToken,
-        previewUrl: `${requestOrigin}/participant-preview/${rawToken}`,
+        previewUrl,
         createdAt: result.createdAt,
         expiresAt: result.expiresAt,
       },

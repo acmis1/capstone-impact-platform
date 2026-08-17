@@ -10,6 +10,7 @@ import {
   ParticipantPreviewSnapshot,
 } from '../domain/participantPreview';
 import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
+import { normalizeParticipantPreviewTimestamp } from './participantPreviewTimestamp';
 
 export const DEFAULT_PREVIEW_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
@@ -172,11 +173,13 @@ export class SupabaseParticipantPreviewRepositoryCore {
         throw new ParticipantPreviewExecutionError('INPUT_INVALID');
     }
 
+    const createdAt = normalizeParticipantPreviewTimestamp(res.createdAt);
+    const expiresAt = normalizeParticipantPreviewTimestamp(res.expiresAt);
     if (
       !isNonEmptyString(res.previewId) ||
       !isNonEmptyString(res.publicId) ||
-      !isNonEmptyString(res.createdAt) ||
-      !isNonEmptyString(res.expiresAt)
+      !createdAt ||
+      !expiresAt
     ) {
       throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
     }
@@ -184,8 +187,8 @@ export class SupabaseParticipantPreviewRepositoryCore {
     return {
       previewId: res.previewId,
       publicId: res.publicId,
-      createdAt: res.createdAt,
-      expiresAt: res.expiresAt,
+      createdAt,
+      expiresAt,
     };
   }
 
@@ -231,14 +234,15 @@ export class SupabaseParticipantPreviewRepositoryCore {
         throw new ParticipantPreviewExecutionError('INPUT_INVALID');
     }
 
-    if (!isNonEmptyString(res.previewId) || !isNonEmptyString(res.publicId) || !isNonEmptyString(res.revokedAt)) {
+    const revokedAt = normalizeParticipantPreviewTimestamp(res.revokedAt);
+    if (!isNonEmptyString(res.previewId) || !isNonEmptyString(res.publicId) || !revokedAt) {
       throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
     }
 
     return {
       previewId: res.previewId,
       publicId: res.publicId,
-      revokedAt: res.revokedAt,
+      revokedAt,
     };
   }
 
@@ -267,10 +271,16 @@ export class SupabaseParticipantPreviewRepositoryCore {
       return null;
     }
 
+    const createdAt = normalizeParticipantPreviewTimestamp(data.created_at);
+    const expiresAt = normalizeParticipantPreviewTimestamp(data.expires_at);
+    if (!createdAt || !expiresAt) {
+      throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
+    }
+
     return {
       previewId: data.id,
-      createdAt: data.created_at,
-      expiresAt: data.expires_at,
+      createdAt,
+      expiresAt,
       createdBy: data.created_by ?? null,
     };
   }
@@ -299,11 +309,12 @@ export class SupabaseParticipantPreviewRepositoryCore {
       return null;
     }
 
+    const expiresAt = normalizeParticipantPreviewTimestamp(res.expiresAt);
     if (
       !isNonEmptyString(res.previewId) ||
       typeof res.snapshot !== 'object' || res.snapshot === null ||
       !Array.isArray(res.mediaSnapshot) ||
-      !isNonEmptyString(res.expiresAt)
+      !expiresAt
     ) {
       return null;
     }
@@ -321,7 +332,7 @@ export class SupabaseParticipantPreviewRepositoryCore {
       previewId: res.previewId,
       snapshot: res.snapshot as ParticipantPreviewSnapshot,
       mediaSnapshot,
-      expiresAt: res.expiresAt,
+      expiresAt,
     };
   }
 
@@ -350,9 +361,10 @@ export class SupabaseParticipantPreviewRepositoryCore {
       return null;
     }
 
+    const confirmedAt = normalizeParticipantPreviewTimestamp(res.confirmedAt);
     if (
       !isNonEmptyString(res.confirmationId) ||
-      !isNonEmptyString(res.confirmedAt) ||
+      !confirmedAt ||
       typeof res.alreadyConfirmed !== 'boolean'
     ) {
       return null;
@@ -360,7 +372,7 @@ export class SupabaseParticipantPreviewRepositoryCore {
 
     return {
       confirmationId: res.confirmationId,
-      confirmedAt: res.confirmedAt,
+      confirmedAt,
       alreadyConfirmed: res.alreadyConfirmed,
     };
   }
@@ -394,11 +406,12 @@ export class SupabaseParticipantPreviewRepositoryCore {
       return null;
     }
 
-    if (!isNonEmptyString(data.confirmed_at)) {
+    const confirmedAt = normalizeParticipantPreviewTimestamp(data.confirmed_at);
+    if (!confirmedAt) {
       throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
     }
 
-    return { confirmedAt: data.confirmed_at };
+    return { confirmedAt };
   }
 
   /**
@@ -430,9 +443,10 @@ export class SupabaseParticipantPreviewRepositoryCore {
       return null;
     }
 
+    const requestedAt = normalizeParticipantPreviewTimestamp(res.requestedAt);
     if (
       !isNonEmptyString(res.correctionRequestId) ||
-      !isNonEmptyString(res.requestedAt) ||
+      !requestedAt ||
       !isNonEmptyString(res.comment) ||
       typeof res.alreadyRequested !== 'boolean'
     ) {
@@ -441,7 +455,7 @@ export class SupabaseParticipantPreviewRepositoryCore {
 
     return {
       correctionRequestId: res.correctionRequestId,
-      requestedAt: res.requestedAt,
+      requestedAt,
       comment: res.comment,
       alreadyRequested: res.alreadyRequested,
     };
@@ -472,11 +486,12 @@ export class SupabaseParticipantPreviewRepositoryCore {
       return null;
     }
 
-    if (!isNonEmptyString(data.requested_at) || typeof data.correction_comment !== 'string') {
+    const requestedAt = normalizeParticipantPreviewTimestamp(data.requested_at);
+    if (!requestedAt || typeof data.correction_comment !== 'string') {
       throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
     }
 
-    return { requestedAt: data.requested_at, comment: data.correction_comment };
+    return { requestedAt, comment: data.correction_comment };
   }
 
   /**
@@ -543,15 +558,17 @@ export class SupabaseParticipantPreviewRepositoryCore {
     switch (res.resultCode) {
       case 'SUCCESS':
         break;
-      case 'ALREADY_IN_PROGRESS':
-        if (!isNonEmptyString(res.correctionRequestId) || !isNonEmptyString(res.resolutionStartedAt)) {
+      case 'ALREADY_IN_PROGRESS': {
+        const existingResolutionStartedAt = normalizeParticipantPreviewTimestamp(res.resolutionStartedAt);
+        if (!isNonEmptyString(res.correctionRequestId) || !existingResolutionStartedAt) {
           throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
         }
         return {
           correctionRequestId: res.correctionRequestId,
-          resolutionStartedAt: res.resolutionStartedAt,
+          resolutionStartedAt: existingResolutionStartedAt,
           alreadyInProgress: true,
         };
+      }
       case 'PROJECT_NOT_FOUND':
         throw new ParticipantPreviewExecutionError('PROJECT_NOT_FOUND');
       case 'INVALID_PROJECT_STATE':
@@ -568,13 +585,14 @@ export class SupabaseParticipantPreviewRepositoryCore {
         throw new ParticipantPreviewExecutionError('INPUT_INVALID');
     }
 
-    if (!isNonEmptyString(res.correctionRequestId) || !isNonEmptyString(res.resolutionStartedAt)) {
+    const resolutionStartedAt = normalizeParticipantPreviewTimestamp(res.resolutionStartedAt);
+    if (!isNonEmptyString(res.correctionRequestId) || !resolutionStartedAt) {
       throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
     }
 
     return {
       correctionRequestId: res.correctionRequestId,
-      resolutionStartedAt: res.resolutionStartedAt,
+      resolutionStartedAt,
       auditRecordId: isNonEmptyString(res.auditRecordId) ? res.auditRecordId : undefined,
     };
   }
@@ -639,16 +657,31 @@ export class SupabaseParticipantPreviewRepositoryCore {
       throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
     }
 
-    if (!isNonEmptyString(row.id) || !isNonEmptyString(row.participant_preview_id) || typeof row.correction_comment !== 'string' || !isNonEmptyString(row.requested_at)) {
+    const requestedAt = normalizeParticipantPreviewTimestamp(row.requested_at);
+    const resolutionStartedAt = row.resolution_started_at === null
+      ? null
+      : normalizeParticipantPreviewTimestamp(row.resolution_started_at);
+    const resolvedAt = row.resolved_at === null
+      ? null
+      : normalizeParticipantPreviewTimestamp(row.resolved_at);
+
+    if (
+      !isNonEmptyString(row.id) ||
+      !isNonEmptyString(row.participant_preview_id) ||
+      typeof row.correction_comment !== 'string' ||
+      !requestedAt ||
+      (row.resolution_started_at !== null && !resolutionStartedAt) ||
+      (row.resolved_at !== null && !resolvedAt)
+    ) {
       throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
     }
 
     // Validate status metadata consistency
-    if (status === 'in_progress' && (!isNonEmptyString(row.resolution_started_at) || !isNonEmptyString(row.resolution_started_by))) {
+    if (status === 'in_progress' && (!resolutionStartedAt || !isNonEmptyString(row.resolution_started_by))) {
       throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
     }
 
-    if (status === 'resolved' && (!isNonEmptyString(row.resolution_started_at) || !isNonEmptyString(row.resolution_started_by) || !isNonEmptyString(row.resolved_at) || !isNonEmptyString(row.resolved_by) || !isNonEmptyString(row.replacement_preview_id))) {
+    if (status === 'resolved' && (!resolutionStartedAt || !isNonEmptyString(row.resolution_started_by) || !resolvedAt || !isNonEmptyString(row.resolved_by) || !isNonEmptyString(row.replacement_preview_id))) {
       throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
     }
 
@@ -657,10 +690,10 @@ export class SupabaseParticipantPreviewRepositoryCore {
       status,
       participantPreviewId: row.participant_preview_id,
       comment: row.correction_comment,
-      requestedAt: row.requested_at,
-      resolutionStartedAt: row.resolution_started_at ?? null,
+      requestedAt,
+      resolutionStartedAt,
       resolutionStartedBy: row.resolution_started_by ?? null,
-      resolvedAt: row.resolved_at ?? null,
+      resolvedAt,
       resolvedBy: row.resolved_by ?? null,
       replacementPreviewId: row.replacement_preview_id ?? null,
     };
@@ -718,9 +751,7 @@ export class SupabaseParticipantPreviewRepositoryCore {
 
     const resultCode = res.resultCode as import('../domain/publicationReadiness').PublicationReadinessCode;
     const confirmedPreviewId = isNonEmptyString(res.confirmedPreviewId) ? res.confirmedPreviewId : undefined;
-    const confirmedAt = isNonEmptyString(res.confirmedAt) && Number.isFinite(Date.parse(res.confirmedAt))
-      ? res.confirmedAt
-      : undefined;
+    const confirmedAt = normalizeParticipantPreviewTimestamp(res.confirmedAt) ?? undefined;
     if (
       (res.ready && resultCode !== 'READY') ||
       (resultCode === 'READY' && (!confirmedPreviewId || !confirmedAt))
