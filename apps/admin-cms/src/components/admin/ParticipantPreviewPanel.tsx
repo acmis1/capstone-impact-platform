@@ -94,6 +94,12 @@ function toLocalDateTimeInputValue(value: string): string | undefined {
     `T${part(date.getHours())}:${part(date.getMinutes())}`;
 }
 
+function formatParticipantPreviewDate(value: string | null | undefined): string {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString() : 'N/A';
+}
+
 export function ParticipantPreviewPanel({
   publicId,
   canManage,
@@ -498,13 +504,13 @@ export function ParticipantPreviewPanel({
               <div>
                 <dt className="text-muted-foreground font-medium">Created</dt>
                 <dd className="font-semibold text-foreground mt-0.5">
-                  {activePreview.createdAt ? new Date(activePreview.createdAt).toLocaleString() : 'N/A'}
+                  {formatParticipantPreviewDate(activePreview.createdAt)}
                 </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground font-medium">Expires</dt>
                 <dd className="font-semibold text-foreground mt-0.5">
-                  {activePreview.expiresAt ? new Date(activePreview.expiresAt).toLocaleString() : 'N/A'}
+                  {formatParticipantPreviewDate(activePreview.expiresAt)}
                 </dd>
               </div>
             </dl>
@@ -515,13 +521,13 @@ export function ParticipantPreviewPanel({
                 {previewResponseState.type === 'confirmed' ? (
                   <div className="p-2.5 rounded-md bg-success/10 border border-success/30 text-success text-xs font-semibold flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>Participant confirmed on {new Date(previewResponseState.confirmedAt).toLocaleString()}</span>
+                    <span>Participant confirmed on {formatParticipantPreviewDate(previewResponseState.confirmedAt)}</span>
                   </div>
                 ) : previewResponseState.type === 'correction_requested' ? (
                   <div className="p-3 rounded-md bg-warning/10 border border-warning/30 text-warning text-xs space-y-2">
                     <div className="font-semibold flex items-center gap-1.5">
                       <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span>Correction requested on {new Date(previewResponseState.requestedAt).toLocaleString()}</span>
+                      <span>Correction requested on {formatParticipantPreviewDate(previewResponseState.requestedAt)}</span>
                     </div>
                     <div className="text-foreground bg-background p-2 rounded border border-border font-normal whitespace-pre-wrap">
                       {previewResponseState.comment}
@@ -560,12 +566,12 @@ export function ParticipantPreviewPanel({
                 </div>
                 <div>
                   <span className="text-muted-foreground">Requested: </span>
-                  <span className="text-foreground">{new Date(notification.requestedAt).toLocaleString()}</span>
+                  <span className="text-foreground">{formatParticipantPreviewDate(notification.requestedAt)}</span>
                 </div>
                 {notification.sentAt && (
                   <div>
                     <span className="text-muted-foreground">Sent at: </span>
-                    <span className="text-foreground">{new Date(notification.sentAt).toLocaleString()}</span>
+                    <span className="text-foreground">{formatParticipantPreviewDate(notification.sentAt)}</span>
                   </div>
                 )}
                 {notification.failureCode && (
@@ -620,7 +626,7 @@ export function ParticipantPreviewPanel({
                     {pending ? 'Working…' : 'Schedule reminder'}
                   </Button>
                   <span className="text-xs text-muted-foreground">
-                    Must be before {new Date(activePreview.expiresAt).toLocaleString()}.
+                    Must be before {formatParticipantPreviewDate(activePreview.expiresAt)}.
                   </span>
                 </div>
               ) : (
@@ -677,7 +683,7 @@ export function ParticipantPreviewPanel({
             <span className="font-semibold text-success">Participant correction resolved</span>
             {resolutionStatus.resolvedAt && (
               <span className="text-xs text-muted-foreground">
-                on {new Date(resolutionStatus.resolvedAt).toLocaleString()}
+                on {formatParticipantPreviewDate(resolutionStatus.resolvedAt)}
               </span>
             )}
           </div>
@@ -729,18 +735,18 @@ export function ParticipantPreviewPanel({
                   )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground pt-1">
-                  <div><span className="text-foreground font-medium">Scheduled for:</span> {new Date(reminder.scheduledFor).toLocaleString()}</div>
+                  <div><span className="text-foreground font-medium">Scheduled for:</span> {formatParticipantPreviewDate(reminder.scheduledFor)}</div>
                   <div><span className="text-foreground font-medium">Recipient snapshot:</span> {reminder.recipient}</div>
                   <div><span className="text-foreground font-medium">Scheduled by:</span> {reminder.scheduledBy}</div>
-                  <div><span className="text-foreground font-medium">Preview expires:</span> {new Date(reminder.previewExpiresAt).toLocaleString()}</div>
-                  {reminder.triggeredAt && <div><span className="text-foreground font-medium">Triggered:</span> {new Date(reminder.triggeredAt).toLocaleString()}</div>}
-                  {reminder.cancelledAt && <div><span className="text-foreground font-medium">Cancelled:</span> {new Date(reminder.cancelledAt).toLocaleString()}</div>}
+                  <div><span className="text-foreground font-medium">Preview expires:</span> {formatParticipantPreviewDate(reminder.previewExpiresAt)}</div>
+                  {reminder.triggeredAt && <div><span className="text-foreground font-medium">Triggered:</span> {formatParticipantPreviewDate(reminder.triggeredAt)}</div>}
+                  {reminder.cancelledAt && <div><span className="text-foreground font-medium">Cancelled:</span> {formatParticipantPreviewDate(reminder.cancelledAt)}</div>}
                   {reminder.skipReason && <div><span className="text-foreground font-medium">Skip reason:</span> {reminder.skipReason}</div>}
                   {reminder.delivery && (
                     <div className="sm:col-span-2">
                       <span className="text-foreground font-medium">Delivery:</span>{' '}
                       {participantPreviewNotificationStatusLabel(reminder.delivery.status)}
-                      {reminder.delivery.sentAt ? ` on ${new Date(reminder.delivery.sentAt).toLocaleString()}` : ''}
+                      {reminder.delivery.sentAt ? ` on ${formatParticipantPreviewDate(reminder.delivery.sentAt)}` : ''}
                       {reminder.delivery.failureCode ? ` (${reminder.delivery.failureCode})` : ''}
                     </div>
                   )}

@@ -8,7 +8,7 @@
  * - Missing, empty, or malformed origin headers are rejected (returns false).
  * - Forwarding headers are never trusted.
  */
-function parseHttpOrigin(value: string | null | undefined): string | null {
+export function parseCanonicalHttpOrigin(value: string | null | undefined): string | null {
   if (!value || !/^https?:\/\/[^/?#\\\s]+\/?$/i.test(value)) return null;
 
   try {
@@ -22,14 +22,28 @@ function parseHttpOrigin(value: string | null | undefined): string | null {
 }
 
 export function validateSameOrigin(originHeader: string | null, requestOrigin: string): boolean {
-  const submittedOrigin = parseHttpOrigin(originHeader);
+  const submittedOrigin = parseCanonicalHttpOrigin(originHeader);
   if (!submittedOrigin) return false;
 
-  const directOrigin = parseHttpOrigin(requestOrigin);
+  const directOrigin = parseCanonicalHttpOrigin(requestOrigin);
   if (directOrigin === submittedOrigin) return true;
 
   if (process.env.RENDER !== 'true') return false;
 
-  const renderExternalOrigin = parseHttpOrigin(process.env.RENDER_EXTERNAL_URL);
+  const renderExternalOrigin = parseCanonicalHttpOrigin(process.env.RENDER_EXTERNAL_URL);
   return renderExternalOrigin !== null && renderExternalOrigin === submittedOrigin;
+}
+
+/**
+ * Resolves the canonical origin safe to place into a URL that leaves this process.
+ *
+ * Unlike CSRF validation, a Render deployment must never use its direct/internal request origin:
+ * only Render's platform-owned external URL is authoritative. Forwarding and Host headers are not
+ * inputs to this function.
+ */
+export function resolveCanonicalPublicOrigin(requestOrigin: string): string | null {
+  if (process.env.RENDER === 'true') {
+    return parseCanonicalHttpOrigin(process.env.RENDER_EXTERNAL_URL);
+  }
+  return parseCanonicalHttpOrigin(requestOrigin);
 }

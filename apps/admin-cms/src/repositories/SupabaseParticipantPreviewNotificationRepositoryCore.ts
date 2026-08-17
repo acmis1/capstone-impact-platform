@@ -6,6 +6,7 @@ import type {
   ParticipantPreviewNotificationView,
 } from '../notifications/participantPreviewNotification';
 import type { NotificationTransitionOutcome } from '../notifications/participantPreviewNotificationService';
+import { normalizeParticipantPreviewTimestamp } from './participantPreviewTimestamp';
 
 /**
  * Service-role access to the participant preview delivery ledger.
@@ -149,16 +150,19 @@ export class SupabaseParticipantPreviewNotificationRepositoryCore {
         throw new ParticipantPreviewExecutionError('INPUT_INVALID');
     }
 
+    const createdAt = normalizeParticipantPreviewTimestamp(res.createdAt);
+    const expiresAt = normalizeParticipantPreviewTimestamp(res.expiresAt);
+    const requestedAt = normalizeParticipantPreviewTimestamp(res.requestedAt);
     if (
       !isNonEmptyString(res.previewId) ||
       !isNonEmptyString(res.publicId) ||
-      !isNonEmptyString(res.createdAt) ||
-      !isNonEmptyString(res.expiresAt) ||
+      !createdAt ||
+      !expiresAt ||
       typeof res.projectTitle !== 'string' ||
       !isNonEmptyString(res.notificationId) ||
       !isNonEmptyString(res.executionToken) ||
       !isNonEmptyString(res.recipient) ||
-      !isNonEmptyString(res.requestedAt)
+      !requestedAt
     ) {
       throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
     }
@@ -168,13 +172,13 @@ export class SupabaseParticipantPreviewNotificationRepositoryCore {
       value: {
         previewId: res.previewId,
         publicId: res.publicId,
-        createdAt: res.createdAt,
-        expiresAt: res.expiresAt,
+        createdAt,
+        expiresAt,
         projectTitle: res.projectTitle,
         notificationId: res.notificationId,
         executionToken: res.executionToken,
         recipient: res.recipient,
-        requestedAt: res.requestedAt,
+        requestedAt,
       },
     };
   }
@@ -309,15 +313,20 @@ export class SupabaseParticipantPreviewNotificationRepositoryCore {
     }
 
     const row = data as unknown as Record<string, unknown>;
+    const requestedAt = normalizeParticipantPreviewTimestamp(row.requested_at);
+    const sentAt = row.sent_at === null
+      ? null
+      : normalizeParticipantPreviewTimestamp(row.sent_at);
+    const leaseExpiresAt = normalizeParticipantPreviewTimestamp(row.lease_expires_at);
     if (
       !isNonEmptyString(row.id) ||
       row.notification_kind !== 'initial' ||
       !isNonEmptyString(row.recipient_email_snapshot) ||
       typeof row.status !== 'string' ||
       !NOTIFICATION_STATUSES.has(row.status) ||
-      !isNonEmptyString(row.requested_at) ||
-      !isNonEmptyString(row.lease_expires_at) ||
-      (row.sent_at !== null && !isNonEmptyString(row.sent_at)) ||
+      !requestedAt ||
+      !leaseExpiresAt ||
+      (row.sent_at !== null && !sentAt) ||
       (row.failure_code !== null && !isNonEmptyString(row.failure_code))
     ) {
       throw new ParticipantPreviewExecutionError('RESPONSE_INVALID');
@@ -328,10 +337,10 @@ export class SupabaseParticipantPreviewNotificationRepositoryCore {
       kind: 'initial',
       recipient: row.recipient_email_snapshot,
       status: row.status as ParticipantPreviewNotificationStatus,
-      requestedAt: row.requested_at,
-      sentAt: (row.sent_at as string | null) ?? null,
+      requestedAt,
+      sentAt,
       failureCode: (row.failure_code as string | null) ?? null,
-      leaseExpiresAt: row.lease_expires_at,
+      leaseExpiresAt,
     };
   }
 }

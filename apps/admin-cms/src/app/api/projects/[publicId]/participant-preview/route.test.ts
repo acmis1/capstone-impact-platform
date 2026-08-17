@@ -7,14 +7,26 @@ vi.mock('../../../../../lib/supabase/admin', () => ({
 vi.mock('../../../../../lib/supabase/buckets', () => ({
   getStagingBuckets: vi.fn(() => ({ DRAFT_PRIVATE: 'project-draft-private-assets' })),
 }));
+vi.mock('../../../../../notifications/participantPreviewEmailConfig', () => ({
+  resolveParticipantPreviewEmailConfig: vi.fn(),
+}));
+vi.mock('../../../../../notifications/smtpParticipantPreviewEmailTransport', () => ({
+  SmtpParticipantPreviewEmailTransport: vi.fn(),
+}));
+vi.mock('../../../../../notifications/participantPreviewNotificationService', () => ({
+  executeParticipantPreviewNotification: vi.fn(),
+}));
 
 import { NextRequest } from 'next/server';
 import { POST as previewPOST } from './route';
 import { requireAdmin } from '../../../../../auth/requireAdmin';
-import { validateSameOrigin } from '../../../../../auth/csrf';
+import { resolveCanonicalPublicOrigin, validateSameOrigin } from '../../../../../auth/csrf';
 import { SupabaseParticipantPreviewRepository } from '../../../../../repositories/SupabaseParticipantPreviewRepository';
+import { SupabaseParticipantPreviewNotificationRepository } from '../../../../../repositories/SupabaseParticipantPreviewNotificationRepository';
 import { ParticipantPreviewExecutionError } from '../../../../../repositories/ParticipantPreviewRepository';
 import { AdminAuthError } from '../../../../../auth/authTypes';
+import { resolveParticipantPreviewEmailConfig } from '../../../../../notifications/participantPreviewEmailConfig';
+import { executeParticipantPreviewNotification } from '../../../../../notifications/participantPreviewNotificationService';
 
 vi.mock('../../../../../auth/requireAdmin');
 vi.mock('../../../../../auth/csrf');
@@ -26,6 +38,8 @@ describe('POST /api/projects/[publicId]/participant-preview Route Handler Tests'
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(validateSameOrigin).mockReturnValue(true);
+    vi.mocked(resolveCanonicalPublicOrigin).mockReturnValue('http://localhost:3000');
+    vi.mocked(resolveParticipantPreviewEmailConfig).mockReturnValue({ enabled: false });
   });
 
   function createRequest(options?: { origin?: string; body?: unknown }) {
@@ -84,6 +98,7 @@ describe('POST /api/projects/[publicId]/participant-preview Route Handler Tests'
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.publicId).toBe(mockPublicId);
+    expect(json.previewUrl).toMatch(/^http:\/\/localhost:3000\/participant-preview\/[0-9a-f]{64}$/);
     expect(mockGenerate).toHaveBeenCalledWith(expect.objectContaining({
       isCorrectionReissue: false,
     }));
@@ -196,5 +211,83 @@ describe('POST /api/projects/[publicId]/participant-preview Route Handler Tests'
     const json = await res.json();
     expect(json.success).toBe(false);
     expect(json.code).toBe('AMBIGUOUS_CORRECTION_REQUEST');
+  });
+
+  it('10. Uses the canonical public origin instead of the internal request origin', async () => {
+    vi.mocked(resolveCanonicalPublicOrigin).mockReturnValue('https://capstone-admin-cms-staging-v2.onrender.com');
+    vi.mocked(requireAdmin).mockResolvedValue({
+      adminUserId: mockAdminId,
+      permissions: ['projects.review'],
+    } as never);
+    vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'generatePreview').mockResolvedValue({
+      previewId: 'prev-render',
+      publicId: mockPublicId,
+      createdAt: '2026-08-17T03:43:43.849Z',
+      expiresAt: '2026-08-24T03:43:43.849Z',
+    });
+
+    const res = await previewPOST(createRequest(), {
+      params: Promise.resolve({ publicId: mockPublicId }),
+    });
+    const json = await res.json();
+
+    expect(json.previewUrl).toMatch(
+      /^https:\/\/capstone-admin-cms-staging-v2\.onrender\.com\/participant-preview\/[0-9a-f]{64}$/,
+    );
+    expect(json.previewUrl).not.toContain('localhost');
+  });
+
+  it('11. Passes the same canonical URL to Generate + Send transport and response', async () => {
+    const publicOrigin = 'https://capstone-admin-cms-staging-v2.onrender.com';
+    vi.mocked(resolveCanonicalPublicOrigin).mockReturnValue(publicOrigin);
+    vi.mocked(resolveParticipantPreviewEmailConfig).mockReturnValue({
+      enabled: true,
+      smtp: {
+        host: 'smtp.example.test', port: 587, secure: false,
+        auth: { user: 'username', password: 'password' }, from: 'noreply@example.test',
+      },
+    });
+    vi.mocked(requireAdmin).mockResolvedValue({
+      adminUserId: mockAdminId,
+      permissions: ['projects.review'],
+    } as never);
+    vi.spyOn(
+      SupabaseParticipantPreviewNotificationRepository.prototype,
+      'generatePreviewWithNotification',
+    ).mockResolvedValue({
+      resultCode: 'SUCCESS',
+      value: {
+        previewId: 'prev-email', publicId: mockPublicId,
+        createdAt: '2026-08-17T03:43:43.849Z', expiresAt: '2026-08-24T03:43:43.849Z',
+        projectTitle: 'Project', notificationId: 'notification-1', executionToken: 'execution-1',
+        recipient: 'participant@example.test', requestedAt: '2026-08-17T03:43:43.849Z',
+      },
+    });
+    vi.mocked(executeParticipantPreviewNotification).mockResolvedValue({
+      code: 'SENT', message: 'Sent.', failureCode: null,
+    });
+
+    const res = await previewPOST(createRequest({ body: { sendEmail: true } }), {
+      params: Promise.resolve({ publicId: mockPublicId }),
+    });
+    const json = await res.json();
+    const notificationInput = vi.mocked(executeParticipantPreviewNotification).mock.calls[0][1];
+
+    expect(notificationInput).toMatchObject({ previewUrl: json.previewUrl });
+    expect(json.previewUrl).toMatch(
+      /^https:\/\/capstone-admin-cms-staging-v2\.onrender\.com\/participant-preview\/[0-9a-f]{64}$/,
+    );
+  });
+
+  it('12. Fails closed before generation when no canonical public origin is available', async () => {
+    vi.mocked(resolveCanonicalPublicOrigin).mockReturnValue(null);
+    const generate = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'generatePreview');
+
+    const res = await previewPOST(createRequest(), {
+      params: Promise.resolve({ publicId: mockPublicId }),
+    });
+
+    expect(res.status).toBe(500);
+    expect(generate).not.toHaveBeenCalled();
   });
 });
