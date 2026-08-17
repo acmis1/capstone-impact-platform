@@ -164,6 +164,122 @@ describe('participantPreviewHtml escaping', () => {
   });
 });
 
+/**
+ * Regression guard for the hosted UAT failure in issue #125.
+ *
+ * The participant response forms are plain same-origin HTML form POSTs, so the Origin header is
+ * the only CSRF signal this cookieless public endpoint has. Under `Referrer-Policy: no-referrer`
+ * the Fetch Standard requires a conforming browser to serialize the Origin of a non-GET/HEAD,
+ * non-CORS request as the literal `null` — so the participant's own submission arrived with
+ * `Origin: null` and was rejected before the confirmation could ever be recorded. That is why the
+ * hosted click produced the generic unavailable page with zero confirmation rows.
+ *
+ * The route must keep rejecting `Origin: null` (it is also what a sandboxed iframe and a
+ * cross-origin redirect emit). The page must therefore declare a policy that does not suppress the
+ * Origin header in the first place, while still keeping the raw token out of every Referer.
+ */
+describe('participant-facing referrer policy preserves the same-origin Origin header', () => {
+  /** Policies that never null the Origin header of a same-origin form POST at equal scheme security. */
+  const ORIGIN_PRESERVING_POLICIES = new Set(['strict-origin', 'same-origin', 'strict-origin-when-cross-origin', 'origin']);
+
+  it('declares an Origin-preserving referrer policy — never no-referrer — on both participant pages', () => {
+    for (const html of [
+      renderParticipantPreviewPage({
+        snapshot: {
+          title: 'Referrer Policy Project', summary: null, background: null, solution: null, year: 2026,
+          program: null, studyProgram: null, discipline: null, disciplines: [], industry: null,
+          industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [],
+          posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [],
+        },
+        media: [],
+        responseState: { type: 'unresponded' },
+      }),
+      renderParticipantPreviewUnavailablePage(),
+    ]) {
+      const declared = /<meta name="referrer" content="([^"]+)"/.exec(html)?.[1];
+      expect(declared).toBeDefined();
+      expect(declared).not.toBe('no-referrer');
+      expect(ORIGIN_PRESERVING_POLICIES.has(declared as string)).toBe(true);
+    }
+  });
+
+  it('sends the same Origin-preserving referrer policy as a response header, and never a path in a Referer', async () => {
+    const { GET } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const resolveSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'resolveByTokenHash').mockResolvedValue(null);
+
+    const token = '4'.repeat(64);
+    const res = await GET(new NextRequest(`http://localhost:3000/participant-preview/${token}`), {
+      params: Promise.resolve({ token }),
+    });
+
+    const policy = res.headers.get('Referrer-Policy');
+    expect(policy).not.toBe('no-referrer');
+    expect(ORIGIN_PRESERVING_POLICIES.has(policy as string)).toBe(true);
+    // `strict-origin` and `origin` emit only a scheme/host/port Referer, so the raw token in this
+    // URL is never carried anywhere — the property `no-referrer` was originally chosen for.
+    expect(['strict-origin', 'origin']).toContain(policy);
+
+    resolveSpy.mockRestore();
+  });
+
+  it('still fails closed on the literal null Origin a no-referrer document would have produced', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+    const correctionSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'requestCorrection');
+
+    const token = 'b'.repeat(64);
+    const submissions: Record<string, string>[] = [
+      { action: 'confirm' },
+      { action: 'request_correction', comment: 'Please fix the title.' },
+    ];
+    for (const fields of submissions) {
+      const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, {
+        method: 'POST',
+        ...formRequestInit('null', fields),
+      });
+      const res = await POST(req, { params: Promise.resolve({ token }) });
+      const html = await res.text();
+
+      expect(res.status).toBe(403);
+      expect(res.headers.get('Location')).toBeNull();
+      expect(html).toContain('Preview Unavailable');
+    }
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(correctionSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+    correctionSpy.mockRestore();
+  });
+
+  it('fails closed on a missing or malformed Origin header', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const token = 'b'.repeat(64);
+    const body = 'action=confirm';
+    const headerVariants: Record<string, string>[] = [
+      { 'content-type': 'application/x-www-form-urlencoded' },
+      { origin: '', 'content-type': 'application/x-www-form-urlencoded' },
+      { origin: 'localhost:3000', 'content-type': 'application/x-www-form-urlencoded' },
+      { origin: 'http://localhost:3000/participant-preview', 'content-type': 'application/x-www-form-urlencoded' },
+      { origin: 'http://user@localhost:3000', 'content-type': 'application/x-www-form-urlencoded' },
+    ];
+
+    for (const headers of headerVariants) {
+      const req = new NextRequest(`http://localhost:3000/participant-preview/${token}`, { method: 'POST', headers, body });
+      const res = await POST(req, { params: Promise.resolve({ token }) });
+      expect(res.status).toBe(403);
+    }
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+});
+
 describe('Public participant-preview route', () => {
   it('rejects a malformed token without querying the repository at all', async () => {
     const { GET } = await import('../app/participant-preview/[token]/route');
@@ -179,7 +295,7 @@ describe('Public participant-preview route', () => {
     expect(resolveSpy).not.toHaveBeenCalled();
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     expect(res.headers.get('X-Robots-Tag')).toContain('noindex');
-    expect(res.headers.get('Referrer-Policy')).toBe('no-referrer');
+    expect(res.headers.get('Referrer-Policy')).toBe('strict-origin');
 
     resolveSpy.mockRestore();
   });
@@ -626,6 +742,242 @@ describe('Public participant-preview Render CSRF protection', () => {
 
     expect(res.status).toBe(403);
     expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  /**
+   * The exact hosted topology: the browser posts from the public Render URL while the Next.js
+   * process itself only ever sees its internal localhost listener as the request origin.
+   */
+  it('confirms exactly once and redirects to the canonical public origin, never the internal one', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview').mockResolvedValue({
+      confirmationId: 'c1',
+      confirmedAt: '2026-08-17T09:30:00.000Z',
+      alreadyConfirmed: false,
+    });
+
+    const token = 'a'.repeat(64);
+    const req = new NextRequest(`http://localhost:10000/participant-preview/${token}`, {
+      method: 'POST',
+      ...formRequestInit(externalOrigin, { action: 'confirm' }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('Location')).toBe(`${externalOrigin}/participant-preview/${token}`);
+    expect(res.headers.get('Location')).not.toContain('localhost');
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(confirmSpy).toHaveBeenCalledWith(hashPreviewToken(token));
+
+    confirmSpy.mockRestore();
+  });
+
+  it('records a correction request exactly once under the same topology, with no confirmation', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+    const correctionSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'requestCorrection').mockResolvedValue({
+      correctionRequestId: 'cr1',
+      requestedAt: '2026-08-17T09:35:00.000Z',
+      comment: 'Please correct the industry partner.',
+      alreadyRequested: false,
+    });
+
+    const token = 'a'.repeat(64);
+    const req = new NextRequest(`http://localhost:10000/participant-preview/${token}`, {
+      method: 'POST',
+      ...formRequestInit(externalOrigin, { action: 'request_correction', comment: 'Please correct the industry partner.' }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ token }) });
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('Location')).toBe(`${externalOrigin}/participant-preview/${token}`);
+    expect(res.headers.get('Location')).not.toContain('localhost');
+    expect(correctionSpy).toHaveBeenCalledTimes(1);
+    expect(correctionSpy).toHaveBeenCalledWith(hashPreviewToken(token), 'Please correct the industry partner.');
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+    correctionSpy.mockRestore();
+  });
+
+  it('repeats idempotently without a second redirect target or a duplicated response type', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview').mockResolvedValue({
+      confirmationId: 'c1',
+      confirmedAt: '2026-08-17T09:30:00.000Z',
+      alreadyConfirmed: true,
+    });
+    const correctionSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'requestCorrection');
+
+    const token = 'a'.repeat(64);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const req = new NextRequest(`http://localhost:10000/participant-preview/${token}`, {
+        method: 'POST',
+        ...formRequestInit(externalOrigin, { action: 'confirm' }),
+      });
+      const res = await POST(req, { params: Promise.resolve({ token }) });
+
+      expect(res.status).toBe(303);
+      expect(res.headers.get('Location')).toBe(`${externalOrigin}/participant-preview/${token}`);
+    }
+
+    // The route never invents a second response type; the RPC stays the single source of evidence.
+    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    expect(new Set(confirmSpy.mock.calls.map(([hash]) => hash)).size).toBe(1);
+    expect(correctionSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+    correctionSpy.mockRestore();
+  });
+
+  it('renders the confirmed state when the browser follows the returned public Location', async () => {
+    const { GET, POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview').mockResolvedValue({
+      confirmationId: 'c1',
+      confirmedAt: '2026-08-17T09:30:00.000Z',
+      alreadyConfirmed: false,
+    });
+
+    const token = 'a'.repeat(64);
+    const postRes = await POST(
+      new NextRequest(`http://localhost:10000/participant-preview/${token}`, {
+        method: 'POST',
+        ...formRequestInit(externalOrigin, { action: 'confirm' }),
+      }),
+      { params: Promise.resolve({ token }) }
+    );
+
+    const location = new URL(postRes.headers.get('Location') as string);
+    expect(location.origin).toBe(externalOrigin);
+    expect(location.pathname).toBe(`/participant-preview/${token}`);
+
+    const resolveSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'resolveByTokenHash').mockResolvedValue({
+      previewId: 'p-hosted',
+      snapshot: {
+        title: 'Hosted Confirmed Project', summary: null, background: null, solution: null, year: 2026,
+        program: null, studyProgram: null, discipline: null, disciplines: [], industry: null,
+        industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [],
+        posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [],
+      },
+      mediaSnapshot: [],
+      expiresAt: '2026-08-24T00:00:00.000Z',
+    });
+    const responseStateSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'getResponseState').mockResolvedValue({
+      type: 'confirmed',
+      confirmedAt: '2026-08-17T09:30:00.000Z',
+    });
+
+    // The follow-up GET the browser issues against the public Location it was handed.
+    const getRes = await GET(new NextRequest(location), { params: Promise.resolve({ token: location.pathname.split('/').pop() as string }) });
+    const html = await getRes.text();
+
+    expect(getRes.status).toBe(200);
+    expect(html).toContain('You confirmed that');
+    expect(html).not.toContain('Confirm project details');
+    // The recorded instant must stay parseable end to end — never "Invalid Date" on the page.
+    expect(html).not.toContain('Invalid Date');
+    expect(html).toContain(new Date('2026-08-17T09:30:00.000Z').toUTCString());
+
+    confirmSpy.mockRestore();
+    resolveSpy.mockRestore();
+    responseStateSpy.mockRestore();
+  });
+
+  it('fails closed when the Render external URL is missing or malformed', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview');
+
+    const token = 'a'.repeat(64);
+
+    // Public Origin can no longer be vouched for: same-origin validation itself fails closed.
+    for (const value of [undefined, 'not-a-url', `${externalOrigin}/participant-preview`, 'https://user@capstone-admin-cms-staging-v2.onrender.com']) {
+      if (value === undefined) delete process.env.RENDER_EXTERNAL_URL;
+      else process.env.RENDER_EXTERNAL_URL = value;
+
+      const res = await POST(
+        new NextRequest(`http://localhost:10000/participant-preview/${token}`, {
+          method: 'POST',
+          ...formRequestInit(externalOrigin, { action: 'confirm' }),
+        }),
+        { params: Promise.resolve({ token }) }
+      );
+      expect(res.status).toBe(403);
+    }
+
+    // Origin matches the internal listener exactly, so same-origin passes — but no canonical public
+    // origin exists to redirect to, and nothing may be recorded that the participant cannot return to.
+    delete process.env.RENDER_EXTERNAL_URL;
+    const res = await POST(
+      new NextRequest(`http://localhost:10000/participant-preview/${token}`, {
+        method: 'POST',
+        ...formRequestInit('http://localhost:10000', { action: 'confirm' }),
+      }),
+      { params: Promise.resolve({ token }) }
+    );
+    const html = await res.text();
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get('Location')).toBeNull();
+    expect(html).toContain('Preview Unavailable');
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it('never lets Host, Forwarded, or X-Forwarded-* influence the same-origin decision or the redirect', async () => {
+    const { POST } = await import('../app/participant-preview/[token]/route');
+    const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
+    const confirmSpy = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'confirmPreview').mockResolvedValue({
+      confirmationId: 'c1',
+      confirmedAt: '2026-08-17T09:30:00.000Z',
+      alreadyConfirmed: false,
+    });
+
+    const spoofed = {
+      host: 'evil.example',
+      forwarded: 'host=evil.example;proto=https',
+      'x-forwarded-host': 'evil.example',
+      'x-forwarded-proto': 'https',
+    };
+    const token = 'a'.repeat(64);
+
+    // Spoofed forwarding headers alongside the authentic public Origin change nothing.
+    const authentic = formRequestInit(externalOrigin, { action: 'confirm' });
+    const acceptedRes = await POST(
+      new NextRequest(`http://localhost:10000/participant-preview/${token}`, {
+        method: 'POST',
+        body: authentic.body,
+        headers: { ...authentic.headers, ...spoofed },
+      }),
+      { params: Promise.resolve({ token }) }
+    );
+
+    expect(acceptedRes.status).toBe(303);
+    expect(acceptedRes.headers.get('Location')).toBe(`${externalOrigin}/participant-preview/${token}`);
+    expect(acceptedRes.headers.get('Location')).not.toContain('evil.example');
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+
+    // The same headers cannot promote an attacker Origin into an accepted one either.
+    const attacker = formRequestInit('https://evil.example', { action: 'confirm' });
+    const rejectedRes = await POST(
+      new NextRequest(`http://localhost:10000/participant-preview/${token}`, {
+        method: 'POST',
+        body: attacker.body,
+        headers: { ...attacker.headers, ...spoofed },
+      }),
+      { params: Promise.resolve({ token }) }
+    );
+
+    expect(rejectedRes.status).toBe(403);
+    expect(rejectedRes.headers.get('Location')).toBeNull();
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
 
     confirmSpy.mockRestore();
   });
