@@ -3,12 +3,13 @@ import { ProjectMetadataInput, ProjectMetadataView } from './projectMetadata';
 import { ProjectMetadataGateway, SupabaseProjectMetadataGateway, loadProjectMetadataEditorData, resolveUniqueLookupId, saveProjectMetadata } from './projectMetadataService';
 
 const ids = { program: 'a0000000-0000-4000-8000-000000000001', discipline: 'b0000000-0000-4000-8000-000000000001', category: 'c0000000-0000-4000-8000-000000000001' };
+const auditRecordId = 'e0000000-0000-4000-8000-000000000001';
 const input: ProjectMetadataInput = { publicId: 'synthetic-project', title: 'Updated title', summary: 'Updated summary', background: 'Updated background', solution: 'Updated solution', posterText: 'Updated poster full text', accessibilityText: 'Updated accessibility text', year: 2026, programId: ids.program, disciplineIds: [ids.discipline], industryCategoryIds: [ids.category], expectedUpdatedAt: '2026-01-01T00:00:00.000Z' };
 const metadata: ProjectMetadataView = { ...input, year: '2026' };
 
 class FakeGateway implements ProjectMetadataGateway {
   calls: string[] = [];
-  response: unknown = { resultCode: 'SUCCESS', metadata };
+  response: unknown = { resultCode: 'SUCCESS', metadata, auditRecordId };
   options = { programs: [{ id: ids.program, name: 'Program' }], disciplines: [{ id: ids.discipline, name: 'Discipline' }], industryCategories: [{ id: ids.category, name: 'Industry' }] };
   async loadProject() { return { ...metadata, id: 'd0000000-0000-4000-8000-000000000001' }; }
   async loadOptions() { this.calls.push('lookups'); return this.options; }
@@ -35,7 +36,7 @@ describe('project metadata atomic persistence workflow', () => {
       disciplines: [{ id: zeroVersion, name: 'Discipline' }],
       industryCategories: [{ id: zeroVersion, name: 'Industry' }],
     };
-    gateway.response = { resultCode: 'SUCCESS', metadata: zeroVersionMetadata };
+    gateway.response = { resultCode: 'SUCCESS', metadata: zeroVersionMetadata, auditRecordId };
     expect(await saveProjectMetadata(gateway, zeroVersionMetadata, 'test-admin-user')).toEqual({ ok: true, metadata: zeroVersionMetadata });
   });
   it('does not expose the database-only project id to the strict editor mutation payload', async () => {
@@ -72,6 +73,30 @@ describe('project metadata atomic persistence workflow', () => {
     const nullable = new FakeGateway();
     nullable.response = { resultCode: 'NO_CHANGES', metadata: { ...metadata, background: null, solution: null } };
     expect(await saveProjectMetadata(nullable, metadata, 'test-admin-user')).toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
+  });
+  it('acknowledges a committed save matching the authoritative audited RPC contract (regression for #128)', async () => {
+    const gateway = new FakeGateway();
+    gateway.response = { resultCode: 'SUCCESS', metadata, auditRecordId };
+    expect(await saveProjectMetadata(gateway, metadata, 'test-admin-user')).toEqual({ ok: true, metadata });
+  });
+  it('fails closed on a SUCCESS response omitting the auditRecordId the authoritative RPC always returns', async () => {
+    const gateway = new FakeGateway();
+    gateway.response = { resultCode: 'SUCCESS', metadata };
+    expect(await saveProjectMetadata(gateway, metadata, 'test-admin-user')).toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
+  });
+  it('fails closed on a SUCCESS response with a malformed auditRecordId', async () => {
+    const gateway = new FakeGateway();
+    gateway.response = { resultCode: 'SUCCESS', metadata, auditRecordId: 'not-a-uuid' };
+    expect(await saveProjectMetadata(gateway, metadata, 'test-admin-user')).toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
+  });
+  it('fails closed on an unexpected top-level RPC response property on either successful resultCode', async () => {
+    const success = new FakeGateway();
+    success.response = { resultCode: 'SUCCESS', metadata, auditRecordId, unexpected: 'value' };
+    expect(await saveProjectMetadata(success, metadata, 'test-admin-user')).toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
+
+    const noChanges = new FakeGateway();
+    noChanges.response = { resultCode: 'NO_CHANGES', metadata, auditRecordId };
+    expect(await saveProjectMetadata(noChanges, metadata, 'test-admin-user')).toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
   });
   it('rejects malformed or unknown RPC responses and hides raw RPC errors', async () => {
     const malformed = new FakeGateway(); malformed.response = { resultCode: 'SUCCESS' };
