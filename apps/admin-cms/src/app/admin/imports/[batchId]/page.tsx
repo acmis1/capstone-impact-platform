@@ -120,22 +120,22 @@ export default async function ImportBatchDetailPage({
   ].join('|');
 
   return (
-    <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full">
+    <div className="flex flex-col gap-6 w-full">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col gap-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground truncate">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground break-words">
               {batch.batch_name || 'Import batch'}
             </h2>
             <ImportBatchStatusBadge status={batch.status} />
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Folder className="h-3.5 w-3.5" aria-hidden="true" />
-              <code className="font-mono">{batch.source_folder}</code>
+            <span className="flex items-center gap-1 min-w-0">
+              <Folder className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <code className="font-mono break-all">{batch.source_folder}</code>
             </span>
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1 shrink-0">
               <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
               {new Date(batch.created_at).toLocaleString()}
             </span>
@@ -151,64 +151,49 @@ export default async function ImportBatchDetailPage({
         </div>
       </div>
 
-      {/* Outcome Summary Banner (3 actionable summary cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Card className="bg-card border-border shadow-xs">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
-              <Folder className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Projects imported</p>
-              <p className="text-xl font-bold text-foreground">{totalImported}</p>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Outcome Summary Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border rounded-lg border border-border bg-card">
+        <div className="p-4 flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+            <Folder className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Projects imported</p>
+            <p className="text-xl font-bold text-foreground">{totalImported}</p>
+          </div>
+        </div>
 
-        <Card className="bg-card border-border shadow-xs">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-success/10 text-success shrink-0">
-              <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Ready to submit</p>
-              <p className="text-xl font-bold text-success">{readyToSubmitCount}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="p-4 flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-success/10 text-success shrink-0">
+            <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Ready to submit</p>
+            <p className="text-xl font-bold text-success">{readyToSubmitCount}</p>
+          </div>
+        </div>
 
-        <Card className="bg-card border-border shadow-xs">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-warning/10 text-warning shrink-0">
-              <XCircle className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Need fixes</p>
-              <p className="text-xl font-bold text-warning">{needsFixesCount}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="p-4 flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-warning/10 text-warning shrink-0">
+            <XCircle className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Need fixes</p>
+            <p className="text-xl font-bold text-warning">{needsFixesCount}</p>
+          </div>
+        </div>
       </div>
 
-      {/* Main Content Layout Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Left Column: Import Summary */}
-        <Card className="bg-card border-border shadow-xs lg:col-span-1">
+      {/* Main Content Layout: fixed-width metadata rail + fluid review surface */}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-6 items-start">
+        {/* Left Rail: Import Summary (secondary, compact) */}
+        <Card className="bg-card border-border shadow-xs">
           <CardHeader className="border-b border-border pb-3">
-            <CardTitle className="text-base font-semibold text-foreground">
+            <CardTitle className="text-sm font-semibold text-foreground">
               Import summary
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-4 flex flex-col gap-4 text-xs sm:text-sm">
-            <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Status
-              </span>
-              <div>
-                <ImportBatchStatusBadge status={batch.status} />
-              </div>
-            </div>
-
+          <CardContent className="pt-4 flex flex-col gap-3.5 text-xs">
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Source Folder
@@ -255,7 +240,7 @@ export default async function ImportBatchDetailPage({
             </div>
 
             {/* Native Disclosure for Technical Details */}
-            <details className="mt-2 pt-3 border-t border-border group">
+            <details className="mt-1 pt-3 border-t border-border group">
               <summary className="text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer flex items-center justify-between list-none">
                 <span>Advanced details</span>
                 <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
@@ -267,7 +252,7 @@ export default async function ImportBatchDetailPage({
             </details>
 
             {/* Staging Safety Notice */}
-            <div className="mt-2 pt-3 border-t border-border text-xs text-muted-foreground leading-relaxed flex items-start gap-2">
+            <div className="mt-1 pt-3 border-t border-border text-xs text-muted-foreground leading-relaxed flex items-start gap-2">
               <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" aria-hidden="true" />
               <span>
                 {batch.status === 'metadata_staged'
@@ -278,8 +263,8 @@ export default async function ImportBatchDetailPage({
           </CardContent>
         </Card>
 
-        {/* Right Column: Ingested Projects Review Surface */}
-        <Card className="bg-card border-border shadow-xs lg:col-span-2">
+        {/* Primary Workspace: Ingested Projects Review Surface */}
+        <Card className="bg-card border-border shadow-xs">
           <CardHeader className="border-b border-border pb-3">
             <CardTitle className="text-base font-semibold text-foreground">
               Projects in this import ({reviewProjects.length})
