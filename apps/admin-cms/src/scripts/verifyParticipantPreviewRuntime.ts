@@ -87,15 +87,23 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
       overrides?: { bucket?: string; isPublicApproved?: boolean; publicUrl?: string | null }
     ) => {
       const bucket = overrides?.bucket ?? PRIVATE_DRAFT_BUCKET;
+      const isPosterImage = assetType === 'poster_image';
+      const isPosterPdf = assetType === 'poster_pdf';
+      const fileName = isPosterImage ? 'poster.png' : isPosterPdf ? 'poster.pdf' : `${assetType}-${suffix}.bin`;
+      const mimeType = isPosterImage ? 'image/png' : isPosterPdf ? 'application/pdf' : 'application/octet-stream';
+      const projectPublicId = `${testPrefix}-${suffix}`;
+      const storagePath = isPosterImage || isPosterPdf
+        ? `drafts/${projectPublicId}/${assetType}/${fileName}`
+        : `drafts/${suffix}/${assetType}/${assetType}.bin`;
       const { data, error } = await client
         .from('media_assets')
         .insert({
           project_id: projectId,
           asset_type: assetType,
-          file_name: `${assetType}-${suffix}.bin`,
+          file_name: fileName,
           storage_bucket: bucket,
-          storage_path: `drafts/${suffix}/${assetType}/${assetType}.bin`,
-          mime_type: 'application/octet-stream',
+          storage_path: storagePath,
+          mime_type: mimeType,
           file_size_bytes: 10,
           public_url: overrides?.publicUrl ?? null,
           is_public_approved: overrides?.isPublicApproved ?? false,
@@ -104,6 +112,11 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
         .single();
       if (error || !data) throw new Error(`Failed to create media asset fixture for ${suffix}`);
       return data as Record<string, unknown>;
+    };
+
+    const createRequiredApprovalMedia = async (projectId: string, suffix: string) => {
+      await createMediaAsset(projectId, 'poster_image', suffix);
+      await createMediaAsset(projectId, 'poster_pdf', suffix);
     };
 
     const generate = async (publicId: string, adminUserId: string, isCorrectionReissue?: boolean) => {
@@ -341,8 +354,8 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     if (
       t8.res.data?.resultCode === 'SUCCESS' &&
       t8MediaPaths.length === 2 &&
-      t8MediaPaths.every((p) => p.includes('/t8a/')) &&
-      !t8MediaPaths.some((p) => p.includes('/t8b/')) &&
+      t8MediaPaths.every((p) => p.startsWith(`drafts/${String(t8ProjA.public_id)}/`)) &&
+      !t8MediaPaths.some((p) => p.startsWith(`drafts/${String(t8ProjB.public_id)}/`)) &&
       !t8SnapshotAssetIds.includes(String(t8PublicApproved.id)) &&
       !t8SnapshotAssetIds.includes(String(t8PublicBucket.id)) &&
       t8AllLegitimateStillPrivate
@@ -980,6 +993,7 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     // ============================================================
     console.log('--- Test 35 (Scenario A): Start Resolution Happy Path ---');
     const t35Proj = await createProject('t35', 'approved');
+    await createRequiredApprovalMedia(String(t35Proj.id), 't35');
     const t35A = await generate(String(t35Proj.public_id), adminId);
     const t35Comment = 'Please update team members list.';
     const t35Correction = await requestCorrection(t35A.hash, t35Comment);
@@ -1169,6 +1183,7 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     // ============================================================
     console.log('--- Test 40 (Scenario F): Immutable Version History ---');
     const t40Proj = await createProject('t40', 'approved');
+    await createRequiredApprovalMedia(String(t40Proj.id), 't40');
     const t40A = await generate(String(t40Proj.public_id), adminId);
     await requestCorrection(t40A.hash, 'Fix title typo.');
     await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t40Proj.public_id, p_admin_id: adminId });
@@ -1210,6 +1225,7 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     // ============================================================
     console.log('--- Test 41 (Scenario G): Concurrent Start Resolution ---');
     const t41Proj = await createProject('t41', 'approved');
+    await createRequiredApprovalMedia(String(t41Proj.id), 't41');
     const t41A = await generate(String(t41Proj.public_id), adminId);
     await requestCorrection(t41A.hash, 'Concurrent resolution comment.');
     const [t41Start1, t41Start2] = await Promise.all([
@@ -1271,6 +1287,7 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     // ============================================================
     console.log('--- Test 43 (Scenario I): Authorization Boundaries ---');
     const t43Proj = await createProject('t43', 'approved');
+    await createRequiredApprovalMedia(String(t43Proj.id), 't43');
     const t43A = await generate(String(t43Proj.public_id), adminId);
     await requestCorrection(t43A.hash, 'Auth test comment.');
 
@@ -1373,6 +1390,7 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     // ============================================================
     console.log('--- Test 46: Fully-Resolved Lifecycle Deletion Semantics ---');
     const t46Proj = await createProject('t46', 'approved');
+    await createRequiredApprovalMedia(String(t46Proj.id), 't46');
     const t46A = await generate(String(t46Proj.public_id), adminId);
     if (!t46A.res.data?.previewId || t46A.res.data.resultCode !== 'SUCCESS') {
       console.error('FAIL: Test 46 setup - Preview A generation failed.', t46A.res.data);
@@ -1461,6 +1479,7 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     // ============================================================
     console.log('--- Test 47: Multi-Project Deletion Order-Independence Regression Test ---');
     const t47ProjX = await createProject('t47x', 'approved');
+    await createRequiredApprovalMedia(String(t47ProjX.id), 't47x');
     const t47XA = await generate(String(t47ProjX.public_id), adminId);
     await requestCorrection(t47XA.hash, 'Multi-project regression X');
     await client.rpc('start_participant_preview_correction_resolution', { p_public_id: String(t47ProjX.public_id), p_admin_id: adminId });
@@ -1468,6 +1487,7 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     const t47XB = await generate(String(t47ProjX.public_id), adminId, true);
 
     const t47ProjY = await createProject('t47y', 'approved');
+    await createRequiredApprovalMedia(String(t47ProjY.id), 't47y');
     const t47YA = await generate(String(t47ProjY.public_id), adminId);
     await requestCorrection(t47YA.hash, 'Multi-project regression Y');
     await client.rpc('start_participant_preview_correction_resolution', { p_public_id: String(t47ProjY.public_id), p_admin_id: adminId });

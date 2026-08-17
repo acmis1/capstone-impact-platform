@@ -38,7 +38,8 @@ import {
   PROJECT_AUDIT_HISTORY_SELECT,
   parseAuditHistoryRow,
 } from '../../../../projects/projectDetailAuxiliaryData';
-import { loadProjectMediaPreviewItems } from '../../../../projects/projectMediaPreview';
+import { loadProjectMediaReviewData } from '../../../../projects/projectMediaPreview';
+import type { ApprovalMediaInput } from '../../../../validation/projectValidation';
 import type { ProjectMediaPreviewItem } from '../../../../components/admin-media/mediaPreviewTypes';
 import { Button } from '../../../../components/ui/button';
 import { Card, CardHeader, CardDescription, CardContent } from '../../../../components/ui/card';
@@ -101,6 +102,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let canExecuteLocalArchive = false;
   let mediaItems: ProjectMediaPreviewItem[] = [];
   let mediaAvailable = false;
+  let approvalMedia: ApprovalMediaInput | null = null;
 
   // Essential dependencies: without the base project or authenticated staff context there is no
   // safe project-detail page to render.
@@ -223,13 +225,16 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       publicationReadiness = auxiliary.publicationReadiness;
       publicationActionsAvailable = auxiliary.publicationActionsAvailable;
       try {
-        mediaItems = await loadProjectMediaPreviewItems({
+        const mediaReview = await loadProjectMediaReviewData({
           supabase,
           projectId: await projectDbId,
+          projectPublicId: publicId,
           projectTitle: project.title,
           accessibilityText: project.accessibilityText,
           privateBucket: env.SUPABASE_DRAFT_BUCKET,
         });
+        mediaItems = mediaReview.items;
+        approvalMedia = mediaReview.approvalMedia;
         mediaAvailable = true;
       } catch (error: unknown) {
         console.error('[Project detail: media preview load failure]', projectDetailFailureCategory(error));
@@ -590,7 +595,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           description="Approval readiness gates, blocking issues, and compliance warnings."
           icon={ShieldCheck}
         >
-          <ProjectValidationSummary project={project} />
+          <ProjectValidationSummary project={project} approvalMedia={approvalMedia} />
         </ProjectReviewSection>
 
         {/* E. REVIEW / SUBMISSION ACTIONS */}

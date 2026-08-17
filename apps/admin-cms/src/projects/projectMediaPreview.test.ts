@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  deriveApprovalMediaInput,
   loadProjectMediaPreviewItems,
   ProjectMediaPreviewReadError,
   toProjectMediaPreviewItem,
@@ -10,6 +11,7 @@ import {
 const privateRow: ProjectMediaAssetPreviewRow = {
   id: 'asset-private', asset_type: 'poster_image', file_name: 'poster.png',
   storage_bucket: 'draft-media', storage_path: 'drafts/private/poster.png', public_url: null,
+  public_storage_bucket: null, public_storage_path: null,
   mime_type: 'image/png', file_size_bytes: 2048, is_public_approved: false, alt_text_public: null,
 };
 
@@ -57,7 +59,7 @@ describe('project media preview read model', () => {
     order.mockReturnValueOnce(chain).mockReturnValueOnce(chain).mockResolvedValueOnce({ data: [privateRow], error: null });
     const supabase = { from: vi.fn(() => chain) } as never;
 
-    const result = await loadProjectMediaPreviewItems({ supabase, projectId: 'project-uuid', projectTitle: 'Synthetic Project', privateBucket: 'draft-media', signDraftMediaUrl: vi.fn().mockResolvedValue(null) });
+    const result = await loadProjectMediaPreviewItems({ supabase, projectId: 'project-uuid', projectPublicId: 'private', projectTitle: 'Synthetic Project', privateBucket: 'draft-media', signDraftMediaUrl: vi.fn().mockResolvedValue(null) });
     expect(result).toHaveLength(1);
     expect((chain.eq as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith('project_id', 'project-uuid');
     expect(order).toHaveBeenNthCalledWith(1, 'asset_type', { ascending: true });
@@ -70,6 +72,50 @@ describe('project media preview read model', () => {
     const order = vi.fn();
     Object.assign(chain, { select: vi.fn(() => chain), eq: vi.fn(() => chain), order });
     order.mockReturnValueOnce(chain).mockReturnValueOnce(chain).mockResolvedValueOnce({ data: null, error: { message: 'unavailable' } });
-    await expect(loadProjectMediaPreviewItems({ supabase: { from: vi.fn(() => chain) } as never, projectId: 'project-uuid', projectTitle: 'Synthetic Project', privateBucket: 'draft-media' })).rejects.toBeInstanceOf(ProjectMediaPreviewReadError);
+    await expect(loadProjectMediaPreviewItems({ supabase: { from: vi.fn(() => chain) } as never, projectId: 'project-uuid', projectPublicId: 'private', projectTitle: 'Synthetic Project', privateBucket: 'draft-media' })).rejects.toBeInstanceOf(ProjectMediaPreviewReadError);
+  });
+
+  it('derives exact private approval evidence without exposing storage locations', () => {
+    const posterPdf: ProjectMediaAssetPreviewRow = {
+      ...privateRow,
+      id: 'asset-pdf',
+      asset_type: 'poster_pdf',
+      file_name: 'poster.pdf',
+      storage_path: 'drafts/private/poster_pdf/poster.pdf',
+      mime_type: 'application/pdf',
+    };
+    const result = deriveApprovalMediaInput([
+      { ...privateRow, storage_path: 'drafts/private/poster_image/poster.png' },
+      posterPdf,
+    ], { projectPublicId: 'private', privateBucket: 'draft-media' });
+
+    expect(result).toEqual({
+      posterImage: { rowCount: 1, validPrivateCount: 1 },
+      posterPdf: { rowCount: 1, validPrivateCount: 1 },
+      snapshotMedia: null,
+    });
+    expect(JSON.stringify(result)).not.toContain('drafts/private');
+    expect(JSON.stringify(result)).not.toContain('draft-media');
+  });
+
+  it('marks wrong-project paths, public state, and malformed metadata invalid', () => {
+    const result = deriveApprovalMediaInput([
+      { ...privateRow, storage_path: 'drafts/foreign/poster_image/poster.png' },
+      {
+        ...privateRow,
+        id: 'asset-pdf',
+        asset_type: 'poster_pdf',
+        file_name: 'poster.pdf',
+        storage_path: 'drafts/private/poster_pdf/poster.pdf',
+        mime_type: 'application/pdf',
+        is_public_approved: true,
+        public_url: 'https://assets.example/poster.pdf',
+        public_storage_bucket: 'project-public-assets',
+        public_storage_path: 'published/private/poster_pdf/poster.pdf',
+      },
+    ], { projectPublicId: 'private', privateBucket: 'draft-media' });
+
+    expect(result.posterImage).toEqual({ rowCount: 1, validPrivateCount: 0 });
+    expect(result.posterPdf).toEqual({ rowCount: 1, validPrivateCount: 0 });
   });
 });

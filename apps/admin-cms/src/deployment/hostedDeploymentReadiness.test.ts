@@ -151,9 +151,9 @@ function completeEvidence(overrides: Partial<HostedReadinessEvidence> = {}): Hos
 
 describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () => {
   describe('authoritative migration, table, and RPC inventory', () => {
-    it('matches the exact 27 migration files and keeps every historical file byte-identical to origin/main', () => {
+    it('matches the exact 28 migration files and keeps every historical file byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(27);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(28);
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
       for (const historical of EXPECTED_REPOSITORY_MIGRATIONS.slice(0, -1)) {
@@ -217,7 +217,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const missingMigration = evaluateHostedDeploymentReadiness(
         completeEvidence({ recordedMigrationVersions: [], manualEvidence: undefined })
       );
-      expect(missingMigration.missingMigrations).toHaveLength(27);
+      expect(missingMigration.missingMigrations).toHaveLength(28);
       expect(missingMigration.deploymentClassification).toBe('RECONCILIATION_REQUIRED');
     });
 

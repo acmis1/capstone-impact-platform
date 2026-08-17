@@ -518,6 +518,36 @@ export async function runParticipantPreviewNotificationRuntimeVerification(
 
     const t16Recipient = recipientFor('t16');
     const t16Project = await createProject('t16', t16Recipient);
+    const t16PublicId = String(t16Project.public_id);
+    const { error: t16MediaError } = await client.from('media_assets').insert([
+      {
+        project_id: String(t16Project.id),
+        asset_type: 'poster_image',
+        file_name: 'poster.png',
+        storage_bucket: PRIVATE_DRAFT_BUCKET,
+        storage_path: `drafts/${t16PublicId}/poster_image/poster.png`,
+        mime_type: 'image/png',
+        file_size_bytes: 128,
+        is_public_approved: false,
+        public_url: null,
+        public_storage_bucket: null,
+        public_storage_path: null,
+      },
+      {
+        project_id: String(t16Project.id),
+        asset_type: 'poster_pdf',
+        file_name: 'poster.pdf',
+        storage_bucket: PRIVATE_DRAFT_BUCKET,
+        storage_path: `drafts/${t16PublicId}/poster_pdf/poster.pdf`,
+        mime_type: 'application/pdf',
+        file_size_bytes: 256,
+        is_public_approved: false,
+        public_url: null,
+        public_storage_bucket: null,
+        public_storage_path: null,
+      },
+    ]);
+    if (t16MediaError) throw new Error(`Failed to stage correction fixture media: ${t16MediaError.message}`);
     const t16A = await sendFor(String(t16Project.public_id), adminId);
     const t16APreviewId = t16A.generated.resultCode === 'SUCCESS' ? t16A.generated.value.previewId : '';
 

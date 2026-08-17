@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 27;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 28;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -35,6 +35,7 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260814090000_accessible_full_text_gate.sql',
   '20260814140000_snapshot_image_alt_text.sql',
   '20260816144917_staging_uat_direct_account_finalization.sql',
+  '20260817090000_private_media_approval_gate.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [
@@ -99,7 +100,7 @@ function rpc(
   return { name, parameterNames, parameterTypes };
 }
 
-/** Final application RPC signatures granted to service_role by migrations 0001-0027. */
+/** Final application RPC signatures granted to service_role by migrations 0001-0028. */
 export const REQUIRED_RPC_SIGNATURES = [
   rpc('bootstrap_initial_admin', ['p_auth_user_id', 'p_email', 'p_full_name'], ['uuid', 'text', 'text']),
   rpc('perform_project_review_action', ['p_public_id', 'p_action', 'p_comments', 'p_admin_id'], ['text', 'text', 'text', 'uuid']),

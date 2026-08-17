@@ -4,6 +4,12 @@ import { getStagingBuckets } from '../lib/supabase/buckets';
 import { createSignedDraftMediaUrl } from '../storage/mediaStorage';
 import { isValidMediaUrl } from '../components/admin-media/mediaPreviewUtils';
 import type { ProjectMediaPreviewItem } from '../components/admin-media/mediaPreviewTypes';
+import type {
+  ApprovalMediaAssetEvidence,
+  ApprovalMediaInput,
+  ApprovalSnapshotMediaInput,
+} from '../validation/projectValidation';
+import { validateMediaAsset } from '../storage/mediaValidationCore';
 
 export interface ProjectMediaAssetPreviewRow {
   id: string;
@@ -12,10 +18,17 @@ export interface ProjectMediaAssetPreviewRow {
   storage_bucket: string;
   storage_path: string;
   public_url: string | null;
+  public_storage_bucket: string | null;
+  public_storage_path: string | null;
   mime_type: string | null;
   file_size_bytes: number | string | null;
   is_public_approved: boolean | null;
   alt_text_public: string | null;
+}
+
+export interface ProjectMediaReviewData {
+  items: ProjectMediaPreviewItem[];
+  approvalMedia: ApprovalMediaInput;
 }
 
 export class ProjectMediaPreviewReadError extends Error {
@@ -28,6 +41,72 @@ function fileSizeBytes(value: ProjectMediaAssetPreviewRow['file_size_bytes']): n
   if (value === null || value === undefined) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function isValidPrivateApprovalAsset(
+  row: ProjectMediaAssetPreviewRow,
+  params: { assetType: string; projectPublicId: string; privateBucket: string },
+): boolean {
+  const size = fileSizeBytes(row.file_size_bytes);
+  const fileName = row.file_name?.trim();
+  const mimeType = row.mime_type?.trim();
+  const storagePath = row.storage_path?.trim();
+  const expectedPrefix = `drafts/${params.projectPublicId}/${params.assetType}/`;
+
+  if (
+    row.asset_type !== params.assetType ||
+    row.storage_bucket !== params.privateBucket ||
+    row.is_public_approved !== false ||
+    row.public_url !== null ||
+    row.public_storage_bucket !== null ||
+    row.public_storage_path !== null ||
+    !fileName ||
+    !mimeType ||
+    size === undefined ||
+    !storagePath ||
+    !storagePath.startsWith(expectedPrefix) ||
+    !storagePath.endsWith(fileName) ||
+    storagePath.includes('..') ||
+    storagePath.includes('\\')
+  ) {
+    return false;
+  }
+
+  const validation = validateMediaAsset({ fileName, fileSizeBytes: size, mimeType });
+  if (!validation.valid) return false;
+
+  return params.assetType === 'poster_pdf'
+    ? mimeType === 'application/pdf'
+    : mimeType.startsWith('image/');
+}
+
+function mediaEvidence(
+  rows: ProjectMediaAssetPreviewRow[],
+  params: { assetType: string; projectPublicId: string; privateBucket: string },
+): ApprovalMediaAssetEvidence {
+  const matching = rows.filter((row) => row.asset_type === params.assetType);
+  return {
+    rowCount: matching.length,
+    validPrivateCount: matching.filter((row) => isValidPrivateApprovalAsset(row, params)).length,
+  };
+}
+
+export function deriveApprovalMediaInput(
+  rows: ProjectMediaAssetPreviewRow[],
+  params: { projectPublicId: string; privateBucket: string },
+): ApprovalMediaInput {
+  const posterImage = mediaEvidence(rows, { ...params, assetType: 'poster_image' });
+  const posterPdf = mediaEvidence(rows, { ...params, assetType: 'poster_pdf' });
+  const snapshots = rows.filter((row) => row.asset_type === 'snapshot_image');
+  const snapshotEvidence = mediaEvidence(rows, { ...params, assetType: 'snapshot_image' });
+  const snapshotMedia: ApprovalSnapshotMediaInput | null = snapshots.length === 0
+    ? null
+    : {
+        ...snapshotEvidence,
+        altText: snapshots.length === 1 ? snapshots[0].alt_text_public : null,
+      };
+
+  return { posterImage, posterPdf, snapshotMedia };
 }
 
 /**
@@ -99,15 +178,29 @@ export async function toProjectMediaPreviewItem(
 export async function loadProjectMediaPreviewItems(params: {
   supabase: SupabaseClient;
   projectId: string;
+  projectPublicId: string;
   projectTitle: string;
   accessibilityText?: string;
   privateBucket?: string;
   signDraftMediaUrl?: typeof createSignedDraftMediaUrl;
 }): Promise<ProjectMediaPreviewItem[]> {
+  const result = await loadProjectMediaReviewData(params);
+  return result.items;
+}
+
+export async function loadProjectMediaReviewData(params: {
+  supabase: SupabaseClient;
+  projectId: string;
+  projectPublicId: string;
+  projectTitle: string;
+  accessibilityText?: string;
+  privateBucket?: string;
+  signDraftMediaUrl?: typeof createSignedDraftMediaUrl;
+}): Promise<ProjectMediaReviewData> {
   const privateBucket = params.privateBucket ?? getStagingBuckets().DRAFT_PRIVATE;
   const { data, error } = await params.supabase
     .from('media_assets')
-    .select('id,asset_type,file_name,storage_bucket,storage_path,public_url,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+    .select('id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
     .eq('project_id', params.projectId)
     .order('asset_type', { ascending: true })
     .order('created_at', { ascending: true })
@@ -115,10 +208,19 @@ export async function loadProjectMediaPreviewItems(params: {
 
   if (error) throw new ProjectMediaPreviewReadError();
 
-  return Promise.all((data ?? []).map((row) => toProjectMediaPreviewItem(row as ProjectMediaAssetPreviewRow, {
+  const rows = (data ?? []) as ProjectMediaAssetPreviewRow[];
+  const items = await Promise.all(rows.map((row) => toProjectMediaPreviewItem(row, {
     projectTitle: params.projectTitle,
     accessibilityText: params.accessibilityText,
     privateBucket,
     signDraftMediaUrl: params.signDraftMediaUrl,
   })));
+
+  return {
+    items,
+    approvalMedia: deriveApprovalMediaInput(rows, {
+      projectPublicId: params.projectPublicId,
+      privateBucket,
+    }),
+  };
 }

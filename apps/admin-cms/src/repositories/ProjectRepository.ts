@@ -16,6 +16,10 @@ export type ReviewActionExecutionErrorCode =
   | 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED'
   | 'ACCESSIBILITY_CONTENT_REQUIRED'
   | 'ACCESSIBILITY_CONTENT_INVALID'
+  /** Required poster image/PDF rows are absent from authoritative project media. */
+  | 'PROJECT_MEDIA_REQUIRED'
+  /** Project media rows exist but are ambiguous, malformed, public, or outside private staging. */
+  | 'PROJECT_MEDIA_INVALID'
   /** The project's snapshot image has no usable text alternative; approval is blocked. */
   | 'MEDIA_ACCESSIBILITY_REQUIRED'
   /** The snapshot image's text alternative exceeds its bounded ceiling; approval is blocked. */

@@ -141,6 +141,16 @@ export async function POST(
             { success: false, error: 'Poster full text or accessibility text exceeds its character safety limit. Shorten it in the project metadata editor, then approve.' },
             { status: 409 }
           );
+        case 'PROJECT_MEDIA_REQUIRED':
+          return NextResponse.json(
+            { success: false, error: 'A poster image and poster PDF are required in project media before approval.' },
+            { status: 409 }
+          );
+        case 'PROJECT_MEDIA_INVALID':
+          return NextResponse.json(
+            { success: false, error: 'Project media is not valid for approval. Review the uploaded poster files, then approve.' },
+            { status: 409 }
+          );
         case 'MEDIA_ACCESSIBILITY_REQUIRED':
           return NextResponse.json(
             { success: false, error: 'The snapshot image needs alt text before approval. Add it in the project media section, then approve.' },

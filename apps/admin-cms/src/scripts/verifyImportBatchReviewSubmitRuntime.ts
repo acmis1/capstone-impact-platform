@@ -505,16 +505,36 @@ export async function runImportBatchReviewSubmitRuntimeVerification(options?: Ru
     // Test 10: Existing reviewer workflow becomes available after submission
     // ============================================================
     console.log('--- Test 10: Existing reviewer approve action becomes available after submission ---');
+    const { data: t10MediaBefore } = await client
+      .from('media_assets')
+      .select('id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+      .eq('project_id', t1Ready.id)
+      .order('asset_type');
     const t10Res = await client.rpc('perform_project_review_action', {
       p_public_id: t1Ready.public_id,
       p_action: 'approve',
       p_comments: 'Approving after submission, runtime verification',
       p_admin_id: adminId,
     });
-    const t10Status = await getProjectStatus(String(t1Ready.id));
+    const { data: t10Project } = await client
+      .from('projects')
+      .select('status,poster_url,poster_pdf_url')
+      .eq('id', t1Ready.id)
+      .single();
+    const { data: t10MediaAfter } = await client
+      .from('media_assets')
+      .select('id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+      .eq('project_id', t1Ready.id)
+      .order('asset_type');
+    const t10Audits = await getAuditRecords(String(t1Ready.id));
 
-    if (!t10Res.error && t10Res.data?.status === 'approved' && t10Status === 'approved') {
-      console.log('PASS: Test 10 - Existing perform_project_review_action approve succeeded after review submission.');
+    if (
+      !t10Res.error && t10Res.data?.status === 'approved' && t10Project?.status === 'approved' &&
+      t10Project.poster_url === null && t10Project.poster_pdf_url === null &&
+      JSON.stringify(t10MediaAfter) === JSON.stringify(t10MediaBefore) &&
+      t10Audits.filter((row) => row.action_taken === 'approve').length === 1
+    ) {
+      console.log('PASS: Test 10 - Approval succeeded from private media with one audit and no public URL/media mutation.');
     } else {
       console.error('FAIL: Test 10 - Existing reviewer workflow integration assertion failed.');
       success = false;

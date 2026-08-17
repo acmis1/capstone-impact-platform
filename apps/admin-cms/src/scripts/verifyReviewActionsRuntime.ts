@@ -2,7 +2,13 @@ import { createClient } from '@supabase/supabase-js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
 import { parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
+import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
+import { validateProjectForApproval } from '../validation/projectValidation';
+
+const SYNTHETIC_PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const SYNTHETIC_PDF = Buffer.from('%PDF-1.4\n%%EOF', 'ascii');
 
 export interface SupabaseCliInvocation {
   executable: string;
@@ -180,7 +186,11 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
     // Helper to create disposable test projects
-    const createFixture = async (suffix: string, status: string = 'in_review') => {
+    const createFixture = async (
+      suffix: string,
+      status: string = 'in_review',
+      media: { posterImage?: boolean; posterPdf?: boolean; snapshotAltText?: string | null } = {},
+    ) => {
       const publicId = `${testProjectPrefix}-${suffix}`;
       const { data, error } = await adminClient
         .from('projects')
@@ -190,6 +200,11 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
           summary: 'Synthetic test project for runtime verification',
           status: status,
           year: 2026,
+          program_name: 'Synthetic Software Engineering',
+          study_program: 'Synthetic Software Engineering',
+          discipline: 'Software Engineering',
+          group_name: `Runtime Group ${suffix}`,
+          team_members: ['Synthetic Member'],
           // Approval requires accessible poster content. This verifier exercises review-action
           // transitions and atomicity, so its standard fixture is compliant by construction.
           poster_text_public: 'Synthetic runtime poster full text.',
@@ -200,6 +215,37 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
 
       if (error || !data) {
         throw new Error(`Failed to create test project fixture: ${publicId}`);
+      }
+
+      const mediaRows: Array<Record<string, unknown>> = [];
+      if (media.posterImage !== false) {
+        mediaRows.push({
+          project_id: data.id, asset_type: 'poster_image', file_name: 'poster.png',
+          storage_bucket: 'project-drafts-private', storage_path: `drafts/${publicId}/poster_image/poster.png`,
+          public_url: null, public_storage_bucket: null, public_storage_path: null,
+          mime_type: 'image/png', file_size_bytes: SYNTHETIC_PNG.length, is_public_approved: false,
+        });
+      }
+      if (media.posterPdf !== false) {
+        mediaRows.push({
+          project_id: data.id, asset_type: 'poster_pdf', file_name: 'poster.pdf',
+          storage_bucket: 'project-drafts-private', storage_path: `drafts/${publicId}/poster_pdf/poster.pdf`,
+          public_url: null, public_storage_bucket: null, public_storage_path: null,
+          mime_type: 'application/pdf', file_size_bytes: SYNTHETIC_PDF.length, is_public_approved: false,
+        });
+      }
+      if (media.snapshotAltText !== undefined) {
+        mediaRows.push({
+          project_id: data.id, asset_type: 'snapshot_image', file_name: 'snapshot-1.png',
+          storage_bucket: 'project-drafts-private', storage_path: `drafts/${publicId}/snapshot_image/snapshot-1.png`,
+          public_url: null, public_storage_bucket: null, public_storage_path: null,
+          mime_type: 'image/png', file_size_bytes: SYNTHETIC_PNG.length, is_public_approved: false,
+          alt_text_public: media.snapshotAltText,
+        });
+      }
+      if (mediaRows.length > 0) {
+        const mediaInsert = await adminClient.from('media_assets').insert(mediaRows);
+        if (mediaInsert.error) throw new Error(`Failed to create media fixture: ${publicId}`);
       }
       return data;
     };
@@ -509,6 +555,220 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
       console.log('PASS: Test 7 - Row locking (FOR UPDATE) successfully serialized concurrent requests (1 succeeded, 1 failed with REVIEW_TRANSITION_INVALID). All winner and audit properties verified.');
     } else {
       console.error('FAIL: Test 7 - Concurrent action serialization assertion failed.');
+      success = false;
+    }
+
+    // ============================================================
+    // Test 8: Submitted browser-import shape approves without public URLs or media mutation
+    // ============================================================
+    console.log('--- Test 8: Private staged poster media authorizes approval without public URLs ---');
+    const t8Proj = await createFixture('t8', 'submitted', { snapshotAltText: 'Synthetic accessible snapshot.' });
+    const { data: t8MediaBefore } = await adminClient
+      .from('media_assets')
+      .select('id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+      .eq('project_id', t8Proj.id)
+      .order('asset_type');
+    const t8Rows = t8MediaBefore ?? [];
+    const t8PrivatePaths = t8Rows.map((row) => row.storage_path);
+    const t8Content = (assetType: string) => assetType === 'poster_pdf' ? SYNTHETIC_PDF : SYNTHETIC_PNG;
+    const t8PublicAssetsBefore = await adminClient.storage.from('project-public-assets').list('', { limit: 1000 });
+    const t8PublicFeedsBefore = await adminClient.storage.from('public-feeds').list('', { limit: 1000 });
+    const { count: t8PublishedSnapshotsBefore } = await adminClient.from('published_snapshots').select('id', { count: 'exact', head: true });
+    let t8Passed = false;
+
+    try {
+      for (const row of t8Rows) {
+        const upload = await adminClient.storage.from('project-drafts-private').upload(
+          row.storage_path,
+          t8Content(row.asset_type),
+          { contentType: row.mime_type ?? undefined, upsert: false },
+        );
+        if (upload.error) throw new Error('Private approval acceptance upload failed.');
+      }
+
+      const t8PrivateHashesBefore = new Map<string, string>();
+      for (const row of t8Rows) {
+        const download = await adminClient.storage.from('project-drafts-private').download(row.storage_path);
+        if (download.error || !download.data) throw new Error('Private approval acceptance download failed.');
+        t8PrivateHashesBefore.set(row.storage_path, createHash('sha256').update(Buffer.from(await download.data.arrayBuffer())).digest('hex'));
+      }
+
+      const applicationProject = await new SupabaseProjectRepositoryCore(adminClient).getProjectByPublicId(String(t8Proj.public_id));
+      const evidence = (assetType: string) => {
+        const rows = t8Rows.filter((row) => row.asset_type === assetType);
+        return {
+          rowCount: rows.length,
+          validPrivateCount: rows.filter((row) => (
+            row.storage_bucket === 'project-drafts-private' &&
+            row.storage_path.startsWith(`drafts/${String(t8Proj.public_id)}/${assetType}/`) &&
+            row.is_public_approved === false && row.public_url === null &&
+            row.public_storage_bucket === null && row.public_storage_path === null
+          )).length,
+        };
+      };
+      const snapshotRows = t8Rows.filter((row) => row.asset_type === 'snapshot_image');
+      const applicationMedia = {
+        posterImage: evidence('poster_image'),
+        posterPdf: evidence('poster_pdf'),
+        snapshotMedia: snapshotRows.length === 0 ? null : {
+          ...evidence('snapshot_image'),
+          altText: snapshotRows.length === 1 ? snapshotRows[0].alt_text_public : null,
+        },
+      };
+      const applicationPreflightPassed = Boolean(
+        applicationProject && validateProjectForApproval(applicationProject, applicationMedia).valid,
+      );
+
+      const { data: t8Result, error: t8Error } = await adminClient.rpc('perform_project_review_action', {
+        p_public_id: t8Proj.public_id, p_action: 'approve', p_comments: 'Private media approval', p_admin_id: reviewerId,
+      });
+
+      const t8RawToken = randomBytes(32).toString('hex');
+      const t8TokenHash = createHash('sha256').update(t8RawToken).digest('hex');
+      const t8Preview = await adminClient.rpc('generate_participant_preview', {
+        p_public_id: t8Proj.public_id,
+        p_admin_id: reviewerId,
+        p_token_hash: t8TokenHash,
+        p_expires_in_seconds: 3600,
+        p_private_bucket: 'project-drafts-private',
+      });
+      const t8Resolved = await adminClient.rpc('resolve_participant_preview', { p_token_hash: t8TokenHash });
+      const t8PreviewId = t8Preview.data?.previewId;
+      const { data: t8PreviewRow } = await adminClient
+        .from('participant_previews')
+        .select('token_hash,media_snapshot')
+        .eq('id', t8PreviewId)
+        .single();
+
+      let signedPrivateMediaResolved = true;
+      for (const row of t8Rows) {
+        const signed = await adminClient.storage.from('project-drafts-private').createSignedUrl(row.storage_path, 60);
+        if (signed.error || !signed.data?.signedUrl) {
+          signedPrivateMediaResolved = false;
+          break;
+        }
+        const response = await fetch(signed.data.signedUrl);
+        const bytes = response.ok ? Buffer.from(await response.arrayBuffer()) : Buffer.alloc(0);
+        if (!bytes.equals(t8Content(row.asset_type))) {
+          signedPrivateMediaResolved = false;
+          break;
+        }
+      }
+
+      const t8Confirmation = await adminClient.rpc('confirm_participant_preview', { p_token_hash: t8TokenHash });
+      const t8Readiness = await adminClient.rpc('get_project_publication_readiness', {
+        p_public_id: t8Proj.public_id,
+        p_admin_id: reviewerId,
+        p_private_bucket: 'project-drafts-private',
+      });
+      const { data: t8After } = await adminClient.from('projects').select('status,poster_url,poster_pdf_url').eq('id', t8Proj.id).single();
+      const { data: t8MediaAfter } = await adminClient
+        .from('media_assets')
+        .select('id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+        .eq('project_id', t8Proj.id)
+        .order('asset_type');
+      const { data: t8Audits } = await adminClient.from('approval_records').select('id,action_taken').eq('project_id', t8Proj.id);
+      const { count: t8PublicationAttempts } = await adminClient.from('publication_attempts').select('id', { count: 'exact', head: true }).eq('project_id', t8Proj.id);
+      const t8PublicAssetsAfter = await adminClient.storage.from('project-public-assets').list('', { limit: 1000 });
+      const t8PublicFeedsAfter = await adminClient.storage.from('public-feeds').list('', { limit: 1000 });
+      const { count: t8PublishedSnapshotsAfter } = await adminClient.from('published_snapshots').select('id', { count: 'exact', head: true });
+
+      let privateBytesUnchanged = true;
+      for (const row of t8Rows) {
+        const download = await adminClient.storage.from('project-drafts-private').download(row.storage_path);
+        const hash = download.error || !download.data
+          ? ''
+          : createHash('sha256').update(Buffer.from(await download.data.arrayBuffer())).digest('hex');
+        if (hash !== t8PrivateHashesBefore.get(row.storage_path)) privateBytesUnchanged = false;
+      }
+
+      const previewMedia = Array.isArray(t8PreviewRow?.media_snapshot) ? t8PreviewRow.media_snapshot : [];
+      t8Passed =
+        applicationPreflightPassed &&
+        !t8Error && t8Result?.status === 'approved' && t8After?.status === 'approved' &&
+        t8After.poster_url === null && t8After.poster_pdf_url === null &&
+        JSON.stringify(t8MediaAfter) === JSON.stringify(t8MediaBefore) && privateBytesUnchanged &&
+        t8Audits?.length === 1 && t8Audits[0].action_taken === 'approve' &&
+        !t8Preview.error && t8Preview.data?.resultCode === 'SUCCESS' &&
+        t8PreviewRow?.token_hash === t8TokenHash && JSON.stringify(t8PreviewRow).includes(t8RawToken) === false &&
+        !t8Resolved.error && t8Resolved.data?.resultCode === 'SUCCESS' && previewMedia.length === 3 &&
+        previewMedia.every((item: Record<string, unknown>) => item.storageBucket === 'project-drafts-private') &&
+        signedPrivateMediaResolved &&
+        !t8Confirmation.error && t8Confirmation.data?.resultCode === 'SUCCESS' &&
+        !t8Readiness.error && t8Readiness.data?.resultCode === 'READY' &&
+        t8PublicationAttempts === 0 && t8PublishedSnapshotsAfter === t8PublishedSnapshotsBefore &&
+        JSON.stringify(t8PublicAssetsAfter.data ?? []) === JSON.stringify(t8PublicAssetsBefore.data ?? []) &&
+        JSON.stringify(t8PublicFeedsAfter.data ?? []) === JSON.stringify(t8PublicFeedsBefore.data ?? []);
+    } finally {
+      const cleanup = await adminClient.storage.from('project-drafts-private').remove(t8PrivatePaths);
+      if (cleanup.error) t8Passed = false;
+    }
+
+    if (t8Passed) {
+      console.log('PASS: Test 8 - Application preflight, approval, signed private preview, confirmation, and readiness succeeded with zero publication or media mutation.');
+    } else {
+      console.error('FAIL: Test 8 - Private staged media end-to-end acceptance invariant failed.');
+      success = false;
+    }
+
+    // ============================================================
+    // Tests 9-10: Each required private poster type fails closed independently
+    // ============================================================
+    for (const [number, suffix, media, expectedType] of [
+      [9, 't9', { posterImage: false }, 'poster_image'],
+      [10, 't10', { posterPdf: false }, 'poster_pdf'],
+    ] as const) {
+      console.log(`--- Test ${number}: Missing ${expectedType} blocks approval with zero mutation ---`);
+      const project = await createFixture(suffix, 'submitted', media);
+      const { data: result, error } = await adminClient.rpc('perform_project_review_action', {
+        p_public_id: project.public_id, p_action: 'approve', p_comments: null, p_admin_id: reviewerId,
+      });
+      const { data: after } = await adminClient.from('projects').select('status,poster_url,poster_pdf_url').eq('id', project.id).single();
+      const { data: audits } = await adminClient.from('approval_records').select('id').eq('project_id', project.id);
+      if (!error && result?.resultCode === 'PROJECT_MEDIA_REQUIRED' && result?.assetType === expectedType && after?.status === 'submitted' && after.poster_url === null && after.poster_pdf_url === null && audits?.length === 0) {
+        console.log(`PASS: Test ${number} - Missing ${expectedType} rejected without status, URL, or audit mutation.`);
+      } else {
+        console.error(`FAIL: Test ${number} - Missing ${expectedType} gate failed.`);
+        success = false;
+      }
+    }
+
+    // ============================================================
+    // Test 11: Project-row public URLs cannot bypass absent authoritative media
+    // ============================================================
+    console.log('--- Test 11: Public URL values cannot bypass absent authoritative media ---');
+    const t11Proj = await createFixture('t11', 'submitted', { posterImage: false, posterPdf: false });
+    await adminClient.from('projects').update({
+      poster_url: 'https://assets.synthetic.invalid/poster.png',
+      poster_pdf_url: 'https://assets.synthetic.invalid/poster.pdf',
+    }).eq('id', t11Proj.id);
+    const { data: t11Result, error: t11Error } = await adminClient.rpc('perform_project_review_action', {
+      p_public_id: t11Proj.public_id, p_action: 'approve', p_comments: null, p_admin_id: adminId,
+    });
+    const { data: t11After } = await adminClient.from('projects').select('status').eq('id', t11Proj.id).single();
+    const { data: t11Audits } = await adminClient.from('approval_records').select('id').eq('project_id', t11Proj.id);
+    if (!t11Error && t11Result?.resultCode === 'PROJECT_MEDIA_REQUIRED' && t11After?.status === 'submitted' && t11Audits?.length === 0) {
+      console.log('PASS: Test 11 - Public URL projections supplied no approval authority.');
+    } else {
+      console.error('FAIL: Test 11 - Public URL projections bypassed the authoritative media gate.');
+      success = false;
+    }
+
+    // ============================================================
+    // Test 12: Wrong-bucket/malformed media fails closed
+    // ============================================================
+    console.log('--- Test 12: Contradictory private media metadata blocks approval ---');
+    const t12Proj = await createFixture('t12', 'submitted');
+    await adminClient.from('media_assets').update({ storage_bucket: 'foreign-private-bucket' }).eq('project_id', t12Proj.id).eq('asset_type', 'poster_image');
+    const { data: t12Result, error: t12Error } = await adminClient.rpc('perform_project_review_action', {
+      p_public_id: t12Proj.public_id, p_action: 'approve', p_comments: null, p_admin_id: adminId,
+    });
+    const { data: t12After } = await adminClient.from('projects').select('status').eq('id', t12Proj.id).single();
+    const { data: t12Audits } = await adminClient.from('approval_records').select('id').eq('project_id', t12Proj.id);
+    if (!t12Error && t12Result?.resultCode === 'PROJECT_MEDIA_INVALID' && t12Result?.assetType === 'poster_image' && t12After?.status === 'submitted' && t12Audits?.length === 0) {
+      console.log('PASS: Test 12 - Wrong-bucket media rejected without mutation.');
+    } else {
+      console.error('FAIL: Test 12 - Contradictory media state was not rejected safely.');
       success = false;
     }
     }

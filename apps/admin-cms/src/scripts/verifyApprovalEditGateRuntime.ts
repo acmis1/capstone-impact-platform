@@ -27,7 +27,9 @@ async function main() {
   const project = (name: string, status: string) => {
     const publicId = `${prefix}-${name}`;
     sql(`INSERT INTO public.projects(public_id,title,summary,background,solution,poster_text_public,accessibility_text_public,year,program_id,program_name,discipline,industry,status) VALUES ('${publicId}','Before','Before','Background','Solution','Before poster full text','Before accessibility text',2026,'${ids.program}'::uuid,'Program','Discipline','Industry','${status}')`);
-    projectIds.push(sql(`SELECT id::text FROM public.projects WHERE public_id='${publicId}'`));
+    const projectId = sql(`SELECT id::text FROM public.projects WHERE public_id='${publicId}'`);
+    projectIds.push(projectId);
+    sql(`INSERT INTO public.media_assets(project_id,asset_type,file_name,storage_bucket,storage_path,mime_type,file_size_bytes,is_public_approved,public_url,public_storage_bucket,public_storage_path) VALUES ('${projectId}'::uuid,'poster_image','poster.png','project-drafts-private','drafts/${publicId}/poster_image/poster.png','image/png',128,false,NULL,NULL,NULL),('${projectId}'::uuid,'poster_pdf','poster.pdf','project-drafts-private','drafts/${publicId}/poster_pdf/poster.pdf','application/pdf',256,false,NULL,NULL,NULL)`);
     return publicId;
   };
   const snapshot = (publicId: string) => one<Record<string, unknown>>(`SELECT p.title,p.summary,p.background,p.solution,p.year,p.program_id::text,p.status,p.updated_at::text,(SELECT json_agg(discipline_id::text ORDER BY discipline_id) FROM public.project_disciplines WHERE project_id=p.id) disciplines,(SELECT json_agg(industry_category_id::text ORDER BY industry_category_id) FROM public.project_industry_categories WHERE project_id=p.id) industries,(SELECT count(*) FROM public.approval_records WHERE project_id=p.id) audits FROM public.projects p WHERE public_id='${publicId}'`);

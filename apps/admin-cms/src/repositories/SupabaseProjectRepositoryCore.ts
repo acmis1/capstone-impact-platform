@@ -533,6 +533,8 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       res.resultCode === 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED' ||
       res.resultCode === 'ACCESSIBILITY_CONTENT_REQUIRED' ||
       res.resultCode === 'ACCESSIBILITY_CONTENT_INVALID' ||
+      res.resultCode === 'PROJECT_MEDIA_REQUIRED' ||
+      res.resultCode === 'PROJECT_MEDIA_INVALID' ||
       res.resultCode === 'MEDIA_ACCESSIBILITY_REQUIRED' ||
       res.resultCode === 'MEDIA_ACCESSIBILITY_INVALID'
     ) {

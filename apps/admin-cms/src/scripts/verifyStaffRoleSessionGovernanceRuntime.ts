@@ -330,6 +330,35 @@ async function main(): Promise<void> {
     assert.ifError(reviewProject.error);
     const reviewProjectId = String(reviewProject.data.id);
     createdProjectIds.add(reviewProjectId);
+    const reviewMedia = await service.from('media_assets').insert([
+      {
+        project_id: reviewProjectId,
+        asset_type: 'poster_image',
+        file_name: 'poster.png',
+        storage_bucket: 'project-drafts-private',
+        storage_path: `drafts/${prefix}-review-audit/poster_image/poster.png`,
+        mime_type: 'image/png',
+        file_size_bytes: 128,
+        is_public_approved: false,
+        public_url: null,
+        public_storage_bucket: null,
+        public_storage_path: null,
+      },
+      {
+        project_id: reviewProjectId,
+        asset_type: 'poster_pdf',
+        file_name: 'poster.pdf',
+        storage_bucket: 'project-drafts-private',
+        storage_path: `drafts/${prefix}-review-audit/poster_pdf/poster.pdf`,
+        mime_type: 'application/pdf',
+        file_size_bytes: 256,
+        is_public_approved: false,
+        public_url: null,
+        public_storage_bucket: null,
+        public_storage_path: null,
+      },
+    ]);
+    assert.ifError(reviewMedia.error);
     const repository = new SupabaseProjectRepositoryCore(service);
     await scenario(31, 'denied actions generate zero audit evidence', async () => {
       const before = await service.from('approval_records').select('id', { count: 'exact', head: true }).eq('project_id', reviewProjectId);
