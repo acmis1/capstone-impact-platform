@@ -54,6 +54,86 @@ function extractCssTokens(): Record<string, string> {
   return tokens;
 }
 
+function compositeOverBackground(fgHex: string, alpha: number, underlyingHex: string): string {
+  const [fr, fgc, fb] = parseHexColor(fgHex);
+  const [ur, ug, ub] = parseHexColor(underlyingHex);
+  const composite = (fgChannel: number, underlyingChannel: number) =>
+    Math.round(fgChannel * alpha + underlyingChannel * (1 - alpha));
+  const toHexPair = (value: number) => value.toString(16).padStart(2, "0");
+  const r = composite(fr, ur);
+  const g = composite(fgc, ug);
+  const b = composite(fb, ub);
+  return `#${toHexPair(r)}${toHexPair(g)}${toHexPair(b)}`;
+}
+
+function extractBadgeVariantClassMap(): Record<string, string> {
+  const badgePath = path.resolve(__dirname, "../components/ui/badge.tsx");
+  const content = fs.readFileSync(badgePath, "utf-8");
+  const variantsBlockMatch = content.match(/variant:\s*\{([\s\S]*?)\n\s*\},\s*\n\s*\},/);
+  if (!variantsBlockMatch) {
+    throw new Error("Could not locate badge `variant` class map in badge.tsx");
+  }
+
+  const map: Record<string, string> = {};
+  const entryPattern = /(\w+):\s*"([^"]+)"/g;
+  let match: RegExpExecArray | null;
+  while ((match = entryPattern.exec(variantsBlockMatch[1]))) {
+    map[match[1]] = match[2];
+  }
+  return map;
+}
+
+function findColorUtility(
+  classString: string,
+  utilityPrefix: "bg" | "text",
+  tokenNames: string[]
+): { token: string; opacityPercent: number | null } | null {
+  const alternation = [...tokenNames].sort((a, b) => b.length - a.length).join("|");
+  const pattern = new RegExp(`\\b${utilityPrefix}-(${alternation})(?:/(\\d+))?\\b`);
+  const match = classString.match(pattern);
+  if (!match) return null;
+  return { token: match[1], opacityPercent: match[2] ? Number(match[2]) : null };
+}
+
+describe("Badge rendered alpha-composited contrast (WCAG 2.2 AA)", () => {
+  const tokens = extractCssTokens();
+  const tokenNames = Object.keys(tokens);
+  const badgeClassMap = extractBadgeVariantClassMap();
+  // Badges render on the card/white surface throughout project, import, and staff status tables.
+  const badgeUnderlyingSurfaceHex = tokens["card"];
+
+  const badgeVariantsToVerify = ["success", "warning", "information", "destructive"];
+
+  for (const variantName of badgeVariantsToVerify) {
+    it(`badge variant "${variantName}" achieves >= 4.5:1 rendered text contrast on its actual composited background`, () => {
+      const classString = badgeClassMap[variantName];
+      expect(classString, `Missing badge variant in badge.tsx: ${variantName}`).toBeDefined();
+
+      const bgUtility = findColorUtility(classString, "bg", tokenNames);
+      const textUtility = findColorUtility(classString, "text", tokenNames);
+      expect(bgUtility, `Could not find a bg-<token> utility for badge variant "${variantName}"`).not.toBeNull();
+      expect(textUtility, `Could not find a text-<token> utility for badge variant "${variantName}"`).not.toBeNull();
+
+      const bgTokenHex = tokens[bgUtility!.token];
+      const textTokenHex = tokens[textUtility!.token];
+      expect(bgTokenHex, `Missing token: --${bgUtility!.token}`).toBeDefined();
+      expect(textTokenHex, `Missing token: --${textUtility!.token}`).toBeDefined();
+
+      const alpha = bgUtility!.opacityPercent !== null ? bgUtility!.opacityPercent / 100 : 1;
+      const renderedBgHex =
+        alpha < 1 ? compositeOverBackground(bgTokenHex, alpha, badgeUnderlyingSurfaceHex) : bgTokenHex;
+
+      const ratio = getContrastRatio(renderedBgHex, textTokenHex);
+      expect(
+        ratio,
+        `Badge variant "${variantName}" renders text ${textTokenHex} on composited background ${renderedBgHex} ` +
+          `(bg-${bgUtility!.token}${bgUtility!.opacityPercent !== null ? `/${bgUtility!.opacityPercent}` : ""} over card ${badgeUnderlyingSurfaceHex}), ` +
+          `contrast ratio ${ratio.toFixed(2)}:1, expected >= 4.5:1`
+      ).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});
+
 describe("Design Token WCAG 2.2 AA Contrast Verification", () => {
   const tokens = extractCssTokens();
 
