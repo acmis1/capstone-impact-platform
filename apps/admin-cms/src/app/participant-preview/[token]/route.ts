@@ -5,7 +5,7 @@ import { createSignedDraftMediaUrl } from '../../../storage/mediaStorage';
 import { renderParticipantPreviewPage, renderParticipantPreviewUnavailablePage } from '../../../previews/participantPreviewHtml';
 import { validateCorrectionComment } from '../../../previews/participantPreviewCorrectionComment';
 import { ParticipantPreviewMediaViewRef } from '../../../domain/participantPreview';
-import { validateSameOrigin } from '../../../auth/csrf';
+import { resolveCanonicalPublicOrigin, validateSameOrigin } from '../../../auth/csrf';
 
 // Generous bound for a same-origin urlencoded form carrying only an action discriminator and, at
 // most, a 2000-character correction comment (worst-case UTF-8 percent-encoding expansion), plus
@@ -68,12 +68,20 @@ async function readBoundedBody(request: NextRequest, limit: number): Promise<Uin
  * Headers: no-store (never cached), noindex/nofollow (both header and meta tag), and a
  * restrictive referrer policy so the token embedded in this URL is never leaked via outgoing
  * Referer headers when a participant follows an external link from this page.
+ *
+ * The referrer policy is deliberately `strict-origin` and must not be tightened to `no-referrer`.
+ * Under `no-referrer`, the Fetch Standard requires a conforming browser to serialize the Origin of
+ * a non-GET/HEAD, non-CORS request as the literal `null` — so the participant's own same-origin
+ * form POST below arrives with `Origin: null` and fails the same-origin check that is this
+ * cookieless public endpoint's only CSRF signal. `strict-origin` never emits a path in a Referer
+ * (same-origin or cross-origin), so the raw token in this URL is still never leaked, while the
+ * real Origin survives on the confirmation/correction submission.
  */
 const RESPONSE_HEADERS = {
   'Content-Type': 'text/html; charset=utf-8',
   'Cache-Control': 'no-store',
   'X-Robots-Tag': 'noindex, nofollow, noarchive',
-  'Referrer-Policy': 'no-referrer',
+  'Referrer-Policy': 'strict-origin',
   'X-Content-Type-Options': 'nosniff',
   // Defense-in-depth only — never a substitute for the explicit href scheme validation in
   // participantPreviewHtml.ts. Blocks script execution and any non-declared external fetch.
@@ -182,6 +190,16 @@ export async function POST(
     return unavailableResponse(403);
   }
 
+  // Resolved before anything is recorded. Behind Render's proxy the direct request origin is the
+  // process's internal localhost listener, so a POST/redirect/GET Location built from it would
+  // strand the participant on an unreachable URL after their response had already been stored.
+  // Only the platform-owned external URL is authoritative here; forwarding and Host headers are
+  // never inputs. A server that cannot supply one fails closed into the same generic page.
+  const publicOrigin = resolveCanonicalPublicOrigin(request.nextUrl.origin);
+  if (!publicOrigin) {
+    return unavailableResponse(500);
+  }
+
   if (!isPlausibleRawPreviewToken(token)) {
     return unavailableResponse(404);
   }
@@ -210,7 +228,7 @@ export async function POST(
   const tokenHash = hashPreviewToken(token);
   const repository = new SupabaseParticipantPreviewRepository();
   const redirectToPreview = () =>
-    NextResponse.redirect(new URL(`/participant-preview/${token}`, request.nextUrl.origin), {
+    NextResponse.redirect(new URL(`/participant-preview/${token}`, publicOrigin), {
       status: 303,
       headers: RESPONSE_HEADERS,
     });

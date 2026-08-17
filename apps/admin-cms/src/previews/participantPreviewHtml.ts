@@ -176,6 +176,18 @@ function renderResponseSection(responseState: ParticipantPreviewResponseState): 
     </div>`;
 }
 
+/**
+ * Referrer policy declared by both participant-facing pages, matching the route's response header.
+ *
+ * It must stay `strict-origin` and must never be tightened back to `no-referrer`: under
+ * `no-referrer` the Fetch Standard requires a conforming browser to serialize the Origin of a
+ * non-GET/HEAD, non-CORS request as the literal `null`, so the participant's own same-origin
+ * confirmation/correction form POST arrives with `Origin: null` and is rejected by the route's
+ * same-origin check — the only CSRF signal this cookieless public endpoint has. `strict-origin`
+ * never emits a path in a Referer, so the raw token in the page URL still never leaves the page.
+ */
+const PAGE_REFERRER_POLICY = 'strict-origin';
+
 const PAGE_STYLE = `
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
@@ -220,7 +232,7 @@ export function renderParticipantPreviewPage(params: {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex, nofollow, noarchive" />
-<meta name="referrer" content="no-referrer" />
+<meta name="referrer" content="${PAGE_REFERRER_POLICY}" />
 <title>${escapeHtml(snapshot.title)} — Participant Preview</title>
 <style>${PAGE_STYLE}</style>
 </head>
@@ -275,7 +287,7 @@ export function renderParticipantPreviewUnavailablePage(): string {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex, nofollow, noarchive" />
-<meta name="referrer" content="no-referrer" />
+<meta name="referrer" content="${PAGE_REFERRER_POLICY}" />
 <title>Preview Unavailable</title>
 <style>${PAGE_STYLE}</style>
 </head>
