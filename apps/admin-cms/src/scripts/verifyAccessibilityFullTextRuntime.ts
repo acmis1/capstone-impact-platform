@@ -646,7 +646,7 @@ export async function verifyAccessibilityFullTextRuntime(): Promise<void> {
       });
       assert(html.includes('Poster Full Text'), 'Participant preview omits the poster full text section.');
       assert(html.includes('Accessibility Description'), 'Participant preview omits the accessibility description section.');
-      const responseSection = html.indexOf('<h3>Your Response</h3>');
+      const responseSection = html.indexOf('<h2 id="response-heading">Your Response</h2>');
       assert(responseSection > -1, 'Participant preview lost its response section.');
       assert(html.indexOf('Poster Full Text') < responseSection, 'Poster full text renders after the confirmation controls.');
       assert(html.indexOf('Accessibility Description') < responseSection, 'Accessibility description renders after the confirmation controls.');
@@ -668,7 +668,7 @@ export async function verifyAccessibilityFullTextRuntime(): Promise<void> {
       assert(!html.includes('<script>evil()</script>'), 'Poster full text emitted raw script markup.');
       assert(!html.includes('<img src=x onerror=alert(1)>'), 'Accessibility text emitted raw image markup.');
       assert(html.includes('&lt;script&gt;evil()&lt;/script&gt;'), 'Poster full text was not HTML-escaped.');
-      assert(html.includes('<br/>second line'), 'Newlines in poster full text did not render safely.');
+      assert(html.includes('<br />second line'), 'Newlines in poster full text did not render safely.');
       assert(!/poster_text_public|accessibility_text_public|import_batch/i.test(html), 'Participant preview leaked internal column or batch state.');
     });
 
