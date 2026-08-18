@@ -7,6 +7,8 @@ import { getWorkflowStatusLabel } from './ProjectStatusBadge';
 interface ProjectAuditHistoryProps {
   /** `null` means the audit read failed; an empty array means there is genuinely no history. */
   auditRecords: AuditHistoryView[] | null;
+  /** Number of newest records shown before the native full-history disclosure. */
+  initialVisibleCount?: number;
 }
 
 const AUDIT_ACTION_LABELS: Record<string, string> = {
@@ -169,7 +171,7 @@ function AuditEntry({ record }: { record: AuditHistoryView }) {
  * but the layout reflows at narrow widths instead of hiding columns, and decision/evidence text
  * is at least 12px.
  */
-export function ProjectAuditHistory({ auditRecords }: ProjectAuditHistoryProps) {
+export function ProjectAuditHistory({ auditRecords, initialVisibleCount = 3 }: ProjectAuditHistoryProps) {
   if (auditRecords === null) {
     return (
       <p role="status" className="text-sm text-muted-foreground">
@@ -182,11 +184,48 @@ export function ProjectAuditHistory({ auditRecords }: ProjectAuditHistoryProps) 
     return <p className="text-sm text-muted-foreground">No recorded changes for this project yet.</p>;
   }
 
+  const recentRecords = auditRecords.slice(0, initialVisibleCount);
+  const olderRecords = auditRecords.slice(initialVisibleCount);
+
   return (
-    <ol className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-      {auditRecords.map((record) => (
-        <AuditEntry key={record.id} record={record} />
-      ))}
-    </ol>
+    <div className="flex flex-col gap-3">
+      {olderRecords.length > 0 && (
+        <p className="text-sm text-muted-foreground">
+          Showing the {recentRecords.length} most recent of {auditRecords.length} recorded changes.
+        </p>
+      )}
+
+      <ol
+        aria-label={olderRecords.length > 0 ? 'Most recent changes' : 'Recorded changes'}
+        className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card"
+      >
+        {recentRecords.map((record) => (
+          <AuditEntry key={record.id} record={record} />
+        ))}
+      </ol>
+
+      {olderRecords.length > 0 && (
+        <details className="group rounded-xl border border-border bg-card">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:px-6">
+            <span>Show {olderRecords.length} older changes</span>
+            <span className="text-xs font-normal text-muted-foreground group-open:hidden" aria-hidden="true">
+              Expand
+            </span>
+            <span className="hidden text-xs font-normal text-muted-foreground group-open:inline" aria-hidden="true">
+              Collapse
+            </span>
+          </summary>
+          <ol
+            start={recentRecords.length + 1}
+            aria-label="Older changes"
+            className="divide-y divide-border border-t border-border"
+          >
+            {olderRecords.map((record) => (
+              <AuditEntry key={record.id} record={record} />
+            ))}
+          </ol>
+        </details>
+      )}
+    </div>
   );
 }

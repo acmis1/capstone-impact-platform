@@ -33,6 +33,14 @@ interface ProjectReviewSectionProps {
   collapsedHint?: string;
 }
 
+interface ProjectDetailMacroSectionProps {
+  id: string;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+  className?: string;
+}
+
 const TONE_CONTAINER: Record<ProjectReviewSectionTone, string> = {
   surface: 'rounded-xl border border-border bg-card',
   emphasis: 'rounded-xl border border-border-strong bg-card shadow-sm',
@@ -83,6 +91,39 @@ function SectionHeading({
   );
 }
 
+/**
+ * Groups related project-detail operations beneath one stable in-page destination.
+ * Macro groups use whitespace and a rule rather than another heavy nested card.
+ */
+export function ProjectDetailMacroSection({
+  id,
+  title,
+  description,
+  children,
+  className,
+}: ProjectDetailMacroSectionProps) {
+  const headingId = `${id}-heading`;
+
+  return (
+    <section
+      id={id}
+      aria-labelledby={headingId}
+      className={cn('scroll-mt-24 xl:scroll-mt-40', className)}
+      data-slot="project-detail-macro-section"
+    >
+      <div className="border-b border-border pb-4">
+        <h2 id={headingId} className="text-xl font-semibold tracking-tight text-foreground">
+          {title}
+        </h2>
+        <p className="mt-1.5 max-w-[75ch] text-sm leading-relaxed text-muted-foreground">
+          {description}
+        </p>
+      </div>
+      <div className="mt-6 flex flex-col gap-6">{children}</div>
+    </section>
+  );
+}
+
 export function ProjectReviewSection({
   title,
   description,
@@ -104,7 +145,7 @@ export function ProjectReviewSection({
       <details
         open={defaultOpen}
         id={id}
-        className={cn('group', TONE_CONTAINER[tone], className)}
+        className={cn('group scroll-mt-24 xl:scroll-mt-40', TONE_CONTAINER[tone], className)}
         data-slot="project-review-section"
       >
         <summary
@@ -146,7 +187,7 @@ export function ProjectReviewSection({
     <section
       id={id}
       aria-labelledby={headingId}
-      className={cn(TONE_CONTAINER[tone], TONE_PADDING[tone], className)}
+      className={cn('scroll-mt-24 xl:scroll-mt-40', TONE_CONTAINER[tone], TONE_PADDING[tone], className)}
       data-slot="project-review-section"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">

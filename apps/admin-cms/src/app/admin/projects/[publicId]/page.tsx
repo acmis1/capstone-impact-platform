@@ -2,7 +2,8 @@ import React from 'react';
 import Link from 'next/link';
 import { SupabaseProjectRepository } from '../../../../repositories/SupabaseProjectRepository';
 import { ProjectStatusBadge } from '../../../../components/admin/ProjectStatusBadge';
-import { ProjectReviewSection } from '../../../../components/admin/ProjectReviewSection';
+import { ProjectDetailMacroSection, ProjectReviewSection } from '../../../../components/admin/ProjectReviewSection';
+import { ProjectDetailSectionNavigation } from '../../../../components/admin/ProjectDetailSectionNavigation';
 import { ProjectMediaSummary } from '../../../../components/admin/ProjectMediaSummary';
 import { ProjectValidationSummary } from '../../../../components/admin/ProjectValidationSummary';
 import { StagingReviewActions } from '../../../../components/admin/StagingReviewActions';
@@ -383,20 +384,29 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           </div>
         </header>
 
-        {/* Operationally important even though it lives in the technical record below */}
-        {project.pendingRemovalFromPublic && (
-          <div className={`flex items-start gap-2.5 p-4 ${PROJECT_DETAIL_SURFACE_CLASSES.blocker}`} role="status">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
-            <div className="text-sm leading-relaxed">
-              <strong className="font-semibold">Showcase removal pending.</strong> This project is marked for
-              removal from the public showcase. Check the lifecycle and technical sections before making
-              further changes.
-            </div>
-          </div>
-        )}
+        <ProjectDetailSectionNavigation />
 
-        {/* The one emphasised area: where the project is, what is blocking it, and what can be done */}
-        <ProjectReviewSection
+        <div className="grid items-start gap-10 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-8">
+          <div className="flex min-w-0 flex-col gap-14">
+            <ProjectDetailMacroSection
+              id="review-and-edit"
+              title="Review and edit"
+              description="Understand the current workflow decision, resolve blockers, take the permitted action, and update project information."
+            >
+              {/* Operationally important even though it is repeated in the technical record below */}
+              {project.pendingRemovalFromPublic && (
+                <div className={`flex items-start gap-2.5 p-4 ${PROJECT_DETAIL_SURFACE_CLASSES.blocker}`} role="status">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+                  <div className="text-sm leading-relaxed">
+                    <strong className="font-semibold">Showcase removal pending.</strong> This project is marked for
+                    removal from the public showcase. Check the lifecycle and technical sections before making
+                    further changes.
+                  </div>
+                </div>
+              )}
+
+              {/* The one emphasised area: where the project is, what is blocking it, and what can be done */}
+              <ProjectReviewSection
           id="workflow-status"
           tone="emphasis"
           title={`Review status: ${workflowContext.stageLabel}`}
@@ -481,14 +491,11 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               )}
             </div>
           </div>
-        </ProjectReviewSection>
+              </ProjectReviewSection>
 
-        {/* Workspace: review content on the left, record context on the right */}
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-8">
-          <div className="flex min-w-0 flex-col gap-6">
             {/* Editing is the highest-frequency task, so it opens the workspace */}
             {metadataEditorData && metadataEditorAvailable ? (
-              <div id="project-information" className="scroll-mt-6 rounded-xl border border-border bg-card p-4 sm:p-6">
+              <div id="project-information" className="scroll-mt-24 rounded-xl border border-border bg-card p-4 sm:p-6 xl:scroll-mt-40">
                 <ProjectMetadataEditor
                   initialMetadata={metadataEditorData.metadata}
                   programs={metadataEditorData.programs}
@@ -513,6 +520,14 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                 </p>
               </ProjectReviewSection>
             )}
+
+            </ProjectDetailMacroSection>
+
+            <ProjectDetailMacroSection
+              id="content-and-media"
+              title="Content and media"
+              description="Inspect the public-facing narrative, supporting links, poster and document assets, and their accessibility evidence."
+            >
 
             <ProjectReviewSection
               id="showcase-content"
@@ -616,6 +631,14 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               />
             </ProjectReviewSection>
 
+            </ProjectDetailMacroSection>
+
+            <ProjectDetailMacroSection
+              id="participant-and-publication"
+              title="Participant and publication"
+              description="Follow the later confirmation and publication stages while each panel reports its own authoritative availability and readiness."
+            >
+
             <ProjectReviewSection
               id="participant-confirmation"
               title="Participant confirmation"
@@ -672,10 +695,108 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                 )}
               </div>
             </ProjectReviewSection>
+
+            </ProjectDetailMacroSection>
+
+            <ProjectDetailMacroSection
+              id="technical-and-history"
+              title="Technical details and history"
+              description="Review secondary configuration, record evidence, and the ordered administrative history without letting it dominate routine decisions."
+            >
+              {/* Secondary technical evidence: available on request, never competing with review */}
+              <ProjectReviewSection
+                id="technical-details"
+                title="Technical configuration and record details"
+                description="Showcase template configuration, cached validation counts, and record timestamps."
+                icon={Sliders}
+                collapsible
+                defaultOpen={project.status === 'archived'}
+                collapsedHint="Advanced"
+              >
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">Layout settings</h4>
+                    <dl className="mt-3 flex flex-col gap-2.5 text-sm">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Active template ID</dt>
+                        <dd className="break-all font-mono text-xs text-foreground">
+                          {project.layoutConfig?.templateId || 'default'}
+                        </dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Featured media focus</dt>
+                        <dd className="capitalize text-foreground">{project.layoutConfig?.featuredMedia || 'None'}</dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Section ordering</dt>
+                        <dd className="break-words text-right text-foreground">
+                          {project.layoutConfig?.sectionOrder
+                            ? project.layoutConfig.sectionOrder.join(', ')
+                            : 'Default order'}
+                        </dd>
+                      </div>
+                      {project.layoutConfig?.hiddenSections && (
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+                          <dt className="text-muted-foreground">Hidden sections</dt>
+                          <dd className="break-words text-right font-medium text-foreground">
+                            {project.layoutConfig.hiddenSections.join(', ')}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">System details</h4>
+                    <dl className="mt-3 flex flex-col gap-2.5 text-sm">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Cached validation errors</dt>
+                        <dd className="font-medium text-foreground">{project.validationErrors?.length || 0}</dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Cached validation warnings</dt>
+                        <dd className="font-medium text-foreground">{project.validationWarnings?.length || 0}</dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Pending showcase removal</dt>
+                        <dd className="font-semibold text-foreground">
+                          {project.pendingRemovalFromPublic ? 'Yes' : 'No'}
+                        </dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Created</dt>
+                        <dd className="break-all text-right text-foreground-subtle">{project.created_at || 'Not recorded'}</dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+                        <dt className="text-muted-foreground">Updated</dt>
+                        <dd className="break-all text-right text-foreground-subtle">{project.updated_at || 'Not recorded'}</dd>
+                      </div>
+                    </dl>
+
+                    {project.status === 'archived' && (
+                      <div className="mt-3 rounded-lg border border-border bg-surface-inset p-3 text-sm text-foreground-subtle">
+                        <p><strong className="font-semibold text-foreground">Archived:</strong> {project.archivedAt || 'Not recorded'}</p>
+                        <p className="mt-1 break-words"><strong className="font-semibold text-foreground">Reason:</strong> {project.archiveReason || 'Not recorded'}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ProjectReviewSection>
+
+              <ProjectReviewSection
+                id="change-history"
+                tone="plain"
+                title="Change history"
+                description="Recorded administrative transitions, project information updates, and review notes."
+                icon={History}
+              >
+                <ProjectAuditHistory auditRecords={auditRecords} />
+              </ProjectReviewSection>
+            </ProjectDetailMacroSection>
           </div>
 
           {/* Contextual rail: read-only record evidence that supports, but does not drive, review */}
-          <aside aria-label="Project record context" className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-6">
+          <aside aria-label="Project record context" className="flex min-w-0 flex-col gap-4">
             <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
               <h3 className="text-base font-semibold tracking-tight text-foreground">Project record</h3>
               <dl className="mt-4 flex flex-col gap-3.5">
@@ -729,95 +850,6 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           </aside>
         </div>
 
-        {/* Secondary technical evidence: available on request, never competing with review */}
-        <ProjectReviewSection
-          id="technical-details"
-          title="Technical configuration and record details"
-          description="Showcase template configuration, cached validation counts, and record timestamps."
-          icon={Sliders}
-          collapsible
-          defaultOpen={project.status === 'archived'}
-          collapsedHint="Advanced"
-        >
-          <div className="grid gap-6 md:grid-cols-2">
-            <div>
-              <h4 className="text-sm font-semibold text-foreground">Layout settings</h4>
-              <dl className="mt-3 flex flex-col gap-2.5 text-sm">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
-                  <dt className="text-muted-foreground">Active template ID</dt>
-                  <dd className="break-all font-mono text-xs text-foreground">
-                    {project.layoutConfig?.templateId || 'default'}
-                  </dd>
-                </div>
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
-                  <dt className="text-muted-foreground">Featured media focus</dt>
-                  <dd className="capitalize text-foreground">{project.layoutConfig?.featuredMedia || 'None'}</dd>
-                </div>
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
-                  <dt className="text-muted-foreground">Section ordering</dt>
-                  <dd className="break-words text-right text-foreground">
-                    {project.layoutConfig?.sectionOrder
-                      ? project.layoutConfig.sectionOrder.join(', ')
-                      : 'Default order'}
-                  </dd>
-                </div>
-                {project.layoutConfig?.hiddenSections && (
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
-                    <dt className="text-muted-foreground">Hidden sections</dt>
-                    <dd className="break-words text-right font-medium text-foreground">
-                      {project.layoutConfig.hiddenSections.join(', ')}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-semibold text-foreground">System details</h4>
-              <dl className="mt-3 flex flex-col gap-2.5 text-sm">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
-                  <dt className="text-muted-foreground">Cached validation errors</dt>
-                  <dd className="font-medium text-foreground">{project.validationErrors?.length || 0}</dd>
-                </div>
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
-                  <dt className="text-muted-foreground">Cached validation warnings</dt>
-                  <dd className="font-medium text-foreground">{project.validationWarnings?.length || 0}</dd>
-                </div>
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
-                  <dt className="text-muted-foreground">Pending showcase removal</dt>
-                  <dd className="font-semibold text-foreground">
-                    {project.pendingRemovalFromPublic ? 'Yes' : 'No'}
-                  </dd>
-                </div>
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
-                  <dt className="text-muted-foreground">Created</dt>
-                  <dd className="break-all text-right text-foreground-subtle">{project.created_at || 'Not recorded'}</dd>
-                </div>
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
-                  <dt className="text-muted-foreground">Updated</dt>
-                  <dd className="break-all text-right text-foreground-subtle">{project.updated_at || 'Not recorded'}</dd>
-                </div>
-              </dl>
-
-              {project.status === 'archived' && (
-                <div className="mt-3 rounded-lg border border-border bg-surface-inset p-3 text-sm text-foreground-subtle">
-                  <p><strong className="font-semibold text-foreground">Archived:</strong> {project.archivedAt || 'Not recorded'}</p>
-                  <p className="mt-1 break-words"><strong className="font-semibold text-foreground">Reason:</strong> {project.archiveReason || 'Not recorded'}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </ProjectReviewSection>
-
-        <ProjectReviewSection
-          id="change-history"
-          tone="plain"
-          title="Change history"
-          description="Recorded administrative transitions, project information updates, and review notes."
-          icon={History}
-        >
-          <ProjectAuditHistory auditRecords={auditRecords} />
-        </ProjectReviewSection>
       </div>
     </ProjectMetadataNavigationProvider>
   );
