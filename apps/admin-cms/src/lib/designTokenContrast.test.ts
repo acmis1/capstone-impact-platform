@@ -5,6 +5,16 @@ import {
   IMPORT_WORKFLOW_STEP_ITEM_CLASSES,
   IMPORT_WORKFLOW_STEP_SURFACE_TOKEN,
 } from "../components/imports/importWorkflowStepStyles";
+import {
+  PROJECT_DETAIL_SURFACE_CLASSES,
+  PROJECT_DETAIL_SURFACE_TOKEN,
+  PROJECT_DETAIL_PAGE_TEXT_CLASSES,
+  PROJECT_DETAIL_PAGE_SURFACE_TOKEN,
+} from "../components/admin/projectDetailSurfaceStyles";
+import {
+  MEDIA_PREVIEW_CLASSES,
+  MEDIA_PREVIEW_SURFACE_TOKEN,
+} from "../components/admin-media/mediaPreviewStyles";
 
 function parseHexColor(hex: string): [number, number, number] {
   const cleanHex = hex.trim().replace(/^#/, "");
@@ -188,6 +198,99 @@ describe("Import workflow step-tracker rendered contrast (WCAG 2.2 AA)", () => {
         `Step state "${stateName}" renders text-${textUtility!.token} ${textTokenHex} on ${bgDescription}, ` +
           `calculated contrast ratio ${ratio.toFixed(2)}:1, expected >= 4.5:1`
       ).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});
+
+/**
+ * Resolves the rendered text/background pair a class string actually paints and asserts the
+ * composited ratio. Shared by the project-detail and media-preview surface guards below.
+ */
+function expectComposedContrast(
+  classString: string,
+  tokens: Record<string, string>,
+  underlyingToken: string,
+  label: string
+) {
+  const tokenNames = Object.keys(tokens);
+  const textUtility = findColorUtility(classString, "text", tokenNames);
+  expect(textUtility, `Could not find a text-<token> utility for "${label}" in "${classString}"`).not.toBeNull();
+
+  const textTokenHex = tokens[textUtility!.token];
+  expect(textTokenHex, `Missing token: --${textUtility!.token}`).toBeDefined();
+
+  const underlyingHex = tokens[underlyingToken];
+  const bgUtility = findColorUtility(classString, "bg", tokenNames);
+  let renderedBgHex = underlyingHex;
+  let bgDescription = `inherited surface --${underlyingToken} ${underlyingHex}`;
+
+  if (bgUtility) {
+    const bgTokenHex = tokens[bgUtility.token];
+    expect(bgTokenHex, `Missing token: --${bgUtility.token}`).toBeDefined();
+    const alpha = bgUtility.opacityPercent !== null ? bgUtility.opacityPercent / 100 : 1;
+    renderedBgHex = alpha < 1 ? compositeOverBackground(bgTokenHex, alpha, underlyingHex) : bgTokenHex;
+    bgDescription =
+      `bg-${bgUtility.token}${bgUtility.opacityPercent !== null ? `/${bgUtility.opacityPercent}` : ""} ` +
+      `(${bgTokenHex} at alpha ${alpha}) composited over ${underlyingHex} = ${renderedBgHex}`;
+  }
+
+  const ratio = getContrastRatio(renderedBgHex, textTokenHex);
+  expect(
+    ratio,
+    `"${label}" renders text-${textUtility!.token} ${textTokenHex} on ${bgDescription}, ` +
+      `calculated contrast ratio ${ratio.toFixed(2)}:1, expected >= 4.5:1`
+  ).toBeGreaterThanOrEqual(4.5);
+}
+
+describe("Project detail semantic surface rendered contrast (WCAG 2.2 AA)", () => {
+  const tokens = extractCssTokens();
+
+  // Regression guarded here: a semantic foreground on a same-hue 10%-opacity semantic
+  // background composites to roughly 4.1-4.4:1 on the card surface, below the 4.5:1 floor.
+  // These surfaces therefore carry `text-foreground`/`*-strong` and keep the hue on the
+  // decorative icon and border only.
+  const surfaceStates = Object.keys(PROJECT_DETAIL_SURFACE_CLASSES) as Array<
+    keyof typeof PROJECT_DETAIL_SURFACE_CLASSES
+  >;
+
+  for (const stateName of surfaceStates) {
+    it(`project-detail "${stateName}" surface achieves >= 4.5:1 on its actual rendered background`, () => {
+      expectComposedContrast(
+        PROJECT_DETAIL_SURFACE_CLASSES[stateName],
+        tokens,
+        PROJECT_DETAIL_SURFACE_TOKEN,
+        `project-detail ${stateName} surface`
+      );
+    });
+  }
+
+  const pageTextRoles = Object.keys(PROJECT_DETAIL_PAGE_TEXT_CLASSES) as Array<
+    keyof typeof PROJECT_DETAIL_PAGE_TEXT_CLASSES
+  >;
+
+  for (const roleName of pageTextRoles) {
+    it(`project-detail "${roleName}" page text achieves >= 4.5:1 on the page background`, () => {
+      expectComposedContrast(
+        PROJECT_DETAIL_PAGE_TEXT_CLASSES[roleName],
+        tokens,
+        PROJECT_DETAIL_PAGE_SURFACE_TOKEN,
+        `project-detail ${roleName} page text`
+      );
+    });
+  }
+});
+
+describe("Admin media preview rendered contrast (WCAG 2.2 AA)", () => {
+  const tokens = extractCssTokens();
+
+  for (const stateName of ["assetLabel", "stateMessage", "blockingState"] as const) {
+    it(`media preview "${stateName}" achieves >= 4.5:1 on its actual rendered background`, () => {
+      expectComposedContrast(
+        MEDIA_PREVIEW_CLASSES[stateName],
+        tokens,
+        MEDIA_PREVIEW_SURFACE_TOKEN,
+        `media preview ${stateName}`
+      );
     });
   }
 });

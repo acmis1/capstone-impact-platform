@@ -233,6 +233,20 @@ describe('PR2B1 Core Project Review Experience Components', () => {
   });
 
   describe('StagingReviewActions', () => {
+    it('does not render denied review controls that could be keyboard reached', () => {
+      render(
+        <StagingReviewActions
+          publicId="2026-proj-01"
+          currentStatus="in_review"
+          allowedActions={[]}
+        />
+      );
+
+      expect(screen.queryByRole('button', { name: /Approve project/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Request changes/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Archive project/i })).toBeNull();
+    });
+
     it('renders allowed action buttons and dispatches review-action with payload', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -248,7 +262,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
         />
       );
 
-      const textarea = screen.getByLabelText(/Review comments:/i);
+      const textarea = screen.getByLabelText(/Review comments/i);
       fireEvent.change(textarea, { target: { value: 'Looks great!' } });
 
       const approveButton = screen.getByRole('button', { name: /Approve project/i });
@@ -326,7 +340,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
         </ProjectMetadataNavigationProvider>
       );
 
-      expect(screen.getByRole('heading', { name: /project metadata/i, level: 2 })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: /project information/i, level: 2 })).toBeTruthy();
     });
 
     it('renders heading level 4 when explicit headingLevel="h4" is provided', () => {
@@ -345,7 +359,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
         </ProjectMetadataNavigationProvider>
       );
 
-      expect(screen.getByRole('heading', { name: /project metadata/i, level: 4 })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: /project information/i, level: 4 })).toBeTruthy();
     });
   });
 
