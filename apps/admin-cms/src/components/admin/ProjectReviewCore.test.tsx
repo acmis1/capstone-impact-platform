@@ -248,7 +248,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
         />
       );
 
-      const textarea = screen.getByLabelText(/Review comments:/i);
+      const textarea = screen.getByLabelText(/Review comments/i);
       fireEvent.change(textarea, { target: { value: 'Looks great!' } });
 
       const approveButton = screen.getByRole('button', { name: /Approve project/i });
@@ -326,7 +326,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
         </ProjectMetadataNavigationProvider>
       );
 
-      expect(screen.getByRole('heading', { name: /project metadata/i, level: 2 })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: /project information/i, level: 2 })).toBeTruthy();
     });
 
     it('renders heading level 4 when explicit headingLevel="h4" is provided', () => {
@@ -345,7 +345,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
         </ProjectMetadataNavigationProvider>
       );
 
-      expect(screen.getByRole('heading', { name: /project metadata/i, level: 4 })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: /project information/i, level: 4 })).toBeTruthy();
     });
   });
 

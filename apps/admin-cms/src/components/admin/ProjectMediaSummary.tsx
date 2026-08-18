@@ -25,16 +25,16 @@ interface ProjectMediaSummaryProps {
 }
 
 function ExternalLink({ label, url }: { label: string; url: string }) {
-  if (!isValidMediaUrl(url)) return <span className="text-muted-foreground">Not provided</span>;
+  if (!isValidMediaUrl(url)) return <span className="text-sm text-muted-foreground">Not provided</span>;
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-primary hover:underline font-medium break-all"
+      className="inline-flex min-h-[32px] items-center gap-1.5 text-sm font-medium text-foreground underline decoration-border-strong underline-offset-4 wrap-anywhere hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <span>{label}</span>
-      <ExternalLinkIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
+      <ExternalLinkIcon className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden="true" />
     </a>
   );
 }
@@ -46,13 +46,13 @@ export function ProjectMediaSummary({ project, mediaItems, mediaAvailable, snaps
   const snapshotMedia = mediaItems.find((media) => media.assetType === 'snapshot_image');
 
   return (
-    <div className="flex flex-col gap-5 text-xs sm:text-sm">
+    <div className="flex flex-col gap-5 text-sm">
       {!mediaAvailable ? (
-        <p role="status" className="text-muted-foreground">Media preview temporarily unavailable.</p>
+        <p role="status" className="text-sm text-muted-foreground">Media preview temporarily unavailable.</p>
       ) : mediaItems.length === 0 ? (
-        <p className="text-muted-foreground">No media attached to this project.</p>
+        <p className="text-sm text-muted-foreground">No media attached to this project.</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {mediaItems.map((media) => (
             <MediaPreview key={media.id} media={media} />
           ))}
@@ -60,7 +60,7 @@ export function ProjectMediaSummary({ project, mediaItems, mediaAvailable, snaps
       )}
 
       {mediaAvailable && snapshotMedia && snapshotAltText && (
-        <div className="pt-3 border-t border-border">
+        <div className="border-t border-border pt-4">
           <SnapshotAltTextEditor
             publicId={project.publicId || ''}
             initialAltText={snapshotMedia.altText ?? ''}
@@ -73,37 +73,35 @@ export function ProjectMediaSummary({ project, mediaItems, mediaAvailable, snaps
       )}
 
       {/* External Showcase Links */}
-      <div className="pt-3 border-t border-border">
-        <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider mb-2.5">
-          External Showcase Links
-        </h4>
-        <dl className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-          <div className="p-2.5 rounded-md bg-muted/40 border border-border">
-            <dt className="text-muted-foreground font-medium flex items-center gap-1.5 mb-1">
-              <Video className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+      <div className="border-t border-border pt-4">
+        <h4 className="text-sm font-semibold text-foreground">External showcase links</h4>
+        <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-3">
+          <div className="min-w-0">
+            <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <Video className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden="true" />
               Video Showcase
             </dt>
-            <dd>
+            <dd className="min-w-0">
               <ExternalLink label="Video showcase link" url={project.videoUrl} />
             </dd>
           </div>
 
-          <div className="p-2.5 rounded-md bg-muted/40 border border-border">
-            <dt className="text-muted-foreground font-medium flex items-center gap-1.5 mb-1">
-              <Globe className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+          <div className="min-w-0">
+            <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <Globe className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden="true" />
               Interactive Demo
             </dt>
-            <dd>
+            <dd className="min-w-0">
               <ExternalLink label="External demo" url={project.demoUrl} />
             </dd>
           </div>
 
-          <div className="p-2.5 rounded-md bg-muted/40 border border-border">
-            <dt className="text-muted-foreground font-medium flex items-center gap-1.5 mb-1">
-              <Code2 className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+          <div className="min-w-0">
+            <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <Code2 className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden="true" />
               Git Repository
             </dt>
-            <dd>
+            <dd className="min-w-0">
               <ExternalLink label="Git repository" url={project.repositoryUrl} />
             </dd>
           </div>

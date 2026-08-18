@@ -6,7 +6,8 @@ import { useProjectMetadataNavigation } from './ProjectMetadataNavigation';
 import { canSubmitForReview } from './submitForReviewButtonState';
 import { Button } from '../ui/button';
 import { Alert } from '../ui/alert';
-import { Send, CheckCircle2 } from 'lucide-react';
+import { PROJECT_DETAIL_SURFACE_CLASSES } from './projectDetailSurfaceStyles';
+import { Send, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 interface SubmitForReviewButtonProps {
   batchId: string;
@@ -69,7 +70,7 @@ export function SubmitForReviewButton({ batchId, publicId, currentStatus }: Subm
   };
 
   return (
-    <div className="flex flex-col gap-2.5 text-xs sm:text-sm">
+    <div className="flex flex-col gap-3 text-sm">
       {error && (
         <Alert
           variant="destructive"
@@ -78,14 +79,17 @@ export function SubmitForReviewButton({ batchId, publicId, currentStatus }: Subm
         />
       )}
       {success && (
-        <div className="p-3 rounded-md bg-success/10 border border-success/30 text-success text-xs font-semibold flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>Submitted for review successfully.</span>
+        <div className={`flex items-start gap-2.5 p-3 ${PROJECT_DETAIL_SURFACE_CLASSES.affirm}`} role="status">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+          <span className="text-sm font-medium leading-relaxed">Submitted for review successfully.</span>
         </div>
       )}
       {dirty && !success && (
-        <div className="p-3 rounded-md bg-warning/10 border border-warning/30 text-warning text-xs font-medium">
-          Save or Cancel your metadata edits before submitting for review.
+        <div className={`flex items-start gap-2.5 p-3 ${PROJECT_DETAIL_SURFACE_CLASSES.caution}`} role="status">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <span className="text-sm leading-relaxed">
+            Save or cancel your project information edits before submitting for review.
+          </span>
         </div>
       )}
       <div>
@@ -93,9 +97,9 @@ export function SubmitForReviewButton({ batchId, publicId, currentStatus }: Subm
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmitForReview(pending, success, dirty)}
-          className="font-semibold"
+          className="w-full font-semibold"
         >
-          <Send className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+          <Send aria-hidden="true" />
           {pending
             ? 'Submitting…'
             : currentStatus === 'changes_requested'

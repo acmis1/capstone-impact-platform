@@ -131,11 +131,11 @@ export function ParticipantPreviewPanel({
 
   if (!stateAvailable) {
     return (
-      <div role="status" className="p-3.5 rounded-lg bg-warning/10 border border-warning/30 text-xs sm:text-sm text-foreground flex items-start gap-2.5">
+      <div role="status" className="flex items-start gap-2.5 rounded-lg border border-warning/40 bg-warning/8 p-3.5 text-sm text-foreground">
         <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" aria-hidden="true" />
         <div>
-          <strong className="font-semibold block text-warning">Participant Preview status unavailable.</strong>
-          <span className="text-muted-foreground text-xs block mt-0.5">
+          <strong className="block font-semibold text-foreground">Participant Preview status unavailable.</strong>
+          <span className="mt-0.5 block text-sm text-foreground-subtle">
             Preview actions are temporarily disabled because the current preview state could not be verified.
           </span>
         </div>
@@ -145,11 +145,11 @@ export function ParticipantPreviewPanel({
 
   if (!resolutionStateAvailable) {
     return (
-      <div role="status" className="p-3.5 rounded-lg bg-warning/10 border border-warning/30 text-xs sm:text-sm text-foreground flex items-start gap-2.5">
+      <div role="status" className="flex items-start gap-2.5 rounded-lg border border-warning/40 bg-warning/8 p-3.5 text-sm text-foreground">
         <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" aria-hidden="true" />
         <div>
-          <strong className="font-semibold block text-warning">Correction-resolution status unavailable.</strong>
-          <span className="text-muted-foreground text-xs block mt-0.5">
+          <strong className="block font-semibold text-foreground">Correction-resolution status unavailable.</strong>
+          <span className="mt-0.5 block text-sm text-foreground-subtle">
             Preview and correction-resolution actions are temporarily disabled until authoritative state can be verified.
           </span>
         </div>
@@ -409,8 +409,8 @@ export function ParticipantPreviewPanel({
       )}
 
       {error && (
-        <div role="alert" className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-xs font-semibold flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/8 p-3 text-sm font-medium leading-relaxed text-foreground">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
           <span>{error}</span>
         </div>
       )}
@@ -418,9 +418,9 @@ export function ParticipantPreviewPanel({
       {deliveryNotice && (
         <div
           role="status"
-          className="p-3 rounded-md bg-success/10 border border-success/30 text-success text-xs font-medium flex items-center gap-2"
+          className="flex items-start gap-2 rounded-md border border-success/40 bg-success/8 p-3 text-sm font-medium leading-relaxed text-foreground"
         >
-          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
           <span>{deliveryNotice}</span>
         </div>
       )}
@@ -428,17 +428,17 @@ export function ParticipantPreviewPanel({
       {reminderNotice && (
         <div
           role="status"
-          className="p-3 rounded-md bg-success/10 border border-success/30 text-success text-xs font-medium flex items-center gap-2"
+          className="flex items-start gap-2 rounded-md border border-success/40 bg-success/8 p-3 text-sm font-medium leading-relaxed text-foreground"
         >
-          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
           <span>{reminderNotice}</span>
         </div>
       )}
 
       {justGeneratedUrl && (
-        <div className="p-4 rounded-lg bg-success/10 border border-success/30 space-y-2.5">
-          <div className="flex items-center gap-2 text-success font-semibold text-xs sm:text-sm">
-            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <div className="space-y-2.5 rounded-lg border border-success/40 bg-success/8 p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
             <span>Preview link generated</span>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -519,14 +519,14 @@ export function ParticipantPreviewPanel({
               <span className="text-muted-foreground font-medium block">Participant response</span>
               <div role="status">
                 {previewResponseState.type === 'confirmed' ? (
-                  <div className="p-2.5 rounded-md bg-success/10 border border-success/30 text-success text-xs font-semibold flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <div className="flex items-start gap-2 rounded-md border border-success/40 bg-success/8 p-2.5 text-sm font-semibold text-foreground">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
                     <span>Participant confirmed on {formatParticipantPreviewDate(previewResponseState.confirmedAt)}</span>
                   </div>
                 ) : previewResponseState.type === 'correction_requested' ? (
-                  <div className="p-3 rounded-md bg-warning/10 border border-warning/30 text-warning text-xs space-y-2">
-                    <div className="font-semibold flex items-center gap-1.5">
-                      <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <div className="space-y-2 rounded-md border border-warning/40 bg-warning/8 p-3 text-sm text-foreground">
+                    <div className="flex items-center gap-1.5 font-semibold">
+                      <AlertCircle className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
                       <span>Correction requested on {formatParticipantPreviewDate(previewResponseState.requestedAt)}</span>
                     </div>
                     <div className="text-foreground bg-background p-2 rounded border border-border font-normal whitespace-pre-wrap">
@@ -539,7 +539,7 @@ export function ParticipantPreviewPanel({
                         size="sm"
                         onClick={handleStartResolution}
                         disabled={pending}
-                        className="text-warning border-warning/30 hover:bg-warning/10 hover:text-warning font-semibold mt-1"
+                        className="mt-1 border-border-strong font-semibold"
                       >
                         {pending ? 'Starting resolution…' : 'Start correction resolution'}
                       </Button>
@@ -575,13 +575,13 @@ export function ParticipantPreviewPanel({
                   </div>
                 )}
                 {notification.failureCode && (
-                  <div className="sm:col-span-2 text-destructive">
+                  <div className="sm:col-span-2 text-destructive-strong">
                     <span className="font-semibold">Reason: </span>
                     <span>{notification.failureCode}</span>
                   </div>
                 )}
                 {notification.status === 'delivery_unknown' && (
-                  <div className="sm:col-span-2 text-warning font-medium mt-1">
+                  <div className="mt-1 font-medium text-warning-strong sm:col-span-2">
                     The message may or may not have reached the participant. It has not been sent again
                     automatically. Revoke this preview and issue a new one if you need to be certain.
                   </div>
@@ -647,9 +647,9 @@ export function ParticipantPreviewPanel({
         </div>
       ) : isInProgress ? (
         /* CASE B: Correction in progress (Preview A revoked) */
-        <div className="p-4 rounded-lg bg-warning/10 border border-warning/30 space-y-3">
-          <div className="flex items-center gap-2 text-warning font-semibold text-xs sm:text-sm">
-            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <div className="space-y-3 rounded-lg border border-warning/40 bg-warning/8 p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <AlertCircle className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
             <span>Correction resolution in progress</span>
           </div>
           {resolutionStatus?.comment && (
@@ -664,7 +664,7 @@ export function ParticipantPreviewPanel({
           ) : projectStatus === 'approved' && canResolveCorrection ? (
             <div className="space-y-3">
               <p className="text-xs font-semibold text-success flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
                 <span>Project re-approved! You may now issue a corrected participant preview.</span>
               </p>
               {renderGenerateActions(true, 'Generate corrected participant preview')}
@@ -678,9 +678,9 @@ export function ParticipantPreviewPanel({
       ) : resolutionStatus?.status === 'resolved' ? (
         /* CASE C: Correction resolved historical info */
         <div className="space-y-3">
-          <div className="p-3 rounded-lg bg-success/10 border border-success/30 text-xs sm:text-sm flex items-center gap-2 text-foreground">
-            <CheckCircle2 className="h-4 w-4 text-success shrink-0" aria-hidden="true" />
-            <span className="font-semibold text-success">Participant correction resolved</span>
+          <div className="flex items-center gap-2 rounded-lg border border-success/40 bg-success/8 p-3 text-sm text-foreground">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+            <span className="font-semibold text-foreground">Participant correction resolved</span>
             {resolutionStatus.resolvedAt && (
               <span className="text-xs text-muted-foreground">
                 on {formatParticipantPreviewDate(resolutionStatus.resolvedAt)}
