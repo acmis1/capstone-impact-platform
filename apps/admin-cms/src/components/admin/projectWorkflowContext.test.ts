@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { getPermissionsForRoles } from '../../auth/permissions';
+import { getAllowedReviewActions } from '../../workflow/projectWorkflow';
+import { getPermittedReviewActions } from './projectReviewActions';
 import { deriveProjectWorkflowContext, ProjectWorkflowContextInput } from './projectWorkflowContext';
 
 const baseInput: ProjectWorkflowContextInput = {
@@ -9,7 +12,7 @@ const baseInput: ProjectWorkflowContextInput = {
   canEditMetadata: true,
   participantResponse: 'unresponded',
   hasActivePreview: false,
-  publicationReady: false,
+  publicationReadiness: null,
   pendingRemovalFromPublic: false,
 };
 
@@ -31,7 +34,6 @@ describe('project workflow orientation context', () => {
   it('offers submission only when readiness is verified and ready', () => {
     const context = derive({ submitForReview: { ready: true, blockingReasons: [] } });
     expect(context.decision).toMatch(/can be submitted for review/i);
-    expect(context.hasCanonicalAction).toBe(true);
   });
 
   it('directs staff to the blocking issues when submission readiness is not satisfied', () => {
@@ -50,7 +52,6 @@ describe('project workflow orientation context', () => {
   it('states the permission limit instead of an action a reader cannot take', () => {
     const context = derive({ canEditMetadata: false, submitForReview: { ready: true, blockingReasons: [] } });
     expect(context.decision).toMatch(/cannot edit it or submit it for review/i);
-    expect(context.hasCanonicalAction).toBe(false);
   });
 
   it('explains that no import batch means submission is not offered', () => {
@@ -62,13 +63,11 @@ describe('project workflow orientation context', () => {
     const context = derive({ status: 'in_review', allowedActions: ['approve', 'request_changes', 'archive'] });
     expect(context.summary).toMatch(/waiting on a review decision/i);
     expect(context.decision).toMatch(/approve it or request changes/i);
-    expect(context.hasCanonicalAction).toBe(true);
   });
 
   it('states the permission limit when a reader cannot record a review decision', () => {
     const context = derive({ status: 'in_review', allowedActions: [] });
     expect(context.decision).toMatch(/cannot record a review decision/i);
-    expect(context.hasCanonicalAction).toBe(false);
   });
 
   it('never claims approval publishes a project', () => {
@@ -93,12 +92,29 @@ describe('project workflow orientation context', () => {
     expect(context.decision).toMatch(/^Resolve the participant correction/);
   });
 
-  it('only announces publication preparation when readiness is actually satisfied', () => {
-    const confirmedNotReady = derive({ status: 'approved', participantResponse: 'confirmed', publicationReady: false });
-    expect(confirmedNotReady.decision).toMatch(/readiness is not satisfied yet/i);
-
-    const confirmedReady = derive({ status: 'approved', participantResponse: 'confirmed', publicationReady: true });
+  it('distinguishes ready, verified blocked, and unavailable publication readiness', () => {
+    const confirmedReady = derive({
+      status: 'approved',
+      participantResponse: 'confirmed',
+      publicationReadiness: { ready: true, resultCode: 'READY', blockers: [] },
+    });
     expect(confirmedReady.decision).toMatch(/publication can be prepared/i);
+
+    const confirmedBlocked = derive({
+      status: 'approved',
+      participantResponse: 'confirmed',
+      publicationReadiness: { ready: false, resultCode: 'PROJECT_SNAPSHOT_STALE', blockers: ['Snapshot stale'] },
+    });
+    expect(confirmedBlocked.decision).toMatch(/check the publication status below/i);
+    expect(confirmedBlocked.decision).not.toMatch(/could not be verified/i);
+
+    for (const publicationReadiness of [
+      null,
+      { ready: false, resultCode: 'READINESS_UNAVAILABLE' as const, blockers: ['Unavailable'] },
+    ]) {
+      expect(derive({ status: 'approved', participantResponse: 'confirmed', publicationReadiness }).decision)
+        .toMatch(/could not be verified/i);
+    }
   });
 
   it('does not assert a participant state when the preview subsystem is unavailable', () => {
@@ -116,7 +132,6 @@ describe('project workflow orientation context', () => {
   it('states plainly that a published project has no review transition', () => {
     const context = derive({ status: 'published', allowedActions: [] });
     expect(context.decision).toMatch(/no review transition is available/i);
-    expect(context.hasCanonicalAction).toBe(false);
   });
 
   it('states plainly that an archived project has no review transition', () => {
@@ -129,5 +144,25 @@ describe('project workflow orientation context', () => {
     const context = derive({ status: 'deleted', allowedActions: [] });
     expect(context.decision).toMatch(/no review transition is available/i);
     expect(context.summary).toContain('Deleted');
+  });
+});
+
+describe('permission-filtered review actions', () => {
+  const statusAllowedActions = getAllowedReviewActions('in_review');
+
+  it.each([
+    ['Editor', ['editor'], []],
+    ['Reviewer', ['reviewer'], ['request_changes', 'approve']],
+    ['Administrator', ['admin'], ['request_changes', 'approve', 'archive']],
+    ['Reviewer + Editor', ['reviewer', 'editor'], ['request_changes', 'approve']],
+  ] as const)('%s sees only its permitted review controls', (_role, roles, expectedActions) => {
+    const permittedActions = getPermittedReviewActions(statusAllowedActions, getPermissionsForRoles(roles));
+    expect(permittedActions).toEqual(expectedActions);
+  });
+
+  it('keeps orientation copy aligned with the permitted action list', () => {
+    expect(derive({ status: 'in_review', allowedActions: [] }).decision).toMatch(/cannot record a review decision/i);
+    expect(derive({ status: 'in_review', allowedActions: ['request_changes', 'approve'] }).decision)
+      .toMatch(/approve it or request changes/i);
   });
 });

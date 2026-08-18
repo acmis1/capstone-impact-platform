@@ -43,6 +43,7 @@ import type { ApprovalMediaInput } from '../../../../validation/projectValidatio
 import type { ProjectMediaPreviewItem } from '../../../../components/admin-media/mediaPreviewTypes';
 import { ProjectAuditHistory } from '../../../../components/admin/ProjectAuditHistory';
 import { deriveProjectWorkflowContext } from '../../../../components/admin/projectWorkflowContext';
+import { getPermittedReviewActions } from '../../../../components/admin/projectReviewActions';
 import { PROJECT_DETAIL_SURFACE_CLASSES } from '../../../../components/admin/projectDetailSurfaceStyles';
 import { Button } from '../../../../components/ui/button';
 import { ErrorState } from '../../../../components/ui/error-state';
@@ -300,27 +301,28 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   }
 
   const isEligible = project.status === 'approved' || project.status === 'published';
-  const allowedActions = getAllowedReviewActions(project.status);
+  const statusAllowedActions = getAllowedReviewActions(project.status);
+  const permittedReviewActions = getPermittedReviewActions(statusAllowedActions, adminContext?.permissions ?? []);
 
   // Orientation prose derived from the state this page already loaded. It never decides what a
   // transition does; `getAllowedReviewActions`, import readiness, and publication readiness
   // remain the only authorities, and the canonical controls below are unchanged.
   const workflowContext = deriveProjectWorkflowContext({
     status: project.status,
-    allowedActions,
+    allowedActions: permittedReviewActions,
     submitForReview,
     submitForReviewUnavailable,
     canEditMetadata,
     participantResponse: previewStateAvailable ? previewResponseState.type : null,
     hasActivePreview: activePreview !== null,
-    publicationReady: publicationActionsAvailable,
+    publicationReadiness,
     pendingRemovalFromPublic: Boolean(project.pendingRemovalFromPublic),
   });
 
   const canSubmitForReview = submitForReview !== null && canEditMetadata;
   const showSubmitButton = canSubmitForReview && submitForReview!.ready;
   const showSubmitBlockers = canSubmitForReview && !submitForReview!.ready;
-  const hasCanonicalAction = showSubmitButton || allowedActions.length > 0;
+  const hasCanonicalAction = showSubmitButton || permittedReviewActions.length > 0;
   // Participant confirmation and publication only become operational after approval. Before
   // that they stay present and reachable, but collapsed so they do not compete with editing.
   const laterStagesActive = project.status === 'approved' || project.status === 'published';
@@ -464,11 +466,11 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                       currentStatus={project.status}
                     />
                   )}
-                  {allowedActions.length > 0 && (
+                  {permittedReviewActions.length > 0 && (
                     <StagingReviewActions
                       publicId={project.publicId || ''}
                       currentStatus={project.status}
-                      allowedActions={allowedActions}
+                      allowedActions={permittedReviewActions}
                     />
                   )}
                 </div>

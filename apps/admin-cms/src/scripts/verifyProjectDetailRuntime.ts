@@ -363,7 +363,11 @@ async function run(): Promise<void> {
       const body = await response.text();
       if (response.status !== 200 || response.url.includes('/login')) throw new Error(`Authenticated project navigation failed: ${project.publicId}`);
       if (body.includes('Project Details Unavailable')) throw new Error(`Project detail fallback rendered: ${project.publicId}`);
-      if (!body.includes(project.title) || !body.includes('Public ID:') || !body.includes('Project Overview')) {
+      if (!body.includes(project.title)
+        || !body.includes('Public ID')
+        || !body.includes('Review status:')
+        || !body.includes('Project information')
+        || !body.includes('Public showcase content')) {
         throw new Error(`Required project detail markers missing: ${project.publicId}`);
       }
       const evidence = projectEvidence.find((item) => item.publicId === project.publicId)!;
@@ -392,8 +396,8 @@ async function run(): Promise<void> {
       if (isolatedResponse.status !== 200
         || isolatedBody.includes('Project Details Unavailable')
         || !isolatedBody.includes(auditFixture.title)
-        || !isolatedBody.includes('Project metadata')
-        || !isolatedBody.includes('Audit history is temporarily unavailable.')) {
+        || !isolatedBody.includes('Project information')
+        || !isolatedBody.includes('Change history is temporarily unavailable.')) {
         throw new Error('Audit query failure erased the base project or independently healthy metadata editor.');
       }
       console.log('PASS: approval_records failure stayed isolated from the base project and metadata editor.');

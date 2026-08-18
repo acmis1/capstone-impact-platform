@@ -265,6 +265,13 @@ describe('project detail workspace information architecture', () => {
     expect(decisionSection).toContain('<SubmitForReviewButton');
   });
 
+  it('passes only permission-filtered review actions to the decision controls and orientation', () => {
+    expect(pageSource).toContain('const statusAllowedActions = getAllowedReviewActions(project.status);');
+    expect(pageSource).toContain('getPermittedReviewActions(statusAllowedActions, adminContext?.permissions ?? [])');
+    expect(pageSource).toContain('allowedActions: permittedReviewActions');
+    expect(pageSource).toContain('allowedActions={permittedReviewActions}');
+  });
+
   it('keeps technical details and change history available rather than removed', () => {
     expect(pageSource).toContain('<ProjectAuditHistory');
     expect(pageSource).toContain('Layout settings');

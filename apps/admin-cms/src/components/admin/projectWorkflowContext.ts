@@ -1,4 +1,5 @@
 import type { WorkflowStatus } from '../../domain/workflowStatus';
+import type { PublicationReadinessResult } from '../../domain/publicationReadiness';
 import { getWorkflowStatusLabel } from './ProjectStatusBadge';
 
 /**
@@ -9,7 +10,7 @@ import { getWorkflowStatusLabel } from './ProjectStatusBadge';
  */
 export interface ProjectWorkflowContextInput {
   status: WorkflowStatus | string;
-  /** Exactly the list `getAllowedReviewActions(project.status)` returned. */
+  /** Status-valid actions that the current staff member is permitted to perform. */
   allowedActions: readonly string[];
   /** Import submit-for-review readiness, or null when the project is not in a submitting state. */
   submitForReview: { ready: boolean; blockingReasons: string[] } | null;
@@ -19,8 +20,8 @@ export interface ProjectWorkflowContextInput {
   /** `null` when the participant preview subsystem could not be read. */
   participantResponse: 'unresponded' | 'confirmed' | 'correction_requested' | null;
   hasActivePreview: boolean;
-  /** `publicationActionsAvailable`: readiness verified AND ready AND resultCode READY. */
-  publicationReady: boolean;
+  /** `null` when readiness could not be read; otherwise the authoritative result. */
+  publicationReadiness: PublicationReadinessResult | null;
   pendingRemovalFromPublic: boolean;
 }
 
@@ -34,12 +35,19 @@ export interface ProjectWorkflowContext {
    * next action this states the situation rather than inventing one.
    */
   decision: string;
-  /** True when a canonical mutation control is rendered in the decision area. */
-  hasCanonicalAction: boolean;
 }
 
 function normalize(status: WorkflowStatus | string): string {
   return (status || '').toLowerCase();
+}
+
+function isPublicationReadinessUnavailable(readiness: PublicationReadinessResult | null): boolean {
+  return readiness === null || [
+    'READINESS_PERMISSION_DENIED',
+    'INVALID_SELECTION',
+    'INVALID_PRIVATE_BUCKET',
+    'READINESS_UNAVAILABLE',
+  ].includes(readiness.resultCode);
 }
 
 /**
@@ -55,7 +63,6 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
   const canSubmit = input.submitForReview !== null && input.canEditMetadata;
   const submitBlocked = canSubmit && !input.submitForReview!.ready;
   const hasReviewActions = input.allowedActions.length > 0;
-  const hasCanonicalAction = canSubmit || hasReviewActions;
 
   if (status === 'draft' || status === 'changes_requested') {
     const summary = status === 'changes_requested'
@@ -75,7 +82,7 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
       decision = 'Project information can be edited, and the project can be submitted for review.';
     }
 
-    return { stageLabel, summary, decision, hasCanonicalAction };
+    return { stageLabel, summary, decision };
   }
 
   if (status === 'submitted' || status === 'in_review') {
@@ -85,7 +92,6 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
       decision: hasReviewActions
         ? 'Read the project information and media, then approve it or request changes.'
         : 'Your role can read this project but cannot record a review decision.',
-      hasCanonicalAction,
     };
   }
 
@@ -99,9 +105,13 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
       summary = 'Internal review is complete, but the participant asked for a correction.';
       decision = 'Resolve the participant correction before publication can be prepared.';
     } else if (input.participantResponse === 'confirmed') {
-      decision = input.publicationReady
-        ? 'The participant has confirmed. Publication can be prepared.'
-        : 'The participant has confirmed, but publication readiness is not satisfied yet. The publication section lists what is outstanding.';
+      if (input.publicationReadiness?.ready && input.publicationReadiness.resultCode === 'READY') {
+        decision = 'The participant has confirmed. Publication can be prepared.';
+      } else if (isPublicationReadinessUnavailable(input.publicationReadiness)) {
+        decision = 'The participant has confirmed, but publication readiness could not be verified. Publication preparation remains unavailable until it can be checked.';
+      } else {
+        decision = 'The participant has confirmed. Check the publication status below before preparing publication.';
+      }
     } else if (input.hasActivePreview) {
       summary = 'Internal review is complete. A participant preview is active and awaiting a response.';
       decision = 'Wait for the participant to confirm, or manage the preview and reminders below.';
@@ -109,7 +119,7 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
       decision = 'Share a participant preview so the participant can confirm their project before publication.';
     }
 
-    return { stageLabel, summary, decision, hasCanonicalAction };
+    return { stageLabel, summary, decision };
   }
 
   if (status === 'published') {
@@ -121,7 +131,6 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
       decision: input.pendingRemovalFromPublic
         ? 'A showcase removal is pending for this project. Review the lifecycle section below.'
         : 'No review transition is available from this status. Lifecycle changes use the controlled archive workflow.',
-      hasCanonicalAction,
     };
   }
 
@@ -130,7 +139,6 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
       stageLabel,
       summary: 'This project is archived and is not part of the showcase.',
       decision: 'No review transition is available from this status.',
-      hasCanonicalAction,
     };
   }
 
@@ -140,6 +148,5 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
     decision: hasReviewActions
       ? 'Review decisions are available for this project.'
       : 'No review transition is available from this status.',
-    hasCanonicalAction,
   };
 }
