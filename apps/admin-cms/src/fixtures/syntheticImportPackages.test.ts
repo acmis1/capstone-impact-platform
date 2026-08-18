@@ -142,6 +142,8 @@ describe('synthetic import validation variants', () => {
       { code: 'WORKBOOK_DUPLICATE_TEAM_MEMBER', severity: 'warning', count: 1 },
     ]);
     expect(scenarios.get('duplicate-public-id')?.duplicateStagingCode).toBe('INVALID_SELECTION');
+    expect(scenarios.get('duplicate-public-id')?.duplicateBoundary).toBe('metadata-staging');
+    expect(scenarios.get('duplicate-public-id')?.issueDistribution).toEqual([]);
     expect(createClientSpy).not.toHaveBeenCalled();
     createClientSpy.mockRestore();
   });

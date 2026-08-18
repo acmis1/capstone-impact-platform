@@ -69,7 +69,7 @@ export interface GenerateSyntheticImportBatchOptions {
   selectedRootName?: string;
 }
 
-export interface SyntheticDuplicatePublicIdFixture {
+export interface SyntheticStagingDuplicatePublicIdFixture {
   batch: SyntheticImportBatchFixture;
   duplicatePublicId: string;
 }
@@ -323,9 +323,15 @@ export async function generateSyntheticImportBatch({
   };
 }
 
-export async function createSyntheticDuplicatePublicIdFixture({
+/**
+ * Folder names are the authoritative public IDs at the supported package-selection boundary, so
+ * two sibling packages cannot legitimately produce the same public ID. This fixture therefore
+ * keeps the selected packages valid and unique and supplies the ID used to exercise the first
+ * production boundary that independently defends against duplicates: metadata staging.
+ */
+export async function createSyntheticStagingDuplicatePublicIdFixture({
   seed = DEFAULT_SYNTHETIC_SEED,
-}: { seed?: number } = {}): Promise<SyntheticDuplicatePublicIdFixture> {
+}: { seed?: number } = {}): Promise<SyntheticStagingDuplicatePublicIdFixture> {
   const batch = await generateSyntheticImportBatch({
     count: 2,
     seed,

@@ -8,17 +8,13 @@ import {
   type BrowserImportIssue,
   type BrowserImportPreviewResponse,
 } from '../import/browserImportPreviewContract';
-import {
-  parseAdminReferenceWorksheet,
-  reconcilePackagesAgainstAdminReference,
-} from '../import/adminReferenceReconciliationCore';
 import { prepareBrowserImportCommitIntent } from '../import/prepareBrowserImportCommitIntentCore';
 import { stageBrowserImportMetadata } from '../import/stageBrowserImportMetadata';
 import { validateMediaAsset } from '../storage/mediaValidationCore';
 import type { AuthenticatedAdminContext } from '../auth/authTypes';
 import {
   createSyntheticAdminReferenceOptions,
-  createSyntheticDuplicatePublicIdFixture,
+  createSyntheticStagingDuplicatePublicIdFixture,
   generateSyntheticImportBatch,
   SYNTHETIC_IMPORT_VARIANTS,
   type SyntheticImportBatchFixture,
@@ -27,10 +23,7 @@ import {
   type SyntheticImportPackageCount,
   type SyntheticPreviewVariant,
 } from './syntheticImportPackages';
-import {
-  DEFAULT_SYNTHETIC_SEED,
-  findDuplicatePublicIds,
-} from './syntheticProjects';
+import { DEFAULT_SYNTHETIC_SEED } from './syntheticProjects';
 
 export interface SyntheticImportCounts {
   packageCount: number;
@@ -95,6 +88,7 @@ export interface SyntheticImportScenarioReport {
   expectedIssueCodes: readonly string[];
   issueDistribution: SyntheticIssueDistributionEntry[];
   passed: true;
+  duplicateBoundary?: 'metadata-staging';
   duplicateStagingCode?: string;
 }
 
@@ -327,7 +321,7 @@ function flattenIssueDistribution(
 }
 
 async function runDuplicateScenario(seed: number): Promise<SyntheticImportScenarioReport> {
-  const duplicateFixture = await createSyntheticDuplicatePublicIdFixture({ seed });
+  const duplicateFixture = await createSyntheticStagingDuplicatePublicIdFixture({ seed });
   const referenceOptions = await createSyntheticAdminReferenceOptions(
     duplicateFixture.batch.packages.map((pkg) => pkg.project),
   );
@@ -338,34 +332,10 @@ async function runDuplicateScenario(seed: number): Promise<SyntheticImportScenar
   );
 
   const originalIds = analysis.packages.map((pkg) => pkg.proposedPublicId);
-  const duplicatedIds = [originalIds[0], originalIds[0]];
   assertCondition(
-    findDuplicatePublicIds(duplicatedIds.map((publicId) => ({ publicId }))).length === 1,
-    'PR #73 duplicate-ID helper did not detect the synthetic duplicate.',
-  );
-
-  const referenceRows = await parseAdminReferenceWorksheet(
-    referenceOptions.referenceFileBuffer,
-    referenceOptions.mapping,
-  );
-  const duplicatedPackages = analysis.packages.map((pkg, index) => ({
-    packagePath: pkg.packagePath,
-    manifest: index === 0 || !pkg.manifest
-      ? pkg.manifest || {}
-      : { ...pkg.manifest, publicId: duplicateFixture.duplicatePublicId },
-  }));
-  const reconciliation = reconcilePackagesAgainstAdminReference({
-    packages: duplicatedPackages,
-    referenceRows,
-    mapping: referenceOptions.mapping,
-  });
-  const reconciliationIssues = [
-    ...reconciliation.batchIssues,
-    ...[...reconciliation.packageResults.values()].flatMap((result) => result.issues),
-  ];
-  assertCondition(
-    reconciliationIssues.some((issue) => issue.code === 'ADMIN_REFERENCE_DUPLICATE_PACKAGE_KEY'),
-    'Admin Reference reconciliation did not detect the synthetic duplicate package key.',
+    new Set(originalIds).size === originalIds.length
+      && analysis.packages.every((pkg) => pkg.proposedPublicId === pkg.folderName),
+    'Folder-derived package selection did not preserve unique authoritative public IDs.',
   );
 
   const prepared = prepareBrowserImportCommitIntent({
@@ -377,6 +347,9 @@ async function runDuplicateScenario(seed: number): Promise<SyntheticImportScenar
   });
   assertCondition(prepared.success, 'Could not prepare a valid duplicate-ID staging intent.');
 
+  // A duplicate cannot be represented by the supported folder-derived selection contract. Inject
+  // it only at the metadata-staging function boundary to verify that this independent production
+  // guard rejects it before the Supabase admin client (and therefore any persistence) is created.
   const duplicatedAnalysis: BrowserImportServerAnalysis = {
     preview: analysis.preview,
     packages: analysis.packages.map((pkg, index) =>
@@ -413,9 +386,10 @@ async function runDuplicateScenario(seed: number): Promise<SyntheticImportScenar
       warningPackageCount: 0,
       invalidPackageCount: 2,
     },
-    expectedIssueCodes: ['ADMIN_REFERENCE_DUPLICATE_PACKAGE_KEY'],
-    issueDistribution: summarizeIssueDistribution(reconciliationIssues),
+    expectedIssueCodes: [],
+    issueDistribution: [],
     passed: true,
+    duplicateBoundary: 'metadata-staging',
     duplicateStagingCode: stagingResult.code,
   };
 }
@@ -520,6 +494,9 @@ export function formatSyntheticImportValidationReport(
     lines.push(
       `  ${scenario.variant}: packages=${scenario.counts.packageCount}, valid=${scenario.counts.validPackageCount}, warning=${scenario.counts.warningPackageCount}, invalid=${scenario.counts.invalidPackageCount}, passed=${scenario.passed ? 'yes' : 'no'}`,
     );
+    if (scenario.duplicateBoundary) {
+      lines.push(`    duplicate boundary: ${scenario.duplicateBoundary}`);
+    }
     if (scenario.duplicateStagingCode) {
       lines.push(`    duplicate staging result: ${scenario.duplicateStagingCode}`);
     }
