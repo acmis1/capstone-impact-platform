@@ -18,6 +18,7 @@
     "check:diff": "tsx src/scripts/checkDiffWhitespace.ts",
     "check:sample-feed": "tsx src/scripts/checkSampleFeed.ts",
     "benchmark:projects": "tsx src/scripts/benchmarkSyntheticProjects.ts",
+    "validate:synthetic-imports": "tsx src/scripts/validateSyntheticImportPackages.ts",
     "seed:staging": "tsx src/scripts/seedStagingProjects.ts",
     "check:staging-projects": "tsx src/scripts/checkStagingProjects.ts",
     "seed:staging-media": "tsx src/scripts/seedFakeMediaAssets.ts",
