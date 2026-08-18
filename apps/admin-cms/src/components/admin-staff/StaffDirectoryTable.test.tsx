@@ -70,6 +70,7 @@ describe('StaffDirectoryTable', () => {
   it('renders active, pending, zero-role, multi-role and timestamp states semantically', () => {
     render(<StaffDirectoryTable staff={staff} incidents={[]} />);
 
+    expect(screen.getByRole('heading', { level: 2, name: 'Staff directory' })).toBeDefined();
     expect(screen.getByRole('region', { name: 'Staff directory' })).toBeDefined();
     expect(screen.getByRole('table', { name: /staff accounts and their assigned roles/i })).toBeDefined();
 
@@ -91,6 +92,7 @@ describe('StaffDirectoryTable', () => {
   it('retains all three provisioning outcomes with plain-language follow-up context', () => {
     render(<StaffDirectoryTable staff={staff.slice(0, 1)} incidents={incidents} />);
 
+    expect(screen.getByRole('heading', { level: 2, name: 'Provisioning incidents' })).toBeDefined();
     const mobileIncidents = screen.getByRole('list', { name: /Staff provisioning incidents/i });
     expect(within(mobileIncidents).getByText('Cleanup in progress')).toBeDefined();
     expect(within(mobileIncidents).getByText('Needs attention')).toBeDefined();
@@ -124,7 +126,7 @@ describe('StaffDirectoryTable', () => {
   it('renders a useful empty state without a redundant incident section', () => {
     render(<StaffDirectoryTable staff={[]} incidents={[]} />);
 
-    expect(screen.getByRole('heading', { name: 'No staff accounts' })).toBeDefined();
+    expect(screen.getByRole('heading', { level: 3, name: 'No staff accounts' })).toBeDefined();
     expect(screen.queryByRole('region', { name: 'Provisioning incidents' })).toBeNull();
   });
 });

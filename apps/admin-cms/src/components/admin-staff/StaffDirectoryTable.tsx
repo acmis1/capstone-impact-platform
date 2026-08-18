@@ -8,7 +8,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Badge } from '../ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent, CardDescription, CardHeader } from '../ui/card';
 import { EmptyState } from '../ui/empty-state';
 import type { AdminRole } from '../../auth/authTypes';
 import type {
@@ -130,7 +130,13 @@ export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTablePro
         <CardHeader className="border-b border-border/80">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <CardTitle id="staff-directory-heading">Staff directory</CardTitle>
+              <h2
+                id="staff-directory-heading"
+                data-slot="card-title"
+                className="text-base font-semibold leading-tight tracking-tight text-foreground"
+              >
+                Staff directory
+              </h2>
               <CardDescription className="mt-1 max-w-3xl">
                 People who can sign in to the Admin/CMS and invitations awaiting account setup.
               </CardDescription>
@@ -227,7 +233,13 @@ export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTablePro
       {incidents.length > 0 && (
         <Card role="region" aria-labelledby="staff-incidents-heading" className="overflow-hidden border-warning/30">
           <CardHeader className="border-b border-warning/20 bg-warning/[0.04]">
-            <CardTitle id="staff-incidents-heading">Provisioning incidents</CardTitle>
+            <h2
+              id="staff-incidents-heading"
+              data-slot="card-title"
+              className="text-base font-semibold leading-tight tracking-tight text-foreground"
+            >
+              Provisioning incidents
+            </h2>
             <CardDescription className="max-w-3xl">
               These attempts did not create usable access. Cleanup and attention states remain
               distinct so administrators can identify what, if anything, still needs follow-up.

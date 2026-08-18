@@ -27,8 +27,8 @@ function fill() {
   fireEvent.change(screen.getByLabelText(/^Confirm password/i), {
     target: { value: SYNTHETIC_PASSWORD },
   });
-  fireEvent.click(screen.getByLabelText(/^Reviewer/i));
-  fireEvent.click(screen.getByLabelText(/^Editor/i));
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Reviewer' }));
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Editor' }));
 }
 
 describe('StaffTestAccountForm rendered boundary', () => {
@@ -51,12 +51,39 @@ describe('StaffTestAccountForm rendered boundary', () => {
     render(<StaffTestAccountForm available />);
     expect(screen.getByRole('heading', { name: /Create test account/i })).toBeDefined();
     expect(screen.getByText(/Staging only/i)).toBeDefined();
-    expect(screen.getByLabelText(/^Reviewer/i)).toBeDefined();
-    expect(screen.getByLabelText(/^Editor/i)).toBeDefined();
+    expect(screen.getByRole('checkbox', { name: 'Reviewer' })).toBeDefined();
+    expect(screen.getByRole('checkbox', { name: 'Editor' })).toBeDefined();
     expect(screen.queryByLabelText(/Administrator/i)).toBeNull();
     expect(screen.getByLabelText(/^Password/i)).toBeDefined();
     expect(screen.getByLabelText(/^Confirm password/i)).toBeDefined();
     expect(screen.getByText(/No setup email is sent/i)).toBeDefined();
+  });
+
+  it('keeps role names exact and descriptions separately associated', () => {
+    render(<StaffTestAccountForm available />);
+
+    const descriptions = {
+      Reviewer: 'Can read projects and complete review decisions.',
+      Editor: 'Can read and edit project metadata and import projects.',
+    };
+
+    for (const [role, description] of Object.entries(descriptions)) {
+      const roleKey = role.toLowerCase();
+      const checkbox = screen.getByRole('checkbox', { name: role }) as HTMLInputElement;
+      expect(checkbox.getAttribute('aria-labelledby')).toBe(`test-account-role-${roleKey}-label`);
+      const descriptionId = `test-account-role-${roleKey}-description`;
+      expect(checkbox.getAttribute('aria-describedby')).toBe(descriptionId);
+      expect(document.getElementById(descriptionId)?.textContent).toBe(description);
+    }
+  });
+
+  it('toggles a role when its full row is clicked', () => {
+    render(<StaffTestAccountForm available />);
+
+    const checkbox = screen.getByRole('checkbox', { name: 'Reviewer' }) as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    fireEvent.click(screen.getByText('Reviewer'));
+    expect(checkbox.checked).toBe(true);
   });
 
   it('preserves bounded password and autocomplete semantics', () => {

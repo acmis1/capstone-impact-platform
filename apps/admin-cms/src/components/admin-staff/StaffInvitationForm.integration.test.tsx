@@ -23,7 +23,7 @@ function fill(values: { fullName?: string; email?: string; role?: string }) {
     fireEvent.change(screen.getByLabelText(/Email address/i), { target: { value: values.email } });
   }
   if (values.role !== undefined) {
-    fireEvent.click(screen.getByLabelText(new RegExp(values.role, 'i')));
+    fireEvent.click(screen.getByRole('checkbox', { name: values.role }));
   }
 }
 
@@ -47,10 +47,38 @@ describe('StaffInvitationForm rendered boundary', () => {
 
     expect(screen.getByLabelText(/Full name/i)).toBeDefined();
     expect(screen.getByLabelText(/Email address/i)).toBeDefined();
-    expect(screen.getByLabelText(/Administrator/i)).toBeDefined();
-    expect(screen.getByLabelText(/Reviewer/i)).toBeDefined();
-    expect(screen.getByLabelText(/Editor/i)).toBeDefined();
+    expect(screen.getByRole('checkbox', { name: 'Administrator' })).toBeDefined();
+    expect(screen.getByRole('checkbox', { name: 'Reviewer' })).toBeDefined();
+    expect(screen.getByRole('checkbox', { name: 'Editor' })).toBeDefined();
     expect(screen.getByRole('button', { name: /Send invitation/i })).toBeDefined();
+  });
+
+  it('keeps role names exact and descriptions separately associated', () => {
+    renderForm();
+
+    const descriptions = {
+      Administrator: 'Full project authority, including publication, archiving and staff management.',
+      Reviewer: 'Can read projects and complete review decisions.',
+      Editor: 'Can read and edit project metadata.',
+    };
+
+    for (const [role, description] of Object.entries(descriptions)) {
+      const checkbox = screen.getByRole('checkbox', { name: role }) as HTMLInputElement;
+      const roleKey = role === 'Administrator' ? 'admin' : role.toLowerCase();
+      expect(checkbox.getAttribute('aria-labelledby')).toBe(`staff-role-${roleKey}-label`);
+      const descriptionId = `staff-role-${roleKey}-description`;
+      expect(checkbox.getAttribute('aria-describedby')).toBe(descriptionId);
+      expect(document.getElementById(descriptionId)?.textContent).toBe(description);
+    }
+  });
+
+  it('toggles a role when its full row is clicked', () => {
+    renderForm();
+
+    const checkbox = screen.getByRole('checkbox', { name: 'Reviewer' }) as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    fireEvent.click(screen.getByText('Reviewer'));
+    expect(checkbox.checked).toBe(true);
   });
 
   it('states that the invitee sets their own password', () => {
@@ -149,7 +177,7 @@ describe('StaffInvitationForm rendered boundary', () => {
     expect(screen.queryByLabelText(/Full name/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /Send invitation/i })).toBeNull();
     expect(screen.getByText(/Invitations are unavailable/i)).toBeDefined();
-    expect(screen.getByText(/Existing staff access and pending setup remain visible/i)).toBeDefined();
+    expect(screen.getByText('Staff invitation creation is paused in this environment. Existing staff access is unchanged.')).toBeDefined();
   });
 
   it('communicates outcomes through a polite live region rather than colour alone', async () => {

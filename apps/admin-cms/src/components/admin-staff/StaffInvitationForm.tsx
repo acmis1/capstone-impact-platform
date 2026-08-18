@@ -89,7 +89,7 @@ export function StaffInvitationForm({ assignableRoles, provisioningEnabled }: St
           <Alert
             variant="warning"
             title="Invitations are unavailable"
-            description="Staff invitation creation is paused in this environment. Existing staff access and pending setup remain visible in the directory."
+            description="Staff invitation creation is paused in this environment. Existing staff access is unchanged."
           />
         </CardContent>
       </Card>
@@ -160,13 +160,19 @@ export function StaffInvitationForm({ assignableRoles, provisioningEnabled }: St
                   className="mt-0.5 h-5 w-5 shrink-0 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   checked={state.roles.includes(role)}
                   disabled={!provisioningEnabled || state.phase === 'submitting'}
+                  aria-labelledby={`staff-role-${role}-label`}
                   aria-describedby={`staff-role-${role}-description`}
                   onChange={() =>
                     setState((current) => ({ ...current, roles: toggleStaffRole(current.roles, role) }))
                   }
                 />
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium leading-none text-foreground">{ROLE_LABELS[role]}</span>
+                  <span
+                    id={`staff-role-${role}-label`}
+                    className="text-sm font-medium leading-none text-foreground"
+                  >
+                    {ROLE_LABELS[role]}
+                  </span>
                   <span id={`staff-role-${role}-description`} className="mt-1 text-xs leading-relaxed text-muted-foreground">
                     {ROLE_DESCRIPTIONS[role]}
                   </span>

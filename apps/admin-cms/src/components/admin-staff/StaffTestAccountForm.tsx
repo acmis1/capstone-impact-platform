@@ -189,6 +189,7 @@ export function StaffTestAccountForm({ available }: StaffTestAccountFormProps) {
                   className="mt-0.5 h-5 w-5 shrink-0 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   checked={state.roles.includes(role)}
                   disabled={disabled}
+                  aria-labelledby={`test-account-role-${role}-label`}
                   aria-describedby={`test-account-role-${role}-description`}
                   onChange={() =>
                     setState((current) => ({
@@ -198,7 +199,12 @@ export function StaffTestAccountForm({ available }: StaffTestAccountFormProps) {
                   }
                 />
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium leading-none text-foreground">{ROLE_LABELS[role]}</span>
+                  <span
+                    id={`test-account-role-${role}-label`}
+                    className="text-sm font-medium leading-none text-foreground"
+                  >
+                    {ROLE_LABELS[role]}
+                  </span>
                   <span
                     id={`test-account-role-${role}-description`}
                     className="mt-1 text-xs leading-relaxed text-muted-foreground"
