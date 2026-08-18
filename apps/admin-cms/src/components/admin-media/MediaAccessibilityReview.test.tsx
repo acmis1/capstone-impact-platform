@@ -28,12 +28,12 @@ describe('MediaAccessibilityReview', () => {
   it('reports an available text alternative without duplicating text shown by a valid image preview', () => {
     render(
       <MediaAccessibilityReview
-        media={media({ altText: 'Students demonstrating the project prototype.' })}
+        media={media({ altText: 'Participants demonstrating the project prototype.' })}
       />,
     );
 
     expect(screen.getByText('Text alternative available')).toBeTruthy();
-    expect(screen.queryByText('Students demonstrating the project prototype.')).toBeNull();
+    expect(screen.queryByText('Participants demonstrating the project prototype.')).toBeNull();
     expect(screen.queryByText('Accessibility information incomplete')).toBeNull();
   });
 
@@ -41,7 +41,7 @@ describe('MediaAccessibilityReview', () => {
     render(
       <MediaAccessibilityReview
         media={media({
-          altText: 'Students demonstrating the project prototype.',
+          altText: 'Participants demonstrating the project prototype.',
           previewSource: 'unavailable',
           url: undefined,
         })}
@@ -49,7 +49,7 @@ describe('MediaAccessibilityReview', () => {
     );
 
     expect(screen.getByText('Text alternative available')).toBeTruthy();
-    expect(screen.getByText('Students demonstrating the project prototype.')).toBeTruthy();
+    expect(screen.getByText('Participants demonstrating the project prototype.')).toBeTruthy();
   });
 
   it('clearly reports missing image alternative text', () => {
