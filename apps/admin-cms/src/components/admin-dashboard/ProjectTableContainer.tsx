@@ -358,13 +358,13 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
       </div>
 
       {/* Desktop/Tablet Table View */}
-      <div className="hidden overflow-hidden rounded-lg border bg-card shadow-xs md:block">
+      <div className="hidden overflow-hidden rounded-lg border border-border bg-card shadow-xs md:block">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left">
             <caption className="sr-only">
               Capstone project records, showing {fromRecord} to {toRecord} of {total}.
             </caption>
-            <thead className="border-b bg-muted/40">
+            <thead className="border-b border-border bg-muted/40">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
@@ -394,7 +394,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
                 </tr>
               ))}
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-border">
               {table.getRowModel().rows.map((row) => (
                 <tr key={row.id} className="transition-colors hover:bg-muted/30">
                   {row.getVisibleCells().map((cell) => (
@@ -416,7 +416,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
           const secondary = supportingContext(row);
 
           return (
-            <li key={row.id} className="rounded-lg border bg-card p-4 shadow-xs">
+            <li key={row.id} className="rounded-lg border border-border bg-card p-4 shadow-xs">
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
                   <h4 className="text-sm font-semibold leading-snug text-foreground">
@@ -478,7 +478,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
       {/* Pagination Bar */}
       <nav
         aria-label="Project results pages"
-        className="flex flex-col items-start gap-3 rounded-lg border bg-card px-4 py-3 shadow-xs sm:flex-row sm:items-center sm:justify-between"
+        className="flex flex-col items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-xs sm:flex-row sm:items-center sm:justify-between"
       >
         <p className="text-sm text-muted-foreground">
           Page <span className="font-semibold tabular-nums text-foreground">{page}</span> of{' '}

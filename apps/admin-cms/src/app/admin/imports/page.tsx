@@ -8,6 +8,7 @@ import { requireAdmin } from '../../../auth/requireAdmin';
 import { hasPermission } from '../../../auth/permissions';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { getImportSummaryMetrics, ImportMetricsSummary } from '../../../components/admin/ImportMetricsSummary';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { ErrorState } from '../../../components/ui/error-state';
 
@@ -34,12 +35,7 @@ export default async function ImportBatchesPage() {
     loadError = true;
   }
 
-  // Summary aggregation metrics
-  const totalBatches = batches.length;
-  const completedCount = batches.filter((b) => b.status === 'completed').length;
-  const failedCount = batches.filter((b) => b.status === 'failed').length;
-  const totalWarnings = batches.reduce((acc, b) => acc + (b.warning_count || 0), 0);
-  const totalErrors = batches.reduce((acc, b) => acc + (b.error_count || 0), 0);
+  const summaryMetrics = getImportSummaryMetrics(batches);
 
   return (
     <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full">
@@ -78,63 +74,7 @@ export default async function ImportBatchesPage() {
         />
       ) : (
         <>
-          {/* Summary Metric Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-            <Card className="bg-card border-border shadow-xs">
-              <CardContent className="p-4">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Recent Imports
-                </p>
-                <p className="text-2xl font-bold text-foreground mt-1">
-                  {totalBatches}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card border-border shadow-xs">
-              <CardContent className="p-4">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Completed
-                </p>
-                <p className="text-2xl font-bold text-success mt-1">
-                  {completedCount}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card border-border shadow-xs">
-              <CardContent className="p-4">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Failed
-                </p>
-                <p className="text-2xl font-bold text-destructive mt-1">
-                  {failedCount}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card border-border shadow-xs">
-              <CardContent className="p-4">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Total Warnings
-                </p>
-                <p className="text-2xl font-bold text-warning mt-1">
-                  {totalWarnings}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card border-border shadow-xs col-span-2 sm:col-span-1">
-              <CardContent className="p-4">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Total Errors
-                </p>
-                <p className="text-2xl font-bold text-destructive mt-1">
-                  {totalErrors}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          <ImportMetricsSummary metrics={summaryMetrics} />
 
           {/* Import Batches Table Card */}
           <Card className="bg-card border-border shadow-xs">

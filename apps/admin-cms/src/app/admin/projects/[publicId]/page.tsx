@@ -495,7 +495,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
             {/* Editing is the highest-frequency task, so it opens the workspace */}
             {metadataEditorData && metadataEditorAvailable ? (
-              <div id="project-information" className="scroll-mt-24 rounded-xl border border-border bg-card p-4 sm:p-6 xl:scroll-mt-40">
+              <div id="project-information" className="scroll-mt-44 rounded-xl border border-border bg-card p-4 sm:p-6 xl:scroll-mt-40">
                 <ProjectMetadataEditor
                   initialMetadata={metadataEditorData.metadata}
                   programs={metadataEditorData.programs}

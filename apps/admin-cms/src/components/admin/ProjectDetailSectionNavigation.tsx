@@ -10,7 +10,7 @@ export function ProjectDetailSectionNavigation() {
   return (
     <nav
       aria-labelledby="project-detail-section-navigation-heading"
-      className="rounded-xl border border-border/80 bg-background p-3 shadow-xs sm:p-4 xl:sticky xl:top-20 xl:z-30"
+      className="sticky top-16 z-30 rounded-xl border border-border/80 bg-background p-3 shadow-xs xl:top-20 xl:p-4"
     >
       <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center">
         <p
@@ -19,12 +19,12 @@ export function ProjectDetailSectionNavigation() {
         >
           On this page
         </p>
-        <ul className="grid min-w-0 grid-cols-1 gap-2 min-[480px]:grid-cols-2 sm:flex sm:flex-wrap">
+        <ul className="-mx-1 flex min-w-0 gap-2 overflow-x-auto overscroll-x-contain px-1 py-1 xl:mx-0 xl:flex-wrap xl:overflow-visible xl:px-0 xl:py-0">
           {PROJECT_DETAIL_SECTION_LINKS.map((section) => (
-            <li key={section.id} className="min-w-0">
+            <li key={section.id} className="shrink-0">
               <a
                 href={`#${section.id}`}
-                className="inline-flex min-h-10 w-full items-center rounded-md border border-border bg-card px-3 py-2 text-sm font-medium leading-snug text-foreground-subtle transition-colors hover:border-border-strong hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-auto"
+                className="inline-flex min-h-10 items-center whitespace-nowrap rounded-md border border-border bg-card px-3 py-2 text-sm font-medium leading-snug text-foreground-subtle transition-colors hover:border-border-strong hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 {section.label}
               </a>

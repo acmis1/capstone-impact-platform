@@ -375,7 +375,7 @@ export function ProjectFilterBar({
         </div>
 
         {hasActiveFilters && (
-          <div className="flex flex-col gap-2 border-t pt-4">
+          <div className="flex flex-col gap-2 border-t border-border pt-4">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Active filters
             </h4>
@@ -408,7 +408,7 @@ export function ProjectFilterBar({
         )}
       </div>
 
-      <div className="flex flex-col gap-3 border-t bg-surface-inset px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 border-t border-border bg-surface-inset px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <label htmlFor="filter-pagesize" className="text-sm font-medium text-muted-foreground">
             Rows per page

@@ -207,13 +207,8 @@ export function ProjectAuditHistory({ auditRecords, initialVisibleCount = 3 }: P
       {olderRecords.length > 0 && (
         <details className="group rounded-xl border border-border bg-card">
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:px-6">
-            <span>Show {olderRecords.length} older changes</span>
-            <span className="text-xs font-normal text-muted-foreground group-open:hidden" aria-hidden="true">
-              Expand
-            </span>
-            <span className="hidden text-xs font-normal text-muted-foreground group-open:inline" aria-hidden="true">
-              Collapse
-            </span>
+            <span className="group-open:hidden">Show {olderRecords.length} older changes</span>
+            <span className="hidden group-open:inline">Hide {olderRecords.length} older changes</span>
           </summary>
           <ol
             start={recentRecords.length + 1}

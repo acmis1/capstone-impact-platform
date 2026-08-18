@@ -155,10 +155,18 @@ describe('Project Detail macro navigation', () => {
     );
 
     const navigation = screen.getByRole('navigation', { name: 'On this page' });
+    expect(navigation.className).toContain('sticky');
+    expect(navigation.className).toContain('top-16');
+    expect(navigation.className).toContain('xl:top-20');
+    const linkRow = navigation.querySelector('ul') as HTMLUListElement;
+    expect(linkRow.className).toContain('overflow-x-auto');
+    expect(linkRow.className).toContain('xl:overflow-visible');
     for (const section of PROJECT_DETAIL_SECTION_LINKS) {
       const link = within(navigation).getByRole('link', { name: section.label });
       expect(link.getAttribute('href')).toBe(`#${section.id}`);
+      expect(link.className).toContain('whitespace-nowrap');
       expect(document.getElementById(section.id)).toBeTruthy();
+      expect(document.getElementById(section.id)?.className).toContain('scroll-mt-44');
       expect(screen.getByRole('heading', { name: section.label, level: 2 })).toBeTruthy();
       expect(screen.getByRole('heading', { name: `${section.label} child`, level: 3 })).toBeTruthy();
     }
@@ -266,12 +274,15 @@ describe('ProjectAuditHistory', () => {
 
     fireEvent.click(screen.getByText('Show 3 older changes'));
     expect(details.open).toBe(true);
+    expect(screen.getByText('Hide 3 older changes').className).toContain('group-open:inline');
+    expect(screen.queryByText('Collapse')).toBeNull();
   });
 
   it('keeps older actor evidence in server-rendered markup while visually collapsed', () => {
     const markup = renderToStaticMarkup(<ProjectAuditHistory auditRecords={auditRecords(5)} />);
 
     expect(markup).toContain('Show 2 older changes');
+    expect(markup).toContain('Hide 2 older changes');
     expect(markup).toContain('Audit actor 5');
     expect(markup.match(/Audit actor 5/g)).toHaveLength(1);
   });
@@ -364,6 +375,14 @@ describe('project detail workspace information architecture', () => {
     path.resolve(__dirname, './ProjectDetailSectionNavigation.tsx'),
     'utf-8'
   );
+  const sectionSource = fs.readFileSync(
+    path.resolve(__dirname, './ProjectReviewSection.tsx'),
+    'utf-8'
+  );
+  const auditHistorySource = fs.readFileSync(
+    path.resolve(__dirname, './ProjectAuditHistory.tsx'),
+    'utf-8'
+  );
 
   it('keeps four ordered macro destinations with the requested labels', () => {
     const macroSections = [
@@ -394,6 +413,32 @@ describe('project detail workspace information architecture', () => {
       expect(navigationSource).toContain(`{ id: '${id}', label: '${label}' }`);
       expect(pageSource).toContain(`id="${id}"`);
     }
+  });
+
+  it('keeps the one fragment navigation sticky with locally scrollable compact links', () => {
+    expect(navigationSource).toContain('sticky top-16 z-30');
+    expect(navigationSource).toContain('xl:top-20');
+    expect(navigationSource).toContain('overflow-x-auto');
+    expect(navigationSource).toContain('overscroll-x-contain');
+    expect(navigationSource).toContain('xl:overflow-visible');
+    expect(navigationSource).toContain('whitespace-nowrap');
+    expect(navigationSource).not.toContain('grid-cols-1');
+  });
+
+  it('clears the sticky navigation for every macro and child fragment target', () => {
+    expect(sectionSource).toContain("'scroll-mt-44 xl:scroll-mt-40'");
+    expect(sectionSource).not.toContain('scroll-mt-24');
+    expect(pageSource).toContain('id="project-information" className="scroll-mt-44');
+  });
+
+  it('uses native details with CSS-only Show/Hide wording for older changes', () => {
+    expect(auditHistorySource).toContain('<details');
+    expect(auditHistorySource).toContain('Show {olderRecords.length} older changes');
+    expect(auditHistorySource).toContain('Hide {olderRecords.length} older changes');
+    expect(auditHistorySource).toContain('group-open:hidden');
+    expect(auditHistorySource).toContain('group-open:inline');
+    expect(auditHistorySource).not.toContain('Collapse');
+    expect(auditHistorySource).not.toMatch(/useState|useEffect/);
   });
 
   it('keeps every high-priority workflow section on the page', () => {
