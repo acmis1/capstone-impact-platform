@@ -3,14 +3,24 @@
 import React from 'react';
 import fs from 'node:fs';
 import path from 'node:path';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { cleanup, render, screen, fireEvent, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Layers } from 'lucide-react';
-import { ProjectReviewSection } from './ProjectReviewSection';
+import { ProjectDetailMacroSection, ProjectReviewSection } from './ProjectReviewSection';
+import { ProjectDetailSectionNavigation, PROJECT_DETAIL_SECTION_LINKS } from './ProjectDetailSectionNavigation';
 import { ProjectAuditHistory } from './ProjectAuditHistory';
+import {
+  GuardedProjectBackLink,
+  ProjectMetadataNavigationProvider,
+  useProjectMetadataNavigation,
+} from './ProjectMetadataNavigation';
 import type { AuditHistoryView } from '../../projects/projectDetailAuxiliaryData';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe('ProjectReviewSection layout primitive', () => {
   it('renders a semantic section labelled by its own heading', () => {
@@ -124,6 +134,66 @@ describe('ProjectReviewSection layout primitive', () => {
   });
 });
 
+describe('Project Detail macro navigation', () => {
+  it('labels one native anchor navigation and targets four semantic macro sections', () => {
+    render(
+      <>
+        <ProjectDetailSectionNavigation />
+        {PROJECT_DETAIL_SECTION_LINKS.map((section) => (
+          <ProjectDetailMacroSection
+            key={section.id}
+            id={section.id}
+            title={section.label}
+            description={`${section.label} description`}
+          >
+            <ProjectReviewSection title={`${section.label} child`}>
+              <p>Child content</p>
+            </ProjectReviewSection>
+          </ProjectDetailMacroSection>
+        ))}
+      </>
+    );
+
+    const navigation = screen.getByRole('navigation', { name: 'On this page' });
+    for (const section of PROJECT_DETAIL_SECTION_LINKS) {
+      const link = within(navigation).getByRole('link', { name: section.label });
+      expect(link.getAttribute('href')).toBe(`#${section.id}`);
+      expect(document.getElementById(section.id)).toBeTruthy();
+      expect(screen.getByRole('heading', { name: section.label, level: 2 })).toBeTruthy();
+      expect(screen.getByRole('heading', { name: `${section.label} child`, level: 3 })).toBeTruthy();
+    }
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.queryByRole('tab')).toBeNull();
+  });
+
+  it('keeps same-page anchors outside the dirty-navigation guard while Back remains guarded', () => {
+    function DirtyStateControl() {
+      const { setDirty } = useProjectMetadataNavigation();
+      return <button type="button" onClick={() => setDirty(true)}>Mark project information dirty</button>;
+    }
+
+    const confirmDiscard = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(
+      <ProjectMetadataNavigationProvider>
+        <ProjectDetailSectionNavigation />
+        <DirtyStateControl />
+        <GuardedProjectBackLink href="/admin">Back to projects</GuardedProjectBackLink>
+      </ProjectMetadataNavigationProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark project information dirty' }));
+    const beforeUnload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(beforeUnload);
+    expect(beforeUnload.defaultPrevented).toBe(true);
+
+    fireEvent.click(screen.getByRole('link', { name: 'Content and media' }));
+    expect(confirmDiscard).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Back to projects' }));
+    expect(confirmDiscard).toHaveBeenCalledTimes(1);
+  });
+});
+
 const auditRecord: AuditHistoryView = {
   id: 'a0000000-0000-4000-8000-000000000001',
   action: 'approve',
@@ -137,6 +207,17 @@ const auditRecord: AuditHistoryView = {
   mediaAccessibilityEventDetails: null,
 };
 
+function auditRecords(count: number): AuditHistoryView[] {
+  return Array.from({ length: count }, (_, index) => ({
+    ...auditRecord,
+    id: `a0000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    timestamp: `2026-08-${String(10 - index).padStart(2, '0')}T10:00:00.000Z`,
+    comments: `Ordered audit comment ${index + 1}`,
+    actorFullName: `Audit actor ${index + 1}`,
+    actorEmail: `audit.actor.${index + 1}@capstone.test`,
+  }));
+}
+
 describe('ProjectAuditHistory', () => {
   it('states unavailability without erasing the rest of the page', () => {
     render(<ProjectAuditHistory auditRecords={null} />);
@@ -147,6 +228,52 @@ describe('ProjectAuditHistory', () => {
     render(<ProjectAuditHistory auditRecords={[]} />);
     expect(screen.getByText(/No recorded changes for this project yet/i)).toBeTruthy();
     expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('shows one to three records in full without an unnecessary history disclosure', () => {
+    const { container } = render(<ProjectAuditHistory auditRecords={auditRecords(3)} />);
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.getByRole('list', { name: 'Recorded changes' })).toBeTruthy();
+    expect(screen.queryByText(/older changes/i)).toBeNull();
+    expect(container.querySelector('details')).toBeNull();
+  });
+
+  it('previews the latest three and keeps every older record once in a native disclosure', () => {
+    const records = auditRecords(6);
+    const { container } = render(<ProjectAuditHistory auditRecords={records} />);
+
+    const recent = screen.getByRole('list', { name: 'Most recent changes' });
+    expect(within(recent).getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.getByText('Showing the 3 most recent of 6 recorded changes.')).toBeTruthy();
+
+    const details = container.querySelector('details') as HTMLDetailsElement;
+    const older = container.querySelector('ol[aria-label="Older changes"]') as HTMLOListElement;
+    expect(details.open).toBe(false);
+    expect(older.start).toBe(4);
+    expect(older.querySelectorAll('li')).toHaveLength(3);
+    expect(screen.getByText('Show 3 older changes')).toBeTruthy();
+
+    for (const record of records) {
+      expect(screen.getAllByText(record.actorFullName)).toHaveLength(1);
+      expect(screen.getAllByText(record.comments!)).toHaveLength(1);
+    }
+
+    const actorsInDocumentOrder = [...container.querySelectorAll('li')].map((entry) =>
+      entry.textContent?.match(/Audit actor \d/)?.[0]
+    );
+    expect(actorsInDocumentOrder).toEqual(records.map((record) => record.actorFullName));
+
+    fireEvent.click(screen.getByText('Show 3 older changes'));
+    expect(details.open).toBe(true);
+  });
+
+  it('keeps older actor evidence in server-rendered markup while visually collapsed', () => {
+    const markup = renderToStaticMarkup(<ProjectAuditHistory auditRecords={auditRecords(5)} />);
+
+    expect(markup).toContain('Show 2 older changes');
+    expect(markup).toContain('Audit actor 5');
+    expect(markup.match(/Audit actor 5/g)).toHaveLength(1);
   });
 
   it('preserves timestamp, action, actor, transition and comment evidence', () => {
@@ -233,10 +360,46 @@ describe('project detail workspace information architecture', () => {
     path.resolve(__dirname, '../../app/admin/projects/[publicId]/page.tsx'),
     'utf-8'
   );
+  const navigationSource = fs.readFileSync(
+    path.resolve(__dirname, './ProjectDetailSectionNavigation.tsx'),
+    'utf-8'
+  );
+
+  it('keeps four ordered macro destinations with the requested labels', () => {
+    const macroSections = [
+      ['review-and-edit', 'Review and edit'],
+      ['content-and-media', 'Content and media'],
+      ['participant-and-publication', 'Participant and publication'],
+      ['technical-and-history', 'Technical details and history'],
+    ] as const;
+    let previousIndex = -1;
+    for (const [id, title] of macroSections) {
+      const index = pageSource.indexOf(`id="${id}"`);
+      expect(index, `Missing macro section: ${id}`).toBeGreaterThan(previousIndex);
+      expect(pageSource.slice(index, index + 250)).toContain(`title="${title}"`);
+      previousIndex = index;
+    }
+  });
+
+  it('uses static fragment navigation rather than tabs or a client scroll state machine', () => {
+    expect(pageSource).toContain('<ProjectDetailSectionNavigation />');
+    expect(navigationSource).not.toContain("'use client'");
+    expect(navigationSource).not.toMatch(/useState|useEffect|onClick|role="tab"/);
+    for (const [id, label] of [
+      ['review-and-edit', 'Review and edit'],
+      ['content-and-media', 'Content and media'],
+      ['participant-and-publication', 'Participant and publication'],
+      ['technical-and-history', 'Technical details and history'],
+    ]) {
+      expect(navigationSource).toContain(`{ id: '${id}', label: '${label}' }`);
+      expect(pageSource).toContain(`id="${id}"`);
+    }
+  });
 
   it('keeps every high-priority workflow section on the page', () => {
     for (const sectionId of [
       'workflow-status',
+      'project-information',
       'showcase-content',
       'media-accessibility',
       'participant-confirmation',
@@ -246,6 +409,37 @@ describe('project detail workspace information architecture', () => {
     ]) {
       expect(pageSource, `Missing project-detail section: ${sectionId}`).toContain(`id="${sectionId}"`);
     }
+  });
+
+  it('groups child sections beneath the correct macro areas in workflow order', () => {
+    const review = pageSource.slice(
+      pageSource.indexOf('id="review-and-edit"'),
+      pageSource.indexOf('id="content-and-media"'),
+    );
+    expect(review).toContain('id="workflow-status"');
+    expect(review).toContain('id="project-information"');
+    expect(review.indexOf('id="workflow-status"')).toBeLessThan(review.indexOf('id="project-information"'));
+
+    const content = pageSource.slice(
+      pageSource.indexOf('id="content-and-media"'),
+      pageSource.indexOf('id="participant-and-publication"'),
+    );
+    expect(content).toContain('id="showcase-content"');
+    expect(content).toContain('id="media-accessibility"');
+
+    const lifecycle = pageSource.slice(
+      pageSource.indexOf('id="participant-and-publication"'),
+      pageSource.indexOf('id="technical-and-history"'),
+    );
+    expect(lifecycle).toContain('id="participant-confirmation"');
+    expect(lifecycle).toContain('id="publication-lifecycle"');
+
+    const technical = pageSource.slice(
+      pageSource.indexOf('id="technical-and-history"'),
+      pageSource.indexOf('<aside aria-label="Project record context"'),
+    );
+    expect(technical).toContain('id="technical-details"');
+    expect(technical).toContain('id="change-history"');
   });
 
   it('renders each canonical mutation control exactly once, so no action can double-fire', () => {
@@ -299,6 +493,17 @@ describe('project detail workspace information architecture', () => {
   it('does not constrain the workspace to the previous narrow single column', () => {
     expect(pageSource).not.toContain('max-w-5xl');
     expect(pageSource).toContain('xl:grid-cols-[minmax(0,1fr)_340px]');
+  });
+
+  it('keeps the contextual rail secondary and non-sticky beside the macro workspace', () => {
+    const asideSource = pageSource.slice(
+      pageSource.indexOf('<aside aria-label="Project record context"'),
+      pageSource.indexOf('</aside>'),
+    );
+    expect(asideSource).not.toContain('sticky');
+    expect(asideSource).toContain('Project record');
+    expect(asideSource).toContain('Import origin');
+    expect(asideSource).toContain('Review staging sandbox');
   });
 
   it('keeps the unsaved-edit navigation guard on the back link', () => {
