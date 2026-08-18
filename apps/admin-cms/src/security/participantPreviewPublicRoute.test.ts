@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { createRequire } from 'node:module';
 import { escapeHtml, renderParticipantPreviewPage, renderParticipantPreviewUnavailablePage, isSafeExternalPreviewUrl } from '../previews/participantPreviewHtml';
 import { hashPreviewToken } from '../previews/participantPreviewToken';
 import { ParticipantPreviewSnapshot } from '../domain/participantPreview';
+
+const require = createRequire(import.meta.url);
+const { JSDOM } = require('jsdom') as {
+  JSDOM: new (html: string) => { window: { document: Document } };
+};
 
 vi.mock('server-only', () => ({}));
 vi.mock('../lib/supabase/admin', () => ({
@@ -123,7 +129,7 @@ describe('participantPreviewHtml escaping', () => {
 
       // Anchor on the response section heading, not the button class, which also appears in the
       // stylesheet in <head>.
-      const responseSection = html.indexOf('<h3>Your Response</h3>');
+      const responseSection = html.indexOf('<h2 id="response-heading">Your Response</h2>');
       expect(responseSection).toBeGreaterThan(-1);
       expect(html.indexOf('Poster Full Text')).toBeLessThan(responseSection);
       expect(html.indexOf('Accessibility Description')).toBeLessThan(responseSection);
@@ -144,8 +150,8 @@ describe('participantPreviewHtml escaping', () => {
     it('renders newlines as line breaks rather than raw markup', () => {
       const html = render({ posterText: 'Aim\nMeasure wake.', accessibilityText: 'Poster.\nTwo columns.' });
 
-      expect(html).toContain('Aim<br/>Measure wake.');
-      expect(html).toContain('Poster.<br/>Two columns.');
+      expect(html).toContain('Aim<br />Measure wake.');
+      expect(html).toContain('Poster.<br />Two columns.');
     });
 
     it('never leaks internal or private project state alongside the accessible content', () => {
@@ -161,6 +167,139 @@ describe('participantPreviewHtml escaping', () => {
     const html = renderParticipantPreviewUnavailablePage();
     expect(html).toContain('Preview Unavailable');
     expect(html).toContain('noindex, nofollow');
+  });
+});
+
+describe('participant preview semantic review layout', () => {
+  const snapshot: ParticipantPreviewSnapshot = {
+    title: 'A Long Synthetic Project Title for Participant Review',
+    summary: 'Synthetic summary.',
+    background: 'Synthetic background.',
+    solution: 'Synthetic solution.',
+    year: 2026,
+    program: 'Bachelor of Information Technology',
+    studyProgram: null,
+    discipline: 'Software Engineering',
+    disciplines: ['Software Engineering', 'Design'],
+    industry: null,
+    industryPartner: 'Synthetic Partner',
+    academicSupervisor: 'Dr Synthetic Supervisor',
+    groupName: 'Synthetic Team',
+    teamMembers: ['Alex Example', 'Casey Example'],
+    posterText: 'Poster full text.',
+    accessibilityText: 'Poster with a red heading and two content columns.',
+    citations: ['Synthetic citation.'],
+    externalLinks: [{ label: 'Synthetic research', url: 'https://example.test/research' }],
+    industryCategories: ['Technology'],
+  };
+
+  const media = [
+    {
+      mediaAssetId: 'poster', assetType: 'poster_image', fileName: 'poster.png', mimeType: 'image/png',
+      altText: null, signedUrl: 'https://signed.invalid/poster.png',
+    },
+    {
+      mediaAssetId: 'snapshot', assetType: 'snapshot_image', fileName: 'snapshot.png', mimeType: 'image/png',
+      altText: 'Synthetic workspace screenshot.', signedUrl: 'https://signed.invalid/snapshot.png',
+    },
+    {
+      mediaAssetId: 'pdf', assetType: 'poster_pdf', fileName: 'poster.pdf', mimeType: 'application/pdf',
+      altText: null, signedUrl: 'https://signed.invalid/poster.pdf',
+    },
+  ];
+
+  it('puts complete project evidence before one explicit response region in logical DOM order', () => {
+    const html = renderParticipantPreviewPage({ snapshot, media, responseState: { type: 'unresponded' } });
+    const document = new JSDOM(html).window.document;
+    const main = document.querySelector('main#main-content');
+    const response = document.querySelector('[aria-labelledby="response-heading"]');
+    const article = document.querySelector('article[aria-label="Project information to review"]');
+
+    expect(document.querySelectorAll('h1')).toHaveLength(1);
+    expect(document.querySelector('h1')?.textContent).toBe(snapshot.title);
+    expect(main).not.toBeNull();
+    expect(document.querySelector('a.skip-link')?.getAttribute('href')).toBe('#main-content');
+    expect(document.querySelector('.private-notice')?.textContent).toContain('not publicly listed or searchable');
+    expect(document.querySelector('.project-meta')?.textContent).toContain('2026');
+    expect(document.querySelector('.project-meta')?.textContent).toContain(snapshot.program);
+    expect(document.querySelector('#overview-heading')?.textContent).toBe('Project overview');
+    expect(document.querySelector('#media-heading')?.textContent).toBe('Project media');
+    expect(document.querySelector('#accessible-heading')?.textContent).toBe('Poster content in text');
+    expect(document.querySelector('#context-heading')?.textContent).toBe('Project and team details');
+    expect(document.querySelector('#references-heading')?.textContent).toBe('References and links');
+    expect(document.querySelector('#response-heading')?.textContent).toBe('Your Response');
+    expect(article).not.toBeNull();
+    expect(response).not.toBeNull();
+    expect((article as Element).compareDocumentPosition(response as Node) & 4).toBe(4);
+
+    const responseMarkupPosition = html.indexOf('<aside class="response-column"');
+    expect(html.indexOf('Poster Full Text')).toBeLessThan(responseMarkupPosition);
+    expect(html.indexOf('Accessibility Description')).toBeLessThan(responseMarkupPosition);
+
+    const headings = [...document.querySelectorAll('h1, h2, h3')].map((heading) => Number(heading.tagName.slice(1)));
+    expect(headings[0]).toBe(1);
+    expect(headings.every((level, index) => index === 0 || level <= headings[index - 1] + 1)).toBe(true);
+  });
+
+  it('preserves both plain same-current-URL POST form contracts without scripts', () => {
+    const html = renderParticipantPreviewPage({ snapshot, media, responseState: { type: 'unresponded' } });
+    const document = new JSDOM(html).window.document;
+    const forms = [...document.querySelectorAll('form')];
+    const confirmationForm = forms.find((form) => form.querySelector('input[name="action"]')?.getAttribute('value') === 'confirm');
+    const correctionForm = forms.find((form) => form.querySelector('input[name="action"]')?.getAttribute('value') === 'request_correction');
+    const textarea = correctionForm?.querySelector('textarea[name="comment"]');
+
+    expect(forms).toHaveLength(2);
+    expect(confirmationForm?.getAttribute('method')).toBe('POST');
+    expect(confirmationForm?.hasAttribute('action')).toBe(false);
+    expect(confirmationForm?.textContent).toContain('Confirm project details');
+    expect(correctionForm?.getAttribute('method')).toBe('POST');
+    expect(correctionForm?.hasAttribute('action')).toBe(false);
+    expect(document.querySelector('details.correction-disclosure > summary')?.textContent).toBe('Request corrections');
+    expect(textarea?.hasAttribute('required')).toBe(true);
+    expect(textarea?.getAttribute('maxlength')).toBe('2000');
+    expect(textarea?.getAttribute('aria-describedby')).toBe('correction-comment-hint');
+    expect(document.querySelector('#correction-comment-hint')).not.toBeNull();
+    expect(correctionForm?.textContent).toContain('Submit correction request');
+    expect(document.querySelector('script')).toBeNull();
+    expect(document.querySelector('link[rel="stylesheet"]')).toBeNull();
+    expect(document.querySelector('style')?.textContent).not.toMatch(/@import|url\s*\(/i);
+  });
+
+  it('replaces both forms with structured, mutually exclusive recorded outcomes', () => {
+    const confirmed = new JSDOM(renderParticipantPreviewPage({
+      snapshot, media: [], responseState: { type: 'confirmed', confirmedAt: '2026-08-18T04:00:00.000Z' },
+    })).window.document;
+    expect(confirmed.querySelectorAll('form')).toHaveLength(0);
+    expect(confirmed.querySelector('[role="status"]')?.textContent).toContain('Confirmed');
+    expect(confirmed.querySelector('time')?.getAttribute('datetime')).toBe('2026-08-18T04:00:00.000Z');
+    expect(confirmed.querySelector('[role="status"]')?.textContent).toContain('does not publish');
+
+    const corrected = new JSDOM(renderParticipantPreviewPage({
+      snapshot,
+      media: [],
+      responseState: {
+        type: 'correction_requested', requestedAt: '2026-08-18T04:05:00.000Z',
+        comment: '<script>unsafe()</script>\nPlease update the partner.',
+      },
+    })).window.document;
+    expect(corrected.querySelectorAll('form')).toHaveLength(0);
+    expect(corrected.querySelector('[role="status"]')?.textContent).toContain('Correction requested');
+    expect(corrected.querySelector('.submitted-comment')?.textContent).toContain('<script>unsafe()</script>');
+    expect(corrected.querySelector('.submitted-comment script')).toBeNull();
+    expect(corrected.querySelector('[role="status"]')?.textContent).toContain('has not yet been applied');
+  });
+
+  it('keeps the unavailable page generic, semantic, and free of project details', () => {
+    const document = new JSDOM(renderParticipantPreviewUnavailablePage()).window.document;
+    expect(document.querySelectorAll('h1')).toHaveLength(1);
+    expect(document.querySelector('h1')?.textContent).toBe('Preview Unavailable');
+    expect(document.querySelector('main#main-content')).not.toBeNull();
+    expect(document.querySelector('a.skip-link')?.getAttribute('href')).toBe('#main-content');
+    expect(document.body.textContent).toContain('contact your project coordinator');
+    expect(document.body.textContent).not.toContain(snapshot.title);
+    expect(document.querySelector('script')).toBeNull();
+    expect(document.querySelector('form')).toBeNull();
   });
 });
 

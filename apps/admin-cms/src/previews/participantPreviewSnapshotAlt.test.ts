@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createRequire } from 'node:module';
 
 import type {
   ParticipantPreviewMediaViewRef,
@@ -8,6 +9,11 @@ import {
   ParticipantPreviewMediaAccessibilityError,
   renderParticipantPreviewPage,
 } from './participantPreviewHtml';
+
+const require = createRequire(import.meta.url);
+const { JSDOM } = require('jsdom') as {
+  JSDOM: new (html: string) => { window: { document: Document } };
+};
 
 const POSTER_ALT = 'Poster showing a synthetic system architecture diagram beside a results table.';
 const SNAPSHOT_ALT = 'Screenshot of the mock operator console with three active sensor feeds.';
@@ -63,6 +69,22 @@ describe('participant-facing image alt attributes', () => {
     expect(altAttributes(html)).toEqual([POSTER_ALT, SNAPSHOT_ALT]);
   });
 
+  it('assigns poster and snapshot images to distinct semantic presentation groups', () => {
+    const html = render([
+      media(),
+      media({
+        mediaAssetId: 'm2', assetType: 'snapshot_image', fileName: 'snapshot-1.png',
+        altText: SNAPSHOT_ALT, signedUrl: 'https://signed.invalid/snapshot-1.png',
+      }),
+    ]);
+    const document = new JSDOM(html).window.document;
+
+    expect(document.querySelector('[data-media-kind="poster"] figcaption')?.textContent).toBe('Project poster');
+    expect(document.querySelector('[data-media-kind="snapshot"] figcaption')?.textContent).toBe('Supporting project image 1');
+    expect(document.querySelector('[data-media-kind="poster"] img')?.getAttribute('alt')).toBe(POSTER_ALT);
+    expect(document.querySelector('[data-media-kind="snapshot"] img')?.getAttribute('alt')).toBe(SNAPSHOT_ALT);
+  });
+
   it('never falls back to the filename', () => {
     const html = render([media({
       mediaAssetId: 'm2', assetType: 'snapshot_image', fileName: 'snapshot-1.png',
@@ -107,6 +129,21 @@ describe('participant-facing image alt attributes', () => {
     })]);
     expect(altAttributes(html)).toEqual([]);
     expect(html).toContain('poster.pdf');
+  });
+
+  it('renders a document as an accessible secured media asset rather than a loose URL', () => {
+    const html = render([media({
+      mediaAssetId: 'm3', assetType: 'poster_pdf', fileName: 'poster.pdf',
+      mimeType: 'application/pdf', altText: null, signedUrl: 'https://signed.invalid/poster.pdf?private=value',
+    })]);
+    const document = new JSDOM(html).window.document;
+    const link = document.querySelector('a[data-media-kind="document"]');
+
+    expect(link?.textContent).toContain('poster.pdf');
+    expect(link?.textContent).toContain('Open document in a new tab');
+    expect(link?.getAttribute('target')).toBe('_blank');
+    expect(link?.getAttribute('rel')).toBe('noopener noreferrer nofollow');
+    expect(document.body.textContent).not.toContain('private=value');
   });
 
   it('escapes markup in a snapshot alt text so it cannot inject into the page', () => {
