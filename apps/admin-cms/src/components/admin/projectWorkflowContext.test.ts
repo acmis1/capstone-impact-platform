@@ -97,7 +97,7 @@ describe('project workflow orientation context', () => {
       status: 'approved', participantResponse: 'unresponded', hasActivePreview: true, canManageParticipantPreview: true,
     });
     expect(context.summary).toMatch(/awaiting a response/i);
-    expect(context.decision).toMatch(/manage the preview and reminders/i);
+    expect(context.decision).toMatch(/manage the preview below/i);
   });
 
   it('states the preview-management limit while an active preview is unanswered', () => {

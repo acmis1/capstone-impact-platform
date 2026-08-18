@@ -133,7 +133,7 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
     } else if (input.hasActivePreview) {
       summary = 'Internal review is complete. A participant preview is active and awaiting a response.';
       decision = input.canManageParticipantPreview
-        ? 'The participant response is pending. Wait for confirmation, or manage the preview and reminders below.'
+        ? 'The participant response is pending. Wait for confirmation, or manage the preview below.'
         : 'The participant response is pending. Your role can inspect this state, but preview and reminder management is not available to your role.';
     } else {
       decision = input.canManageParticipantPreview

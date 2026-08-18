@@ -277,10 +277,10 @@ describe('project detail workspace information architecture', () => {
       'canManageParticipantPreview: canManagePreview',
       'canResolveParticipantCorrection: canResolveCorrection',
       'canPreparePublication: canPreparePublicationPlan',
-      'canExecuteLocalArchive,\n    participantResponse',
     ]) {
       expect(pageSource).toContain(capability);
     }
+    expect(pageSource).toMatch(/canExecuteLocalArchive,\s*participantResponse:/);
   });
 
   it('keeps technical details and change history available rather than removed', () => {
