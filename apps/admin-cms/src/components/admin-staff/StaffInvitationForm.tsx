@@ -75,26 +75,38 @@ export function StaffInvitationForm({ assignableRoles, provisioningEnabled }: St
 
   const variant = staffInvitationAlertVariant(state.resultCode);
 
+  if (!provisioningEnabled) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Invite staff</CardTitle>
+          <CardDescription>
+            Invitations are the normal onboarding path. The invited person sets their own
+            password before access begins.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Alert
+            variant="warning"
+            title="Invitations are unavailable"
+            description="Staff invitation creation is paused in this environment. Existing staff access and pending setup remain visible in the directory."
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Invite a staff member</CardTitle>
+        <CardTitle>Invite staff</CardTitle>
         <CardDescription>
           The invited person sets their own password. No password is ever created, shown or sent by
           an administrator. Access begins only after they complete account setup.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {!provisioningEnabled && (
-          <Alert
-            variant="warning"
-            className="mb-4"
-            title="Provisioning is not enabled"
-            description={staffProvisioningMessage('PROVISIONING_DISABLED')}
-          />
-        )}
-
-        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5" aria-busy={state.phase === 'submitting'}>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="staff-full-name" isRequired>
               Full name
@@ -128,20 +140,24 @@ export function StaffInvitationForm({ assignableRoles, provisioningEnabled }: St
             />
           </div>
 
-          <fieldset className="flex flex-col gap-2 border-0 p-0">
+          <fieldset className="flex flex-col gap-2.5 border-0 p-0">
             <legend className="text-sm font-medium leading-none">
               Roles
               <span className="ml-0.5 text-destructive" aria-hidden="true">*</span>
               <span className="sr-only"> (required)</span>
             </legend>
             {assignableRoles.map((role) => (
-              <div key={role} className="flex items-start gap-2">
+              <label
+                key={role}
+                htmlFor={`staff-role-${role}`}
+                className="flex min-h-12 cursor-pointer items-start gap-3 rounded-lg border border-border/80 px-3 py-2.5 transition-colors hover:bg-muted/50 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30"
+              >
                 <input
                   id={`staff-role-${role}`}
                   name="roles"
                   type="checkbox"
                   value={role}
-                  className="mt-1 h-4 w-4 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="mt-0.5 h-5 w-5 shrink-0 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   checked={state.roles.includes(role)}
                   disabled={!provisioningEnabled || state.phase === 'submitting'}
                   aria-describedby={`staff-role-${role}-description`}
@@ -150,17 +166,22 @@ export function StaffInvitationForm({ assignableRoles, provisioningEnabled }: St
                   }
                 />
                 <div className="flex flex-col">
-                  <Label htmlFor={`staff-role-${role}`}>{ROLE_LABELS[role]}</Label>
-                  <span id={`staff-role-${role}-description`} className="text-xs text-muted-foreground">
+                  <span className="text-sm font-medium leading-none text-foreground">{ROLE_LABELS[role]}</span>
+                  <span id={`staff-role-${role}-description`} className="mt-1 text-xs leading-relaxed text-muted-foreground">
                     {ROLE_DESCRIPTIONS[role]}
                   </span>
                 </div>
-              </div>
+              </label>
             ))}
           </fieldset>
 
           <div className="flex items-center gap-3">
-            <Button type="submit" disabled={!submittable} isLoading={state.phase === 'submitting'}>
+            <Button
+              type="submit"
+              className="w-full sm:w-auto"
+              disabled={!submittable}
+              isLoading={state.phase === 'submitting'}
+            >
               {state.phase === 'submitting' ? 'Sending invitation' : 'Send invitation'}
             </Button>
           </div>

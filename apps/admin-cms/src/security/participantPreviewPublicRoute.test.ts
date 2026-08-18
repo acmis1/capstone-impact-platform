@@ -241,6 +241,33 @@ describe('participant preview semantic review layout', () => {
     expect(headings.every((level, index) => index === 0 || level <= headings[index - 1] + 1)).toBe(true);
   });
 
+  it('retains pathological long title, citation, link and list content with safe token wrapping', () => {
+    const longToken = 'SyntheticUnbrokenToken'.repeat(40);
+    const html = renderParticipantPreviewPage({
+      snapshot: {
+        ...snapshot,
+        title: longToken,
+        summary: longToken,
+        teamMembers: Array.from({ length: 9 }, (_, index) => `${longToken}${index}`),
+        citations: [longToken],
+        externalLinks: [{ label: longToken, url: `https://example.test/${longToken}` }],
+      },
+      media,
+      responseState: { type: 'unresponded' },
+    });
+    const document = new JSDOM(html).window.document;
+    const styles = document.querySelector('style')?.textContent ?? '';
+
+    expect(document.querySelector('h1')?.textContent).toBe(longToken);
+    expect(document.querySelector('.reference-list li')?.textContent).toContain(longToken);
+    expect(document.querySelector('.team-list')?.textContent).toContain(longToken);
+    expect(document.querySelector('.external-links')?.textContent).toContain(longToken);
+    expect(styles).toMatch(/h1\s*\{[^}]*overflow-wrap:\s*anywhere/);
+    expect(styles).toMatch(/\.team-list li,[^{]*\.reference-list li\s*\{[^}]*overflow-wrap:\s*anywhere/);
+    expect(styles).toMatch(/\.external-links a,[^{]*\{[^}]*overflow-wrap:\s*anywhere/);
+    expect(styles).not.toContain('word-break: break-all');
+  });
+
   it('preserves both plain same-current-URL POST form contracts without scripts', () => {
     const html = renderParticipantPreviewPage({ snapshot, media, responseState: { type: 'unresponded' } });
     const document = new JSDOM(html).window.document;

@@ -92,9 +92,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-col gap-1">
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             Projects
-          </h2>
+          </h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Search, review and open capstone project records.
           </p>

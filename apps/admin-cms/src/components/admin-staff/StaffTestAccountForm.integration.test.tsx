@@ -44,18 +44,33 @@ describe('StaffTestAccountForm rendered boundary', () => {
 
   it('does not render when server-resolved staging eligibility is false', () => {
     render(<StaffTestAccountForm available={false} />);
-    expect(screen.queryByText(/Create staging test account/i)).toBeNull();
+    expect(screen.queryByText(/Create test account/i)).toBeNull();
   });
 
   it('renders only Reviewer and Editor with password controls when available', () => {
     render(<StaffTestAccountForm available />);
-    expect(screen.getByText(/Create staging test account/i)).toBeDefined();
+    expect(screen.getByRole('heading', { name: /Create test account/i })).toBeDefined();
+    expect(screen.getByText(/Staging only/i)).toBeDefined();
     expect(screen.getByLabelText(/^Reviewer/i)).toBeDefined();
     expect(screen.getByLabelText(/^Editor/i)).toBeDefined();
     expect(screen.queryByLabelText(/Administrator/i)).toBeNull();
     expect(screen.getByLabelText(/^Password/i)).toBeDefined();
     expect(screen.getByLabelText(/^Confirm password/i)).toBeDefined();
     expect(screen.getByText(/No setup email is sent/i)).toBeDefined();
+  });
+
+  it('preserves bounded password and autocomplete semantics', () => {
+    render(<StaffTestAccountForm available />);
+    const password = screen.getByLabelText(/^Password/i) as HTMLInputElement;
+    const confirmation = screen.getByLabelText(/^Confirm password/i) as HTMLInputElement;
+
+    expect(password.minLength).toBe(12);
+    expect(password.maxLength).toBe(128);
+    expect(password.autocomplete).toBe('new-password');
+    expect(confirmation.minLength).toBe(12);
+    expect(confirmation.maxLength).toBe(128);
+    expect(confirmation.autocomplete).toBe('new-password');
+    expect(screen.getByText(/password is cleared from this page after every attempt/i)).toBeDefined();
   });
 
   it('keeps submit disabled until every field is valid and passwords match', () => {

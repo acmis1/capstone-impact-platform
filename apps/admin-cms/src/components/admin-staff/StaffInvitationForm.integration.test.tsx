@@ -143,12 +143,13 @@ describe('StaffInvitationForm rendered boundary', () => {
     expect(document.body.textContent).not.toContain('auth.users');
   });
 
-  it('disables the whole form when provisioning is not enabled', () => {
+  it('replaces the form with a bounded unavailable state when provisioning is not enabled', () => {
     renderForm(false);
 
-    expect((screen.getByLabelText(/Full name/i) as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: /Send invitation/i }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/not enabled in this environment/i)).toBeDefined();
+    expect(screen.queryByLabelText(/Full name/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Send invitation/i })).toBeNull();
+    expect(screen.getByText(/Invitations are unavailable/i)).toBeDefined();
+    expect(screen.getByText(/Existing staff access and pending setup remain visible/i)).toBeDefined();
   });
 
   it('communicates outcomes through a polite live region rather than colour alone', async () => {

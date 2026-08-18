@@ -37,6 +37,7 @@ export interface UserSummaryProps {
 export function TopBar({ displayName, email, roles = [], canManageStaff = false, logoutAction }: UserSummaryProps) {
   const pathname = usePathname() || '/admin';
   const descriptor = getRouteDescriptor(pathname);
+  const hasNavigableBreadcrumb = descriptor.breadcrumbs.some((item) => item.href);
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
   const identityLabel = displayName || email || 'Administrator';
@@ -70,10 +71,10 @@ export function TopBar({ displayName, email, roles = [], canManageStaff = false,
 
         {/* Route-aware breadcrumbs and title */}
         <div className="flex flex-col justify-center min-w-0 flex-1 gap-0.5">
-          <Breadcrumbs items={descriptor.breadcrumbs} />
-          <h1 className="text-sm sm:text-base font-semibold tracking-tight text-foreground truncate">
+          {hasNavigableBreadcrumb && <Breadcrumbs items={descriptor.breadcrumbs} />}
+          <p className="text-sm sm:text-base font-semibold tracking-tight text-foreground truncate">
             {descriptor.title}
-          </h1>
+          </p>
         </div>
       </div>
 

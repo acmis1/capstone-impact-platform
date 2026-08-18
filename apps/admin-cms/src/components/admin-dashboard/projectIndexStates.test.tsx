@@ -245,7 +245,7 @@ describe('Projects index page states', () => {
     repository.getProjectFilterOptions.mockResolvedValue(EMPTY_OPTIONS);
 
     await renderAdminPage();
-    expect(screen.getByRole('heading', { name: 'Projects', level: 2 })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Projects', level: 1 })).toBeTruthy();
     expect(screen.getByText('128 project records')).toBeTruthy();
 
     cleanup();

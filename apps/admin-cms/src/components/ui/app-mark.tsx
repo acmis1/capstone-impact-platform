@@ -1,5 +1,10 @@
 import * as React from 'react';
 import { cn } from '../../lib/utils';
+import {
+  APP_MARK_CORNER_RADIUS,
+  APP_MARK_PATHS,
+  APP_MARK_VIEW_BOX,
+} from './app-mark-geometry';
 
 export interface AppMarkProps extends React.ComponentProps<'svg'> {
   size?: 'sm' | 'md' | 'lg';
@@ -16,27 +21,17 @@ export function AppMark({ className, size = 'md', ...props }: AppMarkProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 32 32"
+      viewBox={APP_MARK_VIEW_BOX}
       fill="none"
-      aria-hidden="true"
       className={cn('shrink-0 rounded-md', dimensionClass, className)}
       {...props}
+      aria-hidden="true"
+      focusable="false"
     >
-      {/* Brand Background */}
-      <rect width="32" height="32" rx="6" className="fill-primary" />
-      {/* Neutral "CI" Capstone Impact Monogram */}
-      <text
-        x="16"
-        y="21.5"
-        textAnchor="middle"
-        fill="#ffffff"
-        fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-        fontWeight="800"
-        fontSize="14"
-        letterSpacing="-0.5"
-      >
-        CI
-      </text>
+      <rect width="32" height="32" rx={APP_MARK_CORNER_RADIUS} className="fill-primary" />
+      {APP_MARK_PATHS.map((path) => (
+        <path key={path} d={path} className="fill-primary-foreground" />
+      ))}
     </svg>
   );
 }

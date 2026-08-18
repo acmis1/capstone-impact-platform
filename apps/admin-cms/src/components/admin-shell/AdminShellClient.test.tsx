@@ -119,6 +119,23 @@ describe('Admin Shell and Layout Components', () => {
   });
 
   describe('TopBar', () => {
+    it('renders route context without creating a duplicate page-level heading', () => {
+      mocks.pathname = '/admin/staff';
+      render(
+        <TopBar
+          displayName="Jane Doe"
+          email="jane@rmit.edu.au"
+          roles={['admin']}
+          canManageStaff={true}
+          logoutAction={logoutMock}
+        />
+      );
+
+      expect(document.querySelector('header')?.textContent).toContain('Staff access');
+      expect(screen.getAllByText('Staff access')).toHaveLength(1);
+      expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    });
+
     it('displays user identity, roles, and staging badge', () => {
       render(
         <TopBar
