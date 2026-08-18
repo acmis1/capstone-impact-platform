@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import * as React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const navigation = vi.hoisted(() => ({ search: '', push: vi.fn(), replace: vi.fn() }));
@@ -16,23 +16,54 @@ import { ProjectTableContainer } from './ProjectTableContainer';
 import { DashboardPreferencesProvider } from './useDashboardPreferences';
 import { loadDashboardPreferences } from './dashboardPreferences';
 import { parseProjectListQuery } from '../../domain/projectQuery';
+import type { ProjectIndexResult, ProjectIndexRow } from './projectDashboardHelpers';
 
-const result = {
-  rows: [{
-    id: 'project-1', publicId: 'P-1', title: 'Atlas', status: 'approved' as const,
-    program: 'Engineering', discipline: 'Software', year: '2026',
-    createdAt: '2026-01-01', updatedAt: '2026-02-01', validationLabel: 'Ready', validationVariant: 'success' as const,
-  }],
-  total: 1, page: 1, pageSize: 10, pageCount: 1,
+const LONG_TITLE =
+  'Synthetic Longitudinal Cross-Disciplinary Capstone Investigation Into Regional Transit Accessibility And Community Wayfinding Outcomes';
+const LONG_PUBLIC_ID = 'synthetic-2026-extended-identifier-0001-regional-transit-accessibility';
+const LONG_GROUP = 'Synthetic Combined Engineering And Digital Media Collaboration Team Number Fourteen';
+const LONG_PARTNER = 'Synthetic Metropolitan Regional Transport And Community Infrastructure Authority';
+
+const baseRow: ProjectIndexRow = {
+  id: 'project-1',
+  publicId: 'P-1',
+  title: 'Atlas',
+  status: 'approved',
+  program: 'Engineering',
+  discipline: 'Software',
+  year: '2026',
+  groupName: 'Team Atlas',
+  industryPartner: 'Synthetic Technology',
+  createdAt: '2026-01-01',
+  updatedAt: '2026-02-01',
+  validationLabel: 'Ready',
+  validationVariant: 'success',
 };
 
-function renderTable(rawSearch = navigation.search) {
+const result: ProjectIndexResult = {
+  rows: [baseRow],
+  total: 1,
+  page: 1,
+  pageSize: 10,
+  pageCount: 1,
+};
+
+function renderTable(rawSearch = navigation.search, tableResult: ProjectIndexResult = result) {
   navigation.search = rawSearch;
   return render(
     <DashboardPreferencesProvider>
-      <ProjectTableContainer query={parseProjectListQuery(Object.fromEntries(new URLSearchParams(rawSearch)))} result={result} />
+      <ProjectTableContainer
+        query={parseProjectListQuery(Object.fromEntries(new URLSearchParams(rawSearch)))}
+        result={tableResult}
+      />
     </DashboardPreferencesProvider>,
   );
+}
+
+async function openColumnsMenu() {
+  const trigger = await screen.findByRole('button', { name: /^Columns/ });
+  fireEvent.keyDown(trigger, { key: 'Enter' });
+  return screen.findByRole('menu');
 }
 
 describe('ProjectTableContainer preference integration', () => {
@@ -46,10 +77,13 @@ describe('ProjectTableContainer preference integration', () => {
 
   afterEach(cleanup);
 
-  it('persists desktop column visibility and preserves mandatory title and actions columns', async () => {
+  it('persists desktop column visibility through the column settings menu and preserves mandatory columns', async () => {
     renderTable();
-    const statusToggle = await screen.findByRole('checkbox', { name: 'Status' });
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeTruthy();
+
+    await openColumnsMenu();
+    const statusToggle = screen.getByRole('menuitemcheckbox', { name: 'Status' });
+    expect(statusToggle.getAttribute('aria-checked')).toBe('true');
 
     fireEvent.click(statusToggle);
     await waitFor(() => expect(screen.queryByRole('columnheader', { name: 'Status' })).toBeNull());
@@ -59,10 +93,33 @@ describe('ProjectTableContainer preference integration', () => {
 
     cleanup();
     renderTable();
-    expect((await screen.findByRole('checkbox', { name: 'Status' }) as HTMLInputElement).checked).toBe(false);
+    await openColumnsMenu();
+    expect(
+      screen.getByRole('menuitemcheckbox', { name: 'Status' }).getAttribute('aria-checked'),
+    ).toBe('false');
     expect(screen.queryByRole('columnheader', { name: 'Status' })).toBeNull();
+
+    // Mandatory columns are never offered for removal and never disappear.
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Project' })).toBeNull();
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Actions' })).toBeNull();
     expect(screen.getByRole('columnheader', { name: 'Project' })).toBeTruthy();
     expect(screen.getAllByRole('link', { name: 'View project' })).toHaveLength(2);
+  });
+
+  it('hides every configurable column while keeping the project and actions columns', async () => {
+    renderTable();
+    await openColumnsMenu();
+
+    for (const label of ['Status', 'Program & discipline', 'Year', 'Validation', 'Updated']) {
+      fireEvent.click(screen.getByRole('menuitemcheckbox', { name: label }));
+    }
+
+    await waitFor(() =>
+      expect(screen.queryByRole('columnheader', { name: 'Updated' })).toBeNull(),
+    );
+    expect(loadDashboardPreferences().visibleColumns).toEqual(['title', 'actions']);
+    expect(screen.getByRole('columnheader', { name: 'Project' })).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'View project' }).length).toBeGreaterThan(0);
   });
 
   it('persists both sort and direction from the actual table interaction', async () => {
@@ -78,5 +135,185 @@ describe('ProjectTableContainer preference integration', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Sort by Project descending' }));
     expect(navigation.push).toHaveBeenLastCalledWith('/admin?sort=title&direction=desc');
     expect(loadDashboardPreferences()).toMatchObject({ sort: 'title', direction: 'desc' });
+  });
+
+  it.each([
+    ['Project', 'title'],
+    ['Status', 'status'],
+    ['Year', 'year'],
+    ['Updated', 'updated_at'],
+  ])('sorts on the %s header and exposes aria-sort for the active column', async (label, field) => {
+    renderTable();
+    fireEvent.click(await screen.findByRole('button', { name: `Sort by ${label} ascending` }));
+    expect(navigation.push).toHaveBeenLastCalledWith(`/admin?sort=${field}&direction=asc`);
+
+    cleanup();
+    renderTable(`sort=${field}&direction=asc`);
+    expect(screen.getByRole('columnheader', { name: label }).getAttribute('aria-sort')).toBe('ascending');
+    // The accessible name always states the direction the next activation applies.
+    expect(screen.getByRole('button', { name: `Sort by ${label} descending` })).toBeTruthy();
+
+    cleanup();
+    renderTable(`sort=${field}&direction=desc`);
+    expect(screen.getByRole('columnheader', { name: label }).getAttribute('aria-sort')).toBe('descending');
+    expect(screen.getByRole('button', { name: `Sort by ${label} ascending` })).toBeTruthy();
+  });
+
+  it('marks unsorted sortable columns as aria-sort none and leaves static columns unsorted', async () => {
+    renderTable('sort=title&direction=asc');
+    expect((await screen.findByRole('columnheader', { name: 'Status' })).getAttribute('aria-sort')).toBe('none');
+    expect(screen.getByRole('columnheader', { name: 'Year' }).getAttribute('aria-sort')).toBe('none');
+    expect(screen.getByRole('columnheader', { name: 'Validation' }).hasAttribute('aria-sort')).toBe(false);
+    expect(screen.getByRole('columnheader', { name: 'Program & discipline' }).hasAttribute('aria-sort')).toBe(false);
+  });
+
+  it('preserves every active query parameter when changing page and disables boundary controls', async () => {
+    const paged: ProjectIndexResult = { rows: [baseRow], total: 120, page: 2, pageSize: 10, pageCount: 12 };
+    renderTable('q=atlas&status=approved&year=2026&sort=title&direction=asc&pageSize=10&page=2', paged);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Go to next page' }));
+    expect(navigation.push).toHaveBeenLastCalledWith(
+      '/admin?q=atlas&status=approved&year=2026&sort=title&direction=asc&pageSize=10&page=3',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go to previous page' }));
+    expect(navigation.push).toHaveBeenLastCalledWith(
+      '/admin?q=atlas&status=approved&year=2026&sort=title&direction=asc&pageSize=10&page=1',
+    );
+
+    expect(screen.getByText(/Showing/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Go to previous page' }).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Go to next page' }).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('disables previous on the first page and next on the last page', async () => {
+    renderTable('', { rows: [baseRow], total: 30, page: 1, pageSize: 10, pageCount: 3 });
+    expect((await screen.findByRole('button', { name: 'Go to previous page' })).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Go to next page' }).hasAttribute('disabled')).toBe(false);
+
+    cleanup();
+    renderTable('page=3', { rows: [baseRow], total: 30, page: 3, pageSize: 10, pageCount: 3 });
+    expect((await screen.findByRole('button', { name: 'Go to previous page' })).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Go to next page' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('reports the current record range and page position', async () => {
+    renderTable('page=2&pageSize=25', { rows: [baseRow], total: 128, page: 2, pageSize: 25, pageCount: 6 });
+    const range = await screen.findByText(/Showing/);
+    expect(range.textContent?.replace(/\s+/g, ' ')).toContain('26');
+    expect(range.textContent).toContain('50');
+    expect(range.textContent).toContain('128');
+    expect(screen.getByText(/^Page/).textContent?.replace(/\s+/g, ' ')).toContain('2');
+  });
+
+  it('renders an unavailable state instead of a link when the public ID is missing', async () => {
+    renderTable('', {
+      rows: [{ ...baseRow, publicId: undefined }],
+      total: 1, page: 1, pageSize: 10, pageCount: 1,
+    });
+    await waitFor(() => expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0));
+    expect(screen.queryByRole('link', { name: 'View project' })).toBeNull();
+  });
+
+  it('URL-encodes the project detail link', async () => {
+    renderTable('', {
+      rows: [{ ...baseRow, publicId: 'synthetic 2026/001' }],
+      total: 1, page: 1, pageSize: 10, pageCount: 1,
+    });
+    const links = await screen.findAllByRole('link', { name: 'View project' });
+    expect(links[0].getAttribute('href')).toBe('/admin/projects/synthetic%202026%2F001');
+  });
+
+  it('renders status and validation as text labels', async () => {
+    renderTable('', {
+      rows: [
+        { ...baseRow, id: 'a', publicId: 'P-A', status: 'in_review', validationLabel: '2 Warnings', validationVariant: 'warning' },
+        { ...baseRow, id: 'b', publicId: 'P-B', status: 'changes_requested', validationLabel: '1 Error', validationVariant: 'destructive' },
+      ],
+      total: 2, page: 1, pageSize: 10, pageCount: 1,
+    });
+
+    expect((await screen.findAllByText('In review')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Changes requested').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('2 Warnings').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1 Error').length).toBeGreaterThan(0);
+  });
+
+  it('renders long titles, public IDs and supporting context in full without truncation markers', async () => {
+    renderTable('', {
+      rows: [{
+        ...baseRow,
+        title: LONG_TITLE,
+        publicId: LONG_PUBLIC_ID,
+        groupName: LONG_GROUP,
+        industryPartner: LONG_PARTNER,
+      }],
+      total: 1, page: 1, pageSize: 10, pageCount: 1,
+    });
+
+    expect((await screen.findAllByText(LONG_TITLE)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(LONG_PUBLIC_ID).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(`Group: ${LONG_GROUP} · Partner: ${LONG_PARTNER}`).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('preserves the updated-date fallback and the not-recorded state', async () => {
+    renderTable('', {
+      rows: [
+        { ...baseRow, id: 'a', publicId: 'P-A', updatedAt: undefined, createdAt: '2026-03-04T00:00:00.000Z' },
+        { ...baseRow, id: 'b', publicId: 'P-B', updatedAt: undefined, createdAt: undefined },
+        { ...baseRow, id: 'c', publicId: 'P-C', updatedAt: 'not-a-date', createdAt: undefined },
+      ],
+      total: 3, page: 1, pageSize: 10, pageCount: 1,
+    });
+
+    await waitFor(() => expect(screen.getAllByText('Not recorded').length).toBe(4));
+  });
+});
+
+describe('ProjectTableContainer mobile card presentation', () => {
+  beforeEach(() => {
+    cleanup();
+    localStorage.clear();
+    navigation.search = '';
+    navigation.push.mockReset();
+    navigation.replace.mockReset();
+  });
+
+  afterEach(cleanup);
+
+  it('keeps every critical project field and the view action in the mobile card', async () => {
+    renderTable();
+    const card = (await screen.findByRole('heading', { name: 'Atlas', level: 4 })).closest('li');
+    expect(card).toBeTruthy();
+
+    const cardQueries = within(card as HTMLElement);
+    expect(cardQueries.getByText('P-1')).toBeTruthy();
+    expect(cardQueries.getByText('Approved')).toBeTruthy();
+    expect(cardQueries.getByText('Ready')).toBeTruthy();
+    expect(cardQueries.getByText('Engineering')).toBeTruthy();
+    expect(cardQueries.getByText('Software')).toBeTruthy();
+    expect(cardQueries.getByText('2026')).toBeTruthy();
+    expect(cardQueries.getByText('Group: Team Atlas · Partner: Synthetic Technology')).toBeTruthy();
+    expect(cardQueries.getByText('Updated')).toBeTruthy();
+    expect(cardQueries.getByRole('link', { name: 'View project' })).toBeTruthy();
+  });
+
+  it('keeps mobile card content intact when every configurable desktop column is hidden', async () => {
+    renderTable();
+    await openColumnsMenu();
+    for (const label of ['Status', 'Program & discipline', 'Year', 'Validation', 'Updated']) {
+      fireEvent.click(screen.getByRole('menuitemcheckbox', { name: label }));
+    }
+    await waitFor(() => expect(screen.queryByRole('columnheader', { name: 'Year' })).toBeNull());
+
+    const card = screen.getByRole('heading', { name: 'Atlas', level: 4 }).closest('li');
+    const cardQueries = within(card as HTMLElement);
+    expect(cardQueries.getByText('Approved')).toBeTruthy();
+    expect(cardQueries.getByText('Ready')).toBeTruthy();
+    expect(cardQueries.getByText('Engineering')).toBeTruthy();
+    expect(cardQueries.getByText('2026')).toBeTruthy();
+    expect(cardQueries.getByRole('link', { name: 'View project' })).toBeTruthy();
   });
 });

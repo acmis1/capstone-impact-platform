@@ -406,22 +406,46 @@ export default function BrowserImportPreviewClient() {
     ? previewResult.packages.filter((p) => p.status === 'warning' && !selectionState.acknowledgedWarningPackagePaths.includes(p.packagePath)).length
     : 0;
 
-  // Determine current active workflow step for orientation
+  // Determine current active workflow step for orientation. A confirmed reference mapping is
+  // required before a selection can be confirmed or saved (see prepareBrowserImportCommitIntentClient),
+  // so step 1 stays current — even if files were already chosen or checked — until it is configured.
   let currentStep: 1 | 2 | 3 | 4 | 5 = 1;
-  if (mediaCompleteResult || stagedResult || selectionState.preparedIntent) {
+  if (!adminReferenceData) {
+    currentStep = 1;
+  } else if (stagedResult) {
     currentStep = 5;
-  } else if (previewResult && adminReferenceData) {
+  } else if (previewResult) {
     currentStep = 4;
-  } else if (adminReferenceData) {
+  } else if (selectedFiles.length > 0) {
     currentStep = 3;
   } else {
     currentStep = 2;
   }
+  const isWorkflowComplete = Boolean(mediaCompleteResult);
+
+  // Single authoritative presentation phase.
+  //
+  // The underlying workflow state is intentionally cumulative: successful metadata
+  // staging keeps `preparedIntent`, and successful media staging keeps `stagedResult`,
+  // because the media-stage controller still needs the prepared intent and the staged
+  // batch ID. Deriving one phase from that cumulative state (rather than rendering each
+  // surface off its own non-null check) is what keeps the outcome banners mutually
+  // exclusive, so the page can never claim "not saved yet" and "saved" at the same time.
+  // Failures do not advance the phase: they leave the earlier surface in place and
+  // render their own error next to it.
+  const presentationPhase: 'completed' | 'metadata_staged' | 'prepared' | 'pre_prepared' =
+    mediaCompleteResult
+      ? 'completed'
+      : stagedResult
+        ? 'metadata_staged'
+        : selectionState.preparedIntent
+          ? 'prepared'
+          : 'pre_prepared';
 
   return (
-    <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
+    <div className="flex flex-col gap-6 w-full">
       {/* Workflow Steps Indicator & Onboarding Guide */}
-      <ImportWorkflowGuide currentStep={currentStep} />
+      <ImportWorkflowGuide currentStep={currentStep} isComplete={isWorkflowComplete} />
 
       {/* Browser Support Check Warning */}
       {!isSupported && (
@@ -445,7 +469,7 @@ export default function BrowserImportPreviewClient() {
       />
 
       {/* Step 3: Choose project folder */}
-      <Card className="bg-card border-border shadow-xs">
+      <Card>
         <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
           <div className="flex items-center gap-2">
             <FolderOpen className="h-4 w-4 text-primary" aria-hidden="true" />
@@ -509,7 +533,7 @@ export default function BrowserImportPreviewClient() {
           {selectedRootName && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-lg bg-muted/40 border border-border text-xs">
               <div>
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
                   Selected folder
                 </span>
                 <span className="font-semibold text-foreground truncate block mt-0.5" title={selectedRootName}>
@@ -517,7 +541,7 @@ export default function BrowserImportPreviewClient() {
                 </span>
               </div>
               <div>
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
                   Projects detected
                 </span>
                 <span className="font-semibold text-foreground block mt-0.5">
@@ -525,7 +549,7 @@ export default function BrowserImportPreviewClient() {
                 </span>
               </div>
               <div>
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
                   Files selected
                 </span>
                 <span className="font-semibold text-foreground block mt-0.5">
@@ -533,7 +557,7 @@ export default function BrowserImportPreviewClient() {
                 </span>
               </div>
               <div>
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
                   Total size
                 </span>
                 <span className="font-semibold text-foreground block mt-0.5">
@@ -558,7 +582,7 @@ export default function BrowserImportPreviewClient() {
       {previewResult && (
         <div className="flex flex-col gap-6">
           {/* Validation Results Card */}
-          <Card className="bg-card border-border shadow-xs">
+          <Card>
             <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
               <div className="flex items-center gap-2">
                 <FileCheck className="h-4 w-4 text-primary" aria-hidden="true" />
@@ -572,10 +596,12 @@ export default function BrowserImportPreviewClient() {
             </CardHeader>
 
             <CardContent className="p-4 sm:p-6 flex flex-col gap-5">
-              {/* Batch Metrics Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 rounded-lg bg-card border border-border shadow-xs">
-                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+              {/* Batch Metrics Strip.
+                  One column below `sm` so the sibling-order `divide-y` separators line up
+                  with the visual rows; four columns and vertical dividers from `sm` up. */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border rounded-lg border border-border bg-muted/20">
+                <div className="p-3">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
                     Total projects
                   </span>
                   <span className="text-xl font-bold text-foreground block mt-1">
@@ -583,8 +609,8 @@ export default function BrowserImportPreviewClient() {
                   </span>
                 </div>
 
-                <div className="p-3 rounded-lg bg-card border border-border shadow-xs">
-                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                <div className="p-3">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
                     Ready to import
                   </span>
                   <span className="text-xl font-bold text-success block mt-1">
@@ -592,8 +618,8 @@ export default function BrowserImportPreviewClient() {
                   </span>
                 </div>
 
-                <div className="p-3 rounded-lg bg-card border border-border shadow-xs">
-                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                <div className="p-3">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
                     With warnings
                   </span>
                   <span className="text-xl font-bold text-warning block mt-1">
@@ -601,8 +627,8 @@ export default function BrowserImportPreviewClient() {
                   </span>
                 </div>
 
-                <div className="p-3 rounded-lg bg-card border border-border shadow-xs">
-                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block">
+                <div className="p-3">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider block">
                     Needs attention
                   </span>
                   <span className="text-xl font-bold text-destructive block mt-1">
@@ -631,12 +657,12 @@ export default function BrowserImportPreviewClient() {
               {/* Batch-Level Issues Banner */}
               {previewResult.batchIssues && previewResult.batchIssues.length > 0 && (
                 <div className="p-3.5 rounded-lg bg-warning/10 border border-warning/30 text-xs flex flex-col gap-1.5">
-                  <div className="flex items-center gap-1.5 font-semibold text-warning">
-                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                  <div className="flex items-center gap-1.5 font-semibold text-warning-strong">
+                    <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
                     <span>Batch Folder Warnings</span>
                   </div>
                   {previewResult.batchIssues.map((issue, idx) => (
-                    <p key={`batch-issue-${idx}`} className="text-foreground text-[11px]">
+                    <p key={`batch-issue-${idx}`} className="text-foreground text-xs">
                       {issue.message} {issue.fileName && `(file: ${issue.fileName})`}
                     </p>
                   ))}
@@ -734,19 +760,19 @@ export default function BrowserImportPreviewClient() {
                             </span>
 
                             {pkg.status === 'valid' ? (
-                              <Badge variant="success" className="text-[11px]">
+                              <Badge variant="success">
                                 <CheckCircle2 className="h-3 w-3 mr-1" aria-hidden="true" />
                                 Ready
                                 <span className="sr-only">{pkg.status.toUpperCase()}</span>
                               </Badge>
                             ) : pkg.status === 'warning' ? (
-                              <Badge variant="warning" className="text-[11px]">
+                              <Badge variant="warning">
                                 <AlertTriangle className="h-3 w-3 mr-1" aria-hidden="true" />
                                 Warning
                                 <span className="sr-only">{pkg.status.toUpperCase()}</span>
                               </Badge>
                             ) : (
-                              <Badge variant="destructive" className="text-[11px]">
+                              <Badge variant="destructive">
                                 <XCircle className="h-3 w-3 mr-1" aria-hidden="true" />
                                 Needs attention
                                 <span className="sr-only">{pkg.status.toUpperCase()}</span>
@@ -757,7 +783,6 @@ export default function BrowserImportPreviewClient() {
                             {pkg.reconciliation && (
                               <Badge
                                 variant={pkg.reconciliation.status === 'RECONCILED' ? 'success' : 'neutral'}
-                                className="text-[11px]"
                               >
                                 {pkg.reconciliation.status === 'RECONCILED' ? (
                                   <>
@@ -805,19 +830,19 @@ export default function BrowserImportPreviewClient() {
                       {pkg.previewMetadata ? (
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-border text-xs text-muted-foreground">
                           <div>
-                            <span className="text-[11px] block text-muted-foreground">Title:</span>
+                            <span className="text-xs block text-muted-foreground">Title:</span>
                             <span className="font-semibold text-foreground truncate block">{pkg.previewMetadata.title}</span>
                           </div>
                           <div>
-                            <span className="text-[11px] block text-muted-foreground">Program & Discipline:</span>
+                            <span className="text-xs block text-muted-foreground">Program & Discipline:</span>
                             <span className="text-foreground truncate block">{pkg.previewMetadata.program} · {pkg.previewMetadata.discipline}</span>
                           </div>
                           <div>
-                            <span className="text-[11px] block text-muted-foreground">Group name:</span>
+                            <span className="text-xs block text-muted-foreground">Group name:</span>
                             <span className="text-foreground truncate block">{pkg.previewMetadata.groupName}</span>
                           </div>
                           <div>
-                            <span className="text-[11px] block text-muted-foreground">Roster:</span>
+                            <span className="text-xs block text-muted-foreground">Roster:</span>
                             <span className="text-foreground truncate block">{pkg.previewMetadata.teamMemberCount} member(s)</span>
                           </div>
                         </div>
@@ -829,7 +854,7 @@ export default function BrowserImportPreviewClient() {
 
                       {/* Media File Presence Indicators */}
                       <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground text-[11px]">Media files:</span>
+                        <span className="font-medium text-foreground text-xs">Media files:</span>
                         <span className="inline-flex items-center gap-1">
                           {pkg.filePresence.posterImagePresent ? (
                             <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden="true" />
@@ -862,9 +887,9 @@ export default function BrowserImportPreviewClient() {
                           {pkg.errors.map((err, idx) => (
                             <div
                               key={`err-${idx}`}
-                              className="p-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-[11px] leading-relaxed"
+                              className="p-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-foreground text-xs leading-relaxed"
                             >
-                              <strong>Issue:</strong> {err.message}
+                              <strong className="text-destructive-strong">Issue:</strong> {err.message}
                               {err.fieldName && <span className="text-muted-foreground"> (field: {err.fieldName})</span>}
                               {err.fileName && <span className="text-muted-foreground"> (file: {err.fileName})</span>}
                             </div>
@@ -872,9 +897,9 @@ export default function BrowserImportPreviewClient() {
                           {pkg.warnings.map((warn, idx) => (
                             <div
                               key={`warn-${idx}`}
-                              className="p-2.5 rounded-md bg-warning/10 border border-warning/20 text-warning text-[11px] leading-relaxed"
+                              className="p-2.5 rounded-md bg-warning/10 border border-warning/20 text-foreground text-xs leading-relaxed"
                             >
-                              <strong>Warning:</strong> {warn.message}
+                              <strong className="text-warning-strong">Warning:</strong> {warn.message}
                               {warn.fieldName && <span className="text-muted-foreground"> (field: {warn.fieldName})</span>}
                               {warn.fileName && <span className="text-muted-foreground"> (file: {warn.fileName})</span>}
                             </div>
@@ -888,16 +913,18 @@ export default function BrowserImportPreviewClient() {
             </div>
           </div>
 
-          {/* Package Selection Controls & Prepare Import Action Toolbar */}
+          {/* Package Selection Controls & Confirm Selection Action Toolbar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-muted/50 border border-border">
             <div className="flex flex-col gap-0.5">
               <div className="text-xs font-semibold text-foreground">
                 Project selection: {totalSelectedCount} of {previewResult.packageCount} selected ({selectedValidCount} ready, {selectedWarningCount} warning)
               </div>
-              <div className="text-[11px] text-muted-foreground">
-                {unacknowledgedWarningCount > 0
-                  ? `${unacknowledgedWarningCount} warning project(s) require acknowledgement before import`
-                  : 'All selected projects are ready for preparation'}
+              <div className="text-xs text-muted-foreground">
+                {!adminReferenceData
+                  ? 'A confirmed Admin Reference mapping (above) is also required before you can confirm.'
+                  : unacknowledgedWarningCount > 0
+                    ? `${unacknowledgedWarningCount} warning project(s) require acknowledgement before you can confirm.`
+                    : 'Confirming does not save these projects yet — it locks in your selection for the next step.'}
               </div>
             </div>
 
@@ -909,7 +936,7 @@ export default function BrowserImportPreviewClient() {
               className="font-semibold shrink-0"
             >
               <CheckSquare className="h-4 w-4 mr-1.5" aria-hidden="true" />
-              {selectionState.isPreparing ? 'Preparing import…' : 'Prepare import'}
+              {selectionState.isPreparing ? 'Confirming selection…' : 'Confirm selected projects'}
             </Button>
           </div>
 
@@ -917,29 +944,31 @@ export default function BrowserImportPreviewClient() {
           {selectionState.preparationErrorCode && (
             <Alert
               variant="destructive"
-              title="Import Preparation Failed"
+              title="Selection Could Not Be Confirmed"
               description={
                 selectionState.preparationErrorCode === 'EMPTY_SELECTION'
                   ? 'At least one project must be selected.'
                   : selectionState.preparationErrorCode === 'PREVIEW_FINGERPRINT_MISMATCH'
                     ? 'Project file state has changed. Please re-check the files.'
-                    : 'The selection could not be prepared as an import intent. Please check acknowledgements and try again.'
+                    : !adminReferenceData
+                      ? 'A confirmed Admin Reference mapping is required before a selection can be confirmed. Choose and confirm a reference file above, then check the files again.'
+                      : 'The selection could not be confirmed. Please check that all warnings are acknowledged and try again.'
               }
             />
           )}
 
-          {/* Step: Prepared Intent Banner */}
-          {selectionState.preparedIntent && (
+          {/* Step: Prepared Intent Banner (prepared phase only) */}
+          {presentationPhase === 'prepared' && selectionState.preparedIntent && (
             <div className="p-4 rounded-lg bg-success/10 border border-success/30 flex flex-col gap-3 text-xs">
-              <div className="flex items-center gap-2 text-success font-semibold text-sm">
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                <span>Import prepared successfully</span>
+              <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
+                <CheckCircle2 className="h-4 w-4 text-success" aria-hidden="true" />
+                <span>Selection confirmed</span>
               </div>
               <p className="text-muted-foreground text-xs leading-relaxed">
-                The selected project details are verified and ready to be saved as draft records in the test environment.
+                These project details have not been saved yet. Import the project details below to create draft records in the test environment.
               </p>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-2.5 rounded bg-background border border-border text-[11px]">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-2.5 rounded bg-background border border-border text-xs">
                 <div>
                   <span className="text-muted-foreground block">Projects to save:</span>
                   <strong className="text-foreground">{selectionState.preparedIntent.selectedPackagePaths.length}</strong>
@@ -959,7 +988,7 @@ export default function BrowserImportPreviewClient() {
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   Saving project details creates draft records. Media files are imported in the next step.
                 </span>
 
@@ -971,7 +1000,7 @@ export default function BrowserImportPreviewClient() {
                   className="font-semibold shrink-0"
                 >
                   <Layers className="h-4 w-4 mr-1.5" aria-hidden="true" />
-                  {isStaging ? 'Importing project details…' : 'Import project details'}
+                  {isStaging ? 'Saving project details…' : 'Import selected project details'}
                 </Button>
               </div>
             </div>
@@ -986,45 +1015,43 @@ export default function BrowserImportPreviewClient() {
             />
           )}
 
-          {/* Step: Metadata Staged Success & Media Action Card */}
-          {stagedResult && (
+          {/* Step: Metadata Staged Success & Media Action Card (metadata-staged phase only) */}
+          {presentationPhase === 'metadata_staged' && stagedResult && (
             <div className="p-4 rounded-lg bg-information/10 border border-information/30 flex flex-col gap-4 text-xs">
-              <div className="flex items-center gap-2 text-information font-semibold text-sm">
-                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+              <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
+                <CheckCircle2 className="h-4 w-4 text-information" aria-hidden="true" />
                 <span>
                   {stagedResult.result === 'already_staged'
                     ? 'Project details already saved'
-                    : 'Project details imported successfully'}
+                    : 'Project details saved to the test environment'}
                 </span>
               </div>
               <p className="text-muted-foreground text-xs leading-relaxed">
-                {stagedResult.projectCount} project draft(s) have been created in the test environment. Complete the import by uploading media files below.
+                {stagedResult.projectCount} project draft(s) have been created. Media files have not been imported yet, so this import is not complete.
               </p>
 
               {/* Media Completion Action */}
-              {!mediaCompleteResult && (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-background border border-border">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-semibold text-foreground">
-                      Next step: Import media files
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">
-                      Adds the poster, PDF, and snapshot images to the draft projects in the test environment. Nothing is published to the public showcase.
-                    </span>
-                  </div>
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={handleCompleteMedia}
-                    disabled={isCompletingMedia}
-                    className="font-semibold shrink-0"
-                  >
-                    <Upload className="h-4 w-4 mr-1.5" aria-hidden="true" />
-                    {isCompletingMedia ? 'Importing media…' : 'Import media & complete'}
-                  </Button>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-background border border-border">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs font-semibold text-foreground">
+                    Next step: Import media files
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Adds the poster, PDF, and snapshot images to the draft projects in the test environment. Nothing is published to the public showcase.
+                  </span>
                 </div>
-              )}
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleCompleteMedia}
+                  disabled={isCompletingMedia}
+                  className="font-semibold shrink-0"
+                >
+                  <Upload className="h-4 w-4 mr-1.5" aria-hidden="true" />
+                  {isCompletingMedia ? 'Importing media…' : 'Import media and finish'}
+                </Button>
+              </div>
 
               {mediaCompleteError && (
                 <Alert
@@ -1036,11 +1063,11 @@ export default function BrowserImportPreviewClient() {
             </div>
           )}
 
-          {/* Step: Import Completed Success Card */}
-          {mediaCompleteResult && (
+          {/* Step: Import Completed Success Card (completed phase only) */}
+          {presentationPhase === 'completed' && mediaCompleteResult && (
             <div className="p-5 rounded-lg bg-success/10 border border-success/30 flex flex-col gap-4 text-xs">
-              <div className="flex items-center gap-2 text-success font-bold text-base">
-                <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+              <div className="flex items-center gap-2 text-foreground font-bold text-base">
+                <CheckCircle2 className="h-5 w-5 text-success" aria-hidden="true" />
                 <span>
                   {mediaCompleteResult.result === 'already_completed'
                     ? 'Import already completed'
@@ -1048,7 +1075,7 @@ export default function BrowserImportPreviewClient() {
                 </span>
               </div>
               <p className="text-muted-foreground text-xs leading-relaxed">
-                All project details and {mediaCompleteResult.mediaAssetCount} media files were imported into the test environment. Projects remain in draft status for review.
+                All project details and {mediaCompleteResult.mediaAssetCount} media files were imported into the test environment. Projects remain in draft status for review and are not published to the public showcase.
               </p>
 
               <div className="flex items-center gap-3 pt-1">

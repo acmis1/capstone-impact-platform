@@ -2,7 +2,8 @@ import React from 'react';
 import Link from 'next/link';
 import { SupabaseProjectRepository } from '../../../../repositories/SupabaseProjectRepository';
 import { ProjectStatusBadge } from '../../../../components/admin/ProjectStatusBadge';
-import { ProjectReviewSection } from '../../../../components/admin/ProjectReviewSection';
+import { ProjectDetailMacroSection, ProjectReviewSection } from '../../../../components/admin/ProjectReviewSection';
+import { ProjectDetailSectionNavigation } from '../../../../components/admin/ProjectDetailSectionNavigation';
 import { ProjectMediaSummary } from '../../../../components/admin/ProjectMediaSummary';
 import { ProjectValidationSummary } from '../../../../components/admin/ProjectValidationSummary';
 import { StagingReviewActions } from '../../../../components/admin/StagingReviewActions';
@@ -41,25 +42,25 @@ import {
 import { loadProjectMediaReviewData } from '../../../../projects/projectMediaPreview';
 import type { ApprovalMediaInput } from '../../../../validation/projectValidation';
 import type { ProjectMediaPreviewItem } from '../../../../components/admin-media/mediaPreviewTypes';
+import { ProjectAuditHistory } from '../../../../components/admin/ProjectAuditHistory';
+import { deriveProjectWorkflowContext } from '../../../../components/admin/projectWorkflowContext';
+import { getPermittedReviewActions } from '../../../../components/admin/projectReviewActions';
+import { PROJECT_DETAIL_SURFACE_CLASSES } from '../../../../components/admin/projectDetailSurfaceStyles';
 import { Button } from '../../../../components/ui/button';
-import { Card, CardHeader, CardDescription, CardContent } from '../../../../components/ui/card';
 import { ErrorState } from '../../../../components/ui/error-state';
 import {
   ArrowLeft,
   FileText,
-  Layers,
   Sparkles,
   Image as ImageIcon,
-  ShieldCheck,
-  CheckSquare,
   Sliders,
-  Info,
   History,
   AlertTriangle,
   FolderArchive,
   ExternalLink,
   UserCheck,
   Rocket,
+  Info,
 } from 'lucide-react';
 
 // Force dynamic server rendering for real-time detail load
@@ -69,6 +70,26 @@ interface PageProps {
   params: Promise<{
     publicId: string;
   }>;
+}
+
+/** Read-only fact rendered in the contextual rail. Long values wrap rather than truncate. */
+function RecordFact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 break-words text-sm text-foreground">{children}</dd>
+    </div>
+  );
+}
+
+/** Long-form public showcase content block with a readable measure. */
+function ContentBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border-t border-border pt-4 first:border-t-0 first:pt-0">
+      <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+      <div className="mt-1.5 max-w-[75ch] text-sm leading-relaxed text-foreground-subtle">{children}</div>
+    </div>
+  );
 }
 
 export default async function ProjectDetailPage({ params }: PageProps) {
@@ -248,9 +269,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
   if (loadError) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center max-w-lg mx-auto">
+      <div className="mx-auto flex min-h-[50vh] max-w-lg flex-col items-center justify-center p-6 text-center">
         <ErrorState
-          headingLevel="h2"
+          headingLevel="h1"
           title="Project Details Unavailable"
           description="Project details could not be loaded. Please try again shortly."
           action={
@@ -265,669 +286,570 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
   if (!project) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center max-w-lg mx-auto">
-        <Card className="bg-card border-border shadow-xs p-6 text-center w-full">
-          <CardHeader className="p-0 pb-3">
-            <h2 className="text-base sm:text-lg font-bold text-foreground">Project Not Found</h2>
-            <CardDescription className="text-xs text-muted-foreground mt-1">
-              No project record was found matching the identifier <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-foreground">{publicId}</code>.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0 pt-4">
+      <div className="mx-auto flex min-h-[50vh] max-w-lg flex-col items-center justify-center p-6 text-center">
+        <ErrorState
+          headingLevel="h1"
+          title="Project not found"
+          description={`No project record was found matching the identifier ${publicId}.`}
+          action={
             <Button asChild>
               <Link href="/admin">Return to projects</Link>
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       </div>
     );
   }
 
   const isEligible = project.status === 'approved' || project.status === 'published';
-  const allowedActions = getAllowedReviewActions(project.status);
+  const statusAllowedActions = getAllowedReviewActions(project.status);
+  const permittedReviewActions = getPermittedReviewActions(statusAllowedActions, adminContext?.permissions ?? []);
+
+  // Orientation prose derived from the state this page already loaded. It never decides what a
+  // transition does; `getAllowedReviewActions`, import readiness, and publication readiness
+  // remain the only authorities, and the canonical controls below are unchanged.
+  const workflowContext = deriveProjectWorkflowContext({
+    status: project.status,
+    allowedActions: permittedReviewActions,
+    submitForReview,
+    submitForReviewUnavailable,
+    canEditMetadata,
+    canManageParticipantPreview: canManagePreview,
+    canResolveParticipantCorrection: canResolveCorrection,
+    canPreparePublication: canPreparePublicationPlan,
+    canExecuteLocalArchive,
+    participantResponse: previewStateAvailable ? previewResponseState.type : null,
+    hasActivePreview: activePreview !== null,
+    publicationReadiness,
+    pendingRemovalFromPublic: Boolean(project.pendingRemovalFromPublic),
+  });
+
+  const canSubmitForReview = submitForReview !== null && canEditMetadata;
+  const showSubmitButton = canSubmitForReview && submitForReview!.ready;
+  const showSubmitBlockers = canSubmitForReview && !submitForReview!.ready;
+  const hasCanonicalAction = showSubmitButton || permittedReviewActions.length > 0;
+  // Participant confirmation and publication only become operational after approval. Before
+  // that they stay present and reachable, but collapsed so they do not compete with editing.
+  const laterStagesActive = project.status === 'approved' || project.status === 'published';
 
   return (
     <ProjectMetadataNavigationProvider>
-      <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full pb-12">
-        {/* Top Navigation & Project Header */}
-        <div className="flex flex-col gap-3">
-          <div>
-            <GuardedProjectBackLink
-              href="/admin"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Back to projects</span>
-            </GuardedProjectBackLink>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 sm:p-5 rounded-lg bg-card border border-border shadow-xs">
-            <div className="flex flex-col gap-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h2 className="text-lg sm:text-xl font-bold text-foreground tracking-tight break-words">
-                  {project.title}
-                </h2>
-                <ProjectStatusBadge status={project.status} />
-              </div>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span>
-                  <strong className="text-foreground">Public ID:</strong>{' '}
-                  <code className="font-mono bg-muted px-1.5 py-0.5 rounded text-foreground">{project.publicId}</code>
-                </span>
-                {project.year && (
-                  <span>
-                    <strong className="text-foreground">Year:</strong> {project.year}
-                  </span>
-                )}
-                {project.program && (
-                  <span>
-                    <strong className="text-foreground">Program:</strong> {project.program}
-                  </span>
-                )}
-                {project.discipline && (
-                  <span>
-                    <strong className="text-foreground">Discipline:</strong> {project.discipline}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sandbox Safety Notice Banner */}
-        <div className="p-3.5 rounded-lg bg-warning/10 border border-warning/30 text-warning text-xs leading-relaxed flex items-start gap-2.5">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
-          <div>
-            <strong>Administrative review staging sandbox:</strong> Hosted and production public-feed operations remain disabled, and external integrations stay disconnected. Local test publication controls are available only when connected to loopback Local Supabase.
-          </div>
-        </div>
-
-        {/* B. REVIEW AND EDIT PROJECT INFORMATION */}
-        <ProjectReviewSection
-          title="Review & Edit Project Information"
-          description="Core public project information including program, disciplines, categories, and accessibility text."
-          icon={FileText}
-        >
-          {metadataEditorData && metadataEditorAvailable ? (
-            <ProjectMetadataEditor
-              initialMetadata={metadataEditorData.metadata}
-              programs={metadataEditorData.programs}
-              disciplines={metadataEditorData.disciplines}
-              industryCategories={metadataEditorData.industryCategories}
-              canEdit={canEditMetadata}
-              projectStatus={project.status}
-              saveAction={saveProjectMetadataAction}
-              headingLevel="h4"
-            />
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Project metadata editing is temporarily unavailable. Read-only project metadata remains visible below.
-            </p>
-          )}
-        </ProjectReviewSection>
-
-        {/* Project Overview */}
-        <ProjectReviewSection
-          title="Project Overview"
-          description="Detailed academic and industry identification for this project record."
-          icon={Layers}
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs sm:text-sm">
-            <dl className="flex flex-col gap-3">
-              <div>
-                <dt className="text-xs font-semibold text-muted-foreground">Project Title</dt>
-                <dd className="font-semibold text-foreground text-sm mt-0.5">{project.title}</dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-semibold text-muted-foreground">Public Showcase ID</dt>
-                <dd className="mt-0.5">
-                  <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-xs text-foreground">
-                    {project.publicId}
-                  </code>
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-semibold text-muted-foreground">Academic Term (Year)</dt>
-                <dd className="text-foreground mt-0.5">{project.year || 'Not provided'}</dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-semibold text-muted-foreground">Study Program & Code</dt>
-                <dd className="text-foreground mt-0.5">
-                  {project.program ? `${project.program} (${project.studyProgram || 'Not provided'})` : 'Not provided'}
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-semibold text-muted-foreground">Primary Discipline</dt>
-                <dd className="text-foreground mt-0.5">{project.discipline || 'Not provided'}</dd>
-              </div>
-            </dl>
-
-            <dl className="flex flex-col gap-3">
-              <div>
-                <dt className="text-xs font-semibold text-muted-foreground">Mapped Showcase Disciplines</dt>
-                <dd className="text-foreground mt-0.5">
-                  {project.disciplines && project.disciplines.length > 0 ? project.disciplines.join(', ') : 'None'}
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-semibold text-muted-foreground">Industry Partner / Area</dt>
-                <dd className="text-foreground mt-0.5">
-                  {project.industryPartner ? `${project.industryPartner} (${project.industry || 'Not provided'})` : 'Not provided'}
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-semibold text-muted-foreground">Group Name</dt>
-                <dd className="text-foreground mt-0.5">{project.groupName || 'Not provided'}</dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-semibold text-muted-foreground">Team Roster</dt>
-                <dd className="text-foreground mt-0.5">
-                  {project.teamMembers && project.teamMembers.length > 0 ? project.teamMembers.join(', ') : 'None'}
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-semibold text-muted-foreground">Academic Supervisor</dt>
-                <dd className="text-foreground mt-0.5">{project.academicSupervisor || 'Not provided'}</dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-semibold text-muted-foreground">Public feed status eligibility</dt>
-                <dd className="mt-0.5">
-                  {isEligible ? (
-                    <span className="text-success font-semibold text-xs inline-flex items-center gap-1">
-                      Eligible
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground text-xs">
-                      Not eligible
-                    </span>
-                  )}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          {project.importBatchId && (
-            <div className="mt-4 pt-3 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-md bg-muted/40 text-xs">
-              <div className="flex items-center gap-2">
-                <FolderArchive className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
-                <span className="text-muted-foreground">
-                  Imported via folder: <code className="font-mono text-foreground font-semibold">{project.sourceFolder}</code>
-                </span>
-              </div>
-              <Button asChild variant="outline" size="sm" className="h-7 text-xs font-medium shrink-0">
-                <Link href={`/admin/imports/${project.importBatchId}`}>
-                  View Import Batch
-                  <ExternalLink className="h-3 w-3 ml-1" aria-hidden="true" />
-                </Link>
-              </Button>
-            </div>
-          )}
-        </ProjectReviewSection>
-
-        {/* Public Showcase Content */}
-        <ProjectReviewSection
-          title="Public Showcase Content"
-          description="Content displayed on the public project card and detail views."
-          icon={Sparkles}
-        >
-          <div className="flex flex-col gap-4 text-xs sm:text-sm">
-            <div>
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                Short Summary
-              </h4>
-              <p className="text-foreground leading-relaxed">
-                {project.summary || 'Not provided'}
-              </p>
-            </div>
-
-            <div className="pt-3 border-t border-border">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                Problem Background
-              </h4>
-              <p className="text-foreground leading-relaxed whitespace-pre-wrap">
-                {project.background || 'Not provided'}
-              </p>
-            </div>
-
-            <div className="pt-3 border-t border-border">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                Developed Solution
-              </h4>
-              <p className="text-foreground leading-relaxed whitespace-pre-wrap">
-                {project.solution || 'Not provided'}
-              </p>
-            </div>
-
-            <div className="pt-3 border-t border-border">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                Accessibility Description (accessibility.txt)
-              </h4>
-              <p className="text-foreground leading-relaxed">
-                {project.accessibilityText || 'Not provided'}
-              </p>
-            </div>
-
-            <div className="pt-3 border-t border-border">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                Poster Full Text Index
-              </h4>
-              <p className="text-xs text-muted-foreground italic leading-relaxed whitespace-pre-wrap bg-muted/30 p-3 rounded-md border border-border">
-                {project.posterText || 'Not provided'}
-              </p>
-            </div>
-
-            <div className="pt-3 border-t border-border grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                  External Citations
-                </h4>
-                {project.citations && project.citations.length > 0 ? (
-                  <ul className="list-disc pl-4 space-y-1 text-xs text-foreground">
-                    {project.citations.map((c: string, i: number) => (
-                      <li key={i}>{c}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-muted-foreground">None</p>
-                )}
-              </div>
-
-              <div>
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                  External Web Links
-                </h4>
-                {project.externalLinks && project.externalLinks.length > 0 ? (
-                  <ul className="space-y-1.5 text-xs">
-                    {project.externalLinks.map((link: { label?: string; url: string }, i: number) => (
-                      <li key={i}>
-                        <a
-                          href={link.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-primary hover:underline font-medium break-all"
-                        >
-                          <span>{link.label || link.url}</span>
-                          <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-muted-foreground">None</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </ProjectReviewSection>
-
-        {/* C. REVIEW MEDIA AND ACCESSIBILITY */}
-        <ProjectReviewSection
-          title="Media & Accessibility Review"
-          description="Uploaded project images and documents, plus snapshot image alt text."
-          icon={ImageIcon}
-        >
-          <ProjectMediaSummary
-            project={project}
-            mediaItems={mediaItems}
-            mediaAvailable={mediaAvailable}
-            snapshotAltText={metadataEditorData ? {
-              canEdit: canEditMetadata,
-              // The same project version the metadata editor holds, so whichever surface saves
-              // second is told the view is stale instead of silently overwriting the other.
-              expectedUpdatedAt: metadataEditorData.metadata.expectedUpdatedAt,
-              saveAction: saveSnapshotAltTextAction,
-            } : undefined}
-          />
-        </ProjectReviewSection>
-
-        {/* D. CHECK VALIDATION */}
-        <ProjectReviewSection
-          title="Compliance & Validation"
-          description="Approval readiness gates, blocking issues, and compliance warnings."
-          icon={ShieldCheck}
-        >
-          <ProjectValidationSummary project={project} approvalMedia={approvalMedia} />
-        </ProjectReviewSection>
-
-        {/* E. REVIEW / SUBMISSION ACTIONS */}
-        <ProjectReviewSection
-          title="Review & Submission Actions"
-          description="Submit project for review or execute administrative workflow transitions."
-          icon={CheckSquare}
-        >
-          {submitForReviewUnavailable && (
-            <div className="mb-3 p-2.5 rounded-md bg-warning/10 border border-warning/30 text-xs text-warning">
-              Submission readiness is temporarily unavailable. Submit-for-review is disabled until readiness can be verified.
-            </div>
-          )}
-
-          {submitForReview && canEditMetadata && (
-            <div className="mb-4 pb-4 border-b border-border">
-              {submitForReview.ready ? (
-                <SubmitForReviewButton
-                  batchId={project.importBatchId || ''}
-                  publicId={project.publicId || ''}
-                  currentStatus={project.status}
-                />
-              ) : (
-                <div className="p-3 rounded-md bg-warning/10 border border-warning/30 text-xs text-warning flex flex-col gap-1">
-                  <strong className="text-foreground">Not ready to submit for review:</strong>
-                  <ul className="list-disc pl-4 space-y-0.5 text-warning">
-                    {submitForReview.blockingReasons.map((reason) => (
-                      <li key={reason}>{reason}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-
-          <StagingReviewActions
-            publicId={project.publicId || ''}
-            currentStatus={project.status}
-            allowedActions={allowedActions}
-          />
-        </ProjectReviewSection>
-
-        {/* F. PARTICIPANT CONFIRMATION */}
-        <ProjectReviewSection
-          title="Participant Confirmation"
-          description="Share the approved project with participants, track their response, and resolve requested corrections before publication."
-          icon={UserCheck}
-        >
-          <ParticipantPreviewPanel
-            publicId={project.publicId || ''}
-            canManage={canManagePreview}
-            isApprovedEligible={project.status === 'approved'}
-            initialActivePreview={activePreview}
-            responseState={previewResponseState}
-            stateAvailable={previewStateAvailable}
-            notification={previewNotification}
-            participantContactEmail={project.participantContactEmail || null}
-            emailDeliveryEnabled={emailDeliveryEnabled}
-            reminderSchedulingEnabled={reminderSchedulingEnabled}
-            reminders={previewReminders}
-            resolutionStatus={resolutionStatus}
-            resolutionStateAvailable={resolutionStatusAvailable}
-            canResolveCorrection={canResolveCorrection}
-            projectStatus={project.status}
-          />
-        </ProjectReviewSection>
-
-        {/* G. PUBLICATION / ARCHIVE */}
-        <ProjectReviewSection
-          title="Publication & Archive"
-          description="Check publication readiness, prepare publishing evidence, and manage the project's local showcase lifecycle. This interface does not perform live Duda publication."
-          icon={Rocket}
-        >
-          <PublicationReadinessPanel readiness={publicationReadiness} />
-          <PublicationPreparationPanel
-            publicId={project.publicId || ''}
-            ready={publicationActionsAvailable}
-            canPrepare={canPreparePublicationPlan}
-            localExecutionAvailable={localPublicationExecutionAvailable}
-          />
-          {project.status === 'published' && canExecuteLocalArchive && (
-            <div className="mt-4 pt-4 border-t border-border/20">
-              <LocalArchivePanel publicId={project.publicId || ''} />
-            </div>
-          )}
-        </ProjectReviewSection>
-
-        {/* H. TECHNICAL / AUDIT DETAILS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Layout Settings */}
-          <ProjectReviewSection
-            title="Layout Settings"
-            description="Active showcase template configuration."
-            icon={Sliders}
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 pb-16 xl:gap-8">
+        {/* Orientation: identity, workflow status, and the way back */}
+        <header className="flex flex-col gap-4">
+          <GuardedProjectBackLink
+            href="/admin"
+            className="inline-flex min-h-[40px] w-fit items-center gap-1.5 rounded-md text-sm font-medium text-foreground-subtle transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
-            <dl className="flex flex-col gap-2.5 text-xs">
-              <div className="flex items-center justify-between py-1 border-b border-border">
-                <dt className="text-muted-foreground">Active Template ID</dt>
-                <dd>
-                  <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-primary font-semibold">
-                    {project.layoutConfig?.templateId || 'default'}
-                  </code>
-                </dd>
-              </div>
+            <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>Back to projects</span>
+          </GuardedProjectBackLink>
 
-              <div className="flex items-center justify-between py-1 border-b border-border">
-                <dt className="text-muted-foreground">Featured Media Focus</dt>
-                <dd className="font-medium text-foreground capitalize">
-                  {project.layoutConfig?.featuredMedia || 'None'}
-                </dd>
-              </div>
-
-              <div className="flex items-center justify-between py-1 border-b border-border">
-                <dt className="text-muted-foreground">Section Ordering</dt>
-                <dd className="font-medium text-foreground">
-                  {project.layoutConfig?.sectionOrder ? (
-                    project.layoutConfig.sectionOrder.join(' → ')
-                  ) : (
-                    <span className="text-muted-foreground">Default order</span>
-                  )}
-                </dd>
-              </div>
-
-              {project.layoutConfig?.hiddenSections && (
-                <div className="flex items-center justify-between py-1">
-                  <dt className="text-muted-foreground">Hidden Sections</dt>
-                  <dd className="font-medium text-destructive">
-                    {project.layoutConfig.hiddenSections.join(', ')}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+            <div className="flex min-w-0 flex-col gap-2">
+              <h1 className="max-w-[24ch] break-words text-2xl font-bold tracking-tight text-foreground">
+                {project.title}
+              </h1>
+              <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-sm">
+                <div className="flex min-w-0 items-baseline gap-1.5">
+                  <dt className="text-muted-foreground">Public ID</dt>
+                  <dd className="min-w-0 break-all rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+                    {project.publicId}
                   </dd>
                 </div>
-              )}
-            </dl>
-          </ProjectReviewSection>
+                {project.year && (
+                  <div className="flex items-baseline gap-1.5">
+                    <dt className="text-muted-foreground">Year</dt>
+                    <dd className="text-foreground">{project.year}</dd>
+                  </div>
+                )}
+                {project.program && (
+                  <div className="flex min-w-0 items-baseline gap-1.5">
+                    <dt className="text-muted-foreground">Program</dt>
+                    <dd className="break-words text-foreground">{project.program}</dd>
+                  </div>
+                )}
+                {project.discipline && (
+                  <div className="flex min-w-0 items-baseline gap-1.5">
+                    <dt className="text-muted-foreground">Discipline</dt>
+                    <dd className="break-words text-foreground">{project.discipline}</dd>
+                  </div>
+                )}
+              </dl>
+            </div>
 
-          {/* System Details */}
-          <ProjectReviewSection
-            title="System Details"
-            description="Staging diagnostics and record timestamps."
-            icon={Info}
-          >
-            <dl className="flex flex-col gap-2.5 text-xs">
-              <div className="flex items-center justify-between py-1 border-b border-border">
-                <dt className="text-muted-foreground">Validation Errors (Cached)</dt>
-                <dd className="font-semibold text-foreground">
-                  {project.validationErrors?.length || 0}
-                </dd>
-              </div>
+            <div className="shrink-0">
+              <ProjectStatusBadge status={project.status} />
+            </div>
+          </div>
+        </header>
 
-              <div className="flex items-center justify-between py-1 border-b border-border">
-                <dt className="text-muted-foreground">Validation Warnings (Cached)</dt>
-                <dd className="font-semibold text-foreground">
-                  {project.validationWarnings?.length || 0}
-                </dd>
-              </div>
+        <ProjectDetailSectionNavigation />
 
-              <div className="flex items-center justify-between py-1 border-b border-border">
-                <dt className="text-muted-foreground">Pending Showcase Removal</dt>
-                <dd className="font-semibold">
-                  {project.pendingRemovalFromPublic ? (
-                    <span className="text-destructive font-bold">Yes</span>
-                  ) : (
-                    <span className="text-success font-semibold">No</span>
-                  )}
-                </dd>
-              </div>
-
-              {project.status === 'archived' && (
-                <div className="p-2 rounded bg-muted/40 border border-border text-xs">
-                  <div><strong>Archived:</strong> {project.archivedAt || 'Not recorded'}</div>
-                  <div className="mt-0.5"><strong>Reason:</strong> {project.archiveReason || 'Not recorded'}</div>
+        <div className="grid items-start gap-10 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-8">
+          <div className="flex min-w-0 flex-col gap-14">
+            <ProjectDetailMacroSection
+              id="review-and-edit"
+              title="Review and edit"
+              description="Understand the current workflow decision, resolve blockers, take the permitted action, and update project information."
+            >
+              {/* Operationally important even though it is repeated in the technical record below */}
+              {project.pendingRemovalFromPublic && (
+                <div className={`flex items-start gap-2.5 p-4 ${PROJECT_DETAIL_SURFACE_CLASSES.blocker}`} role="status">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+                  <div className="text-sm leading-relaxed">
+                    <strong className="font-semibold">Showcase removal pending.</strong> This project is marked for
+                    removal from the public showcase. Check the lifecycle and technical sections before making
+                    further changes.
+                  </div>
                 </div>
               )}
 
-              <div className="pt-2 border-t border-border text-[11px] text-muted-foreground flex flex-col gap-1">
-                <div>Created: {project.created_at || 'Not recorded'}</div>
-                <div>Updated: {project.updated_at || 'Not recorded'}</div>
+              {/* The one emphasised area: where the project is, what is blocking it, and what can be done */}
+              <ProjectReviewSection
+          id="workflow-status"
+          tone="emphasis"
+          title={`Review status: ${workflowContext.stageLabel}`}
+          description={workflowContext.summary}
+        >
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <p className="max-w-[80ch] text-sm font-medium leading-relaxed text-foreground">
+                {workflowContext.decision}
+              </p>
+              {/*
+                An in-page anchor, never a second Edit control: the metadata editor stays the one
+                place project information can be changed, and this only moves focus to it so the
+                editor is one step away from the decision area on a tall review state.
+              */}
+              {metadataEditorAvailable && (
+                <a
+                  href="#project-information"
+                  className="inline-flex min-h-[32px] w-fit items-center gap-1.5 text-sm font-medium text-foreground-subtle underline decoration-border-strong underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  Go to project information
+                </a>
+              )}
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] lg:gap-8">
+              {/* Why an action may be unavailable, next to the action itself */}
+              <div className="flex min-w-0 flex-col gap-4">
+                {submitForReviewUnavailable && (
+                  <div className={`flex items-start gap-2.5 p-3.5 ${PROJECT_DETAIL_SURFACE_CLASSES.caution}`}>
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                    <p className="text-sm leading-relaxed">
+                      Submission readiness is temporarily unavailable, so submit for review stays disabled
+                      until readiness can be verified.
+                    </p>
+                  </div>
+                )}
+
+                {showSubmitBlockers && (
+                  <div className={`p-3.5 ${PROJECT_DETAIL_SURFACE_CLASSES.blocker}`}>
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+                      <div className="min-w-0">
+                        <strong className="text-sm font-semibold">Not ready to submit for review</strong>
+                        <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm leading-relaxed">
+                          {submitForReview!.blockingReasons.map((reason) => (
+                            <li key={reason}>{reason}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <ProjectValidationSummary project={project} approvalMedia={approvalMedia} />
               </div>
-            </dl>
-          </ProjectReviewSection>
+
+              {/*
+                Canonical workflow controls — rendered exactly once on this page. The column
+                only appears when an action actually exists, so a draft is never told both
+                "Submit for review" and "no review transition is available"; when nothing is
+                available the status summary above states that on its own.
+              */}
+              {hasCanonicalAction && (
+                <div className="flex min-w-0 flex-col gap-4 lg:border-l lg:border-border lg:pl-8">
+                  <h4 className="text-sm font-semibold text-foreground">Available actions</h4>
+                  {showSubmitButton && (
+                    <SubmitForReviewButton
+                      batchId={project.importBatchId || ''}
+                      publicId={project.publicId || ''}
+                      currentStatus={project.status}
+                    />
+                  )}
+                  {permittedReviewActions.length > 0 && (
+                    <StagingReviewActions
+                      publicId={project.publicId || ''}
+                      currentStatus={project.status}
+                      allowedActions={permittedReviewActions}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+              </ProjectReviewSection>
+
+            {/* Editing is the highest-frequency task, so it opens the workspace */}
+            {metadataEditorData && metadataEditorAvailable ? (
+              <div id="project-information" className="scroll-mt-24 rounded-xl border border-border bg-card p-4 sm:p-6 xl:scroll-mt-40">
+                <ProjectMetadataEditor
+                  initialMetadata={metadataEditorData.metadata}
+                  programs={metadataEditorData.programs}
+                  disciplines={metadataEditorData.disciplines}
+                  industryCategories={metadataEditorData.industryCategories}
+                  canEdit={canEditMetadata}
+                  projectStatus={project.status}
+                  saveAction={saveProjectMetadataAction}
+                  headingLevel="h3"
+                />
+              </div>
+            ) : (
+              <ProjectReviewSection
+                id="project-information"
+                title="Project information"
+                description="Core public project information including program, disciplines, categories, and accessibility text."
+                icon={FileText}
+              >
+                <p role="status" className="text-sm text-muted-foreground">
+                  Project metadata editing is temporarily unavailable. The read-only project content below
+                  remains visible.
+                </p>
+              </ProjectReviewSection>
+            )}
+
+            </ProjectDetailMacroSection>
+
+            <ProjectDetailMacroSection
+              id="content-and-media"
+              title="Content and media"
+              description="Inspect the public-facing narrative, supporting links, poster and document assets, and their accessibility evidence."
+            >
+
+            <ProjectReviewSection
+              id="showcase-content"
+              title="Public showcase content"
+              description="The written content that appears on the public project card and detail view."
+              icon={Sparkles}
+            >
+              <div className="flex flex-col gap-4">
+                <ContentBlock title="Short summary">
+                  <p className="whitespace-pre-wrap break-words">{project.summary || 'Not provided'}</p>
+                </ContentBlock>
+
+                <ContentBlock title="Problem background">
+                  <p className="whitespace-pre-wrap break-words">{project.background || 'Not provided'}</p>
+                </ContentBlock>
+
+                <ContentBlock title="Developed solution">
+                  <p className="whitespace-pre-wrap break-words">{project.solution || 'Not provided'}</p>
+                </ContentBlock>
+
+                <ContentBlock title="Accessibility description">
+                  <p className="whitespace-pre-wrap break-words">{project.accessibilityText || 'Not provided'}</p>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Screen-reader description of the poster image, read from accessibility.txt.
+                  </p>
+                </ContentBlock>
+
+                {/* Poster full text can run to many hundreds of words, so it opens on request */}
+                <div className="border-t border-border pt-4">
+                  <details className="group">
+                    <summary className="inline-flex min-h-[40px] cursor-pointer list-none items-center gap-2 rounded-md text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                      <ExternalLink className="h-4 w-4 shrink-0 rotate-90 text-foreground-subtle transition-transform group-open:rotate-180" aria-hidden="true" />
+                      <span>Poster full text</span>
+                      <span className="font-normal text-muted-foreground">
+                        {project.posterText ? `(${project.posterText.length.toLocaleString()} characters)` : '(not provided)'}
+                      </span>
+                    </summary>
+                    <p className="mt-2 max-w-[75ch] whitespace-pre-wrap break-words rounded-lg border border-border bg-surface-inset p-3 text-sm leading-relaxed text-foreground-subtle">
+                      {project.posterText || 'Not provided'}
+                    </p>
+                  </details>
+                </div>
+
+                <div className="grid gap-5 border-t border-border pt-4 sm:grid-cols-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">External citations</h4>
+                    {project.citations && project.citations.length > 0 ? (
+                      <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm leading-relaxed text-foreground-subtle">
+                        {project.citations.map((c: string, i: number) => (
+                          <li key={i} className="break-words">{c}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-1.5 text-sm text-muted-foreground">None</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">External web links</h4>
+                    {project.externalLinks && project.externalLinks.length > 0 ? (
+                      <ul className="mt-1.5 space-y-1.5 text-sm">
+                        {project.externalLinks.map((link: { label?: string; url: string }, i: number) => (
+                          <li key={i}>
+                            <a
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex min-h-[32px] items-center gap-1.5 font-medium text-foreground underline decoration-border-strong underline-offset-4 wrap-anywhere hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            >
+                              <span>{link.label || link.url}</span>
+                              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden="true" />
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-1.5 text-sm text-muted-foreground">None</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </ProjectReviewSection>
+
+            <ProjectReviewSection
+              id="media-accessibility"
+              title="Media and accessibility"
+              description="Uploaded poster, document, and snapshot files, their text alternatives, and external showcase links."
+              icon={ImageIcon}
+            >
+              <ProjectMediaSummary
+                project={project}
+                mediaItems={mediaItems}
+                mediaAvailable={mediaAvailable}
+                snapshotAltText={metadataEditorData ? {
+                  canEdit: canEditMetadata,
+                  // The same project version the metadata editor holds, so whichever surface saves
+                  // second is told the view is stale instead of silently overwriting the other.
+                  expectedUpdatedAt: metadataEditorData.metadata.expectedUpdatedAt,
+                  saveAction: saveSnapshotAltTextAction,
+                } : undefined}
+              />
+            </ProjectReviewSection>
+
+            </ProjectDetailMacroSection>
+
+            <ProjectDetailMacroSection
+              id="participant-and-publication"
+              title="Participant and publication"
+              description="Follow the later confirmation and publication stages while each panel reports its own authoritative availability and readiness."
+            >
+
+            <ProjectReviewSection
+              id="participant-confirmation"
+              title="Participant confirmation"
+              description={
+                laterStagesActive
+                  ? 'Share the approved project with participants, track their response, and resolve requested corrections before publication.'
+                  : 'Becomes available after internal review approves the project. Participants confirm their project before publication.'
+              }
+              icon={UserCheck}
+              collapsible={!laterStagesActive}
+              collapsedHint={laterStagesActive ? undefined : 'After approval'}
+            >
+              <ParticipantPreviewPanel
+                publicId={project.publicId || ''}
+                canManage={canManagePreview}
+                isApprovedEligible={project.status === 'approved'}
+                initialActivePreview={activePreview}
+                responseState={previewResponseState}
+                stateAvailable={previewStateAvailable}
+                notification={previewNotification}
+                participantContactEmail={project.participantContactEmail || null}
+                emailDeliveryEnabled={emailDeliveryEnabled}
+                reminderSchedulingEnabled={reminderSchedulingEnabled}
+                reminders={previewReminders}
+                resolutionStatus={resolutionStatus}
+                resolutionStateAvailable={resolutionStatusAvailable}
+                canResolveCorrection={canResolveCorrection}
+                projectStatus={project.status}
+              />
+            </ProjectReviewSection>
+
+            <ProjectReviewSection
+              id="publication-lifecycle"
+              title="Publication and lifecycle"
+              description={
+                laterStagesActive
+                  ? 'Publication readiness, preparation evidence, and the local showcase lifecycle. Approval alone does not publish a project, and this interface never performs live Duda publication.'
+                  : 'Becomes relevant after approval and participant confirmation. Approval alone does not publish a project.'
+              }
+              icon={Rocket}
+              collapsible={!laterStagesActive}
+              collapsedHint={laterStagesActive ? undefined : 'After confirmation'}
+            >
+              <div className="flex flex-col gap-4">
+                <PublicationReadinessPanel readiness={publicationReadiness} />
+                <PublicationPreparationPanel
+                  publicId={project.publicId || ''}
+                  ready={publicationActionsAvailable}
+                  canPrepare={canPreparePublicationPlan}
+                  localExecutionAvailable={localPublicationExecutionAvailable}
+                />
+                {project.status === 'published' && canExecuteLocalArchive && (
+                  <LocalArchivePanel publicId={project.publicId || ''} />
+                )}
+              </div>
+            </ProjectReviewSection>
+
+            </ProjectDetailMacroSection>
+
+            <ProjectDetailMacroSection
+              id="technical-and-history"
+              title="Technical details and history"
+              description="Review secondary configuration, record evidence, and the ordered administrative history without letting it dominate routine decisions."
+            >
+              {/* Secondary technical evidence: available on request, never competing with review */}
+              <ProjectReviewSection
+                id="technical-details"
+                title="Technical configuration and record details"
+                description="Showcase template configuration, cached validation counts, and record timestamps."
+                icon={Sliders}
+                collapsible
+                defaultOpen={project.status === 'archived'}
+                collapsedHint="Advanced"
+              >
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">Layout settings</h4>
+                    <dl className="mt-3 flex flex-col gap-2.5 text-sm">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Active template ID</dt>
+                        <dd className="break-all font-mono text-xs text-foreground">
+                          {project.layoutConfig?.templateId || 'default'}
+                        </dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Featured media focus</dt>
+                        <dd className="capitalize text-foreground">{project.layoutConfig?.featuredMedia || 'None'}</dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Section ordering</dt>
+                        <dd className="break-words text-right text-foreground">
+                          {project.layoutConfig?.sectionOrder
+                            ? project.layoutConfig.sectionOrder.join(', ')
+                            : 'Default order'}
+                        </dd>
+                      </div>
+                      {project.layoutConfig?.hiddenSections && (
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+                          <dt className="text-muted-foreground">Hidden sections</dt>
+                          <dd className="break-words text-right font-medium text-foreground">
+                            {project.layoutConfig.hiddenSections.join(', ')}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">System details</h4>
+                    <dl className="mt-3 flex flex-col gap-2.5 text-sm">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Cached validation errors</dt>
+                        <dd className="font-medium text-foreground">{project.validationErrors?.length || 0}</dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Cached validation warnings</dt>
+                        <dd className="font-medium text-foreground">{project.validationWarnings?.length || 0}</dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Pending showcase removal</dt>
+                        <dd className="font-semibold text-foreground">
+                          {project.pendingRemovalFromPublic ? 'Yes' : 'No'}
+                        </dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-border pb-2">
+                        <dt className="text-muted-foreground">Created</dt>
+                        <dd className="break-all text-right text-foreground-subtle">{project.created_at || 'Not recorded'}</dd>
+                      </div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+                        <dt className="text-muted-foreground">Updated</dt>
+                        <dd className="break-all text-right text-foreground-subtle">{project.updated_at || 'Not recorded'}</dd>
+                      </div>
+                    </dl>
+
+                    {project.status === 'archived' && (
+                      <div className="mt-3 rounded-lg border border-border bg-surface-inset p-3 text-sm text-foreground-subtle">
+                        <p><strong className="font-semibold text-foreground">Archived:</strong> {project.archivedAt || 'Not recorded'}</p>
+                        <p className="mt-1 break-words"><strong className="font-semibold text-foreground">Reason:</strong> {project.archiveReason || 'Not recorded'}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ProjectReviewSection>
+
+              <ProjectReviewSection
+                id="change-history"
+                tone="plain"
+                title="Change history"
+                description="Recorded administrative transitions, project information updates, and review notes."
+                icon={History}
+              >
+                <ProjectAuditHistory auditRecords={auditRecords} />
+              </ProjectReviewSection>
+            </ProjectDetailMacroSection>
+          </div>
+
+          {/* Contextual rail: read-only record evidence that supports, but does not drive, review */}
+          <aside aria-label="Project record context" className="flex min-w-0 flex-col gap-4">
+            <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+              <h3 className="text-base font-semibold tracking-tight text-foreground">Project record</h3>
+              <dl className="mt-4 flex flex-col gap-3.5">
+                <RecordFact label="Study program code">{project.studyProgram || 'Not provided'}</RecordFact>
+                <RecordFact label="Showcase disciplines">
+                  {project.disciplines && project.disciplines.length > 0 ? project.disciplines.join(', ') : 'None'}
+                </RecordFact>
+                <RecordFact label="Industry partner">
+                  {project.industryPartner ? `${project.industryPartner} (${project.industry || 'area not provided'})` : 'Not provided'}
+                </RecordFact>
+                <RecordFact label="Group name">{project.groupName || 'Not provided'}</RecordFact>
+                <RecordFact label="Team roster">
+                  {project.teamMembers && project.teamMembers.length > 0 ? (
+                    <ul className="flex flex-col gap-0.5">
+                      {project.teamMembers.map((member: string, index: number) => (
+                        <li key={index}>{member}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    'None'
+                  )}
+                </RecordFact>
+                <RecordFact label="Academic supervisor">{project.academicSupervisor || 'Not provided'}</RecordFact>
+                <RecordFact label="Public feed eligibility">
+                  {isEligible ? 'Eligible by status' : 'Not eligible at this status'}
+                </RecordFact>
+              </dl>
+            </div>
+
+            {project.importBatchId && (
+              <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+                <h3 className="flex items-center gap-2 text-base font-semibold tracking-tight text-foreground">
+                  <FolderArchive className="h-4 w-4 shrink-0 text-foreground-subtle" aria-hidden="true" />
+                  Import origin
+                </h3>
+                <p className="mt-2 break-all font-mono text-xs text-foreground-subtle">{project.sourceFolder}</p>
+                <Button asChild variant="outline" size="sm" className="mt-3 w-full">
+                  <Link href={`/admin/imports/${project.importBatchId}`}>View import batch</Link>
+                </Button>
+              </div>
+            )}
+
+            <div className={`flex items-start gap-2.5 p-4 ${PROJECT_DETAIL_SURFACE_CLASSES.context}`}>
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-foreground-subtle" aria-hidden="true" />
+              <p className="text-sm leading-relaxed">
+                <strong className="font-semibold text-foreground">Review staging sandbox.</strong> Hosted and
+                production public-feed operations are disabled and external integrations stay disconnected.
+                Local test publication controls appear only on loopback Local Supabase.
+              </p>
+            </div>
+          </aside>
         </div>
 
-        {/* Change History & Audit Logs */}
-        <ProjectReviewSection
-          title="Change History & Audit Logs"
-          description="Recorded administrative transitions, metadata updates, and audit notes."
-          icon={History}
-        >
-          {auditRecords === null ? (
-            <p className="text-xs text-muted-foreground italic">
-              Audit history is temporarily unavailable.
-            </p>
-          ) : auditRecords.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              No review action logs recorded for this project.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-border text-muted-foreground">
-                    <th className="py-2 px-2 font-semibold">Timestamp</th>
-                    <th className="py-2 px-2 font-semibold">Action Taken</th>
-                    <th className="py-2 px-2 font-semibold">Transition</th>
-                    <th className="py-2 px-2 font-semibold">Comments / Notes</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {auditRecords.map((rec) => (
-                    <tr key={rec.id} className="text-foreground align-top">
-                      <td className="py-2.5 px-2 text-muted-foreground text-[11px] whitespace-nowrap">
-                        {rec.timestamp ? new Date(rec.timestamp).toLocaleString() : 'Not recorded'}
-                      </td>
-                      <td className="py-2.5 px-2">
-                        <span className="inline-block px-1.5 py-0.5 rounded bg-muted font-semibold text-[11px] uppercase tracking-wider text-foreground">
-                          {rec.action.replace('_', ' ')}
-                        </span>
-                        <div className="mt-1 text-[11px] text-muted-foreground">
-                          Actor: <strong className="text-foreground">{rec.actorFullName}</strong>
-                          {rec.actorEmail && <span> ({rec.actorEmail})</span>}
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-2 whitespace-nowrap">
-                        <code className="text-xs font-mono">{rec.fromStatus || 'None'}</code>
-                        {' → '}
-                        <code className="text-xs font-mono font-semibold text-primary">{rec.toStatus || 'None'}</code>
-                      </td>
-                      <td className="py-2.5 px-2 text-xs">
-                        {rec.comments && (
-                          <div className="text-foreground font-medium mb-1">
-                            {rec.comments}
-                          </div>
-                        )}
-
-                        {rec.action === 'update_metadata' && rec.metadataEventDetails && (
-                          <div className="mt-1.5 p-2 rounded bg-muted/40 border border-border text-[11px]">
-                            <div className="text-muted-foreground mb-1">
-                              <strong>Changed fields:</strong> {rec.metadataEventDetails.changedFields.join(', ')}
-                            </div>
-                            <details className="cursor-pointer text-primary">
-                              <summary className="font-medium hover:underline">View details</summary>
-                              <div className="mt-2 pl-2 border-l-2 border-primary space-y-2 text-foreground">
-                                {rec.metadataEventDetails.changedFields.map((field) => {
-                                  const before = rec.metadataEventDetails!.before[field];
-                                  const after = rec.metadataEventDetails!.after[field];
-
-                                  let changeView;
-                                  if (field === 'background' || field === 'solution' || field === 'posterText' || field === 'accessibilityText') {
-                                    changeView = (
-                                      <div className="mt-1">
-                                        <div className="text-muted-foreground text-[10px]">Previous:</div>
-                                        <div className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words opacity-70 p-1.5 bg-muted rounded text-[11px]">
-                                          {before ? String(before) : 'Not provided'}
-                                        </div>
-                                        <div className="text-success text-[10px] mt-1">New:</div>
-                                        <div className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words p-1.5 bg-muted rounded text-[11px]">
-                                          {after ? String(after) : 'Not provided'}
-                                        </div>
-                                      </div>
-                                    );
-                                  } else if (field === 'program') {
-                                    changeView = (
-                                      <div className="mt-0.5">
-                                        <span className="text-muted-foreground line-through">
-                                          {(before as Record<string, unknown>)?.name as string || 'Not provided'}
-                                        </span>
-                                        {' → '}
-                                        <span className="text-success font-medium">
-                                          {(after as Record<string, unknown>)?.name as string || 'Not provided'}
-                                        </span>
-                                      </div>
-                                    );
-                                  } else if (field === 'disciplines' || field === 'industryCategories') {
-                                    const beforeSet = new Set(((before as Record<string, unknown>[]) || []).map((x) => x.name as string));
-                                    const afterSet = new Set(((after as Record<string, unknown>[]) || []).map((x) => x.name as string));
-                                    const added = [...afterSet].filter((x) => !beforeSet.has(x));
-                                    const removed = [...beforeSet].filter((x) => !afterSet.has(x));
-                                    changeView = (
-                                      <div className="mt-0.5 space-y-0.5">
-                                        {added.length > 0 && <div className="text-success">Added: {added.join(', ')}</div>}
-                                        {removed.length > 0 && <div className="text-destructive">Removed: {removed.join(', ')}</div>}
-                                      </div>
-                                    );
-                                  } else {
-                                    changeView = (
-                                      <div className="mt-0.5">
-                                        <span className="text-muted-foreground line-through">{String(before)}</span>
-                                        {' → '}
-                                        <span className="text-success font-medium">{String(after)}</span>
-                                      </div>
-                                    );
-                                  }
-
-                                  return (
-                                    <div key={field}>
-                                      <strong className="capitalize text-muted-foreground">{field}:</strong>
-                                      {changeView}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </details>
-                          </div>
-                        )}
-
-                        {rec.action === 'update_metadata' && rec.mediaAccessibilityEventDetails && (
-                          <div className="mt-1.5 p-2 rounded bg-muted/40 border border-border text-[11px]">
-                            <div className="text-muted-foreground mb-1">
-                              <strong>Changed:</strong> Snapshot image alt text
-                            </div>
-                            <details className="cursor-pointer text-primary">
-                              <summary className="font-medium hover:underline">View details</summary>
-                              <div className="mt-2 pl-2 border-l-2 border-primary text-foreground">
-                                <div className="text-muted-foreground text-[10px]">Previous:</div>
-                                <div className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words opacity-70 p-1.5 bg-muted rounded text-[11px]">
-                                  {rec.mediaAccessibilityEventDetails.before.snapshotAltText ?? 'Not previously provided'}
-                                </div>
-                                <div className="text-success text-[10px] mt-1">New:</div>
-                                <div className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words p-1.5 bg-muted rounded text-[11px]">
-                                  {rec.mediaAccessibilityEventDetails.after.snapshotAltText}
-                                </div>
-                              </div>
-                            </details>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </ProjectReviewSection>
       </div>
     </ProjectMetadataNavigationProvider>
   );

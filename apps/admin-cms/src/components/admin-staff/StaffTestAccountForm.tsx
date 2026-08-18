@@ -3,6 +3,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert } from '../ui/alert';
+import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
@@ -86,16 +87,19 @@ export function StaffTestAccountForm({ available }: StaffTestAccountFormProps) {
   const disabled = state.phase === 'submitting';
 
   return (
-    <Card>
+    <Card className="border-information/30">
       <CardHeader>
-        <CardTitle>Create staging test account</CardTitle>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle>Create test account</CardTitle>
+          <Badge variant="information" className="w-fit">Staging only</Badge>
+        </div>
         <CardDescription>
           Creates a ready-to-use non-admin credential for controlled stakeholder testing on
           staging. No setup email is sent; only Reviewer and Editor authority can be assigned.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5" aria-busy={disabled}>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="test-account-full-name" isRequired>Full name</Label>
             <Input
@@ -160,24 +164,32 @@ export function StaffTestAccountForm({ available }: StaffTestAccountFormProps) {
                 }
               />
             </div>
+            <p className="text-xs leading-relaxed text-muted-foreground sm:col-span-2">
+              Use 12–128 characters. The password is cleared from this page after every attempt.
+            </p>
           </div>
 
-          <fieldset className="flex flex-col gap-2 border-0 p-0">
+          <fieldset className="flex flex-col gap-2.5 border-0 p-0">
             <legend className="text-sm font-medium leading-none">
               Roles
               <span className="ml-0.5 text-destructive" aria-hidden="true">*</span>
               <span className="sr-only"> (required)</span>
             </legend>
             {ROLES.map((role) => (
-              <div key={role} className="flex items-start gap-2">
+              <label
+                key={role}
+                htmlFor={`test-account-role-${role}`}
+                className="flex min-h-12 cursor-pointer items-start gap-3 rounded-lg border border-border/80 px-3 py-2.5 transition-colors hover:bg-muted/50 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30"
+              >
                 <input
                   id={`test-account-role-${role}`}
                   name="roles"
                   type="checkbox"
                   value={role}
-                  className="mt-1 h-4 w-4 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="mt-0.5 h-5 w-5 shrink-0 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   checked={state.roles.includes(role)}
                   disabled={disabled}
+                  aria-labelledby={`test-account-role-${role}-label`}
                   aria-describedby={`test-account-role-${role}-description`}
                   onChange={() =>
                     setState((current) => ({
@@ -187,19 +199,24 @@ export function StaffTestAccountForm({ available }: StaffTestAccountFormProps) {
                   }
                 />
                 <div className="flex flex-col">
-                  <Label htmlFor={`test-account-role-${role}`}>{ROLE_LABELS[role]}</Label>
+                  <span
+                    id={`test-account-role-${role}-label`}
+                    className="text-sm font-medium leading-none text-foreground"
+                  >
+                    {ROLE_LABELS[role]}
+                  </span>
                   <span
                     id={`test-account-role-${role}-description`}
-                    className="text-xs text-muted-foreground"
+                    className="mt-1 text-xs leading-relaxed text-muted-foreground"
                   >
                     {ROLE_DESCRIPTIONS[role]}
                   </span>
                 </div>
-              </div>
+              </label>
             ))}
           </fieldset>
 
-          <Button type="submit" disabled={!submittable} isLoading={disabled}>
+          <Button type="submit" className="w-full sm:w-auto" disabled={!submittable} isLoading={disabled}>
             {disabled ? 'Creating test account' : 'Create test account'}
           </Button>
 

@@ -179,20 +179,20 @@ export function ImportBatchReviewPanel({ batchId, batchStatus, projects, canSubm
         </Button>
       </div>
 
-      {/* Projects Table */}
-      <div className="overflow-x-auto w-full border border-border rounded-lg bg-card">
+      {/* Projects Table (medium screens and above) */}
+      <div className="hidden xl:block overflow-x-auto w-full border border-border rounded-lg bg-card">
         <table className="w-full text-left text-sm border-collapse">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              <th className="py-2.5 px-3 w-10 text-center">
+              <th className="py-3 px-3 w-10 text-center">
                 <span className="sr-only">Select</span>
               </th>
-              <th className="py-2.5 px-3">Title</th>
-              <th className="py-2.5 px-3">Public ID</th>
-              <th className="py-2.5 px-3">Status</th>
-              <th className="py-2.5 px-3">Readiness</th>
-              <th className="py-2.5 px-3">Staged media</th>
-              <th className="py-2.5 px-3 text-right">
+              <th className="py-3 px-3">Title</th>
+              <th className="py-3 px-3">Public ID</th>
+              <th className="py-3 px-3">Status</th>
+              <th className="py-3 px-3">Readiness</th>
+              <th className="py-3 px-3">Staged media</th>
+              <th className="py-3 px-3 text-right">
                 <span className="sr-only">Inspect</span>
               </th>
             </tr>
@@ -204,85 +204,36 @@ export function ImportBatchReviewPanel({ batchId, batchStatus, projects, canSubm
               return (
                 <tr
                   key={project.publicId}
-                  className="hover:bg-muted/50 transition-colors"
+                  className="hover:bg-muted/50 transition-colors align-top"
                 >
-                  <td className="py-3 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      disabled={!selectable}
-                      onChange={() => toggleSelected(project.publicId)}
-                      aria-label={`Select project ${project.title || project.publicId}`}
-                      className="h-4 w-4 rounded border-input text-primary focus:ring-ring disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
-                    />
+                  <td className="py-3.5 px-3 text-center">
+                    <label className="flex items-center justify-center p-1.5 -m-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        disabled={!selectable}
+                        onChange={() => toggleSelected(project.publicId)}
+                        aria-label={`Select project ${project.title || project.publicId}`}
+                        className="h-4 w-4 rounded border-input text-primary focus:ring-ring disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                      />
+                    </label>
                   </td>
-                  <td className="py-3 px-3 font-semibold text-foreground max-w-xs">
+                  <td className="py-3.5 px-3 font-semibold text-foreground max-w-xs">
                     {project.title}
                   </td>
-                  <td className="py-3 px-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                  <td className="py-3.5 px-3 font-mono text-xs text-muted-foreground break-all max-w-[12rem]">
                     <code>{project.publicId}</code>
                   </td>
-                  <td className="py-3 px-3 whitespace-nowrap">
+                  <td className="py-3.5 px-3 whitespace-nowrap">
                     <ProjectStatusBadge status={project.status} />
                   </td>
-                  <td className="py-3 px-3 text-xs leading-relaxed max-w-sm">
-                    {project.eligibility === 'already_submitted' ? (
-                      <span className="text-information font-medium">Already submitted</span>
-                    ) : project.eligibility === 'ineligible' ? (
-                      <span className="text-muted-foreground font-medium">Not eligible from &quot;{project.status}&quot;</span>
-                    ) : project.ready ? (
-                      <span className="text-success font-semibold flex items-center gap-1">
-                        <Check className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
-                        Ready
-                      </span>
-                    ) : (
-                      <span className="text-warning font-semibold flex items-center gap-1">
-                        <X className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
-                        Blocked
-                      </span>
-                    )}
-                    {project.blockingReasons.length > 0 && (
-                      <ul className="mt-1 space-y-0.5 text-destructive text-[11px] list-disc list-inside">
-                        {project.blockingReasons.map((reason) => (
-                          <li key={reason}>{reason}</li>
-                        ))}
-                      </ul>
-                    )}
-                    {project.warnings.length > 0 && (
-                      <ul className="mt-1 space-y-0.5 text-warning text-[11px] list-disc list-inside">
-                        {project.warnings.map((warning) => (
-                          <li key={warning}>{warning}</li>
-                        ))}
-                      </ul>
-                    )}
+                  <td className="py-3.5 px-3 text-xs leading-relaxed max-w-sm">
+                    <ReadinessSummary project={project} />
                   </td>
-                  <td className="py-3 px-3 text-xs whitespace-nowrap text-muted-foreground">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="inline-flex items-center gap-1">
-                        Poster: {project.posterPresent ? (
-                          <span className="text-success font-medium inline-flex items-center gap-0.5">
-                            <Check className="h-3 w-3" aria-hidden="true" /> Present
-                          </span>
-                        ) : (
-                          <span className="text-destructive font-medium inline-flex items-center gap-0.5">
-                            <X className="h-3 w-3" aria-hidden="true" /> Missing
-                          </span>
-                        )}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        PDF: {project.posterPdfPresent ? (
-                          <span className="text-success font-medium inline-flex items-center gap-0.5">
-                            <Check className="h-3 w-3" aria-hidden="true" /> Present
-                          </span>
-                        ) : (
-                          <span className="text-destructive font-medium inline-flex items-center gap-0.5">
-                            <X className="h-3 w-3" aria-hidden="true" /> Missing
-                          </span>
-                        )}
-                      </span>
-                    </div>
+                  <td className="py-3.5 px-3 text-xs whitespace-nowrap text-muted-foreground">
+                    <MediaPresenceSummary project={project} />
                   </td>
-                  <td className="py-3 px-3 text-right whitespace-nowrap">
+                  <td className="py-3.5 px-3 text-right whitespace-nowrap">
                     <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-xs">
                       <Link href={`/admin/projects/${project.publicId}`}>
                         Inspect
@@ -296,6 +247,122 @@ export function ImportBatchReviewPanel({ batchId, batchStatus, projects, canSubm
           </tbody>
         </table>
       </div>
+
+      {/* Project Cards (narrow / mobile viewports) */}
+      <div className="flex xl:hidden flex-col gap-3">
+        {projects.map((project) => {
+          const selectable = canSubmit && project.eligibility === 'eligible' && project.ready && !pending;
+          const isChecked = selected.has(project.publicId);
+          return (
+            <div
+              key={project.publicId}
+              className="rounded-lg border border-border bg-card p-3.5 flex flex-col gap-2.5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <label className="flex items-center p-1.5 -m-1.5 mt-0.5 cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      disabled={!selectable}
+                      onChange={() => toggleSelected(project.publicId)}
+                      aria-label={`Select project ${project.title || project.publicId}`}
+                      className="h-4 w-4 rounded border-input text-primary focus:ring-ring disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                    />
+                  </label>
+                  <div className="min-w-0 flex flex-col gap-1">
+                    <span className="font-semibold text-foreground break-words">{project.title}</span>
+                    <ProjectStatusBadge status={project.status} className="self-start" />
+                  </div>
+                </div>
+                <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-xs shrink-0">
+                  <Link href={`/admin/projects/${project.publicId}`}>
+                    Inspect
+                    <ArrowRight className="ml-1 h-3 w-3" aria-hidden="true" />
+                  </Link>
+                </Button>
+              </div>
+
+              <div className="text-xs leading-relaxed">
+                <ReadinessSummary project={project} />
+              </div>
+
+              <div className="text-xs text-muted-foreground pt-1 border-t border-border">
+                <MediaPresenceSummary project={project} />
+              </div>
+
+              <div className="font-mono text-xs text-muted-foreground break-all">
+                <code>{project.publicId}</code>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ReadinessSummary({ project }: { project: ImportBatchReviewProjectView }) {
+  return (
+    <>
+      {project.eligibility === 'already_submitted' ? (
+        <span className="text-information font-medium">Already submitted</span>
+      ) : project.eligibility === 'ineligible' ? (
+        <span className="text-muted-foreground font-medium">Not eligible from &quot;{project.status}&quot;</span>
+      ) : project.ready ? (
+        <span className="text-success-strong font-semibold flex items-center gap-1">
+          <Check className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+          Ready
+        </span>
+      ) : (
+        <span className="text-warning-strong font-semibold flex items-center gap-1">
+          <X className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+          Blocked
+        </span>
+      )}
+      {project.blockingReasons.length > 0 && (
+        <ul className="mt-1 space-y-0.5 text-destructive-strong text-xs list-disc list-inside">
+          {project.blockingReasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      )}
+      {project.warnings.length > 0 && (
+        <ul className="mt-1 space-y-0.5 text-warning-strong text-xs list-disc list-inside">
+          {project.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+function MediaPresenceSummary({ project }: { project: ImportBatchReviewProjectView }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="inline-flex items-center gap-1">
+        Poster: {project.posterPresent ? (
+          <span className="text-success-strong font-medium inline-flex items-center gap-0.5">
+            <Check className="h-3 w-3" aria-hidden="true" /> Present
+          </span>
+        ) : (
+          <span className="text-destructive-strong font-medium inline-flex items-center gap-0.5">
+            <X className="h-3 w-3" aria-hidden="true" /> Missing
+          </span>
+        )}
+      </span>
+      <span className="inline-flex items-center gap-1">
+        PDF: {project.posterPdfPresent ? (
+          <span className="text-success-strong font-medium inline-flex items-center gap-0.5">
+            <Check className="h-3 w-3" aria-hidden="true" /> Present
+          </span>
+        ) : (
+          <span className="text-destructive-strong font-medium inline-flex items-center gap-0.5">
+            <X className="h-3 w-3" aria-hidden="true" /> Missing
+          </span>
+        )}
+      </span>
     </div>
   );
 }

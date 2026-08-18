@@ -116,8 +116,8 @@ export function SnapshotAltTextEditor({
       {!isEditing && (
         <div className="flex flex-col gap-2">
           {savedAltText === '' ? (
-            <div className="p-3 rounded-md bg-warning/10 border border-warning/30 text-warning text-xs flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/8 p-3 text-sm leading-relaxed text-foreground">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
               <span>
                 Snapshot alt text missing. This project cannot be submitted for review, approved, previewed by participants, or published until it is provided.
               </span>
@@ -183,8 +183,8 @@ export function SnapshotAltTextEditor({
         />
       )}
       {statusMessage && !errorMessage && (
-        <div role="status" className="p-2.5 rounded-md bg-success/10 border border-success/30 text-success text-xs font-semibold flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <div role="status" className="flex items-center gap-2 rounded-md border border-success/40 bg-success/8 p-2.5 text-sm font-semibold text-foreground">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
           <span>{statusMessage}</span>
         </div>
       )}

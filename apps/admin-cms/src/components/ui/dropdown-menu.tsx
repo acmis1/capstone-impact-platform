@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { DropdownMenu as RadixDropdownMenu } from 'radix-ui';
+import { Check } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export const DropdownMenu = RadixDropdownMenu.Root;
@@ -18,7 +19,7 @@ export const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-50 min-w-[12rem] overflow-hidden rounded-md border bg-background p-1 text-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+        'z-50 min-w-[14rem] overflow-hidden rounded-lg border border-border bg-popover p-1.5 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
         className
       )}
       {...props}
@@ -34,7 +35,7 @@ export const DropdownMenuItem = React.forwardRef<
   <RadixDropdownMenu.Item
     ref={ref}
     className={cn(
-      'relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'relative flex cursor-pointer select-none items-center rounded-md px-2.5 py-2 text-sm outline-none transition-colors hover:bg-accent focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className
     )}
     {...props}
@@ -42,13 +43,35 @@ export const DropdownMenuItem = React.forwardRef<
 ));
 DropdownMenuItem.displayName = RadixDropdownMenu.Item.displayName;
 
+export const DropdownMenuCheckboxItem = React.forwardRef<
+  React.ComponentRef<typeof RadixDropdownMenu.CheckboxItem>,
+  React.ComponentPropsWithoutRef<typeof RadixDropdownMenu.CheckboxItem>
+>(({ className, children, ...props }, ref) => (
+  <RadixDropdownMenu.CheckboxItem
+    ref={ref}
+    className={cn(
+      'relative flex min-h-[40px] cursor-pointer select-none items-center rounded-md py-2 pl-9 pr-2.5 text-sm outline-none transition-colors hover:bg-accent focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      className
+    )}
+    {...props}
+  >
+    <span className="absolute left-2.5 flex size-4 items-center justify-center text-primary">
+      <RadixDropdownMenu.ItemIndicator>
+        <Check className="size-4" aria-hidden="true" />
+      </RadixDropdownMenu.ItemIndicator>
+    </span>
+    {children}
+  </RadixDropdownMenu.CheckboxItem>
+));
+DropdownMenuCheckboxItem.displayName = RadixDropdownMenu.CheckboxItem.displayName;
+
 export const DropdownMenuLabel = React.forwardRef<
   React.ComponentRef<typeof RadixDropdownMenu.Label>,
   React.ComponentPropsWithoutRef<typeof RadixDropdownMenu.Label>
 >(({ className, ...props }, ref) => (
   <RadixDropdownMenu.Label
     ref={ref}
-    className={cn('px-2 py-1.5 text-xs font-semibold text-muted-foreground', className)}
+    className={cn('px-2.5 py-2 text-xs font-semibold text-muted-foreground', className)}
     {...props}
   />
 ));
@@ -60,7 +83,7 @@ export const DropdownMenuSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <RadixDropdownMenu.Separator
     ref={ref}
-    className={cn('-mx-1 my-1 h-px bg-border', className)}
+    className={cn('-mx-1.5 my-1.5 h-px bg-border', className)}
     {...props}
   />
 ));

@@ -46,9 +46,9 @@ export default async function ImportBatchesPage() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col gap-1">
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             Imports
-          </h2>
+          </h1>
           <p className="text-sm text-muted-foreground">
             A record of project imports and their validation results.
           </p>

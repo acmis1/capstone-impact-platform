@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import { Plus, FolderOpen } from 'lucide-react';
 import { SupabaseProjectRepository } from '../../repositories/SupabaseProjectRepository';
 import {
   parseProjectListQuery,
@@ -7,13 +8,16 @@ import {
   ProjectDashboardMetrics,
   ProjectFilterOptions,
 } from '../../domain/projectQuery';
-import { DashboardMetricsCards } from '../../components/admin-dashboard/DashboardMetricsCards';
+import { requireAdmin } from '../../auth/requireAdmin';
+import { hasPermission } from '../../auth/permissions';
+import { DashboardMetricsSummary } from '../../components/admin-dashboard/DashboardMetricsSummary';
 import { ProjectFilterBar } from '../../components/admin-dashboard/ProjectFilterBar';
 import { ProjectTableContainer } from '../../components/admin-dashboard/ProjectTableContainer';
+import { NoMatchingProjectsState } from '../../components/admin-dashboard/NoMatchingProjectsState';
 import { DashboardPreferencesProvider } from '../../components/admin-dashboard/useDashboardPreferences';
+import { Button } from '../../components/ui/button';
 import { ErrorState } from '../../components/ui/error-state';
 import { EmptyState } from '../../components/ui/empty-state';
-import { FolderOpen, SearchX } from 'lucide-react';
 
 import {
   toProjectIndexRow,
@@ -34,6 +38,15 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   let metrics: ProjectDashboardMetrics | null = null;
   let filterOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [] };
   let loadError: boolean = false;
+  let canImport = false;
+
+  try {
+    const authContext = await requireAdmin();
+    canImport = hasPermission(authContext.permissions, 'projects.edit');
+  } catch {
+    // The admin layout already guards this route; an unavailable permission context
+    // only means the contextual import action stays hidden.
+  }
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -66,16 +79,40 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
     query.search || query.status || query.year || query.program || query.discipline
   );
 
+  const resultContext = clientResult
+    ? `${clientResult.total.toLocaleString()} ${
+        hasActiveFilters
+          ? clientResult.total === 1 ? 'matching project record' : 'matching project records'
+          : clientResult.total === 1 ? 'project record' : 'project records'
+      }`
+    : null;
+
   return (
-    <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full">
+    <div className="flex w-full flex-col gap-6">
       {/* Page Header */}
-      <div className="flex flex-col gap-1">
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">
-          Projects
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Manage capstone project records and review workflows.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            Projects
+          </h1>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Search, review and open capstone project records.
+          </p>
+          {resultContext && (
+            <p className="text-sm font-medium text-foreground-subtle">{resultContext}</p>
+          )}
+        </div>
+
+        {canImport && (
+          <div className="shrink-0">
+            <Button asChild>
+              <Link href="/admin/imports/new">
+                <Plus aria-hidden="true" />
+                New import
+              </Link>
+            </Button>
+          </div>
+        )}
       </div>
 
       {loadError || !clientResult || !metrics ? (
@@ -83,20 +120,15 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           title="Projects could not be loaded"
           description="The requested project index information could not be retrieved from the database. Try again or contact the system administrator."
           action={
-            <Link
-              href="/admin"
-              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-2xs hover:bg-primary/90 min-h-[44px]"
-            >
-              Reload Page
-            </Link>
+            <Button asChild className="min-h-[44px]">
+              <Link href="/admin">Reload page</Link>
+            </Button>
           }
         />
       ) : (
         <>
-          {/* Top Metrics Cards */}
-          <DashboardMetricsCards metrics={metrics} />
+          <DashboardMetricsSummary metrics={metrics} />
 
-          {/* Filter Bar */}
           <DashboardPreferencesProvider>
             <ProjectFilterBar
               query={query}
@@ -105,29 +137,26 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               availableDisciplines={filterOptions.disciplines}
             />
 
-            {/* Project List / Table Content */}
             {clientResult.total === 0 ? (
-            hasActiveFilters ? (
-              <EmptyState
-                icon={SearchX}
-                title="No matching projects found"
-                description="No project records match your active search term or filter criteria. Try adjusting or clearing your filters."
-                action={
-                  <Link
-                    href="/admin"
-                    className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-semibold text-foreground shadow-2xs hover:bg-accent hover:text-accent-foreground min-h-[44px]"
-                  >
-                    Clear all filters
-                  </Link>
-                }
-              />
-            ) : (
-              <EmptyState
-                icon={FolderOpen}
-                title="No project records available"
-                description="There are currently no active capstone project records stored in the staging database repository."
-              />
-            )
+              hasActiveFilters ? (
+                <NoMatchingProjectsState query={query} />
+              ) : (
+                <EmptyState
+                  icon={FolderOpen}
+                  title="No project records available"
+                  description="There are currently no active capstone project records stored in the staging database repository."
+                  action={
+                    canImport ? (
+                      <Button asChild className="min-h-[44px]">
+                        <Link href="/admin/imports/new">
+                          <Plus aria-hidden="true" />
+                          New import
+                        </Link>
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              )
             ) : (
               <ProjectTableContainer query={query} result={clientResult} />
             )}

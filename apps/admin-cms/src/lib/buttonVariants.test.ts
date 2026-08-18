@@ -6,7 +6,7 @@ describe("buttonVariants", () => {
     const classes = buttonVariants();
     expect(classes).toContain("bg-primary");
     expect(classes).toContain("text-primary-foreground");
-    expect(classes).toContain("h-9");
+    expect(classes).toContain("h-10");
   });
 
   it("applies secondary variant classes correctly", () => {
@@ -27,12 +27,12 @@ describe("buttonVariants", () => {
     expect(smClasses).toContain("px-3");
 
     const lgClasses = buttonVariants({ size: "lg" });
-    expect(lgClasses).toContain("h-10");
+    expect(lgClasses).toContain("h-11");
     expect(lgClasses).toContain("px-8");
 
     const iconClasses = buttonVariants({ size: "icon" });
-    expect(iconClasses).toContain("h-9");
-    expect(iconClasses).toContain("w-9");
+    expect(iconClasses).toContain("h-10");
+    expect(iconClasses).toContain("w-10");
   });
 
   it("merges custom caller classes", () => {

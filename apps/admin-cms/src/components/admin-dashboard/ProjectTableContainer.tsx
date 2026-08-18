@@ -9,11 +9,27 @@ import {
   flexRender,
   createColumnHelper,
 } from '@tanstack/react-table';
-import { ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  ChevronLeft,
+  ChevronRight,
+  Columns3,
+} from 'lucide-react';
 import { AllowedSortField, ProjectListQuery } from '../../domain/projectQuery';
 import { ProjectStatusBadge } from '../admin/ProjectStatusBadge';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
+import { cn } from '../../lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 import {
   getProjectDetailHref,
   getProjectColumnSortField,
@@ -33,6 +49,32 @@ export interface ProjectTableContainerProps {
 
 const columnHelper = createColumnHelper<ProjectIndexRow>();
 
+const COLUMN_LABELS: Record<DashboardColumnId, string> = {
+  title: 'Project',
+  status: 'Status',
+  program: 'Program & discipline',
+  year: 'Year',
+  validation: 'Validation',
+  updatedAt: 'Updated',
+  actions: 'Actions',
+};
+
+/**
+ * Proportional column widths. Without them the automatic table layout hands almost all
+ * spare width to the long project titles, which squeezes program, discipline and the
+ * status/validation labels into unreadable stacks. Percentages simply re-weight the
+ * remaining columns when some are hidden.
+ */
+const COLUMN_WIDTH_CLASSES: Record<DashboardColumnId, string> = {
+  title: 'w-[28%]',
+  status: 'w-[12%]',
+  program: 'w-[19%]',
+  year: 'w-[7%]',
+  validation: 'w-[12%]',
+  updatedAt: 'w-[12%]',
+  actions: 'w-[10%]',
+};
+
 function formatDate(dateStr?: string) {
   if (!dateStr) return 'Not recorded';
   try {
@@ -48,6 +90,13 @@ function formatDate(dateStr?: string) {
   }
 }
 
+/** Secondary identifying context for a project, kept as one wrapping line. */
+function supportingContext(row: ProjectIndexRow): string | null {
+  const parts: string[] = [];
+  if (row.groupName) parts.push(`Group: ${row.groupName}`);
+  if (row.industryPartner) parts.push(`Partner: ${row.industryPartner}`);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
 
 export function ProjectTableContainer({ query, result }: ProjectTableContainerProps) {
   // Opt out of React Compiler memoization because useReactTable is an incompatible library boundary
@@ -107,17 +156,17 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
           type="button"
           onClick={() => handleSort(field)}
           aria-label={`Sort by ${label} ${isSorted && isAsc ? 'descending' : 'ascending'}`}
-          className="flex items-center gap-1 font-semibold text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-xs"
+          className="inline-flex items-center gap-1.5 rounded-sm text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <span>{label}</span>
           {isSorted ? (
             isAsc ? (
-              <ArrowUp className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+              <ArrowUp className="size-4 text-foreground" aria-hidden="true" />
             ) : (
-              <ArrowDown className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+              <ArrowDown className="size-4 text-foreground" aria-hidden="true" />
             )
           ) : (
-            <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground/50" aria-hidden="true" />
+            <ArrowUpDown className="size-4 text-muted-foreground/60" aria-hidden="true" />
           )}
         </button>
       );
@@ -125,81 +174,94 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
     [query.sort, query.direction, handleSort]
   );
 
+  const staticHeader = React.useCallback(
+    (label: string) => (
+      <span className="text-sm font-semibold text-muted-foreground">{label}</span>
+    ),
+    []
+  );
+
   const columns = React.useMemo(
     () => [
       columnHelper.accessor('title', {
-        header: () => renderSortHeader('Project', 'title'),
+        header: () => renderSortHeader(COLUMN_LABELS.title, 'title'),
         cell: (info) => {
           const row = info.row.original;
-          const secondary = row.groupName || row.industryPartner;
+          const secondary = supportingContext(row);
           return (
-            <div className="flex flex-col gap-0.5">
-              <span className="font-semibold text-foreground text-sm leading-snug">
+            <div className="flex min-w-0 flex-col gap-1">
+              <span className="text-sm font-semibold leading-snug text-foreground">
                 {row.title}
               </span>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="font-mono text-[11px] font-medium text-primary">
-                  {row.publicId || `ID-${row.id}`}
-                </span>
-                {secondary && (
-                  <>
-                    <span>•</span>
-                    <span className="truncate max-w-[200px]">{secondary}</span>
-                  </>
-                )}
-              </div>
+              <span className="font-mono text-xs leading-normal break-words text-foreground-subtle">
+                {row.publicId || `ID-${row.id}`}
+              </span>
+              {secondary && (
+                <span className="text-xs leading-normal text-muted-foreground">{secondary}</span>
+              )}
             </div>
           );
         },
       }),
       columnHelper.accessor('status', {
-        header: () => renderSortHeader('Status', 'status'),
-        cell: (info) => <ProjectStatusBadge status={info.getValue()} />,
+        header: () => renderSortHeader(COLUMN_LABELS.status, 'status'),
+        // Labels stay on one line: a pill with wrapped text reads as a layout fault.
+        cell: (info) => <ProjectStatusBadge status={info.getValue()} className="whitespace-nowrap" />,
       }),
       columnHelper.accessor('program', {
-        header: () => <span className="font-semibold text-xs text-muted-foreground">Program & Discipline</span>,
+        header: () => staticHeader(COLUMN_LABELS.program),
         cell: (info) => {
           const row = info.row.original;
           return (
-            <div className="flex flex-col gap-0.5 text-xs">
-              <span className="font-medium text-foreground">{row.program || 'Not specified'}</span>
-              <span className="text-muted-foreground">{row.discipline || 'General'}</span>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-sm leading-snug text-foreground">
+                {row.program || 'Not specified'}
+              </span>
+              <span className="text-xs leading-normal text-muted-foreground">
+                {row.discipline || 'General'}
+              </span>
             </div>
           );
         },
       }),
       columnHelper.accessor('year', {
-        header: () => renderSortHeader('Year', 'year'),
-        cell: (info) => <span className="text-xs font-semibold text-foreground">{info.getValue()}</span>,
+        header: () => renderSortHeader(COLUMN_LABELS.year, 'year'),
+        cell: (info) => (
+          <span className="text-sm tabular-nums text-foreground">{info.getValue()}</span>
+        ),
       }),
       columnHelper.display({
         id: 'validation',
-        header: () => <span className="font-semibold text-xs text-muted-foreground">Validation</span>,
+        header: () => staticHeader(COLUMN_LABELS.validation),
         cell: (info) => {
           const row = info.row.original;
-          return <Badge variant={row.validationVariant} className="text-xs">{row.validationLabel}</Badge>;
+          return (
+            <Badge variant={row.validationVariant} className="whitespace-nowrap">
+              {row.validationLabel}
+            </Badge>
+          );
         },
       }),
       columnHelper.accessor('updatedAt', {
-        header: () => renderSortHeader('Updated', 'updated_at'),
+        header: () => renderSortHeader(COLUMN_LABELS.updatedAt, 'updated_at'),
         cell: (info) => (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
             {formatDate(info.getValue() || info.row.original.createdAt)}
           </span>
         ),
       }),
       columnHelper.display({
         id: 'actions',
-        header: () => <span className="sr-only">Actions</span>,
+        header: () => <span className="sr-only">{COLUMN_LABELS.actions}</span>,
         cell: (info) => {
           const href = getProjectDetailHref(info.row.original.publicId);
           if (!href) {
-            return <span className="text-xs text-muted-foreground italic">Unavailable</span>;
+            return <span className="text-sm italic text-muted-foreground">Unavailable</span>;
           }
           return (
             <Link
               href={href}
-              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-2xs hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[36px]"
+              className="inline-flex min-h-[40px] items-center justify-center whitespace-nowrap rounded-md border border-input bg-background px-3 text-sm font-semibold text-foreground shadow-2xs hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               View project
             </Link>
@@ -207,7 +269,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
         },
       }),
     ],
-    [renderSortHeader]
+    [renderSortHeader, staticHeader]
   );
 
   // TanStack Table's useReactTable returns an API that React Compiler cannot safely memoize;
@@ -233,35 +295,76 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
   const { page, pageCount, total, pageSize } = result;
   const fromRecord = total > 0 ? (page - 1) * pageSize + 1 : 0;
   const toRecord = Math.min(page * pageSize, total);
+  const totalPages = Math.max(pageCount, 1);
+  const visibleConfigurableCount = DASHBOARD_CONFIGURABLE_COLUMN_IDS.filter((column) =>
+    preferences.visibleColumns.includes(column),
+  ).length;
+
+  const toggleColumn = (column: DashboardColumnId) => {
+    const visibleColumns: DashboardColumnId[] = preferences.visibleColumns.includes(column)
+      ? preferences.visibleColumns.filter((value) => value !== column)
+      : [...preferences.visibleColumns, column];
+    updatePreferences({ visibleColumns });
+  };
 
   return (
-    <div className="flex flex-col gap-4">
-      <fieldset className="flex flex-wrap gap-x-4 gap-y-2 rounded-lg border bg-card p-3 text-xs">
-        <legend className="px-1 font-semibold">Desktop table columns</legend>
-        {DASHBOARD_CONFIGURABLE_COLUMN_IDS.map((column) => (
-          <label key={column} className="flex cursor-pointer items-center gap-1.5">
-            <input
-              type="checkbox"
-              checked={preferences.visibleColumns.includes(column)}
-              onChange={() => {
-                const visibleColumns: DashboardColumnId[] = preferences.visibleColumns.includes(column)
-                  ? preferences.visibleColumns.filter((value) => value !== column)
-                  : [...preferences.visibleColumns, column];
-                updatePreferences({ visibleColumns });
-              }}
-              className="size-4 rounded border-input accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            {column === 'updatedAt'
-              ? 'Updated'
-              : `${column.charAt(0).toUpperCase()}${column.slice(1)}`}
-          </label>
-        ))}
-      </fieldset>
+    <section aria-labelledby="project-results-heading" className="flex flex-col gap-3">
+      <h3 id="project-results-heading" className="sr-only">
+        Project results
+      </h3>
+
+      {/* Result range and secondary view settings */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Showing{' '}
+          <span className="font-semibold tabular-nums text-foreground">
+            {fromRecord}&ndash;{toRecord}
+          </span>{' '}
+          of <span className="font-semibold tabular-nums text-foreground">{total}</span>{' '}
+          {total === 1 ? 'project' : 'projects'}
+        </p>
+
+        {/* Non-modal: the column menu is a secondary setting and must never hide the
+            table from assistive technology or block interaction with the page behind it. */}
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="hidden min-h-[40px] md:inline-flex">
+              <Columns3 aria-hidden="true" />
+              <span>Columns</span>
+              <span className="font-normal text-muted-foreground">
+                {visibleConfigurableCount} of {DASHBOARD_CONFIGURABLE_COLUMN_IDS.length}
+              </span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[16rem]">
+            <DropdownMenuLabel>Desktop table columns</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {DASHBOARD_CONFIGURABLE_COLUMN_IDS.map((column) => (
+              <DropdownMenuCheckboxItem
+                key={column}
+                checked={preferences.visibleColumns.includes(column)}
+                onCheckedChange={() => toggleColumn(column)}
+                onSelect={(event) => event.preventDefault()}
+              >
+                {COLUMN_LABELS[column]}
+              </DropdownMenuCheckboxItem>
+            ))}
+            <DropdownMenuSeparator />
+            <p className="px-2.5 py-2 text-xs text-muted-foreground">
+              Project and Actions always stay visible. Mobile project cards are not affected.
+            </p>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
       {/* Desktop/Tablet Table View */}
-      <div className="hidden md:block rounded-lg border bg-card shadow-xs overflow-hidden">
+      <div className="hidden overflow-hidden rounded-lg border bg-card shadow-xs md:block">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
-            <thead className="bg-muted/50 border-b">
+          <table className="w-full border-collapse text-left">
+            <caption className="sr-only">
+              Capstone project records, showing {fromRecord} to {toRecord} of {total}.
+            </caption>
+            <thead className="border-b bg-muted/40">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
@@ -277,7 +380,10 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
                         key={header.id}
                         scope="col"
                         aria-sort={ariaSort}
-                        className="p-3 font-semibold text-xs text-muted-foreground"
+                        className={cn(
+                          'px-4 py-3 align-bottom font-semibold',
+                          COLUMN_WIDTH_CLASSES[header.column.id as DashboardColumnId],
+                        )}
                       >
                         {header.isPlaceholder
                           ? null
@@ -288,11 +394,11 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
                 </tr>
               ))}
             </thead>
-            <tbody className="divide-y border-b">
+            <tbody className="divide-y">
               {table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="hover:bg-muted/30 transition-colors">
+                <tr key={row.id} className="transition-colors hover:bg-muted/30">
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="p-3 align-middle font-normal">
+                    <td key={cell.id} className="px-4 py-3 align-top font-normal">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
@@ -304,90 +410,104 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
       </div>
 
       {/* Mobile Card List Fallback */}
-      <div className="flex flex-col gap-3 md:hidden">
+      <ul className="flex list-none flex-col gap-3 md:hidden">
         {result.rows.map((row) => {
           const href = getProjectDetailHref(row.publicId);
+          const secondary = supportingContext(row);
 
           return (
-            <div key={row.id} className="flex flex-col gap-2 rounded-lg border bg-card p-4 shadow-xs">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex flex-col gap-0.5 min-w-0">
-                  <span className="font-semibold text-foreground text-sm leading-snug">
+            <li key={row.id} className="rounded-lg border bg-card p-4 shadow-xs">
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <h4 className="text-sm font-semibold leading-snug text-foreground">
                     {row.title}
-                  </span>
-                  <span className="font-mono text-xs text-primary font-medium">
+                  </h4>
+                  <span className="font-mono text-xs leading-normal break-words text-foreground-subtle">
                     {row.publicId || `ID-${row.id}`}
                   </span>
                 </div>
-                <ProjectStatusBadge status={row.status} />
-              </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground pt-1 border-t">
-                <span>{row.program || 'Program'}</span>
-                <span>•</span>
-                <span>{row.year}</span>
-                <span>•</span>
-                <Badge variant={row.validationVariant} className="text-xs">
-                  {row.validationLabel}
-                </Badge>
-              </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <ProjectStatusBadge status={row.status} />
+                  <Badge variant={row.validationVariant}>{row.validationLabel}</Badge>
+                </div>
 
-              <div className="flex items-center justify-between pt-2 border-t mt-1">
-                <span className="text-xs text-muted-foreground">
-                  Updated: {formatDate(row.updatedAt || row.createdAt)}
-                </span>
+                <dl className="flex flex-col gap-1.5 text-sm">
+                  <div className="flex flex-wrap gap-x-2">
+                    <dt className="text-muted-foreground">Program</dt>
+                    <dd className="min-w-0 text-foreground">{row.program || 'Not specified'}</dd>
+                  </div>
+                  <div className="flex flex-wrap gap-x-2">
+                    <dt className="text-muted-foreground">Discipline</dt>
+                    <dd className="min-w-0 text-foreground">{row.discipline || 'General'}</dd>
+                  </div>
+                  <div className="flex flex-wrap gap-x-2">
+                    <dt className="text-muted-foreground">Year</dt>
+                    <dd className="min-w-0 tabular-nums text-foreground">{row.year}</dd>
+                  </div>
+                  {secondary && (
+                    <div className="flex flex-wrap gap-x-2">
+                      <dt className="sr-only">Context</dt>
+                      <dd className="min-w-0 text-muted-foreground">{secondary}</dd>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-x-2">
+                    <dt className="text-muted-foreground">Updated</dt>
+                    <dd className="min-w-0 text-foreground">
+                      {formatDate(row.updatedAt || row.createdAt)}
+                    </dd>
+                  </div>
+                </dl>
+
                 {href ? (
                   <Link
                     href={href}
-                    className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-semibold shadow-2xs hover:bg-primary/90 min-h-[44px]"
+                    className="inline-flex min-h-[44px] w-full items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-semibold text-foreground shadow-2xs hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     View project
                   </Link>
                 ) : (
-                  <span className="text-xs text-muted-foreground italic">Unavailable</span>
+                  <span className="text-sm italic text-muted-foreground">Unavailable</span>
                 )}
               </div>
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
 
       {/* Pagination Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-lg border bg-card p-3 text-xs text-muted-foreground shadow-xs">
-        <div>
-          Showing <span className="font-semibold text-foreground">{fromRecord}</span> to{' '}
-          <span className="font-semibold text-foreground">{toRecord}</span> of{' '}
-          <span className="font-semibold text-foreground">{total}</span> project records
-        </div>
+      <nav
+        aria-label="Project results pages"
+        className="flex flex-col items-start gap-3 rounded-lg border bg-card px-4 py-3 shadow-xs sm:flex-row sm:items-center sm:justify-between"
+      >
+        <p className="text-sm text-muted-foreground">
+          Page <span className="font-semibold tabular-nums text-foreground">{page}</span> of{' '}
+          <span className="font-semibold tabular-nums text-foreground">{totalPages}</span>
+        </p>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
-            size="sm"
             disabled={page <= 1}
             onClick={() => handlePageChange(page - 1)}
             aria-label="Go to previous page"
-            className="gap-1 min-h-[44px] sm:min-h-[36px]"
+            className="min-h-[40px] gap-1"
           >
-            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            <ChevronLeft aria-hidden="true" />
             <span>Previous</span>
           </Button>
-          <span className="font-medium text-foreground px-2">
-            Page {page} of {Math.max(pageCount, 1)}
-          </span>
           <Button
             variant="outline"
-            size="sm"
             disabled={page >= pageCount || pageCount === 0}
             onClick={() => handlePageChange(page + 1)}
             aria-label="Go to next page"
-            className="gap-1 min-h-[44px] sm:min-h-[36px]"
+            className="min-h-[40px] gap-1"
           >
             <span>Next</span>
-            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            <ChevronRight aria-hidden="true" />
           </Button>
         </div>
-      </div>
-    </div>
+      </nav>
+    </section>
   );
 }

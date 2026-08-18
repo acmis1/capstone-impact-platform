@@ -23,6 +23,7 @@ export default async function NewImportPreviewPage() {
         return (
           <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
             <ErrorState
+              headingLevel="h1"
               title="Import service unavailable"
               description="Authentication service is temporarily unavailable. Please try again."
               action={
@@ -37,6 +38,7 @@ export default async function NewImportPreviewPage() {
       return (
         <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
           <ErrorState
+            headingLevel="h1"
             title="Import access required"
             description="Your account does not have permission to import projects."
             action={
@@ -51,6 +53,7 @@ export default async function NewImportPreviewPage() {
     return (
       <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
         <ErrorState
+          headingLevel="h1"
           title="Import unavailable"
           description="An unexpected error occurred while verifying credentials. Please try again."
           action={
@@ -69,6 +72,7 @@ export default async function NewImportPreviewPage() {
     return (
       <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
         <ErrorState
+          headingLevel="h1"
           title="Import access required"
           description="Your account does not have permission to import projects."
           action={
@@ -82,13 +86,13 @@ export default async function NewImportPreviewPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
+    <div className="flex flex-col gap-6 max-w-7xl mx-auto w-full">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col gap-1">
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             Import projects
-          </h2>
+          </h1>
           <p className="text-sm text-muted-foreground">
             Check project files and import them into the test environment.
           </p>

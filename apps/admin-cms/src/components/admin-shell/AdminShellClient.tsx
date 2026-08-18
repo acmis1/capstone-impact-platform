@@ -27,7 +27,7 @@ export function AdminShellClient({
       {/* Skip to main content link */}
       <a
         href="#admin-main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-background focus:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-background focus:text-primary focus:outline-none focus:ring-2 focus:ring-ring focus:shadow-md rounded-md font-semibold text-sm"
       >
         Skip to main content
       </a>
@@ -61,7 +61,7 @@ export function AdminShellClient({
           <main
             id="admin-main-content"
             tabIndex={-1}
-            className="flex-1 p-4 lg:p-6 outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="flex-1 p-4 sm:p-6 lg:p-8 outline-none focus-visible:ring-1 focus-visible:ring-ring w-full max-w-[1920px] mx-auto"
           >
             {children}
           </main>
