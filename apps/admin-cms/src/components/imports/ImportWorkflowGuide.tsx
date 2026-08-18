@@ -1,6 +1,13 @@
 import React from 'react';
 import { FileSpreadsheet, Image as ImageIcon, FileText, Folder, ChevronDown, ChevronRight, HelpCircle, Check } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  OPERATIONAL_SURFACE_CLASS_NAME,
+} from '../ui/card';
 import {
   IMPORT_WORKFLOW_STEP_ITEM_CLASSES,
   IMPORT_WORKFLOW_STEP_MARKER_CLASSES,
@@ -28,7 +35,10 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
   return (
     <div className="flex flex-col gap-4">
       {/* 5-Step Process Orientation Bar */}
-      <nav aria-label="Import workflow steps" className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-xs">
+      <nav
+        aria-label="Import workflow steps"
+        className={`${OPERATIONAL_SURFACE_CLASS_NAME} p-3 sm:p-4`}
+      >
         <ol className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
           {STEPS.map(({ step, label }) => {
             const isCompleted = step < currentStep || (isComplete && step <= currentStep);
@@ -71,7 +81,7 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
       </nav>
 
       {/* Before You Start Onboarding & Folder Guide Card */}
-      <Card className="bg-card border-border shadow-xs">
+      <Card>
         <CardHeader className="py-3 px-4 sm:px-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">

@@ -7,6 +7,7 @@ import { Label } from '../ui/label';
 import { Alert } from '../ui/alert';
 import { PROJECT_DETAIL_SURFACE_CLASSES } from './projectDetailSurfaceStyles';
 import { CheckCircle2 } from 'lucide-react';
+import { getReviewActionPresentation } from './reviewActionPresentation';
 
 interface StagingReviewActionsProps {
   publicId: string;
@@ -64,20 +65,6 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
     }
   };
 
-  const getActionButtonVariant = (action: string): 'default' | 'destructive' | 'outline' | 'secondary' => {
-    if (action === 'approve') return 'default';
-    if (action === 'request_changes') return 'destructive';
-    if (action === 'archive') return 'secondary';
-    return 'outline';
-  };
-
-  const formatActionLabel = (action: string) => {
-    if (action === 'approve') return 'Approve project';
-    if (action === 'request_changes') return 'Request changes';
-    if (action === 'archive') return 'Archive project';
-    return action.replace('_', ' ');
-  };
-
   return (
     <div className="flex flex-col gap-4 text-sm">
       {success && (
@@ -110,18 +97,21 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
 
       {/* Action Buttons */}
       <div className="flex flex-col gap-2">
-        {allowedActions.map((action) => (
-          <Button
-            key={action}
-            type="button"
-            variant={getActionButtonVariant(action)}
-            onClick={() => handleAction(action)}
-            disabled={loading || success}
-            className="w-full font-semibold"
-          >
-            {formatActionLabel(action)}
-          </Button>
-        ))}
+        {allowedActions.map((action) => {
+          const presentation = getReviewActionPresentation(action);
+          return (
+            <Button
+              key={action}
+              type="button"
+              variant={presentation.variant}
+              onClick={() => handleAction(action)}
+              disabled={loading || success}
+              className={`w-full font-semibold ${presentation.className ?? ''}`}
+            >
+              {presentation.label}
+            </Button>
+          );
+        })}
       </div>
 
       <p className={`p-3 text-sm leading-relaxed ${PROJECT_DETAIL_SURFACE_CLASSES.context}`}>

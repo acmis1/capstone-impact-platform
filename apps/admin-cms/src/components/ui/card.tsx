@@ -1,13 +1,17 @@
 import * as React from "react";
 import { cn } from "../../lib/utils";
 
+/** Shared outer geometry for major operational surfaces. */
+export const OPERATIONAL_SURFACE_CLASS_NAME =
+  "rounded-xl border border-border/80 bg-card shadow-xs";
+
 export function Card({ className, ref, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card"
       ref={ref}
       className={cn(
-        "rounded-xl border border-border/80 bg-card text-card-foreground shadow-xs",
+        `${OPERATIONAL_SURFACE_CLASS_NAME} text-card-foreground`,
         className
       )}
       {...props}

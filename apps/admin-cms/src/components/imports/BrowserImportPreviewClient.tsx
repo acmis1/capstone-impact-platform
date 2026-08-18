@@ -469,7 +469,7 @@ export default function BrowserImportPreviewClient() {
       />
 
       {/* Step 3: Choose project folder */}
-      <Card className="bg-card border-border shadow-xs">
+      <Card>
         <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
           <div className="flex items-center gap-2">
             <FolderOpen className="h-4 w-4 text-primary" aria-hidden="true" />
@@ -582,7 +582,7 @@ export default function BrowserImportPreviewClient() {
       {previewResult && (
         <div className="flex flex-col gap-6">
           {/* Validation Results Card */}
-          <Card className="bg-card border-border shadow-xs">
+          <Card>
             <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
               <div className="flex items-center gap-2">
                 <FileCheck className="h-4 w-4 text-primary" aria-hidden="true" />
