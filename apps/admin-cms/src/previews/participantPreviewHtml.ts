@@ -360,8 +360,8 @@ const PAGE_STYLE = `
     margin: 0 0 0.4rem; color: var(--color-brand); font-size: 0.8125rem; font-weight: 760;
     letter-spacing: 0.035em; text-transform: uppercase;
   }
-  h1 { max-width: 29ch; margin: 0; font-size: clamp(2rem, 4.2vw, 3.5rem); line-height: 1.08; letter-spacing: -0.035em; }
-  .project-introduction { max-width: 70ch; margin: 1.15rem 0 0; color: var(--color-text-secondary); font-size: 1.0625rem; }
+  h1 { max-width: 29ch; margin: 0; font-size: clamp(2rem, 4.2vw, 3.5rem); line-height: 1.08; letter-spacing: -0.035em; overflow-wrap: anywhere; }
+  .project-introduction { max-width: 70ch; margin: 1.15rem 0 0; color: var(--color-text-secondary); font-size: 1.0625rem; overflow-wrap: anywhere; }
   .project-meta { display: flex; flex-wrap: wrap; gap: 0.75rem 1.75rem; margin: 1.5rem 0 0; }
   .project-meta div { min-width: 90px; max-width: 28rem; }
   .project-meta dt { color: var(--color-text-muted); font-size: 0.75rem; font-weight: 720; letter-spacing: 0.04em; text-transform: uppercase; }
@@ -415,6 +415,7 @@ const PAGE_STYLE = `
   .team-group { grid-column: 1 / -1; }
   .group-name { margin: 0 0 1rem; color: var(--color-text-secondary); font-weight: 650; }
   .team-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem 1.25rem; margin: 0; padding-left: 1.2rem; color: var(--color-text-secondary); }
+  .team-list li, .compact-list li, .reference-list li { min-width: 0; overflow-wrap: anywhere; }
   .compact-list { margin: 0; padding-left: 1.15rem; }
   .reference-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 2rem; }
   .reference-list { margin: 0; padding-left: 1.2rem; color: var(--color-text-secondary); }

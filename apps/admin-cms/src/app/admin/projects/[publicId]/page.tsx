@@ -270,7 +270,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     return (
       <div className="mx-auto flex min-h-[50vh] max-w-lg flex-col items-center justify-center p-6 text-center">
         <ErrorState
-          headingLevel="h2"
+          headingLevel="h1"
           title="Project Details Unavailable"
           description="Project details could not be loaded. Please try again shortly."
           action={
@@ -287,7 +287,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     return (
       <div className="mx-auto flex min-h-[50vh] max-w-lg flex-col items-center justify-center p-6 text-center">
         <ErrorState
-          headingLevel="h2"
+          headingLevel="h1"
           title="Project not found"
           description={`No project record was found matching the identifier ${publicId}.`}
           action={
@@ -346,9 +346,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
             <div className="flex min-w-0 flex-col gap-2">
-              <h2 className="max-w-[24ch] break-words text-2xl font-bold tracking-tight text-foreground">
+              <h1 className="max-w-[24ch] break-words text-2xl font-bold tracking-tight text-foreground">
                 {project.title}
-              </h2>
+              </h1>
               <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-sm">
                 <div className="flex min-w-0 items-baseline gap-1.5">
                   <dt className="text-muted-foreground">Public ID</dt>

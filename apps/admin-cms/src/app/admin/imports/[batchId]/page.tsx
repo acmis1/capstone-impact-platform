@@ -52,6 +52,7 @@ export default async function ImportBatchDetailPage({
     return (
       <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
         <ErrorState
+          headingLevel="h1"
           title="Import details unavailable"
           description="The requested import details could not be retrieved. Please try again."
           action={
@@ -69,6 +70,7 @@ export default async function ImportBatchDetailPage({
     return (
       <div className="flex flex-col gap-6 max-w-2xl mx-auto w-full py-12">
         <ErrorState
+          headingLevel="h1"
           title="Import not found"
           description="The requested import batch does not exist or has been removed."
           action={
@@ -125,9 +127,9 @@ export default async function ImportBatchDetailPage({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col gap-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground break-words">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground break-words">
               {batch.batch_name || 'Import batch'}
-            </h2>
+            </h1>
             <ImportBatchStatusBadge status={batch.status} />
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">

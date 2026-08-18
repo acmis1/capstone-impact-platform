@@ -180,7 +180,7 @@ export function ImportBatchReviewPanel({ batchId, batchStatus, projects, canSubm
       </div>
 
       {/* Projects Table (medium screens and above) */}
-      <div className="hidden md:block overflow-x-auto w-full border border-border rounded-lg bg-card">
+      <div className="hidden xl:block overflow-x-auto w-full border border-border rounded-lg bg-card">
         <table className="w-full text-left text-sm border-collapse">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -249,7 +249,7 @@ export function ImportBatchReviewPanel({ batchId, batchStatus, projects, canSubm
       </div>
 
       {/* Project Cards (narrow / mobile viewports) */}
-      <div className="flex md:hidden flex-col gap-3">
+      <div className="flex xl:hidden flex-col gap-3">
         {projects.map((project) => {
           const selectable = canSubmit && project.eligibility === 'eligible' && project.ready && !pending;
           const isChecked = selected.has(project.publicId);
