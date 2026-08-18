@@ -272,6 +272,17 @@ describe('project detail workspace information architecture', () => {
     expect(pageSource).toContain('allowedActions={permittedReviewActions}');
   });
 
+  it('passes the already-derived page capabilities into capability-aware orientation', () => {
+    for (const capability of [
+      'canManageParticipantPreview: canManagePreview',
+      'canResolveParticipantCorrection: canResolveCorrection',
+      'canPreparePublication: canPreparePublicationPlan',
+      'canExecuteLocalArchive,\n    participantResponse',
+    ]) {
+      expect(pageSource).toContain(capability);
+    }
+  });
+
   it('keeps technical details and change history available rather than removed', () => {
     expect(pageSource).toContain('<ProjectAuditHistory');
     expect(pageSource).toContain('Layout settings');

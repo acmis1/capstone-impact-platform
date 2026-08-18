@@ -10,6 +10,10 @@ const baseInput: ProjectWorkflowContextInput = {
   submitForReview: null,
   submitForReviewUnavailable: false,
   canEditMetadata: true,
+  canManageParticipantPreview: false,
+  canResolveParticipantCorrection: false,
+  canPreparePublication: false,
+  canExecuteLocalArchive: false,
   participantResponse: 'unresponded',
   hasActivePreview: false,
   publicationReadiness: null,
@@ -51,7 +55,7 @@ describe('project workflow orientation context', () => {
 
   it('states the permission limit instead of an action a reader cannot take', () => {
     const context = derive({ canEditMetadata: false, submitForReview: { ready: true, blockingReasons: [] } });
-    expect(context.decision).toMatch(/cannot edit it or submit it for review/i);
+    expect(context.decision).toMatch(/cannot edit it, submit it for review, or record a review decision/i);
   });
 
   it('explains that no import batch means submission is not offered', () => {
@@ -75,21 +79,45 @@ describe('project workflow orientation context', () => {
     expect(context.summary).toMatch(/approved but is not published/i);
   });
 
-  it('asks for a participant preview when an approved project has none', () => {
+  it('directs a preview manager to create and share a participant preview', () => {
+    const context = derive({
+      status: 'approved', participantResponse: 'unresponded', hasActivePreview: false, canManageParticipantPreview: true,
+    });
+    expect(context.decision).toMatch(/create and share a participant preview/i);
+  });
+
+  it('states the preview-management limit for an approved project with no preview', () => {
     const context = derive({ status: 'approved', participantResponse: 'unresponded', hasActivePreview: false });
-    expect(context.decision).toMatch(/share a participant preview/i);
+    expect(context.decision).toMatch(/confirmation has not started/i);
+    expect(context.decision).toMatch(/cannot issue the preview/i);
   });
 
-  it('waits for the participant while a preview is active and unanswered', () => {
-    const context = derive({ status: 'approved', participantResponse: 'unresponded', hasActivePreview: true });
+  it('directs a preview manager while an active preview is unanswered', () => {
+    const context = derive({
+      status: 'approved', participantResponse: 'unresponded', hasActivePreview: true, canManageParticipantPreview: true,
+    });
     expect(context.summary).toMatch(/awaiting a response/i);
-    expect(context.decision).toMatch(/wait for the participant to confirm/i);
+    expect(context.decision).toMatch(/manage the preview and reminders/i);
   });
 
-  it('prioritises correction resolution over publication', () => {
-    const context = derive({ status: 'approved', participantResponse: 'correction_requested' });
+  it('states the preview-management limit while an active preview is unanswered', () => {
+    const context = derive({ status: 'approved', participantResponse: 'unresponded', hasActivePreview: true });
+    expect(context.decision).toMatch(/response is pending/i);
+    expect(context.decision).toMatch(/not available to your role/i);
+  });
+
+  it('directs a correction resolver to resolve the correction before publication', () => {
+    const context = derive({
+      status: 'approved', participantResponse: 'correction_requested', canResolveParticipantCorrection: true,
+    });
     expect(context.summary).toMatch(/asked for a correction/i);
     expect(context.decision).toMatch(/^Resolve the participant correction/);
+  });
+
+  it.each(['Editor only', 'Reviewer only'])('states the combined-authority requirement when %s cannot resolve a correction', () => {
+    const context = derive({ status: 'approved', participantResponse: 'correction_requested' });
+    expect(context.decision).toMatch(/combined edit-and-review authority/i);
+    expect(context.decision).toMatch(/cannot resolve/i);
   });
 
   it('distinguishes ready, verified blocked, and unavailable publication readiness', () => {
@@ -97,8 +125,17 @@ describe('project workflow orientation context', () => {
       status: 'approved',
       participantResponse: 'confirmed',
       publicationReadiness: { ready: true, resultCode: 'READY', blockers: [] },
+      canPreparePublication: true,
     });
     expect(confirmedReady.decision).toMatch(/publication can be prepared/i);
+
+    const confirmedReadyWithoutAuthority = derive({
+      status: 'approved',
+      participantResponse: 'confirmed',
+      publicationReadiness: { ready: true, resultCode: 'READY', blockers: [] },
+    });
+    expect(confirmedReadyWithoutAuthority.decision).toMatch(/ready for publication preparation/i);
+    expect(confirmedReadyWithoutAuthority.decision).toMatch(/cannot generate the preparation plan/i);
 
     const confirmedBlocked = derive({
       status: 'approved',
@@ -123,15 +160,16 @@ describe('project workflow orientation context', () => {
     expect(context.decision).not.toMatch(/share a participant preview/i);
   });
 
-  it('surfaces a pending showcase removal for a published project', () => {
-    const context = derive({ status: 'published', allowedActions: [], pendingRemovalFromPublic: true });
+  it('surfaces a pending showcase removal only as a local lifecycle action when it is available', () => {
+    const context = derive({ status: 'published', allowedActions: [], pendingRemovalFromPublic: true, canExecuteLocalArchive: true });
     expect(context.summary).toMatch(/marked for removal/i);
-    expect(context.decision).toMatch(/removal is pending/i);
+    expect(context.decision).toMatch(/local lifecycle action is available below/i);
   });
 
-  it('states plainly that a published project has no review transition', () => {
+  it('does not recommend local archive when it is unavailable', () => {
     const context = derive({ status: 'published', allowedActions: [] });
     expect(context.decision).toMatch(/no review transition is available/i);
+    expect(context.decision).toMatch(/authorized staff in a supported environment/i);
   });
 
   it('states plainly that an archived project has no review transition', () => {
@@ -164,5 +202,42 @@ describe('permission-filtered review actions', () => {
     expect(derive({ status: 'in_review', allowedActions: [] }).decision).toMatch(/cannot record a review decision/i);
     expect(derive({ status: 'in_review', allowedActions: ['request_changes', 'approve'] }).decision)
       .toMatch(/approve it or request changes/i);
+  });
+
+  it.each([
+    ['Editor', true, []],
+    ['Reviewer', false, ['approve']],
+    ['Reviewer + Editor', true, ['approve']],
+    ['Administrator', true, ['approve']],
+    ['read-only', false, []],
+  ] as const)('describes the available changes-requested path for %s', (_role, canEditMetadata, allowedActions) => {
+    const context = derive({
+      status: 'changes_requested',
+      canEditMetadata,
+      allowedActions,
+      submitForReview: { ready: true, blockingReasons: [] },
+    });
+
+    if (allowedActions.length > 0 && canEditMetadata) {
+      expect(context.decision).toMatch(/can be submitted for review/i);
+      expect(context.decision).toMatch(/authorized review action is also available below/i);
+    } else if (allowedActions.length > 0) {
+      expect(context.decision).toMatch(/available Approve review control/i);
+    } else if (canEditMetadata) {
+      expect(context.decision).toMatch(/can be submitted for review/i);
+    } else {
+      expect(context.decision).toMatch(/cannot edit it, submit it for review, or record a review decision/i);
+    }
+  });
+
+  it('keeps an available changes-requested review action visible when submission readiness is unavailable', () => {
+    const context = derive({
+      status: 'changes_requested',
+      canEditMetadata: true,
+      allowedActions: ['approve'],
+      submitForReviewUnavailable: true,
+    });
+    expect(context.decision).toMatch(/readiness could not be verified/i);
+    expect(context.decision).toMatch(/authorized review action is also available below/i);
   });
 });

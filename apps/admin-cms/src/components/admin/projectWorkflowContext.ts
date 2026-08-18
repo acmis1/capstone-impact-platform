@@ -17,6 +17,14 @@ export interface ProjectWorkflowContextInput {
   /** True when readiness could not be verified, which fails closed to "cannot submit". */
   submitForReviewUnavailable: boolean;
   canEditMetadata: boolean;
+  /** Existing page-level authority; this helper never derives permissions itself. */
+  canManageParticipantPreview: boolean;
+  /** Existing page-level combined edit-and-review authority. */
+  canResolveParticipantCorrection: boolean;
+  /** Existing page-level publication-preparation authority. */
+  canPreparePublication: boolean;
+  /** Existing page-level local archive availability and authority. */
+  canExecuteLocalArchive: boolean;
   /** `null` when the participant preview subsystem could not be read. */
   participantResponse: 'unresponded' | 'confirmed' | 'correction_requested' | null;
   hasActivePreview: boolean;
@@ -66,20 +74,26 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
 
   if (status === 'draft' || status === 'changes_requested') {
     const summary = status === 'changes_requested'
-      ? 'A reviewer asked for changes. The project is back with staff for editing before it returns to review.'
+      ? 'A reviewer asked for changes. The project is back with staff for correction before it returns to review.'
       : 'This project is being prepared. It is private and has not been sent for review.';
 
     let decision: string;
-    if (input.submitForReviewUnavailable) {
+    if (!input.canEditMetadata) {
+      decision = hasReviewActions
+        ? 'Your role can inspect the corrected project and use the available Approve review control below.'
+        : 'Your role can read this project but cannot edit it, submit it for review, or record a review decision.';
+    } else if (input.submitForReviewUnavailable) {
       decision = 'Submission readiness could not be verified, so submit for review stays unavailable until it can be checked again.';
-    } else if (!input.canEditMetadata) {
-      decision = 'Your role can read this project but cannot edit it or submit it for review.';
     } else if (input.submitForReview === null) {
       decision = 'Submit for review is not offered for this project, because it has no completed import batch to submit from.';
     } else if (submitBlocked) {
       decision = 'Fix the listed blocking issues before this project can be submitted for review.';
     } else {
       decision = 'Project information can be edited, and the project can be submitted for review.';
+    }
+
+    if (status === 'changes_requested' && input.canEditMetadata && hasReviewActions) {
+      decision = `${decision} An authorized review action is also available below.`;
     }
 
     return { stageLabel, summary, decision };
@@ -103,10 +117,14 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
       decision = 'Participant confirmation state could not be read, so publication readiness cannot be confirmed here.';
     } else if (input.participantResponse === 'correction_requested') {
       summary = 'Internal review is complete, but the participant asked for a correction.';
-      decision = 'Resolve the participant correction before publication can be prepared.';
+      decision = input.canResolveParticipantCorrection
+        ? 'Resolve the participant correction before publication can be prepared.'
+        : 'A participant correction remains unresolved. Resolution requires staff with combined edit-and-review authority; your role cannot resolve it.';
     } else if (input.participantResponse === 'confirmed') {
       if (input.publicationReadiness?.ready && input.publicationReadiness.resultCode === 'READY') {
-        decision = 'The participant has confirmed. Publication can be prepared.';
+        decision = input.canPreparePublication
+          ? 'The participant has confirmed. Publication can be prepared.'
+          : 'The project is ready for publication preparation, but your role cannot generate the preparation plan. Publication-authorized staff must perform that action.';
       } else if (isPublicationReadinessUnavailable(input.publicationReadiness)) {
         decision = 'The participant has confirmed, but publication readiness could not be verified. Publication preparation remains unavailable until it can be checked.';
       } else {
@@ -114,9 +132,13 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
       }
     } else if (input.hasActivePreview) {
       summary = 'Internal review is complete. A participant preview is active and awaiting a response.';
-      decision = 'Wait for the participant to confirm, or manage the preview and reminders below.';
+      decision = input.canManageParticipantPreview
+        ? 'The participant response is pending. Wait for confirmation, or manage the preview and reminders below.'
+        : 'The participant response is pending. Your role can inspect this state, but preview and reminder management is not available to your role.';
     } else {
-      decision = 'Share a participant preview so the participant can confirm their project before publication.';
+      decision = input.canManageParticipantPreview
+        ? 'Create and share a participant preview so the participant can confirm their project before publication.'
+        : 'Participant confirmation has not started. Your role can inspect this state but cannot issue the preview; authorized staff must manage it.';
     }
 
     return { stageLabel, summary, decision };
@@ -128,9 +150,11 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
       summary: input.pendingRemovalFromPublic
         ? 'This project is published and is marked for removal from the showcase.'
         : 'This project is published to the showcase.',
-      decision: input.pendingRemovalFromPublic
-        ? 'A showcase removal is pending for this project. Review the lifecycle section below.'
-        : 'No review transition is available from this status. Lifecycle changes use the controlled archive workflow.',
+      decision: input.canExecuteLocalArchive
+        ? input.pendingRemovalFromPublic
+          ? 'A showcase removal is pending for this project. The controlled local lifecycle action is available below.'
+          : 'No review transition is available from this status. The controlled local lifecycle action is available below.'
+        : 'No review transition is available from this status. Archive or removal requires authorized staff in a supported environment.',
     };
   }
 
