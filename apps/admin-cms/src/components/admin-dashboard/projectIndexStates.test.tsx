@@ -80,7 +80,7 @@ describe('DashboardMetricsSummary', () => {
     );
     expect(
       screen.getByText(
-        'Summary counts cover every stored project record and do not change with search or filters.',
+        'Summary counts cover all non-deleted project records and do not change with search or filters.',
       ),
     ).toBeTruthy();
   });

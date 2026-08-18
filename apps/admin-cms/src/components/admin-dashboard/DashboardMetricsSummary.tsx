@@ -84,7 +84,7 @@ export function DashboardMetricsSummary({ metrics }: DashboardMetricsSummaryProp
       </dl>
 
       <p className="border-t px-4 py-2 text-xs text-muted-foreground">
-        Summary counts cover every stored project record and do not change with search or filters.
+        Summary counts cover all non-deleted project records and do not change with search or filters.
       </p>
     </section>
   );
