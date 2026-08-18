@@ -15,6 +15,8 @@ import {
   MEDIA_PREVIEW_CLASSES,
   MEDIA_PREVIEW_SURFACE_TOKEN,
 } from "../components/admin-media/mediaPreviewStyles";
+import { buttonVariants } from "../components/ui/button";
+import { REVIEW_ACTION_PRESENTATIONS } from "../components/admin/reviewActionPresentation";
 
 function parseHexColor(hex: string): [number, number, number] {
   const cleanHex = hex.trim().replace(/^#/, "");
@@ -107,6 +109,33 @@ function findColorUtility(
   const match = classString.match(pattern);
   if (!match) return null;
   return { token: match[1], opacityPercent: match[2] ? Number(match[2]) : null };
+}
+
+function findLastColorUtility(
+  classString: string,
+  utilityPrefix: "bg" | "text" | "border",
+  tokenNames: string[],
+  statePrefix = ""
+): { token: string; opacityPercent: number | null } | null {
+  const alternation = [...tokenNames].sort((a, b) => b.length - a.length).join("|");
+  const state = statePrefix ? `${statePrefix}:` : "";
+  const stateGuard = statePrefix ? "" : "(?<!:)";
+  const pattern = new RegExp(`${stateGuard}\\b${state}${utilityPrefix}-(${alternation})(?:/(\\d+))?\\b`, "g");
+  const matches = [...classString.matchAll(pattern)];
+  const match = matches.at(-1);
+  if (!match) return null;
+  return { token: match[1], opacityPercent: match[2] ? Number(match[2]) : null };
+}
+
+function renderedBackgroundHex(
+  utility: { token: string; opacityPercent: number | null },
+  tokens: Record<string, string>,
+  underlyingHex: string
+) {
+  const tokenHex = tokens[utility.token];
+  expect(tokenHex, `Missing token: --${utility.token}`).toBeDefined();
+  const alpha = utility.opacityPercent !== null ? utility.opacityPercent / 100 : 1;
+  return alpha < 1 ? compositeOverBackground(tokenHex, alpha, underlyingHex) : tokenHex;
 }
 
 describe("Badge rendered alpha-composited contrast (WCAG 2.2 AA)", () => {
@@ -293,6 +322,59 @@ describe("Admin media preview rendered contrast (WCAG 2.2 AA)", () => {
       );
     });
   }
+});
+
+describe("Review-action rendered contrast (WCAG 2.2 AA)", () => {
+  const tokens = extractCssTokens();
+  const tokenNames = Object.keys(tokens);
+
+  function renderedActionClasses(action: keyof typeof REVIEW_ACTION_PRESENTATIONS) {
+    const presentation = REVIEW_ACTION_PRESENTATIONS[action];
+    return buttonVariants({
+      variant: presentation.variant,
+      size: "default",
+      className: presentation.className,
+    });
+  }
+
+  function expectActionTextContrast(
+    action: keyof typeof REVIEW_ACTION_PRESENTATIONS,
+    statePrefix = ""
+  ) {
+    const classString = renderedActionClasses(action);
+    const background = findLastColorUtility(classString, "bg", tokenNames, statePrefix);
+    const foreground = findLastColorUtility(classString, "text", tokenNames, statePrefix);
+    expect(background, `Missing ${statePrefix || "normal"} background for ${action}`).not.toBeNull();
+    expect(foreground, `Missing ${statePrefix || "normal"} foreground for ${action}`).not.toBeNull();
+
+    const renderedBackground = renderedBackgroundHex(background!, tokens, tokens.card);
+    const ratio = getContrastRatio(tokens[foreground!.token], renderedBackground);
+    expect(
+      ratio,
+      `${action} ${statePrefix || "normal"} text --${foreground!.token} on ${renderedBackground} is ${ratio.toFixed(2)}:1`,
+    ).toBeGreaterThanOrEqual(4.5);
+  }
+
+  it("keeps approve and archive action text at >= 4.5:1", () => {
+    expectActionTextContrast("approve");
+    expectActionTextContrast("archive");
+  });
+
+  it("keeps request changes text at >= 4.5:1 in normal and hover states", () => {
+    expectActionTextContrast("request_changes");
+    expectActionTextContrast("request_changes", "hover");
+  });
+
+  it("keeps the request-changes boundary at >= 3:1 against the card surface", () => {
+    const requestChanges = renderedActionClasses("request_changes");
+    const border = findLastColorUtility(requestChanges, "border", tokenNames);
+    expect(border, "Missing request-changes boundary").not.toBeNull();
+    const ratio = getContrastRatio(tokens[border!.token], tokens.card);
+    expect(
+      ratio,
+      `request_changes border --${border!.token} against card is ${ratio.toFixed(2)}:1`,
+    ).toBeGreaterThanOrEqual(3);
+  });
 });
 
 describe("Design Token WCAG 2.2 AA Contrast Verification", () => {

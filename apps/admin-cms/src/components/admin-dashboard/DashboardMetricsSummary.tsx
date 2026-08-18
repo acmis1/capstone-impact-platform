@@ -2,6 +2,7 @@ import * as React from 'react';
 import { FolderKanban, CheckCircle2, Clock, Archive } from 'lucide-react';
 import { ProjectDashboardMetrics } from '../../domain/projectQuery';
 import { cn } from '../../lib/utils';
+import { OPERATIONAL_SURFACE_CLASS_NAME } from '../ui/card';
 
 export interface DashboardMetricsSummaryProps {
   metrics: ProjectDashboardMetrics;
@@ -51,7 +52,7 @@ export function DashboardMetricsSummary({ metrics }: DashboardMetricsSummaryProp
   return (
     <section
       aria-labelledby="project-metrics-heading"
-      className="rounded-lg border bg-card shadow-xs"
+      className={OPERATIONAL_SURFACE_CLASS_NAME}
     >
       <h3 id="project-metrics-heading" className="sr-only">
         Project record summary

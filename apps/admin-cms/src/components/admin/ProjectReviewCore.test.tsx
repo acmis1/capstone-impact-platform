@@ -8,6 +8,7 @@ import { ProjectMediaSummary } from './ProjectMediaSummary';
 import { ProjectValidationSummary } from './ProjectValidationSummary';
 import { SubmitForReviewButton } from './SubmitForReviewButton';
 import { StagingReviewActions } from './StagingReviewActions';
+import { getReviewActionPresentation } from './reviewActionPresentation';
 import { ProjectMetadataEditor } from './ProjectMetadataEditor';
 import { ProjectMetadataNavigationProvider } from './ProjectMetadataNavigation';
 import { Project } from '../../domain/project';
@@ -233,6 +234,28 @@ describe('PR2B1 Core Project Review Experience Components', () => {
   });
 
   describe('StagingReviewActions', () => {
+    it('keeps the allowed action order and assigns accurate visual semantics', () => {
+      const actions = ['approve', 'request_changes', 'archive'];
+      render(
+        <StagingReviewActions
+          publicId="2026-proj-01"
+          currentStatus="in_review"
+          allowedActions={actions}
+        />
+      );
+
+      expect(
+        screen.getAllByRole('button').filter((button) => actions.some((action) =>
+          button.textContent === getReviewActionPresentation(action).label,
+        )).map((button) => button.textContent),
+      ).toEqual(actions.map((action) => getReviewActionPresentation(action).label));
+
+      expect(getReviewActionPresentation('approve').variant).toBe('default');
+      expect(getReviewActionPresentation('request_changes').variant).toBe('outline');
+      expect(getReviewActionPresentation('request_changes').className).not.toContain('destructive');
+      expect(getReviewActionPresentation('archive').variant).toBe('destructive');
+    });
+
     it('does not render denied review controls that could be keyboard reached', () => {
       render(
         <StagingReviewActions

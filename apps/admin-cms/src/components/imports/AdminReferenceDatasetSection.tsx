@@ -209,7 +209,7 @@ export function AdminReferenceDatasetSection({
   const isControlDisabled = disabled || isInspecting;
 
   return (
-    <Card className="bg-card border-border shadow-xs">
+    <Card>
       <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
         <div className="flex items-center gap-2 flex-wrap">
           <FileSpreadsheet className="h-4 w-4 text-primary" aria-hidden="true" />
