@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { Project } from '../../domain/project';
+import { MediaAccessibilityReview } from '../admin-media/MediaAccessibilityReview';
 import { MediaPreview } from '../admin-media/MediaPreview';
 import type { ProjectMediaPreviewItem } from '../admin-media/mediaPreviewTypes';
 import { isValidMediaUrl } from '../admin-media/mediaPreviewUtils';
@@ -53,9 +54,18 @@ export function ProjectMediaSummary({ project, mediaItems, mediaAvailable, snaps
         <p className="text-sm text-muted-foreground">No media attached to this project.</p>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {mediaItems.map((media) => (
-            <MediaPreview key={media.id} media={media} />
-          ))}
+          {mediaItems.map((media) => {
+            const fullText = media.assetType === 'poster_image' || media.assetType === 'poster_pdf'
+              ? project.posterText
+              : undefined;
+
+            return (
+              <div key={media.id} className="flex min-w-0 flex-col gap-2">
+                <MediaPreview media={media} />
+                <MediaAccessibilityReview media={media} fullText={fullText} />
+              </div>
+            );
+          })}
         </div>
       )}
 
