@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import * as React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -83,6 +85,43 @@ describe('DashboardMetricsSummary', () => {
         'Summary counts cover all non-deleted project records and do not change with search or filters.',
       ),
     ).toBeTruthy();
+  });
+
+  it('uses a compact two-by-two mobile grid with semantic row and column dividers', () => {
+    const { container } = render(
+      <DashboardMetricsSummary
+        metrics={{ totalProjects: 128, publicEligible: 34, inReview: 7, archived: 12 }}
+      />,
+    );
+
+    const grid = container.querySelector('dl') as HTMLDListElement;
+    expect(grid.className).toContain('grid-cols-2');
+    expect(grid.className).toContain('lg:grid-cols-4');
+
+    const items = [...grid.children] as HTMLElement[];
+    expect(items).toHaveLength(4);
+    expect(items[1].className).toContain('border-l');
+    expect(items[2].className).toContain('border-t');
+    expect(items[2].className).toContain('lg:border-t-0 lg:border-l');
+    expect(items[3].className).toContain('border-t border-l');
+    expect(items[3].className).toContain('lg:border-t-0');
+    for (const item of items) {
+      expect(item.className).toContain('border-border');
+    }
+
+    expect(screen.getByText(/Summary counts cover/).className).toContain('border-border');
+  });
+
+  it('keeps Projects filter and result boundaries on semantic border tokens', () => {
+    const filterBarSource = fs.readFileSync(path.resolve(__dirname, './ProjectFilterBar.tsx'), 'utf-8');
+    const tableSource = fs.readFileSync(path.resolve(__dirname, './ProjectTableContainer.tsx'), 'utf-8');
+
+    expect(filterBarSource).toContain('border-t border-border pt-4');
+    expect(filterBarSource).toContain('border-t border-border bg-surface-inset');
+    expect(tableSource).toContain('border border-border bg-card');
+    expect(tableSource).toContain('border-b border-border bg-muted/40');
+    expect(tableSource).toContain('divide-y divide-border');
+    expect(tableSource).toContain('rounded-lg border border-border bg-card p-4');
   });
 });
 

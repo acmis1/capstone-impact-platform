@@ -17,6 +17,7 @@ import {
 } from "../components/admin-media/mediaPreviewStyles";
 import { buttonVariants } from "../components/ui/button";
 import { REVIEW_ACTION_PRESENTATIONS } from "../components/admin/reviewActionPresentation";
+import { IMPORT_SUMMARY_VALUE_CLASS_NAMES } from "../components/admin/ImportMetricsSummary";
 
 function parseHexColor(hex: string): [number, number, number] {
   const cleanHex = hex.trim().replace(/^#/, "");
@@ -226,6 +227,24 @@ describe("Import workflow step-tracker rendered contrast (WCAG 2.2 AA)", () => {
         ratio,
         `Step state "${stateName}" renders text-${textUtility!.token} ${textTokenHex} on ${bgDescription}, ` +
           `calculated contrast ratio ${ratio.toFixed(2)}:1, expected >= 4.5:1`
+      ).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+});
+
+describe("Import summary value contrast (WCAG 2.2 AA)", () => {
+  const tokens = extractCssTokens();
+  const tokenNames = Object.keys(tokens);
+
+  for (const [metric, classString] of Object.entries(IMPORT_SUMMARY_VALUE_CLASS_NAMES)) {
+    it(`${metric} value text achieves >= 4.5:1 on the card surface`, () => {
+      const textUtility = findColorUtility(classString, "text", tokenNames);
+      expect(textUtility, `Could not find a text token for ${metric}`).not.toBeNull();
+
+      const ratio = getContrastRatio(tokens[textUtility!.token], tokens.card);
+      expect(
+        ratio,
+        `${metric} text --${textUtility!.token} on card ${tokens.card} is ${ratio.toFixed(2)}:1, expected >= 4.5:1`,
       ).toBeGreaterThanOrEqual(4.5);
     });
   }

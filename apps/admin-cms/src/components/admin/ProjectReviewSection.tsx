@@ -108,7 +108,7 @@ export function ProjectDetailMacroSection({
     <section
       id={id}
       aria-labelledby={headingId}
-      className={cn('scroll-mt-24 xl:scroll-mt-40', className)}
+      className={cn('scroll-mt-44 xl:scroll-mt-40', className)}
       data-slot="project-detail-macro-section"
     >
       <div className="border-b border-border pb-4">
@@ -145,7 +145,7 @@ export function ProjectReviewSection({
       <details
         open={defaultOpen}
         id={id}
-        className={cn('group scroll-mt-24 xl:scroll-mt-40', TONE_CONTAINER[tone], className)}
+        className={cn('group scroll-mt-44 xl:scroll-mt-40', TONE_CONTAINER[tone], className)}
         data-slot="project-review-section"
       >
         <summary
@@ -187,7 +187,7 @@ export function ProjectReviewSection({
     <section
       id={id}
       aria-labelledby={headingId}
-      className={cn('scroll-mt-24 xl:scroll-mt-40', TONE_CONTAINER[tone], TONE_PADDING[tone], className)}
+      className={cn('scroll-mt-44 xl:scroll-mt-40', TONE_CONTAINER[tone], TONE_PADDING[tone], className)}
       data-slot="project-review-section"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
