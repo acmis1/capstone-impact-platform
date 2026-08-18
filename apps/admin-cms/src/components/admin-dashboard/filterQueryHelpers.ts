@@ -25,3 +25,32 @@ export function buildQueryString(
 
   return params.toString();
 }
+
+/**
+ * Stored filter preferences after a "Clear search and filters" operation.
+ * Sort, direction, page size and column visibility are deliberately untouched.
+ */
+export const CLEARED_FILTER_PREFERENCES = {
+  status: '',
+  year: '',
+  program: '',
+  discipline: '',
+} as const;
+
+/**
+ * Builds the URL for "Clear search and filters": removes the transient search term and every
+ * supported filter, resets the page, and preserves sort, direction and page size.
+ * Shared so the filter bar and the no-results state can never drift apart.
+ */
+export function buildClearFiltersQueryString(
+  currentSearchParams: string | URLSearchParams
+): string {
+  return buildQueryString(currentSearchParams, {
+    q: null,
+    search: null,
+    status: null,
+    year: null,
+    program: null,
+    discipline: null,
+  });
+}

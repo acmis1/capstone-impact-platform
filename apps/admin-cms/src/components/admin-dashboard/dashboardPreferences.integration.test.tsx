@@ -144,8 +144,8 @@ describe('dashboard preference production integration', () => {
     });
 
     renderFilterBar('q=capstone&status=approved&year=2026&program=Engineering&discipline=Software&pageSize=50&sort=title&direction=asc&page=3');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Clear' })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Clear search and filters' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search and filters' }));
 
     expect(navigation.push).toHaveBeenCalledWith('/admin?pageSize=50&sort=title&direction=asc');
     expect(loadDashboardPreferences()).toMatchObject({
@@ -157,10 +157,133 @@ describe('dashboard preference production integration', () => {
     saveDashboardPreferences({ ...DEFAULT_DASHBOARD_PREFERENCES, status: 'approved', pageSize: 50, sort: 'title', direction: 'asc' });
     renderFilterBar('q=capstone&status=approved&pageSize=50&sort=title&direction=asc&page=4');
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Reset preferences' })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: 'Reset preferences' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Reset view' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Reset view' }));
 
     expect(navigation.push).toHaveBeenCalledWith('/admin?q=capstone');
     expect(localStorage.getItem(DASHBOARD_PREFERENCES_KEY)).toBeNull();
+  });
+
+  it('keeps search transient so it is never written to stored dashboard preferences', async () => {
+    renderFilterBar('');
+    const input = await screen.findByLabelText('Search projects');
+    fireEvent.change(input, { target: { value: 'atlas' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(navigation.push).toHaveBeenCalledWith('/admin?q=atlas');
+    expect(JSON.stringify(loadDashboardPreferences())).not.toContain('atlas');
+  });
+});
+
+describe('active filter presentation', () => {
+  beforeEach(() => {
+    cleanup();
+    localStorage.clear();
+    navigation.search = '';
+    navigation.push.mockReset();
+    navigation.replace.mockReset();
+  });
+
+  afterEach(cleanup);
+
+  it('names each active filter token and its removal control in accessible text', async () => {
+    renderFilterBar('q=atlas&status=approved&year=2026&program=Engineering&discipline=Software');
+
+    expect(await screen.findByRole('button', { name: 'Remove Search filter: atlas' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove Status filter: Approved' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove Year filter: 2026' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove Program filter: Engineering' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove Discipline filter: Software' })).toBeTruthy();
+  });
+
+  it('renders no active filter region when nothing is applied', async () => {
+    renderFilterBar('');
+    await act(async () => {});
+    expect(screen.queryByText('Active filters')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear search and filters' })).toBeNull();
+  });
+
+  it('removes one filter, resets the page and preserves every unrelated parameter', async () => {
+    saveDashboardPreferences({
+      ...DEFAULT_DASHBOARD_PREFERENCES,
+      status: 'approved',
+      year: '2026',
+      program: 'Engineering',
+      pageSize: 25,
+      sort: 'title',
+      direction: 'asc',
+    });
+    renderFilterBar('q=atlas&status=approved&year=2026&program=Engineering&sort=title&direction=asc&pageSize=25&page=4');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Status filter: Approved' }));
+
+    expect(navigation.push).toHaveBeenLastCalledWith(
+      '/admin?q=atlas&year=2026&program=Engineering&sort=title&direction=asc&pageSize=25',
+    );
+    expect(loadDashboardPreferences()).toMatchObject({
+      status: '',
+      year: '2026',
+      program: 'Engineering',
+      pageSize: 25,
+      sort: 'title',
+      direction: 'asc',
+    });
+  });
+
+  it('removes only the search term and preserves the active filters', async () => {
+    saveDashboardPreferences({
+      ...DEFAULT_DASHBOARD_PREFERENCES,
+      status: 'approved',
+      pageSize: 25,
+      sort: 'title',
+      direction: 'asc',
+    });
+    renderFilterBar('q=atlas&status=approved&sort=title&direction=asc&pageSize=25&page=2');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Search filter: atlas' }));
+
+    expect(navigation.push).toHaveBeenLastCalledWith(
+      '/admin?status=approved&sort=title&direction=asc&pageSize=25',
+    );
+    expect(loadDashboardPreferences()).toMatchObject({
+      status: 'approved',
+      pageSize: 25,
+      sort: 'title',
+      direction: 'asc',
+    });
+  });
+
+  it('keeps active filters visible while the mobile filter controls are collapsed', async () => {
+    renderFilterBar('status=approved&year=2026');
+
+    const disclosure = await screen.findByRole('button', { name: /^Filters/ });
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+    expect(disclosure.textContent).toContain('2 applied');
+
+    // Filter values remain discoverable through the active-filter tokens.
+    expect(screen.getByRole('button', { name: 'Remove Status filter: Approved' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove Year filter: 2026' })).toBeTruthy();
+
+    fireEvent.click(disclosure);
+    expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+    expect((screen.getByLabelText('Status') as HTMLSelectElement).value).toBe('approved');
+  });
+
+  it('presents the workflow status options using the shared status labels', async () => {
+    renderFilterBar('');
+    const statusSelect = (await screen.findByLabelText('Status')) as HTMLSelectElement;
+    const labels = Array.from(statusSelect.options).map((option) => option.textContent);
+
+    expect(labels).toEqual([
+      'All statuses',
+      'Draft',
+      'Submitted',
+      'In review',
+      'Changes requested',
+      'Approved',
+      'Published',
+      'Archived',
+      'Deleted',
+    ]);
   });
 });
