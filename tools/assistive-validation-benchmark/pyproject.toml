@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pp1-assistive-validation-benchmark"
+version = "0.1.0"
+description = "Local, synthetic Phase 0 evidence harness for PP1 assistive validation"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "Pillow==12.3.0",
+  "pypdfium2==5.13.0",
+]
+
+[project.optional-dependencies]
+paddle = [
+  "paddleocr==3.7.0",
+  "paddlepaddle==3.3.0",
+]
+
+[project.scripts]
+assistive-benchmark = "assistive_validation_benchmark.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

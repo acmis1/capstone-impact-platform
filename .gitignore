@@ -28,3 +28,13 @@ Thumbs.db
 infra/supabase/.temp/
 infra/supabase/.branches/
 apps/admin-cms/.local-users.json
+
+# local-only assistive-validation benchmark environments and generated evidence
+tools/assistive-validation-benchmark/.venv/
+tools/assistive-validation-benchmark/node_modules/
+tools/assistive-validation-benchmark/artifacts/
+tools/assistive-validation-benchmark/.paddlex/
+tools/assistive-validation-benchmark/.paddleocr/
+tools/assistive-validation-benchmark/**/__pycache__/
+tools/assistive-validation-benchmark/.pytest_cache/
+tools/assistive-validation-benchmark/src/*.egg-info/
