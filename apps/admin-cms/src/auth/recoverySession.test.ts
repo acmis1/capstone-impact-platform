@@ -19,6 +19,7 @@ import {
   getVerifiedPasswordRecoveryAccess,
   getCurrentPasswordRecoverySessionState,
   hasRecoveryAcceptanceProvenance,
+  hasSupportedAdminPasswordProvenance,
   parseRecoveryRegistrationResult,
   parseRecoverySessionState,
   registerPasswordRecoverySession,
@@ -30,6 +31,43 @@ const CLAIMS: VerifiedAuthClaims = {
   sessionId: '22222222-2222-4222-8222-222222222222',
   authenticationMethods: ['password'],
 };
+
+/**
+ * The only verified single-method AMR sets accepted as recovery-entry provenance: `otp` is proven
+ * by the Local custom TokenHash flow, and `recovery` is Supabase's documented account-recovery
+ * method emitted by the hosted default-template PKCE exchange.
+ */
+const SUPPORTED_RECOVERY_METHODS = ['otp', 'recovery'] as const;
+
+/** Every other documented, mixed, empty, or near-miss AMR set must fail closed. */
+const UNSUPPORTED_RECOVERY_METHOD_SET_CASES: readonly [string[]][] = ([
+  [],
+  ['password'],
+  ['invite'],
+  ['magiclink'],
+  ['email/signup'],
+  ['email_change'],
+  ['oauth'],
+  ['totp'],
+  ['sso/saml'],
+  ['anonymous'],
+  ['token_refresh'],
+  ['unknown'],
+  // Exact equality only - no prefix, suffix, substring, or case-insensitive matching.
+  ['otp_extra'],
+  ['recovery_code'],
+  ['pre-otp'],
+  ['account-recovery'],
+  ['OTP'],
+  ['RECOVERY'],
+  // No multi-method set qualifies, including combinations of the two supported methods.
+  ['otp', 'password'],
+  ['recovery', 'password'],
+  ['otp', 'recovery'],
+  ['recovery', 'otp'],
+  ['otp', 'otp'],
+  ['password', 'recovery', 'otp'],
+] as const).map((methods): [string[]] => [[...methods]]);
 
 describe('password recovery session RPC contracts', () => {
   it.each([
@@ -118,7 +156,7 @@ describe('reset-page and reset-action recovery access boundary', () => {
     else process.env.CAPSTONE_AUTH_FLOW_SECRET = originalSecret;
   });
 
-  function client(resultCode = 'RECOVERY_SESSION') {
+  function client(resultCode = 'RECOVERY_SESSION', method = 'otp') {
     return {
       auth: {
         getClaims: vi.fn(async () => ({
@@ -126,7 +164,7 @@ describe('reset-page and reset-action recovery access boundary', () => {
             claims: {
               sub: CLAIMS.userId,
               session_id: CLAIMS.sessionId,
-              amr: [{ method: 'otp', timestamp: 1_800_000_000 }],
+              amr: [{ method, timestamp: 1_800_000_000 }],
             },
           },
           error: null,
@@ -136,23 +174,76 @@ describe('reset-page and reset-action recovery access boundary', () => {
     };
   }
 
-  it('requires verified claims, durable recovery state, exact OTP provenance, and exact context binding', async () => {
-    await expect(getVerifiedPasswordRecoveryAccess(client())).resolves.toEqual({
-      userId: CLAIMS.userId,
-      sessionId: CLAIMS.sessionId,
-      authenticationMethods: ['otp'],
-    });
-  });
+  it.each(SUPPORTED_RECOVERY_METHODS)(
+    'requires verified claims, durable state, exact %s provenance, and exact context binding',
+    async (method) => {
+      await expect(getVerifiedPasswordRecoveryAccess(client('RECOVERY_SESSION', method)))
+        .resolves.toEqual({
+          userId: CLAIMS.userId,
+          sessionId: CLAIMS.sessionId,
+          authenticationMethods: [method],
+        });
+    },
+  );
 
-  it('rejects missing durable state and wrong-session context substitution', async () => {
-    await expect(getVerifiedPasswordRecoveryAccess(client('NOT_REGISTERED'))).resolves.toBeNull();
-    cookieMocks.value = signRecoveryContext(
-      CLAIMS.userId,
-      '33333333-3333-4333-8333-333333333333',
-      { secret, nowSeconds: 1_800_000_000 },
-    );
-    await expect(getVerifiedPasswordRecoveryAccess(client())).resolves.toBeNull();
-  });
+  it.each(SUPPORTED_RECOVERY_METHODS)(
+    'rejects %s provenance without durable state or with substituted context binding',
+    async (method) => {
+      // Durable ledger state is mandatory for both supported recovery AMRs.
+      await expect(getVerifiedPasswordRecoveryAccess(client('NOT_REGISTERED', method)))
+        .resolves.toBeNull();
+      await expect(getVerifiedPasswordRecoveryAccess(client('INVALID_CONTEXT', method)))
+        .resolves.toBeNull();
+
+      // A valid durable row still cannot be unlocked by a context bound to another session.
+      cookieMocks.value = signRecoveryContext(
+        CLAIMS.userId,
+        '33333333-3333-4333-8333-333333333333',
+        { secret, nowSeconds: 1_800_000_000 },
+      );
+      await expect(getVerifiedPasswordRecoveryAccess(client('RECOVERY_SESSION', method)))
+        .resolves.toBeNull();
+
+      // Nor by a context bound to another user.
+      cookieMocks.value = signRecoveryContext(
+        '44444444-4444-4444-8444-444444444444',
+        CLAIMS.sessionId,
+        { secret, nowSeconds: 1_800_000_000 },
+      );
+      await expect(getVerifiedPasswordRecoveryAccess(client('RECOVERY_SESSION', method)))
+        .resolves.toBeNull();
+
+      // Nor by an absent context.
+      cookieMocks.value = null;
+      await expect(getVerifiedPasswordRecoveryAccess(client('RECOVERY_SESSION', method)))
+        .resolves.toBeNull();
+    },
+  );
+
+  it.each(UNSUPPORTED_RECOVERY_METHOD_SET_CASES)(
+    'refuses recovery access for unsupported AMR %j even with durable state and valid context',
+    async (authenticationMethods) => {
+      const unsupported = {
+        auth: {
+          getClaims: vi.fn(async () => ({
+            data: {
+              claims: {
+                sub: CLAIMS.userId,
+                session_id: CLAIMS.sessionId,
+                amr: authenticationMethods.map((method) => ({
+                  method,
+                  timestamp: 1_800_000_000,
+                })),
+              },
+            },
+            error: null,
+          })),
+        },
+        rpc: vi.fn(async () => ({ data: { resultCode: 'RECOVERY_SESSION' }, error: null })),
+      };
+      await expect(getVerifiedPasswordRecoveryAccess(unsupported)).resolves.toBeNull();
+    },
+  );
 });
 
 describe('Admin authentication provenance truth table', () => {
@@ -215,12 +306,45 @@ describe('Admin authentication provenance truth table', () => {
     },
   );
 
-  it('accepts the locally proven recovery AMR only at the already-verified recovery entry point', () => {
-    expect(hasRecoveryAcceptanceProvenance({ ...CLAIMS, authenticationMethods: ['otp'] })).toBe(true);
-    expect(hasRecoveryAcceptanceProvenance(CLAIMS)).toBe(false);
-    expect(hasRecoveryAcceptanceProvenance({
+  it.each(SUPPORTED_RECOVERY_METHODS)(
+    'accepts the documented %s AMR only at the already-verified recovery entry point',
+    (method) => {
+      expect(hasRecoveryAcceptanceProvenance({
+        ...CLAIMS,
+        authenticationMethods: [method],
+      })).toBe(true);
+      // The same method still cannot reach ordinary Admin without a durable recovery row.
+      expect(classifyAdminAuthenticationProvenance({
+        claims: { ...CLAIMS, authenticationMethods: [method] },
+        recoveryState: 'NOT_REGISTERED',
+        recoveryContext: 'absent',
+      })).toBe('AUTHENTICATION_PROVENANCE_INVALID');
+    },
+  );
+
+  it.each(UNSUPPORTED_RECOVERY_METHOD_SET_CASES)(
+    'refuses recovery-entry provenance for unsupported AMR %j',
+    (authenticationMethods) => {
+      expect(hasRecoveryAcceptanceProvenance({
+        ...CLAIMS,
+        authenticationMethods,
+      })).toBe(false);
+    },
+  );
+
+  it('never treats recovery-entry provenance as Admin password provenance', () => {
+    for (const method of SUPPORTED_RECOVERY_METHODS) {
+      expect(hasSupportedAdminPasswordProvenance({
+        ...CLAIMS,
+        authenticationMethods: [method],
+      })).toBe(false);
+    }
+    // Admin entry remains exactly one `password` method and nothing else.
+    expect(hasSupportedAdminPasswordProvenance(CLAIMS)).toBe(true);
+    expect(hasSupportedAdminPasswordProvenance({
       ...CLAIMS,
-      authenticationMethods: ['otp', 'password'],
+      authenticationMethods: ['password', 'recovery'],
     })).toBe(false);
+    expect(hasRecoveryAcceptanceProvenance(CLAIMS)).toBe(false);
   });
 });
