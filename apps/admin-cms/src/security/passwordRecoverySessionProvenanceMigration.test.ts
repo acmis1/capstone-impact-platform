@@ -17,6 +17,21 @@ describe('password recovery session provenance migration contract', () => {
     .join('\n');
   const compact = executable.replace(/\s+/g, ' ');
 
+  /**
+   * Only the authenticated lookup body, so every session-provenance assertion below is proven
+   * against that function rather than being satisfied by the service-role registration RPC.
+   */
+  const lookupBody = (() => {
+    const start = executable.indexOf(
+      'CREATE OR REPLACE FUNCTION public.get_current_password_recovery_session_state()',
+    );
+    expect(start).toBeGreaterThan(-1);
+    const end = executable.indexOf('\n$$;', start);
+    expect(end).toBeGreaterThan(start);
+    return executable.slice(start, end);
+  })();
+  const lookupCompact = lookupBody.replace(/\s+/g, ' ');
+
   it('is exactly migration 0029 and leaves all 28 former migrations byte-identical', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
@@ -110,6 +125,80 @@ describe('password recovery session provenance migration contract', () => {
     for (const code of ['RECOVERY_SESSION', 'NOT_REGISTERED', 'INVALID_CONTEXT']) {
       expect(executable).toContain(`'${code}'`);
     }
+    expect(compact).toContain(
+      'REVOKE ALL ON FUNCTION public.get_current_password_recovery_session_state() FROM PUBLIC, anon, authenticated, service_role',
+    );
+    expect(compact).toContain(
+      'GRANT EXECUTE ON FUNCTION public.get_current_password_recovery_session_state() TO authenticated',
+    );
+    expect(compact).not.toContain(
+      'GRANT EXECUTE ON FUNCTION public.get_current_password_recovery_session_state() TO service_role',
+    );
+  });
+
+  it('resolves the verified session_id against auth.sessions before any ledger decision', () => {
+    // Supabase deletes the auth.sessions row on sign-out while already-issued access tokens stay
+    // verifiable until their encoded exp, so an absent row is invalid provenance rather than an
+    // ordinary non-recovery session. This exact contiguous sequence is the fail-closed contract.
+    expect(lookupCompact).toContain([
+      "SELECT s.user_id INTO v_session_user_id FROM auth.sessions AS s WHERE s.id = v_session_id;",
+      "IF NOT FOUND THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_CONTEXT');",
+      "END IF; IF v_session_user_id IS DISTINCT FROM v_auth_user_id THEN",
+      "RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_CONTEXT'); END IF;",
+    ].join(' '));
+    // The corrected defect shape: a combined guard let a missing row fall through to a result.
+    expect(lookupCompact).not.toMatch(/IF\s+FOUND\s+AND/i);
+    expect(lookupCompact).not.toMatch(/IF\s+NOT\s+FOUND\s+THEN\s+RETURN[^;]*NOT_REGISTERED/i);
+  });
+
+  it('returns NOT_REGISTERED only after Auth-session existence and ownership are proven', () => {
+    const sessionLookup = lookupCompact.indexOf('FROM auth.sessions AS s WHERE s.id = v_session_id');
+    const missingSessionGuard = lookupCompact.indexOf('IF NOT FOUND THEN');
+    const ownershipGuard = lookupCompact.indexOf(
+      'IF v_session_user_id IS DISTINCT FROM v_auth_user_id THEN',
+    );
+    const recoverySession = lookupCompact.indexOf("'RECOVERY_SESSION'");
+    const notRegistered = lookupCompact.indexOf("'NOT_REGISTERED'");
+
+    for (const index of [
+      sessionLookup, missingSessionGuard, ownershipGuard, recoverySession, notRegistered,
+    ]) {
+      expect(index).toBeGreaterThan(-1);
+    }
+    expect(sessionLookup).toBeLessThan(missingSessionGuard);
+    expect(missingSessionGuard).toBeLessThan(ownershipGuard);
+    expect(ownershipGuard).toBeLessThan(recoverySession);
+    expect(recoverySession).toBeLessThan(notRegistered);
+
+    // NOT_REGISTERED stays the single terminal result, so no earlier branch can reach it.
+    expect(lookupBody.match(/'NOT_REGISTERED'/g)).toHaveLength(1);
+    expect(lookupCompact.trimEnd()).toMatch(
+      /RETURN pg_catalog\.jsonb_build_object\('resultCode', 'NOT_REGISTERED'\); END;$/,
+    );
+  });
+
+  it('still returns RECOVERY_SESSION for the owned ledger row and exposes no identity values', () => {
+    expect(lookupCompact).toContain([
+      "WHERE prs.session_id = v_session_id AND prs.auth_user_id = v_auth_user_id",
+      "AND prs.purpose = 'password_recovery' ) THEN",
+      "RETURN pg_catalog.jsonb_build_object('resultCode', 'RECOVERY_SESSION');",
+    ].join(' '));
+    // Every lookup return is one bounded result code, so no identity or session value leaks out.
+    const returned = lookupBody.match(/jsonb_build_object\([^)]*\)/g) ?? [];
+    expect(returned.length).toBeGreaterThan(0);
+    for (const value of returned) {
+      expect(value).toMatch(
+        /^jsonb_build_object\('resultCode', '(RECOVERY_SESSION|NOT_REGISTERED|INVALID_CONTEXT)'\)$/,
+      );
+    }
+    expect(lookupBody).not.toMatch(/'(sessionId|userId|authUserId|email|sub)'\s*,/);
+  });
+
+  it('keeps the corrected lookup no-argument, authenticated-only, and service-role denied', () => {
+    expect(lookupBody).toContain(
+      'CREATE OR REPLACE FUNCTION public.get_current_password_recovery_session_state()\nRETURNS jsonb',
+    );
+    expect(lookupCompact).not.toMatch(/get_current_password_recovery_session_state\(\s*p_/);
     expect(compact).toContain(
       'REVOKE ALL ON FUNCTION public.get_current_password_recovery_session_state() FROM PUBLIC, anon, authenticated, service_role',
     );

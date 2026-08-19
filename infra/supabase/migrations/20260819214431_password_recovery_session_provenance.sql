@@ -3,6 +3,12 @@
 -- The signed application cookie authorizes only the short-lived reset form. This ledger is the
 -- authoritative Admin gate for the lifetime of the exact Supabase Auth session. Its row is owned
 -- by the Auth session and is deleted only through the Auth foreign-key cascades.
+--
+-- Cryptographic JWT validity is necessary but not sufficient. Supabase deletes the auth.sessions
+-- row on sign-out while already-issued access tokens stay verifiable until their encoded exp, so
+-- the lookup proves the verified session_id still maps to a current auth.sessions row owned by
+-- auth.uid() before it may report NOT_REGISTERED. A missing Auth session is INVALID_CONTEXT --
+-- never an ordinary non-recovery session.
 
 BEGIN;
 
@@ -138,7 +144,11 @@ BEGIN
     FROM auth.sessions AS s
    WHERE s.id = v_session_id;
 
-  IF FOUND AND v_session_user_id IS DISTINCT FROM v_auth_user_id THEN
+  IF NOT FOUND THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_CONTEXT');
+  END IF;
+
+  IF v_session_user_id IS DISTINCT FROM v_auth_user_id THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_CONTEXT');
   END IF;
 

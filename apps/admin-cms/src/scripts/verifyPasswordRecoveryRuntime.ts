@@ -12,14 +12,16 @@ import {
   RECOVERY_CONTEXT_MAX_AGE_SECONDS,
   signRecoveryContext,
   verifyRecoveryContext,
+  type RecoveryContextStatus,
 } from '../auth/recoveryContext';
 import { enforceAdminRecoveryGate } from '../auth/requireAdmin';
 import { resolveAdminContextFromAuthUser } from '../auth/adminContext';
-import type { VerifiedAuthClaims } from '../auth/claims';
+import { UUID_PATTERN, type VerifiedAuthClaims } from '../auth/claims';
 import { parseClaimsResult } from '../auth/claimsResult';
 import {
   getCurrentPasswordRecoverySessionState,
   registerPasswordRecoverySession,
+  type RecoverySessionState,
 } from '../auth/recoverySession';
 import { AdminAuthError } from '../auth/authTypes';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
@@ -121,6 +123,22 @@ async function main(): Promise<void> {
   const scenario = async (number: number, name: string, run: () => Promise<void> | void) => {
     await run();
     console.log(`PASS: Scenario ${number} - ${name}`);
+  };
+
+  /**
+   * Mirrors the production requireAdmin() trust order: the provenance gate must pass before an
+   * Admin client, staff profile, or role lookup is ever attempted. The counter therefore proves
+   * that a rejected session performed no Admin resolution at all.
+   */
+  let adminResolutionAttempts = 0;
+  const guardedAdminResolution = async (
+    resolved: VerifiedAuthClaims,
+    state: RecoverySessionState,
+    context: RecoveryContextStatus,
+  ) => {
+    enforceAdminRecoveryGate(resolved, state, context);
+    adminResolutionAttempts += 1;
+    return resolveAdminContextFromAuthUser(resolved.userId, service);
   };
 
   const searchMail = async (recipient: string): Promise<MailSummary[]> => {
@@ -460,13 +478,18 @@ async function main(): Promise<void> {
     });
     const staleClaims = parseClaimsResult(await staleClient.auth.getClaims(staleAccessToken));
     const staleLookup = await getCurrentPasswordRecoverySessionState(staleClient);
-    await scenario(25, 'a still-unexpired stale token remains non-password and cannot enter Admin', () => {
+    await scenario(25, 'a still-unexpired stale recovery token has an inactive session and cannot enter Admin', async () => {
       assert.deepEqual(staleClaims.authenticationMethods, ['otp']);
-      assert.equal(staleLookup, 'NOT_REGISTERED');
-      assert.throws(
-        () => enforceAdminRecoveryGate(staleClaims, staleLookup, 'absent'),
-        (error) => error instanceof AdminAuthError && error.type === 'AUTHENTICATION_PROVENANCE_INVALID',
+      // Its auth.sessions row is gone, so the lookup reports inactive provenance, not an
+      // ordinary non-recovery session.
+      assert.equal(staleLookup, 'INVALID_CONTEXT');
+      const attemptsBefore = adminResolutionAttempts;
+      await assert.rejects(
+        () => guardedAdminResolution(staleClaims, staleLookup, 'absent'),
+        (error: unknown) => error instanceof AdminAuthError
+          && error.type === 'AUTHENTICATION_PROVENANCE_INVALID',
       );
+      assert.equal(adminResolutionAttempts, attemptsBefore);
     });
 
     await scenario(26, 'the old password fails after the recovery update', async () => {
@@ -541,6 +564,73 @@ async function main(): Promise<void> {
       assert(recoveryBody.includes('token_hash='));
       assert(!recoveryBody.includes('/auth/recovery/callback?code='));
     });
+
+    // Stale password access token: Supabase cannot revoke an issued JWT before its encoded exp,
+    // so a retained ordinary password token must be rejected once its Auth session is deleted.
+    const activeClient = anon();
+    const activeLogin = await activeClient.auth.signInWithPassword({
+      email: staffEmail,
+      password: newPassword,
+    });
+    assert.ifError(activeLogin.error);
+    assert(activeLogin.data.session);
+    const activeClaims = await verifiedRuntimeClaims(activeClient);
+    sessionIds.add(activeClaims.sessionId);
+    const retainedToken = activeLogin.data.session.access_token;
+    const activeLookup = await getCurrentPasswordRecoverySessionState(activeClient);
+    const activeAdmin = await guardedAdminResolution(activeClaims, activeLookup, 'absent');
+
+    await scenario(34, 'an active password session is bounded, present in auth.sessions, and admits Admin', () => {
+      assert.deepEqual(activeClaims.authenticationMethods, ['password']);
+      assert(UUID_PATTERN.test(activeClaims.sessionId));
+      assert.equal(
+        psql(
+          `SELECT pg_catalog.count(*)::text || ':' || COALESCE(pg_catalog.bool_and(user_id = '${activeClaims.userId}'::uuid), false)::text FROM auth.sessions WHERE id = '${activeClaims.sessionId}'::uuid;`,
+        ),
+        '1:true',
+      );
+      assert.equal(activeLookup, 'NOT_REGISTERED');
+      assert.equal(activeAdmin.authUserId, activeClaims.userId);
+      assert(activeAdmin.roles.includes('reviewer'));
+    });
+
+    const attemptsBeforeStalePassword = adminResolutionAttempts;
+    assert.ifError((await activeClient.auth.signOut({ scope: 'local' })).error);
+    // Local-only: a throwaway client presenting the retained token, used for the lookup RPC only.
+    const stalePasswordClient = createClient(cliEnv.API_URL!, cliEnv.ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: { headers: { Authorization: `Bearer ${retainedToken}` } },
+    });
+    const staleAdmission = await stalePasswordClient.auth.getClaims(retainedToken);
+    assert.ifError(staleAdmission.error);
+    const stalePasswordClaims = parseClaimsResult(staleAdmission);
+    const staleExpiry = (staleAdmission.data?.claims as { exp?: unknown } | undefined)?.exp;
+
+    await scenario(35, 'sign-out deletes the password Auth session while its issued token stays valid', () => {
+      assert.equal(
+        psql(`SELECT count(*) FROM auth.sessions WHERE id = '${activeClaims.sessionId}'::uuid;`),
+        '0',
+      );
+      // The retained token still verifies and still carries exact password provenance.
+      assert.equal(stalePasswordClaims.sessionId, activeClaims.sessionId);
+      assert.deepEqual(stalePasswordClaims.authenticationMethods, ['password']);
+      assert(
+        typeof staleExpiry === 'number' && staleExpiry * 1000 > Date.now(),
+        'Retained password token expired before the stale-token check could run.',
+      );
+    });
+
+    const stalePasswordLookup = await getCurrentPasswordRecoverySessionState(stalePasswordClient);
+    await scenario(36, 'a retained password token for a deleted Auth session is refused Admin', async () => {
+      assert.equal(stalePasswordLookup, 'INVALID_CONTEXT');
+      await assert.rejects(
+        () => guardedAdminResolution(stalePasswordClaims, stalePasswordLookup, 'absent'),
+        (error: unknown) => error instanceof AdminAuthError
+          && error.type === 'AUTHENTICATION_PROVENANCE_INVALID',
+      );
+      // No Admin client, staff profile, or role lookup was reached for the stale token.
+      assert.equal(adminResolutionAttempts, attemptsBeforeStalePassword);
+    });
   } catch (error) {
     primaryFailure = error;
   } finally {
@@ -574,7 +664,7 @@ async function main(): Promise<void> {
           '0',
         );
       }
-      console.log('PASS: Scenario 34 - all verifier-owned Auth, staff, session, ledger, and Mailpit fixtures are removed');
+      console.log('PASS: Scenario 37 - all verifier-owned Auth, staff, session, ledger, and Mailpit fixtures are removed');
     } catch (error) {
       cleanupFailure = error;
     }

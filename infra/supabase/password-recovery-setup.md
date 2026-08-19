@@ -55,8 +55,31 @@ references:
   without overwriting contradictory state.
 - `get_current_password_recovery_session_state()` is executable only by `authenticated`. It accepts
   no arguments, derives the user from `auth.uid()`, strictly parses `session_id` from `auth.jwt()`,
-  joins the ledger to `auth.sessions`, and returns only `RECOVERY_SESSION`, `NOT_REGISTERED`, or
-  `INVALID_CONTEXT`.
+  resolves that session against `auth.sessions`, joins the ledger to `auth.sessions`, and returns
+  only `RECOVERY_SESSION`, `NOT_REGISTERED`, or `INVALID_CONTEXT`.
+
+### Active-session invariant
+
+**For Admin authorization, cryptographic JWT validity is necessary but not sufficient.** The
+verified JWT `session_id` must also map to a currently active `auth.sessions` row owned by the
+verified user. A missing Auth session is invalid provenance, never an ordinary non-recovery
+session.
+
+Supabase documents that every access token carries a `session_id` claim correlating to the
+`auth.sessions` primary key, that sign-out deletes the session row while already-issued access
+tokens stay valid until their encoded `exp`, and that sensitive operations should therefore
+validate the claim against that table. Admin authorization is exactly such an operation here.
+
+The three lookup results have these exact meanings:
+
+| Result | Meaning |
+| --- | --- |
+| `RECOVERY_SESSION` | A current Auth session exists, belongs to `auth.uid()`, and has a matching `password_recovery_sessions` row. |
+| `NOT_REGISTERED` | A current Auth session exists, belongs to `auth.uid()`, and has no password-recovery ledger row. |
+| `INVALID_CONTEXT` | The identity/session claim is malformed, the Auth user and session do not match, **or** the JWT `session_id` no longer exists in `auth.sessions`. |
+
+`NOT_REGISTERED` is returned only after Auth-session existence and ownership are positively
+proven, so a retained post-sign-out token can never be mistaken for an ordinary Admin session.
 
 The durable row is the authoritative Admin gate for the entire Auth session. The signed
 `capstone_password_recovery_context` cookie is a separate, approximately ten-minute permission to
@@ -92,10 +115,14 @@ returns a non-null error, the application does not manually delete durable state
 context, and does not claim complete termination. Recovery acceptance, callback, invalid cleanup,
 reset, login stale-context handling, and logout all use this rule.
 
-Supabase access tokens cannot be revoked before their encoded expiry. A stale verified recovery
-token may therefore remain cryptographically valid after sign-out, but its Auth session and ledger
-rows are gone. The lookup then returns `NOT_REGISTERED`; because its verified AMR is still `otp`
-rather than exact `password`, the application continues to reject Admin access.
+Supabase access tokens cannot be revoked before their encoded expiry. A stale verified token may
+therefore remain cryptographically valid after sign-out, but its Auth session row — and any
+cascaded ledger row — is gone. The lookup then returns `INVALID_CONTEXT`, and the application
+fails closed before creating an Admin client or resolving a staff profile or roles.
+
+This holds for an ordinary password token as well as a recovery token. A retained, still-unexpired
+`amr=[password]` access token whose Auth session was deleted at sign-out is rejected with
+`AUTHENTICATION_PROVENANCE_INVALID`; exact password provenance does not rescue an inactive session.
 
 ## Local Mailpit verification
 

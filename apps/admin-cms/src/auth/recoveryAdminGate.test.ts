@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getClaims: vi.fn(),
   rpc: vi.fn(),
   resolveAdmin: vi.fn(),
+  adminFrom: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
@@ -63,7 +64,7 @@ describe('Admin recovery-purpose session gate', () => {
     mocks.inspectContext.mockResolvedValue('absent');
     mocks.getClaims.mockResolvedValue(claims());
     mocks.rpc.mockResolvedValue({ data: { resultCode: 'NOT_REGISTERED' }, error: null });
-    mocks.createAdminClient.mockReturnValue({ from: vi.fn() });
+    mocks.createAdminClient.mockReturnValue({ from: mocks.adminFrom });
     mocks.resolveAdmin.mockResolvedValue(ADMIN_CONTEXT);
   });
 
@@ -83,6 +84,38 @@ describe('Admin recovery-purpose session gate', () => {
       expect(mocks.resolveAdmin).not.toHaveBeenCalled();
     },
   );
+
+  it.each(['absent', 'valid', 'invalid'])(
+    'rejects an inactive Auth session with %s context before any Admin lookup',
+    async (status) => {
+      // A cryptographically valid password JWT whose session_id no longer maps to a live
+      // auth.sessions row: the lookup reports INVALID_CONTEXT, never NOT_REGISTERED.
+      mocks.inspectContext.mockResolvedValueOnce(status);
+      mocks.rpc.mockResolvedValueOnce({
+        data: { resultCode: 'INVALID_CONTEXT' },
+        error: null,
+      });
+      await expect(requireAdmin()).rejects.toMatchObject({
+        type: 'AUTHENTICATION_PROVENANCE_INVALID',
+        message: 'Authentication cannot be used for administrative access.',
+      });
+      expect(mocks.createAdminClient).not.toHaveBeenCalled();
+      expect(mocks.adminFrom).not.toHaveBeenCalled();
+      expect(mocks.resolveAdmin).not.toHaveBeenCalled();
+    },
+  );
+
+  it('never reaches profile or role resolution for an inactive password session', async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: { resultCode: 'INVALID_CONTEXT' }, error: null });
+    await expect(requireAdmin()).rejects.toMatchObject({
+      type: 'AUTHENTICATION_PROVENANCE_INVALID',
+    });
+    // Exact password AMR must not rescue an Auth session that no longer exists.
+    expect(await mocks.getClaims.mock.results[0].value).toEqual(claims(['password']));
+    expect(mocks.createAdminClient).not.toHaveBeenCalled();
+    expect(mocks.adminFrom).not.toHaveBeenCalled();
+    expect(mocks.resolveAdmin).not.toHaveBeenCalled();
+  });
 
   it.each([
     { authenticationMethods: ['otp'] },

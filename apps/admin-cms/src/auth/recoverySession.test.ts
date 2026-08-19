@@ -202,13 +202,18 @@ describe('Admin authentication provenance truth table', () => {
     },
   );
 
-  it('rejects malformed durable lookup context even for exact password AMR', () => {
-    expect(classifyAdminAuthenticationProvenance({
-      claims: CLAIMS,
-      recoveryState: 'INVALID_CONTEXT',
-      recoveryContext: 'absent',
-    })).toBe('AUTHENTICATION_PROVENANCE_INVALID');
-  });
+  it.each(['absent', 'valid', 'invalid'] as const)(
+    'rejects INVALID_CONTEXT with %s signed context even for exact password AMR',
+    (recoveryContext) => {
+      // INVALID_CONTEXT covers a malformed identity/session claim, an Auth user/session mismatch,
+      // and a verified session_id with no live auth.sessions row. None may reach Admin.
+      expect(classifyAdminAuthenticationProvenance({
+        claims: CLAIMS,
+        recoveryState: 'INVALID_CONTEXT',
+        recoveryContext,
+      })).toBe('AUTHENTICATION_PROVENANCE_INVALID');
+    },
+  );
 
   it('accepts the locally proven recovery AMR only at the already-verified recovery entry point', () => {
     expect(hasRecoveryAcceptanceProvenance({ ...CLAIMS, authenticationMethods: ['otp'] })).toBe(true);
