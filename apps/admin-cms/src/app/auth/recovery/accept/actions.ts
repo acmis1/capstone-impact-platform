@@ -11,7 +11,14 @@ import {
   RECOVERY_TOKEN_COOKIE_NAME,
   RECOVERY_TOKEN_COOKIE_PATH,
 } from '../../../../auth/confirmationValidation';
+import { parseClaimsResult } from '../../../../auth/claimsResult';
 import { issueRecoveryContextCookie } from '../../../../auth/recoveryContext';
+import {
+  hasRecoveryAcceptanceProvenance,
+  isSuccessfulRecoveryRegistration,
+  registerPasswordRecoverySession,
+} from '../../../../auth/recoverySession';
+import { createSupabaseAdminClient } from '../../../../lib/supabase/admin';
 import { createSupabaseServerClient } from '../../../../lib/supabase/server';
 
 export async function acceptRecoveryAction() {
@@ -46,8 +53,17 @@ export async function acceptRecoveryAction() {
     });
 
     if (!error && data.user && data.session) {
-      await issueRecoveryContextCookie(data.user.id);
-      success = true;
+      const claims = parseClaimsResult(await supabase.auth.getClaims());
+      if (claims.userId === data.user.id && hasRecoveryAcceptanceProvenance(claims)) {
+        const registration = await registerPasswordRecoverySession(
+          createSupabaseAdminClient(),
+          claims,
+        );
+        if (isSuccessfulRecoveryRegistration(registration)) {
+          await issueRecoveryContextCookie(claims.userId, claims.sessionId);
+          success = true;
+        }
+      }
     }
   } catch {
     success = false;
@@ -55,9 +71,10 @@ export async function acceptRecoveryAction() {
 
   if (!success && supabase) {
     try {
-      await supabase.auth.signOut({ scope: 'local' });
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) success = false;
     } catch {
-      // Best-effort cleanup of a partially established recovery session.
+      success = false;
     }
   }
 

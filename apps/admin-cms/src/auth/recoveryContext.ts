@@ -18,6 +18,7 @@ export interface RecoveryContextPayload {
   version: typeof RECOVERY_CONTEXT_VERSION;
   purpose: typeof RECOVERY_CONTEXT_PURPOSE;
   userId: string;
+  sessionId: string;
   issuedAt: number;
   expiresAt: number;
   nonce: string;
@@ -73,7 +74,7 @@ function hasExactPayloadShape(value: unknown): value is RecoveryContextPayload {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   const keys = Object.keys(record).sort();
-  const expectedKeys = ['expiresAt', 'issuedAt', 'nonce', 'purpose', 'userId', 'version'];
+  const expectedKeys = ['expiresAt', 'issuedAt', 'nonce', 'purpose', 'sessionId', 'userId', 'version'];
   if (keys.length !== expectedKeys.length || keys.some((key, index) => key !== expectedKeys[index])) {
     return false;
   }
@@ -82,6 +83,8 @@ function hasExactPayloadShape(value: unknown): value is RecoveryContextPayload {
     record.purpose === RECOVERY_CONTEXT_PURPOSE &&
     typeof record.userId === 'string' &&
     UUID_PATTERN.test(record.userId) &&
+    typeof record.sessionId === 'string' &&
+    UUID_PATTERN.test(record.sessionId) &&
     Number.isInteger(record.issuedAt) &&
     Number.isInteger(record.expiresAt) &&
     typeof record.nonce === 'string' &&
@@ -93,9 +96,10 @@ function hasExactPayloadShape(value: unknown): value is RecoveryContextPayload {
 
 export function signRecoveryContext(
   userId: string,
+  sessionId: string,
   options: { secret?: string; nowSeconds?: number; nonce?: string } = {},
 ): string {
-  if (!UUID_PATTERN.test(userId)) {
+  if (!UUID_PATTERN.test(userId) || !UUID_PATTERN.test(sessionId)) {
     throw new Error('Password recovery context identity is invalid.');
   }
   const secret = requireStrongSecret(options.secret);
@@ -112,6 +116,7 @@ export function signRecoveryContext(
     version: RECOVERY_CONTEXT_VERSION,
     purpose: RECOVERY_CONTEXT_PURPOSE,
     userId,
+    sessionId,
     issuedAt,
     expiresAt: issuedAt + RECOVERY_CONTEXT_MAX_AGE_SECONDS,
     nonce,
@@ -122,7 +127,12 @@ export function signRecoveryContext(
 
 export function verifyRecoveryContext(
   token: string | null | undefined,
-  options: { secret?: string; nowSeconds?: number; expectedUserId?: string } = {},
+  options: {
+    secret?: string;
+    nowSeconds?: number;
+    expectedUserId?: string;
+    expectedSessionId?: string;
+  } = {},
 ): RecoveryContextVerification {
   const secret = requireStrongSecret(options.secret);
   if (!token || typeof token !== 'string' || token.length > MAX_CONTEXT_TOKEN_LENGTH) {
@@ -160,6 +170,9 @@ export function verifyRecoveryContext(
   if (options.expectedUserId && parsed.userId !== options.expectedUserId) {
     return { valid: false };
   }
+  if (options.expectedSessionId && parsed.sessionId !== options.expectedSessionId) {
+    return { valid: false };
+  }
   return { valid: true, payload: parsed };
 }
 
@@ -173,11 +186,11 @@ export function getRecoveryContextCookieOptions(maxAge = RECOVERY_CONTEXT_MAX_AG
   };
 }
 
-export async function issueRecoveryContextCookie(userId: string): Promise<void> {
+export async function issueRecoveryContextCookie(userId: string, sessionId: string): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(
     RECOVERY_CONTEXT_COOKIE_NAME,
-    signRecoveryContext(userId),
+    signRecoveryContext(userId, sessionId),
     getRecoveryContextCookieOptions(),
   );
 }
@@ -196,32 +209,14 @@ export async function readRecoveryContextCookie(): Promise<string | null> {
   return cookieStore.get(RECOVERY_CONTEXT_COOKIE_NAME)?.value ?? null;
 }
 
-export async function inspectRecoveryContextForUser(userId: string): Promise<RecoveryContextStatus> {
+export async function inspectRecoveryContextForSession(
+  userId: string,
+  sessionId: string,
+): Promise<RecoveryContextStatus> {
   const token = await readRecoveryContextCookie();
   if (!token) return 'absent';
-  return verifyRecoveryContext(token, { expectedUserId: userId }).valid ? 'valid' : 'invalid';
-}
-
-export async function inspectRecoveryContextForClient(client: {
-  auth: {
-    getUser: () => Promise<{
-      data: { user: { id: string } | null };
-      error: unknown;
-    }>;
-  };
-}): Promise<RecoveryContextStatus> {
-  const token = await readRecoveryContextCookie();
-  if (!token) return 'absent';
-
-  try {
-    const preliminary = verifyRecoveryContext(token);
-    if (!preliminary.valid) return 'invalid';
-    const { data, error } = await client.auth.getUser();
-    if (error || !data.user) return 'invalid';
-    return verifyRecoveryContext(token, { expectedUserId: data.user.id }).valid
-      ? 'valid'
-      : 'invalid';
-  } catch {
-    return 'invalid';
-  }
+  return verifyRecoveryContext(token, {
+    expectedUserId: userId,
+    expectedSessionId: sessionId,
+  }).valid ? 'valid' : 'invalid';
 }

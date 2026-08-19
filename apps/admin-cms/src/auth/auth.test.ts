@@ -133,6 +133,12 @@ describe('Authentication & Authorization Tests (Offline)', () => {
 
   describe('3. Claims Extraction & Envelope Verification (A)', () => {
     const validUuid = 'd7170068-bc23-4554-ba5e-f00de7a7872d';
+    const validSessionId = 'a7170068-bc23-4554-ba5e-f00de7a7872e';
+    const validClaims = {
+      sub: validUuid,
+      session_id: validSessionId,
+      amr: [{ method: 'password', timestamp: 1_800_000_000 }],
+    };
 
     it('accepts valid subject UUID claim', () => {
       expect(extractSubClaim({ sub: validUuid })).toBe(validUuid);
@@ -149,13 +155,15 @@ describe('Authentication & Authorization Tests (Offline)', () => {
     it('parses valid getClaims response envelope correctly', () => {
       const envelope = {
         data: {
-          claims: {
-            sub: validUuid,
-          },
+          claims: validClaims,
         },
         error: null,
       };
-      expect(parseClaimsResult(envelope)).toBe(validUuid);
+      expect(parseClaimsResult(envelope)).toEqual({
+        userId: validUuid,
+        sessionId: validSessionId,
+        authenticationMethods: ['password'],
+      });
     });
 
     it('rejects envelope with returned Auth error', () => {
@@ -184,7 +192,7 @@ describe('Authentication & Authorization Tests (Offline)', () => {
 
     it('rejects envelope with claims missing sub', () => {
       const envelope = {
-        data: { claims: { email: 'admin@test.local' } },
+        data: { claims: { ...validClaims, sub: undefined } },
         error: null,
       };
       expect(() => parseClaimsResult(envelope)).toThrow(AdminAuthError);
@@ -192,7 +200,7 @@ describe('Authentication & Authorization Tests (Offline)', () => {
 
     it('rejects envelope with empty sub', () => {
       const envelope = {
-        data: { claims: { sub: '   ' } },
+        data: { claims: { ...validClaims, sub: '   ' } },
         error: null,
       };
       expect(() => parseClaimsResult(envelope)).toThrow(AdminAuthError);
@@ -200,7 +208,7 @@ describe('Authentication & Authorization Tests (Offline)', () => {
 
     it('rejects envelope with malformed sub', () => {
       const envelope = {
-        data: { claims: { sub: 'malformed-uuid' } },
+        data: { claims: { ...validClaims, sub: 'malformed-uuid' } },
         error: null,
       };
       expect(() => parseClaimsResult(envelope)).toThrow(AdminAuthError);
@@ -209,6 +217,24 @@ describe('Authentication & Authorization Tests (Offline)', () => {
     it('rejects raw top-level object treated as complete response envelope', () => {
       const rawPayload = { sub: validUuid };
       expect(() => parseClaimsResult(rawPayload)).toThrow(AdminAuthError);
+    });
+
+    it.each([
+      { ...validClaims, session_id: undefined },
+      { ...validClaims, session_id: 'not-a-uuid' },
+      { ...validClaims, amr: null },
+      { ...validClaims, amr: {} },
+      { ...validClaims, amr: [{ method: '', timestamp: 1 }] },
+      { ...validClaims, amr: [{ method: ' password', timestamp: 1 }] },
+      { ...validClaims, amr: [{ method: 'password', timestamp: 1.5 }] },
+      { ...validClaims, amr: [{ method: 'password', timestamp: -1 }] },
+      { ...validClaims, amr: [{ method: 'password', timestamp: 1, extra: true }] },
+    ])('rejects malformed verified session and AMR claims: %o', (claims) => {
+      expect(() => parseClaimsResult({ data: { claims }, error: null })).toThrow(AdminAuthError);
+    });
+
+    it('rejects a response that omits the exact error field', () => {
+      expect(() => parseClaimsResult({ data: { claims: validClaims } })).toThrow(AdminAuthError);
     });
   });
 
@@ -231,6 +257,11 @@ describe('Authentication & Authorization Tests (Offline)', () => {
     it('maps a recovery-purpose session to a generic access-denied response', () => {
       expect(getAuthErrorHttpStatus('PASSWORD_RECOVERY_REQUIRED')).toBe(403);
       expect(getPublicAuthErrorMessage('PASSWORD_RECOVERY_REQUIRED')).toBe('Access denied.');
+    });
+
+    it('maps unsupported authentication provenance to the same generic access denial', () => {
+      expect(getAuthErrorHttpStatus('AUTHENTICATION_PROVENANCE_INVALID')).toBe(403);
+      expect(getPublicAuthErrorMessage('AUTHENTICATION_PROVENANCE_INVALID')).toBe('Access denied.');
     });
 
     it('maps configuration failure error correctly', () => {

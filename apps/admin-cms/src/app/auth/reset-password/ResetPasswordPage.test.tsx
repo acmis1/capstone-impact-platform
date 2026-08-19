@@ -4,14 +4,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  inspectContext: vi.fn(),
+  verifyAccess: vi.fn(),
   createServerClient: vi.fn(),
   resetAction: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
-vi.mock('../../../auth/recoveryContext', () => ({
-  inspectRecoveryContextForClient: mocks.inspectContext,
+vi.mock('../../../auth/recoverySession', () => ({
+  getVerifiedPasswordRecoveryAccess: mocks.verifyAccess,
 }));
 vi.mock('../../../lib/supabase/server', () => ({
   createSupabaseServerClient: mocks.createServerClient,
@@ -29,20 +29,22 @@ import ResetPasswordPage from './page';
 describe('recovery reset-password page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.createServerClient.mockResolvedValue({ auth: { getUser: vi.fn() } });
-    mocks.inspectContext.mockResolvedValue('valid');
+    mocks.createServerClient.mockResolvedValue({ auth: { getClaims: vi.fn() }, rpc: vi.fn() });
+    mocks.verifyAccess.mockResolvedValue({
+      userId: '11111111-1111-4111-8111-111111111111',
+      sessionId: '22222222-2222-4222-8222-222222222222',
+      authenticationMethods: ['otp'],
+    });
     mocks.resetAction.mockResolvedValue({ error: 'PASSWORD_UPDATE_FAILED' });
   });
 
   afterEach(() => cleanup());
 
-  it('requires the signed, authenticated user-bound recovery context', async () => {
-    for (const status of ['absent', 'invalid']) {
-      mocks.inspectContext.mockResolvedValueOnce(status);
-      await expect(ResetPasswordPage()).rejects.toThrow(
-        'NEXT_REDIRECT:/auth/recovery/invalid',
-      );
-    }
+  it('requires verified claims, durable state, and exact user/session-bound context', async () => {
+    mocks.verifyAccess.mockResolvedValueOnce(null);
+    await expect(ResetPasswordPage()).rejects.toThrow(
+      'NEXT_REDIRECT:/auth/recovery/invalid',
+    );
   });
 
   it('renders only required new-password fields without user identity', async () => {

@@ -20,13 +20,82 @@ Local Supabase uses the preferred recovery template at `templates/recovery.html`
 `/auth/confirm` only captures the token hash into the dedicated short-lived HttpOnly recovery
 cookie. A GET does not verify the token. The user must POST the explicit form at
 `/auth/recovery/accept`, after which `verifyOtp({ type: 'recovery', token_hash })` establishes the
-recovery session and `/auth/reset-password` updates the password.
+recovery session. The application then verifies `sub`, `session_id`, and `amr` with `getClaims()`,
+registers that exact Auth session in the durable recovery ledger, and issues the signed reset-form
+context bound to both identifiers. `/auth/reset-password` updates the password only while verified
+user, verified session, durable recovery state, and signed context still agree.
 
 The compatibility fallback uses Supabase's default PKCE ConfirmationURL. It returns to
 `/auth/recovery/callback?code=...`, where the server exchanges the code exactly once. PKCE requires
 the code verifier stored by the browser that initiated the request; do not claim cross-browser or
 cross-device compatibility without a controlled test. The custom token-hash flow is the robust
 cross-browser and email-prefetch-protected path.
+
+## Durable session-provenance boundary
+
+Migration `20260819214431_password_recovery_session_provenance.sql` is Migration 0029. The
+repository inventory is exactly 29 migrations after it is added.
+
+`public.password_recovery_sessions` contains only:
+
+- `session_id uuid` — primary key and foreign key to `auth.sessions(id) ON DELETE CASCADE`;
+- `auth_user_id uuid` — foreign key to `auth.users(id) ON DELETE CASCADE`;
+- `purpose text` — fixed by default and check constraint to `password_recovery`;
+- `created_at timestamptz` — database creation time.
+
+RLS is enabled with a restrictive deny policy. `PUBLIC`, `anon`, `authenticated`, and
+`service_role` have no direct table privileges. Browser and service code therefore use only these
+bounded `SECURITY DEFINER` functions, both with `SET search_path = ''` and schema-qualified
+references:
+
+- `register_password_recovery_session(p_session_id uuid, p_auth_user_id uuid)` is executable only
+  by `service_role`. It verifies Auth-session ownership before insert and returns `REGISTERED`,
+  `ALREADY_REGISTERED`, `SESSION_NOT_FOUND`, `SESSION_USER_MISMATCH`, or `VALIDATION_FAILED`.
+  `ON CONFLICT DO NOTHING` and the primary key make identical concurrent registration idempotent
+  without overwriting contradictory state.
+- `get_current_password_recovery_session_state()` is executable only by `authenticated`. It accepts
+  no arguments, derives the user from `auth.uid()`, strictly parses `session_id` from `auth.jwt()`,
+  joins the ledger to `auth.sessions`, and returns only `RECOVERY_SESSION`, `NOT_REGISTERED`, or
+  `INVALID_CONTEXT`.
+
+The durable row is the authoritative Admin gate for the entire Auth session. The signed
+`capstone_password_recovery_context` cookie is a separate, approximately ten-minute permission to
+render and submit the reset form. Its HMAC-SHA256 payload is bound to the exact verified user and
+session IDs; deleting or expiring it cannot turn the recovery session into an Admin session.
+
+Admin entry is allowed only for exact verified `amr=[password]`, a valid current user/session claim
+set, `NOT_REGISTERED` durable state, and an absent recovery context. Durable recovery state always
+returns `PASSWORD_RECOVERY_REQUIRED`. Malformed lookup context, RPC failure, `otp`, recovery,
+invite, magic-link, empty, mixed, or unknown AMR, and any contradictory signed context all fail
+closed before an Admin client or profile/role lookup is created.
+
+## Registration, reset, and termination order
+
+Both explicit TokenHash acceptance and PKCE callback follow the same order:
+
+```text
+provider recovery verification or code exchange
+→ verified getClaims() user/session/AMR parsing
+→ service-role durable registration
+→ signed user+session context
+→ reset-password page
+```
+
+The reset page and action independently repeat verified claims, authenticated no-argument lookup,
+and exact signed-context binding. The update action validates plain input before client creation,
+calls `updateUser({ password })` once, and then inspects the result of local sign-out. It never calls
+staff activation or mutates staff profile, role, or provisioning data.
+
+On successful local sign-out, Supabase deletes the `auth.sessions` row and the recovery row cascades
+away; only then may the signed context be cleared and success reported. If sign-out throws or
+returns a non-null error, the application does not manually delete durable state, does not clear the
+context, and does not claim complete termination. Recovery acceptance, callback, invalid cleanup,
+reset, login stale-context handling, and logout all use this rule.
+
+Supabase access tokens cannot be revoked before their encoded expiry. A stale verified recovery
+token may therefore remain cryptographically valid after sign-out, but its Auth session and ledger
+rows are gone. The lookup then returns `NOT_REGISTERED`; because its verified AMR is still `otp`
+rather than exact `password`, the application continues to reject Admin access.
 
 ## Local Mailpit verification
 
@@ -39,6 +108,12 @@ cross-browser and email-prefetch-protected path.
    Auth/Mailpit verifier.
 
 No hosted project or external email provider is contacted by this workflow.
+
+The runtime verifier additionally proves session-ID stability across refresh, Auth-session mapping,
+concurrent registration, role/function/table privilege denials, context deletion and deterministic
+expiry, refresh persistence, stale-token rejection, cascade cleanup, fresh-password authorization,
+staff-data invariants, token replay rejection, and complete synthetic fixture cleanup. It prints only
+bounded scenario names and never prints credentials, claims, identity values, or cookie contents.
 
 ## Hosted Auth and Render requirements
 
@@ -76,3 +151,28 @@ References:
 - [Supabase email templates and prefetching](https://supabase.com/docs/guides/auth/auth-email-templates)
 - [Supabase Auth rate limits](https://supabase.com/docs/guides/auth/rate-limits)
 - [Supabase Free-plan template change](https://supabase.com/changelog/46599-changes-to-email-template-customisation-on-free-tier)
+- [Supabase user sessions and `session_id`](https://supabase.com/docs/guides/auth/sessions)
+- [Supabase verified `getClaims()`](https://supabase.com/docs/reference/javascript/auth-getclaims)
+- [Supabase sign-out and stale access tokens](https://supabase.com/docs/guides/auth/signout)
+- [Supabase database-function security](https://supabase.com/docs/guides/database/functions)
+- [Supabase Row Level Security and Auth helpers](https://supabase.com/docs/guides/database/postgres/row-level-security)
+
+## Hosted deployment and rollback order
+
+This task does not apply the migration or configure Auth on a hosted project. After merge and an
+independent security review, an authorized operator must deploy in this order: apply Migration 0029,
+deploy the application code that depends on its functions, configure the dedicated Render signing
+secret and exact hosted Auth URLs/templates, and only then perform a controlled hosted recovery
+test. Never deploy the application dependency before the migration.
+
+Rollback is intentionally gated and must be performed only by an authorized operator:
+
+1. Disable or revert all recovery entry points first.
+2. Ensure no active password-recovery Auth sessions remain.
+3. Verify `public.password_recovery_sessions` is empty.
+4. Drop `public.get_current_password_recovery_session_state()`.
+5. Drop `public.register_password_recovery_session(uuid, uuid)`.
+6. Drop `public.password_recovery_sessions`.
+7. Only then remove application dependencies on those contracts.
+
+Do not delete ledger rows as a shortcut for rollback while their Auth sessions remain usable.

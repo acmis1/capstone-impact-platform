@@ -15,16 +15,20 @@ function secureResponse(response: NextResponse): NextResponse {
 }
 
 export async function GET(request: NextRequest) {
+  let terminated = false;
   try {
     const supabase = await createSupabaseServerClient();
-    await supabase.auth.signOut({ scope: 'local' });
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    terminated = error === null;
   } catch {
-    // Continue with local context-cookie cleanup.
+    terminated = false;
   }
-  try {
-    await clearRecoveryContextCookie();
-  } catch {
-    // The signed context expires naturally after its bounded lifetime.
+  if (terminated) {
+    try {
+      await clearRecoveryContextCookie();
+    } catch {
+      // The signed context expires naturally after its bounded lifetime.
+    }
   }
 
   const publicOrigin = resolveCanonicalPublicOrigin(request.nextUrl.origin);

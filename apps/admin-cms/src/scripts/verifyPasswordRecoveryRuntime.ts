@@ -14,6 +14,13 @@ import {
   verifyRecoveryContext,
 } from '../auth/recoveryContext';
 import { enforceAdminRecoveryGate } from '../auth/requireAdmin';
+import { resolveAdminContextFromAuthUser } from '../auth/adminContext';
+import type { VerifiedAuthClaims } from '../auth/claims';
+import { parseClaimsResult } from '../auth/claimsResult';
+import {
+  getCurrentPasswordRecoverySessionState,
+  registerPasswordRecoverySession,
+} from '../auth/recoverySession';
 import { AdminAuthError } from '../auth/authTypes';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
 
@@ -46,6 +53,10 @@ function recoveryTokenFrom(body: string): string {
   const match = body.match(/token_hash=([A-Za-z0-9_-]+)/);
   assert(match, 'Local recovery email did not contain a token-hash link.');
   return match[1];
+}
+
+async function verifiedRuntimeClaims(client: SupabaseClient): Promise<VerifiedAuthClaims> {
+  return parseClaimsResult(await client.auth.getClaims());
 }
 
 async function main(): Promise<void> {
@@ -96,6 +107,7 @@ async function main(): Promise<void> {
   const expiryPassword = `Expiry_${crypto.randomBytes(18).toString('hex')}!`;
   const authIds = new Set<string>();
   const adminIds = new Set<string>();
+  const sessionIds = new Set<string>();
   const mailIds = new Set<string>();
   let primaryFailure: unknown = null;
   let cleanupFailure: unknown = null;
@@ -233,58 +245,272 @@ async function main(): Promise<void> {
       assert(accepted.data.session);
     });
 
-    let signedContext: string | null = signRecoveryContext(accepted.data.user.id, {
-      secret: signingSecret,
+    const recoveryClaimsBeforeRefresh = await verifiedRuntimeClaims(recoveryClient);
+    sessionIds.add(recoveryClaimsBeforeRefresh.sessionId);
+    assert.equal(recoveryClaimsBeforeRefresh.userId, accepted.data.user.id);
+    const refreshedRecovery = await recoveryClient.auth.refreshSession();
+    assert.ifError(refreshedRecovery.error);
+    assert(refreshedRecovery.data.session && refreshedRecovery.data.user);
+    const recoveryClaimsAfterRefresh = await verifiedRuntimeClaims(recoveryClient);
+    await scenario(7, 'recovery session ID remains stable across refresh', () => {
+      assert.equal(recoveryClaimsAfterRefresh.sessionId, recoveryClaimsBeforeRefresh.sessionId);
+      assert.deepEqual(recoveryClaimsBeforeRefresh.authenticationMethods, ['otp']);
+      assert.deepEqual(recoveryClaimsAfterRefresh.authenticationMethods, ['otp']);
     });
-    await scenario(7, 'the signed recovery context is valid, user-bound, and short-lived', () => {
+    await scenario(8, 'recovery session maps to one Auth session row', () => {
+      assert.equal(
+        psql(
+          `SELECT pg_catalog.count(*)::text || ':' || COALESCE(pg_catalog.bool_and(user_id = '${recoveryClaimsBeforeRefresh.userId}'::uuid), false)::text FROM auth.sessions WHERE id = '${recoveryClaimsBeforeRefresh.sessionId}'::uuid;`,
+        ),
+        '1:true',
+      );
+    });
+
+    const freshPasswordClient = anon();
+    const freshPasswordLogin = await freshPasswordClient.auth.signInWithPassword({
+      email: staffEmail,
+      password: oldPassword,
+    });
+    assert.ifError(freshPasswordLogin.error);
+    assert(freshPasswordLogin.data.session && freshPasswordLogin.data.user);
+    const freshPasswordClaims = await verifiedRuntimeClaims(freshPasswordClient);
+    sessionIds.add(freshPasswordClaims.sessionId);
+    await scenario(9, 'fresh password login uses a distinct session', () => {
+      assert.notEqual(freshPasswordClaims.sessionId, recoveryClaimsBeforeRefresh.sessionId);
+      assert.deepEqual(freshPasswordClaims.authenticationMethods, ['password']);
+    });
+    assert.ifError((await freshPasswordClient.auth.signOut({ scope: 'local' })).error);
+
+    await scenario(10, 'Local Supabase applied exactly 29 migrations', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '29');
+    });
+
+    const registrations = await Promise.all([
+      registerPasswordRecoverySession(service, recoveryClaimsAfterRefresh),
+      registerPasswordRecoverySession(service, recoveryClaimsAfterRefresh),
+    ]);
+    await scenario(11, 'concurrent durable registration is idempotent', () => {
+      assert.deepEqual(
+        registrations.sort(),
+        ['ALREADY_REGISTERED', 'REGISTERED'],
+      );
+    });
+    await scenario(12, 'durable registration creates exactly one bounded ledger row', () => {
+      assert.equal(
+        psql(
+          `SELECT count(*) FROM public.password_recovery_sessions WHERE session_id = '${recoveryClaimsAfterRefresh.sessionId}'::uuid AND auth_user_id = '${recoveryClaimsAfterRefresh.userId}'::uuid AND purpose = 'password_recovery';`,
+        ),
+        '1',
+      );
+    });
+
+    const recoveryState = await getCurrentPasswordRecoverySessionState(recoveryClient);
+    await scenario(13, 'authenticated no-argument lookup finds the exact recovery session', () => {
+      assert.equal(recoveryState, 'RECOVERY_SESSION');
+    });
+
+    await scenario(14, 'anonymous callers cannot execute the authenticated lookup', async () => {
+      const result = await anon().rpc('get_current_password_recovery_session_state');
+      assert.equal(result.error?.code, '42501');
+    });
+    await scenario(15, 'authenticated callers cannot execute durable registration', async () => {
+      const result = await recoveryClient.rpc('register_password_recovery_session', {
+        p_session_id: recoveryClaimsAfterRefresh.sessionId,
+        p_auth_user_id: recoveryClaimsAfterRefresh.userId,
+      });
+      assert.equal(result.error?.code, '42501');
+    });
+    await scenario(16, 'browser and service roles have no direct ledger table privileges', async () => {
+      const unauthorized = [
+        await anon().from('password_recovery_sessions').select('session_id').limit(1),
+        await recoveryClient.from('password_recovery_sessions').select('session_id').limit(1),
+        await recoveryClient.from('password_recovery_sessions').insert({
+          session_id: crypto.randomUUID(),
+          auth_user_id: recoveryClaimsAfterRefresh.userId,
+          purpose: 'password_recovery',
+        }),
+        await recoveryClient.from('password_recovery_sessions')
+          .update({ purpose: 'password_recovery' })
+          .eq('session_id', crypto.randomUUID()),
+        await recoveryClient.from('password_recovery_sessions')
+          .delete()
+          .eq('session_id', crypto.randomUUID()),
+        await service.from('password_recovery_sessions').select('session_id').limit(1),
+      ];
+      assert(unauthorized.every(({ error }) => error?.code === '42501'));
+    });
+
+    let signedContext: string | null = signRecoveryContext(
+      accepted.data.user.id,
+      recoveryClaimsAfterRefresh.sessionId,
+      {
+        secret: signingSecret,
+      },
+    );
+    await scenario(17, 'signed context is bound to the exact recovery user and session', () => {
       const verified = verifyRecoveryContext(signedContext, {
         secret: signingSecret,
         expectedUserId: accepted.data.user!.id,
+        expectedSessionId: recoveryClaimsAfterRefresh.sessionId,
       });
       assert(verified.valid);
       assert.equal(verified.payload.expiresAt - verified.payload.issuedAt, RECOVERY_CONTEXT_MAX_AGE_SECONDS);
       assert(!JSON.stringify(verified.payload).match(/email|name|role/i));
     });
-    await scenario(8, 'the production Admin recovery gate rejects the active context', () => {
+    await scenario(18, 'the production Admin gate blocks durable recovery with valid context', () => {
       assert.throws(
-        () => enforceAdminRecoveryGate('valid'),
+        () => enforceAdminRecoveryGate(
+          recoveryClaimsAfterRefresh,
+          'RECOVERY_SESSION',
+          'valid',
+        ),
         (error) => error instanceof AdminAuthError && error.type === 'PASSWORD_RECOVERY_REQUIRED',
       );
     });
+
+    signedContext = null;
+    await scenario(19, 'deleting only the signed context does not unblock Admin', () => {
+      assert.equal(signedContext, null);
+      assert.throws(
+        () => enforceAdminRecoveryGate(recoveryClaimsAfterRefresh, 'RECOVERY_SESSION', 'absent'),
+        (error) => error instanceof AdminAuthError && error.type === 'PASSWORD_RECOVERY_REQUIRED',
+      );
+    });
+
+    const deterministicContext = signRecoveryContext(
+      recoveryClaimsAfterRefresh.userId,
+      recoveryClaimsAfterRefresh.sessionId,
+      { secret: signingSecret, nowSeconds: 1_800_000_000 },
+    );
+    await scenario(20, 'expired signed context does not unblock durable recovery state', () => {
+      assert.equal(verifyRecoveryContext(deterministicContext, {
+        secret: signingSecret,
+        nowSeconds: 1_800_000_000 + RECOVERY_CONTEXT_MAX_AGE_SECONDS,
+        expectedUserId: recoveryClaimsAfterRefresh.userId,
+        expectedSessionId: recoveryClaimsAfterRefresh.sessionId,
+      }).valid, false);
+      assert.throws(
+        () => enforceAdminRecoveryGate(recoveryClaimsAfterRefresh, 'RECOVERY_SESSION', 'invalid'),
+        (error) => error instanceof AdminAuthError && error.type === 'PASSWORD_RECOVERY_REQUIRED',
+      );
+    });
+
+    const refreshedAgain = await recoveryClient.auth.refreshSession();
+    assert.ifError(refreshedAgain.error);
+    assert(refreshedAgain.data.session);
+    const claimsAfterDurableRefresh = await verifiedRuntimeClaims(recoveryClient);
+    const stateAfterRefresh = await getCurrentPasswordRecoverySessionState(recoveryClient);
+    await scenario(21, 'session refresh preserves the ID, durable lookup, and Admin block', () => {
+      assert.equal(claimsAfterDurableRefresh.sessionId, recoveryClaimsAfterRefresh.sessionId);
+      assert.equal(stateAfterRefresh, 'RECOVERY_SESSION');
+      assert.throws(
+        () => enforceAdminRecoveryGate(claimsAfterDurableRefresh, stateAfterRefresh, 'absent'),
+        (error) => error instanceof AdminAuthError && error.type === 'PASSWORD_RECOVERY_REQUIRED',
+      );
+    });
+
+    await scenario(22, 'malformed signed context remains blocked by durable state', () => {
+      assert.equal(verifyRecoveryContext('malformed.context', { secret: signingSecret }).valid, false);
+      assert.throws(
+        () => enforceAdminRecoveryGate(claimsAfterDurableRefresh, 'RECOVERY_SESSION', 'invalid'),
+        (error) => error instanceof AdminAuthError && error.type === 'PASSWORD_RECOVERY_REQUIRED',
+      );
+    });
+
+    signedContext = signRecoveryContext(
+      claimsAfterDurableRefresh.userId,
+      claimsAfterDurableRefresh.sessionId,
+      { secret: signingSecret },
+    );
+    assert(verifyRecoveryContext(signedContext, {
+      secret: signingSecret,
+      expectedUserId: claimsAfterDurableRefresh.userId,
+      expectedSessionId: claimsAfterDurableRefresh.sessionId,
+    }).valid);
 
     const update = await recoveryClient.auth.updateUser({ password: newPassword });
     assert.ifError(update.error);
     assert(update.data.user);
     const staffAfter = await snapshotStaff();
-    await scenario(9, 'password update leaves profile, role, and provisioning rows byte-for-byte unchanged', () => {
+    await scenario(23, 'password update leaves profile, role, and provisioning rows byte-for-byte unchanged', () => {
       assert.equal(staffAfter, staffBefore);
     });
 
+    const staleAccessToken = refreshedAgain.data.session.access_token;
     assert.ifError((await recoveryClient.auth.signOut({ scope: 'local' })).error);
     const ended = await recoveryClient.auth.getSession();
     assert.ifError(ended.error);
     signedContext = null;
-    await scenario(10, 'the recovery session terminates and local context is cleared', () => {
+    await scenario(24, 'successful sign-out deletes the Auth session and cascades the ledger row', () => {
       assert.equal(ended.data.session, null);
       assert.equal(signedContext, null);
-    });
-    await scenario(11, 'the old password fails and the new password signs in', async () => {
-      const oldLogin = await anon().auth.signInWithPassword({ email: staffEmail, password: oldPassword });
-      assert(oldLogin.error);
-      assert.equal(oldLogin.data.session, null);
-      const client = anon();
-      const newLogin = await client.auth.signInWithPassword({ email: staffEmail, password: newPassword });
-      assert.ifError(newLogin.error);
-      assert(newLogin.data.session);
-      assert.ifError((await client.auth.signOut({ scope: 'local' })).error);
+      assert.equal(
+        psql(`SELECT count(*) FROM auth.sessions WHERE id = '${claimsAfterDurableRefresh.sessionId}'::uuid;`),
+        '0',
+      );
+      assert.equal(
+        psql(`SELECT count(*) FROM public.password_recovery_sessions WHERE session_id = '${claimsAfterDurableRefresh.sessionId}'::uuid;`),
+        '0',
+      );
     });
 
-    await scenario(12, 'the consumed token cannot be replayed', async () => {
+    const staleClient = createClient(cliEnv.API_URL!, cliEnv.ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: { headers: { Authorization: `Bearer ${staleAccessToken}` } },
+    });
+    const staleClaims = parseClaimsResult(await staleClient.auth.getClaims(staleAccessToken));
+    const staleLookup = await getCurrentPasswordRecoverySessionState(staleClient);
+    await scenario(25, 'a still-unexpired stale token remains non-password and cannot enter Admin', () => {
+      assert.deepEqual(staleClaims.authenticationMethods, ['otp']);
+      assert.equal(staleLookup, 'NOT_REGISTERED');
+      assert.throws(
+        () => enforceAdminRecoveryGate(staleClaims, staleLookup, 'absent'),
+        (error) => error instanceof AdminAuthError && error.type === 'AUTHENTICATION_PROVENANCE_INVALID',
+      );
+    });
+
+    await scenario(26, 'the old password fails after the recovery update', async () => {
+      const oldLogin = await anon().auth.signInWithPassword({
+        email: staffEmail,
+        password: oldPassword,
+      });
+      assert(oldLogin.error);
+      assert.equal(oldLogin.data.session, null);
+    });
+
+    const newPasswordClient = anon();
+    const newLogin = await newPasswordClient.auth.signInWithPassword({
+      email: staffEmail,
+      password: newPassword,
+    });
+    assert.ifError(newLogin.error);
+    assert(newLogin.data.session);
+    const newPasswordClaims = await verifiedRuntimeClaims(newPasswordClient);
+    sessionIds.add(newPasswordClaims.sessionId);
+    const newPasswordState = await getCurrentPasswordRecoverySessionState(newPasswordClient);
+    await scenario(27, 'fresh password login has a distinct supported session with no ledger row', () => {
+      assert.notEqual(newPasswordClaims.sessionId, claimsAfterDurableRefresh.sessionId);
+      assert.deepEqual(newPasswordClaims.authenticationMethods, ['password']);
+      assert.equal(newPasswordState, 'NOT_REGISTERED');
+      assert.doesNotThrow(() => enforceAdminRecoveryGate(
+        newPasswordClaims,
+        newPasswordState,
+        'absent',
+      ));
+    });
+    await scenario(28, 'ordinary Admin authorization succeeds only after fresh password login', async () => {
+      const admin = await resolveAdminContextFromAuthUser(newPasswordClaims.userId, service);
+      assert.equal(admin.authUserId, newPasswordClaims.userId);
+      assert(admin.roles.includes('reviewer'));
+    });
+    assert.ifError((await newPasswordClient.auth.signOut({ scope: 'local' })).error);
+
+    await scenario(29, 'the consumed token cannot be replayed', async () => {
       const replay = await anon().auth.verifyOtp({ type: 'recovery', token_hash: tokenHash });
       assert(replay.error);
       assert.equal(replay.data.session, null);
     });
-    await scenario(13, 'malformed recovery tokens fail without a session', async () => {
+    await scenario(30, 'malformed recovery tokens fail without a session', async () => {
       const malformed = await anon().auth.verifyOtp({ type: 'recovery', token_hash: 'malformed' });
       assert(malformed.error);
       assert.equal(malformed.data.session, null);
@@ -303,26 +529,15 @@ async function main(): Promise<void> {
     const expiryMessage = await waitForMail(expiryEmail);
     const expiryToken = recoveryTokenFrom(await mailBody(expiryMessage.ID));
     psql(`UPDATE auth.users SET recovery_sent_at = now() - interval '2 hours' WHERE id = '${expiryCreated.data.user.id}';`);
-    await scenario(14, 'an expired real recovery token fails without a session', async () => {
+    await scenario(31, 'an expired real recovery token fails without a session', async () => {
       const expired = await anon().auth.verifyOtp({ type: 'recovery', token_hash: expiryToken });
       assert(expired.error);
       assert.equal(expired.data.session, null);
     });
-    await scenario(15, 'an expired signed recovery context fails locally', () => {
-      const context = signRecoveryContext(created.data.user!.id, {
-        secret: signingSecret,
-        nowSeconds: 1_800_000_000,
-      });
-      assert.equal(verifyRecoveryContext(context, {
-        secret: signingSecret,
-        nowSeconds: 1_800_000_000 + RECOVERY_CONTEXT_MAX_AGE_SECONDS,
-      }).valid, false);
-    });
-
-    await scenario(16, 'the nonexistent-address request produced no verifier-owned email', async () => {
+    await scenario(32, 'the nonexistent-address request produced no verifier-owned email', async () => {
       assert.equal((await searchMail(absentEmail)).length, 0);
     });
-    await scenario(17, 'PKCE callback exchange is not falsely claimed under the custom Local template', () => {
+    await scenario(33, 'PKCE callback exchange is not falsely claimed under the custom Local template', () => {
       assert(recoveryBody.includes('token_hash='));
       assert(!recoveryBody.includes('/auth/recovery/callback?code='));
     });
@@ -351,7 +566,15 @@ async function main(): Promise<void> {
       assert.equal(psql(`SELECT count(*) FROM auth.users WHERE email LIKE '${prefix}%';`), '0');
       assert.equal(psql(`SELECT count(*) FROM public.admin_users WHERE email LIKE '${prefix}%';`), '0');
       assert.equal(psql(`SELECT count(*) FROM public.staff_provisioning_requests WHERE normalized_email LIKE '${prefix}%';`), '0');
-      console.log('PASS: Scenario 18 - all verifier-owned Auth, staff, session, and Mailpit fixtures are removed');
+      if (sessionIds.size > 0) {
+        const ids = [...sessionIds].map((id) => `'${id}'::uuid`).join(',');
+        assert.equal(psql(`SELECT count(*) FROM auth.sessions WHERE id IN (${ids});`), '0');
+        assert.equal(
+          psql(`SELECT count(*) FROM public.password_recovery_sessions WHERE session_id IN (${ids});`),
+          '0',
+        );
+      }
+      console.log('PASS: Scenario 34 - all verifier-owned Auth, staff, session, ledger, and Mailpit fixtures are removed');
     } catch (error) {
       cleanupFailure = error;
     }

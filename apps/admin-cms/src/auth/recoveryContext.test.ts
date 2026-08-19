@@ -33,6 +33,8 @@ import {
 const SECRET = 'synthetic-auth-flow-secret-32-bytes-minimum';
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const OTHER_USER_ID = '22222222-2222-4222-8222-222222222222';
+const SESSION_ID = '33333333-3333-4333-8333-333333333333';
+const OTHER_SESSION_ID = '44444444-4444-4444-8444-444444444444';
 const NOW = 1_800_000_000;
 
 function signPayload(payload: Record<string, unknown>): string {
@@ -56,7 +58,7 @@ describe('signed password-recovery context', () => {
   });
 
   it('signs and verifies an exact, user-bound, short-lived payload', () => {
-    const token = signRecoveryContext(USER_ID, {
+    const token = signRecoveryContext(USER_ID, SESSION_ID, {
       secret: SECRET,
       nowSeconds: NOW,
       nonce: 'abcdefghijklmnop',
@@ -65,6 +67,7 @@ describe('signed password-recovery context', () => {
       secret: SECRET,
       nowSeconds: NOW + 1,
       expectedUserId: USER_ID,
+      expectedSessionId: SESSION_ID,
     });
     expect(result.valid).toBe(true);
     if (result.valid) {
@@ -72,19 +75,20 @@ describe('signed password-recovery context', () => {
         version: 1,
         purpose: 'password_recovery',
         userId: USER_ID,
+        sessionId: SESSION_ID,
         issuedAt: NOW,
         expiresAt: NOW + RECOVERY_CONTEXT_MAX_AGE_SECONDS,
         nonce: 'abcdefghijklmnop',
       });
       expect(Object.keys(result.payload).sort()).toEqual([
-        'expiresAt', 'issuedAt', 'nonce', 'purpose', 'userId', 'version',
+        'expiresAt', 'issuedAt', 'nonce', 'purpose', 'sessionId', 'userId', 'version',
       ]);
       expect(JSON.stringify(result.payload)).not.toMatch(/email|name|role/i);
     }
   });
 
   it('rejects tampered payloads and signatures', () => {
-    const token = signRecoveryContext(USER_ID, { secret: SECRET, nowSeconds: NOW });
+    const token = signRecoveryContext(USER_ID, SESSION_ID, { secret: SECRET, nowSeconds: NOW });
     const [payload, signature] = token.split('.');
     const tamperedPayload = `${payload[0] === 'A' ? 'B' : 'A'}${payload.slice(1)}`;
     const tamperedSignature = `${signature[0] === 'A' ? 'B' : 'A'}${signature.slice(1)}`;
@@ -97,12 +101,14 @@ describe('signed password-recovery context', () => {
       version: 1,
       purpose: 'password_recovery',
       userId: USER_ID,
+      sessionId: SESSION_ID,
       issuedAt: NOW,
       expiresAt: NOW + 600,
       nonce: 'abcdefghijklmnop',
     };
     expect(verifyRecoveryContext(signPayload({ ...validPayload, purpose: 'invitation' }), { secret: SECRET, nowSeconds: NOW }).valid).toBe(false);
     expect(verifyRecoveryContext(signPayload(validPayload), { secret: SECRET, nowSeconds: NOW, expectedUserId: OTHER_USER_ID }).valid).toBe(false);
+    expect(verifyRecoveryContext(signPayload(validPayload), { secret: SECRET, nowSeconds: NOW, expectedSessionId: OTHER_SESSION_ID }).valid).toBe(false);
     expect(verifyRecoveryContext(signPayload(validPayload), { secret: SECRET, nowSeconds: NOW + 600 }).valid).toBe(false);
     expect(verifyRecoveryContext(signPayload({ ...validPayload, issuedAt: NOW + 31, expiresAt: NOW + 631 }), { secret: SECRET, nowSeconds: NOW }).valid).toBe(false);
     expect(verifyRecoveryContext(signPayload({ ...validPayload, expiresAt: NOW + 601 }), { secret: SECRET, nowSeconds: NOW }).valid).toBe(false);
@@ -120,10 +126,10 @@ describe('signed password-recovery context', () => {
 
   it('rejects missing and weak signing secrets without exposing their values', () => {
     delete process.env.CAPSTONE_AUTH_FLOW_SECRET;
-    expect(() => signRecoveryContext(USER_ID, { nowSeconds: NOW })).toThrow(
+    expect(() => signRecoveryContext(USER_ID, SESSION_ID, { nowSeconds: NOW })).toThrow(
       'Password recovery context configuration is unavailable.',
     );
-    expect(() => signRecoveryContext(USER_ID, { secret: 'too-short', nowSeconds: NOW })).toThrow(
+    expect(() => signRecoveryContext(USER_ID, SESSION_ID, { secret: 'too-short', nowSeconds: NOW })).toThrow(
       'Password recovery context configuration is unavailable.',
     );
   });
@@ -144,7 +150,7 @@ describe('signed password-recovery context', () => {
       maxAge: 600,
     });
 
-    await issueRecoveryContextCookie(USER_ID);
+    await issueRecoveryContextCookie(USER_ID, SESSION_ID);
     expect(mocks.set).toHaveBeenLastCalledWith(
       RECOVERY_CONTEXT_COOKIE_NAME,
       expect.stringMatching(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/),

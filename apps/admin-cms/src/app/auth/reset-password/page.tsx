@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { AuthPageShell } from '../../../components/auth/AuthPageShell';
 import { Button } from '../../../components/ui/button';
 import { RECOVERY_INVALID_CLEANUP_PATH } from '../../../auth/confirmationValidation';
-import { inspectRecoveryContextForClient } from '../../../auth/recoveryContext';
+import { getVerifiedPasswordRecoveryAccess } from '../../../auth/recoverySession';
 import { createSupabaseServerClient } from '../../../lib/supabase/server';
 import { logoutAction } from '../../login/actions';
 import { ResetPasswordForm } from './ResetPasswordForm';
@@ -13,7 +13,7 @@ export default async function ResetPasswordPage() {
   let allowed = false;
   try {
     const supabase = await createSupabaseServerClient();
-    allowed = (await inspectRecoveryContextForClient(supabase)) === 'valid';
+    allowed = (await getVerifiedPasswordRecoveryAccess(supabase)) !== null;
   } catch {
     allowed = false;
   }

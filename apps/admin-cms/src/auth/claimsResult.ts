@@ -1,5 +1,5 @@
 import { AdminAuthError } from './authTypes';
-import { extractSubClaim } from './claims';
+import { extractVerifiedAuthClaims, type VerifiedAuthClaims } from './claims';
 
 /**
  * Pure helper to parse and validate the complete getClaims() response envelope.
@@ -10,14 +10,14 @@ import { extractSubClaim } from './claims';
  * - Delegate sub claim validation to extractSubClaim.
  * - Does not import Next.js, cookies, Supabase client/network calls, or env configurations.
  */
-export function parseClaimsResult(result: unknown): string {
+export function parseClaimsResult(result: unknown): VerifiedAuthClaims {
   if (!result || typeof result !== 'object') {
     throw new AdminAuthError('UNAUTHENTICATED', 'Authentication required.');
   }
 
   const envelope = result as { data?: { claims?: unknown } | null; error?: unknown };
 
-  if (envelope.error) {
+  if (!Object.prototype.hasOwnProperty.call(envelope, 'error') || envelope.error !== null) {
     throw new AdminAuthError('UNAUTHENTICATED', 'Authentication required.');
   }
 
@@ -31,5 +31,5 @@ export function parseClaimsResult(result: unknown): string {
     throw new AdminAuthError('UNAUTHENTICATED', 'Authentication required.');
   }
 
-  return extractSubClaim(claims);
+  return extractVerifiedAuthClaims(claims);
 }

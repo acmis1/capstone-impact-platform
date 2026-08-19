@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 28;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 29;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -36,6 +36,7 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260814140000_snapshot_image_alt_text.sql',
   '20260816144917_staging_uat_direct_account_finalization.sql',
   '20260817090000_private_media_approval_gate.sql',
+  '20260819214431_password_recovery_session_provenance.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [
@@ -72,6 +73,8 @@ export const REQUIRED_PUBLICATION_TABLES = [
 
 export const REQUIRED_STAFF_TABLES = ['staff_provisioning_requests'] as const;
 
+export const REQUIRED_AUTH_PROVENANCE_TABLES = ['password_recovery_sessions'] as const;
+
 export const REQUIRED_NOTIFICATION_TABLES = [
   'participant_preview_notifications',
   'participant_preview_reminder_schedules',
@@ -83,6 +86,7 @@ export const ALL_REQUIRED_TABLES = [
   ...REQUIRED_PREVIEW_TABLES,
   ...REQUIRED_PUBLICATION_TABLES,
   ...REQUIRED_STAFF_TABLES,
+  ...REQUIRED_AUTH_PROVENANCE_TABLES,
   ...REQUIRED_NOTIFICATION_TABLES,
 ] as const;
 
@@ -100,9 +104,10 @@ function rpc(
   return { name, parameterNames, parameterTypes };
 }
 
-/** Final application RPC signatures granted to service_role by migrations 0001-0028. */
+/** Final application RPC signatures granted to service_role by migrations 0001-0029. */
 export const REQUIRED_RPC_SIGNATURES = [
   rpc('bootstrap_initial_admin', ['p_auth_user_id', 'p_email', 'p_full_name'], ['uuid', 'text', 'text']),
+  rpc('register_password_recovery_session', ['p_session_id', 'p_auth_user_id'], ['uuid', 'uuid']),
   rpc('perform_project_review_action', ['p_public_id', 'p_action', 'p_comments', 'p_admin_id'], ['text', 'text', 'text', 'uuid']),
   rpc(
     'update_project_metadata',

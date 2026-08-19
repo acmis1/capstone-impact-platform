@@ -9,9 +9,8 @@ import {
 import { validatePasswordUpdate } from '../../../auth/invitationValidation';
 import {
   clearRecoveryContextCookie,
-  readRecoveryContextCookie,
-  verifyRecoveryContext,
 } from '../../../auth/recoveryContext';
+import { getVerifiedPasswordRecoveryAccess } from '../../../auth/recoverySession';
 import { createSupabaseServerClient } from '../../../lib/supabase/server';
 
 export interface RecoveryPasswordUpdateInput {
@@ -40,59 +39,56 @@ export async function resetPasswordAction(input: RecoveryPasswordUpdateInput) {
     return { error: validation.error ?? 'PASSWORD_UPDATE_FAILED' };
   }
 
-  let contextUserId: string | null = null;
-  try {
-    const token = await readRecoveryContextCookie();
-    const context = verifyRecoveryContext(token);
-    if (context.valid) contextUserId = context.payload.userId;
-  } catch {
-    contextUserId = null;
-  }
-
-  let invalidContext = contextUserId === null;
+  let invalidContext = false;
   let updateSuccess = false;
   let actionError: string | null = null;
   let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>> | null = null;
 
-  if (!invalidContext) {
-    try {
-      supabase = await createSupabaseServerClient();
-      const { data, error } = await supabase.auth.getUser();
-      if (error || !data.user || data.user.id !== contextUserId) {
-        invalidContext = true;
+  try {
+    supabase = await createSupabaseServerClient();
+    const access = await getVerifiedPasswordRecoveryAccess(supabase);
+    if (!access) {
+      invalidContext = true;
+    } else {
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: input.password,
+      });
+      if (updateError) {
+        actionError = 'PASSWORD_UPDATE_FAILED';
       } else {
-        const { error: updateError } = await supabase.auth.updateUser({
-          password: input.password,
-        });
-        if (updateError) {
-          actionError = 'PASSWORD_UPDATE_FAILED';
+        const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+        if (signOutError) {
+          actionError = 'SESSION_TERMINATION_FAILED';
         } else {
-          const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
-          if (signOutError) {
-            actionError = 'SESSION_TERMINATION_FAILED';
-          } else {
+          try {
             await clearRecoveryContextCookie();
             updateSuccess = true;
+          } catch {
+            actionError = 'SESSION_TERMINATION_FAILED';
           }
         }
       }
-    } catch {
-      actionError = 'PASSWORD_UPDATE_FAILED';
     }
+  } catch {
+    actionError = 'PASSWORD_UPDATE_FAILED';
   }
 
   if (invalidContext) {
+    let terminated = false;
     if (supabase) {
       try {
-        await supabase.auth.signOut({ scope: 'local' });
+        const { error } = await supabase.auth.signOut({ scope: 'local' });
+        terminated = error === null;
       } catch {
-        // Best-effort local session termination for an invalid recovery context.
+        terminated = false;
       }
     }
-    try {
-      await clearRecoveryContextCookie();
-    } catch {
-      // The cleanup route repeats this bounded local cleanup.
+    if (terminated) {
+      try {
+        await clearRecoveryContextCookie();
+      } catch {
+        // The cleanup route repeats cookie cleanup after the Auth session is terminated.
+      }
     }
     redirect(RECOVERY_INVALID_CLEANUP_PATH);
   }

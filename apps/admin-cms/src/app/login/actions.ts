@@ -8,6 +8,15 @@ import { redirect } from 'next/navigation';
 import { sanitizeRedirectPath } from '../../auth/redirect';
 import { clearRecoveryContextCookie } from '../../auth/recoveryContext';
 
+async function signOutLocal(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>): Promise<boolean> {
+  try {
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    return error === null;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Server Action to authenticate administrative users.
  * 
@@ -40,7 +49,7 @@ export async function loginAction(prevState: unknown, formData: FormData) {
     try {
       await clearRecoveryContextCookie();
     } catch {
-      await supabase.auth.signOut({ scope: 'local' });
+      await signOutLocal(supabase);
       return { error: 'An unexpected authentication error occurred.' };
     }
 
@@ -54,7 +63,10 @@ export async function loginAction(prevState: unknown, formData: FormData) {
 
     if (dbError || !adminUser) {
       // Identity not provisioned in database admin list. Sign out immediately.
-      await supabase.auth.signOut();
+      const terminated = await signOutLocal(supabase);
+      if (!terminated) {
+        return { error: 'An unexpected authentication error occurred.' };
+      }
       return { error: 'Access denied. This account is not provisioned as an administrator.' };
     }
 
@@ -73,16 +85,19 @@ export async function loginAction(prevState: unknown, formData: FormData) {
  * Server Action to sign out and clear session cookies.
  */
 export async function logoutAction() {
+  let terminated = false;
   try {
     const supabase = await createSupabaseServerClient();
-    await supabase.auth.signOut();
+    terminated = await signOutLocal(supabase);
   } catch {
-    // Ignore sign-out error
+    terminated = false;
   }
-  try {
-    await clearRecoveryContextCookie();
-  } catch {
-    // Ignore local context cleanup errors during logout.
+  if (terminated) {
+    try {
+      await clearRecoveryContextCookie();
+    } catch {
+      terminated = false;
+    }
   }
-  redirect('/login');
+  redirect(terminated ? '/login' : '/login?error=SIGN_OUT_FAILED');
 }
