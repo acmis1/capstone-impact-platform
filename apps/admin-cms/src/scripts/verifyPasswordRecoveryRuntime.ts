@@ -20,6 +20,8 @@ import { UUID_PATTERN, type VerifiedAuthClaims } from '../auth/claims';
 import { parseClaimsResult } from '../auth/claimsResult';
 import {
   getCurrentPasswordRecoverySessionState,
+  hasRecoveryAcceptanceProvenance,
+  hasSupportedAdminPasswordProvenance,
   registerPasswordRecoverySession,
   type RecoverySessionState,
 } from '../auth/recoverySession';
@@ -631,6 +633,60 @@ async function main(): Promise<void> {
       // No Admin client, staff profile, or role lookup was reached for the stale token.
       assert.equal(adminResolutionAttempts, attemptsBeforeStalePassword);
     });
+
+    // Bounded pure-application contract only. Local Auth genuinely emits `otp` for the custom
+    // TokenHash flow (proven above by real sessions), while Supabase's documented `amr` contract
+    // also defines `recovery` for the hosted default-template PKCE exchange. No Auth token is
+    // manufactured here: these are in-process claim structures exercising the provenance helpers.
+    await scenario(37, 'documented recovery AMR is accepted only by recovery entry', () => {
+      const structural = (authenticationMethods: string[]): VerifiedAuthClaims => ({
+        userId: activeClaims.userId,
+        sessionId: activeClaims.sessionId,
+        authenticationMethods,
+      });
+
+      for (const method of ['otp', 'recovery']) {
+        // Accepted as recovery-entry provenance.
+        assert.equal(hasRecoveryAcceptanceProvenance(structural([method])), true);
+        // Never accepted as Admin password provenance, and never admitted to Admin
+        // without a durable recovery ledger row.
+        assert.equal(hasSupportedAdminPasswordProvenance(structural([method])), false);
+        assert.throws(
+          () => enforceAdminRecoveryGate(structural([method]), 'NOT_REGISTERED', 'absent'),
+          (error) => error instanceof AdminAuthError
+            && error.type === 'AUTHENTICATION_PROVENANCE_INVALID',
+        );
+      }
+
+      // Exact single-method equality only: no other documented method, near-miss string,
+      // or multi-method set is recovery-entry provenance.
+      for (const methods of [
+        [],
+        ['password'],
+        ['invite'],
+        ['magiclink'],
+        ['email/signup'],
+        ['email_change'],
+        ['oauth'],
+        ['token_refresh'],
+        ['unknown'],
+        ['otp_extra'],
+        ['recovery_code'],
+        ['OTP'],
+        ['RECOVERY'],
+        ['otp', 'password'],
+        ['recovery', 'password'],
+        ['otp', 'recovery'],
+      ]) {
+        assert.equal(hasRecoveryAcceptanceProvenance(structural(methods)), false);
+      }
+
+      // The real Local recovery session proven earlier still satisfies the same helper, and the
+      // real Local password session still does not.
+      assert.equal(hasRecoveryAcceptanceProvenance(recoveryClaimsAfterRefresh), true);
+      assert.equal(hasRecoveryAcceptanceProvenance(activeClaims), false);
+      assert.equal(hasSupportedAdminPasswordProvenance(activeClaims), true);
+    });
   } catch (error) {
     primaryFailure = error;
   } finally {
@@ -664,7 +720,7 @@ async function main(): Promise<void> {
           '0',
         );
       }
-      console.log('PASS: Scenario 37 - all verifier-owned Auth, staff, session, ledger, and Mailpit fixtures are removed');
+      console.log('PASS: Scenario 38 - all verifier-owned Auth, staff, session, ledger, and Mailpit fixtures are removed');
     } catch (error) {
       cleanupFailure = error;
     }
