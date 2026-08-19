@@ -341,6 +341,25 @@ function cleanupDockerProxyPaths(paths: DockerProxyPrivatePaths): void {
   removeTemporaryDirectory(paths.temporaryDirectory);
 }
 
+const proxyShutdownRequests = new WeakSet<ChildProcess>();
+
+function requestDockerProxyShutdown(child: ChildProcess): void {
+  if (proxyShutdownRequests.has(child)) return;
+  proxyShutdownRequests.add(child);
+  if (child.exitCode !== null || child.signalCode !== null) return;
+
+  try {
+    if (child.connected) child.disconnect();
+    else child.kill('SIGTERM');
+  } catch {
+    // The worker may already have exited or disconnected.
+  }
+
+  setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  }, 1_500).unref();
+}
+
 export function startDockerLoopbackProxy(
   repoRoot: string,
   options?: { targetDockerHost?: string; authorizationToken?: string },
@@ -376,7 +395,8 @@ export function startDockerLoopbackProxy(
   let child: ChildProcess;
   try {
     child = spawn(process.execPath, [workerPath], {
-      stdio: 'ignore',
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      detached: process.platform === 'win32',
       env: {
         ...process.env,
         CAPSTONE_DOCKER_PROXY_TARGET: targetDockerHost,
@@ -388,6 +408,8 @@ export function startDockerLoopbackProxy(
         CAPSTONE_DOCKER_PROXY_AUTHORIZATION: authorizationToken,
       },
     });
+    child.unref();
+    child.channel?.unref();
   } catch {
     cleanupDockerProxyPaths(privatePaths);
     throw new Error('DOCKER_PROXY_FAILED');
@@ -410,7 +432,7 @@ export function startDockerLoopbackProxy(
       } catch {
         // A missing or ambiguous endpoint is not ready for use.
       }
-      child.kill('SIGTERM');
+      requestDockerProxyShutdown(child);
       cleanupDockerProxyPaths(handle);
       throw new Error('DOCKER_PROXY_FAILED');
     }
@@ -418,13 +440,13 @@ export function startDockerLoopbackProxy(
     waitBriefly(25);
   }
 
-  child.kill('SIGTERM');
+  requestDockerProxyShutdown(child);
   cleanupDockerProxyPaths(privatePaths);
   throw new Error('DOCKER_PROXY_FAILED');
 }
 
 export function stopDockerLoopbackProxy(handle: DockerProxyHandle): void {
-  handle.process.kill('SIGTERM');
+  requestDockerProxyShutdown(handle.process);
   cleanupDockerProxyPaths(handle);
 }
 

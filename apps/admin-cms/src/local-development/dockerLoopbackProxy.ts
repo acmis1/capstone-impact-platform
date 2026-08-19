@@ -326,8 +326,17 @@ function startProxy(): void {
     server.close(() => finish(exitCode));
     setTimeout(() => finish(exitCode), 1_000).unref();
   };
+  const parentLivenessTimer = setInterval(() => {
+    if (process.ppid !== parentPid || !parentProcessExists(parentPid)) shutdown();
+  }, 250);
+  parentLivenessTimer.unref();
 
   server.on('error', () => shutdown(1));
+  if (!process.connected) {
+    finish(1);
+    return;
+  }
+  process.once('disconnect', () => shutdown());
 
   const listenOptions: net.ListenOptions = process.platform === 'win32'
     ? { path: listenPath, readableAll: false, writableAll: false }
@@ -343,10 +352,6 @@ function startProxy(): void {
 
   process.on('SIGTERM', () => shutdown());
   process.on('SIGINT', () => shutdown());
-  const parentLivenessTimer = setInterval(() => {
-    if (process.ppid !== parentPid || !parentProcessExists(parentPid)) shutdown();
-  }, 250);
-  parentLivenessTimer.unref();
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) startProxy();

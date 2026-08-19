@@ -68,6 +68,26 @@ function waitForExit(child: ReturnType<typeof spawn>, timeoutMilliseconds = 2_00
   });
 }
 
+function expectProxyEndpointClosed(listenPath: string, timeoutMilliseconds = 1_000): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const socket = net.createConnection(listenPath);
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      reject(new Error('SYNTHETIC_PROXY_ENDPOINT_CHECK_TIMED_OUT'));
+    }, timeoutMilliseconds);
+    const finish = (error?: Error) => {
+      clearTimeout(timeout);
+      socket.destroy();
+      if (error) reject(error);
+      else resolve();
+    };
+
+    socket.once('connect', () => finish(new Error('SYNTHETIC_PROXY_ENDPOINT_STILL_ACCEPTING_CONNECTIONS')));
+    socket.once('error', () => finish());
+    socket.once('close', () => finish());
+  });
+}
+
 async function waitForCondition(condition: () => boolean, timeoutMilliseconds = 3_000): Promise<void> {
   const startedAt = Date.now();
   while (!condition()) {
@@ -466,11 +486,9 @@ describe.sequential('authenticated Docker loopback proxy', () => {
       });
     }
 
-    [
-      readyPath,
-      auditPath,
-      listenPath,
-    ].forEach((file) => expect(fs.existsSync(file)).toBe(false));
+    await expectProxyEndpointClosed(listenPath);
+    [readyPath, auditPath].forEach((file) => expect(fs.existsSync(file)).toBe(false));
+    if (process.platform !== 'win32') expect(fs.existsSync(listenPath)).toBe(false);
     expect(fs.existsSync(temporaryDirectory)).toBe(false);
   });
 });
@@ -520,13 +538,15 @@ describe.sequential('Docker proxy lifecycle regressions', () => {
         connection?.once('error', reject);
       });
 
-      standalone.process.kill('SIGINT');
-      standalone.process.kill('SIGTERM');
+      stopDockerLoopbackProxy(standalone);
+      stopDockerLoopbackProxy(standalone);
       connection.destroy();
       await waitForExit(standalone.process);
 
-      [standalone.listenPath, standalone.readyPath, standalone.auditPath]
+      await expectProxyEndpointClosed(standalone.listenPath);
+      [standalone.readyPath, standalone.auditPath]
         .forEach((artifact) => expect(fs.existsSync(artifact)).toBe(false));
+      if (process.platform !== 'win32') expect(fs.existsSync(standalone.listenPath)).toBe(false);
       expect(fs.existsSync(standalone.temporaryDirectory)).toBe(false);
       expect(fs.existsSync(unrelatedDirectory)).toBe(true);
       expect(() => stopDockerLoopbackProxy(standalone)).not.toThrow();
@@ -598,11 +618,14 @@ setInterval(() => {}, 1_000);`,
       if (!worker) throw new Error('SYNTHETIC_WORKER_HANDLE_MISSING');
 
       process.kill(worker.parentPid, 'SIGKILL');
+      await waitForExit(harness);
       await waitForCondition(() => !fs.existsSync(worker?.temporaryDirectory ?? ''));
       await waitForCondition(() => !processExists(worker?.workerPid ?? -1));
 
-      [worker.listenPath, worker.readyPath, worker.auditPath, worker.temporaryDirectory]
+      await expectProxyEndpointClosed(worker.listenPath);
+      [worker.readyPath, worker.auditPath, worker.temporaryDirectory]
         .forEach((artifact) => expect(fs.existsSync(artifact)).toBe(false));
+      if (process.platform !== 'win32') expect(fs.existsSync(worker.listenPath)).toBe(false);
     } finally {
       if (harness.exitCode === null && harness.signalCode === null) harness.kill('SIGKILL');
       if (worker && processExists(worker.parentPid)) process.kill(worker.parentPid, 'SIGKILL');
