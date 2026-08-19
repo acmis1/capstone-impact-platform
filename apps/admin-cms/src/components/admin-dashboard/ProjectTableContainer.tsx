@@ -358,7 +358,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
       </div>
 
       {/* Desktop/Tablet Table View */}
-      <div className="hidden overflow-hidden rounded-lg border border-border bg-card shadow-xs md:block">
+      <div className="hidden overflow-hidden rounded-xl border border-border-structural bg-card shadow-xs md:block">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left">
             <caption className="sr-only">
@@ -478,7 +478,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
       {/* Pagination Bar */}
       <nav
         aria-label="Project results pages"
-        className="flex flex-col items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-xs sm:flex-row sm:items-center sm:justify-between"
+        className="flex flex-col items-start gap-3 rounded-xl border border-border-structural bg-card px-4 py-3 shadow-xs sm:flex-row sm:items-center sm:justify-between"
       >
         <p className="text-sm text-muted-foreground">
           Page <span className="font-semibold tabular-nums text-foreground">{page}</span> of{' '}

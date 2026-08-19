@@ -5,6 +5,10 @@ import { cn } from "../../lib/utils";
 export const OPERATIONAL_SURFACE_CLASS_NAME =
   "rounded-xl border border-border/80 bg-card shadow-xs";
 
+/** Shared outer geometry for major operational regions only. */
+export const STRUCTURAL_SURFACE_CLASS_NAME =
+  "rounded-xl border border-border-structural bg-card shadow-xs";
+
 export function Card({ className, ref, ...props }: React.ComponentProps<"div">) {
   return (
     <div

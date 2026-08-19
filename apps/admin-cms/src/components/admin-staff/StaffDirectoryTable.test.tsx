@@ -71,7 +71,7 @@ describe('StaffDirectoryTable', () => {
     render(<StaffDirectoryTable staff={staff} incidents={[]} />);
 
     expect(screen.getByRole('heading', { level: 2, name: 'Staff directory' })).toBeDefined();
-    expect(screen.getByRole('region', { name: 'Staff directory' })).toBeDefined();
+    expect(screen.getByRole('region', { name: 'Staff directory' }).className).toContain('border-border-structural');
     expect(screen.getByRole('table', { name: /staff accounts and their assigned roles/i })).toBeDefined();
 
     const mobileDirectory = screen.getByRole('list', { name: /Admin\/CMS staff accounts/i });
@@ -93,6 +93,7 @@ describe('StaffDirectoryTable', () => {
     render(<StaffDirectoryTable staff={staff.slice(0, 1)} incidents={incidents} />);
 
     expect(screen.getByRole('heading', { level: 2, name: 'Provisioning incidents' })).toBeDefined();
+    expect(screen.getByRole('region', { name: 'Provisioning incidents' }).className).toContain('border-warning/30');
     const mobileIncidents = screen.getByRole('list', { name: /Staff provisioning incidents/i });
     expect(within(mobileIncidents).getByText('Cleanup in progress')).toBeDefined();
     expect(within(mobileIncidents).getByText('Needs attention')).toBeDefined();

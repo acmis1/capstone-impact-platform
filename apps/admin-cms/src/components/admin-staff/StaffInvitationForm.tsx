@@ -77,7 +77,7 @@ export function StaffInvitationForm({ assignableRoles, provisioningEnabled }: St
 
   if (!provisioningEnabled) {
     return (
-      <Card>
+      <Card className="border-border-structural">
         <CardHeader>
           <CardTitle>Invite staff</CardTitle>
           <CardDescription>
@@ -97,7 +97,7 @@ export function StaffInvitationForm({ assignableRoles, provisioningEnabled }: St
   }
 
   return (
-    <Card>
+    <Card className="border-border-structural">
       <CardHeader>
         <CardTitle>Invite staff</CardTitle>
         <CardDescription>

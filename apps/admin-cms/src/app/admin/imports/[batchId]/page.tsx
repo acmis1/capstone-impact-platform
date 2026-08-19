@@ -154,7 +154,7 @@ export default async function ImportBatchDetailPage({
       </div>
 
       {/* Outcome Summary Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border rounded-lg border border-border bg-card">
+      <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border rounded-xl border border-border-structural bg-card shadow-xs">
         <div className="p-4 flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
             <Folder className="h-5 w-5" aria-hidden="true" />
@@ -189,7 +189,7 @@ export default async function ImportBatchDetailPage({
       {/* Main Content Layout: fixed-width metadata rail + fluid review surface */}
       <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-6 items-start">
         {/* Left Rail: Import Summary (secondary, compact) */}
-        <Card className="bg-card border-border shadow-xs">
+        <Card>
           <CardHeader className="border-b border-border pb-3">
             <CardTitle className="text-sm font-semibold text-foreground">
               Import summary
@@ -266,7 +266,7 @@ export default async function ImportBatchDetailPage({
         </Card>
 
         {/* Primary Workspace: Ingested Projects Review Surface */}
-        <Card className="bg-card border-border shadow-xs">
+        <Card className="border-border-structural">
           <CardHeader className="border-b border-border pb-3">
             <CardTitle className="text-base font-semibold text-foreground">
               Projects in this import ({reviewProjects.length})

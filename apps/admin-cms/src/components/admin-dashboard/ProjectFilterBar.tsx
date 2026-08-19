@@ -7,7 +7,7 @@ import { ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react';
 import type { PageSizeOption, ProjectListQuery } from '../../domain/projectQuery';
 import type { WorkflowStatus } from '../../domain/workflowStatus';
 import { Button } from '../ui/button';
-import { OPERATIONAL_SURFACE_CLASS_NAME } from '../ui/card';
+import { STRUCTURAL_SURFACE_CLASS_NAME } from '../ui/card';
 import { getWorkflowStatusLabel } from '../admin/ProjectStatusBadge';
 import { cn } from '../../lib/utils';
 import {
@@ -257,7 +257,7 @@ export function ProjectFilterBar({
   return (
     <section
       aria-labelledby="project-discovery-heading"
-      className={`${OPERATIONAL_SURFACE_CLASS_NAME} overflow-hidden`}
+      className={`${STRUCTURAL_SURFACE_CLASS_NAME} overflow-hidden`}
     >
       <h3 id="project-discovery-heading" className="sr-only">
         Find projects

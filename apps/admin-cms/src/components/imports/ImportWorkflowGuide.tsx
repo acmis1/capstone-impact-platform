@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
   CardDescription,
-  OPERATIONAL_SURFACE_CLASS_NAME,
+  STRUCTURAL_SURFACE_CLASS_NAME,
 } from '../ui/card';
 import {
   IMPORT_WORKFLOW_STEP_ITEM_CLASSES,
@@ -37,7 +37,7 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
       {/* 5-Step Process Orientation Bar */}
       <nav
         aria-label="Import workflow steps"
-        className={`${OPERATIONAL_SURFACE_CLASS_NAME} p-3 sm:p-4`}
+        className={`${STRUCTURAL_SURFACE_CLASS_NAME} p-3 sm:p-4`}
       >
         <ol className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
           {STEPS.map(({ step, label }) => {
@@ -81,7 +81,7 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
       </nav>
 
       {/* Before You Start Onboarding & Folder Guide Card */}
-      <Card>
+      <Card className="border-border-structural">
         <CardHeader className="py-3 px-4 sm:px-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">

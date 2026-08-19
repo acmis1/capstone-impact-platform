@@ -42,8 +42,8 @@ interface ProjectDetailMacroSectionProps {
 }
 
 const TONE_CONTAINER: Record<ProjectReviewSectionTone, string> = {
-  surface: 'rounded-xl border border-border bg-card',
-  emphasis: 'rounded-xl border border-border-strong bg-card shadow-sm',
+  surface: 'rounded-xl border border-border-structural bg-card',
+  emphasis: 'rounded-xl border border-border-structural bg-card shadow-sm',
   plain: '',
 };
 

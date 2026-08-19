@@ -86,7 +86,9 @@ describe('ProjectReviewSection layout primitive', () => {
     const emphasis = emphasisContainer.querySelector('[data-slot="project-review-section"]')!.className;
 
     expect(ordinary).not.toBe(emphasis);
-    expect(emphasis).toMatch(/border-border-strong/);
+    expect(ordinary).toMatch(/border-border-structural/);
+    expect(emphasis).toMatch(/border-border-structural/);
+    expect(emphasis).toMatch(/shadow-sm/);
   });
 
   describe('native disclosure form', () => {
@@ -156,6 +158,8 @@ describe('Project Detail macro navigation', () => {
 
     const navigation = screen.getByRole('navigation', { name: 'On this page' });
     expect(navigation.className).toContain('sticky');
+    expect(navigation.className).toContain('border-border-structural');
+    expect(navigation.className).toContain('bg-card');
     expect(navigation.className).toContain('top-16');
     expect(navigation.className).toContain('xl:top-20');
     const linkRow = navigation.querySelector('ul') as HTMLUListElement;
@@ -165,6 +169,7 @@ describe('Project Detail macro navigation', () => {
       const link = within(navigation).getByRole('link', { name: section.label });
       expect(link.getAttribute('href')).toBe(`#${section.id}`);
       expect(link.className).toContain('whitespace-nowrap');
+      expect(link.className).toContain('border-border');
       expect(document.getElementById(section.id)).toBeTruthy();
       expect(document.getElementById(section.id)?.className).toContain('scroll-mt-44');
       expect(screen.getByRole('heading', { name: section.label, level: 2 })).toBeTruthy();
