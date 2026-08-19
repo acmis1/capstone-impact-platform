@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   IMPORT_WORKFLOW_STEP_ITEM_CLASSES,
@@ -18,6 +19,11 @@ import {
 import { buttonVariants } from "../components/ui/button";
 import { REVIEW_ACTION_PRESENTATIONS } from "../components/admin/reviewActionPresentation";
 import { IMPORT_SUMMARY_VALUE_CLASS_NAMES } from "../components/admin/ImportMetricsSummary";
+import {
+  Card,
+  OPERATIONAL_SURFACE_CLASS_NAME,
+  STRUCTURAL_SURFACE_CLASS_NAME,
+} from "../components/ui/card";
 
 function parseHexColor(hex: string): [number, number, number] {
   const cleanHex = hex.trim().replace(/^#/, "");
@@ -138,6 +144,42 @@ function renderedBackgroundHex(
   const alpha = utility.opacityPercent !== null ? utility.opacityPercent / 100 : 1;
   return alpha < 1 ? compositeOverBackground(tokenHex, alpha, underlyingHex) : tokenHex;
 }
+
+describe("Neutral border-role hierarchy", () => {
+  const tokens = extractCssTokens();
+
+  it("keeps structural boundaries above the ordinary neutral border roles", () => {
+    const againstCard = (token: string) => getContrastRatio(tokens[token], tokens.card);
+    const subtle = againstCard("border-subtle");
+    const ordinary = againstCard("border");
+    const strong = againstCard("border-strong");
+    const structural = againstCard("border-structural");
+    const structuralOnBackground = getContrastRatio(tokens["border-structural"], tokens.background);
+
+    expect(subtle, `border-subtle/card ${subtle.toFixed(2)}:1`).toBeLessThan(ordinary);
+    expect(ordinary, `border/card ${ordinary.toFixed(2)}:1`).toBeLessThan(strong);
+    expect(strong, `border-strong/card ${strong.toFixed(2)}:1`).toBeLessThan(structural);
+    expect(structural, `border-structural/card ${structural.toFixed(2)}:1, expected >= 3:1`).toBeGreaterThanOrEqual(3);
+    expect(
+      structuralOnBackground,
+      `border-structural/background ${structuralOnBackground.toFixed(2)}:1, expected >= 3:1`,
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      structural,
+      `border-structural/card ${structural.toFixed(2)}:1 should be materially stronger than border-strong/card ${strong.toFixed(2)}:1`,
+    ).toBeGreaterThanOrEqual(strong * 2);
+  });
+});
+
+describe("Structural-surface contract", () => {
+  it("keeps the shared Card contract ordinary while exposing a distinct structural surface", () => {
+    expect(OPERATIONAL_SURFACE_CLASS_NAME).toBe("rounded-xl border border-border/80 bg-card shadow-xs");
+    expect(STRUCTURAL_SURFACE_CLASS_NAME).toBe("rounded-xl border border-border-structural bg-card shadow-xs");
+    const ordinaryCardMarkup = renderToStaticMarkup(Card({}));
+    expect(ordinaryCardMarkup).toContain("border-border/80");
+    expect(ordinaryCardMarkup).not.toContain("border-border-structural");
+  });
+});
 
 describe("Badge rendered alpha-composited contrast (WCAG 2.2 AA)", () => {
   const tokens = extractCssTokens();

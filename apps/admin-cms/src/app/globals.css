@@ -46,6 +46,7 @@
   --color-border: var(--border);
   --color-border-subtle: var(--border-subtle);
   --color-border-strong: var(--border-strong);
+  --color-border-structural: var(--border-structural);
   --color-input: var(--input);
   --color-ring: var(--ring);
 
@@ -113,6 +114,7 @@
   --border: #e2e8f0;
   --border-subtle: #f1f5f9;
   --border-strong: #cbd5e1;
+  --border-structural: #7f8da3;
   --input: #cbd5e1;
   --ring: #e61e2a;
 

@@ -126,7 +126,7 @@ export interface StaffDirectoryTableProps {
 export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTableProps) {
   return (
     <div className="flex flex-col gap-6">
-      <Card role="region" aria-labelledby="staff-directory-heading" className="overflow-hidden">
+      <Card role="region" aria-labelledby="staff-directory-heading" className="overflow-hidden border-border-structural">
         <CardHeader className="border-b border-border/80">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>

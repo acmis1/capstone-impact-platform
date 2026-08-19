@@ -77,7 +77,7 @@ export default async function ImportBatchesPage() {
           <ImportMetricsSummary metrics={summaryMetrics} />
 
           {/* Import Batches Table Card */}
-          <Card className="bg-card border-border shadow-xs">
+          <Card className="border-border-structural">
             <CardHeader className="border-b border-border py-4 px-6">
               <CardTitle className="text-base font-semibold text-foreground">
                 Recent imports

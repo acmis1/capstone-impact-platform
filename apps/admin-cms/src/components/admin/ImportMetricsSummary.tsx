@@ -1,6 +1,6 @@
 import { cn } from '../../lib/utils';
 import type { ImportBatchRow } from '../../repositories/ImportBatchRepositoryCore';
-import { OPERATIONAL_SURFACE_CLASS_NAME } from '../ui/card';
+import { STRUCTURAL_SURFACE_CLASS_NAME } from '../ui/card';
 
 export interface ImportSummaryMetrics {
   recentImports: number;
@@ -60,7 +60,7 @@ export function ImportMetricsSummary({ metrics }: { metrics: ImportSummaryMetric
   ];
 
   return (
-    <section aria-labelledby="import-metrics-heading" className={OPERATIONAL_SURFACE_CLASS_NAME}>
+    <section aria-labelledby="import-metrics-heading" className={STRUCTURAL_SURFACE_CLASS_NAME}>
       <h2 id="import-metrics-heading" className="sr-only">
         Import batch summary
       </h2>

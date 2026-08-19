@@ -10,7 +10,7 @@ export function ProjectDetailSectionNavigation() {
   return (
     <nav
       aria-labelledby="project-detail-section-navigation-heading"
-      className="sticky top-16 z-30 rounded-xl border border-border/80 bg-background p-3 shadow-xs xl:top-20 xl:p-4"
+      className="sticky top-16 z-30 rounded-xl border border-border-structural bg-card p-3 shadow-xs xl:top-20 xl:p-4"
     >
       <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center">
         <p

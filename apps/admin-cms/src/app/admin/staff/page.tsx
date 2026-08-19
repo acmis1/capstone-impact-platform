@@ -82,7 +82,7 @@ export default async function StaffAccessPage() {
           </Badge>
         </div>
 
-        <dl className="grid overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs sm:grid-cols-2 xl:grid-cols-4">
+        <dl className="grid overflow-hidden rounded-xl border border-border-structural bg-card shadow-xs sm:grid-cols-2 xl:grid-cols-4">
           <div className="border-b border-border/80 px-5 py-4 sm:border-r xl:border-b-0">
             <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Staff accounts</dt>
             <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">

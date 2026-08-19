@@ -95,6 +95,7 @@ describe('DashboardMetricsSummary', () => {
     );
 
     const grid = container.querySelector('dl') as HTMLDListElement;
+    expect(container.querySelector('section')?.className).toContain('border-border-structural');
     expect(grid.className).toContain('grid-cols-2');
     expect(grid.className).toContain('lg:grid-cols-4');
 
@@ -112,13 +113,15 @@ describe('DashboardMetricsSummary', () => {
     expect(screen.getByText(/Summary counts cover/).className).toContain('border-border');
   });
 
-  it('keeps Projects filter and result boundaries on semantic border tokens', () => {
+  it('uses structural boundaries only for Projects outer surfaces while retaining internal semantic dividers', () => {
     const filterBarSource = fs.readFileSync(path.resolve(__dirname, './ProjectFilterBar.tsx'), 'utf-8');
     const tableSource = fs.readFileSync(path.resolve(__dirname, './ProjectTableContainer.tsx'), 'utf-8');
 
+    expect(filterBarSource).toContain('STRUCTURAL_SURFACE_CLASS_NAME');
     expect(filterBarSource).toContain('border-t border-border pt-4');
     expect(filterBarSource).toContain('border-t border-border bg-surface-inset');
-    expect(tableSource).toContain('border border-border bg-card');
+    expect(tableSource).toContain('rounded-xl border border-border-structural bg-card shadow-xs md:block');
+    expect(tableSource).toContain('rounded-xl border border-border-structural bg-card px-4 py-3 shadow-xs');
     expect(tableSource).toContain('border-b border-border bg-muted/40');
     expect(tableSource).toContain('divide-y divide-border');
     expect(tableSource).toContain('rounded-lg border border-border bg-card p-4');

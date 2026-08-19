@@ -70,7 +70,8 @@ describe('Imports index summary', () => {
     render(await ImportBatchesPage());
 
     const summary = screen.getByRole('region', { name: 'Import batch summary' });
-    expect(summary.className).toContain('rounded-xl border border-border/80 bg-card shadow-xs');
+    expect(summary.className).toContain('rounded-xl border border-border-structural bg-card shadow-xs');
+    expect(screen.getByRole('heading', { name: 'Recent imports', level: 3 }).closest('[data-slot="card"]')?.className).toContain('border-border-structural');
     expect(summary.querySelectorAll('dl')).toHaveLength(1);
     expect(summary.querySelectorAll('dt')).toHaveLength(5);
     expect(valueFor('Recent imports').textContent).toBe('3');
