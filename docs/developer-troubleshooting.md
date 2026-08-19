@@ -64,7 +64,7 @@ This guide provides solutions for common issues developers may encounter when se
 
 ### Problem: Local Port Conflicts
 - **Symptom**: `npm run supabase:start` or `npm run dev:admin` fails with `port 54321 is already in use` or `port 3000 in use`.
-- **Cause**: Another process is occupying local ports (`3000`, `54321–54324`).
+- **Cause**: Another process is occupying local ports (`3000`, `54321–54327`).
 
   **Windows PowerShell:**
   ```powershell
@@ -80,6 +80,19 @@ This guide provides solutions for common issues developers may encounter when se
 
 ---
 
+### Problem: Local Docker Network or Host-Binding Safety Failure
+- **Symptom**: `npm run supabase:start` fails with `DOCKER_PROXY_FAILED`, another `DOCKER_PROXY_*` category, `NETWORK_INCOMPATIBLE`, `UNSAFE_PORT_BINDING`, `MISSING_PORT_BINDING`, `WRONG_DOCKER_NETWORK`, `STACK_NOT_READY`, or another category-only Docker safety error.
+- **Cause**: The private authenticated proxy could not start safely, the same-named project network has incompatible options or changed identity, Docker did not publish all expected local ports, a project container was published on a wildcard/non-loopback host address, or the exact required container set was not running and healthy.
+- **Solution**:
+  1. Run `npm run supabase:stop` to cleanly stop this project while preserving local data.
+  2. Run `npm run supabase:assert-stopped` and confirm the project stack is stopped.
+  3. Do not delete or recreate the network automatically. If `NETWORK_INCOMPATIBLE` persists, ask a maintainer to inspect the exact project network before any removal.
+  4. Retry `npm run setup:local` only after resolving the reported category.
+
+The safety check uses structured Docker inspection and never treats a loopback URL from `supabase status` as proof of the host binding.
+
+---
+
 ### Problem: Stale Local Containers / Cannot Start Stack
 
 Try these steps **in order**. Do not skip ahead.
@@ -89,9 +102,9 @@ Try these steps **in order**. Do not skip ahead.
    npm run supabase:stop
    ```
 
-2. **Check the current status:**
+2. **Confirm the project stack is stopped:**
    ```bash
-   npm run supabase:status
+   npm run supabase:assert-stopped
    ```
 
 3. **Retry starting:**

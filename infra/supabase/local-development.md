@@ -6,7 +6,9 @@ This guide documents the canonical, local-only Supabase development workflow for
 
 - **No Hosted Credentials or Dashboards Required:** No hosted project credentials, private dashboards, or shared remote application environments are required for normal local development. (Note: Standard internet access is still required for initial `git clone`, `npm ci`, and pulling Docker images).
 - **No Supabase Organization Membership Required:** Developers do not need access to hosted Supabase, Duda, Render, or Vercel dashboards to build, test, and run the application locally.
-- **Isolated Local State:** All database tables, authentication identities, storage buckets, and Mailpit email captures run on `http://127.0.0.1`.
+- **Isolated Local State:** All database tables, authentication identities, storage buckets, and Mailpit email captures run locally. Docker publishes enabled Supabase ports `54321`–`54327` only on `127.0.0.1`, and the Admin/CMS development server binds only to `127.0.0.1:3000`.
+- **Verified Host Binding:** `supabase:start` creates or reuses the deterministic `capstone-impact-platform-local-loopback` bridge network, captures and passes its immutable Docker ID to the pinned Supabase CLI, rechecks that ID after execution, verifies every container attachment by ID, explicitly applies loopback to Docker create requests for Docker Desktop compatibility, and then fails closed unless structured Docker inspection proves the exact required container set, health, and every published project port.
+- **Private Docker Compatibility Proxy:** The compatibility proxy exists only for one `start` or local reset invocation. It uses a cryptographically random per-run header supplied only to that CLI child, requires the header on normal and upgrade requests, strips it before forwarding, and uses a unique private endpoint. The optional Vector log collector is excluded because it requires independent Docker-socket access and cannot present the per-run CLI capability; local application, database, Auth, Storage, Studio, Mailpit, and Analytics workflows do not depend on that collector. On Unix, runtime checks require a `0700` directory plus a `0600` readiness file and socket; shutdown removes them. Native Windows uses a unique named pipe without enabling Node's all-user read/write options, but its ACL behavior remains runtime-unverified for this patch. Native developer Linux also remains runtime-unverified beyond tests and CI contracts.
 - **Synthetic Data Safety:** Local database seeds use strictly synthetic mock data. No real participant or stakeholder PII or credentials are used or committed.
 - **Deterministic Migration Replay:** Running `npm run supabase:reset` replays all 9 timestamped migrations from `infra/supabase/migrations/` in strict ascending order, ending with `20260808170000_transactional_project_metadata_update.sql` *(migrations 0007 through 0009 are repository/local-only and not applied to hosted staging; migration 0009 remains draft in PR #40)*.
 - **Verification Strategy & Scope:**
@@ -44,7 +46,7 @@ npm run supabase:stop
 ### Diagnostic & Subcommand Reference
 The `npm run setup:local` runner automatically executes these diagnostic steps in sequence:
 1. `npm run onboarding:check` — Toolchain, Docker, Git, and migration precheck
-2. `npm run supabase:start` — Launch local Supabase containers (PostgreSQL, Auth, Storage, Studio, Mailpit)
+2. `npm run supabase:start` — Reuse or create the validated project Docker network, launch local Supabase containers, and assert loopback-only publication for all enabled ports
 3. `npm run supabase:seed:buckets` — Reconcile private/public storage buckets and synthetic poster fixtures
 4. `npm run supabase:env:local` — Write loopback environment variables to `apps/admin-cms/.env.local`
 5. `npm run supabase:users:local` — Provision synthetic `admin`, `reviewer`, and `editor` staff accounts
@@ -64,12 +66,13 @@ When onboarding a new developer or testing on a fresh machine:
 - [ ] `npm ci` completes without workspace errors.
 - [ ] `npm run onboarding:check` passes all 12 prechecks.
 - [ ] `npm run supabase:start` launches local container suite.
+- [ ] Structured Docker inspection reports ports `54321`–`54327` on loopback only, with no `0.0.0.0` or `::` publication.
 - [ ] `npm run supabase:reset` replays all 9 migrations cleanly.
 - [ ] `npm run supabase:seed:buckets` provisions local buckets and poster fixtures.
 - [ ] `npm run supabase:env:local` creates `apps/admin-cms/.env.local`.
 - [ ] `npm run supabase:users:local` provisions synthetic `admin`, `reviewer`, and `editor` accounts.
 - [ ] `npm run supabase:verify:local` outputs PASS for all local checks.
-- [ ] `npm run dev:admin` opens [http://localhost:3000/login](http://localhost:3000/login) and logs in cleanly.
+- [ ] `npm run dev:admin` listens on `127.0.0.1:3000`, and [http://localhost:3000/login](http://localhost:3000/login) opens and logs in cleanly.
 - [ ] Zero hosted keys, organization access, or hosted Supabase dashboard actions were required.
 
 ---
@@ -100,7 +103,9 @@ No emails leave your machine during local development.
 - **Toolchain Used**: Node `v24.14.1`, npm `11.11.0` (Satisfies Node 24 range `>= 24.14.1 < 25` and `npm >= 11.11.0 < 12`)
 - **Docker Engine**: Docker Desktop on Windows 11
 - **Environment Tested**: Verified in a clean Windows remote-clone run
-- **Unverified Platforms**: macOS, Linux and independent human onboarding remain unverified
+- **Unverified Platforms at the time of this historical log**: macOS, Linux and independent human onboarding were unverified
+
+The log below is the historical Windows clean-clone record. Separately, native macOS corrective verification passed on the recorded local checkout after the loopback-binding fix: canonical setup, ports `54321`–`54327` on `127.0.0.1` only, Admin/CMS on `127.0.0.1:3000`, application smoke checks, and the full repository suite all passed. That corrective run was not an independent fresh-clone human onboarding trial; native developer Linux remains unverified beyond Ubuntu CI.
 
 ### Verification Sequence & Outcomes
 1. `node -v` & `npm -v`: Verified Node `v24.14.1` and npm `11.11.0`.

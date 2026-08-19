@@ -4,10 +4,30 @@ import path from 'node:path';
 
 export type LocalStackState = 'RUNNING' | 'STOPPED' | 'DEGRADED' | 'UNKNOWN';
 
+export interface ProjectContainerObservation {
+  name: string;
+  state: string;
+  health?: string;
+}
+
 export interface DockerObservation {
   available: boolean;
-  states: string[];
+  containers: ProjectContainerObservation[];
 }
+
+export const REQUIRED_LOCAL_SUPABASE_SERVICES = [
+  'studio',
+  'pg_meta',
+  'edge_runtime',
+  'storage',
+  'rest',
+  'realtime',
+  'inbucket',
+  'auth',
+  'kong',
+  'analytics',
+  'db',
+] as const;
 
 export function configuredProjectId(repoRoot: string): string | null {
   try {
@@ -20,28 +40,92 @@ export function configuredProjectId(repoRoot: string): string | null {
 
 export function observeDockerProject(projectId: string): DockerObservation {
   try {
-    const output = execFileSync('docker', ['ps', '-a', '--filter', `name=${projectId}`, '--format', '{{.State}}'], {
+    const ids = execFileSync('docker', [
+      'ps',
+      '-a',
+      '--filter',
+      `label=com.supabase.cli.project=${projectId}`,
+      '--format',
+      '{{.ID}}',
+    ], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).split(/\r?\n/).filter(Boolean);
+    if (ids.length === 0) return { available: true, containers: [] };
+    const output = execFileSync('docker', [
+      'inspect',
+      '--format',
+      '{{json .Name}}|{{json .State}}',
+      ...ids,
+    ], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    return { available: true, states: output.split(/\r?\n/).filter(Boolean) };
+    return { available: true, containers: parseDockerProjectInspection(output) };
   } catch {
-    return { available: false, states: [] };
+    return { available: false, containers: [] };
   }
 }
 
-/** The pinned local configuration starts eleven required containers; disabled services are excluded. */
-export function classifyLocalStack(observation: DockerObservation, requiredRunning = 11): LocalStackState {
+export function parseDockerProjectInspection(raw: string): ProjectContainerObservation[] {
+  return raw
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => {
+      const separator = line.indexOf('|');
+      if (separator < 0) throw new Error('DOCKER_PROJECT_INSPECTION_INVALID');
+      const rawName = JSON.parse(line.slice(0, separator)) as unknown;
+      const rawState = JSON.parse(line.slice(separator + 1)) as {
+        Status?: unknown;
+        Health?: { Status?: unknown } | null;
+      } | null;
+      if (typeof rawName !== 'string' || typeof rawState?.Status !== 'string') {
+        throw new Error('DOCKER_PROJECT_INSPECTION_INVALID');
+      }
+      const health = rawState.Health?.Status;
+      if (health !== undefined && typeof health !== 'string') throw new Error('DOCKER_PROJECT_INSPECTION_INVALID');
+      return {
+        name: rawName.replace(/^\//, ''),
+        state: rawState.Status,
+        ...(health ? { health } : {}),
+      };
+    });
+}
+
+export function expectedLocalContainerNames(projectId: string): string[] {
+  return REQUIRED_LOCAL_SUPABASE_SERVICES.map((service) => `supabase_${service}_${projectId}`);
+}
+
+export function classifyLocalStack(observation: DockerObservation, expectedNames: string[]): LocalStackState {
   if (!observation.available) return 'UNKNOWN';
-  const running = observation.states.filter((state) => state === 'running').length;
-  if (running === 0) return 'STOPPED';
-  if (running >= requiredRunning) return 'RUNNING';
+  const active = observation.containers.filter((container) => container.state === 'running' || container.state === 'restarting');
+  if (active.length === 0) return 'STOPPED';
+
+  const byName = new Map(observation.containers.map((container) => [container.name, container]));
+  const hasExactIdentitySet = observation.containers.length === expectedNames.length && byName.size === expectedNames.length;
+  const allRequiredReady = hasExactIdentitySet && expectedNames.every((name) => {
+    const container = byName.get(name);
+    return container?.state === 'running' && (!container.health || container.health === 'healthy');
+  });
+  if (allRequiredReady) return 'RUNNING';
   return 'DEGRADED';
 }
 
 export function observeLocalStack(repoRoot: string): LocalStackState {
   const projectId = configuredProjectId(repoRoot);
-  return projectId ? classifyLocalStack(observeDockerProject(projectId)) : 'UNKNOWN';
+  return projectId
+    ? classifyLocalStack(observeDockerProject(projectId), expectedLocalContainerNames(projectId))
+    : 'UNKNOWN';
+}
+
+export type LocalSupabaseStartDecision =
+  | { mode: 'VERIFY_EXISTING'; ownsCleanup: false }
+  | { mode: 'RUN_CLI'; ownsCleanup: boolean };
+
+export function decideLocalSupabaseStart(state: LocalStackState): LocalSupabaseStartDecision {
+  return state === 'RUNNING'
+    ? { mode: 'VERIFY_EXISTING', ownsCleanup: false }
+    : { mode: 'RUN_CLI', ownsCleanup: state === 'STOPPED' };
 }
 
 export type DatabaseReadiness = 'READY' | 'STARTING' | 'UNHEALTHY' | 'STOPPED' | 'UNKNOWN';
