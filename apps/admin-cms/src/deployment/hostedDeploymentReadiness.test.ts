@@ -208,6 +208,20 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       expect(result.manualEvidenceRequired).toBe(true);
     });
 
+    it('keeps the privilege-hidden recovery ledger manual without classifying it as missing', () => {
+      const result = evaluateHostedDeploymentReadiness(completeEvidence({
+        presentTables: ALL_REQUIRED_TABLES.filter(
+          (table) => table !== 'password_recovery_sessions',
+        ),
+        unverifiedTables: ['password_recovery_sessions'],
+        manualEvidence: undefined,
+      }));
+      expect(result.requiredTableSet).toBe('UNVERIFIED');
+      expect(result.missingTables).toEqual([]);
+      expect(result.unverifiedTables).toEqual(['password_recovery_sessions']);
+      expect(result.deploymentClassification).toBe('MANUAL_EVIDENCE_REQUIRED');
+    });
+
     it('classifies proven missing objects or migration versions as RECONCILIATION_REQUIRED', () => {
       const missingTable = evaluateHostedDeploymentReadiness(
         completeEvidence({ presentTables: [...REQUIRED_CORE_TABLES], manualEvidence: undefined })
