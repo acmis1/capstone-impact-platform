@@ -3,7 +3,7 @@
 This human onboarding acceptance checklist is designed for a new developer or external tester evaluating the self-service developer setup of the Capstone Impact Platform (`acmis1/capstone-impact-platform`).
 
 > [!NOTE]
-> **Verification Status**: Automated onboarding acceptance is complete (`AUTOMATED_ONBOARDING_COMPLETE`). Automated Windows acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). Ubuntu 24.04 GitHub Actions integration has passed (`AUTOMATED_ONBOARDING_VERIFIED`). No independent human onboarding trial was performed (`HUMAN_ONBOARDING_NOT_PERFORMED`). Native macOS and developer Linux onboarding remain unverified beyond CI contracts. This checklist establishes the evaluation criteria if a human verification run is conducted.
+> **Verification Status**: Automated onboarding acceptance is complete (`AUTOMATED_ONBOARDING_COMPLETE`). Automated Windows acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). Ubuntu 24.04 GitHub Actions integration has passed (`AUTOMATED_ONBOARDING_VERIFIED`). Native macOS corrective verification passed on the recorded local checkout after the loopback-binding fix; it was not an independent fresh-clone human trial (`HUMAN_ONBOARDING_NOT_PERFORMED`). Native developer Linux onboarding remains unverified beyond CI contracts. This checklist establishes the evaluation criteria if an independent human verification run is conducted.
 
 ---
 
@@ -30,8 +30,9 @@ Follow `START_HERE.md` from top to bottom and mark each step:
 - [ ] **Dependency Installation**: Executed `npm ci` without errors.
 - [ ] **Automated Onboarding Precheck**: `npm run onboarding:check` passed all 12 checks.
 - [ ] **Local Stack Startup & Setup**: Executed `npm run setup:local` without errors.
+- [ ] **Supabase Host-Binding Isolation**: Confirmed every published local Supabase port (`54321`–`54327`) is bound to loopback only, with no `0.0.0.0` or `::` publication.
 - [ ] **Synthetic Account Generation**: Verified `apps/admin-cms/.local-users.json` was generated.
-- [ ] **Local Server Startup**: `npm run dev:admin` launched Next.js server on `http://localhost:3000`.
+- [ ] **Local Server Startup**: `npm run dev:admin` launched Next.js on `127.0.0.1:3000`; `http://localhost:3000` remained reachable.
 - [ ] **Local Login Acceptance**: Signed in at `http://localhost:3000/login` using synthetic `local.admin@capstone.test` credentials.
 - [ ] **Dashboard Navigation**: Accessed `/admin` dashboard and verified project index loaded.
 - [ ] **Project Listing & Filter Check**: Verified status and program filters function without UI errors.

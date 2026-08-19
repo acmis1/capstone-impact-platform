@@ -3,7 +3,7 @@
 Welcome to the Capstone Impact Platform repository (`acmis1/capstone-impact-platform`). This guide provides a self-service onboarding path intended to minimize maintainer assistance for developers.
 
 > [!NOTE]
-> **Verification status**: Automated onboarding acceptance is complete (`AUTOMATED_ONBOARDING_COMPLETE`). Automated Windows clean-clone acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). Ubuntu 24.04 GitHub Actions integration acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). No independent human onboarding trial was performed (`HUMAN_ONBOARDING_NOT_PERFORMED`). Native macOS onboarding remains unverified beyond static CI contracts. Native developer-machine Linux onboarding remains unverified beyond Ubuntu CI. No hosted project credentials, private dashboards, or shared remote application environments are required for normal local development.
+> **Verification status**: Automated onboarding acceptance is complete (`AUTOMATED_ONBOARDING_COMPLETE`). Automated Windows clean-clone acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). Ubuntu 24.04 GitHub Actions integration acceptance has passed (`AUTOMATED_ONBOARDING_VERIFIED`). Native macOS corrective verification passed on the recorded local checkout after the loopback-binding fix, including canonical setup, host-listener inspection, application smoke testing, and the full repository suite. This was not an independent fresh-clone human trial (`HUMAN_ONBOARDING_NOT_PERFORMED`). Native developer-machine Linux onboarding remains unverified beyond Ubuntu CI. No hosted project credentials, private dashboards, or shared remote application environments are required for normal local development.
 
 ---
 
@@ -40,7 +40,7 @@ Before running the application, verify your toolchain:
 2. **npm**: Requires `npm >= 11.11.0 < 12`. Pinned in `packageManager` to `npm@11.11.0`. Verify with `npm -v`.
 3. **Docker**: Docker Desktop (Windows/macOS) or Docker Engine (Linux) must be launched **before** setup. Verify Docker daemon is active with `docker ps`. Initial setup will automatically download required Supabase Docker images, which may take several minutes on first run. Docker must remain running while executing local commands or `npm run verify:all`.
 4. **Supabase CLI**: Installed locally as a repository devDependency (`supabase@2.109.1`) via `npm ci`. You do **not** need to install `supabase` globally or run `supabase login`.
-5. **Port & Credentials Handling**: Local Supabase uses ports `54321`–`54324` and Next.js uses port `3000`. If a port is occupied, see [`docs/developer-troubleshooting.md`](./docs/developer-troubleshooting.md). Generated local synthetic credentials are stored in `apps/admin-cms/.local-users.json` (git-ignored) and must never be committed.
+5. **Port & Credentials Handling**: Local Supabase publishes ports `54321`–`54327` and Next.js uses port `3000`. The repository starts both on IPv4 loopback (`127.0.0.1`) and fails setup if Docker reports a wildcard, missing, or non-loopback Supabase binding. If a port is occupied, see [`docs/developer-troubleshooting.md`](./docs/developer-troubleshooting.md). Generated local synthetic credentials are stored in `apps/admin-cms/.local-users.json` (git-ignored) and must never be committed.
 
 ---
 
@@ -58,7 +58,7 @@ npm run dev:admin
 
 ### What `npm run setup:local` Does:
 1. Runs `npm run onboarding:check` (verifies Node, npm, Docker, and repository configuration).
-2. Runs `npm run supabase:start` (launches local Supabase Docker containers).
+2. Runs `npm run supabase:start` (creates or reuses the project-specific loopback Docker network, launches the local containers, and verifies every published host port from structured Docker inspection).
 3. Runs `npm run supabase:seed:buckets` (reconciles local private & public storage buckets and mock poster fixtures).
 4. Runs `npm run supabase:env:local` (generates `apps/admin-cms/.env.local`).
 5. Runs `npm run supabase:users:local` (reconciles synthetic local Auth accounts).
@@ -78,6 +78,8 @@ npm run setup:local
 # 2. Launch Next.js dev server
 npm run dev:admin
 ```
+
+`npm run dev:admin` explicitly listens on `127.0.0.1:3000`; it does not expose the development server to other host interfaces.
 
 ### Logging In Locally
 1. Open [`http://localhost:3000/login`](http://localhost:3000/login) in your browser.

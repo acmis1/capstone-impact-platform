@@ -7,6 +7,7 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
   const migrationsDir = path.resolve(repoRoot, 'infra/supabase/migrations');
   const configPath = path.resolve(repoRoot, 'infra/supabase/config.toml');
   const seedPath = path.resolve(repoRoot, 'infra/supabase/seed.sql');
+  const adminPackagePath = path.resolve(repoRoot, 'apps/admin-cms/package.json');
 
   it('1. Exactly 29 timestamped migration files exist in explicitly sorted ascending order', () => {
     const rawFiles = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'));
@@ -167,5 +168,11 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
     expect(content).not.toContain('sb_secret_');
     expect(content).not.toContain('sb_publishable_');
     expect(content).not.toContain('password');
+  });
+
+  it('6. The normal Admin/CMS development script binds Next.js to IPv4 loopback only', () => {
+    const adminPackage = JSON.parse(fs.readFileSync(adminPackagePath, 'utf8')) as { scripts?: Record<string, string> };
+    expect(adminPackage.scripts?.dev).toBe('next dev --hostname 127.0.0.1');
+    expect(adminPackage.scripts?.start).toBe('next start');
   });
 });
