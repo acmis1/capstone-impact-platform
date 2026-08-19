@@ -34,7 +34,8 @@ site_url = "http://localhost:3000"
 additional_redirect_urls = [
   "http://localhost:3000/auth/confirm",
   "http://localhost:3000/auth/confirm/accept",
-  "http://localhost:3000/auth/set-password"
+  "http://localhost:3000/auth/set-password",
+  "http://localhost:3000/auth/recovery/callback"
 ]
 jwt_expiry = 3600
 
@@ -49,6 +50,10 @@ enable_confirmations = true
 [auth.email.template.invite]
 subject = "Complete your Capstone Impact Admin/CMS account setup"
 content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.recovery]
+subject = "Reset your Capstone Impact Admin/CMS password"
+content_path = "./supabase/templates/recovery.html"
 
 [storage]
 enabled = true

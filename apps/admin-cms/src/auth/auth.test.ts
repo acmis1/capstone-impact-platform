@@ -228,6 +228,11 @@ describe('Authentication & Authorization Tests (Offline)', () => {
       expect(getPublicAuthErrorMessage('PERMISSION_DENIED')).toBe('Access denied.');
     });
 
+    it('maps a recovery-purpose session to a generic access-denied response', () => {
+      expect(getAuthErrorHttpStatus('PASSWORD_RECOVERY_REQUIRED')).toBe(403);
+      expect(getPublicAuthErrorMessage('PASSWORD_RECOVERY_REQUIRED')).toBe('Access denied.');
+    });
+
     it('maps configuration failure error correctly', () => {
       expect(getAuthErrorHttpStatus('CONFIGURATION_FAILURE')).toBe(500);
       expect(getPublicAuthErrorMessage('CONFIGURATION_FAILURE')).toBe('Authentication service unavailable.');

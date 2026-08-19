@@ -27,6 +27,9 @@ export default async function AdminLayout({
     adminContext = await requireAdmin();
   } catch (error: unknown) {
     if (error instanceof AdminAuthError) {
+      if (error.type === 'PASSWORD_RECOVERY_REQUIRED') {
+        redirect('/auth/reset-password');
+      }
       if (error.type === 'UNAUTHENTICATED') {
         redirect('/login?redirectTo=/admin');
       }

@@ -69,6 +69,12 @@ describe('LoginPage and LoginForm rendered contract', () => {
     expect((submitBtn as HTMLButtonElement).type).toBe('submit');
   });
 
+  it('renders a keyboard-reachable forgot-password link with the exact destination', () => {
+    render(<LoginPage />);
+    const link = screen.getByRole('link', { name: /Forgot password\?/i });
+    expect(link.getAttribute('href')).toBe('/auth/forgot-password');
+  });
+
   it('maps known URL error codes to alert message', () => {
     mocks.searchParams = new URLSearchParams('error=SESSION_EXPIRED');
     render(<LoginPage />);
@@ -81,6 +87,13 @@ describe('LoginPage and LoginForm rendered contract', () => {
     render(<LoginPage />);
     expect(screen.getByRole('status')).toBeDefined();
     expect(screen.getByText(/Security credentials established successfully\. Please sign in below\./i)).toBeDefined();
+  });
+
+  it('maps PASSWORD_RESET separately from invitation password establishment', () => {
+    mocks.searchParams = new URLSearchParams('status=PASSWORD_RESET');
+    render(<LoginPage />);
+    expect(screen.getByRole('status')).toBeDefined();
+    expect(screen.getByText('Your password has been reset. Sign in with your new password.')).toBeDefined();
   });
 
   it('displays authorised staff notice', () => {

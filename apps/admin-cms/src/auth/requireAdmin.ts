@@ -5,6 +5,15 @@ import { createSupabaseAdminClient } from '../lib/supabase/admin';
 import { AdminAuthError, AuthenticatedAdminContext } from './authTypes';
 import { parseClaimsResult } from './claimsResult';
 import { resolveAdminContextFromAuthUser } from './adminContext';
+import { inspectRecoveryContextForClient } from './recoveryContext';
+
+export function enforceAdminRecoveryGate(
+  recoveryContext: Awaited<ReturnType<typeof inspectRecoveryContextForClient>>,
+): void {
+  if (recoveryContext !== 'absent') {
+    throw new AdminAuthError('PASSWORD_RECOVERY_REQUIRED', 'Password recovery must be completed.');
+  }
+}
 
 /**
  * Server-only helper that authenticates the user session and authorizes administrative privileges.
@@ -30,6 +39,9 @@ export async function requireAdmin(): Promise<AuthenticatedAdminContext> {
 
   // B & C. getClaims result validation & execution boundary
   try {
+    const recoveryContext = await inspectRecoveryContextForClient(supabaseSession);
+    enforceAdminRecoveryGate(recoveryContext);
+
     const result = await supabaseSession.auth.getClaims();
     authUserId = parseClaimsResult(result);
   } catch (err: unknown) {

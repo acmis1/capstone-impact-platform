@@ -1,22 +1,25 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import {
+  type ConfirmationType,
+  getConfirmationFlow,
   validateConfirmationParams,
   INVITATION_COOKIE_NAME,
   INVITATION_COOKIE_PATH,
-  INVITATION_COOKIE_MAX_AGE_SECONDS,
-  INVITATION_ACCEPT_PATH
-} from '../../../auth/invitationValidation';
+  RECOVERY_TOKEN_COOKIE_NAME,
+  RECOVERY_TOKEN_COOKIE_PATH,
+  RECOVERY_FAILURE_PATH,
+} from '../../../auth/confirmationValidation';
+import { resolveCanonicalPublicOrigin } from '../../../auth/csrf';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Server-side Route Handler that captures invitation query params,
- * stores the token hash in a secure HttpOnly cookie, and redirects
- * to the explicit acceptance page to protect against email-link prefetching.
+ * Captures a validated invitation or recovery token hash into its dedicated HttpOnly cookie,
+ * then redirects to the matching explicit acceptance page without consuming the token.
  */
 export async function GET(request: NextRequest) {
-  const url = new URL(request.url);
-  const { searchParams } = url;
+  const { searchParams } = request.nextUrl;
+  const publicOrigin = resolveCanonicalPublicOrigin(request.nextUrl.origin);
 
   // Local helper to decorate response with required security headers
   function secureResponse(res: NextResponse): NextResponse {
@@ -27,23 +30,50 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
-  // Local helper to expire the stale cookie
-  function expireCookie(res: NextResponse): void {
-    res.cookies.set(INVITATION_COOKIE_NAME, '', {
+  function expireCookie(res: NextResponse, name: string, path: string): void {
+    res.cookies.set(name, '', {
       httpOnly: true,
       sameSite: 'lax',
-      path: INVITATION_COOKIE_PATH,
+      path,
       maxAge: 0,
       secure: process.env.NODE_ENV === 'production',
     });
   }
 
+  function expireRelevantCookies(res: NextResponse, requestedType: string | null): void {
+    if (requestedType === 'invite') {
+      expireCookie(res, INVITATION_COOKIE_NAME, INVITATION_COOKIE_PATH);
+      return;
+    }
+    if (requestedType === 'recovery') {
+      expireCookie(res, RECOVERY_TOKEN_COOKIE_NAME, RECOVERY_TOKEN_COOKIE_PATH);
+      return;
+    }
+    expireCookie(res, INVITATION_COOKIE_NAME, INVITATION_COOKIE_PATH);
+    expireCookie(res, RECOVERY_TOKEN_COOKIE_NAME, RECOVERY_TOKEN_COOKIE_PATH);
+  }
+
+  if (!publicOrigin) {
+    const failClosed = new NextResponse('Authentication request could not be completed.', {
+      status: 400,
+    });
+    expireRelevantCookies(failClosed, searchParams.get('type'));
+    return secureResponse(failClosed);
+  }
+
+  const redirectUrl = (path: string) => new URL(path, publicOrigin);
+  const requestedType = searchParams.get('type');
+  const failurePath = (error: string) =>
+    requestedType === 'recovery'
+      ? RECOVERY_FAILURE_PATH
+      : `/login?error=${encodeURIComponent(error)}`;
+
   // Parameter keys and duplicates verification
   const allowedParams = ['token_hash', 'type', 'next'];
   for (const key of Array.from(searchParams.keys())) {
     if (!allowedParams.includes(key) || searchParams.getAll(key).length > 1) {
-      const failRes = NextResponse.redirect(new URL('/login?error=INVALID_PARAMETERS', request.url), 303);
-      expireCookie(failRes);
+      const failRes = NextResponse.redirect(redirectUrl(failurePath('INVALID_PARAMETERS')), 303);
+      expireRelevantCookies(failRes, requestedType);
       return secureResponse(failRes);
     }
   }
@@ -57,24 +87,21 @@ export async function GET(request: NextRequest) {
 
   if (!validation.isValid) {
     const errorClassification = validation.error || 'INVALID_PARAMETERS';
-    const failRes = NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(errorClassification)}`, request.url),
-      303
-    );
-    expireCookie(failRes);
+    const failRes = NextResponse.redirect(redirectUrl(failurePath(errorClassification)), 303);
+    expireRelevantCookies(failRes, requestedType);
     return secureResponse(failRes);
   }
 
-  // Construct redirect to clean acceptance page
-  const successRes = NextResponse.redirect(new URL(INVITATION_ACCEPT_PATH, request.url), 303);
+  const confirmationType = validation.type as ConfirmationType;
+  const flow = getConfirmationFlow(confirmationType);
+  const successRes = NextResponse.redirect(redirectUrl(flow.acceptPath), 303);
   secureResponse(successRes);
 
-  // Store trimmed token hash in secure HttpOnly cookie
-  successRes.cookies.set(INVITATION_COOKIE_NAME, (token_hash as string).trim(), {
+  successRes.cookies.set(flow.cookieName, (token_hash as string).trim(), {
     httpOnly: true,
     sameSite: 'lax',
-    path: INVITATION_COOKIE_PATH,
-    maxAge: INVITATION_COOKIE_MAX_AGE_SECONDS,
+    path: flow.cookiePath,
+    maxAge: flow.cookieMaxAgeSeconds,
     secure: process.env.NODE_ENV === 'production',
   });
 

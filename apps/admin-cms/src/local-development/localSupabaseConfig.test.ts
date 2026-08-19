@@ -118,6 +118,7 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
     expect(authSection).toContain('"http://localhost:3000/auth/confirm"');
     expect(authSection).toContain('"http://localhost:3000/auth/confirm/accept"');
     expect(authSection).toContain('"http://localhost:3000/auth/set-password"');
+    expect(authSection).toContain('"http://localhost:3000/auth/recovery/callback"');
     expect(authSection).not.toContain('/auth/callback');
 
     // Staff invitation emails must route through the application's own confirmation flow.
@@ -131,6 +132,18 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
     expect(inviteTemplate).toContain('type=invite');
     expect(inviteTemplate).toContain('next=/auth/set-password');
     expect(inviteTemplate).not.toContain('{{ .Token }}');
+
+    expect(content).toContain('[auth.email.template.recovery]');
+    expect(content).toContain('content_path = "./supabase/templates/recovery.html"');
+    const recoveryTemplate = fs.readFileSync(
+      path.resolve(repoRoot, 'infra/supabase/templates/recovery.html'),
+      'utf8',
+    );
+    expect(recoveryTemplate).toContain('{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}');
+    expect(recoveryTemplate).toContain('type=recovery');
+    expect(recoveryTemplate).toContain('next=/auth/reset-password');
+    expect(recoveryTemplate).not.toContain('{{ .Token }}');
+    expect(recoveryTemplate).not.toMatch(/\.Email|\.Data/);
 
     // Storage buckets
     expect(content).toContain('[storage.buckets.project-drafts-private]');

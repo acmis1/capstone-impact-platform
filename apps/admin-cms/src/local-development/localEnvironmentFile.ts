@@ -2,6 +2,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { randomBytes } from 'node:crypto';
 
 export interface ParsedCliEnv {
   API_URL?: string;
@@ -98,6 +99,7 @@ export function buildLocalEnvContent(envData: ParsedCliEnv): string {
   const apiUrl = envData.API_URL || 'http://127.0.0.1:54321';
   const anonKey = envData.ANON_KEY || '';
   const serviceKey = envData.SERVICE_ROLE_KEY || '';
+  const authFlowSecret = randomBytes(32).toString('hex');
 
   if (!isLoopbackUrl(apiUrl)) {
     throw new Error('Non-loopback Supabase endpoint rejected.');
@@ -110,6 +112,9 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${anonKey}
 
 SUPABASE_SERVICE_ROLE_KEY=${serviceKey}
 SUPABASE_SECRET_KEY=
+
+# Local-only signing key for short-lived password-recovery context cookies.
+CAPSTONE_AUTH_FLOW_SECRET=${authFlowSecret}
 
 SUPABASE_DRAFT_BUCKET=project-drafts-private
 SUPABASE_PUBLIC_ASSETS_BUCKET=project-public-assets
@@ -182,6 +187,7 @@ export function generateLocalEnvironmentFile(options: GenerateEnvOptions = {}): 
     'NEXT_PUBLIC_SUPABASE_ANON_KEY',
     'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
     'SUPABASE_SERVICE_ROLE_KEY',
+    'CAPSTONE_AUTH_FLOW_SECRET',
     'SUPABASE_DRAFT_BUCKET',
     'SUPABASE_PUBLIC_ASSETS_BUCKET',
     'SUPABASE_PUBLIC_FEEDS_BUCKET',

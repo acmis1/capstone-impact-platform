@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from '../../lib/supabase/server';
 import { createSupabaseAdminClient } from '../../lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { sanitizeRedirectPath } from '../../auth/redirect';
+import { clearRecoveryContextCookie } from '../../auth/recoveryContext';
 
 /**
  * Server Action to authenticate administrative users.
@@ -34,6 +35,13 @@ export async function loginAction(prevState: unknown, formData: FormData) {
 
     if (error || !data?.user) {
       return { error: 'Invalid email or password.' };
+    }
+
+    try {
+      await clearRecoveryContextCookie();
+    } catch {
+      await supabase.auth.signOut({ scope: 'local' });
+      return { error: 'An unexpected authentication error occurred.' };
     }
 
     // Authenticated! Verify public admin profile exists
@@ -70,6 +78,11 @@ export async function logoutAction() {
     await supabase.auth.signOut();
   } catch {
     // Ignore sign-out error
+  }
+  try {
+    await clearRecoveryContextCookie();
+  } catch {
+    // Ignore local context cleanup errors during logout.
   }
   redirect('/login');
 }

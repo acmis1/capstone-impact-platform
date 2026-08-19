@@ -1,76 +1,20 @@
-/**
- * Pure validation logic for Supabase invitation confirmation
- * and protected set-password pages.
- * 
- * Rules:
- * - Accesses no environment variables
- * - Accesses no network
- * - Logs nothing
- * - Contains no Supabase client
- * - Returns no token, password, or caller-supplied URL values.
- */
+/** Pure password validation retained for the invitation password-establishment flow. */
 
-export const INVITATION_COOKIE_NAME = 'capstone_invitation_token_hash';
-export const INVITATION_COOKIE_PATH = '/auth/confirm';
-export const INVITATION_COOKIE_MAX_AGE_SECONDS = 600;
-export const INVITATION_ACCEPT_PATH = '/auth/confirm/accept';
-export const INVITATION_PASSWORD_PATH = '/auth/set-password';
-
-export interface ConfirmationParams {
-  tokenHash: string | null | undefined;
-  type: string | null | undefined;
-  next: string | null | undefined;
-}
+// Compatibility exports keep existing invitation imports stable while generic confirmation
+// routing lives in the accurately named confirmationValidation module.
+export {
+  INVITATION_COOKIE_NAME,
+  INVITATION_COOKIE_PATH,
+  INVITATION_COOKIE_MAX_AGE_SECONDS,
+  INVITATION_ACCEPT_PATH,
+  INVITATION_PASSWORD_PATH,
+  validateNextPath,
+  validateConfirmationParams,
+} from './confirmationValidation';
 
 export interface ValidationResult {
   isValid: boolean;
   error?: string;
-  type?: 'invite';
-  next?: '/auth/set-password';
-}
-
-/**
- * Validates next redirect target path.
- * Must be either absent/empty or exactly '/auth/set-password'.
- */
-export function validateNextPath(path: string | null | undefined): boolean {
-  if (!path || path.trim() === '') return true;
-  return path.trim() === INVITATION_PASSWORD_PATH;
-}
-
-/**
- * Validates invitation confirmation parameters.
- * Checks token length (max 2048) and enforces that next resolves only to /auth/set-password.
- * Returns only safe result classifications and does NOT return the token hash or dynamic redirect URLs.
- */
-export function validateConfirmationParams(params: ConfirmationParams): ValidationResult {
-  const { tokenHash, type, next } = params;
-
-  if (!tokenHash || typeof tokenHash !== 'string' || tokenHash.trim() === '') {
-    return { isValid: false, error: 'MISSING_TOKEN_HASH' };
-  }
-
-  if (tokenHash.length > 2048) {
-    return { isValid: false, error: 'TOKEN_TOO_LONG' };
-  }
-
-  if (!type || typeof type !== 'string' || type.trim() === '') {
-    return { isValid: false, error: 'MISSING_TYPE' };
-  }
-
-  if (type !== 'invite') {
-    return { isValid: false, error: 'INVALID_TYPE' };
-  }
-
-  if (!validateNextPath(next)) {
-    return { isValid: false, error: 'INVALID_NEXT_PATH' };
-  }
-
-  return {
-    isValid: true,
-    type: 'invite',
-    next: INVITATION_PASSWORD_PATH
-  };
 }
 
 /**

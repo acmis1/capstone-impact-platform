@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { loginAction } from './actions';
 import { createSupabaseServerClient } from '../../lib/supabase/server';
 import { createSupabaseAdminClient } from '../../lib/supabase/admin';
+import { clearRecoveryContextCookie } from '../../auth/recoveryContext';
 
 vi.mock('server-only', () => ({}));
 
@@ -11,6 +12,10 @@ vi.mock('../../lib/supabase/server', () => ({
 
 vi.mock('../../lib/supabase/admin', () => ({
   createSupabaseAdminClient: vi.fn(),
+}));
+
+vi.mock('../../auth/recoveryContext', () => ({
+  clearRecoveryContextCookie: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -24,6 +29,7 @@ vi.mock('next/navigation', () => ({
 describe('loginAction Server Action Unit & Security Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(clearRecoveryContextCookie).mockResolvedValue();
   });
 
   it('1. Missing email or password returns the required-fields error', async () => {
@@ -115,6 +121,7 @@ describe('loginAction Server Action Unit & Security Tests', () => {
     formData.append('redirectTo', '/admin/projects');
 
     await expect(loginAction(null, formData)).rejects.toThrow('NEXT_REDIRECT: /admin/projects');
+    expect(clearRecoveryContextCookie).toHaveBeenCalledTimes(1);
   });
 
   it('5. Unexpected Auth exception returns a generic safe browser error', async () => {
@@ -247,5 +254,29 @@ describe('loginAction Server Action Unit & Security Tests', () => {
     }
     expect(caughtErr).toBeDefined();
     expect((caughtErr as { digest: string }).digest).toContain('NEXT_REDIRECT');
+  });
+
+  it('10. A stale recovery-context cleanup failure terminates the new login session', async () => {
+    const signOut = vi.fn().mockResolvedValue({ error: null });
+    vi.mocked(createSupabaseServerClient).mockResolvedValue({
+      auth: {
+        signInWithPassword: vi.fn().mockResolvedValue({
+          data: { user: { id: 'valid-admin-user-id' } },
+          error: null,
+        }),
+        signOut,
+      },
+    } as unknown as Awaited<ReturnType<typeof createSupabaseServerClient>>);
+    vi.mocked(clearRecoveryContextCookie).mockRejectedValueOnce(new Error('cookie write failed'));
+
+    const formData = new FormData();
+    formData.append('email', 'admin@capstone.test');
+    formData.append('password', 'ValidPass123!');
+
+    await expect(loginAction(null, formData)).resolves.toEqual({
+      error: 'An unexpected authentication error occurred.',
+    });
+    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(createSupabaseAdminClient).not.toHaveBeenCalled();
   });
 });

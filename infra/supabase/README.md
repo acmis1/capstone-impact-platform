@@ -54,6 +54,7 @@ npm run supabase:stop
 * **[Staging Reconciliation Runbook](./staging-reconciliation-runbook.md):** 7-gate procedure to verify, back up, reconcile, and validate hosted database schema and migration tracking tables.
 * **[Key Migration Governance](./key-migration-governance.md):** Standards for modern server key preference (`SUPABASE_SECRET_KEY` over legacy `SUPABASE_SERVICE_ROLE_KEY`) and secret rotation policies.
 * **[Staff Lifecycle Design](./staff-lifecycle-design.md):** Governance design for staff provisioning, role modification, emergency offboarding, and audit attribution.
+* **[Password Recovery Setup](./password-recovery-setup.md):** Local Mailpit verification, hosted Auth URL/template requirements, PKCE fallback, and recovery-session security boundaries.
 * **[Staging Auth Verification](./staging-auth-verification.md):** Controlled authentication and authorization verification runbook.
 * **[Manual Apply Guide](./manual-apply-guide.md):** Historical manual migration reference (the staging reconciliation runbook outranks this for existing projects).
 
