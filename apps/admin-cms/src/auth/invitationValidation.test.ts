@@ -161,8 +161,8 @@ describe('Pure Logic Parameter Validation', () => {
       expect(res.error).toBe('MISSING_TYPE');
     });
 
-    it('should reject non-invite type', () => {
-      const res = validateConfirmationParams({ tokenHash: 'token123', type: 'recovery', next: INVITATION_PASSWORD_PATH });
+    it('should reject unsupported confirmation type', () => {
+      const res = validateConfirmationParams({ tokenHash: 'token123', type: 'signup', next: INVITATION_PASSWORD_PATH });
       expect(res.isValid).toBe(false);
       expect(res.error).toBe('INVALID_TYPE');
     });

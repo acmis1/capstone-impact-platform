@@ -47,23 +47,23 @@ async function main(): Promise<void> {
   const openApiDocument = await fetchPostgrestOpenApi(apiUrl, serviceRoleKey, auditedFetch);
   const evaluation = await checkHostedDeploymentReadinessWithClient(client, { openApiDocument });
 
-  assert.equal(ALL_REQUIRED_TABLES.length, 23);
+  assert.equal(ALL_REQUIRED_TABLES.length, 24);
   assert.equal(ALL_REQUIRED_TABLES.includes('publication_attempts'), true);
   assert.equal(ALL_REQUIRED_TABLES.includes('participant_preview_tokens' as never), false);
   assert.equal(
     evaluation.requiredTableSet,
-    'PRESENT',
-    `Table evidence incomplete (missing=${evaluation.missingTables.join(',') || 'none'}; unverified=${evaluation.unverifiedTables.join(',') || 'none'}).`
+    'UNVERIFIED',
+    `Table evidence changed unexpectedly (missing=${evaluation.missingTables.join(',') || 'none'}; unverified=${evaluation.unverifiedTables.join(',') || 'none'}).`
   );
   assert.equal(evaluation.missingTables.length, 0);
-  assert.equal(evaluation.unverifiedTables.length, 0);
+  assert.deepEqual(evaluation.unverifiedTables, ['password_recovery_sessions']);
   assert.equal(
     evaluation.requiredRpcNames,
     'PRESENT',
     `RPC name evidence incomplete (missing=${evaluation.missingRpcNames.join(',') || 'none'}).`
   );
   assert.equal(evaluation.missingRpcNames.length, 0);
-  assert.equal(REQUIRED_RPC_NAMES.length, 42);
+  assert.equal(REQUIRED_RPC_NAMES.length, 43);
   assert.equal(
     evaluation.requiredStorageBuckets,
     'PRESENT',
@@ -84,7 +84,8 @@ async function main(): Promise<void> {
   );
 
   console.log('Hosted readiness inspection verified against disposable loopback Supabase.');
-  console.log('23 application tables and 42 RPC names recognized; exact overload evidence remains manual.');
+  console.log('23 application tables directly inspected; the privilege-hidden recovery ledger requires manual schema evidence.');
+  console.log('43 RPC names recognized; exact overload evidence remains manual.');
   console.log('Migration history truthfully reported unavailable through the configured Data API.');
   console.log('Zero RPC executions, mutations, identifying rows, or temporary verifier records.');
 }

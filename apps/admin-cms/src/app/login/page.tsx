@@ -2,6 +2,7 @@
 
 import React, { useActionState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { loginAction } from './actions';
 import { AppMark } from '../../components/ui/app-mark';
 import { Button } from '../../components/ui/button';
@@ -32,6 +33,8 @@ function LoginForm() {
       case 'MISSING_TYPE':
       case 'INVALID_TYPE':
         return 'The invitation link is misconfigured or incomplete.';
+      case 'RECOVERY_LINK_INVALID':
+        return 'The password reset link is invalid or has expired. Request a new link.';
       default:
         return 'An authentication error occurred.';
     }
@@ -42,6 +45,8 @@ function LoginForm() {
     switch (code) {
       case 'PASSWORD_SET':
         return 'Security credentials established successfully. Please sign in below.';
+      case 'PASSWORD_RESET':
+        return 'Your password has been reset. Sign in with your new password.';
       default:
         return null;
     }
@@ -70,9 +75,17 @@ function LoginForm() {
       </div>
 
       <div className="flex flex-col gap-1.5 text-left">
-        <Label htmlFor="password" isRequired>
-          Password
-        </Label>
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="password" isRequired>
+            Password
+          </Label>
+          <Link
+            href="/auth/forgot-password"
+            className="rounded-sm text-xs font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <Input
           id="password"
           name="password"

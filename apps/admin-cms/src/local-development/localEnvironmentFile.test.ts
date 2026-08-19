@@ -103,6 +103,7 @@ SERVICE_ROLE_KEY='sb_service_mock_456'
     expect(content).toContain('NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321');
     expect(content).toContain('NEXT_PUBLIC_SUPABASE_ANON_KEY=mock_anon');
     expect(content).toContain('SUPABASE_SERVICE_ROLE_KEY=mock_service');
+    expect(content).toMatch(/CAPSTONE_AUTH_FLOW_SECRET=[0-9a-f]{64}/);
     expect(content).not.toContain('EXISTING=true');
   });
 

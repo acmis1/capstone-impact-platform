@@ -55,6 +55,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 | Variable | Required | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `SUPABASE_SECRET_KEY` | **Yes** | — | Modern database administrative secret key (preferred over legacy `SUPABASE_SERVICE_ROLE_KEY`). |
+| `CAPSTONE_AUTH_FLOW_SECRET` | **Yes** | — | Dedicated server-only value containing at least 32 random bytes. Signs short-lived password-recovery context cookies and must not reuse any provider, database, JWT, or SMTP secret. |
 | `SUPABASE_DRAFT_BUCKET` | Optional | `project-drafts-private` | Private Storage bucket for unapproved project uploads and drafts. |
 | `SUPABASE_PUBLIC_ASSETS_BUCKET` | Optional | `project-public-assets` | Public Storage bucket for approved poster and snapshot media assets. |
 | `SUPABASE_PUBLIC_FEEDS_BUCKET` | Optional | `public-feeds` | Public Storage bucket holding compiled public JSON feed artifacts. |

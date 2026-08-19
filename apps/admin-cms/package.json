@@ -50,6 +50,7 @@
     "verify:controlled-public-removal-runtime": "tsx src/scripts/verifyControlledPublicRemovalRuntime.ts",
     "verify:approval-edit-gate-runtime": "tsx src/scripts/verifyApprovalEditGateRuntime.ts",
     "verify:staff-provisioning-runtime": "tsx src/scripts/verifyStaffProvisioningRuntime.ts",
+    "verify:password-recovery-runtime": "node --conditions=react-server --import tsx src/scripts/verifyPasswordRecoveryRuntime.ts",
     "verify:participant-preview-notification-runtime": "tsx src/scripts/verifyParticipantPreviewNotificationRuntime.ts",
     "verify:participant-preview-reminder-runtime": "tsx src/scripts/verifyParticipantPreviewReminderRuntime.ts",
     "verify:admin-excel-reconciliation-runtime": "tsx src/scripts/verifyAdminExcelReconciliationRuntime.ts",

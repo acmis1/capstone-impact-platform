@@ -54,6 +54,7 @@ npm run supabase:stop
 * **[Staging Reconciliation Runbook](./staging-reconciliation-runbook.md):** 7-gate procedure to verify, back up, reconcile, and validate hosted database schema and migration tracking tables.
 * **[Key Migration Governance](./key-migration-governance.md):** Standards for modern server key preference (`SUPABASE_SECRET_KEY` over legacy `SUPABASE_SERVICE_ROLE_KEY`) and secret rotation policies.
 * **[Staff Lifecycle Design](./staff-lifecycle-design.md):** Governance design for staff provisioning, role modification, emergency offboarding, and audit attribution.
+* **[Password Recovery Setup](./password-recovery-setup.md):** Local Mailpit verification, hosted Auth URL/template requirements, PKCE fallback, and recovery-session security boundaries.
 * **[Staging Auth Verification](./staging-auth-verification.md):** Controlled authentication and authorization verification runbook.
 * **[Manual Apply Guide](./manual-apply-guide.md):** Historical manual migration reference (the staging reconciliation runbook outranks this for existing projects).
 
@@ -69,7 +70,7 @@ npm run supabase:stop
 
 ---
 
-## Migration Inventory (27 Migrations)
+## Migration Inventory (29 Migrations)
 
 * **[20260601035138_staging_schema.sql](./migrations/20260601035138_staging_schema.sql):** Creates core relational tables (`programs`, `disciplines`, `industry_categories`, `admin_users`, `user_roles`, `import_batches`, `projects`, `project_disciplines`, `project_industry_categories`, `media_assets`, `validation_flags`, `approval_records`, `published_snapshots`), check constraints, indexes, and `updated_at` triggers.
 * **[20260601035139_staging_rls_policies.sql](./migrations/20260601035139_staging_rls_policies.sql):** Enables Row-Level Security (RLS) across all tables with restrictive defaults.
@@ -88,3 +89,5 @@ npm run supabase:stop
 * **[20260814090000_accessible_full_text_gate.sql](./migrations/20260814090000_accessible_full_text_gate.sql):** Enforces accessible poster full text (`projects.poster_text_public`) and poster accessibility text (`projects.accessibility_text_public`) across metadata updates, import review submission, approval, and publication readiness gates. *(Repository/local-only; not applied to hosted staging.)*
 * **[20260814140000_snapshot_image_alt_text.sql](./migrations/20260814140000_snapshot_image_alt_text.sql):** Adds authoritative staff-authored alt text (`media_assets.alt_text_public`) for snapshot images, establishes `public.update_snapshot_image_alt_text`, and enforces snapshot alt text across media staging, review submission, approval, participant preview generation, and publication readiness. *(Repository/local-only; not applied to hosted staging.)*
 * **[20260816144917_staging_uat_direct_account_finalization.sql](./migrations/20260816144917_staging_uat_direct_account_finalization.sql):** Adds the service-role-only transactional `finalize_and_activate_staff_provisioning` RPC for direct staging UAT identities. It independently rejects Administrator roles, re-proves exact Auth email and ownership marker, and atomically creates the staff profile, assigns Reviewer/Editor roles, and activates the lifecycle. *(Repository/local-only; not applied to hosted staging.)*
+* **[20260817090000_private_media_approval_gate.sql](./migrations/20260817090000_private_media_approval_gate.sql):** Requires one exact, internally consistent private poster image and PDF before project approval while preserving request-change and archive behavior. *(Repository/local-only; not applied to hosted staging.)*
+* **[20260819214431_password_recovery_session_provenance.sql](./migrations/20260819214431_password_recovery_session_provenance.sql):** Adds the locked `password_recovery_sessions` ledger, service-role registration RPC, and authenticated no-argument lookup used to keep recovery sessions out of Admin until the Auth session ends. The lookup resolves the verified JWT `session_id` against `auth.sessions` first, so a deleted Auth session returns `INVALID_CONTEXT` and only a live session owned by `auth.uid()` can report `NOT_REGISTERED`. *(Repository/local-only; not applied to hosted staging.)*

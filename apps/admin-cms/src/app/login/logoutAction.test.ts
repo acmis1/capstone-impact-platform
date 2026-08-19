@@ -13,6 +13,13 @@ vi.mock('../../lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(async () => mockSupabaseServerClient),
 }));
 
+const { mockClearRecoveryContextCookie } = vi.hoisted(() => ({
+  mockClearRecoveryContextCookie: vi.fn(),
+}));
+vi.mock('../../auth/recoveryContext', () => ({
+  clearRecoveryContextCookie: mockClearRecoveryContextCookie,
+}));
+
 vi.mock('next/navigation', () => ({
   redirect: vi.fn((url: string) => {
     const err = new Error(`NEXT_REDIRECT:${url}`);
@@ -27,6 +34,7 @@ import { createSupabaseServerClient } from '../../lib/supabase/server';
 describe('logoutAction Server Action Unit Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockClearRecoveryContextCookie.mockResolvedValue(undefined);
   });
 
   it('1. Creates Supabase server client and calls auth.signOut() exactly once', async () => {
@@ -36,20 +44,33 @@ describe('logoutAction Server Action Unit Tests', () => {
 
     expect(createSupabaseServerClient).toHaveBeenCalledTimes(1);
     expect(mockSignOut).toHaveBeenCalledTimes(1);
+    expect(mockSignOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(mockClearRecoveryContextCookie).toHaveBeenCalledTimes(1);
   });
 
   it('2. Preserves NEXT_REDIRECT exception even if signOut throws an unexpected error', async () => {
     mockSignOut.mockRejectedValueOnce(new Error('Network error during sign out'));
 
-    await expect(logoutAction()).rejects.toThrow('NEXT_REDIRECT:/login');
+    await expect(logoutAction()).rejects.toThrow('NEXT_REDIRECT:/login?error=SIGN_OUT_FAILED');
 
     expect(createSupabaseServerClient).toHaveBeenCalledTimes(1);
     expect(mockSignOut).toHaveBeenCalledTimes(1);
+    expect(mockClearRecoveryContextCookie).not.toHaveBeenCalled();
   });
 
   it('3. Preserves NEXT_REDIRECT exception even if createSupabaseServerClient throws', async () => {
     vi.mocked(createSupabaseServerClient).mockRejectedValueOnce(new Error('Client creation failed'));
 
-    await expect(logoutAction()).rejects.toThrow('NEXT_REDIRECT:/login');
+    await expect(logoutAction()).rejects.toThrow('NEXT_REDIRECT:/login?error=SIGN_OUT_FAILED');
+    expect(mockClearRecoveryContextCookie).not.toHaveBeenCalled();
+  });
+
+  it('4. Preserves recovery context when signOut resolves with a provider error', async () => {
+    mockSignOut.mockResolvedValueOnce({ error: { message: 'private provider detail' } });
+
+    await expect(logoutAction()).rejects.toThrow(
+      'NEXT_REDIRECT:/login?error=SIGN_OUT_FAILED',
+    );
+    expect(mockClearRecoveryContextCookie).not.toHaveBeenCalled();
   });
 });
