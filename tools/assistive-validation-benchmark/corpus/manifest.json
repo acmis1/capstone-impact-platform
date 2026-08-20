@@ -1430,7 +1430,7 @@
         {
           "id": "d9-other",
           "title": "Library Seat Finder",
-          "text": "Students locate free study seats in the library.",
+          "text": "Library visitors locate free study seats on each floor.",
           "relevant": false,
           "relation": "unrelated"
         }
