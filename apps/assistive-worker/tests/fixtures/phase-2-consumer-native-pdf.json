@@ -1,0 +1,19 @@
+{
+  "schema_version": "assistive-document-extraction/v1",
+  "status": "COMPLETED",
+  "source": "NATIVE_PDF",
+  "document_type": "PDF",
+  "page_count": 1,
+  "text": "RMIT University\nAI-Enabled Flood Warning System\nPoster details",
+  "blocks": [
+    {"page_number": 1, "text": "RMIT University", "source": "NATIVE_PDF", "bounding_box": {"left": 40, "top": 20, "right": 130, "bottom": 30, "unit": "PDF_POINTS_TOP_LEFT"}, "confidence": null},
+    {"page_number": 1, "text": "AI-Enabled Flood Warning System", "source": "NATIVE_PDF", "bounding_box": {"left": 40, "top": 60, "right": 420, "bottom": 98, "unit": "PDF_POINTS_TOP_LEFT"}, "confidence": null},
+    {"page_number": 1, "text": "Poster details", "source": "NATIVE_PDF", "bounding_box": {"left": 40, "top": 160, "right": 150, "bottom": 173, "unit": "PDF_POINTS_TOP_LEFT"}, "confidence": null}
+  ],
+  "native_quality": "NATIVE_USABLE",
+  "quality_evidence": {"native_character_count": 60, "meaningful_character_count": 58, "printable_ratio": 1.0, "replacement_character_count": 0, "text_object_count": 3, "reasons": ["NATIVE_TEXT_PRESENT"]},
+  "ocr_state": "NOT_REQUIRED",
+  "provider": null,
+  "warnings": [],
+  "error": null
+}
