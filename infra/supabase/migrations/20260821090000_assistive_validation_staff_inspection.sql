@@ -13,8 +13,17 @@
 -- 2. Project ownership check: if p_run_id is provided but belongs to a different project, it fails
 --    closed and returns NOT_FOUND.
 -- 3. Bounded output: only non-sensitive evidence and lifecycle status are returned. Claim tokens,
---    worker IDs, lease timestamps, private bucket names, and internal storage paths are never returned.
--- 4. No mutations: this function performs zero writes to projects, workflow, media, or findings.
+--    worker IDs, lease timestamps, private bucket names, internal storage paths, and reviewer identity
+--    UUIDs (reviewed_by) are never returned. Finding count is strictly bounded to <= 50.
+-- 4. No fabricated job state: exactly one job must exist per run (Migration 31 invariant); if the job
+--    row is missing or finding count exceeds bounds, it fails closed with INVARIANT_VIOLATION.
+-- 5. No mutations: this function performs zero writes to projects, workflow, media, or findings.
+-- 6. No fabricated failure state: failureCode is reported from the run alone. Migration 31 writes
+--    assistive_validation_runs.failure_code and assistive_validation_jobs.last_error_code together on
+--    every terminal transition, but a retryable failure re-queues the run with a NULL failure_code
+--    while the job retains last_error_code. Coalescing the two would therefore report a failure code
+--    for a healthy in-flight retry, contradicting check_assistive_run_failure_coherence. Run status
+--    is the authority; attempt telemetry stays inside job coordination.
 
 BEGIN;
 
@@ -31,6 +40,7 @@ DECLARE
   v_pipeline_version text := pg_catalog.btrim(COALESCE(p_pipeline_version, ''));
   v_run public.assistive_validation_runs%ROWTYPE;
   v_job public.assistive_validation_jobs%ROWTYPE;
+  v_finding_count integer;
   v_findings jsonb;
 BEGIN
   IF p_project_id IS NULL
@@ -61,8 +71,19 @@ BEGIN
 
   SELECT j.* INTO v_job
     FROM public.assistive_validation_jobs AS j
-   WHERE j.run_id = v_run.id
-   LIMIT 1;
+   WHERE j.run_id = v_run.id;
+
+  IF NOT FOUND THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'INVARIANT_VIOLATION');
+  END IF;
+
+  SELECT pg_catalog.count(*) INTO v_finding_count
+    FROM public.assistive_validation_findings AS f
+   WHERE f.run_id = v_run.id;
+
+  IF v_finding_count > 50 THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'INVARIANT_VIOLATION');
+  END IF;
 
   SELECT COALESCE(pg_catalog.jsonb_agg(
     pg_catalog.jsonb_build_object(
@@ -78,7 +99,6 @@ BEGIN
       'scoreValue', f.score_value,
       'evidence', f.evidence,
       'disposition', f.disposition,
-      'reviewedBy', f.reviewed_by::text,
       'reviewedAt', f.reviewed_at,
       'createdAt', f.created_at
     ) ORDER BY f.ordinal
@@ -94,9 +114,9 @@ BEGIN
       'inputHash', v_run.input_hash,
       'pipelineVersion', v_run.pipeline_version,
       'runStatus', v_run.status,
-      'jobStatus', COALESCE(v_job.status, CASE WHEN v_run.status = 'RUNNING' THEN 'CHECKING' ELSE v_run.status END),
-      'attemptCount', COALESCE(v_job.attempt_count, 0),
-      'failureCode', COALESCE(v_job.last_error_code, v_run.failure_code),
+      'jobStatus', v_job.status,
+      'attemptCount', v_job.attempt_count,
+      'failureCode', v_run.failure_code,
       'cancellationRequested', (v_job.cancellation_requested_at IS NOT NULL),
       'createdAt', v_run.created_at,
       'startedAt', v_run.started_at,

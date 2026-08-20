@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AssistiveInspectionView, StoredAssistiveFinding } from '../../../assistive-validation';
+import type { AssistiveInspectionFinding, AssistiveInspectionView } from '../../../assistive-validation';
 import {
   assistiveChecksReducer,
   formatCheckType,
@@ -8,6 +8,7 @@ import {
   formatFailureCode,
   formatJobStatus,
   formatOutcome,
+  formatPartialNoticeDescription,
   initialAssistiveChecksUiState,
   isFindingEligibleToApply,
 } from '../projectAssistiveChecksState';
@@ -15,7 +16,7 @@ import {
 const RUN_ID = '22222222-2222-4222-8222-222222222222';
 const FINDING_ID = '33333333-3333-4333-8333-333333333333';
 
-const sampleFinding = (overrides: Partial<StoredAssistiveFinding> = {}): StoredAssistiveFinding => ({
+const sampleFinding = (overrides: Partial<AssistiveInspectionFinding> = {}): AssistiveInspectionFinding => ({
   findingId: FINDING_ID,
   ordinal: 1,
   checkType: 'TITLE_CONSISTENCY',
@@ -38,7 +39,6 @@ const sampleFinding = (overrides: Partial<StoredAssistiveFinding> = {}): StoredA
     explanation: 'The poster title has high lexical similarity with the metadata title.',
   },
   disposition: 'UNREVIEWED',
-  reviewedBy: null,
   reviewedAt: null,
   createdAt: '2026-08-21T09:00:00.000Z',
   ...overrides,
@@ -60,7 +60,7 @@ const sampleInspection = (overrides: Partial<AssistiveInspectionView> = {}): Ass
 });
 
 describe('assistiveChecksReducer', () => {
-  it('handles LOAD_STARTED, LOAD_SUCCEEDED, and LOAD_FAILED', () => {
+  it('handles LOAD_STARTED, LOAD_SUCCEEDED, LOAD_FAILED, and SET_READ_UNAVAILABLE', () => {
     let state = assistiveChecksReducer(initialAssistiveChecksUiState, { type: 'LOAD_STARTED' });
     expect(state.loading).toBe(true);
 
@@ -68,9 +68,13 @@ describe('assistiveChecksReducer', () => {
     state = assistiveChecksReducer(state, { type: 'LOAD_SUCCEEDED', inspection });
     expect(state.loading).toBe(false);
     expect(state.inspection).toEqual(inspection);
+    expect(state.readUnavailable).toBe(false);
 
     state = assistiveChecksReducer(state, { type: 'LOAD_FAILED', error: 'Network error' });
     expect(state.error).toBe('Network error');
+
+    state = assistiveChecksReducer(state, { type: 'SET_READ_UNAVAILABLE', unavailable: true });
+    expect(state.readUnavailable).toBe(true);
   });
 
   it('handles RUN lifecycle and transitions', () => {
@@ -85,7 +89,7 @@ describe('assistiveChecksReducer', () => {
     expect(state.error).toBe('No media');
   });
 
-  it('handles DISPOSITION_SUCCEEDED updating the specific finding immutably', () => {
+  it('handles DISPOSITION_SUCCEEDED updating the specific finding immutably without staff identity', () => {
     const initial = {
       ...initialAssistiveChecksUiState,
       inspection: sampleInspection(),
@@ -95,17 +99,14 @@ describe('assistiveChecksReducer', () => {
       type: 'DISPOSITION_SUCCEEDED',
       findingId: FINDING_ID,
       disposition: 'REVIEWED',
-      reviewedAt: '2026-08-21T09:10:00.000Z',
-      reviewedBy: 'admin-1',
     });
 
     expect(state.actionInFlight).toBe('idle');
     expect(state.feedback?.message).toBe('Marked as reviewed.');
     expect(state.inspection?.findings[0].disposition).toBe('REVIEWED');
-    expect(state.inspection?.findings[0].reviewedBy).toBe('admin-1');
   });
 
-  it('handles APPLY and COPY feedback transitions', () => {
+  it('handles APPLY and COPY feedback transitions (success and failure)', () => {
     let state = assistiveChecksReducer(initialAssistiveChecksUiState, { type: 'APPLY_STARTED' });
     expect(state.actionInFlight).toBe('applying');
 
@@ -117,8 +118,13 @@ describe('assistiveChecksReducer', () => {
     expect(state.actionInFlight).toBe('idle');
     expect(state.feedback?.message).toBe('Suggestion applied.');
 
-    state = assistiveChecksReducer(state, { type: 'COPY_FEEDBACK', findingId: FINDING_ID });
+    state = assistiveChecksReducer(state, { type: 'COPY_FEEDBACK', findingId: FINDING_ID, status: 'copied' });
     expect(state.copiedFindingId).toBe(FINDING_ID);
+    expect(state.copyStatus).toBe('copied');
+
+    state = assistiveChecksReducer(state, { type: 'COPY_FEEDBACK', findingId: FINDING_ID, status: 'failed' });
+    expect(state.copiedFindingId).toBe(FINDING_ID);
+    expect(state.copyStatus).toBe('failed');
 
     state = assistiveChecksReducer(state, { type: 'CLEAR_FEEDBACK' });
     expect(state.feedback).toBe(null);
@@ -158,40 +164,74 @@ describe('formatting and presentation helpers', () => {
     expect(formatFailureCode('MEDIA_INVALID')).toContain('poster file is missing');
     expect(formatFailureCode('OCR_REQUIRED')).toContain('OCR text extraction is required');
   });
+
+  it('provides truthful partial notice copy based on OCR capability', () => {
+    expect(formatPartialNoticeDescription('OCR_REQUIRED')).toContain('OCR has not run. Native text, when available, was checked.');
+    expect(formatPartialNoticeDescription('OCR_PROVIDER_UNAVAILABLE')).toContain('configured OCR capability is unavailable. Native text, when available, was checked.');
+    expect(formatPartialNoticeDescription(null)).toContain('Some document content could not be evaluated in this environment.');
+  });
 });
 
-describe('isFindingEligibleToApply', () => {
-  it('allows applying when finding is title consistency, current run, candidate present, and staff has edit authority', () => {
+describe('isFindingEligibleToApply canonical bounds', () => {
+  it('allows applying when finding is title consistency, current run, candidate <= 200 chars, and staff has edit authority', () => {
     const finding = sampleFinding();
     const eligible = isFindingEligibleToApply(finding, 'CURRENT', true, true);
     expect(eligible).toBe(true);
   });
 
-  it('forbids applying when the run is STALE', () => {
-    const finding = sampleFinding();
-    const eligible = isFindingEligibleToApply(finding, 'STALE', true, true);
-    expect(eligible).toBe(false);
+  it('allows applying for exact 200-character candidate title', () => {
+    const finding = sampleFinding({
+      evidence: {
+        ...sampleFinding().evidence,
+        candidateValue: 'A'.repeat(200),
+      },
+    });
+    const eligible = isFindingEligibleToApply(finding, 'CURRENT', true, true);
+    expect(eligible).toBe(true);
   });
 
-  it('forbids applying when staff lacks metadata edit permission', () => {
-    const finding = sampleFinding();
-    const eligible = isFindingEligibleToApply(finding, 'CURRENT', false, true);
-    expect(eligible).toBe(false);
-  });
-
-  it('forbids applying when finding is not TITLE_CONSISTENCY', () => {
-    const finding = sampleFinding({ checkType: 'FORMATTING' });
+  it('forbids applying for 201-character candidate title (authoritative limit 200)', () => {
+    const finding = sampleFinding({
+      evidence: {
+        ...sampleFinding().evidence,
+        candidateValue: 'A'.repeat(201),
+      },
+    });
     const eligible = isFindingEligibleToApply(finding, 'CURRENT', true, true);
     expect(eligible).toBe(false);
   });
 
-  it('forbids applying when candidate title is empty or missing', () => {
+  it('forbids applying for blank or whitespace-only candidate title', () => {
     const finding = sampleFinding({
       evidence: {
         ...sampleFinding().evidence,
-        candidateValue: null,
+        candidateValue: '   ',
       },
     });
+    const eligible = isFindingEligibleToApply(finding, 'CURRENT', true, true);
+    expect(eligible).toBe(false);
+  });
+
+  it('forbids applying when finding outcome is AGREES (already matches)', () => {
+    const finding = sampleFinding({ outcome: 'AGREES' });
+    const eligible = isFindingEligibleToApply(finding, 'CURRENT', true, true);
+    expect(eligible).toBe(false);
+  });
+
+  it('forbids applying when the run is STALE or UNVERIFIABLE', () => {
+    const finding = sampleFinding();
+    expect(isFindingEligibleToApply(finding, 'STALE', true, true)).toBe(false);
+    expect(isFindingEligibleToApply(finding, 'UNVERIFIABLE', true, true)).toBe(false);
+  });
+
+  it('forbids applying when staff lacks metadata edit permission or handler is unavailable', () => {
+    const finding = sampleFinding();
+    expect(isFindingEligibleToApply(finding, 'CURRENT', false, true)).toBe(false);
+    expect(isFindingEligibleToApply(finding, 'CURRENT', true, false)).toBe(false);
+  });
+
+  it('forbids applying when finding is not TITLE_CONSISTENCY', () => {
+    const finding = sampleFinding({ checkType: 'FORMATTING' });
     const eligible = isFindingEligibleToApply(finding, 'CURRENT', true, true);
     expect(eligible).toBe(false);
   });

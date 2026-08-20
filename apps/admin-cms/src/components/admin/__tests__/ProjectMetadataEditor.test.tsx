@@ -114,6 +114,31 @@ describe('ProjectMetadataEditor Title Suggestion Integration', () => {
     });
   });
 
+  /**
+   * Edit mode renders a failure notice as the form's error description, with an assertive alert and
+   * destructive styling. Applying a suggestion is a confirmation, so it must not borrow that
+   * channel: doing so tells a staff member their successful action failed, and mislabels the whole
+   * form as invalid to assistive technology.
+   */
+  it('announces an applied suggestion as status, not as a form error', async () => {
+    render(
+      <ProjectMetadataNavigationProvider>
+        <TestContainer canEdit={true} projectStatus="draft" suggestedTitle="AI & Smart Cities" />
+      </ProjectMetadataNavigationProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('trigger-suggestion-btn'));
+
+    const notice = await screen.findByText(/Suggestion applied to the draft/i);
+    expect(notice.getAttribute('role')).toBe('status');
+    expect(notice.getAttribute('id')).not.toBe('metadata-form-error');
+    expect(notice.className).not.toMatch(/destructive/);
+
+    expect(screen.queryByRole('alert')).toBeNull();
+    const form = document.querySelector('form');
+    expect(form?.getAttribute('aria-describedby')).toBeNull();
+  });
+
   it('prompts with window.confirm if the title draft was already modified with unsaved changes', async () => {
     render(
       <ProjectMetadataNavigationProvider>

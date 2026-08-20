@@ -56,7 +56,14 @@ describe('assistive validation staff inspection migration contract', () => {
   it('enforces strict project-to-run ownership and fail-closed validation', () => {
     expect(compact).toContain("RETURN pg_catalog.jsonb_build_object('resultCode', 'VALIDATION_FAILED');");
     expect(compact).toContain("RETURN pg_catalog.jsonb_build_object('resultCode', 'NOT_FOUND');");
+    expect(compact).toContain("RETURN pg_catalog.jsonb_build_object('resultCode', 'INVARIANT_VIOLATION');");
     expect(compact).toContain('WHERE r.id = p_run_id AND r.project_id = p_project_id AND r.pipeline_version = v_pipeline_version');
     expect(compact).toContain('WHERE r.project_id = p_project_id AND r.pipeline_version = v_pipeline_version ORDER BY r.created_at DESC, r.id DESC LIMIT 1');
+  });
+
+  it('strictly bounds finding count to 50 and omits staff identity UUIDs', () => {
+    expect(compact).toContain('IF v_finding_count > 50 THEN RETURN pg_catalog.jsonb_build_object(\'resultCode\', \'INVARIANT_VIOLATION\');');
+    expect(compact).not.toContain('reviewed_by');
+    expect(compact).not.toContain('reviewedBy');
   });
 });

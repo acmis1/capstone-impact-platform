@@ -22,6 +22,7 @@ import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetad
 import { GuardedProjectBackLink, ProjectMetadataNavigationProvider } from '../../../../components/admin/ProjectMetadataNavigation';
 import { ProjectAssistiveChecks } from '../../../../components/admin/ProjectAssistiveChecks';
 import {
+  isAssistiveExecutionAvailable,
   loadAssistiveInspection,
   SupabaseAssistiveValidationRepository,
   SupabaseAssistiveInputRepository,
@@ -134,6 +135,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let approvalMedia: ApprovalMediaInput | null = null;
   let canReview = false;
   let initialAssistiveInspection: AssistiveInspectionView | null = null;
+  let initialAssistiveInspectionReadFailed = false;
+  const canExecuteAssistiveChecks = isAssistiveExecutionAvailable();
 
   // Essential dependencies: without the base project or authenticated staff context there is no
   // safe project-detail page to render.
@@ -282,10 +285,15 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             privateBucket: env.SUPABASE_DRAFT_BUCKET,
           },
         );
-        if (inspectionResult.ok && inspectionResult.found) {
-          initialAssistiveInspection = inspectionResult.inspection;
+        if (inspectionResult.ok) {
+          if (inspectionResult.found) {
+            initialAssistiveInspection = inspectionResult.inspection;
+          }
+        } else {
+          initialAssistiveInspectionReadFailed = true;
         }
       } catch (error: unknown) {
+        initialAssistiveInspectionReadFailed = true;
         console.error('[Project detail: assistive inspection load failure]', projectDetailFailureCategory(error));
       }
     } catch (error: unknown) {
@@ -525,7 +533,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                 publicId={publicId}
                 canEditMetadata={canEditMetadata}
                 canReview={canReview}
+                canExecute={canExecuteAssistiveChecks}
                 initialInspection={initialAssistiveInspection}
+                initialReadFailed={initialAssistiveInspectionReadFailed}
                 headingLevel="h3"
               />
 

@@ -1,14 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { postgresCanonicalUuidSchema } from '../domain/persistenceContract';
 
 const projectRowSchema = z.object({
-  id: z.uuid(),
+  id: postgresCanonicalUuidSchema,
   public_id: z.string().min(1).max(100),
   title: z.string().nullable(),
 }).strict();
 
 const assetRowSchema = z.object({
-  id: z.uuid(),
+  id: postgresCanonicalUuidSchema,
   asset_type: z.enum(['poster_pdf', 'poster_image']),
   file_name: z.string().min(1).max(255),
   storage_bucket: z.string().min(1).max(100),

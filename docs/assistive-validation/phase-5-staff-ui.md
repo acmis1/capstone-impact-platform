@@ -8,7 +8,8 @@ Phase 5 of the PP1 AI/OCR assistive validation subsystem introduces the producti
 Assistive validation is strictly **advisory** and **non-blocking**:
 - Assistive findings **never** directly mutate project status, workflow gates, publication readiness, or database records.
 - "Apply to draft" populates the in-browser `ProjectMetadataEditor` form draft and marks the form dirty; persistence occurs only when staff explicitly clicks **Save metadata**, invoking the authoritative `saveProjectMetadataAction` audit pipeline.
-- Assistive status labels never use misleading marketing terminology (e.g. "AI approved", "validation passed", "blocking").
+- Finding dispositions (`REVIEWED`, `IGNORED`) are editorial tracking records, not project approvals.
+- Assistive status labels never use misleading terminology (e.g. "AI approved", "validation passed", "blocking").
 
 ---
 
@@ -17,7 +18,7 @@ Assistive validation is strictly **advisory** and **non-blocking**:
 To provide bounded, read-only inspection of active/terminal runs, current job lifecycle status, and findings, Migration 0032 is introduced. Migrations 1–31 remain byte-for-byte unmodified against `origin/main`.
 
 - **Canonical Migration Filename**: `20260821090000_assistive_validation_staff_inspection.sql`
-- **SHA-256 Digest**: `d0d3afc0f1b732220e4693fef92986c8346f5f0c6eff517630a883bcab0124d8`
+- **SHA-256 Digest**: `dbef25a767ae147798f940f37df51b05ec928d18267066edc9268fef0278670a`
 
 ```sql
 -- Migration 0032: bounded read-only inspection for staff assistive validation review.
@@ -32,12 +33,15 @@ SET search_path = ''
 ...
 ```
 
-### Security & Isolation Invariants
+### Security, Isolation & Privacy Invariants
 1. **Service-Role Execution Only**: `REVOKE ALL` from `PUBLIC, anon, authenticated, service_role`; `GRANT EXECUTE` strictly to `service_role`.
 2. **Deny-All Table Protection**: Direct table access remains denied on `assistive_validation_runs`, `assistive_validation_jobs`, and `assistive_validation_findings`.
 3. **Fail-Closed Project Association**: If `p_run_id` is supplied but belongs to a different project, the function returns `NOT_FOUND`.
-4. **No Secret Leakage**: Claim tokens, worker IDs, lease timestamps, private bucket names, and storage paths are completely omitted from return payloads.
-5. **No Dynamic SQL & No Mutations**: The inspection function performs zero database writes and uses zero dynamic SQL formatting.
+4. **No Secret or Token Leakage**: Claim tokens, worker IDs, lease timestamps, private bucket names, and storage paths are completely omitted from return payloads.
+5. **Privacy Boundary**: Staff identity UUIDs (`reviewed_by`) are strictly omitted from the inspection payload to protect internal user identities.
+6. **Finding Count Bound**: Finding array is strictly capped to <= 50 findings. If count exceeds bounds, the RPC fails closed with `INVARIANT_VIOLATION`.
+7. **No Fabricated Job State**: Exactly one job row must exist per run (Migration 31 invariant). Missing job rows return `INVARIANT_VIOLATION`.
+8. **No Dynamic SQL & No Mutations**: The inspection function performs zero database writes and uses zero dynamic SQL formatting.
 
 ---
 
@@ -62,60 +66,77 @@ All interactions route through typed Next.js Server Actions with strict server-d
 
 | Server Action | Permission Required | Description |
 | :--- | :--- | :--- |
-| `runAssistiveChecksAction(publicId)` | `projects.read` | Authenticates staff via `requireAdmin()`, resolves project ID, enqueues Phase 4 asynchronous job. |
-| `cancelAssistiveChecksAction(publicId, runId)` | `projects.read` | Verifies run belongs to project, requests job cancellation in Postgres queue. |
-| `recordAssistiveDispositionAction(publicId, runId, findingId, disposition)` | `projects.review` | Verifies reviewer role, ensures finding belongs to project run, records `REVIEWED` or `IGNORED` disposition. |
+| `runAssistiveChecksAction(publicId)` | `projects.read` | Authenticates staff via `requireAdmin()`, checks environment execution availability, resolves non-deleted project ID, enqueues Phase 4 asynchronous job. |
+| `cancelAssistiveChecksAction(publicId, runId)` | `projects.read` | Verifies run belongs to non-deleted project with strict schema parsing, requests job cancellation in Postgres queue. |
+| `recordAssistiveDispositionAction(publicId, runId, findingId, disposition)` | `projects.review` | Verifies reviewer role, ensures finding belongs to non-deleted project run with strict schema parsing, records `REVIEWED` or `IGNORED` disposition without returning staff UUID to browser. |
 | `getAssistiveInspectionAction(publicId, runId?)` | `projects.read` | Fetches bounded inspection run, job status, findings, and computes stale state. |
 
-### Role Permissions Matrix
-- **Admin**: View findings, run checks, cancel checks, record dispositions (`projects.review`), apply candidate titles to draft (`projects.edit`).
-- **Reviewer**: View findings, run checks, cancel checks, record dispositions (`projects.review`); cannot apply titles or edit metadata.
-- **Editor**: View findings, run checks, cancel checks, apply candidate titles to draft (`projects.edit`); cannot record reviewer dispositions.
+### Environment Execution Boundary
+- Asynchronous worker and coordinator execution is currently supported in local loopback environments (`isAssistiveExecutionAvailable()`).
+- In hosted environments where no worker daemon is deployed, the server action returns `EXECUTION_UNAVAILABLE` and the UI presents a truthful notice while allowing read-only access to historical findings.
 
 ---
 
 ## 5. UI Features & Operational Workflows
 
 ### A. Asynchronous Polling Lifecycle
-- While a check job is active (`QUEUED`, `EXTRACTING`, `CHECKING`, `RUNNING`), the client component polls `getAssistiveInspectionAction` every 2.5 seconds.
-- Polling is lightweight: the server queries Postgres job state without re-downloading or re-hashing poster files.
-- When the job reaches a terminal state (`COMPLETED`, `PARTIAL`, `FAILED`, `CANCELLED`, `SUPERSEDED`), polling immediately halts.
+- While a check job is active (`QUEUED`, `EXTRACTING`, `CHECKING`, `RUNNING`), the client component uses a self-scheduling bounded polling loop (`schedulePoll` every 2.5s).
+- Polling requests never overlap (`isPollingRef`). Polling stops on terminal state (`COMPLETED`, `PARTIAL`, `FAILED`, `CANCELLED`, `SUPERSEDED`) or unmount.
+- Transient read failures preserve the last known inspection view and re-schedule the next poll interval.
 
-### B. Stale-Run & Unverifiable Detection
-- When a terminal run is loaded, the server compares the run's `inputHash` against the current project title and poster SHA-256 (`loadAssistiveInput`).
-- **`CURRENT`**: Title and poster match the snapshot evaluated during the run.
-- **`STALE`**: Metadata or poster media changed after the run completed. A warning banner informs staff that results may be outdated, and "Apply to draft" is disabled until re-run.
-- **`UNVERIFIABLE`**: Poster media cannot be loaded or validated.
+### B. Stale-Run Detection & Synchronization
+- When a terminal run is evaluated, `loadAssistiveInspection` checks current project title and poster hash:
+  - **`CURRENT`**: Title and poster match the evaluated snapshot.
+  - **`STALE`**: Metadata or poster changed after the run. Warning banner is shown; "Apply to draft" is disabled.
+  - **`UNVERIFIABLE`**: Document assets cannot be verified.
+- Client state synchronizes with refreshed server props (after `saveProjectMetadataAction` -> `router.refresh()`), transitioning old runs to `STALE` without overwriting newly started local runs.
 
 ### C. Graceful Partial / Degraded Mode
-- When OCR extraction is unavailable (`ocrProvider: 'NONE'`), born-digital PDF text is still extracted and analyzed.
-- The run completes with status `PARTIAL`.
-- The UI displays an informational notice explaining that born-digital text was verified while scanned raster graphics were skipped, avoiding false "validation failed" alarms.
+- When OCR is not run (`OCR_REQUIRED`) or no provider is configured (`OCR_PROVIDER_UNAVAILABLE`), whatever native text layer the document carries is checked and the status is set to `PARTIAL`.
+- The notice is completion-code aware and media-neutral. A PNG, JPEG, or scanned poster has no native text layer at all, so the copy says native text was checked *when available* rather than asserting that born-digital PDF text was evaluated on every partial run.
 
-### D. Evidence Presentation & Safe Literal Rendering
-- Each finding presents:
-  - Human-friendly check type (e.g. `Project title`, `Document formatting`, `Document extraction`).
-  - Semantic outcome badge (`Title match`, `Review suggested`, `Possible title mismatch`, `Information`).
-  - Review status badge (`Unreviewed`, `Reviewed`, `Ignored`).
-  - Side-by-side title comparison (Metadata Title vs Document Candidate Title).
-  - Score percentage (clearly labeled as lexical similarity evidence).
-  - Document excerpt with page number.
+### D. Evidence Presentation & Accessibility Targets
+- **WCAG 2.2 AA target (not a certification)**: the surface is built against the repository accessibility target and was exercised at 390px, 768px, and 1440px with keyboard focus, semantic heading levels, and `motion-safe:animate-spin` / `prefers-reduced-motion` scrolling. No formal conformance audit has been performed and none is claimed.
+- **Diagnostic Score Disclosure**: Lexical similarity is presented in an accessible technical details disclosure (`Lexical similarity score: 0.85; Diagnostic evidence only — not confidence or accuracy.`) without percentage or confidence claims.
 - **Untrusted Text Security**: All document excerpts and candidate values are rendered strictly as text nodes in the DOM. No `dangerouslySetInnerHTML` or Markdown parsing is performed on untrusted candidate strings.
-
-### E. Accessible Actions
-- **Copy Text**: Copies candidate or excerpt string to the clipboard with accessible temporary `Copied` confirmation.
-- **Apply to Draft**: Available for `TITLE_CONSISTENCY` findings on `CURRENT` runs when staff has `projects.edit`. If the user already has unsaved title edits, the UI prompts for confirmation before updating `draft.title`, switching to edit mode, and focusing `#metadata-title`.
-- **Mark Reviewed / Ignore**: Toggles reviewer disposition for audit compliance.
+- **Apply to Draft**: Available for `TITLE_CONSISTENCY` findings on `CURRENT` runs when candidate fits the canonical 200-character bound (`PROJECT_METADATA_LIMITS.title`).
 
 ---
 
 ## 6. Verification & Test Suite
 
-The staff UI is verified by an exhaustive test suite:
-- `assistiveValidationStaffInspectionMigration.test.ts`: Migration 0032 identity, SHA-256 verification, grant hardening, and fail-closed isolation.
-- `inspectionContract.test.ts`: Strict Zod schema parsing and secret omission.
-- `assistiveInspectionService.test.ts`: Run loading, stale calculation, and active in-flight polling isolation.
-- `assistiveActions.test.ts`: Server action authentication, authorization, project association, and disposition handling.
-- `projectAssistiveChecksState.test.ts`: Reducer lifecycle, status formatters, and eligibility predicates.
-- `ProjectAssistiveChecks.test.tsx`: Component rendering, active polling, copy feedback, stale banners, disposition triggers, and XSS safety.
-- `ProjectMetadataEditor.test.tsx`: "Apply to draft" handler registration, mode switching, dirty tracking, and unsaved changes confirmation.
+The staff UI is covered by the following automated evidence. Unit tests alone are not treated as
+sufficient for this phase: the browser workflow was exercised against disposable Local Supabase as
+well (see section 7).
+- `assistiveValidationStaffInspectionMigration.test.ts`: Migration 0032 identity, SHA-256 verification, grant hardening, finding bounds, and privacy invariants.
+- `verifyAssistiveValidationStaffInspectionRuntime.ts`: Local Supabase runtime verifier covering 26 scenarios, including the fifty-finding bound, the retry-queued failure-code invariant, and an end-to-end parse of a seeded-shape project identifier through the browser-facing contract.
+- `inspectionContract.test.ts`: Strict Zod schema parsing, max 50 finding limit, and secret/identity omission.
+- `assistiveInspectionService.test.ts`: Run loading, stale calculation, and in-flight polling isolation.
+- `assistiveActions.test.ts`: Server action authentication, authorization, project association, execution availability, and disposition handling.
+- `projectAssistiveChecksState.test.ts`: Reducer lifecycle, status formatters, 200-character title eligibility, and truthful partial notices.
+- `ProjectAssistiveChecks.test.tsx`: Component rendering, recursive polling, no overlap, unmount cleanup, transient failure recovery, stale prop sync, copy feedback, and XSS safety.
+- `ProjectMetadataEditor.test.tsx`: "Apply to draft" handler registration, mode switching, dirty tracking, reduced motion, status-versus-error notice channel, and unsaved changes confirmation.
+- `postgresCanonicalUuid.test.ts`: which identifier boundaries accept canonical database UUID text and which stay strict, including the job claim token.
+
+---
+
+## 7. Browser Verification
+
+The workflow was driven in a real browser against the real Admin/CMS and disposable Local Supabase,
+using synthetic fixtures only, at 390px, 768px, and 1440px.
+
+Observed: the no-history empty state; local Run checks availability; an active `QUEUED` run polled
+repeatedly while its state did not change, with non-overlapping requests; a `COMPLETED` run with
+findings; a `PARTIAL` run produced by a PNG poster with OCR left at its `NONE` default; document text
+containing markup rendered literally; copy success and copy failure; "Apply to draft" changing only
+the title in the existing client draft, focusing the field, leaving the editor dirty and persisting
+nothing; an explicit "Save metadata" through the existing authoritative workflow, after which the
+historical run became `STALE` and its finding could no longer be applied; a reviewer disposition
+surviving reload; an editor-only account offered no disposition controls and a reviewer-only account
+no "Apply to draft"; keyboard-focusable controls; and reduced-motion behaviour.
+
+Two states are covered by component and Server Action tests rather than in-browser observation. Both
+the execution-availability gate and the Supabase admin client read `NEXT_PUBLIC_SUPABASE_URL`, so
+rendering the execution-unavailable state in a browser would require pointing the application at a
+non-loopback Supabase, which the repository safety boundary does not permit. The assistive-read
+failure state likewise requires forcing a server-side read error.

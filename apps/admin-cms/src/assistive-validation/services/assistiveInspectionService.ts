@@ -9,12 +9,11 @@ import {
 import {
   ASSISTIVE_PIPELINE_VERSION,
   assistivePipelineVersionSchema,
+  postgresCanonicalUuidSchema,
 } from '../domain/persistenceContract';
 import type { AssistiveInputGateway } from '../repositories/assistiveInputRepository';
 import type { AssistiveValidationPersistenceGateway } from '../repositories/assistiveValidationRepository';
 import { loadAssistiveInput } from './assistiveInputService';
-
-const uuid = z.uuid();
 
 export type AssistiveInspectionReadResult =
   | { ok: true; found: false }
@@ -32,9 +31,9 @@ export async function loadAssistiveInspection(
   },
 ): Promise<AssistiveInspectionReadResult> {
   const parsed = z.object({
-    projectId: uuid,
+    projectId: postgresCanonicalUuidSchema,
     pipelineVersion: assistivePipelineVersionSchema.default(ASSISTIVE_PIPELINE_VERSION),
-    runId: uuid.optional(),
+    runId: z.uuid().optional(),
     privateBucket: z.string().min(1).max(100),
   }).strict().safeParse(params);
 
@@ -80,6 +79,14 @@ export async function loadAssistiveInspection(
       ok: false,
       code: 'VALIDATION_FAILED',
       message: 'The database rejected the assistive inspection query parameters.',
+    };
+  }
+
+  if (response.data.resultCode === 'INVARIANT_VIOLATION') {
+    return {
+      ok: false,
+      code: 'INTERNAL_FAILURE',
+      message: 'The assistive inspection record violated data integrity bounds.',
     };
   }
 

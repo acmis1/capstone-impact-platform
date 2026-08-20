@@ -1,11 +1,12 @@
 import type {
+  AssistiveInspectionFinding,
   AssistiveInspectionView,
   AssistiveJobFailureCode,
   AssistiveJobStatus,
   AssistiveRunStatus,
   AssistiveStaleState,
-  StoredAssistiveFinding,
 } from '../../assistive-validation';
+import { PROJECT_METADATA_LIMITS } from '../../projects/projectMetadata';
 
 export interface AssistiveChecksUiState {
   inspection: AssistiveInspectionView | null;
@@ -14,6 +15,8 @@ export interface AssistiveChecksUiState {
   actionInFlight: 'idle' | 'running' | 'cancelling' | 'dispositioning' | 'applying';
   feedback: { message: string; type: 'success' | 'warning' | 'info' } | null;
   copiedFindingId: string | null;
+  copyStatus: 'copied' | 'failed' | null;
+  readUnavailable: boolean;
 }
 
 export const initialAssistiveChecksUiState: AssistiveChecksUiState = {
@@ -23,12 +26,15 @@ export const initialAssistiveChecksUiState: AssistiveChecksUiState = {
   actionInFlight: 'idle',
   feedback: null,
   copiedFindingId: null,
+  copyStatus: null,
+  readUnavailable: false,
 };
 
 export type AssistiveChecksAction =
   | { type: 'LOAD_STARTED' }
   | { type: 'LOAD_SUCCEEDED'; inspection: AssistiveInspectionView | null }
   | { type: 'LOAD_FAILED'; error: string }
+  | { type: 'SET_READ_UNAVAILABLE'; unavailable: boolean }
   | { type: 'RUN_STARTED' }
   | { type: 'RUN_SUCCEEDED'; runId: string; status: string }
   | { type: 'RUN_FAILED'; error: string }
@@ -36,11 +42,11 @@ export type AssistiveChecksAction =
   | { type: 'CANCEL_SUCCEEDED' }
   | { type: 'CANCEL_FAILED'; error: string }
   | { type: 'DISPOSITION_STARTED' }
-  | { type: 'DISPOSITION_SUCCEEDED'; findingId: string; disposition: 'REVIEWED' | 'IGNORED'; reviewedAt: string; reviewedBy: string | null }
+  | { type: 'DISPOSITION_SUCCEEDED'; findingId: string; disposition: 'REVIEWED' | 'IGNORED' }
   | { type: 'DISPOSITION_FAILED'; error: string }
   | { type: 'APPLY_STARTED' }
   | { type: 'APPLY_COMPLETED'; message: string; success: boolean }
-  | { type: 'COPY_FEEDBACK'; findingId: string | null }
+  | { type: 'COPY_FEEDBACK'; findingId: string | null; status: 'copied' | 'failed' | null }
   | { type: 'CLEAR_FEEDBACK' };
 
 export function assistiveChecksReducer(
@@ -51,9 +57,11 @@ export function assistiveChecksReducer(
     case 'LOAD_STARTED':
       return { ...state, loading: state.inspection === null, error: null };
     case 'LOAD_SUCCEEDED':
-      return { ...state, loading: false, inspection: action.inspection, error: null };
+      return { ...state, loading: false, inspection: action.inspection, error: null, readUnavailable: false };
     case 'LOAD_FAILED':
       return { ...state, loading: false, error: action.error };
+    case 'SET_READ_UNAVAILABLE':
+      return { ...state, readUnavailable: action.unavailable };
     case 'RUN_STARTED':
       return { ...state, actionInFlight: 'running', error: null, feedback: null };
     case 'RUN_SUCCEEDED':
@@ -79,8 +87,6 @@ export function assistiveChecksReducer(
           return {
             ...finding,
             disposition: action.disposition,
-            reviewedAt: action.reviewedAt,
-            reviewedBy: action.reviewedBy,
           };
         }
         return finding;
@@ -106,7 +112,7 @@ export function assistiveChecksReducer(
         feedback: action.success ? { message: action.message, type: 'success' } : null,
       };
     case 'COPY_FEEDBACK':
-      return { ...state, copiedFindingId: action.findingId };
+      return { ...state, copiedFindingId: action.findingId, copyStatus: action.status };
     case 'CLEAR_FEEDBACK':
       return { ...state, feedback: null, error: null };
   }
@@ -181,6 +187,21 @@ export function formatJobStatus(
   }
 }
 
+/**
+ * Single source of truth for "this run is still being worked on".
+ *
+ * Polling scheduling, the cancel/re-run control, and every empty/terminal branch all ask this same
+ * question, so they derive it from `formatJobStatus`, which already resolves job and run status
+ * together. Restating the status lists at each call site is how a terminal state ends up polled
+ * forever, or an active run rendered as history.
+ */
+export function isAssistiveRunActive(
+  inspection: Pick<AssistiveInspectionView, 'jobStatus' | 'runStatus'> | null | undefined,
+): boolean {
+  if (!inspection) return false;
+  return formatJobStatus(inspection.jobStatus, inspection.runStatus).active;
+}
+
 export function formatDisposition(disposition: string): {
   label: string;
   variant: 'success' | 'warning' | 'destructive' | 'information' | 'neutral';
@@ -226,8 +247,18 @@ export function formatFailureCode(code: AssistiveJobFailureCode | string | null)
   }
 }
 
+export function formatPartialNoticeDescription(failureCode: AssistiveJobFailureCode | string | null): string {
+  if (failureCode === 'OCR_REQUIRED') {
+    return 'Some document content could not be evaluated because OCR has not run. Native text, when available, was checked.';
+  }
+  if (failureCode === 'OCR_PROVIDER_UNAVAILABLE') {
+    return 'Some document content could not be evaluated because the configured OCR capability is unavailable. Native text, when available, was checked.';
+  }
+  return 'Some document content could not be evaluated in this environment. Native text, when available, was checked.';
+}
+
 export function isFindingEligibleToApply(
-  finding: StoredAssistiveFinding,
+  finding: AssistiveInspectionFinding,
   staleState: AssistiveStaleState,
   canEditMetadata: boolean,
   canApplyHandler: boolean,
@@ -235,8 +266,9 @@ export function isFindingEligibleToApply(
   if (!canEditMetadata || !canApplyHandler) return false;
   if (staleState !== 'CURRENT') return false;
   if (finding.checkType !== 'TITLE_CONSISTENCY') return false;
+  if (finding.outcome === 'AGREES') return false;
   const candidate = finding.evidence.candidateValue;
   if (!candidate || candidate.trim().length === 0) return false;
-  if (candidate.length > 400) return false;
+  if (candidate.length > PROJECT_METADATA_LIMITS.title) return false;
   return true;
 }

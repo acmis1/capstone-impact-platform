@@ -103,6 +103,21 @@ describe('loadAssistiveInspection service', () => {
     }
   });
 
+  it('reports INTERNAL_FAILURE when database returns INVARIANT_VIOLATION', async () => {
+    const gateway = mockPersistenceGateway({
+      loadInspection: vi.fn().mockResolvedValue({ resultCode: 'INVARIANT_VIOLATION' }),
+    });
+    const result = await loadAssistiveInspection(gateway, mockInputGateway(), {
+      projectId: PROJECT_ID,
+      privateBucket: BUCKET,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('INTERNAL_FAILURE');
+      expect(result.message).toContain('data integrity bounds');
+    }
+  });
+
   it('keeps active in-flight jobs lightweight without downloading poster media', async () => {
     const gateway = mockPersistenceGateway({
       loadInspection: vi.fn().mockResolvedValue({

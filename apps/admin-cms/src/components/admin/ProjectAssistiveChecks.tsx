@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useReducer, useRef } from 'react';
+import React, { useCallback, useEffect, useReducer, useRef } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -16,9 +16,9 @@ import {
 } from 'lucide-react';
 
 import type {
+  AssistiveInspectionFinding,
   AssistiveInspectionView,
   AssistiveRecordableDisposition,
-  StoredAssistiveFinding,
 } from '../../assistive-validation';
 import {
   cancelAssistiveChecksAction,
@@ -37,7 +37,9 @@ import {
   formatFailureCode,
   formatJobStatus,
   formatOutcome,
+  formatPartialNoticeDescription,
   initialAssistiveChecksUiState,
+  isAssistiveRunActive,
   isFindingEligibleToApply,
 } from './projectAssistiveChecksState';
 import { useProjectMetadataNavigation } from './ProjectMetadataNavigation';
@@ -46,7 +48,9 @@ interface ProjectAssistiveChecksProps {
   publicId: string;
   canEditMetadata: boolean;
   canReview: boolean;
+  canExecute?: boolean;
   initialInspection?: AssistiveInspectionView | null;
+  initialReadFailed?: boolean;
   headingLevel?: 'h2' | 'h3' | 'h4';
 }
 
@@ -56,53 +60,113 @@ export function ProjectAssistiveChecks({
   publicId,
   canEditMetadata,
   canReview,
+  canExecute = true,
   initialInspection = null,
+  initialReadFailed = false,
   headingLevel: Heading = 'h3',
 }: ProjectAssistiveChecksProps) {
   const [state, dispatch] = useReducer(assistiveChecksReducer, {
     ...initialAssistiveChecksUiState,
     inspection: initialInspection,
+    readUnavailable: initialReadFailed,
   });
 
   const { canApplyTitleSuggestion, applyTitleSuggestion } = useProjectMetadataNavigation();
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPollingRef = useRef(false);
+  const activeRunIdRef = useRef<string | null>(initialInspection?.runId ?? null);
   const inFlightRef = useRef(false);
+  const isMountedRef = useRef(true);
 
-  const runId = state.inspection?.runId;
-  const jobStatus = state.inspection?.jobStatus;
-  const runStatus = state.inspection?.runStatus;
-
-  // Poll for active jobs
   useEffect(() => {
-    const isJobActive =
-      jobStatus &&
-      ['QUEUED', 'EXTRACTING', 'CHECKING', 'RUNNING'].includes(jobStatus) &&
-      !['COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED', 'SUPERSEDED'].includes(runStatus ?? '');
-
-    if (!isJobActive) {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-      return;
-    }
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
-    const poll = async () => {
+  // Sync with refreshed server prop (e.g. after ProjectMetadataEditor save -> router.refresh())
+  const prevServerPropRef = useRef(initialInspection);
+  useEffect(() => {
+    if (initialInspection !== prevServerPropRef.current) {
+      prevServerPropRef.current = initialInspection;
+      if (state.actionInFlight === 'idle') {
+        if (initialInspection) {
+          const shouldUpdate =
+            !state.inspection ||
+            state.inspection.runId === initialInspection.runId ||
+            new Date(initialInspection.createdAt).getTime() >= new Date(state.inspection.createdAt).getTime();
+          if (shouldUpdate) {
+            dispatch({ type: 'LOAD_SUCCEEDED', inspection: initialInspection });
+          }
+        } else if (!state.inspection) {
+          dispatch({ type: 'LOAD_SUCCEEDED', inspection: null });
+        }
+      }
+    }
+  }, [initialInspection, state.actionInFlight, state.inspection]);
+
+  // Keep track of active run ID for polling lifecycle
+  useEffect(() => {
+    activeRunIdRef.current = state.inspection?.runId ?? null;
+  }, [state.inspection?.runId]);
+
+  const schedulePollRef = useRef<(targetRunId: string) => void>(() => {});
+
+  // Self-scheduling bounded polling loop
+  const schedulePoll = useCallback((targetRunId: string) => {
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    pollTimerRef.current = setTimeout(async () => {
+      if (!isMountedRef.current || isPollingRef.current) return;
+      if (activeRunIdRef.current !== targetRunId) return;
+
+      isPollingRef.current = true;
       try {
-        const result = await getAssistiveInspectionAction(publicId, runId);
+        const result = await getAssistiveInspectionAction(publicId, targetRunId);
+        if (!isMountedRef.current || activeRunIdRef.current !== targetRunId) return;
+
         if (result.ok && result.found) {
           dispatch({ type: 'LOAD_SUCCEEDED', inspection: result.inspection });
+          if (isAssistiveRunActive(result.inspection)) {
+            schedulePollRef.current(targetRunId);
+          }
+        } else if (result.ok && !result.found) {
+          // Terminal/gone, stop polling
+        } else {
+          // Transient failure: preserve last known inspection, schedule next poll attempt
+          schedulePollRef.current(targetRunId);
         }
       } catch {
-        // Soft-fail polling errors without tearing down UI
+        // Transient exception: preserve inspection, schedule next poll attempt
+        if (isMountedRef.current && activeRunIdRef.current === targetRunId) {
+          schedulePollRef.current(targetRunId);
+        }
+      } finally {
+        isPollingRef.current = false;
       }
-    };
+    }, POLLING_INTERVAL_MS);
+  }, [publicId]);
 
-    pollTimerRef.current = setTimeout(poll, POLLING_INTERVAL_MS);
-    return () => {
+  useEffect(() => {
+    schedulePollRef.current = schedulePoll;
+  }, [schedulePoll]);
+
+  // Trigger polling when an active run is in flight
+  useEffect(() => {
+    const inspection = state.inspection;
+
+    if (inspection?.runId && isAssistiveRunActive(inspection)) {
+      schedulePoll(inspection.runId);
+    } else {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-    };
-  }, [publicId, jobStatus, runStatus, runId]);
+    }
+  }, [state.inspection, schedulePoll]);
 
   const handleRunChecks = async () => {
-    if (inFlightRef.current || state.actionInFlight !== 'idle') return;
+    if (!canExecute || inFlightRef.current || state.actionInFlight !== 'idle') return;
     inFlightRef.current = true;
     dispatch({ type: 'RUN_STARTED' });
 
@@ -166,8 +230,6 @@ export function ProjectAssistiveChecks({
           type: 'DISPOSITION_SUCCEEDED',
           findingId: result.findingId,
           disposition: result.disposition,
-          reviewedAt: result.reviewedAt,
-          reviewedBy: result.reviewedBy,
         });
       } else {
         dispatch({ type: 'DISPOSITION_FAILED', error: result.message });
@@ -198,21 +260,29 @@ export function ProjectAssistiveChecks({
   };
 
   const handleCopyText = async (textToCopy: string, findingId: string) => {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error('Clipboard unavailable');
+      }
       await navigator.clipboard.writeText(textToCopy);
-      dispatch({ type: 'COPY_FEEDBACK', findingId });
-      setTimeout(() => {
-        dispatch({ type: 'COPY_FEEDBACK', findingId: null });
+      dispatch({ type: 'COPY_FEEDBACK', findingId, status: 'copied' });
+      copyTimerRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          dispatch({ type: 'COPY_FEEDBACK', findingId: null, status: null });
+        }
       }, 2000);
     } catch {
-      // Clipboard write failed
+      dispatch({ type: 'COPY_FEEDBACK', findingId, status: 'failed' });
+      copyTimerRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          dispatch({ type: 'COPY_FEEDBACK', findingId: null, status: null });
+        }
+      }, 4000);
     }
   };
 
-  const isJobActive =
-    state.inspection &&
-    ['QUEUED', 'EXTRACTING', 'CHECKING', 'RUNNING'].includes(state.inspection.jobStatus) &&
-    !['COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED', 'SUPERSEDED'].includes(state.inspection.runStatus);
+  const isJobActive = isAssistiveRunActive(state.inspection);
 
   const statusPresentation = state.inspection
     ? formatJobStatus(state.inspection.jobStatus, state.inspection.runStatus)
@@ -261,8 +331,15 @@ export function ProjectAssistiveChecks({
               type="button"
               size="sm"
               onClick={handleRunChecks}
-              disabled={state.actionInFlight !== 'idle'}
+              disabled={!canExecute || state.actionInFlight !== 'idle'}
               isLoading={state.actionInFlight === 'running'}
+              title={
+                !canExecute
+                  ? 'Running assistive checks is not available in this environment.'
+                  : state.inspection
+                  ? 'Re-evaluate project metadata against poster document evidence.'
+                  : 'Start assistive checks.'
+              }
             >
               {state.inspection ? (
                 <>
@@ -279,6 +356,13 @@ export function ProjectAssistiveChecks({
           )}
         </div>
       </div>
+
+      {/* Execution Environment Notice if unavailable */}
+      {!canExecute && (
+        <div className="mt-3 text-xs text-muted-foreground">
+          Running assistive checks is not available in this environment. Historical findings remain viewable.
+        </div>
+      )}
 
       {/* Notifications / Alerts */}
       {state.error && (
@@ -320,32 +404,49 @@ export function ProjectAssistiveChecks({
         </div>
       )}
 
-      {/* Degraded / Partial OCR Banner */}
+      {/* Degraded / Partial OCR Banner with Truthful Copy */}
       {state.inspection?.runStatus === 'PARTIAL' && (
         <div className="mt-4">
           <Alert
             variant="information"
             icon={Info}
             title="Partial check results"
-            description="OCR text extraction is unavailable in this environment. Born-digital PDF text was evaluated, but scanned images and graphics were not checked."
+            description={formatPartialNoticeDescription(state.inspection.failureCode)}
           />
         </div>
       )}
 
       {/* Main Content Area */}
       <div className="mt-5">
+        {/* Read Failure State */}
+        {state.readUnavailable && !state.inspection && !isJobActive && (
+          <div className="rounded-lg border border-border bg-surface-inset p-4 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">Assistive checks are temporarily unavailable.</p>
+            <p className="mt-1 text-xs">Could not load historical check results. You can still review and edit metadata below.</p>
+          </div>
+        )}
+
         {/* No inspection yet -> Empty State */}
-        {!state.inspection && !isJobActive && (
+        {!state.readUnavailable && !state.inspection && !isJobActive && (
           <EmptyState
             icon={FileSearch}
             title="No assistive checks run yet"
-            description="Run assistive checks to verify project title consistency and document formatting against uploaded poster evidence."
+            description={
+              canExecute
+                ? 'Run assistive checks to verify project title consistency and document formatting against uploaded poster evidence.'
+                : 'Running assistive checks is not available in this environment.'
+            }
             action={
               <Button
                 type="button"
                 onClick={handleRunChecks}
-                disabled={state.actionInFlight !== 'idle'}
+                disabled={!canExecute || state.actionInFlight !== 'idle'}
                 isLoading={state.actionInFlight === 'running'}
+                title={
+                  !canExecute
+                    ? 'Running assistive checks is not available in this environment.'
+                    : 'Run checks now'
+                }
               >
                 <Play className="h-3.5 w-3.5" aria-hidden="true" />
                 Run checks now
@@ -361,7 +462,7 @@ export function ProjectAssistiveChecks({
             aria-live="polite"
             className="flex items-center gap-3 rounded-lg border border-border bg-surface-inset p-5 text-sm"
           >
-            <Loader2 className="h-5 w-5 animate-spin text-primary" aria-hidden="true" />
+            <Loader2 className="h-5 w-5 motion-safe:animate-spin text-primary" aria-hidden="true" />
             <div className="min-w-0">
               <p className="font-semibold text-foreground">
                 {state.inspection?.jobStatus === 'EXTRACTING'
@@ -371,7 +472,7 @@ export function ProjectAssistiveChecks({
                   : 'Checks are queued and will start shortly...'}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                This process takes a few seconds and updates automatically.
+                Assistive checks run asynchronously. Status updates automatically while a worker is processing this run.
               </p>
             </div>
           </div>
@@ -417,7 +518,7 @@ export function ProjectAssistiveChecks({
             {/* Findings List */}
             {state.inspection.findings.length > 0 && (
               <ul className="flex flex-col gap-4" aria-label="Assistive validation findings">
-                {state.inspection.findings.map((finding: StoredAssistiveFinding) => {
+                {state.inspection.findings.map((finding: AssistiveInspectionFinding) => {
                   const outcome = formatOutcome(finding.outcome);
                   const disposition = formatDisposition(finding.disposition);
                   const canApply = isFindingEligibleToApply(
@@ -426,7 +527,8 @@ export function ProjectAssistiveChecks({
                     canEditMetadata,
                     canApplyTitleSuggestion,
                   );
-                  const isCopied = state.copiedFindingId === finding.findingId;
+                  const isCopied = state.copiedFindingId === finding.findingId && state.copyStatus === 'copied';
+                  const isCopyFailed = state.copiedFindingId === finding.findingId && state.copyStatus === 'failed';
 
                   return (
                     <li
@@ -447,7 +549,7 @@ export function ProjectAssistiveChecks({
                         </div>
                       </div>
 
-                      {/* Finding Body / Explanation */}
+                      {/* Finding Body / Explanation (rendered safely as plain text) */}
                       <div className="mt-3">
                         <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
                           {finding.evidence.explanation}
@@ -472,13 +574,20 @@ export function ProjectAssistiveChecks({
                             </div>
                           </div>
 
+                          {/* Technical details disclosure - no percentages or confidence wording */}
                           {finding.scoreValue !== null && (
-                            <div className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">
-                              <span>Similarity score: {Math.round(finding.scoreValue * 100)}%</span>
-                              {finding.evidence.pageNumber && (
-                                <span className="ml-3">Found on page {finding.evidence.pageNumber}</span>
-                              )}
-                            </div>
+                            <details className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">
+                              <summary className="cursor-pointer font-medium hover:text-foreground">
+                                Technical diagnostic details
+                              </summary>
+                              <div className="mt-1 font-mono text-[11px]">
+                                <p>Lexical similarity score: {finding.scoreValue.toFixed(2)}</p>
+                                <p className="text-[10px] text-muted-foreground">Diagnostic evidence only — not confidence or accuracy.</p>
+                                {finding.evidence.pageNumber && (
+                                  <p>Candidate located on page {finding.evidence.pageNumber}</p>
+                                )}
+                              </div>
+                            </details>
                           )}
                         </div>
                       )}
@@ -503,29 +612,43 @@ export function ProjectAssistiveChecks({
                         {/* Copy & Apply Draft Actions */}
                         <div className="flex flex-wrap items-center gap-2">
                           {(finding.evidence.candidateValue || finding.evidence.evidenceExcerpt) && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                handleCopyText(
-                                  finding.evidence.candidateValue || finding.evidence.evidenceExcerpt || '',
-                                  finding.findingId,
-                                )
-                              }
-                            >
-                              {isCopied ? (
-                                <>
-                                  <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
-                                  <span>Copied</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                                  <span>Copy text</span>
-                                </>
-                              )}
-                            </Button>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  handleCopyText(
+                                    finding.evidence.candidateValue || finding.evidence.evidenceExcerpt || '',
+                                    finding.findingId,
+                                  )
+                                }
+                              >
+                                {isCopied ? (
+                                  <>
+                                    <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+                                    <span>Copied</span>
+                                  </>
+                                ) : isCopyFailed ? (
+                                  <>
+                                    <AlertTriangle className="h-3.5 w-3.5 text-destructive" aria-hidden="true" />
+                                    <span>Copy failed</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                                    <span>Copy text</span>
+                                  </>
+                                )}
+                              </Button>
+                              {/*
+                                A blocked or unavailable clipboard is reported rather than swallowed, and it is
+                                announced politely so the outcome does not depend on noticing the button relabel.
+                              */}
+                              <span role="status" aria-live="polite" className="text-xs text-destructive">
+                                {isCopyFailed ? 'Could not copy text. Select the text above and copy it manually.' : ''}
+                              </span>
+                            </div>
                           )}
 
                           {finding.checkType === 'TITLE_CONSISTENCY' && finding.evidence.candidateValue && (

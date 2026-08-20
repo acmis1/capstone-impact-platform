@@ -64,6 +64,7 @@
     "verify:assistive-persistence-runtime": "npm run verify:assistive-persistence-runtime --workspace=apps/admin-cms",
     "verify:assistive-upgrade-runtime": "npm run verify:assistive-upgrade-runtime --workspace=apps/admin-cms",
     "verify:assistive-jobs-runtime": "npm run verify:assistive-jobs-runtime --workspace=apps/admin-cms",
+    "verify:assistive-staff-inspection-runtime": "npm run verify:assistive-staff-inspection-runtime --workspace=apps/admin-cms",
     "run:assistive-worker": "npm run run:assistive-worker --workspace=apps/admin-cms",
     "run:assistive-worker-once": "npm run run:assistive-worker-once --workspace=apps/admin-cms",
     "assistive-worker:health": "npm run assistive-worker:health --workspace=apps/admin-cms",

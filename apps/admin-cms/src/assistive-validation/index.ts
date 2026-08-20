@@ -15,6 +15,7 @@ export * from './repositories/assistiveValidationRepository';
 export * from './services/assistiveCoordinator';
 export * from './services/assistiveInputService';
 export * from './services/assistiveJobService';
-export * from './services/assistiveValidationPersistenceService';
+export * from './services/assistiveExecutionAvailability';
 export * from './services/assistiveInspectionService';
+export * from './services/assistiveValidationPersistenceService';
 export * from './services/pythonWorkerProcess';

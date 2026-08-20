@@ -7,6 +7,7 @@ import { createSupabaseAdminClient } from '../../../../lib/supabase/admin';
 import {
   cancelAssistiveValidation,
   enqueueAssistiveValidation,
+  isAssistiveExecutionAvailable,
   loadAssistiveInspection,
   recordAssistiveFindingDisposition,
 } from '../../../../assistive-validation';
@@ -35,6 +36,7 @@ vi.mock('../../../../assistive-validation', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../assistive-validation')>();
   return {
     ...actual,
+    isAssistiveExecutionAvailable: vi.fn().mockReturnValue(true),
     enqueueAssistiveValidation: vi.fn(),
     cancelAssistiveValidation: vi.fn(),
     recordAssistiveFindingDisposition: vi.fn(),
@@ -51,6 +53,7 @@ const ADMIN_ID = 'admin-user-123';
 describe('Assistive Validation Server Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isAssistiveExecutionAvailable).mockReturnValue(true);
     vi.mocked(getServerEnv).mockReturnValue({
       SUPABASE_DRAFT_BUCKET: 'capstone-drafts',
     } as unknown as ReturnType<typeof getServerEnv>);
@@ -65,15 +68,57 @@ describe('Assistive Validation Server Actions', () => {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            maybeSingle: vi.fn().mockResolvedValue({ data: { id: PROJECT_ID }, error: null }),
+            is: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({ data: { id: PROJECT_ID }, error: null }),
+            }),
           }),
         }),
       }),
       rpc: vi.fn().mockResolvedValue({
         data: {
           resultCode: 'FOUND',
-          run: { runId: RUN_ID },
-          findings: [{ findingId: FINDING_ID }],
+          run: {
+            runId: RUN_ID,
+            projectId: PROJECT_ID,
+            inputHash: 'a'.repeat(64),
+            pipelineVersion: 'assistive-deterministic-checks/v1',
+            runStatus: 'COMPLETED',
+            jobStatus: 'COMPLETED',
+            attemptCount: 1,
+            failureCode: null,
+            cancellationRequested: false,
+            createdAt: '2026-08-21T09:00:00.000Z',
+            startedAt: '2026-08-21T09:00:01.000Z',
+            completedAt: '2026-08-21T09:00:05.000Z',
+          },
+          findings: [
+            {
+              findingId: FINDING_ID,
+              ordinal: 1,
+              checkType: 'TITLE_CONSISTENCY',
+              outcome: 'MISMATCH',
+              classification: 'NON_BLOCKING',
+              reasonCode: 'MATERIAL_TOKEN_DIFFERENCE',
+              affectedField: 'title',
+              origin: 'DETERMINISTIC_HELPER',
+              scoreKind: 'LEXICAL_SIMILARITY',
+              scoreValue: 0.42,
+              evidence: {
+                version: 'assistive-finding-evidence/v1',
+                evidenceExcerpt: 'Synthetic Excerpt',
+                pageNumber: 1,
+                boundingBox: null,
+                metadataValue: 'Synthetic Project',
+                normalizedMetadataValue: 'synthetic project',
+                candidateValue: 'Candidate Poster Title',
+                normalizedCandidateValue: 'candidate poster title',
+                explanation: 'Synthetic candidate explanation.',
+              },
+              disposition: 'UNREVIEWED',
+              reviewedAt: null,
+              createdAt: '2026-08-21T09:00:00.000Z',
+            },
+          ],
         },
         error: null,
       }),
@@ -100,6 +145,16 @@ describe('Assistive Validation Server Actions', () => {
         ok: false,
         code: 'PERMISSION_DENIED',
         message: 'You do not have permission to view this project.',
+      });
+    });
+
+    it('rejects when assistive execution is not available in environment', async () => {
+      vi.mocked(isAssistiveExecutionAvailable).mockReturnValueOnce(false);
+      const result = await runAssistiveChecksAction(PUBLIC_ID);
+      expect(result).toEqual({
+        ok: false,
+        code: 'EXECUTION_UNAVAILABLE',
+        message: 'Running assistive checks is not available in this environment.',
       });
     });
 
@@ -143,7 +198,9 @@ describe('Assistive Validation Server Actions', () => {
         from: vi.fn().mockReturnValue({
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
-              maybeSingle: vi.fn().mockResolvedValue({ data: { id: PROJECT_ID }, error: null }),
+              is: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: { id: PROJECT_ID }, error: null }),
+              }),
             }),
           }),
         }),
@@ -164,7 +221,7 @@ describe('Assistive Validation Server Actions', () => {
       vi.mocked(requireAdmin).mockResolvedValueOnce({
         adminUserId: ADMIN_ID,
         role: 'editor',
-        permissions: ['projects.read', 'projects.edit'], // No projects.review
+        permissions: ['projects.read', 'projects.edit'],
       } as unknown as Awaited<ReturnType<typeof requireAdmin>>);
 
       const result = await recordAssistiveDispositionAction(PUBLIC_ID, RUN_ID, FINDING_ID, 'REVIEWED');
@@ -180,15 +237,30 @@ describe('Assistive Validation Server Actions', () => {
         from: vi.fn().mockReturnValue({
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
-              maybeSingle: vi.fn().mockResolvedValue({ data: { id: PROJECT_ID }, error: null }),
+              is: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: { id: PROJECT_ID }, error: null }),
+              }),
             }),
           }),
         }),
         rpc: vi.fn().mockResolvedValue({
           data: {
             resultCode: 'FOUND',
-            run: { runId: RUN_ID },
-            findings: [{ findingId: 'other-finding-id' }], // Does not contain FINDING_ID
+            run: {
+              runId: RUN_ID,
+              projectId: PROJECT_ID,
+              inputHash: 'a'.repeat(64),
+              pipelineVersion: 'assistive-deterministic-checks/v1',
+              runStatus: 'COMPLETED',
+              jobStatus: 'COMPLETED',
+              attemptCount: 1,
+              failureCode: null,
+              cancellationRequested: false,
+              createdAt: '2026-08-21T09:00:00.000Z',
+              startedAt: '2026-08-21T09:00:01.000Z',
+              completedAt: '2026-08-21T09:00:05.000Z',
+            },
+            findings: [], // Empty findings list, does not contain FINDING_ID
           },
           error: null,
         }),
@@ -203,7 +275,7 @@ describe('Assistive Validation Server Actions', () => {
       });
     });
 
-    it('successfully records disposition for authorized reviewer', async () => {
+    it('successfully records disposition and omits staff UUID from browser response (Privacy Invariant)', async () => {
       vi.mocked(recordAssistiveFindingDisposition).mockResolvedValueOnce({
         ok: true,
         findingId: FINDING_ID,
@@ -218,9 +290,9 @@ describe('Assistive Validation Server Actions', () => {
         ok: true,
         findingId: FINDING_ID,
         disposition: 'REVIEWED',
-        reviewedAt: '2026-08-21T09:10:00.000Z',
-        reviewedBy: ADMIN_ID,
       });
+      // Verify no reviewedBy or adminUserId exists in the response
+      expect('reviewedBy' in result).toBe(false);
     });
   });
 

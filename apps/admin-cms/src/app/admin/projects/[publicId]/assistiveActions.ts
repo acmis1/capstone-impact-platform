@@ -5,11 +5,13 @@ import { z } from 'zod';
 import {
   cancelAssistiveValidation,
   enqueueAssistiveValidation,
+  isAssistiveExecutionAvailable,
   loadAssistiveInspection,
   recordAssistiveFindingDisposition,
   SupabaseAssistiveInputRepository,
   SupabaseAssistiveJobRepository,
   SupabaseAssistiveValidationRepository,
+  assistiveInspectionResponseSchema,
   type AssistiveInspectionView,
   type AssistiveRecordableDisposition,
   assistiveRecordableDispositionSchema,
@@ -32,8 +34,11 @@ export type CancelAssistiveChecksActionResult =
   | { ok: true }
   | { ok: false; code: string; message: string };
 
+/**
+ * Privacy Invariant: internal staff identity UUIDs (reviewedBy) are NEVER returned to browser.
+ */
 export type RecordAssistiveDispositionActionResult =
-  | { ok: true; findingId: string; disposition: AssistiveRecordableDisposition; reviewedAt: string; reviewedBy: string | null }
+  | { ok: true; findingId: string; disposition: AssistiveRecordableDisposition }
   | { ok: false; code: string; message: string };
 
 export type GetAssistiveInspectionActionResult =
@@ -46,6 +51,7 @@ async function resolveProjectDbId(supabase: ReturnType<typeof createSupabaseAdmi
     .from('projects')
     .select('id')
     .eq('public_id', publicId)
+    .is('deleted_at', null)
     .maybeSingle();
 
   if (error || !data?.id) return null;
@@ -57,6 +63,14 @@ export async function runAssistiveChecksAction(publicIdInput: unknown): Promise<
     const context = await requireAdmin();
     if (!hasPermission(context.permissions, 'projects.read')) {
       return { ok: false, code: 'PERMISSION_DENIED', message: 'You do not have permission to view this project.' };
+    }
+
+    if (!isAssistiveExecutionAvailable()) {
+      return {
+        ok: false,
+        code: 'EXECUTION_UNAVAILABLE',
+        message: 'Running assistive checks is not available in this environment.',
+      };
     }
 
     const publicIdParsed = publicIdSchema.safeParse(publicIdInput);
@@ -119,11 +133,11 @@ export async function cancelAssistiveChecksAction(publicIdInput: unknown, runIdI
       return { ok: false, code: 'PROJECT_NOT_FOUND', message: 'Project not found.' };
     }
 
-    // Verify run belongs to the requested project
+    // Verify run belongs to the requested project with strict schema validation
     const validationRepo = new SupabaseAssistiveValidationRepository(supabase);
     const rawInspection = await validationRepo.loadInspection(projectId, ASSISTIVE_PIPELINE_VERSION, runIdParsed.data);
-    const inspectionData = rawInspection as { resultCode?: string } | null;
-    if (inspectionData?.resultCode !== 'FOUND') {
+    const inspectionParsed = assistiveInspectionResponseSchema.safeParse(rawInspection);
+    if (!inspectionParsed.success || inspectionParsed.data.resultCode !== 'FOUND') {
       return { ok: false, code: 'NOT_FOUND', message: 'Assistive run not found for this project.' };
     }
 
@@ -171,11 +185,15 @@ export async function recordAssistiveDispositionAction(
       return { ok: false, code: 'PROJECT_NOT_FOUND', message: 'Project not found.' };
     }
 
-    // Verify run and finding association
+    // Verify run and finding association with strict schema parsing
     const validationRepo = new SupabaseAssistiveValidationRepository(supabase);
     const rawInspection = await validationRepo.loadInspection(projectId, ASSISTIVE_PIPELINE_VERSION, runIdParsed.data);
-    const inspectionData = rawInspection as { resultCode?: string; findings?: Array<{ findingId?: string }> } | null;
-    if (inspectionData?.resultCode !== 'FOUND' || !inspectionData.findings?.some((f) => f.findingId === findingIdParsed.data)) {
+    const inspectionParsed = assistiveInspectionResponseSchema.safeParse(rawInspection);
+    if (
+      !inspectionParsed.success ||
+      inspectionParsed.data.resultCode !== 'FOUND' ||
+      !inspectionParsed.data.findings.some((f) => f.findingId === findingIdParsed.data)
+    ) {
       return { ok: false, code: 'FINDING_NOT_FOUND', message: 'Finding not found for this project run.' };
     }
 
@@ -191,8 +209,6 @@ export async function recordAssistiveDispositionAction(
         ok: true,
         findingId: result.findingId,
         disposition: result.disposition as AssistiveRecordableDisposition,
-        reviewedAt: result.reviewedAt,
-        reviewedBy: result.reviewedBy,
       };
     }
 
