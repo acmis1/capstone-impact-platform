@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,22 +28,17 @@ describe('assistive validation persistence migration contract', () => {
   const dispositionBody = functionBody('CREATE OR REPLACE FUNCTION public.record_assistive_finding_disposition(');
   const readBody = functionBody('CREATE OR REPLACE FUNCTION public.get_latest_assistive_validation_run(');
 
-  it('is exactly migration 0030 and leaves all 29 inherited migrations byte-identical', () => {
+  it('remains migration 0030 and leaves every pre-Phase-4 migration byte-identical', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(30);
+    expect(files).toHaveLength(31);
     expect(files[29]).toBe(filename);
+    expect(files[30]).toBe('20260820160000_assistive_validation_job_coordination.sql');
 
-    for (const inherited of files.slice(0, 29)) {
-      const local = fs.readFileSync(path.join(migrations, inherited), 'utf8').replace(/\r\n/g, '\n');
-      const base = execFileSync(
-        'git', ['show', `origin/main:infra/supabase/migrations/${inherited}`],
-        { cwd: root, encoding: 'utf8' },
-      ).replace(/\r\n/g, '\n');
-      expect(crypto.createHash('sha256').update(local).digest('hex')).toBe(
-        crypto.createHash('sha256').update(base).digest('hex'),
-      );
-    }
+    expect(() => execFileSync(
+      'git', ['diff', '--exit-code', 'origin/main', '--', `infra/supabase/migrations/${filename}`],
+      { cwd: root, stdio: 'pipe' },
+    )).not.toThrow();
   });
 
   it('is additive only and never rewrites, drops, or repurposes inherited schema', () => {

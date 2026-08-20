@@ -6,13 +6,19 @@ on:
     paths:
       - '.github/workflows/assistive-worker-ci.yml'
       - 'apps/assistive-worker/**'
+      - 'apps/admin-cms/src/assistive-validation/**'
+      - 'infra/supabase/migrations/20260820160000_assistive_validation_job_coordination.sql'
       - 'docs/assistive-validation/phase-1-document-extraction.md'
+      - 'docs/assistive-validation/phase-4-async-job-coordination.md'
   pull_request:
     branches: [main]
     paths:
       - '.github/workflows/assistive-worker-ci.yml'
       - 'apps/assistive-worker/**'
+      - 'apps/admin-cms/src/assistive-validation/**'
+      - 'infra/supabase/migrations/20260820160000_assistive_validation_job_coordination.sql'
       - 'docs/assistive-validation/phase-1-document-extraction.md'
+      - 'docs/assistive-validation/phase-4-async-job-coordination.md'
 
 permissions:
   contents: read
@@ -37,12 +43,27 @@ jobs:
           cache: 'pip'
           cache-dependency-path: apps/assistive-worker/pyproject.toml
 
+      - name: Setup Node.js 24.14.1
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+          cache: 'npm'
+
       - name: Install production extraction package
         run: python -m pip install -e apps/assistive-worker
+
+      - name: Install repository dependencies
+        run: npm ci
 
       - name: Run production extraction tests
         working-directory: apps/assistive-worker
         run: python -m unittest discover -s tests -v
+
+      - name: Run production Node-to-Python process integration
+        run: npm exec --workspace=apps/admin-cms -- vitest run src/assistive-validation/__tests__/pythonWorkerProcess.integration.test.ts
+        env:
+          ASSISTIVE_PROCESS_INTEGRATION: '1'
+          ASSISTIVE_TEST_PYTHON: python
 
       - name: Generate deterministic golden fixtures
         working-directory: apps/assistive-worker

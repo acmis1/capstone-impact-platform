@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 30;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 31;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -38,6 +38,7 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260817090000_private_media_approval_gate.sql',
   '20260819214431_password_recovery_session_provenance.sql',
   '20260820120000_assistive_validation_persistence.sql',
+  '20260820160000_assistive_validation_job_coordination.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [
@@ -79,6 +80,7 @@ export const REQUIRED_AUTH_PROVENANCE_TABLES = ['password_recovery_sessions'] as
 export const REQUIRED_ASSISTIVE_TABLES = [
   'assistive_validation_runs',
   'assistive_validation_findings',
+  'assistive_validation_jobs',
 ] as const;
 
 export const REQUIRED_NOTIFICATION_TABLES = [
@@ -111,7 +113,7 @@ function rpc(
   return { name, parameterNames, parameterTypes };
 }
 
-/** Final application RPC signatures granted to service_role by migrations 0001-0030. */
+/** Final application RPC signatures granted to service_role by migrations 0001-0031. */
 export const REQUIRED_RPC_SIGNATURES = [
   rpc('bootstrap_initial_admin', ['p_auth_user_id', 'p_email', 'p_full_name'], ['uuid', 'text', 'text']),
   rpc('register_password_recovery_session', ['p_session_id', 'p_auth_user_id'], ['uuid', 'uuid']),
@@ -168,6 +170,16 @@ export const REQUIRED_RPC_SIGNATURES = [
   ),
   rpc('record_assistive_finding_disposition', ['p_finding_id', 'p_actor_admin_id', 'p_disposition'], ['uuid', 'uuid', 'text']),
   rpc('get_latest_assistive_validation_run', ['p_project_id', 'p_pipeline_version'], ['uuid', 'text']),
+  rpc('enqueue_assistive_validation_run', ['p_project_id', 'p_actor_admin_id', 'p_input_hash', 'p_pipeline_version'], ['uuid', 'uuid', 'text', 'text']),
+  rpc('get_assistive_validation_run_status', ['p_run_id'], ['uuid']),
+  rpc('get_assistive_validation_job_health', [], []),
+  rpc('claim_next_assistive_validation_job', ['p_worker_id', 'p_lease_seconds'], ['uuid', 'integer']),
+  rpc('heartbeat_assistive_validation_job', ['p_job_id', 'p_claim_token', 'p_lease_seconds'], ['uuid', 'uuid', 'integer']),
+  rpc('advance_assistive_validation_job_stage', ['p_job_id', 'p_claim_token'], ['uuid', 'uuid']),
+  rpc('request_assistive_validation_cancellation', ['p_run_id', 'p_actor_admin_id'], ['uuid', 'uuid']),
+  rpc('supersede_assistive_validation_job', ['p_job_id', 'p_claim_token'], ['uuid', 'uuid']),
+  rpc('record_assistive_validation_job_failure', ['p_job_id', 'p_claim_token', 'p_failure_code'], ['uuid', 'uuid', 'text']),
+  rpc('finalize_assistive_validation_job', ['p_job_id', 'p_claim_token', 'p_input_hash', 'p_status', 'p_completion_code', 'p_findings'], ['uuid', 'uuid', 'text', 'text', 'text', 'jsonb']),
 ] as const satisfies readonly RequiredRpcSignature[];
 
 export const REQUIRED_RPC_NAMES = [...new Set(REQUIRED_RPC_SIGNATURES.map(({ name }) => name))] as readonly string[];

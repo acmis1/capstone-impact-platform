@@ -1,0 +1,242 @@
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+
+import { runLocalSupabaseCli } from '../local-development/safeSupabaseCli';
+
+const DB_CONTAINER = 'supabase_db_capstone-impact-platform';
+const MIGRATION_30_VERSION = '20260820120000';
+const PIPELINE = 'assistive-deterministic-checks/v1';
+const FINDING = [{
+  checkType: 'FORMATTING',
+  outcome: 'INFORMATION',
+  classification: 'NON_BLOCKING',
+  reasonCode: 'REPEATED_WHITESPACE',
+  affectedField: 'extraction_text',
+  origin: 'DETERMINISTIC_HELPER',
+  scoreKind: null,
+  scoreValue: null,
+  evidence: {
+    version: 'assistive-finding-evidence/v1',
+    evidenceExcerpt: 'Synthetic  spacing',
+    pageNumber: null,
+    boundingBox: null,
+    metadataValue: null,
+    normalizedMetadataValue: null,
+    candidateValue: null,
+    normalizedCandidateValue: null,
+    explanation: 'Synthetic Migration 0030 to 0031 upgrade finding.',
+  },
+}];
+
+function sqlLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function hash(value: string): string {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function assertCliSuccess(result: ReturnType<typeof runLocalSupabaseCli>, operation: string): void {
+  assert.equal(
+    result.ok,
+    true,
+    `${operation} failed (${result.failureCategory ?? 'UNKNOWN'}, exit ${result.exitCode ?? 'null'}).`,
+  );
+}
+
+async function main(): Promise<void> {
+  console.log('=== Assistive Validation Migration 0030 to 0031 Upgrade Verification ===');
+  const root = path.resolve(__dirname, '../../../..');
+  const psql = (sql: string): string => execFileSync(
+    'docker',
+    ['exec', '-i', DB_CONTAINER, 'psql', '-U', 'postgres', '-d', 'postgres', '-At', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+  ).trim();
+
+  let primaryFailure: unknown = null;
+  let passed = 0;
+  const scenario = (name: string, body: () => void) => {
+    body();
+    passed += 1;
+    console.log(`PASS: ${name}`);
+  };
+
+  try {
+    assertCliSuccess(
+      runLocalSupabaseCli('reset', root, { resetVersion: MIGRATION_30_VERSION }),
+      'reset through Migration 0030',
+    );
+    scenario('database is exactly at Migration 0030 before fixture insertion', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '30');
+      assert.equal(psql("SELECT to_regclass('public.assistive_validation_jobs') IS NULL;"), 't');
+    });
+
+    const actorId = crypto.randomUUID();
+    const projectId = crypto.randomUUID();
+    const prefix = `assistive-upgrade-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    psql(`
+      INSERT INTO public.admin_users (id, email, full_name)
+      VALUES (${sqlLiteral(actorId)}::uuid, ${sqlLiteral(`${prefix}@capstone.test`)}, 'Synthetic Upgrade Actor');
+      INSERT INTO public.user_roles (user_id, role)
+      VALUES (${sqlLiteral(actorId)}::uuid, 'editor');
+      INSERT INTO public.projects (
+        id, public_id, title, summary, status, year, program_name, discipline, group_name, team_members
+      ) VALUES (
+        ${sqlLiteral(projectId)}::uuid, ${sqlLiteral(`2026-${prefix}`)},
+        'Synthetic Upgrade Project', 'Disposable Migration 0030 fixture.', 'draft', 2026,
+        'Synthetic Software Engineering', 'Software Engineering', 'Synthetic Upgrade Group',
+        ARRAY['Synthetic Member']::text[]
+      );
+    `);
+
+    const persist = (status: 'COMPLETED' | 'FAILED', failureCode: string | null, findings: unknown) => {
+      const result = JSON.parse(psql(`
+        SELECT public.persist_assistive_validation_run(
+          ${sqlLiteral(projectId)}::uuid,
+          ${sqlLiteral(actorId)}::uuid,
+          ${sqlLiteral(hash(`${prefix}:${status}`))},
+          ${sqlLiteral(PIPELINE)},
+          ${sqlLiteral(status)},
+          ${failureCode === null ? 'NULL' : sqlLiteral(failureCode)},
+          ${sqlLiteral(JSON.stringify(findings))}::jsonb
+        )::text;
+      `)) as { resultCode?: unknown; runId?: unknown };
+      assert.equal(result.resultCode, 'PERSISTED');
+      assert.equal(typeof result.runId, 'string');
+      return String(result.runId);
+    };
+
+    const completedRunId = persist('COMPLETED', null, FINDING);
+    const failedRunId = persist('FAILED', 'EXTRACTION_FAILED', []);
+    const runIds = [completedRunId, failedRunId];
+    const runList = runIds.map((id) => `${sqlLiteral(id)}::uuid`).join(',');
+    const findingsBefore = psql(`
+      SELECT COALESCE(pg_catalog.jsonb_agg(to_jsonb(f) ORDER BY f.ordinal), '[]'::jsonb)::text
+      FROM public.assistive_validation_findings AS f
+      WHERE f.run_id = ${sqlLiteral(completedRunId)}::uuid;
+    `);
+    const projectBefore = psql(`SELECT to_jsonb(p)::text FROM public.projects AS p WHERE p.id = ${sqlLiteral(projectId)}::uuid;`);
+    const workflowBefore = psql(`
+      SELECT pg_catalog.jsonb_build_object(
+        'approvalRecords', (SELECT pg_catalog.count(*) FROM public.approval_records WHERE project_id = ${sqlLiteral(projectId)}::uuid),
+        'validationFlags', (SELECT pg_catalog.count(*) FROM public.validation_flags WHERE project_id = ${sqlLiteral(projectId)}::uuid),
+        'publishedSnapshots', (SELECT pg_catalog.count(*) FROM public.published_snapshots)
+      )::text;
+    `);
+
+    scenario('existing completed and failed Phase 3 runs plus findings are seeded', () => {
+      assert.equal(psql(`SELECT count(*) FROM public.assistive_validation_runs WHERE id IN (${runList});`), '2');
+      assert.equal(JSON.parse(findingsBefore).length, 1);
+    });
+
+    assertCliSuccess(runLocalSupabaseCli('migration-up', root), 'apply pending Migration 0031');
+    scenario('Migration 0031 applies as the only pending migration', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '31');
+      assert.equal(psql("SELECT to_regclass('public.assistive_validation_jobs') IS NOT NULL;"), 't');
+    });
+
+    const job = (runId: string) => JSON.parse(psql(`
+      SELECT pg_catalog.jsonb_build_object(
+        'status', j.status,
+        'attemptCount', j.attempt_count,
+        'availableAtMatches', j.available_at = r.created_at,
+        'lastErrorCode', j.last_error_code,
+        'claimStateClear', j.claimed_at IS NULL AND j.lease_until IS NULL
+          AND j.worker_id IS NULL AND j.claim_token IS NULL,
+        'cancellationStateClear', j.cancellation_requested_at IS NULL AND j.cancelled_at IS NULL
+      )::text
+      FROM public.assistive_validation_runs AS r
+      JOIN public.assistive_validation_jobs AS j ON j.run_id = r.id
+      WHERE r.id = ${sqlLiteral(runId)}::uuid;
+    `)) as Record<string, unknown>;
+
+    scenario('completed and failed runs each receive one coherent attempt-zero terminal job', () => {
+      assert.deepEqual(job(completedRunId), {
+        status: 'COMPLETED',
+        attemptCount: 0,
+        availableAtMatches: true,
+        lastErrorCode: null,
+        claimStateClear: true,
+        cancellationStateClear: true,
+      });
+      assert.deepEqual(job(failedRunId), {
+        status: 'FAILED',
+        attemptCount: 0,
+        availableAtMatches: true,
+        lastErrorCode: 'EXTRACTION_FAILED',
+        claimStateClear: true,
+        cancellationStateClear: true,
+      });
+      assert.equal(psql(`
+        SELECT count(*) FROM (
+          SELECT r.id FROM public.assistive_validation_runs AS r
+          LEFT JOIN public.assistive_validation_jobs AS j ON j.run_id = r.id
+          GROUP BY r.id HAVING count(j.id) <> 1
+        ) AS incoherent;
+      `), '0');
+      assert.equal(psql('SELECT count(*) - count(DISTINCT run_id) FROM public.assistive_validation_jobs;'), '0');
+    });
+
+    scenario('run IDs and Phase 3 findings remain byte-for-byte stable', () => {
+      assert.equal(
+        psql(`SELECT string_agg(id::text, ',' ORDER BY id) FROM public.assistive_validation_runs WHERE id IN (${runList});`),
+        [...runIds].sort().join(','),
+      );
+      assert.equal(psql(`
+        SELECT COALESCE(pg_catalog.jsonb_agg(to_jsonb(f) ORDER BY f.ordinal), '[]'::jsonb)::text
+        FROM public.assistive_validation_findings AS f
+        WHERE f.run_id = ${sqlLiteral(completedRunId)}::uuid;
+      `), findingsBefore);
+    });
+
+    scenario('the Phase 4 status reader resolves both migrated runs', () => {
+      for (const [runId, expectedStatus] of [
+        [completedRunId, 'COMPLETED'],
+        [failedRunId, 'FAILED'],
+      ] as const) {
+        const status = JSON.parse(psql(`
+          SELECT public.get_assistive_validation_run_status(${sqlLiteral(runId)}::uuid)::text;
+        `)) as Record<string, unknown>;
+        assert.equal(status.resultCode, 'FOUND');
+        assert.equal(status.runId, runId);
+        assert.equal(status.runStatus, expectedStatus);
+        assert.equal(status.jobStatus, expectedStatus);
+        assert.equal(status.attemptCount, 0);
+      }
+    });
+
+    scenario('project and authoritative workflow data remain unchanged', () => {
+      assert.equal(
+        psql(`SELECT to_jsonb(p)::text FROM public.projects AS p WHERE p.id = ${sqlLiteral(projectId)}::uuid;`),
+        projectBefore,
+      );
+      assert.equal(psql(`
+        SELECT pg_catalog.jsonb_build_object(
+          'approvalRecords', (SELECT pg_catalog.count(*) FROM public.approval_records WHERE project_id = ${sqlLiteral(projectId)}::uuid),
+          'validationFlags', (SELECT pg_catalog.count(*) FROM public.validation_flags WHERE project_id = ${sqlLiteral(projectId)}::uuid),
+          'publishedSnapshots', (SELECT pg_catalog.count(*) FROM public.published_snapshots)
+        )::text;
+      `), workflowBefore);
+    });
+
+    console.log(`Assistive Migration 0030 to 0031 upgrade verification passed (${passed} scenarios).`);
+  } catch (error) {
+    primaryFailure = error;
+  } finally {
+    try {
+      assertCliSuccess(runLocalSupabaseCli('reset', root), 'restore fresh Migration 0031 database');
+    } catch (restoreError) {
+      if (primaryFailure) throw new AggregateError([primaryFailure, restoreError], 'Upgrade verification and database restoration failed.');
+      throw restoreError;
+    }
+  }
+
+  if (primaryFailure) throw primaryFailure;
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : 'Assistive upgrade verification failed.');
+  process.exitCode = 1;
+});

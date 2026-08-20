@@ -140,10 +140,10 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify thirty migrations and local integrity
+      - name: Verify thirty-one migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 30
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 31
 
       - name: Verify read-only hosted readiness inspection against Local Supabase
         run: npm run verify:hosted-readiness-inspection-runtime
@@ -215,6 +215,12 @@ jobs:
 
       - name: Verify assistive validation persistence runtime behavior
         run: npm run verify:assistive-persistence-runtime --workspace=apps/admin-cms
+
+      - name: Verify Migration 0030 to 0031 assistive upgrade behavior
+        run: npm run verify:assistive-upgrade-runtime --workspace=apps/admin-cms
+
+      - name: Verify assistive validation job coordination runtime behavior
+        run: npm run verify:assistive-jobs-runtime --workspace=apps/admin-cms
 
       - name: Admin Application Smoke Test (/api/health & /login 200 OK)
         run: npm run check:app-smoke

@@ -22,4 +22,15 @@ Core operation requires only PDFium (`pypdfium2`) and Pillow. No OCR engine is r
 
 Tesseract is an optional local executable adapter and is used only when the caller explicitly passes `--ocr-provider tesseract`. It is not the production default. Paddle/PP-OCR is not implemented in Phase 1 because production model provisioning and redistribution have not been decided.
 
-See [`docs/assistive-validation/phase-1-document-extraction.md`](../../docs/assistive-validation/phase-1-document-extraction.md) for the contract, limits, decisions, and known limitations.
+Phase 4 adds a one-task process contract used by the trusted Node coordinator. The coordinator
+passes a fixed staging root as an argument and one strict `assistive-worker-task/v1` object on
+stdin; the worker emits exactly one bounded `assistive-worker-task-result/v1` JSON line on stdout.
+The task accepts only `document.pdf`, `document.png`, or `document.jpg`. It has no Supabase
+credential, database client, network queue, or project mutation capability. Check the process
+boundary without running a task with:
+
+```powershell
+.venv\Scripts\capstone-assistive-task --health
+```
+
+See [`docs/assistive-validation/phase-1-document-extraction.md`](../../docs/assistive-validation/phase-1-document-extraction.md) for extraction and [`docs/assistive-validation/phase-4-async-job-coordination.md`](../../docs/assistive-validation/phase-4-async-job-coordination.md) for coordination, lifecycle, and operator commands.

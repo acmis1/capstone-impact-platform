@@ -91,7 +91,11 @@ A dependency regression holds the whole domain to its boundary: no module under 
 
 ## Verification
 
-Local Supabase is reset from zero and all 30 migrations apply cleanly. The dedicated runtime verifier (`npm run verify:assistive-persistence-runtime`) proves 39 scenarios against loopback Local Supabase with synthetic fixtures only: schema, constraints, indexes, RLS, exact grants and execute privileges, anonymous and authenticated denial, service-role table denial, trusted persistence, exact round-trip, field-level malformed evidence rejection through the RPC and direct-superuser table path, invalid identity rejection, injected mid-payload failure leaving nothing, exact retry convergence, completed-result conflicts with zero mutation, completed-then-failed conflict, identical and conflicting concurrency, retry after failure, reviewer disposition and its refusals, evidence immutability, a byte-for-byte unchanged project row, no approval or publication side effect, no job or queue object, staff deletion degrading attribution without deleting evidence, project cascade, and fixture-only cleanup.
+At Phase 3 delivery, Local Supabase reset from zero and all 30 migrations applied cleanly. After
+Phase 4, the same dedicated runtime verifier (`npm run verify:assistive-persistence-runtime`) runs
+against the 31-migration schema and retains the Phase 3 behavioural assertions. It additionally
+checks that every legacy terminal insert receives exactly one matching terminal job without
+changing the Phase 3 RPC shapes. Phase 4's queue-specific proof is documented separately.
 
 ## Boundaries and Phase 4 handoff
 

@@ -16,7 +16,7 @@ describe('staging UAT direct-account migration contract', () => {
   it('is the single twenty-seventh forward migration', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(30);
+    expect(files).toHaveLength(31);
     expect(files[26]).toBe(filename);
   });
 

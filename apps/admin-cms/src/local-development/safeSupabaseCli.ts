@@ -6,7 +6,11 @@ import { randomBytes } from 'node:crypto';
 import { DOCKER_PROXY_AUTH_HEADER } from './dockerLoopbackProxy';
 import { configuredProjectId, observeLocalStack } from './localStackState';
 
-export type LocalSupabaseCommand = 'start' | 'stop' | 'reset' | 'status';
+export type LocalSupabaseCommand = 'start' | 'stop' | 'reset' | 'status' | 'migration-up';
+
+export interface LocalSupabaseCommandOptions {
+  resetVersion?: string;
+}
 
 export interface LocalSupabaseResult {
   ok: boolean;
@@ -46,9 +50,26 @@ export const LOCAL_DOCKER_NETWORK_NAME = 'capstone-impact-platform-local-loopbac
 export const DOCKER_HOST_BINDING_OPTION = 'com.docker.network.bridge.host_binding_ipv4';
 export const EXPECTED_LOCAL_PUBLISHED_PORTS = [54321, 54322, 54323, 54324, 54325, 54326, 54327] as const;
 
-export function supabaseCommandArguments(command: LocalSupabaseCommand, networkId = LOCAL_DOCKER_NETWORK_NAME): string[] {
+export function supabaseCommandArguments(
+  command: LocalSupabaseCommand,
+  networkId = LOCAL_DOCKER_NETWORK_NAME,
+  options: LocalSupabaseCommandOptions = {},
+): string[] {
   const globalArguments = ['--workdir', 'infra', '--network-id', networkId];
-  if (command === 'reset') return ['db', 'reset', '--local', ...globalArguments];
+  if (options.resetVersion !== undefined && !/^\d{14}$/.test(options.resetVersion)) {
+    throw new Error('INVALID_LOCAL_MIGRATION_VERSION');
+  }
+  if (command !== 'reset' && options.resetVersion !== undefined) {
+    throw new Error('RESET_VERSION_REQUIRES_RESET');
+  }
+  if (command === 'reset') {
+    return [
+      'db', 'reset', '--local',
+      ...(options.resetVersion ? ['--version', options.resetVersion] : []),
+      ...globalArguments,
+    ];
+  }
+  if (command === 'migration-up') return ['migration', 'up', '--local', ...globalArguments];
   if (command === 'start') return ['start', '--exclude', 'vector', ...globalArguments];
   return [command, ...globalArguments];
 }
@@ -268,6 +289,18 @@ function waitBriefly(milliseconds: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
+export function waitForLocalStackReadiness(
+  observe: () => ReturnType<typeof observeLocalStack>,
+  pause: (milliseconds: number) => void = waitBriefly,
+  attempts = 40,
+): boolean {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (observe() === 'RUNNING') return true;
+    if (attempt + 1 < attempts) pause(250);
+  }
+  return false;
+}
+
 function childProcessIsAlive(pid: number | undefined): boolean {
   if (!pid || !Number.isSafeInteger(pid) || pid <= 0) return false;
   try {
@@ -457,6 +490,7 @@ export const commandTimeoutMs: Record<LocalSupabaseCommand, number> = {
   stop: 60_000,
   reset: 180_000,
   status: 15_000,
+  'migration-up': 180_000,
 };
 
 function proxyFailureCategory(error: unknown): LocalSupabaseResult['failureCategory'] | undefined {
@@ -479,7 +513,11 @@ function auditedProxyAuthenticationFailure(auditPath: string): LocalSupabaseResu
   return undefined;
 }
 
-export function runLocalSupabaseCli(command: LocalSupabaseCommand, repoRoot: string): LocalSupabaseResult {
+export function runLocalSupabaseCli(
+  command: LocalSupabaseCommand,
+  repoRoot: string,
+  options: LocalSupabaseCommandOptions = {},
+): LocalSupabaseResult {
   let proxy: DockerProxyHandle | undefined;
   let networkId: string | undefined;
   try {
@@ -520,7 +558,10 @@ export function runLocalSupabaseCli(command: LocalSupabaseCommand, repoRoot: str
       }
     }
 
-    const output = execFileSync(process.execPath, [cliShim, ...supabaseCommandArguments(command, networkId)], {
+    const output = execFileSync(process.execPath, [
+      cliShim,
+      ...supabaseCommandArguments(command, networkId, options),
+    ], {
       cwd: repoRoot,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -540,7 +581,7 @@ export function runLocalSupabaseCli(command: LocalSupabaseCommand, repoRoot: str
       if (!bindings.ok) {
         return { ok: false, exitCode: 0, signal: null, failureCategory: bindings.category };
       }
-      if (observeLocalStack(repoRoot) !== 'RUNNING') {
+      if (!waitForLocalStackReadiness(() => observeLocalStack(repoRoot))) {
         return { ok: false, exitCode: 0, signal: null, failureCategory: 'STACK_NOT_READY' };
       }
     }

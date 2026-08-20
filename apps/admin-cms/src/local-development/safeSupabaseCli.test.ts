@@ -11,6 +11,7 @@ import {
   revalidateLocalDockerNetwork,
   safeProcessResult,
   supabaseCommandArguments,
+  waitForLocalStackReadiness,
 } from './safeSupabaseCli';
 
 const sensitiveFixtures = [
@@ -35,6 +36,31 @@ describe('safe local process results', () => {
   it('keeps signal and spawn failures category-only', () => {
     expect(safeProcessResult({ ok: false, signal: 'SIGTERM' })).toEqual({ ok: false, exitCode: null, signal: 'SIGTERM', failureCategory: 'COMMAND_TERMINATED' });
     expect(safeProcessResult({ ok: false })).toEqual({ ok: false, exitCode: null, signal: null, failureCategory: 'SPAWN_FAILED' });
+  });
+});
+
+describe('local stack readiness polling', () => {
+  it('accepts a stack that becomes ready within the bounded polling window', () => {
+    const states: Array<'DEGRADED' | 'RUNNING'> = ['DEGRADED', 'DEGRADED', 'RUNNING'];
+    const pauses: number[] = [];
+
+    expect(waitForLocalStackReadiness(
+      () => states.shift() ?? 'RUNNING',
+      (milliseconds) => pauses.push(milliseconds),
+      3,
+    )).toBe(true);
+    expect(pauses).toEqual([250, 250]);
+  });
+
+  it('fails closed when the stack never becomes ready', () => {
+    const pauses: number[] = [];
+
+    expect(waitForLocalStackReadiness(
+      () => 'DEGRADED',
+      (milliseconds) => pauses.push(milliseconds),
+      3,
+    )).toBe(false);
+    expect(pauses).toEqual([250, 250]);
   });
 });
 
@@ -201,6 +227,17 @@ describe('Supabase Docker API compatibility boundary', () => {
     expect(supabaseCommandArguments('stop')).toEqual(['stop', '--workdir', 'infra', '--network-id', LOCAL_DOCKER_NETWORK_NAME]);
     expect(supabaseCommandArguments('status')).toEqual(['status', '--workdir', 'infra', '--network-id', LOCAL_DOCKER_NETWORK_NAME]);
     expect(supabaseCommandArguments('reset')).toEqual(['db', 'reset', '--local', '--workdir', 'infra', '--network-id', LOCAL_DOCKER_NETWORK_NAME]);
+    expect(supabaseCommandArguments('reset', LOCAL_DOCKER_NETWORK_NAME, { resetVersion: '20260820120000' })).toEqual([
+      'db', 'reset', '--local', '--version', '20260820120000',
+      '--workdir', 'infra', '--network-id', LOCAL_DOCKER_NETWORK_NAME,
+    ]);
+    expect(supabaseCommandArguments('migration-up')).toEqual([
+      'migration', 'up', '--local', '--workdir', 'infra', '--network-id', LOCAL_DOCKER_NETWORK_NAME,
+    ]);
+    expect(() => supabaseCommandArguments('reset', LOCAL_DOCKER_NETWORK_NAME, { resetVersion: '30' }))
+      .toThrow('INVALID_LOCAL_MIGRATION_VERSION');
+    expect(() => supabaseCommandArguments('status', LOCAL_DOCKER_NETWORK_NAME, { resetVersion: '20260820120000' }))
+      .toThrow('RESET_VERSION_REQUIRES_RESET');
     expect(supabaseCommandArguments('start', expectedNetworkId)).toEqual([
       'start', '--exclude', 'vector', '--workdir', 'infra', '--network-id', expectedNetworkId,
     ]);
