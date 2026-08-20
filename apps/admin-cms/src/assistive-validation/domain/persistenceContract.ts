@@ -1,0 +1,230 @@
+import { z } from 'zod';
+
+import { assistiveCheckResultSchema, type AssistiveCheckResult } from './evidence';
+
+/**
+ * Phase 3 durable persistence contract for the Phase 2 deterministic assistive observations.
+ *
+ * Everything here is non-authoritative. A persisted run or finding never changes project status,
+ * approval, publication, archival, publication readiness, or project metadata, and this module
+ * deliberately imports nothing from the project, review, publication, or import domains.
+ */
+
+/**
+ * Identity of the deterministic evaluation that produced a run. It is part of the run's uniqueness
+ * key, so bumping it is how a changed algorithm earns a new durable run for unchanged content.
+ */
+export const ASSISTIVE_PIPELINE_VERSION = 'assistive-deterministic-checks/v1';
+
+/** Version tag stored inside every persisted evidence object. */
+export const ASSISTIVE_FINDING_EVIDENCE_VERSION = 'assistive-finding-evidence/v1';
+
+export const ASSISTIVE_PERSISTENCE_LIMITS = {
+  findingsPerRun: 50,
+  /**
+   * Application ceiling for one serialized evidence object, deliberately below the database
+   * ceiling below. PostgreSQL renders `jsonb::text` with a space after every `:` and `,`, so the
+   * stored text is a little longer than `JSON.stringify` output; keeping the application bound
+   * lower guarantees the strict contract rejects an oversized payload before the database has to.
+   */
+  evidenceJsonCharacters: 8000,
+  /** Mirror of the `check_assistive_finding_evidence_size` constraint in migration 0030. */
+  databaseEvidenceJsonCharacters: 8192,
+  pipelineVersionCharacters: 64,
+} as const;
+
+/** Lowercase SHA-256 hexadecimal. Uppercase, truncated, and arbitrary strings all fail closed. */
+export const ASSISTIVE_INPUT_HASH_PATTERN = /^[a-f0-9]{64}$/;
+
+export const ASSISTIVE_PIPELINE_VERSION_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*\/v[1-9][0-9]*$/;
+
+export const assistiveInputHashSchema = z.string().regex(
+  ASSISTIVE_INPUT_HASH_PATTERN,
+  'Input hash must be lowercase SHA-256 hexadecimal.',
+);
+
+export const assistivePipelineVersionSchema = z.string()
+  .max(ASSISTIVE_PERSISTENCE_LIMITS.pipelineVersionCharacters)
+  .regex(ASSISTIVE_PIPELINE_VERSION_PATTERN, 'Pipeline version must be a bounded versioned identifier.');
+
+const checkResultShape = assistiveCheckResultSchema.shape;
+
+/**
+ * The persisted evidence object. Every bound is inherited directly from the Phase 2 result schema
+ * rather than restated, so persistence can never widen what Phase 2 already decided is bounded
+ * plain text. Only useful comparison evidence is stored: no reasoning trace, no raw transcript, no
+ * prompt, no provider response, no URL, no credential.
+ */
+export const persistedAssistiveEvidenceSchema = z.object({
+  version: z.literal(ASSISTIVE_FINDING_EVIDENCE_VERSION),
+  evidenceExcerpt: checkResultShape.evidenceExcerpt,
+  pageNumber: checkResultShape.pageNumber,
+  boundingBox: checkResultShape.boundingBox,
+  metadataValue: checkResultShape.metadataValue,
+  normalizedMetadataValue: checkResultShape.normalizedMetadataValue,
+  candidateValue: checkResultShape.candidateValue,
+  normalizedCandidateValue: checkResultShape.normalizedCandidateValue,
+  explanation: checkResultShape.explanation.refine(
+    (value) => value.length > 0,
+    'Explanation must not be empty.',
+  ),
+}).strict();
+
+export type PersistedAssistiveEvidence = z.infer<typeof persistedAssistiveEvidenceSchema>;
+
+/**
+ * The score is persisted as an explicit kind plus value. Phase 0 measured that this number is
+ * lexical/edit evidence, not confidence and not a calibrated probability, and naming the kind in
+ * the durable record stops a later reader treating a bare scalar as certainty.
+ */
+export const persistedAssistiveFindingSchema = z.object({
+  checkType: checkResultShape.checkType,
+  outcome: checkResultShape.outcome,
+  classification: checkResultShape.classification,
+  reasonCode: checkResultShape.reasonCode,
+  affectedField: checkResultShape.affectedField,
+  origin: checkResultShape.origin,
+  scoreKind: z.literal('LEXICAL_SIMILARITY').nullable(),
+  scoreValue: z.number().finite().min(0).max(1).nullable(),
+  evidence: persistedAssistiveEvidenceSchema,
+}).strict().superRefine((finding, context) => {
+  if ((finding.scoreKind === null) !== (finding.scoreValue === null)) {
+    context.addIssue({ code: 'custom', message: 'Score kind and score value must both be present or both absent.' });
+  }
+  if (JSON.stringify(finding.evidence).length > ASSISTIVE_PERSISTENCE_LIMITS.evidenceJsonCharacters) {
+    context.addIssue({ code: 'custom', message: 'Persisted evidence exceeds the bounded size.' });
+  }
+});
+
+export type PersistedAssistiveFinding = z.infer<typeof persistedAssistiveFindingSchema>;
+
+export const ASSISTIVE_RUN_FAILURE_CODES = [
+  'EXTRACTION_CONTRACT_REJECTED',
+  'EXTRACTION_FAILED',
+  'INTERNAL_FAILURE',
+] as const;
+
+export type AssistiveRunFailureCode = (typeof ASSISTIVE_RUN_FAILURE_CODES)[number];
+
+/**
+ * A Phase 3 run is durable only in a terminal state, because it is written after the deterministic
+ * evaluation has already finished. Worker claiming, leasing, attempts, and cancellation are Phase 4
+ * job coordination and are deliberately absent from the run model.
+ */
+export const assistiveRunPersistenceInputSchema = z.object({
+  projectId: z.uuid(),
+  inputHash: assistiveInputHashSchema,
+  pipelineVersion: assistivePipelineVersionSchema,
+  status: z.enum(['COMPLETED', 'FAILED']),
+  failureCode: z.enum(ASSISTIVE_RUN_FAILURE_CODES).nullable(),
+  findings: z.array(persistedAssistiveFindingSchema).max(ASSISTIVE_PERSISTENCE_LIMITS.findingsPerRun),
+}).strict().superRefine((run, context) => {
+  if (run.status === 'COMPLETED' && run.failureCode !== null) {
+    context.addIssue({ code: 'custom', message: 'A completed run must not carry a failure code.' });
+  }
+  if (run.status === 'FAILED' && run.failureCode === null) {
+    context.addIssue({ code: 'custom', message: 'A failed run must carry a bounded failure code.' });
+  }
+  if (run.status === 'COMPLETED' && run.findings.length === 0) {
+    context.addIssue({ code: 'custom', message: 'A completed run must persist at least one finding.' });
+  }
+  if (run.status === 'FAILED' && run.findings.length > 0) {
+    context.addIssue({ code: 'custom', message: 'A failed run must not persist findings.' });
+  }
+});
+
+export type AssistiveRunPersistenceInput = z.infer<typeof assistiveRunPersistenceInputSchema>;
+
+export const ASSISTIVE_DISPOSITIONS = ['UNREVIEWED', 'REVIEWED', 'IGNORED'] as const;
+
+export type AssistiveDisposition = (typeof ASSISTIVE_DISPOSITIONS)[number];
+
+/**
+ * Only these two may be recorded. There is deliberately no "accepted" or "applied" disposition:
+ * nothing in Phase 3 updates authoritative metadata, so no durable value may imply that it did.
+ */
+export const ASSISTIVE_RECORDABLE_DISPOSITIONS = ['REVIEWED', 'IGNORED'] as const;
+
+export type AssistiveRecordableDisposition = (typeof ASSISTIVE_RECORDABLE_DISPOSITIONS)[number];
+
+export const assistiveRecordableDispositionSchema = z.enum(ASSISTIVE_RECORDABLE_DISPOSITIONS);
+
+/** Bounded read shape returned by `get_latest_assistive_validation_run`. */
+export const storedAssistiveRunSchema = z.object({
+  runId: z.uuid(),
+  projectId: z.uuid(),
+  inputHash: assistiveInputHashSchema,
+  pipelineVersion: assistivePipelineVersionSchema,
+  status: z.enum(['COMPLETED', 'FAILED']),
+  failureCode: z.enum(ASSISTIVE_RUN_FAILURE_CODES).nullable(),
+  createdAt: z.string().min(1),
+}).strict().superRefine((run, context) => {
+  if (run.status === 'COMPLETED' && run.failureCode !== null) {
+    context.addIssue({ code: 'custom', message: 'A stored completed run must not carry a failure code.' });
+  }
+  if (run.status === 'FAILED' && run.failureCode === null) {
+    context.addIssue({ code: 'custom', message: 'A stored failed run must carry a bounded failure code.' });
+  }
+});
+
+export type StoredAssistiveRun = z.infer<typeof storedAssistiveRunSchema>;
+
+export const storedAssistiveFindingSchema = z.object({
+  findingId: z.uuid(),
+  /** Database-derived position within the run; the caller never supplies it. */
+  ordinal: z.number().int().min(1).max(ASSISTIVE_PERSISTENCE_LIMITS.findingsPerRun),
+  checkType: checkResultShape.checkType,
+  outcome: checkResultShape.outcome,
+  classification: checkResultShape.classification,
+  reasonCode: checkResultShape.reasonCode,
+  affectedField: checkResultShape.affectedField,
+  origin: checkResultShape.origin,
+  scoreKind: z.literal('LEXICAL_SIMILARITY').nullable(),
+  scoreValue: z.number().finite().min(0).max(1).nullable(),
+  evidence: persistedAssistiveEvidenceSchema,
+  disposition: z.enum(ASSISTIVE_DISPOSITIONS),
+  reviewedBy: z.uuid().nullable(),
+  reviewedAt: z.string().min(1).nullable(),
+  createdAt: z.string().min(1),
+}).strict().superRefine((finding, context) => {
+  if ((finding.scoreKind === null) !== (finding.scoreValue === null)) {
+    context.addIssue({ code: 'custom', message: 'Stored score kind and value must both be present or both absent.' });
+  }
+  if (finding.disposition === 'UNREVIEWED' && (finding.reviewedBy !== null || finding.reviewedAt !== null)) {
+    context.addIssue({ code: 'custom', message: 'An unreviewed finding must not claim reviewer attribution.' });
+  }
+  if (finding.disposition !== 'UNREVIEWED' && finding.reviewedAt === null) {
+    context.addIssue({ code: 'custom', message: 'A dispositioned finding must carry a review timestamp.' });
+  }
+});
+
+export type StoredAssistiveFinding = z.infer<typeof storedAssistiveFindingSchema>;
+
+/**
+ * Converts one in-memory Phase 2 result into its durable representation without reinterpreting it.
+ * The outcome, reason, classification, and bounded evidence are carried across unchanged; only the
+ * lexical score is restructured into its explicit (kind, value) pair.
+ */
+export function toPersistedAssistiveFinding(result: AssistiveCheckResult): PersistedAssistiveFinding {
+  return persistedAssistiveFindingSchema.parse({
+    checkType: result.checkType,
+    outcome: result.outcome,
+    classification: result.classification,
+    reasonCode: result.reasonCode,
+    affectedField: result.affectedField,
+    origin: result.origin,
+    scoreKind: result.lexicalScore === null ? null : 'LEXICAL_SIMILARITY',
+    scoreValue: result.lexicalScore,
+    evidence: {
+      version: ASSISTIVE_FINDING_EVIDENCE_VERSION,
+      evidenceExcerpt: result.evidenceExcerpt,
+      pageNumber: result.pageNumber,
+      boundingBox: result.boundingBox,
+      metadataValue: result.metadataValue,
+      normalizedMetadataValue: result.normalizedMetadataValue,
+      candidateValue: result.candidateValue,
+      normalizedCandidateValue: result.normalizedCandidateValue,
+      explanation: result.explanation,
+    },
+  });
+}

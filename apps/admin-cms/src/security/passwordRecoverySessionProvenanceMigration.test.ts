@@ -35,7 +35,7 @@ describe('password recovery session provenance migration contract', () => {
   it('is exactly migration 0029 and leaves all 28 former migrations byte-identical', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(29);
+    expect(files).toHaveLength(30);
     expect(files[28]).toBe(filename);
 
     for (const inherited of files.slice(0, 28)) {
