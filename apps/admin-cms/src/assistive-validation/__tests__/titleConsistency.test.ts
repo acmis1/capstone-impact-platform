@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parsePhase1ExtractionResult } from '../domain/extractionContract';
 import { evaluateTitleConsistency } from '../deterministic/titleConsistency';
+import { assistiveCheckResultSchema } from '../domain/evidence';
 
 function completed(...titles: Array<{ text: string; top?: number }>) {
   return parsePhase1ExtractionResult({
@@ -52,9 +53,10 @@ describe('conservative deterministic title consistency', () => {
     expect(evaluateTitleConsistency(completed({ text: 'Project One', top: 40 }, { text: 'Project Two', top: 300 }), 'Project One').reasonCode).toBe('AMBIGUOUS_TITLE_CANDIDATES');
   });
 
-  it('does not crash or leak prohibited controls from metadata title evidence', () => {
-    const result = evaluateTitleConsistency(completed({ text: 'Flood Warning System' }), 'Flood\u0000 Warning System');
+  it.each(['\u0000', '\u001F', '\u007F'])('does not crash or leak prohibited controls from metadata title evidence (%j)', (control) => {
+    const result = evaluateTitleConsistency(completed({ text: 'Flood Warning System' }), `Flood${control} Warning System`);
     expect(result.outcome).toBe('REVIEW');
+    expect(assistiveCheckResultSchema.safeParse(result).success).toBe(true);
     expect(result.metadataValue).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/);
     expect(result.normalizedMetadataValue).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/);
   });
