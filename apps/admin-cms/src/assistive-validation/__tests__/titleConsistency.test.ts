@@ -51,4 +51,11 @@ describe('conservative deterministic title consistency', () => {
   it('routes similarly prominent independent candidates to review', () => {
     expect(evaluateTitleConsistency(completed({ text: 'Project One', top: 40 }, { text: 'Project Two', top: 300 }), 'Project One').reasonCode).toBe('AMBIGUOUS_TITLE_CANDIDATES');
   });
+
+  it('does not crash or leak prohibited controls from metadata title evidence', () => {
+    const result = evaluateTitleConsistency(completed({ text: 'Flood Warning System' }), 'Flood\u0000 Warning System');
+    expect(result.outcome).toBe('REVIEW');
+    expect(result.metadataValue).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/);
+    expect(result.normalizedMetadataValue).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/);
+  });
 });

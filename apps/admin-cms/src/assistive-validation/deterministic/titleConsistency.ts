@@ -1,5 +1,5 @@
 import type { AssistiveCheckResult } from '../domain/evidence';
-import { createAssistiveCheckResult } from '../domain/evidence';
+import { ASSISTIVE_EVIDENCE_LIMITS, createAssistiveCheckResult, sanitizeAssistivePlainText } from '../domain/evidence';
 import type { Phase1ExtractionResult } from '../domain/extractionContract';
 import { extractTitleCandidates, type TitleCandidate } from './titleCandidates';
 import { normalizeTitle } from './normalization';
@@ -81,7 +81,8 @@ function baseResult(
   return createAssistiveCheckResult({
     checkType: 'TITLE_CONSISTENCY', outcome, classification: 'NON_BLOCKING', reasonCode, affectedField: 'title',
     origin: 'PHASE_1_EXTRACTION', evidenceExcerpt: candidate?.text ?? null, pageNumber: candidate?.pageNumber ?? null,
-    boundingBox: candidate?.boundingBox ?? null, metadataValue: metadataTitle, normalizedMetadataValue: metadataTitle === null ? null : normalizeTitle(metadataTitle),
+    boundingBox: candidate?.boundingBox ?? null, metadataValue: metadataTitle === null ? null : sanitizeAssistivePlainText(metadataTitle, ASSISTIVE_EVIDENCE_LIMITS.value),
+    normalizedMetadataValue: metadataTitle === null ? null : sanitizeAssistivePlainText(normalizeTitle(metadataTitle), ASSISTIVE_EVIDENCE_LIMITS.value),
     candidateValue: candidate?.text ?? null, normalizedCandidateValue: candidate === null ? null : normalizeTitle(candidate.text),
     lexicalScore: score, explanation,
   });

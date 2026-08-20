@@ -4,6 +4,8 @@ import { phase1BoundingBoxSchema } from './extractionContract';
 const boundedPlainText = (maximum: number) => z.string().max(maximum)
   .refine((value) => !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value), 'Must be plain text.');
 
+const prohibitedPlainTextControls = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
 export const ASSISTIVE_EVIDENCE_LIMITS = {
   excerpt: 500,
   value: 400,
@@ -35,6 +37,11 @@ export const assistiveCheckResultSchema = z.object({
 }).strict();
 
 export type AssistiveCheckResult = z.infer<typeof assistiveCheckResultSchema>;
+
+/** Converts untrusted source text into bounded plain-text evidence without changing the source value. */
+export function sanitizeAssistivePlainText(value: string, maximum: number): string {
+  return value.slice(0, maximum).replace(prohibitedPlainTextControls, '\uFFFD');
+}
 
 export function createAssistiveCheckResult(input: AssistiveCheckResult): AssistiveCheckResult {
   return assistiveCheckResultSchema.parse(input);
