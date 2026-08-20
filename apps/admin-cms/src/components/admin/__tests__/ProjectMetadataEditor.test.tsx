@@ -1,0 +1,139 @@
+/** @vitest-environment jsdom */
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+
+import { ProjectMetadataEditor } from '../ProjectMetadataEditor';
+import {
+  ProjectMetadataNavigationProvider,
+  useProjectMetadataNavigation,
+} from '../ProjectMetadataNavigation';
+import type { ProjectMetadataView } from '../../../projects/projectMetadata';
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+
+const initialMetadata: ProjectMetadataView = {
+  publicId: 'PRJ-101',
+  expectedUpdatedAt: '2026-08-21T09:00:00.000Z',
+  title: 'Original Project Title',
+  summary: 'A short summary of the project.',
+  background: 'Background information goes here.',
+  solution: 'Solution details go here.',
+  posterText: 'Poster text here.',
+  accessibilityText: 'Alt text for poster.',
+  year: '2026',
+  programId: 'prog-1',
+  disciplineIds: ['disc-1'],
+  industryCategoryIds: ['cat-1'],
+};
+
+function TestContainer({
+  canEdit = true,
+  projectStatus = 'draft',
+  suggestedTitle = 'Suggested New Title',
+}: {
+  canEdit?: boolean;
+  projectStatus?: string;
+  suggestedTitle?: string;
+}) {
+  const { applyTitleSuggestion, canApplyTitleSuggestion, dirty } = useProjectMetadataNavigation();
+  return (
+    <div>
+      <div data-testid="dirty-indicator">{dirty ? 'DIRTY' : 'CLEAN'}</div>
+      <div data-testid="can-apply">{canApplyTitleSuggestion ? 'CAN_APPLY' : 'CANNOT_APPLY'}</div>
+      <button
+        type="button"
+        data-testid="trigger-suggestion-btn"
+        onClick={() => applyTitleSuggestion(suggestedTitle)}
+      >
+        Apply Suggestion
+      </button>
+
+      <ProjectMetadataEditor
+        initialMetadata={initialMetadata}
+        programs={[{ id: 'prog-1', name: 'Bachelor of Software Engineering' }]}
+        disciplines={[{ id: 'disc-1', name: 'Software Engineering' }]}
+        industryCategories={[{ id: 'cat-1', name: 'Information Technology' }]}
+        canEdit={canEdit}
+        projectStatus={projectStatus}
+        saveAction={vi.fn()}
+      />
+    </div>
+  );
+}
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+  window.confirm = vi.fn().mockReturnValue(true);
+});
+
+afterEach(cleanup);
+
+describe('ProjectMetadataEditor Title Suggestion Integration', () => {
+  it('registers the suggestion handler when canEdit is true and project is editable', () => {
+    render(
+      <ProjectMetadataNavigationProvider>
+        <TestContainer canEdit={true} projectStatus="draft" />
+      </ProjectMetadataNavigationProvider>,
+    );
+
+    expect(screen.getByTestId('can-apply').textContent).toBe('CAN_APPLY');
+  });
+
+  it('unregisters the suggestion handler when canEdit is false or project is approved', () => {
+    render(
+      <ProjectMetadataNavigationProvider>
+        <TestContainer canEdit={false} projectStatus="draft" />
+      </ProjectMetadataNavigationProvider>,
+    );
+
+    expect(screen.getByTestId('can-apply').textContent).toBe('CANNOT_APPLY');
+  });
+
+  it('switches to edit mode, populates the suggested title, marks dirty, and does NOT auto-save', async () => {
+    render(
+      <ProjectMetadataNavigationProvider>
+        <TestContainer canEdit={true} projectStatus="draft" suggestedTitle="AI & Smart Cities" />
+      </ProjectMetadataNavigationProvider>,
+    );
+
+    expect(screen.getByTestId('dirty-indicator').textContent).toBe('CLEAN');
+    const triggerBtn = screen.getByTestId('trigger-suggestion-btn');
+    fireEvent.click(triggerBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dirty-indicator').textContent).toBe('DIRTY');
+      expect(screen.getByText('Editing project information')).toBeTruthy();
+      const titleInput = screen.getByLabelText(/Project title/i) as HTMLInputElement;
+      expect(titleInput.value).toBe('AI & Smart Cities');
+      expect(
+        screen.getByText(/Suggestion applied to the draft. Review it and select Save metadata/i),
+      ).toBeTruthy();
+    });
+  });
+
+  it('prompts with window.confirm if the title draft was already modified with unsaved changes', async () => {
+    render(
+      <ProjectMetadataNavigationProvider>
+        <TestContainer canEdit={true} projectStatus="draft" suggestedTitle="Suggested Title 2" />
+      </ProjectMetadataNavigationProvider>,
+    );
+
+    // Enter edit mode manually and change title
+    const editBtn = screen.getByRole('button', { name: /Edit metadata/i });
+    fireEvent.click(editBtn);
+
+    const titleInput = screen.getByLabelText(/Project title/i) as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: 'User Typed Title' } });
+
+    // Now trigger suggestion
+    const triggerBtn = screen.getByTestId('trigger-suggestion-btn');
+    fireEvent.click(triggerBtn);
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      'You have unsaved changes in Project title. Replace it with the suggestion?',
+    );
+  });
+});

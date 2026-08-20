@@ -54,6 +54,7 @@ function gateway(overrides: Partial<AssistiveValidationPersistenceGateway> = {})
     recordDisposition: vi.fn().mockResolvedValue({
       resultCode: 'RECORDED', findingId: FINDING_ID, disposition: 'REVIEWED', reviewedBy: ADMIN_ID, reviewedAt: CREATED_AT,
     }),
+    loadInspection: vi.fn().mockResolvedValue({ resultCode: 'NOT_FOUND' }),
     ...overrides,
   };
 }

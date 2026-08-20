@@ -41,7 +41,7 @@ export function ProjectMetadataEditor({
   headingLevel: Heading = 'h2',
 }: Props) {
   const router = useRouter();
-  const { setDirty, confirmDiscard } = useProjectMetadataNavigation();
+  const { setDirty, confirmDiscard, registerTitleSuggestionHandler } = useProjectMetadataNavigation();
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [initial, setInitial] = useState(initialMetadata);
   const [draft, setDraft] = useState(initialMetadata);
@@ -52,8 +52,49 @@ export function ProjectMetadataEditor({
   const summaryRef = useRef<HTMLParagraphElement>(null);
   const dirty = isMetadataDirty(initial, draft);
 
+  const protectedNotice = projectStatus === 'approved' ? 'This project is approved. Request changes before editing metadata.' : projectStatus === 'published' ? 'Published project metadata is locked until a controlled revision workflow is available.' : null;
+
   useEffect(() => { setDirty(dirty); return () => setDirty(false); }, [dirty, setDirty]);
   useEffect(() => { if (notice && Object.keys(fieldErrors).length > 0) summaryRef.current?.focus(); }, [notice, fieldErrors]);
+
+  const draftRef = useRef(draft);
+  const initialRef = useRef(initial);
+
+  useEffect(() => {
+    draftRef.current = draft;
+    initialRef.current = initial;
+  }, [draft, initial]);
+
+  useEffect(() => {
+    if (!canEdit || protectedNotice) {
+      registerTitleSuggestionHandler(null);
+      return;
+    }
+    const handler = (suggestedTitle: string): boolean => {
+      const currentDraft = draftRef.current;
+      const currentInitial = initialRef.current;
+      if (currentDraft.title !== currentInitial.title && currentDraft.title !== suggestedTitle) {
+        const proceed = window.confirm('You have unsaved changes in Project title. Replace it with the suggestion?');
+        if (!proceed) return false;
+      }
+      setMode('edit');
+      setDraft((prev) => ({ ...prev, title: suggestedTitle }));
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next.title;
+        return next;
+      });
+      setNotice('Suggestion applied to the draft. Review it and select Save metadata to persist the change.');
+      requestAnimationFrame(() => {
+        const input = document.getElementById('metadata-title');
+        input?.focus();
+        input?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+      });
+      return true;
+    };
+    registerTitleSuggestionHandler(handler);
+    return () => registerTitleSuggestionHandler(null);
+  }, [canEdit, protectedNotice, registerTitleSuggestionHandler]);
 
   const cancel = () => {
     if (!confirmDiscard()) return;
@@ -80,7 +121,6 @@ export function ProjectMetadataEditor({
   };
 
   const message = (name: string) => fieldErrors[name]?.[0];
-  const protectedNotice = projectStatus === 'approved' ? 'This project is approved. Request changes before editing metadata.' : projectStatus === 'published' ? 'Published project metadata is locked until a controlled revision workflow is available.' : null;
   if (mode === 'view') return <section aria-labelledby="metadata-editor-title">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="min-w-0">
