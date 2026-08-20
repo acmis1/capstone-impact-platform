@@ -47,7 +47,7 @@ async function main(): Promise<void> {
   const openApiDocument = await fetchPostgrestOpenApi(apiUrl, serviceRoleKey, auditedFetch);
   const evaluation = await checkHostedDeploymentReadinessWithClient(client, { openApiDocument });
 
-  assert.equal(ALL_REQUIRED_TABLES.length, 24);
+  assert.equal(ALL_REQUIRED_TABLES.length, 26);
   assert.equal(ALL_REQUIRED_TABLES.includes('publication_attempts'), true);
   assert.equal(ALL_REQUIRED_TABLES.includes('participant_preview_tokens' as never), false);
   assert.equal(
@@ -56,14 +56,20 @@ async function main(): Promise<void> {
     `Table evidence changed unexpectedly (missing=${evaluation.missingTables.join(',') || 'none'}; unverified=${evaluation.unverifiedTables.join(',') || 'none'}).`
   );
   assert.equal(evaluation.missingTables.length, 0);
-  assert.deepEqual(evaluation.unverifiedTables, ['password_recovery_sessions']);
+  // Every table whose privileges are fully revoked is invisible to PostgREST by design, so the
+  // recovery ledger and both assistive tables are correctly reported as needing manual evidence.
+  assert.deepEqual(evaluation.unverifiedTables, [
+    'password_recovery_sessions',
+    'assistive_validation_runs',
+    'assistive_validation_findings',
+  ]);
   assert.equal(
     evaluation.requiredRpcNames,
     'PRESENT',
     `RPC name evidence incomplete (missing=${evaluation.missingRpcNames.join(',') || 'none'}).`
   );
   assert.equal(evaluation.missingRpcNames.length, 0);
-  assert.equal(REQUIRED_RPC_NAMES.length, 43);
+  assert.equal(REQUIRED_RPC_NAMES.length, 46);
   assert.equal(
     evaluation.requiredStorageBuckets,
     'PRESENT',
@@ -84,8 +90,8 @@ async function main(): Promise<void> {
   );
 
   console.log('Hosted readiness inspection verified against disposable loopback Supabase.');
-  console.log('23 application tables directly inspected; the privilege-hidden recovery ledger requires manual schema evidence.');
-  console.log('43 RPC names recognized; exact overload evidence remains manual.');
+  console.log('23 application tables directly inspected; the three privilege-hidden ledgers require manual schema evidence.');
+  console.log('46 RPC names recognized; exact overload evidence remains manual.');
   console.log('Migration history truthfully reported unavailable through the configured Data API.');
   console.log('Zero RPC executions, mutations, identifying rows, or temporary verifier records.');
 }

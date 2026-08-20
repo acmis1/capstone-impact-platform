@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 29;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 30;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -37,6 +37,7 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260816144917_staging_uat_direct_account_finalization.sql',
   '20260817090000_private_media_approval_gate.sql',
   '20260819214431_password_recovery_session_provenance.sql',
+  '20260820120000_assistive_validation_persistence.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [
@@ -75,6 +76,11 @@ export const REQUIRED_STAFF_TABLES = ['staff_provisioning_requests'] as const;
 
 export const REQUIRED_AUTH_PROVENANCE_TABLES = ['password_recovery_sessions'] as const;
 
+export const REQUIRED_ASSISTIVE_TABLES = [
+  'assistive_validation_runs',
+  'assistive_validation_findings',
+] as const;
+
 export const REQUIRED_NOTIFICATION_TABLES = [
   'participant_preview_notifications',
   'participant_preview_reminder_schedules',
@@ -88,6 +94,7 @@ export const ALL_REQUIRED_TABLES = [
   ...REQUIRED_STAFF_TABLES,
   ...REQUIRED_AUTH_PROVENANCE_TABLES,
   ...REQUIRED_NOTIFICATION_TABLES,
+  ...REQUIRED_ASSISTIVE_TABLES,
 ] as const;
 
 export type RequiredRpcSignature = {
@@ -104,7 +111,7 @@ function rpc(
   return { name, parameterNames, parameterTypes };
 }
 
-/** Final application RPC signatures granted to service_role by migrations 0001-0029. */
+/** Final application RPC signatures granted to service_role by migrations 0001-0030. */
 export const REQUIRED_RPC_SIGNATURES = [
   rpc('bootstrap_initial_admin', ['p_auth_user_id', 'p_email', 'p_full_name'], ['uuid', 'text', 'text']),
   rpc('register_password_recovery_session', ['p_session_id', 'p_auth_user_id'], ['uuid', 'uuid']),
@@ -154,6 +161,13 @@ export const REQUIRED_RPC_SIGNATURES = [
   rpc('cancel_participant_preview_reminder', ['p_public_id', 'p_admin_id', 'p_reference'], ['text', 'uuid', 'uuid']),
   rpc('claim_due_participant_preview_reminders', ['p_batch_limit'], ['integer']),
   rpc('update_snapshot_image_alt_text', ['p_public_id', 'p_alt_text', 'p_expected_updated_at', 'p_admin_id'], ['text', 'text', 'timestamptz', 'uuid']),
+  rpc(
+    'persist_assistive_validation_run',
+    ['p_project_id', 'p_actor_admin_id', 'p_input_hash', 'p_pipeline_version', 'p_status', 'p_failure_code', 'p_findings'],
+    ['uuid', 'uuid', 'text', 'text', 'text', 'text', 'jsonb']
+  ),
+  rpc('record_assistive_finding_disposition', ['p_finding_id', 'p_actor_admin_id', 'p_disposition'], ['uuid', 'uuid', 'text']),
+  rpc('get_latest_assistive_validation_run', ['p_project_id', 'p_pipeline_version'], ['uuid', 'text']),
 ] as const satisfies readonly RequiredRpcSignature[];
 
 export const REQUIRED_RPC_NAMES = [...new Set(REQUIRED_RPC_SIGNATURES.map(({ name }) => name))] as readonly string[];

@@ -38,7 +38,9 @@ describe('formatting information and purity boundary', () => {
     const files = readdirSync(root, { recursive: true }).filter((entry) => String(entry).endsWith('.ts') && !String(entry).includes('__tests__'));
     for (const file of files) {
       const source = readFileSync(join(root, String(file)), 'utf8');
-      expect(source).not.toMatch(/from\s+['"][^'"]*(projects|workflow|publication|duda|repositories)[^'"]*['"]/i);
+      // `../../` is the domain boundary itself: Phase 3 added an in-domain repositories/ directory,
+      // so the rule is now that no assistive module may escape src/assistive-validation at all.
+      expect(source).not.toMatch(/from\s+['"][^'"]*(projects|workflow|publication|duda|\.\.\/\.\.\/)[^'"]*['"]/i);
     }
   });
 });
