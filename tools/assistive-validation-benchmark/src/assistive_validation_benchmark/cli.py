@@ -39,6 +39,9 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--languagetool-url", default="http://127.0.0.1:8081",
                      help="loopback-only local LanguageTool base URL")
     run.add_argument("--languagetool-pid", type=int, help="optional local server PID for process-memory measurement")
+    run.add_argument("--languagetool-language", default="en-AU", help="language code sent to the local LanguageTool server")
+    run.add_argument("--tesseract-psm", default="3",
+                     help="Tesseract page segmentation mode; 3 (automatic) keeps layout analysis comparable with PP-OCR detection")
     return parser
 
 
@@ -52,7 +55,13 @@ def main(argv: list[str] | None = None) -> int:
     manifest = load_manifest(args.manifest.resolve())
     if args.command == "validate":
         counts = {kind: len(cases_of_kind(manifest, kind)) for kind in ("document", "grammar", "duplicate")}
-        print(json.dumps({"valid": True, "corpus_version": manifest["corpus_version"], "total_cases": len(manifest["cases"]), "counts": counts}, indent=2))
+        splits: dict[str, int] = {}
+        for case in manifest["cases"]:
+            key = f"{case['kind']}/{case['split']}"
+            splits[key] = splits.get(key, 0) + 1
+        print(json.dumps({"valid": True, "corpus_version": manifest["corpus_version"],
+                          "total_cases": len(manifest["cases"]), "counts": counts,
+                          "splits": dict(sorted(splits.items()))}, indent=2))
         return 0
     seed = manifest["seed"] if args.seed is None else args.seed
     output_dir = args.output_dir.resolve()
@@ -75,6 +84,8 @@ def main(argv: list[str] | None = None) -> int:
         seed=seed,
         languagetool_url=args.languagetool_url,
         languagetool_pid=args.languagetool_pid,
+        tesseract_psm=args.tesseract_psm,
+        languagetool_language=args.languagetool_language,
     )
     report["exact_command"] = " ".join(shlex.quote(value) for value in ([sys.executable, "-m", "assistive_validation_benchmark"] + (argv if argv is not None else sys.argv[1:])))
     json_path = output_dir / "report.json"

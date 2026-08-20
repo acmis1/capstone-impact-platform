@@ -82,6 +82,10 @@ class TitleMatch:
     score: float
     normalized_metadata: str
     normalized_candidate: str
+    decision: str = "mismatch"
+
+
+CONFIDENT_CLASSIFICATIONS = {"exact_normalized", "approved_alias", "allowed_subtitle"}
 
 
 def match_title(
@@ -92,16 +96,30 @@ def match_title(
     allow_subtitle: bool = False,
     threshold: float = 0.90,
 ) -> TitleMatch:
+    """Compare a metadata title with a title candidate taken from a document.
+
+    Three decisions are produced, because Phase 0 measurement showed that a single
+    boolean hides where the evidence actually is:
+
+    - ``match``     deterministic equality after documented normalization, an approved
+                    alias, or an explicitly allowed subtitle. Only this path may be
+                    treated as a confident automatic agreement.
+    - ``review``    lexically close but not equal. Assistive only; a human decides.
+    - ``mismatch``  clearly different.
+
+    ``matched`` stays true for ``match`` and ``review`` so the permissive assistive view
+    remains reportable, but the benchmark reports the two tracks separately.
+    """
     metadata = normalize_title(metadata_title)
     candidate = normalize_title(candidate_title)
     if not candidate:
-        return TitleMatch(False, "missing", 0.0, metadata, candidate)
+        return TitleMatch(False, "missing", 0.0, metadata, candidate, "mismatch")
     if candidate == metadata:
-        return TitleMatch(True, "exact_normalized", 1.0, metadata, candidate)
+        return TitleMatch(True, "exact_normalized", 1.0, metadata, candidate, "match")
     if candidate in {normalize_title(alias) for alias in aliases}:
-        return TitleMatch(True, "approved_alias", 1.0, metadata, candidate)
+        return TitleMatch(True, "approved_alias", 1.0, metadata, candidate, "match")
     if allow_subtitle and (candidate.startswith(f"{metadata} ") or metadata.startswith(f"{candidate} ")):
-        return TitleMatch(True, "allowed_subtitle", 1.0, metadata, candidate)
+        return TitleMatch(True, "allowed_subtitle", 1.0, metadata, candidate, "match")
 
     char_score = SequenceMatcher(None, metadata, candidate, autojunk=False).ratio()
     token_score = _token_jaccard(metadata, candidate)
@@ -112,17 +130,20 @@ def match_title(
         for left, right in zip(metadata_tokens, candidate_tokens)
         if left != right
     ]
-    ocr_like_single_token = (
+    # Narrow, deterministic glyph-confusion rule only. An earlier revision also accepted any
+    # single differing token pair with SequenceMatcher ratio >= 0.80, which admitted material
+    # substitutions such as "Waste Stream" / "Water Stream"; that arm was a measured
+    # false-positive source and was removed.
+    ocr_confusion_single_token = (
         len(metadata_tokens) == len(candidate_tokens)
         and len(differing_pairs) == 1
-        and (
-            SequenceMatcher(None, differing_pairs[0][0], differing_pairs[0][1], autojunk=False).ratio() >= 0.80
-            or _ocr_confusion_skeleton(differing_pairs[0][0]) == _ocr_confusion_skeleton(differing_pairs[0][1])
-        )
-        and char_score >= 0.96
+        and _ocr_confusion_skeleton(differing_pairs[0][0]) == _ocr_confusion_skeleton(differing_pairs[0][1])
     )
-    matched = score >= threshold or ocr_like_single_token
-    return TitleMatch(matched, "fuzzy_ocr" if matched else "mismatch", score, metadata, candidate)
+    if ocr_confusion_single_token:
+        return TitleMatch(True, "ocr_glyph_confusion", score, metadata, candidate, "review")
+    if score >= threshold:
+        return TitleMatch(True, "lexical_near_match", score, metadata, candidate, "review")
+    return TitleMatch(False, "mismatch", score, metadata, candidate, "mismatch")
 
 
 def binary_metrics(expected: Iterable[bool], predicted: Iterable[bool]) -> dict[str, float | int]:
@@ -199,49 +220,102 @@ def rank_duplicate_candidates(case: dict[str, Any]) -> list[dict[str, Any]]:
     return sorted(ranked, key=lambda item: (-item["score"], item["id"]))
 
 
-def duplicate_metrics(cases: list[dict[str, Any]], *, candidate_threshold: float = 0.55) -> dict[str, Any]:
-    rankings = []
-    candidate_pool = []
-    seen_candidate_ids: set[str] = set()
+DUPLICATE_THRESHOLDS = [0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70]
+
+
+def _rank_all(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rank every query against the single shared candidate pool built from all cases.
+
+    Relevance labels and duplicate-group metadata are attached only after ranking, and the
+    ranking function is given nothing but candidate title and text, so ground truth cannot
+    influence either the score or the candidate ordering.
+    """
+    candidate_pool: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for case in cases:
         for candidate in case["candidates"]:
-            if candidate["id"] not in seen_candidate_ids:
-                candidate_pool.append(candidate)
-                seen_candidate_ids.add(candidate["id"])
-    exact_total = exact_found = recall_1 = recall_3 = recall_5 = false_candidates = 0
-    total_candidates = 0
+            if candidate["id"] not in seen:
+                candidate_pool.append({"id": candidate["id"], "title": candidate["title"], "text": candidate["text"]})
+                seen.add(candidate["id"])
+    ranked_cases = []
     for case in cases:
-        own_candidates = {candidate["id"]: candidate for candidate in case["candidates"]}
-        query_pool = [
-            {
-                **candidate,
-                "relevant": bool(own_candidates.get(candidate["id"], {}).get("relevant", False)),
-                "relation": own_candidates.get(candidate["id"], {}).get("relation", "cross_case"),
-            }
-            for candidate in candidate_pool
-        ]
-        ranking = rank_duplicate_candidates({**case, "candidates": query_pool})
-        rankings.append({"case_id": case["id"], "ranking": ranking})
+        own = {candidate["id"]: candidate for candidate in case["candidates"]}
+        scored = rank_duplicate_candidates({
+            **case,
+            "candidates": [{**candidate, "relevant": False, "relation": None} for candidate in candidate_pool],
+        })
+        for item in scored:
+            labelled = own.get(item["id"])
+            item["relevant"] = bool(labelled["relevant"]) if labelled else False
+            item["relation"] = labelled.get("relation") if labelled else "cross_case"
+        ranked_cases.append({"case_id": case["id"], "split": case["split"], "ranking": scored})
+    return ranked_cases
+
+
+def _duplicate_aggregate(ranked_cases: list[dict[str, Any]], candidate_threshold: float) -> dict[str, Any]:
+    exact_total = exact_found = recall_1 = recall_3 = recall_5 = false_candidates = 0
+    total_flagged = missed_at_5 = 0
+    for entry in ranked_cases:
+        ranking = entry["ranking"]
         relevant = {item["id"] for item in ranking if item["relevant"]}
-        exact_relevant = {item["id"] for item in ranking if item["relevant"] and item["relation"] in {"exact", "normalized"}}
+        exact_relevant = {item["id"] for item in ranking
+                          if item["relevant"] and item["relation"] in {"exact", "normalized"}}
         if exact_relevant:
             exact_total += 1
-            exact_found += int(any(item["id"] in exact_relevant and (item["exact_hash"] or item["normalized_title_equal"]) for item in ranking))
+            exact_found += int(any(item["id"] in exact_relevant and (item["exact_hash"] or item["normalized_title_equal"])
+                                   for item in ranking))
         recall_1 += int(bool(relevant & {item["id"] for item in ranking[:1]}))
         recall_3 += int(bool(relevant & {item["id"] for item in ranking[:3]}))
-        recall_5 += int(bool(relevant & {item["id"] for item in ranking[:5]}))
+        hit_5 = bool(relevant & {item["id"] for item in ranking[:5]})
+        recall_5 += int(hit_5)
+        missed_at_5 += int(not hit_5)
         false_candidates += sum(1 for item in ranking if not item["relevant"] and item["score"] >= candidate_threshold)
-        total_candidates += sum(1 for item in ranking if item["score"] >= candidate_threshold)
-    count = len(cases)
+        total_flagged += sum(1 for item in ranking if item["score"] >= candidate_threshold)
+    count = len(ranked_cases)
+    flagged_relevant = total_flagged - false_candidates
+    total_relevant = sum(sum(1 for item in entry["ranking"] if item["relevant"]) for entry in ranked_cases)
     return {
         "case_count": count,
-        "candidate_pool_size": len(candidate_pool),
         "exact_duplicate_detection": exact_found / exact_total if exact_total else None,
         "recall_at_1": recall_1 / count if count else None,
         "recall_at_3": recall_3 / count if count else None,
         "recall_at_5": recall_5 / count if count else None,
+        "queries_missed_at_5": missed_at_5,
         "false_candidate_count": false_candidates,
-        "irrelevant_candidate_rate": false_candidates / total_candidates if total_candidates else 0.0,
+        "flagged_candidate_count": total_flagged,
+        "irrelevant_candidate_rate": false_candidates / total_flagged if total_flagged else 0.0,
+        "threshold_precision": flagged_relevant / total_flagged if total_flagged else 0.0,
+        "threshold_recall": flagged_relevant / total_relevant if total_relevant else 0.0,
+    }
+
+
+def duplicate_metrics(cases: list[dict[str, Any]], *, candidate_threshold: float | None = None) -> dict[str, Any]:
+    ranked_cases = _rank_all(cases)
+    calibration = [entry for entry in ranked_cases if entry["split"] == "calibration"]
+    holdout = [entry for entry in ranked_cases if entry["split"] == "holdout"]
+    sweep = []
+    for threshold in DUPLICATE_THRESHOLDS:
+        aggregate = _duplicate_aggregate(calibration or ranked_cases, threshold)
+        precision, recall = aggregate["threshold_precision"], aggregate["threshold_recall"]
+        aggregate["f1"] = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        sweep.append({"threshold": threshold, **aggregate})
+    if candidate_threshold is None:
+        candidate_threshold = max(sweep, key=lambda item: (item["f1"], item["threshold_precision"], item["threshold"]))["threshold"]
+    overall = _duplicate_aggregate(ranked_cases, candidate_threshold)
+    pool_size = len(ranked_cases[0]["ranking"]) if ranked_cases else 0
+    return {
+        **overall,
+        "candidate_pool_size": pool_size,
         "candidate_threshold": candidate_threshold,
-        "rankings": rankings,
+        "threshold_selection": "Calibration split only, maximising flagged-candidate F1 then precision then the "
+                               "stricter threshold; holdout is scored once with the selected value.",
+        "threshold_at_sweep_boundary": candidate_threshold in {DUPLICATE_THRESHOLDS[0], DUPLICATE_THRESHOLDS[-1]},
+        "threshold_sweep_calibration": sweep,
+        "by_split": {
+            "calibration": _duplicate_aggregate(calibration, candidate_threshold) if calibration else {},
+            "holdout": _duplicate_aggregate(holdout, candidate_threshold) if holdout else {},
+        },
+        "rankings": ranked_cases,
+        "note": "Ranking sees only candidate title and text. Relevance labels, relation labels and split membership "
+                "are attached after ranking and never affect the score or the candidate ordering.",
     }

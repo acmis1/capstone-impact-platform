@@ -13,8 +13,12 @@ SUPPORTED_DOCUMENT_TYPES = {
     "unsupported",
 }
 SUPPORTED_KINDS = {"document", "grammar", "duplicate"}
+SUPPORTED_TYPEFACES = {"sans", "serif", "humanist", "slab", "mono", "condensed", "display", "grotesque"}
+SUPPORTED_TITLE_STYLES = {"plain", "letterspaced", "condensed_caps"}
+SUPPORTED_LAYOUTS = {"single_column", "multi_column", "three_column", "table", "diagram",
+                     "rotated", "skewed", "empty", "none"}
 SUPPORTED_SPLITS = {"calibration", "holdout"}
-MAX_CASES = 100
+MAX_CASES = 150
 MAX_TEXT_CHARS = 25_000
 
 
@@ -45,6 +49,9 @@ def _validate_asset(asset: Any, case_id: str) -> None:
 def _validate_document(case: dict[str, Any], case_id: str) -> None:
     _validate_asset(case.get("asset"), case_id)
     _require(case.get("document_type") in SUPPORTED_DOCUMENT_TYPES, f"{case_id}.document_type is unsupported")
+    _require(case.get("layout") in SUPPORTED_LAYOUTS, f"{case_id}.layout is unsupported")
+    _require(case.get("typeface", "sans") in SUPPORTED_TYPEFACES, f"{case_id}.typeface is unsupported")
+    _require(case.get("title_style", "plain") in SUPPORTED_TITLE_STYLES, f"{case_id}.title_style is unsupported")
     _bounded_text(case.get("metadata_title"), f"{case_id}.metadata_title", allow_empty=False)
     _bounded_text(case.get("poster_title"), f"{case_id}.poster_title")
     _bounded_text(case.get("body"), f"{case_id}.body")

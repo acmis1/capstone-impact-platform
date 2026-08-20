@@ -180,7 +180,13 @@ def render_pdf(path: Path, output_path: Path, *, scale: float = 2.0) -> Path:
     return output_path
 
 
-def tesseract_ocr(path: Path, *, executable: str | None = None) -> dict[str, Any]:
+def tesseract_ocr(path: Path, *, executable: str | None = None, psm: str = "3") -> dict[str, Any]:
+    """Run local Tesseract.
+
+    ``psm`` defaults to 3 (automatic page segmentation). An earlier revision forced ``--psm 6``
+    ("a single uniform block of text"), which suppresses layout analysis and is not equivalent to
+    PP-OCR's detector stage, so the two engines were not being compared on equal terms.
+    """
     engine = "tesseract"
     try:
         _validate_local_file(path, {".png", ".jpg", ".jpeg"})
@@ -194,15 +200,18 @@ def tesseract_ocr(path: Path, *, executable: str | None = None) -> dict[str, Any
     except (OSError, TimeoutError) as error:
         return _unavailable(engine, f"tesseract executable could not run: {error}")
     version_line = (version_result["stdout"] or version_result["stderr"]).splitlines()[0] if (version_result["stdout"] or version_result["stderr"]) else "unknown"
+    if psm not in {str(value) for value in range(0, 14)}:
+        return {"engine": engine, "status": "failed", "version": version_line, "error": f"unsupported psm {psm}"}
     try:
-        result = run_command_measured([command, str(path), "stdout", "--psm", "6", "-l", "eng"])
+        result = run_command_measured([command, str(path), "stdout", "--psm", psm, "-l", "eng"])
     except (OSError, TimeoutError) as error:
         return {"engine": engine, "status": "failed", "version": version_line, "error": str(error)}
+    settings = {"psm": psm, "language": "eng", "executable": command}
     if result["returncode"] != 0:
         return {"engine": engine, "status": "failed", "version": version_line, "error": result["stderr"].strip(),
-                "runtime_ms": result["runtime_ms"], "peak_memory_bytes": result["peak_memory_bytes"]}
+                "settings": settings, "runtime_ms": result["runtime_ms"], "peak_memory_bytes": result["peak_memory_bytes"]}
     return {"engine": engine, "status": "ok", "version": version_line, "model": "eng traineddata",
-            "device": "cpu", "backend": "tesseract-cli", "text": result["stdout"],
+            "device": "cpu", "backend": "tesseract-cli", "text": result["stdout"], "settings": settings,
             "runtime_ms": result["runtime_ms"], "peak_memory_bytes": result["peak_memory_bytes"]}
 
 
@@ -228,6 +237,10 @@ def paddle_ocr(path: Path, variant: str) -> dict[str, Any]:
     except ValueError as error:
         return {"engine": variant, "status": "failed", "error": str(error)}
     detection, recognition = PADDLE_VARIANTS[variant]
+    # A first cold start that also downloads official weights is not comparable with one that only
+    # loads a cached model, so record which of the two this was instead of blending them.
+    cache_root = Path.home() / ".paddlex" / "official_models"
+    weights_cached = all((cache_root / name).is_dir() for name in (detection, recognition))
     started = time.perf_counter()
     try:
         ocr = _PADDLE_INSTANCES.get(variant)
@@ -261,6 +274,9 @@ def paddle_ocr(path: Path, variant: str) -> dict[str, Any]:
             "device": "cpu",
             "backend": "paddle-cpu (oneDNN disabled for Windows compatibility)",
             "cold_start_included": cold_start,
+            "weights_cached_before_run": weights_cached,
+            "settings": {"device": "cpu", "enable_mkldnn": False, "use_doc_orientation_classify": False,
+                         "use_doc_unwarping": False, "use_textline_orientation": False},
             "text": "\n".join(texts),
             "mean_confidence": sum(confidences) / len(confidences) if confidences else None,
             "geometry_count": geometry_count,
@@ -274,6 +290,7 @@ def paddle_ocr(path: Path, variant: str) -> dict[str, Any]:
             "version": importlib.metadata.version("paddleocr"),
             "model": {"detection": detection, "recognition": recognition},
             "device": "cpu",
+            "weights_cached_before_run": weights_cached,
             "error": f"{type(error).__name__}: {error}",
             "runtime_ms": (time.perf_counter() - started) * 1000,
             "peak_memory_bytes": current_process_peak_memory(),
@@ -315,7 +332,8 @@ def _loopback_languagetool_url(value: str) -> str:
     return value.rstrip("/") + "/v2/check"
 
 
-def languagetool_check(texts: list[str], base_url: str, *, process_id: int | None = None) -> dict[str, Any]:
+def languagetool_check(texts: list[str], base_url: str, *, process_id: int | None = None,
+                       language: str = "en-AU") -> dict[str, Any]:
     try:
         endpoint = _loopback_languagetool_url(base_url)
     except ValueError as error:
@@ -324,7 +342,7 @@ def languagetool_check(texts: list[str], base_url: str, *, process_id: int | Non
     case_findings, version, peak = [], "unknown", 0
     try:
         for text in texts:
-            payload = urllib.parse.urlencode({"language": "en-AU", "text": text}).encode()
+            payload = urllib.parse.urlencode({"language": language, "text": text}).encode()
             request = urllib.request.Request(endpoint, data=payload, method="POST")
             with urllib.request.urlopen(request, timeout=30) as response:
                 data = json.loads(response.read().decode("utf-8"))
@@ -339,7 +357,7 @@ def languagetool_check(texts: list[str], base_url: str, *, process_id: int | Non
     except Exception as error:
         return _unavailable("languagetool", f"local server unavailable: {type(error).__name__}: {error}")
     return {"engine": "languagetool", "status": "ok", "version": version, "backend": "local HTTP server",
-            "device": "cpu", "case_findings": case_findings,
+            "device": "cpu", "settings": {"language": language, "endpoint": endpoint}, "case_findings": case_findings,
             "runtime_ms": (time.perf_counter() - started) * 1000,
             "peak_memory_bytes": peak or None,
             "memory_note": "local LanguageTool server peak working set" if process_id is not None else "server PID not supplied; memory not measured"}
