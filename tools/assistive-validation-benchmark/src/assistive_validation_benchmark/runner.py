@@ -543,8 +543,11 @@ def evaluate_grammar(cases: list[dict[str, Any]], tool_root: Path, languagetool_
                              "in Australian English, so dialect mismatch cannot inflate the false-positive count."}
 
 
-def _decision(classification: str, reason: str) -> dict[str, str]:
-    return {"classification": classification, "reason": reason}
+def _decision(classification: str, reason: str, *, role: str | None = None) -> dict[str, str]:
+    decision = {"classification": classification, "reason": reason}
+    if role:
+        decision["role"] = role
+    return decision
 
 
 def make_decisions(results: dict[str, Any]) -> dict[str, Any]:
@@ -555,7 +558,8 @@ def make_decisions(results: dict[str, Any]) -> dict[str, Any]:
         decisions["native_pdfium_extraction"] = _decision(
             "SELECT" if rate >= 0.99 else "DEFER",
             f"Measured born-digital title recovery {rate:.1%} (exact after normalization) across "
-            f"{native['born_digital_case_count']} cases.")
+            f"{native['born_digital_case_count']} cases.",
+            role="deterministic_native_extraction")
     else:
         decisions["native_pdfium_extraction"] = _decision("INSUFFICIENT_EVIDENCE", "Native extraction was not successfully executed.")
 
@@ -568,10 +572,14 @@ def make_decisions(results: dict[str, Any]) -> dict[str, Any]:
             continue
         recovery = evidence["title_recovery_rate"] or 0
         wer = evidence["mean_wer"] if evidence["mean_wer"] is not None else 1
+        role = "quality_leader" if engine == "paddle-medium" else (
+            "performance_leader" if engine == "tesseract" else "candidate")
         decisions[key] = _decision(
             "SELECT" if recovery >= 0.95 and wer <= 0.12 else "DEFER",
-            f"Measured exact title recovery {recovery:.1%}, mean WER {wer:.1%}; compare machine-specific runtime "
-            f"and memory before selection.")
+            f"Measured exact title recovery {recovery:.1%}, mean WER {wer:.1%}; the complete OCR quality gate "
+            "requires at least 95.0% exact recovery and at most 12.0% mean WER. Runtime and memory do not override "
+            "that gate, and Phase 0 has not measured a safe automatic escalation policy.",
+            role=role)
 
     grammar = results.get("grammar", {}).get("engines", {})
     executed_grammar = {key: value for key, value in grammar.items() if value.get("status") == "ok"}
@@ -600,15 +608,20 @@ def make_decisions(results: dict[str, Any]) -> dict[str, Any]:
             candidate = track["all"]["confident_match"]
             if best_extracted is None or candidate["f1"] > best_extracted[1]["f1"]:
                 best_extracted = (source, candidate)
-        classification = "SELECT" if strict["precision"] >= 0.98 and strict["recall"] >= 0.95 else "DEFER"
-        reason = (f"Holdout equality-path precision {strict['precision']:.1%}, recall {strict['recall']:.1%}; "
-                  f"permissive assistive path precision {assistive['precision']:.1%}, recall {assistive['recall']:.1%}.")
-        if title.get("calibration_is_degenerate"):
-            reason += " The fuzzy threshold itself stays unevidenced: every swept threshold tied on calibration."
+        decisions["strict_title_identity_check"] = _decision(
+            "SELECT" if strict["precision"] >= 0.98 else "DEFER",
+            f"Holdout strict-identity precision {strict['precision']:.1%}. This primitive accepts only documented "
+            "safe identity paths (normalized equality, approved aliases, explicitly allowed subtitles and the narrow "
+            "glyph-confusion rule); it is selected for safe agreement, not title-validation recall.",
+            role="safe_agreement_primitive")
+        reason = (f"Holdout strict-identity precision {strict['precision']:.1%}, recall {strict['recall']:.1%}; "
+                  f"permissive assistive path precision {assistive['precision']:.1%}, recall {assistive['recall']:.1%}. "
+                  "The complete title-consistency feature remains deferred because it does not meet the 95.0% recall target "
+                  "and non-identity cases require human review.")
         if best_extracted:
             reason += (f" Best end-to-end extracted track {best_extracted[0]}: precision "
                        f"{best_extracted[1]['precision']:.1%}, recall {best_extracted[1]['recall']:.1%}.")
-        decisions["deterministic_title_matching"] = _decision(classification, reason)
+        decisions["deterministic_title_consistency"] = _decision("DEFER", reason, role="assistive_review")
         overlap = title.get("score_separation", {})
         decisions["fuzzy_title_scoring"] = _decision(
             "DEFER",
@@ -616,10 +629,12 @@ def make_decisions(results: dict[str, Any]) -> dict[str, Any]:
             f"matches and {overlap.get('negative_range')} for material mismatches; the ranges overlap, so no single "
             f"threshold separates OCR noise from a one-token substitution. "
             f"{overlap.get('threshold_decided_cases', 0)} case(s) were decided by the threshold branch. Only the "
-            "equality, alias, subtitle and deterministic glyph-confusion paths are trustworthy; anything else belongs "
-            "in a human review queue rather than an automatic decision.")
+            "equality, alias, subtitle and deterministic glyph-confusion paths are bounded identity evidence; anything "
+            "else belongs in a human review queue rather than an automatic decision.",
+            role="assistive_review")
     else:
-        decisions["deterministic_title_matching"] = _decision("INSUFFICIENT_EVIDENCE", "Title benchmark was not run.")
+        decisions["strict_title_identity_check"] = _decision("INSUFFICIENT_EVIDENCE", "Title benchmark was not run.")
+        decisions["deterministic_title_consistency"] = _decision("INSUFFICIENT_EVIDENCE", "Title benchmark was not run.")
         decisions["fuzzy_title_scoring"] = _decision("INSUFFICIENT_EVIDENCE", "Title benchmark was not run.")
 
     duplicate = results.get("duplicates")
@@ -632,7 +647,9 @@ def make_decisions(results: dict[str, Any]) -> dict[str, Any]:
             f"Holdout Recall@1 {recall1:.1%}, Recall@5 {recall5:.1%} against a "
             f"{duplicate['candidate_pool_size']}-candidate shared pool; irrelevant candidate rate "
             f"{duplicate['irrelevant_candidate_rate']:.1%} at the calibration-selected threshold "
-            f"{duplicate['candidate_threshold']}.")
+            f"{duplicate['candidate_threshold']}. Selected only for ranked candidate generation and human review, not "
+            "authoritative duplicate classification.",
+            role="assistive_shortlist")
         decisions["embeddings"] = _decision(
             "DEFER" if recall5 >= 0.95 else "INSUFFICIENT_EVIDENCE",
             "Lexical ranking already surfaces the relevant candidate inside an assistive shortlist, so embeddings are "

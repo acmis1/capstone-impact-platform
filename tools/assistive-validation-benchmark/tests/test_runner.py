@@ -7,6 +7,7 @@ from assistive_validation_benchmark.runner import (
     _score_separation,
     _summarize_ocr_engine,
     evaluate_title,
+    make_decisions,
 )
 
 
@@ -111,6 +112,38 @@ class OcrSummaryTests(unittest.TestCase):
     def test_child_process_engines_are_labelled_as_such(self):
         summary = _summarize_ocr_engine("tesseract", [self._record("a", 100, True)], memory_baseline=None)
         self.assertEqual(summary["memory_attribution"], "child_process_peak")
+
+
+class DecisionContractTests(unittest.TestCase):
+    def test_safe_title_identity_is_selected_without_claiming_full_title_consistency(self):
+        ocr = {
+            "execution_status": "executed", "title_recovery_rate": 0.852, "mean_wer": 0.16,
+        }
+        title = {
+            "manifest_label_track": {"holdout": {
+                "confident_match": {"precision": 1.0, "recall": 0.733},
+                "assistive_match": {"precision": 1.0, "recall": 0.8},
+            }},
+            "extracted_candidate_tracks": {},
+            "score_separation": {
+                "positive_range": "0.766-0.830", "negative_range": "0.187-0.847",
+                "threshold_decided_cases": 0,
+            },
+        }
+        decisions = make_decisions({"ocr": {"engines": {
+            "tesseract": ocr,
+            "paddle-tiny": {**ocr, "mean_wer": 0.113},
+            "paddle-small": {**ocr, "title_recovery_rate": 0.889, "mean_wer": 0.146},
+            "paddle-medium": {**ocr, "title_recovery_rate": 0.926, "mean_wer": 0.114},
+        }}, "title": title})
+        self.assertEqual(decisions["strict_title_identity_check"]["classification"], "SELECT")
+        self.assertEqual(decisions["strict_title_identity_check"]["role"], "safe_agreement_primitive")
+        self.assertEqual(decisions["deterministic_title_consistency"]["classification"], "DEFER")
+        self.assertEqual(decisions["tesseract"]["classification"], "DEFER")
+        self.assertEqual(decisions["tesseract"]["role"], "performance_leader")
+        self.assertEqual(decisions["paddle_medium"]["classification"], "DEFER")
+        self.assertEqual(decisions["paddle_medium"]["role"], "quality_leader")
+        self.assertNotIn("deterministic_title_matching", decisions)
 
 
 if __name__ == "__main__":

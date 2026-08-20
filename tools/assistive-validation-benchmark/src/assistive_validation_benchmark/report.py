@@ -15,6 +15,154 @@ def _mib(value: int | None) -> str:
     return "n/a" if not value else f"{value / (1024 ** 2):.0f} MiB"
 
 
+def _pick(value: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
+    return {key: value[key] for key in keys if key in value}
+
+
+def export_review_evidence(report: dict[str, Any], *, decisions: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Return a deterministic, compact, path-free audit export of a benchmark report.
+
+    The runnable report keeps full OCR and grammar output for local diagnosis. The checked-in
+    evidence keeps the aggregate and per-case values needed to audit those aggregates without
+    retaining local output paths or redundant synthetic OCR transcripts.
+    """
+    results = report.get("results", {})
+    source_environment = report.get("environment", {})
+    context = report.get("command_context", {})
+    evidence: dict[str, Any] = {
+        "evidence_schema_version": 1,
+        "source": {
+            "kind": "sanitized_machine_report",
+            "report_schema_version": report.get("report_schema_version"),
+            "measurement_benchmark_commit_sha": source_environment.get("benchmark_commit_sha"),
+        },
+        "environment": _pick(source_environment, (
+            "architecture", "benchmark_commit_sha", "benchmark_seed", "corpus_version", "cpu", "gpu",
+            "gpu_used", "logical_cpu_count", "node_version", "os", "python_version", "total_ram_bytes",
+        )),
+        "command_context": {
+            **_pick(context, ("languagetool_language", "ocr_engines", "sections", "seed", "tesseract_psm")),
+            "output_dir": "<local output directory omitted>",
+        },
+        "corpus": _pick(report.get("corpus", {}), ("total_cases", "document_cases", "grammar_cases", "duplicate_cases")),
+        "results": {},
+        "decisions": decisions if decisions is not None else report.get("decisions", {}),
+    }
+    generation = report.get("corpus", {}).get("generation", {})
+    if generation.get("resolved_fonts"):
+        evidence["corpus"]["resolved_fonts"] = generation["resolved_fonts"]
+
+    native = results.get("native")
+    if native:
+        native_evidence = _pick(native, (
+            "born_digital_case_count", "born_digital_success_count", "born_digital_title_recovery_rate",
+            "born_digital_title_recovery_rate_blind", "raster_pdf_quality_gate_indication_rate",
+            "raster_pdf_native_character_counts", "runtime", "failures", "title_recovery_definition", "note",
+        ))
+        native_evidence["records"] = []
+        for record in native.get("records", []):
+            observation = record.get("observation", {})
+            native_evidence["records"].append({
+                **_pick(record, ("case_id", "document_type", "quality", "title_candidate", "title_candidate_blind",
+                                 "title_recovered", "title_recovered_blind", "ocr_indicated_by_observation")),
+                "observation": _pick(observation, (
+                    "engine", "status", "version", "runtime_ms", "extracted_character_count",
+                    "printable_character_ratio", "error",
+                )),
+            })
+        evidence["results"]["native"] = native_evidence
+
+    ocr = results.get("ocr", {}).get("engines", {})
+    if ocr:
+        ocr_evidence: dict[str, Any] = {"engines": {}}
+        for name, engine in ocr.items():
+            entry = _pick(engine, (
+                "engine", "execution_status", "case_count", "scored_success_count", "mean_cer", "mean_wer",
+                "clean_case_count", "clean_mean_wer", "challenging_case_count", "challenging_mean_wer",
+                "title_recovery_rate", "title_recovery_rate_blind", "assistive_title_agreement_rate",
+                "title_recovery_definition", "runtime_all_cases", "warm_runtime", "scored_warm_runtime",
+                "cold_start_ms", "cold_start_included_weight_download", "peak_memory_bytes",
+                "peak_memory_baseline_bytes", "peak_memory_delta_bytes", "memory_attribution", "memory_note",
+                "versions", "models", "failures", "slowest_cases", "worst_wer_cases", "limitation",
+            ))
+            settings = dict(engine.get("settings") or {})
+            if "executable" in settings:
+                settings["executable"] = "<local executable omitted>"
+            if settings:
+                entry["settings"] = settings
+            entry["records"] = []
+            for record in engine.get("records", []):
+                observation = record.get("observation", {})
+                entry["records"].append({
+                    **_pick(record, (
+                        "case_id", "quality", "layout", "tags", "typeface", "scored", "title_candidate",
+                        "title_candidate_blind", "title_recovered_exact", "title_recovered_exact_blind",
+                        "title_assistive_match", "title_assistive_decision", "cer", "wer",
+                    )),
+                    "observation": _pick(observation, (
+                        "engine", "status", "version", "framework_version", "model", "device", "backend",
+                        "cold_start_included", "weights_cached_before_run", "runtime_ms", "peak_memory_bytes",
+                        "mean_confidence", "geometry_count", "error",
+                    )),
+                })
+            ocr_evidence["engines"][name] = entry
+        evidence["results"]["ocr"] = ocr_evidence
+
+    title = results.get("title")
+    if title:
+        title_evidence = _pick(title, (
+            "selected_threshold", "selection_method", "calibration_is_degenerate", "calibration_degeneracy_note",
+            "non_equality_score_range", "score_separation", "threshold_comparison_calibration",
+            "manifest_label_track", "manifest_label_track_note", "extracted_candidate_note",
+        ))
+        title_evidence["records"] = [_pick(record, (
+            "case_id", "split", "title_variant", "expected_match", "candidate_title", "decision", "classification",
+            "confident_match", "assistive_match", "score",
+        )) for record in title.get("records", [])]
+        title_evidence["extracted_candidate_tracks"] = {}
+        for name, track in title.get("extracted_candidate_tracks", {}).items():
+            # OCR per-case candidates are already retained in the OCR section. Keeping this second copy for every
+            # guided/blind track would inflate the checked-in evidence without adding audit information.
+            title_evidence["extracted_candidate_tracks"][name] = _pick(track, ("case_count", "calibration", "holdout", "all"))
+        evidence["results"]["title"] = title_evidence
+
+    grammar = results.get("grammar")
+    if grammar:
+        grammar_evidence: dict[str, Any] = {"language": grammar.get("language"), "language_note": grammar.get("language_note"), "engines": {}}
+        for name, engine in grammar.get("engines", {}).items():
+            entry = _pick(engine, (
+                "engine", "status", "version", "backend", "device", "runtime_ms", "peak_memory_bytes", "memory_note",
+                "case_count", "true_findings", "false_positives", "missed_labelled_issues", "precision", "recall",
+                "vocabulary_false_positives", "non_vocabulary_false_positives", "projected_precision_with_domain_dictionary",
+                "clean_case_count", "clean_case_false_positives", "clean_cases_fully_silent", "by_split", "note",
+            ))
+            entry["records"] = [_pick(record, (
+                "case_id", "split", "tags", "clean_case", "true_findings", "false_positives",
+                "vocabulary_false_positives", "missed_issues",
+            )) for record in engine.get("records", [])]
+            grammar_evidence["engines"][name] = entry
+        evidence["results"]["grammar"] = grammar_evidence
+
+    duplicate = results.get("duplicates")
+    if duplicate:
+        duplicate_evidence = _pick(duplicate, (
+            "candidate_pool_size", "candidate_threshold", "threshold_selection", "threshold_at_sweep_boundary",
+            "threshold_sweep_calibration", "exact_duplicate_detection", "recall_at_1", "recall_at_3", "recall_at_5",
+            "queries_missed_at_5", "false_candidate_count", "flagged_candidate_count", "irrelevant_candidate_rate",
+            "threshold_precision", "threshold_recall", "by_split", "note",
+        ))
+        duplicate_evidence["rankings"] = []
+        for ranking in duplicate.get("rankings", []):
+            duplicate_evidence["rankings"].append({
+                "case_id": ranking["case_id"], "split": ranking["split"],
+                "ranking": [_pick(item, (
+                    "id", "score", "exact_hash", "normalized_title_equal", "relevant", "relation",
+                )) for item in ranking.get("ranking", [])],
+            })
+        evidence["results"]["duplicates"] = duplicate_evidence
+    return evidence
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     environment = report["environment"]
     corpus = report["corpus"]

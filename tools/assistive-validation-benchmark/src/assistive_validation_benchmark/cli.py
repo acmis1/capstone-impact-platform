@@ -8,8 +8,8 @@ from pathlib import Path
 
 from .corpus import generate_corpus
 from .manifest import cases_of_kind, load_manifest
-from .report import render_markdown
-from .runner import DEFAULT_SECTIONS, run_benchmark
+from .report import export_review_evidence, render_markdown
+from .runner import DEFAULT_SECTIONS, make_decisions, run_benchmark
 
 
 def _paths() -> tuple[Path, Path, Path]:
@@ -29,6 +29,10 @@ def _parser() -> argparse.ArgumentParser:
     generate = subparsers.add_parser("generate", help="generate deterministic document fixtures")
     generate.add_argument("--output-dir", type=Path, default=tool_root / "artifacts" / "corpus")
     generate.add_argument("--seed", type=int)
+
+    evidence = subparsers.add_parser("export-evidence", help="sanitize an existing machine report for review")
+    evidence.add_argument("--input-report", type=Path, required=True)
+    evidence.add_argument("--output", type=Path, required=True)
 
     run = subparsers.add_parser("run", help="generate the corpus and run selected benchmark sections")
     run.add_argument("--output-dir", type=Path, default=tool_root / "artifacts" / "latest")
@@ -62,6 +66,13 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"valid": True, "corpus_version": manifest["corpus_version"],
                           "total_cases": len(manifest["cases"]), "counts": counts,
                           "splits": dict(sorted(splits.items()))}, indent=2))
+        return 0
+    if args.command == "export-evidence":
+        source = json.loads(args.input_report.read_text(encoding="utf-8"))
+        evidence = export_review_evidence(source, decisions=make_decisions(source.get("results", {})))
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(f"Sanitized evidence: {args.output}")
         return 0
     seed = manifest["seed"] if args.seed is None else args.seed
     output_dir = args.output_dir.resolve()

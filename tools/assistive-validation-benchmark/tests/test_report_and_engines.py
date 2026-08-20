@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from assistive_validation_benchmark.engines import _loopback_languagetool_url, tesseract_ocr
-from assistive_validation_benchmark.report import render_markdown
+from assistive_validation_benchmark.report import export_review_evidence, render_markdown
 
 
 class EngineBoundaryTests(unittest.TestCase):
@@ -62,6 +62,26 @@ class ReportTests(unittest.TestCase):
         self.assertIn("Scored-case p95", markdown)
         self.assertIn("unscored control", markdown)
         self.assertIn("process_cumulative", markdown)
+
+    def test_evidence_export_removes_local_paths_and_raw_transcripts(self):
+        report = self._report(results={"ocr": {"engines": {"tesseract": {
+            "engine": "tesseract", "execution_status": "executed", "title_recovery_rate": 0.85,
+            "mean_wer": 0.16, "settings": {"executable": "C:\\Users\\Admin\\tesseract.exe"},
+            "records": [{
+                "case_id": "doc-001", "scored": True, "title_candidate": "Poster Title", "cer": 0.1, "wer": 0.2,
+                "observation": {"status": "ok", "runtime_ms": 100, "text": "redundant raw OCR transcript"},
+            }],
+        }}}})
+        report["command_context"]["output_dir"] = "C:\\Users\\Admin\\artifacts"
+        evidence = export_review_evidence(report, decisions={"tesseract": {"classification": "DEFER", "role": "performance_leader"}})
+        encoded = str(evidence)
+        self.assertNotIn("C:\\Users\\Admin", encoded)
+        self.assertNotIn("redundant raw OCR transcript", encoded)
+        record = evidence["results"]["ocr"]["engines"]["tesseract"]["records"][0]
+        self.assertEqual(record["case_id"], "doc-001")
+        self.assertEqual(record["title_candidate"], "Poster Title")
+        self.assertEqual(record["observation"]["runtime_ms"], 100)
+        self.assertEqual(evidence["decisions"]["tesseract"]["role"], "performance_leader")
 
 
 if __name__ == "__main__":

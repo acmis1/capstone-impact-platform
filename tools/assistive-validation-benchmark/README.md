@@ -29,6 +29,21 @@ Select sections or OCR variants explicitly:
 
 Outputs are `report.json`, `summary.md`, generated `corpus/`, and temporary PDF renders. All are gitignored.
 
+### Export reviewed evidence
+
+The runnable report intentionally retains full local diagnostic output. To preserve a reviewed synthetic run without
+committing local paths or redundant OCR transcripts, export a compact audit copy. It preserves aggregate, split and
+per-case outcomes and recalculates the current decision contract from the recorded results:
+
+```powershell
+.venv\Scripts\python -m assistive_validation_benchmark export-evidence `
+  --input-report artifacts\final-v2\report.json `
+  --output ..\..\docs\assistive-validation\evidence\phase-0-report.json
+```
+
+Use this only for a validated synthetic report from the recorded benchmark commit; it does not run an engine or alter
+any measured value.
+
 ### Run one OCR variant per process when memory matters
 
 The harness can only observe the peak working set of the whole benchmark process, and that figure is

@@ -21,6 +21,10 @@ Engine versions: pypdfium2 5.13.0 (PDFium); Tesseract 5.5.3.20260724 with `eng.t
 
 Corpus: 85 cases — 39 document (17 calibration / 22 holdout), 32 grammar (14 / 18), 14 duplicate queries (5 / 9) over a shared 42-candidate pool. Splits were fixed in the manifest before any engine ran.
 
+The reviewed raw machine report is preserved as a compact, path-free audit export at [`evidence/phase-0-report.json`](evidence/phase-0-report.json). It retains aggregate, split and per-case outcomes while omitting redundant OCR transcripts and local paths. Its measurements are from the original reviewed run at `20ead408a2d10602d675490b4fd7a1f4854ad65f`; this document and the export apply the clarified decision contract introduced afterwards.
+
+## Measured results
+
 ## Native PDF extraction (PDFium)
 
 | Metric | Value |
@@ -130,27 +134,32 @@ The one Recall@1 miss is `duplicate-013`: a decoy sharing the full capstone boil
 
 Exact and normalization-only duplicates score 1.0. Paraphrased near duplicates score 0.35-0.53, barely above cross-case noise, which is why the calibration-selected candidate threshold lands at 0.30 and carries a 30% irrelevant-candidate rate at full recall. **The trustworthy interface is a ranked shortlist, not a single similarity threshold.**
 
-## Decisions
+## Phase 0 decisions
 
-The harness emits its own per-candidate verdicts in `report.json`. Those are a **quality-only screen**: for OCR they test title recovery and WER against fixed targets and deliberately say "compare machine-specific runtime and memory before selection", so every OCR engine screens as DEFER. The table below is the Phase 0 recommendation, which is that screen plus the cost evidence the screen refuses to weigh.
+`SELECT` means the measured component is suitable for the stated bounded role. It does not mean that a neighbouring candidate is a production default, and it never grants autonomous authority over staff review.
 
-| Candidate | Decision | Basis |
-|---|---|---|
-| PDFium native extraction | **SELECT** | 100% exact born-digital title recovery, 2.9 ms p50, corrupt input fails safely, and it correctly reports that scanned PDFs need OCR. Nothing about it is probabilistic. |
-| Tesseract 5.5.3 | **SELECT** as the default first pass | 85.2% exact title recovery at 157 ms p50 in a 52 MiB disposable child process: roughly 50x faster and 40x lighter than PP-OCRv6 medium for 7.4 points less title recovery. Also the best whole-page result on the hardest three-column case. Its weakness is character accuracy (10.6% CER), which matters only for fields Phase 0 did not measure. |
-| PP-OCRv6 medium | **DEFER** as a possible escalation path | Best quality measured — 92.6% exact title recovery, 0.4% clean WER — but 8.1 s p50 and 2.1 GiB resident. Only justifiable as a second pass on documents a cheap first pass fails, and Phase 0 measured no confidence signal that could trigger such an escalation, so the policy cannot be sized yet. |
-| PP-OCRv6 small | **DEFER** | 88.9% exact title recovery sits between tiny and medium, but its CER (9.2%) and WER (14.6%) are *worse* than tiny's at 2.5x the latency and 1.4x the memory. It is poor value on this corpus without being strictly dominated, and one 27-case corpus is not grounds to reject it outright. |
-| PP-OCRv6 tiny | **DEFER** | Equal exact title recovery to Tesseract (85.2%) with half the character error rate, at 4.7x the latency and 15x the memory. The CER advantage may matter for non-title fields; nothing in Phase 0 measured those. |
-| Deterministic title matching, equality path | **SELECT** | 100% precision on holdout and on every end-to-end extracted track. Not one material mismatch was accepted, including the paired one-character negatives. |
-| Fuzzy title scoring | **DEFER** | True-match and material-mismatch score ranges overlap, so no threshold separates them. Near matches must go to a human review queue rather than an automatic decision. |
-| Harper 2.7.0 | **DEFER** | 50.0% precision and 52.6% recall untuned, far below any usable target. Every false positive is vocabulary coverage rather than rule quality, so the required next evidence is a curated domain dictionary, not a different engine. |
-| LanguageTool 6.6 | **DEFER** | 56.0% precision and 73.7% recall untuned. Better recall than Harper, at the cost of a JVM server holding 833 MiB against Harper's in-process WASM. Same dictionary conclusion. |
-| Lexical duplicate ranking | **SELECT** as a shortlist | 100% exact detection and 100% Recall@3 and Recall@5 across a 42-candidate pool that includes same-technology, shared-boilerplate and renamed-project negatives. Selected as a ranked shortlist, not as a thresholded verdict. |
-| Embeddings | **DEFER** | Lexical Recall@3 is already 100%, so there is no measured miss for embeddings to fix. Revisit only if a larger, representative corpus pushes lexical recall below the shortlist depth staff will actually read. |
-| Generative local LLM | **DEFER** | Not executed, and no Phase 0 task required generative authority. Every measured problem is addressed better by a deterministic or specialist component. |
-| Vision-language model | **DEFER** | Not executed. Specialist OCR recovers 92.6% of titles exactly at a known cost; a VLM has neither a demonstrated role nor a measured cost envelope. |
+| Candidate | Decision | Role | Basis |
+|---|---|---|---|
+| PDFium native extraction | **SELECT** | deterministic native extraction | 100% exact born-digital title recovery, 2.9 ms p50, safe corrupt failure, and scanned PDFs correctly signal OCR need. |
+| Tesseract 5.5.3 | **DEFER** | performance leader | 85.2% exact title recovery and 16.0% WER fail the complete OCR gate (>=95% exact and <=12% WER), despite 157 ms p50 and 52 MiB. It remains a measured candidate, not a production default. |
+| PP-OCRv6 tiny | **DEFER** | candidate | Its 85.2% exact title recovery and 11.3% WER do not meet the complete OCR gate. |
+| PP-OCRv6 small | **DEFER** | candidate | Its 88.9% exact title recovery and 14.6% WER do not meet the complete OCR gate. |
+| PP-OCRv6 medium | **DEFER** | quality leader | Best measured quality (92.6% exact title recovery; 11.4% WER) still misses the 95% exact-title target and costs 8.1 s p50 / 2.1 GiB. |
+| Strict title identity check | **SELECT** | safe agreement primitive | The documented normalized-equality, approved-alias, allowed-subtitle and narrow glyph-confusion paths have 100% holdout precision. This is safe agreement only, not high-recall validation. |
+| Broader deterministic title consistency | **DEFER** | assistive review | Holdout strict recall is 73.3% and permissive recall is 80.0%; non-identity cases need human review. |
+| Fuzzy title scoring | **DEFER** | assistive review | True-match and material-mismatch score ranges overlap. A scalar score must not automatically pass a title. |
+| Harper 2.7.0 | **DEFER** | candidate | Untuned precision/recall is 50.0% / 52.6%; vocabulary coverage needs separate evidence. |
+| LanguageTool 6.6 | **DEFER** | candidate | Untuned precision/recall is 56.0% / 73.7%; vocabulary coverage needs separate evidence. |
+| Lexical duplicate ranking | **SELECT** | assistive shortlist | 100% exact detection and 100% Recall@3/@5. Selection is for ranked candidate generation and human review, not authoritative duplicate classification. |
+| Embeddings | **DEFER** | candidate | No lexical shortlist miss currently justifies an embedding benchmark. |
+| Generative local LLM | **DEFER** | candidate | Not executed and no measured Phase 0 role requires generative authority. |
+| Vision-language model | **DEFER** | candidate | Not executed; specialist OCR has a measured evidence baseline first. |
 
 No candidate is classified `REJECT`. Nothing measured here is bad enough to close off, and nothing was rejected for being unavailable or inconvenient. No candidate is `INSUFFICIENT_EVIDENCE` either: every OCR and grammar engine named in Phase 0 was executed on this machine.
+
+## Provisional Phase 1 recommendation
+
+After maintainer approval and merge, lock PDFium as the selected native-first extraction component; define a provider-independent OCR abstraction; retain the Tesseract and PP-OCRv6-medium evidence without hard-coding an automatic cascade; implement strict deterministic title identity agreement; and route non-equality or ambiguous title cases to assistive review. Grammar, embeddings, local LLMs and VLMs remain later benchmark-driven work.
 
 ## What Phase 0 does not establish
 
