@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { execFileSync, execSync } from 'node:child_process';
+import { isDeepStrictEqual } from 'node:util';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import { createAssistiveCheckResult } from '../assistive-validation/domain/evidence';
@@ -126,6 +127,8 @@ async function main(): Promise<void> {
   const inputHash = crypto.createHash('sha256').update(`${prefix}:poster`).digest('hex');
   const otherHash = crypto.createHash('sha256').update(`${prefix}:poster-v2`).digest('hex');
   const failedOnlyHash = crypto.createHash('sha256').update(`${prefix}:poster-retry`).digest('hex');
+  const concurrentHash = crypto.createHash('sha256').update(`${prefix}:concurrent-identical`).digest('hex');
+  const conflictingConcurrentHash = crypto.createHash('sha256').update(`${prefix}:concurrent-conflict`).digest('hex');
 
   const authIds = new Set<string>();
   const adminIds = new Set<string>();
@@ -157,6 +160,35 @@ async function main(): Promise<void> {
   const findingCountFor = (hash: string): string => psql(
     `SELECT count(*) FROM public.assistive_validation_findings f JOIN public.assistive_validation_runs r ON r.id = f.run_id WHERE r.project_id = '${projectId}'::uuid AND r.input_hash = '${hash}';`,
   );
+
+  const durableSnapshotFor = (hash: string): string => psql(
+    `SELECT pg_catalog.jsonb_build_object(
+       'run', to_jsonb(r),
+       'findings', COALESCE(pg_catalog.jsonb_agg(to_jsonb(f) ORDER BY f.ordinal)
+         FILTER (WHERE f.id IS NOT NULL), '[]'::jsonb)
+     )::text
+     FROM public.assistive_validation_runs r
+     LEFT JOIN public.assistive_validation_findings f ON f.run_id = r.id
+     WHERE r.project_id = '${projectId}'::uuid AND r.input_hash = '${hash}'
+     GROUP BY r.id;`,
+  );
+
+  const durableIdentityFindingsFor = (hash: string): PersistedAssistiveFinding[] => JSON.parse(psql(
+    `SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+       'checkType', f.check_type,
+       'outcome', f.outcome,
+       'classification', f.classification,
+       'reasonCode', f.reason_code,
+       'affectedField', f.affected_field,
+       'origin', f.origin,
+       'scoreKind', f.score_kind,
+       'scoreValue', f.score_value,
+       'evidence', f.evidence
+     ) ORDER BY f.ordinal)::text
+     FROM public.assistive_validation_findings f
+     JOIN public.assistive_validation_runs r ON r.id = f.run_id
+     WHERE r.project_id = '${projectId}'::uuid AND r.input_hash = '${hash}';`,
+  )) as PersistedAssistiveFinding[];
 
   try {
     // ---------------------------------------------------------------------
@@ -270,9 +302,11 @@ async function main(): Promise<void> {
       const expected = [
         'check_assistive_finding_affected_field', 'check_assistive_finding_check_type',
         'check_assistive_finding_classification', 'check_assistive_finding_disposition',
-        'check_assistive_finding_disposition_coherence', 'check_assistive_finding_evidence_explanation',
+        'check_assistive_finding_disposition_coherence', 'check_assistive_finding_evidence_bounding_box',
+        'check_assistive_finding_evidence_excerpt', 'check_assistive_finding_evidence_explanation',
         'check_assistive_finding_evidence_keys', 'check_assistive_finding_evidence_object',
-        'check_assistive_finding_evidence_size', 'check_assistive_finding_evidence_version',
+        'check_assistive_finding_evidence_page_number', 'check_assistive_finding_evidence_size',
+        'check_assistive_finding_evidence_values', 'check_assistive_finding_evidence_version',
         'check_assistive_finding_ordinal', 'check_assistive_finding_origin',
         'check_assistive_finding_outcome',
         'check_assistive_finding_reason_code', 'check_assistive_finding_score_kind',
@@ -482,27 +516,42 @@ async function main(): Promise<void> {
       assert.equal(runRow(otherHash), '0');
     });
 
-    await scenario(18, 'oversized evidence is rejected by the database itself', async () => {
+    await scenario(18, 'field-level malformed evidence is rejected by the service-role RPC', async () => {
       const base = phase2Findings()[0];
-      const oversized = await persistRaw({
-        p_findings: [{
-          ...base,
-          evidence: { ...base.evidence, evidenceExcerpt: 'x'.repeat(9000) },
-        }],
-      });
-      assert.equal((oversized.data as { resultCode: string }).resultCode, 'VALIDATION_FAILED');
-
-      const unknownEvidenceKey = await persistRaw({
-        p_findings: [{ ...base, evidence: { ...base.evidence, rawOcrTranscript: 'x' } }],
-      });
-      assert.equal((unknownEvidenceKey.data as { resultCode: string }).resultCode, 'VALIDATION_FAILED');
-
-      const wrongEvidenceVersion = await persistRaw({
-        p_findings: [{ ...base, evidence: { ...base.evidence, version: 'assistive-finding-evidence/v2' } }],
-      });
-      assert.equal((wrongEvidenceVersion.data as { resultCode: string }).resultCode, 'VALIDATION_FAILED');
+      const box = base.evidence.boundingBox!;
+      const malformedEvidence = [
+        { ...base.evidence, evidenceExcerpt: 'x'.repeat(501) },
+        { ...base.evidence, evidenceExcerpt: 7 },
+        { ...base.evidence, metadataValue: 'x'.repeat(401) },
+        { ...base.evidence, normalizedMetadataValue: false },
+        { ...base.evidence, pageNumber: 0 },
+        { ...base.evidence, pageNumber: 11 },
+        { ...base.evidence, pageNumber: 1.5 },
+        { ...base.evidence, boundingBox: { left: box.left, top: box.top, right: box.right, unit: box.unit } },
+        { ...base.evidence, boundingBox: { ...box, depth: 1 } },
+        { ...base.evidence, boundingBox: { ...box, left: '52.5' } },
+        { ...base.evidence, boundingBox: { ...box, unit: 'NORMALIZED' } },
+        { ...base.evidence, boundingBox: { ...box, right: box.left - 1 } },
+        { ...base.evidence, boundingBox: { ...box, bottom: box.top - 1 } },
+        { ...base.evidence, explanation: 7 },
+        { ...base.evidence, explanation: '' },
+        { ...base.evidence, explanation: 'x'.repeat(301) },
+        { ...base.evidence, evidenceExcerpt: 'control\u0001character' },
+        { ...base.evidence, rawOcrTranscript: 'x' },
+        { ...base.evidence, version: 'assistive-finding-evidence/v2' },
+      ];
+      for (const evidence of malformedEvidence) {
+        const rejected = await persistRaw({ p_findings: [{ ...base, evidence }] });
+        assert.ifError(rejected.error);
+        assert.equal(
+          (rejected.data as { resultCode: string }).resultCode,
+          'VALIDATION_FAILED',
+          `Malformed evidence was accepted: ${JSON.stringify(evidence)}`,
+        );
+      }
 
       assert.equal(runRow(otherHash), '0');
+      assert.equal(findingCountFor(otherHash), '0');
     });
 
     await scenario(19, 'invalid run identity and incoherent terminal states are rejected', async () => {
@@ -570,27 +619,47 @@ async function main(): Promise<void> {
       assert.equal(findingCountFor(inputHash), '3');
     });
 
-    await scenario(23, 'conflicting reuse of the same identity never rewrites stored evidence', async () => {
-      const evidenceBefore = psql(
-        `SELECT string_agg(evidence::text, '|' ORDER BY created_at, id) FROM public.assistive_validation_findings WHERE run_id = '${runId}'::uuid;`,
-      );
-      const conflicting = await persistAssistiveValidationRun(repository, {
-        projectId, inputHash, pipelineVersion: ASSISTIVE_PIPELINE_VERSION,
-        status: 'COMPLETED', failureCode: null, findings: [findings[0]],
-      }, reviewerAdminId);
-      assert(conflicting.ok, 'Conflicting reuse errored instead of converging.');
-      assert.equal(conflicting.alreadyPersisted, true);
-      assert.equal(conflicting.runId, runId);
+    await scenario(23, 'every materially different completed finding set conflicts with zero mutation', async () => {
+      const durableBefore = durableSnapshotFor(inputHash);
+      const conflicts = [
+        findings.slice(0, 2),
+        findings.map((finding, index) => index === 0 ? { ...finding, outcome: 'REVIEW' } : finding),
+        findings.map((finding, index) => index === 0
+          ? { ...finding, reasonCode: 'POSSIBLE_OCR_OR_SPELLING_VARIANT' }
+          : finding),
+        findings.map((finding, index) => index === 0
+          ? { ...finding, evidence: { ...finding.evidence, explanation: 'Conflicting deterministic explanation.' } }
+          : finding),
+        findings.map((finding, index) => index === 0 ? { ...finding, scoreValue: 0.5 } : finding),
+        [findings[1], findings[0], findings[2]],
+      ];
+      for (const conflictingFindings of conflicts) {
+        const conflicting = await persistAssistiveValidationRun(repository, {
+          projectId, inputHash, pipelineVersion: ASSISTIVE_PIPELINE_VERSION,
+          status: 'COMPLETED', failureCode: null, findings: conflictingFindings,
+        }, reviewerAdminId);
+        assert(
+          !conflicting.ok && conflicting.code === 'IDENTITY_CONFLICT',
+          'A conflicting completed result was mislabeled as an exact retry.',
+        );
+        assert.equal(durableSnapshotFor(inputHash), durableBefore);
+      }
       assert.equal(runRow(inputHash), '1');
       assert.equal(findingCountFor(inputHash), '3');
-      assert.equal(
-        psql(`SELECT string_agg(evidence::text, '|' ORDER BY created_at, id) FROM public.assistive_validation_findings WHERE run_id = '${runId}'::uuid;`),
-        evidenceBefore,
-      );
     });
 
-    await scenario(24, 'concurrent identical attempts converge on exactly one durable run', async () => {
-      const concurrentHash = crypto.createHash('sha256').update(`${prefix}:concurrent`).digest('hex');
+    await scenario(24, 'a failed payload cannot masquerade as a retry of a completed identity', async () => {
+      const durableBefore = durableSnapshotFor(inputHash);
+      const conflicting = await persistAssistiveValidationRun(repository, {
+        projectId, inputHash, pipelineVersion: ASSISTIVE_PIPELINE_VERSION,
+        status: 'FAILED', failureCode: 'EXTRACTION_FAILED', findings: [],
+      }, reviewerAdminId);
+      assert(!conflicting.ok && conflicting.code === 'IDENTITY_CONFLICT');
+      assert.equal(durableSnapshotFor(inputHash), durableBefore);
+      assert.equal(runRow(inputHash), '1');
+    });
+
+    await scenario(25, 'concurrent identical attempts converge on exactly one durable run', async () => {
       const attempts = await Promise.all(Array.from({ length: 4 }, () => persistAssistiveValidationRun(repository, {
         projectId, inputHash: concurrentHash, pipelineVersion: ASSISTIVE_PIPELINE_VERSION,
         status: 'COMPLETED', failureCode: null, findings,
@@ -605,7 +674,31 @@ async function main(): Promise<void> {
       assert.equal(findingCountFor(concurrentHash), '3');
     });
 
-    await scenario(25, 'a previous failed run never blocks a later successful run of the same identity', async () => {
+    await scenario(26, 'concurrent conflicting attempts persist one complete result and reject the other', async () => {
+      const variantA = phase2Findings();
+      const variantB = variantA.map((finding, index) => index === 0
+        ? { ...finding, evidence: { ...finding.evidence, explanation: 'Concurrent conflicting explanation.' } }
+        : finding);
+      const attempts = await Promise.all([variantA, variantB].map((candidateFindings) => (
+        persistAssistiveValidationRun(repository, {
+          projectId, inputHash: conflictingConcurrentHash, pipelineVersion: ASSISTIVE_PIPELINE_VERSION,
+          status: 'COMPLETED', failureCode: null, findings: candidateFindings,
+        }, reviewerAdminId)
+      )));
+
+      assert.equal(attempts.filter((attempt) => attempt.ok && !attempt.alreadyPersisted).length, 1);
+      assert.equal(attempts.filter((attempt) => !attempt.ok && attempt.code === 'IDENTITY_CONFLICT').length, 1);
+      assert.equal(runRow(conflictingConcurrentHash), '1');
+      assert.equal(findingCountFor(conflictingConcurrentHash), '3');
+
+      const durableFindings = durableIdentityFindingsFor(conflictingConcurrentHash);
+      assert(
+        isDeepStrictEqual(durableFindings, variantA) || isDeepStrictEqual(durableFindings, variantB),
+        'Concurrent conflicting attempts produced a mixed or partial finding set.',
+      );
+    });
+
+    await scenario(27, 'a previous failed run never blocks a later successful run of the same identity', async () => {
       const firstFailure = await persistAssistiveValidationRun(repository, {
         projectId, inputHash: failedOnlyHash, pipelineVersion: ASSISTIVE_PIPELINE_VERSION,
         status: 'FAILED', failureCode: 'EXTRACTION_CONTRACT_REJECTED', findings: [],
@@ -633,7 +726,7 @@ async function main(): Promise<void> {
       );
     });
 
-    await scenario(26, 'a second completed run of one identity is impossible even by direct insert', () => {
+    await scenario(28, 'a second completed run of one identity is impossible even by direct insert', () => {
       // Run as the database superuser, which bypasses grants and RLS entirely, so this proves the
       // partial unique index itself rather than the access-control layer in front of it.
       let rejection = '';
@@ -653,7 +746,7 @@ async function main(): Promise<void> {
       `SELECT id::text FROM public.assistive_validation_findings WHERE run_id = '${runId}'::uuid ORDER BY created_at, id LIMIT 1;`,
     );
 
-    await scenario(27, 'a reviewer disposition persists with server-side attribution and timestamp', async () => {
+    await scenario(29, 'a reviewer disposition persists with server-side attribution and timestamp', async () => {
       const recorded = await recordAssistiveFindingDisposition(repository, firstFindingId, reviewerAdminId, 'REVIEWED');
       assert(recorded.ok, 'Disposition failed.');
       assert.equal(recorded.changed, true);
@@ -670,7 +763,7 @@ async function main(): Promise<void> {
       );
     });
 
-    await scenario(28, 'a repeated identical disposition is idempotent and rewrites nothing', async () => {
+    await scenario(30, 'a repeated identical disposition is idempotent and rewrites nothing', async () => {
       const stampBefore = psql(`SELECT reviewed_at::text FROM public.assistive_validation_findings WHERE id = '${firstFindingId}'::uuid;`);
       const repeat = await recordAssistiveFindingDisposition(repository, firstFindingId, reviewerAdminId, 'REVIEWED');
       assert(repeat.ok, 'Repeat disposition failed.');
@@ -681,7 +774,7 @@ async function main(): Promise<void> {
       );
     });
 
-    await scenario(29, 'an editor-only identity and an invalid disposition are both refused', async () => {
+    await scenario(31, 'an editor-only identity and an invalid disposition are both refused', async () => {
       const editorAttempt = await recordAssistiveFindingDisposition(repository, firstFindingId, editorAdminId, 'IGNORED');
       assert(!editorAttempt.ok && editorAttempt.code === 'PERMISSION_DENIED', 'Editor recorded a disposition.');
 
@@ -704,7 +797,7 @@ async function main(): Promise<void> {
       );
     });
 
-    await scenario(30, 'no Data API role can rewrite persisted finding evidence', async () => {
+    await scenario(32, 'no Data API role can rewrite persisted finding evidence', async () => {
       const evidenceBefore = psql(`SELECT evidence::text FROM public.assistive_validation_findings WHERE id = '${firstFindingId}'::uuid;`);
       for (const [label, client] of [['anon', anonClient], ['authenticated', staffClient], ['service_role', service]] as const) {
         assertDenied(
@@ -727,14 +820,14 @@ async function main(): Promise<void> {
     // ---------------------------------------------------------------------
     // Absence of authoritative side effects
     // ---------------------------------------------------------------------
-    await scenario(31, 'the project row is byte-for-byte unchanged by all assistive activity', () => {
+    await scenario(33, 'the project row is byte-for-byte unchanged by all assistive activity', () => {
       assert.equal(
         psql(`SELECT to_jsonb(p) FROM public.projects p WHERE p.id = '${projectId}'::uuid;`),
         projectSnapshotBefore,
       );
     });
 
-    await scenario(32, 'no approval, validation flag, or publication side effect was created', () => {
+    await scenario(34, 'no approval, validation flag, or publication side effect was created', () => {
       assert.equal(psql(`SELECT count(*) FROM public.approval_records WHERE project_id = '${projectId}'::uuid;`), auditCountBefore);
       assert.equal(psql(`SELECT count(*) FROM public.validation_flags WHERE project_id = '${projectId}'::uuid;`), flagCountBefore);
       assert.equal(psql('SELECT count(*) FROM public.published_snapshots;'), snapshotCountBefore);
@@ -744,7 +837,7 @@ async function main(): Promise<void> {
       );
     });
 
-    await scenario(33, 'the assistive domain added exactly two tables and three functions, and no queue', () => {
+    await scenario(35, 'the assistive domain added exactly two tables and three functions, and no queue', () => {
       // Scoped to the assistive domain: the repository already owns unrelated claim_* functions for
       // publication, provisioning, removal, and reminders, and this phase must add none of its own.
       assert.equal(
@@ -769,30 +862,51 @@ async function main(): Promise<void> {
       );
     });
 
-    await scenario(34, 'the table constraints reject bad evidence even for the database superuser', () => {
+    await scenario(36, 'the table constraints reject bad evidence even for the database superuser', () => {
       // Executed as postgres, which bypasses grants and RLS, so this proves the closed evidence
       // contract itself rather than the access-control layer in front of it.
-      const rejected = (evidence: string): string => {
+      const rejected = (evidence: Record<string, unknown>): string => {
+        const serialized = JSON.stringify(evidence).replace(/'/g, "''");
         try {
-          psql(`INSERT INTO public.assistive_validation_findings (run_id, check_type, outcome, reason_code, affected_field, origin, ordinal, evidence) VALUES ('${runId}'::uuid, 'FORMATTING', 'INFORMATION', 'REPEATED_WHITESPACE', 'extraction_text', 'DETERMINISTIC_HELPER', 9, '${evidence}'::jsonb);`);
+          psql(`INSERT INTO public.assistive_validation_findings (run_id, check_type, outcome, reason_code, affected_field, origin, ordinal, evidence) VALUES ('${runId}'::uuid, 'FORMATTING', 'INFORMATION', 'REPEATED_WHITESPACE', 'extraction_text', 'DETERMINISTIC_HELPER', 9, '${serialized}'::jsonb);`);
         } catch (error) {
           return String((error as { stderr?: unknown }).stderr ?? '');
         }
         return '';
       };
-      const complete = `{"version": "assistive-finding-evidence/v1", "evidenceExcerpt": null, "pageNumber": null, "boundingBox": null, "metadataValue": null, "normalizedMetadataValue": null, "candidateValue": null, "normalizedCandidateValue": null, "explanation": "direct insert probe"}`;
-      assert.match(rejected(complete.replace('assistive-finding-evidence/v1', 'assistive-finding-evidence/v2')), /check_assistive_finding_evidence_version/);
-      assert.match(rejected(complete.replace('"explanation"', '"rawOcrTranscript": "x", "explanation"')), /check_assistive_finding_evidence_keys/);
-      assert.match(rejected(complete.replace('"pageNumber": null,', '')), /check_assistive_finding_evidence_keys/);
-      assert.match(rejected(complete.replace('direct insert probe', 'x'.repeat(400))), /check_assistive_finding_evidence_explanation/);
-      assert.match(
-        rejected(complete.replace('"evidenceExcerpt": null', `"evidenceExcerpt": "${'x'.repeat(9000)}"`)),
-        /check_assistive_finding_evidence_size/,
-      );
+      const complete = { ...phase2Findings()[0].evidence, explanation: 'direct insert probe' };
+      const box = complete.boundingBox!;
+      const missingPageNumber: Record<string, unknown> = { ...complete };
+      delete missingPageNumber.pageNumber;
+      const missingBottom: Record<string, unknown> = { ...box };
+      delete missingBottom.bottom;
+      const cases: Array<[Record<string, unknown>, RegExp]> = [
+        [{ ...complete, version: 'assistive-finding-evidence/v2' }, /check_assistive_finding_evidence_version/],
+        [{ ...complete, rawOcrTranscript: 'x' }, /check_assistive_finding_evidence_keys/],
+        [missingPageNumber, /check_assistive_finding_evidence_keys/],
+        [{ ...complete, explanation: 'x'.repeat(301) }, /check_assistive_finding_evidence_explanation/],
+        [{ ...complete, explanation: 'control\u0001character' }, /check_assistive_finding_evidence_explanation/],
+        [{ ...complete, evidenceExcerpt: 'x'.repeat(501) }, /check_assistive_finding_evidence_excerpt/],
+        [{ ...complete, evidenceExcerpt: 7 }, /check_assistive_finding_evidence_excerpt/],
+        [{ ...complete, metadataValue: 'x'.repeat(401) }, /check_assistive_finding_evidence_values/],
+        [{ ...complete, metadataValue: false }, /check_assistive_finding_evidence_values/],
+        [{ ...complete, pageNumber: 0 }, /check_assistive_finding_evidence_page_number/],
+        [{ ...complete, pageNumber: 11 }, /check_assistive_finding_evidence_page_number/],
+        [{ ...complete, pageNumber: 1.5 }, /check_assistive_finding_evidence_page_number/],
+        [{ ...complete, boundingBox: missingBottom }, /check_assistive_finding_evidence_bounding_box/],
+        [{ ...complete, boundingBox: { ...box, depth: 1 } }, /check_assistive_finding_evidence_bounding_box/],
+        [{ ...complete, boundingBox: { ...box, left: '52.5' } }, /check_assistive_finding_evidence_bounding_box/],
+        [{ ...complete, boundingBox: { ...box, unit: 'NORMALIZED' } }, /check_assistive_finding_evidence_bounding_box/],
+        [{ ...complete, boundingBox: { ...box, right: box.left - 1 } }, /check_assistive_finding_evidence_bounding_box/],
+        [{ ...complete, boundingBox: { ...box, bottom: box.top - 1 } }, /check_assistive_finding_evidence_bounding_box/],
+      ];
+      for (const [evidence, constraint] of cases) {
+        assert.match(rejected(evidence), constraint);
+      }
       assert.equal(findingCountFor(inputHash), '3');
     });
 
-    await scenario(35, 'removing the reviewing staff account degrades attribution without deleting evidence', async () => {
+    await scenario(37, 'removing the reviewing staff account degrades attribution without deleting evidence', async () => {
       // The coherence constraint anchors on reviewed_at precisely so this ON DELETE SET NULL can
       // run. Anchoring on reviewed_by would make the cascade violate the check and block deletion.
       const evidenceBefore = psql(`SELECT evidence::text FROM public.assistive_validation_findings WHERE id = '${firstFindingId}'::uuid;`);
@@ -815,9 +929,9 @@ async function main(): Promise<void> {
       assert.equal(findingCountFor(inputHash), '3');
     });
 
-    await scenario(36, 'deleting the project cascades the assistive side domain away completely', () => {
+    await scenario(38, 'deleting the project cascades the assistive side domain away completely', () => {
       const runsBefore = psql(`SELECT count(*) FROM public.assistive_validation_runs WHERE project_id = '${projectId}'::uuid;`);
-      assert.equal(runsBefore, '5');
+      assert.equal(runsBefore, '6');
       psql(`DELETE FROM public.projects WHERE id = '${projectId}'::uuid;`);
       assert.equal(psql(`SELECT count(*) FROM public.assistive_validation_runs WHERE project_id = '${projectId}'::uuid;`), '0');
       assert.equal(
@@ -854,7 +968,7 @@ async function main(): Promise<void> {
         psql(`SELECT count(*) FROM public.assistive_validation_runs WHERE input_hash IN ('${inputHash}', '${otherHash}', '${failedOnlyHash}');`),
         '0',
       );
-      console.log('PASS: Scenario 37 - only verifier-owned fixtures were removed and none remain');
+      console.log('PASS: Scenario 39 - only verifier-owned fixtures were removed and none remain');
       passed += 1;
     } catch (error) {
       cleanupFailure = error;

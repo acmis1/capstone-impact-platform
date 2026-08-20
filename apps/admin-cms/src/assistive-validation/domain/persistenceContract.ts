@@ -158,7 +158,14 @@ export const storedAssistiveRunSchema = z.object({
   status: z.enum(['COMPLETED', 'FAILED']),
   failureCode: z.enum(ASSISTIVE_RUN_FAILURE_CODES).nullable(),
   createdAt: z.string().min(1),
-}).strict();
+}).strict().superRefine((run, context) => {
+  if (run.status === 'COMPLETED' && run.failureCode !== null) {
+    context.addIssue({ code: 'custom', message: 'A stored completed run must not carry a failure code.' });
+  }
+  if (run.status === 'FAILED' && run.failureCode === null) {
+    context.addIssue({ code: 'custom', message: 'A stored failed run must carry a bounded failure code.' });
+  }
+});
 
 export type StoredAssistiveRun = z.infer<typeof storedAssistiveRunSchema>;
 
@@ -180,6 +187,9 @@ export const storedAssistiveFindingSchema = z.object({
   reviewedAt: z.string().min(1).nullable(),
   createdAt: z.string().min(1),
 }).strict().superRefine((finding, context) => {
+  if ((finding.scoreKind === null) !== (finding.scoreValue === null)) {
+    context.addIssue({ code: 'custom', message: 'Stored score kind and value must both be present or both absent.' });
+  }
   if (finding.disposition === 'UNREVIEWED' && (finding.reviewedBy !== null || finding.reviewedAt !== null)) {
     context.addIssue({ code: 'custom', message: 'An unreviewed finding must not claim reviewer attribution.' });
   }

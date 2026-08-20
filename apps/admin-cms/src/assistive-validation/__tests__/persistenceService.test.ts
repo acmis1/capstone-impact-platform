@@ -78,6 +78,7 @@ describe('persistAssistiveValidationRun', () => {
 
   it('maps every bounded database result code to a bounded error code', async () => {
     const cases: [string, string][] = [
+      ['IDENTITY_CONFLICT', 'IDENTITY_CONFLICT'],
       ['PROJECT_NOT_FOUND', 'PROJECT_NOT_FOUND'],
       ['PERMISSION_DENIED', 'PERMISSION_DENIED'],
       ['VALIDATION_FAILED', 'VALIDATION_FAILED'],
@@ -87,6 +88,18 @@ describe('persistAssistiveValidationRun', () => {
       const result = await persistAssistiveValidationRun(client, validRun(), ADMIN_ID);
       expect(result).toMatchObject({ ok: false, code: expected });
     }
+  });
+
+  it('maps identity conflicts to one bounded application failure', async () => {
+    const client = gateway({ persistRun: vi.fn().mockResolvedValue({ resultCode: 'IDENTITY_CONFLICT' }) });
+    const result = await persistAssistiveValidationRun(client, validRun(), ADMIN_ID);
+    expect(result).toEqual({
+      ok: false,
+      code: 'IDENTITY_CONFLICT',
+      message: 'A durable result already exists for this content identity but does not match the submitted result.',
+    });
+    expect(JSON.stringify(result)).not.toContain(HASH);
+    expect(JSON.stringify(result)).not.toContain(RUN_ID);
   });
 
   it('rejects invalid input before the database is ever contacted', async () => {
@@ -149,14 +162,34 @@ describe('persistAssistiveValidationRun', () => {
     for (const response of [
       { resultCode: 'APPROVED' },
       { resultCode: 'PERSISTED' },
+      { resultCode: 'PERSISTED', runId: RUN_ID, status: 'COMPLETED', findingCount: 0 },
+      { resultCode: 'PERSISTED', runId: RUN_ID, status: 'FAILED', findingCount: 1 },
       { resultCode: 'PERSISTED', runId: 'not-a-uuid', status: 'COMPLETED', findingCount: 1 },
       { resultCode: 'PERSISTED', runId: RUN_ID, status: 'CLAIMED', findingCount: 1 },
+      { resultCode: 'ALREADY_PERSISTED', runId: RUN_ID, status: 'FAILED', findingCount: 0 },
+      { resultCode: 'IDENTITY_CONFLICT', runId: RUN_ID },
       null,
       'PERSISTED',
     ]) {
       const client = gateway({ persistRun: vi.fn().mockResolvedValue(response) });
       const result = await persistAssistiveValidationRun(client, validRun(), ADMIN_ID);
       expect(result).toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
+    }
+  });
+
+  it('rejects unknown fields in every persist RPC response shape', async () => {
+    const responses = [
+      { resultCode: 'PERSISTED', runId: RUN_ID, status: 'COMPLETED', findingCount: 1 },
+      { resultCode: 'ALREADY_PERSISTED', runId: RUN_ID, status: 'COMPLETED', findingCount: 1 },
+      { resultCode: 'IDENTITY_CONFLICT' },
+      { resultCode: 'PROJECT_NOT_FOUND' },
+      { resultCode: 'PERMISSION_DENIED' },
+      { resultCode: 'VALIDATION_FAILED' },
+    ];
+    for (const response of responses) {
+      const client = gateway({ persistRun: vi.fn().mockResolvedValue({ ...response, unexpected: true }) });
+      expect(await persistAssistiveValidationRun(client, validRun(), ADMIN_ID))
+        .toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
     }
   });
 });
@@ -202,7 +235,27 @@ describe('loadLatestAssistiveValidationRun', () => {
   it('refuses a stored row that no longer satisfies the persistence contract', async () => {
     const cases: unknown[] = [
       { resultCode: 'FOUND', run: { ...storedRun, status: 'RUNNING' }, findings: [storedFinding] },
+      {
+        resultCode: 'FOUND',
+        run: { ...storedRun, status: 'COMPLETED', failureCode: 'EXTRACTION_FAILED' },
+        findings: [storedFinding],
+      },
+      {
+        resultCode: 'FOUND',
+        run: { ...storedRun, status: 'FAILED', failureCode: null },
+        findings: [],
+      },
       { resultCode: 'FOUND', run: storedRun, findings: [{ ...storedFinding, classification: 'BLOCKING' }] },
+      {
+        resultCode: 'FOUND',
+        run: storedRun,
+        findings: [{ ...storedFinding, scoreKind: 'LEXICAL_SIMILARITY', scoreValue: null }],
+      },
+      {
+        resultCode: 'FOUND',
+        run: storedRun,
+        findings: [{ ...storedFinding, scoreKind: null, scoreValue: 0.5 }],
+      },
       // A dispositioned finding must never appear without its review timestamp.
       { resultCode: 'FOUND', run: storedRun, findings: [{ ...storedFinding, disposition: 'REVIEWED' }] },
       // An unreviewed finding must never claim reviewer attribution.
@@ -217,6 +270,21 @@ describe('loadLatestAssistiveValidationRun', () => {
       const client = gateway({ loadLatestRun: vi.fn().mockResolvedValue(response) });
       const result = await loadLatestAssistiveValidationRun(client, PROJECT_ID, ASSISTIVE_PIPELINE_VERSION);
       expect(result).toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
+    }
+  });
+
+  it('rejects unknown fields and stale result-specific data in every read RPC response shape', async () => {
+    const responses = [
+      { resultCode: 'FOUND', run: storedRun, findings: [storedFinding], unexpected: true },
+      { resultCode: 'NOT_FOUND', unexpected: true },
+      { resultCode: 'VALIDATION_FAILED', unexpected: true },
+      { resultCode: 'NOT_FOUND', run: storedRun, findings: [storedFinding] },
+      { resultCode: 'VALIDATION_FAILED', run: storedRun },
+    ];
+    for (const response of responses) {
+      const client = gateway({ loadLatestRun: vi.fn().mockResolvedValue(response) });
+      expect(await loadLatestAssistiveValidationRun(client, PROJECT_ID, ASSISTIVE_PIPELINE_VERSION))
+        .toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
     }
   });
 
@@ -311,6 +379,27 @@ describe('recordAssistiveFindingDisposition', () => {
       const client = gateway({ recordDisposition: vi.fn().mockResolvedValue(response) });
       const result = await recordAssistiveFindingDisposition(client, FINDING_ID, ADMIN_ID, 'REVIEWED');
       expect(result).toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
+    }
+  });
+
+  it('rejects unknown fields in every disposition RPC response shape', async () => {
+    const responses = [
+      {
+        resultCode: 'RECORDED', findingId: FINDING_ID, disposition: 'REVIEWED',
+        reviewedBy: ADMIN_ID, reviewedAt: CREATED_AT,
+      },
+      {
+        resultCode: 'UNCHANGED', findingId: FINDING_ID, disposition: 'REVIEWED',
+        reviewedBy: ADMIN_ID, reviewedAt: CREATED_AT,
+      },
+      { resultCode: 'FINDING_NOT_FOUND' },
+      { resultCode: 'PERMISSION_DENIED' },
+      { resultCode: 'VALIDATION_FAILED' },
+    ];
+    for (const response of responses) {
+      const client = gateway({ recordDisposition: vi.fn().mockResolvedValue({ ...response, unexpected: true }) });
+      expect(await recordAssistiveFindingDisposition(client, FINDING_ID, ADMIN_ID, 'REVIEWED'))
+        .toMatchObject({ ok: false, code: 'INTERNAL_FAILURE' });
     }
   });
 

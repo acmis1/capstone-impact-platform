@@ -291,6 +291,8 @@ describe('assistive persistence contract - stored read shapes', () => {
       { disposition: 'IGNORED', reviewedBy: null, reviewedAt: null },
       { disposition: 'ACCEPTED', reviewedBy: ADMIN_ID, reviewedAt: '2026-08-20T02:05:00+00:00' },
       { disposition: 'APPLIED', reviewedBy: ADMIN_ID, reviewedAt: '2026-08-20T02:05:00+00:00' },
+      { scoreKind: 'LEXICAL_SIMILARITY', scoreValue: null },
+      { scoreKind: null, scoreValue: 0.5 },
       { ordinal: 0 },
       { ordinal: 51 },
     ];
@@ -310,9 +312,16 @@ describe('assistive persistence contract - stored read shapes', () => {
       createdAt: '2026-08-20T02:00:00+00:00',
     };
     expect(storedAssistiveRunSchema.safeParse(base).success).toBe(true);
+    expect(storedAssistiveRunSchema.safeParse({
+      ...base,
+      status: 'FAILED',
+      failureCode: 'EXTRACTION_FAILED',
+    }).success).toBe(true);
     for (const override of [
       { status: 'RUNNING' },
       { status: 'CLAIMED' },
+      { status: 'COMPLETED', failureCode: 'EXTRACTION_FAILED' },
+      { status: 'FAILED', failureCode: null },
       { inputHash: 'not-a-hash' },
       { pipelineVersion: 'gemini/v1 ' },
       { leaseUntil: '2026-08-20T02:00:00+00:00' },

@@ -27,6 +27,7 @@ import type { AssistiveValidationPersistenceGateway } from '../repositories/assi
 
 export type AssistivePersistenceErrorCode =
   | 'VALIDATION_FAILED'
+  | 'IDENTITY_CONFLICT'
   | 'PROJECT_NOT_FOUND'
   | 'FINDING_NOT_FOUND'
   | 'PERMISSION_DENIED'
@@ -35,6 +36,7 @@ export type AssistivePersistenceErrorCode =
 
 const MESSAGES: Record<AssistivePersistenceErrorCode, string> = {
   VALIDATION_FAILED: 'The assistive validation record did not satisfy the bounded persistence contract.',
+  IDENTITY_CONFLICT: 'A durable result already exists for this content identity but does not match the submitted result.',
   PROJECT_NOT_FOUND: 'The project for this assistive validation record was not found.',
   FINDING_NOT_FOUND: 'The assistive finding was not found.',
   PERMISSION_DENIED: 'This staff account is not permitted to perform that assistive action.',
@@ -58,38 +60,58 @@ function failure(code: AssistivePersistenceErrorCode): AssistivePersistenceFailu
 
 const actorSchema = z.uuid();
 
-const persistResponseSchema = z.object({
-  resultCode: z.enum([
-    'PERSISTED',
-    'ALREADY_PERSISTED',
-    'PROJECT_NOT_FOUND',
-    'PERMISSION_DENIED',
-    'VALIDATION_FAILED',
-  ]),
-  runId: z.uuid().optional(),
-  status: z.enum(['COMPLETED', 'FAILED']).optional(),
-  findingCount: z.number().int().min(0).optional(),
+const persistedResultSchema = z.object({
+  resultCode: z.literal('PERSISTED'),
+  runId: z.uuid(),
+  status: z.enum(['COMPLETED', 'FAILED']),
+  findingCount: z.number().int().min(0),
+}).strict().superRefine((result, context) => {
+  if (result.status === 'COMPLETED' && result.findingCount === 0) {
+    context.addIssue({ code: 'custom', message: 'A persisted completed run must contain findings.' });
+  }
+  if (result.status === 'FAILED' && result.findingCount !== 0) {
+    context.addIssue({ code: 'custom', message: 'A persisted failed run must not contain findings.' });
+  }
 });
 
-const readResponseSchema = z.object({
-  resultCode: z.enum(['FOUND', 'NOT_FOUND', 'VALIDATION_FAILED']),
-  run: z.unknown().optional(),
-  findings: z.unknown().optional(),
-});
+const persistResponseSchema = z.discriminatedUnion('resultCode', [
+  persistedResultSchema,
+  z.object({
+    resultCode: z.literal('ALREADY_PERSISTED'),
+    runId: z.uuid(),
+    status: z.literal('COMPLETED'),
+    findingCount: z.number().int().min(1),
+  }).strict(),
+  z.object({ resultCode: z.literal('IDENTITY_CONFLICT') }).strict(),
+  z.object({ resultCode: z.literal('PROJECT_NOT_FOUND') }).strict(),
+  z.object({ resultCode: z.literal('PERMISSION_DENIED') }).strict(),
+  z.object({ resultCode: z.literal('VALIDATION_FAILED') }).strict(),
+]);
 
-const dispositionResponseSchema = z.object({
-  resultCode: z.enum([
-    'RECORDED',
-    'UNCHANGED',
-    'FINDING_NOT_FOUND',
-    'PERMISSION_DENIED',
-    'VALIDATION_FAILED',
-  ]),
-  findingId: z.uuid().optional(),
-  disposition: z.enum(['UNREVIEWED', 'REVIEWED', 'IGNORED']).optional(),
-  reviewedBy: z.uuid().nullable().optional(),
-  reviewedAt: z.string().min(1).nullable().optional(),
-});
+const readResponseSchema = z.discriminatedUnion('resultCode', [
+  z.object({
+    resultCode: z.literal('FOUND'),
+    run: storedAssistiveRunSchema,
+    findings: z.array(storedAssistiveFindingSchema),
+  }).strict(),
+  z.object({ resultCode: z.literal('NOT_FOUND') }).strict(),
+  z.object({ resultCode: z.literal('VALIDATION_FAILED') }).strict(),
+]);
+
+const dispositionSuccessShape = {
+  findingId: z.uuid(),
+  disposition: assistiveRecordableDispositionSchema,
+  reviewedBy: z.uuid().nullable(),
+  reviewedAt: z.string().min(1),
+};
+
+const dispositionResponseSchema = z.discriminatedUnion('resultCode', [
+  z.object({ resultCode: z.literal('RECORDED'), ...dispositionSuccessShape }).strict(),
+  z.object({ resultCode: z.literal('UNCHANGED'), ...dispositionSuccessShape }).strict(),
+  z.object({ resultCode: z.literal('FINDING_NOT_FOUND') }).strict(),
+  z.object({ resultCode: z.literal('PERMISSION_DENIED') }).strict(),
+  z.object({ resultCode: z.literal('VALIDATION_FAILED') }).strict(),
+]);
 
 export type AssistiveRunPersistenceResult =
   | {
@@ -97,7 +119,7 @@ export type AssistiveRunPersistenceResult =
     runId: string;
     status: 'COMPLETED' | 'FAILED';
     findingCount: number;
-    /** True when an identical content identity was already durable and was returned unchanged. */
+    /** True only when an identical completed finding set was already durable and returned unchanged. */
     alreadyPersisted: boolean;
   }
   | AssistivePersistenceFailure;
@@ -168,6 +190,7 @@ export async function persistAssistiveValidationRun(
     case 'PROJECT_NOT_FOUND': return failure('PROJECT_NOT_FOUND');
     case 'PERMISSION_DENIED': return failure('PERMISSION_DENIED');
     case 'VALIDATION_FAILED': return failure('VALIDATION_FAILED');
+    case 'IDENTITY_CONFLICT': return failure('IDENTITY_CONFLICT');
   }
 }
 
@@ -200,13 +223,11 @@ export async function loadLatestAssistiveValidationRun(
     case 'NOT_FOUND': return { ok: true, found: false };
     case 'VALIDATION_FAILED': return failure('VALIDATION_FAILED');
     case 'FOUND': {
-      const run = storedAssistiveRunSchema.safeParse(response.data.run);
-      const findings = z.array(storedAssistiveFindingSchema).safeParse(response.data.findings);
-      if (!run.success || !findings.success) return failure('INTERNAL_FAILURE');
-      if (run.data.projectId !== project.data || run.data.pipelineVersion !== pipeline.data) {
+      const { run, findings } = response.data;
+      if (run.projectId !== project.data || run.pipelineVersion !== pipeline.data) {
         return failure('INTERNAL_FAILURE');
       }
-      return { ok: true, found: true, run: run.data, findings: findings.data };
+      return { ok: true, found: true, run, findings };
     }
   }
 }
@@ -241,7 +262,6 @@ export async function recordAssistiveFindingDisposition(
     case 'RECORDED':
     case 'UNCHANGED': {
       const { findingId: id, disposition: stored, reviewedAt } = response.data;
-      if (!id || !stored || stored === 'UNREVIEWED' || !reviewedAt) return failure('INTERNAL_FAILURE');
       if (id !== finding.data || stored !== requested.data) return failure('INTERNAL_FAILURE');
       return {
         ok: true,

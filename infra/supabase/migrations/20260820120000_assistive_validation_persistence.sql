@@ -167,9 +167,69 @@ CREATE TABLE public.assistive_validation_findings (
              'version', 'evidenceExcerpt', 'pageNumber', 'boundingBox', 'metadataValue',
              'normalizedMetadataValue', 'candidateValue', 'normalizedCandidateValue', 'explanation'
            ]) = '{}'::jsonb),
+  CONSTRAINT check_assistive_finding_evidence_excerpt
+    CHECK (pg_catalog.jsonb_typeof(evidence -> 'evidenceExcerpt') IN ('null', 'string')
+           AND (pg_catalog.jsonb_typeof(evidence -> 'evidenceExcerpt') = 'null'
+                OR (pg_catalog.length(evidence ->> 'evidenceExcerpt') <= 500
+                    AND (evidence ->> 'evidenceExcerpt') !~ U&'[\0001-\0008\000B\000C\000E-\001F\007F]'))),
+  CONSTRAINT check_assistive_finding_evidence_values
+    CHECK (
+      pg_catalog.jsonb_typeof(evidence -> 'metadataValue') IN ('null', 'string')
+      AND pg_catalog.jsonb_typeof(evidence -> 'normalizedMetadataValue') IN ('null', 'string')
+      AND pg_catalog.jsonb_typeof(evidence -> 'candidateValue') IN ('null', 'string')
+      AND pg_catalog.jsonb_typeof(evidence -> 'normalizedCandidateValue') IN ('null', 'string')
+      AND (pg_catalog.jsonb_typeof(evidence -> 'metadataValue') = 'null'
+           OR (pg_catalog.length(evidence ->> 'metadataValue') <= 400
+               AND (evidence ->> 'metadataValue') !~ U&'[\0001-\0008\000B\000C\000E-\001F\007F]'))
+      AND (pg_catalog.jsonb_typeof(evidence -> 'normalizedMetadataValue') = 'null'
+           OR (pg_catalog.length(evidence ->> 'normalizedMetadataValue') <= 400
+               AND (evidence ->> 'normalizedMetadataValue') !~ U&'[\0001-\0008\000B\000C\000E-\001F\007F]'))
+      AND (pg_catalog.jsonb_typeof(evidence -> 'candidateValue') = 'null'
+           OR (pg_catalog.length(evidence ->> 'candidateValue') <= 400
+               AND (evidence ->> 'candidateValue') !~ U&'[\0001-\0008\000B\000C\000E-\001F\007F]'))
+      AND (pg_catalog.jsonb_typeof(evidence -> 'normalizedCandidateValue') = 'null'
+           OR (pg_catalog.length(evidence ->> 'normalizedCandidateValue') <= 400
+               AND (evidence ->> 'normalizedCandidateValue') !~ U&'[\0001-\0008\000B\000C\000E-\001F\007F]'))
+    ),
+  CONSTRAINT check_assistive_finding_evidence_page_number
+    CHECK (
+      CASE pg_catalog.jsonb_typeof(evidence -> 'pageNumber')
+        WHEN 'null' THEN true
+        WHEN 'number' THEN
+          (evidence ->> 'pageNumber')::numeric = pg_catalog.trunc((evidence ->> 'pageNumber')::numeric)
+          AND (evidence ->> 'pageNumber')::numeric BETWEEN 1 AND 10
+        ELSE false
+      END
+    ),
+  CONSTRAINT check_assistive_finding_evidence_bounding_box
+    CHECK (
+      CASE pg_catalog.jsonb_typeof(evidence -> 'boundingBox')
+        WHEN 'null' THEN true
+        WHEN 'object' THEN
+          (evidence -> 'boundingBox') ?& ARRAY['left', 'top', 'right', 'bottom', 'unit']
+          AND ((evidence -> 'boundingBox') - ARRAY['left', 'top', 'right', 'bottom', 'unit']) = '{}'::jsonb
+          AND CASE
+            WHEN pg_catalog.jsonb_typeof(evidence -> 'boundingBox' -> 'left') = 'number'
+             AND pg_catalog.jsonb_typeof(evidence -> 'boundingBox' -> 'top') = 'number'
+             AND pg_catalog.jsonb_typeof(evidence -> 'boundingBox' -> 'right') = 'number'
+             AND pg_catalog.jsonb_typeof(evidence -> 'boundingBox' -> 'bottom') = 'number'
+             AND pg_catalog.jsonb_typeof(evidence -> 'boundingBox' -> 'unit') = 'string'
+            THEN (evidence -> 'boundingBox' ->> 'unit') IN (
+                   'PDF_POINTS_TOP_LEFT', 'IMAGE_PIXELS_TOP_LEFT'
+                 )
+                 AND (evidence -> 'boundingBox' ->> 'right')::numeric
+                     >= (evidence -> 'boundingBox' ->> 'left')::numeric
+                 AND (evidence -> 'boundingBox' ->> 'bottom')::numeric
+                     >= (evidence -> 'boundingBox' ->> 'top')::numeric
+            ELSE false
+          END
+        ELSE false
+      END
+    ),
   CONSTRAINT check_assistive_finding_evidence_explanation
     CHECK (pg_catalog.jsonb_typeof(evidence -> 'explanation') = 'string'
-           AND pg_catalog.length(evidence ->> 'explanation') BETWEEN 1 AND 300),
+           AND pg_catalog.length(evidence ->> 'explanation') BETWEEN 1 AND 300
+           AND (evidence ->> 'explanation') !~ U&'[\0001-\0008\000B\000C\000E-\001F\007F]'),
   CONSTRAINT check_assistive_finding_evidence_size
     CHECK (pg_catalog.length(evidence::text) <= 8192),
   -- reviewed_at is the coherence anchor rather than reviewed_by, precisely because the
@@ -243,6 +303,8 @@ DECLARE
   v_run_id uuid;
   v_existing_run_id uuid;
   v_existing_count integer;
+  v_existing_findings jsonb;
+  v_bounding_box jsonb;
   v_finding_keys text[] := ARRAY[
     'checkType', 'outcome', 'classification', 'reasonCode', 'affectedField',
     'origin', 'scoreKind', 'scoreValue', 'evidence'
@@ -360,10 +422,62 @@ BEGIN
        OR (v_evidence - v_evidence_keys) <> '{}'::jsonb
        OR pg_catalog.jsonb_typeof(v_evidence -> 'explanation') <> 'string'
        OR pg_catalog.length(v_evidence ->> 'explanation') NOT BETWEEN 1 AND 300
+       OR (v_evidence ->> 'explanation') ~ U&'[\0001-\0008\000B\000C\000E-\001F\007F]'
+       OR pg_catalog.jsonb_typeof(v_evidence -> 'evidenceExcerpt') NOT IN ('null', 'string')
+       OR (pg_catalog.jsonb_typeof(v_evidence -> 'evidenceExcerpt') = 'string'
+           AND (pg_catalog.length(v_evidence ->> 'evidenceExcerpt') > 500
+                OR (v_evidence ->> 'evidenceExcerpt') ~ U&'[\0001-\0008\000B\000C\000E-\001F\007F]'))
+       OR pg_catalog.jsonb_typeof(v_evidence -> 'metadataValue') NOT IN ('null', 'string')
+       OR (pg_catalog.jsonb_typeof(v_evidence -> 'metadataValue') = 'string'
+           AND (pg_catalog.length(v_evidence ->> 'metadataValue') > 400
+                OR (v_evidence ->> 'metadataValue') ~ U&'[\0001-\0008\000B\000C\000E-\001F\007F]'))
+       OR pg_catalog.jsonb_typeof(v_evidence -> 'normalizedMetadataValue') NOT IN ('null', 'string')
+       OR (pg_catalog.jsonb_typeof(v_evidence -> 'normalizedMetadataValue') = 'string'
+           AND (pg_catalog.length(v_evidence ->> 'normalizedMetadataValue') > 400
+                OR (v_evidence ->> 'normalizedMetadataValue') ~ U&'[\0001-\0008\000B\000C\000E-\001F\007F]'))
+       OR pg_catalog.jsonb_typeof(v_evidence -> 'candidateValue') NOT IN ('null', 'string')
+       OR (pg_catalog.jsonb_typeof(v_evidence -> 'candidateValue') = 'string'
+           AND (pg_catalog.length(v_evidence ->> 'candidateValue') > 400
+                OR (v_evidence ->> 'candidateValue') ~ U&'[\0001-\0008\000B\000C\000E-\001F\007F]'))
+       OR pg_catalog.jsonb_typeof(v_evidence -> 'normalizedCandidateValue') NOT IN ('null', 'string')
+       OR (pg_catalog.jsonb_typeof(v_evidence -> 'normalizedCandidateValue') = 'string'
+           AND (pg_catalog.length(v_evidence ->> 'normalizedCandidateValue') > 400
+                OR (v_evidence ->> 'normalizedCandidateValue') ~ U&'[\0001-\0008\000B\000C\000E-\001F\007F]'))
        OR pg_catalog.jsonb_typeof(v_evidence -> 'pageNumber') NOT IN ('null', 'number')
        OR pg_catalog.jsonb_typeof(v_evidence -> 'boundingBox') NOT IN ('null', 'object')
     THEN
       RETURN pg_catalog.jsonb_build_object('resultCode', 'VALIDATION_FAILED');
+    END IF;
+
+    IF pg_catalog.jsonb_typeof(v_evidence -> 'pageNumber') = 'number'
+       AND ((v_evidence ->> 'pageNumber')::numeric
+              <> pg_catalog.trunc((v_evidence ->> 'pageNumber')::numeric)
+            OR (v_evidence ->> 'pageNumber')::numeric NOT BETWEEN 1 AND 10)
+    THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'VALIDATION_FAILED');
+    END IF;
+
+    v_bounding_box := v_evidence -> 'boundingBox';
+    IF pg_catalog.jsonb_typeof(v_bounding_box) = 'object' THEN
+      IF NOT (v_bounding_box ?& ARRAY['left', 'top', 'right', 'bottom', 'unit'])
+         OR (v_bounding_box - ARRAY['left', 'top', 'right', 'bottom', 'unit']) <> '{}'::jsonb
+         OR pg_catalog.jsonb_typeof(v_bounding_box -> 'left') <> 'number'
+         OR pg_catalog.jsonb_typeof(v_bounding_box -> 'top') <> 'number'
+         OR pg_catalog.jsonb_typeof(v_bounding_box -> 'right') <> 'number'
+         OR pg_catalog.jsonb_typeof(v_bounding_box -> 'bottom') <> 'number'
+         OR pg_catalog.jsonb_typeof(v_bounding_box -> 'unit') <> 'string'
+         OR (v_bounding_box ->> 'unit') NOT IN (
+              'PDF_POINTS_TOP_LEFT', 'IMAGE_PIXELS_TOP_LEFT'
+            )
+      THEN
+        RETURN pg_catalog.jsonb_build_object('resultCode', 'VALIDATION_FAILED');
+      END IF;
+
+      IF (v_bounding_box ->> 'right')::numeric < (v_bounding_box ->> 'left')::numeric
+         OR (v_bounding_box ->> 'bottom')::numeric < (v_bounding_box ->> 'top')::numeric
+      THEN
+        RETURN pg_catalog.jsonb_build_object('resultCode', 'VALIDATION_FAILED');
+      END IF;
     END IF;
   END LOOP;
 
@@ -373,9 +487,10 @@ BEGIN
     pg_catalog.hashtext(p_project_id::text || ':' || v_input_hash || ':' || v_pipeline_version)
   );
 
-  -- 4.7 Documented idempotency. A completed run already answers this exact content identity, so a
-  -- repeat attempt returns that run untouched. Existing evidence is never rewritten in place; a
-  -- genuinely different answer requires different content or a new pipeline version.
+  -- 4.7 A completed identity converges only when every caller-visible finding field and the
+  -- produced order are semantically identical. Durable metadata (UUIDs, timestamps and reviewer
+  -- disposition) is deliberately excluded. A failed payload or different deterministic result
+  -- under the same completed identity is a conflict and never mutates the existing evidence.
   SELECT r.id
     INTO v_existing_run_id
     FROM public.assistive_validation_runs AS r
@@ -385,10 +500,30 @@ BEGIN
      AND r.status = 'COMPLETED';
 
   IF FOUND THEN
-    SELECT pg_catalog.count(*)
-      INTO v_existing_count
+    SELECT pg_catalog.count(*),
+           COALESCE(
+             pg_catalog.jsonb_agg(
+               pg_catalog.jsonb_build_object(
+                 'checkType', f.check_type,
+                 'outcome', f.outcome,
+                 'classification', f.classification,
+                 'reasonCode', f.reason_code,
+                 'affectedField', f.affected_field,
+                 'origin', f.origin,
+                 'scoreKind', f.score_kind,
+                 'scoreValue', f.score_value,
+                 'evidence', f.evidence
+               ) ORDER BY f.ordinal
+             ),
+             '[]'::jsonb
+           )
+      INTO v_existing_count, v_existing_findings
       FROM public.assistive_validation_findings AS f
      WHERE f.run_id = v_existing_run_id;
+
+    IF v_status <> 'COMPLETED' OR v_existing_findings IS DISTINCT FROM p_findings THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'IDENTITY_CONFLICT');
+    END IF;
 
     RETURN pg_catalog.jsonb_build_object(
       'resultCode', 'ALREADY_PERSISTED',
@@ -441,8 +576,8 @@ BEGIN
   );
 EXCEPTION
   WHEN unique_violation THEN
-    -- Defence in depth behind the advisory lock: the partial unique index is the final authority
-    -- on completed-run identity, and the loser of any race converges on the winning run.
+    -- Defence in depth behind the advisory lock: a race loser may converge only when its submitted
+    -- completed finding set is semantically identical to the winner's durable result.
     SELECT r.id
       INTO v_existing_run_id
       FROM public.assistive_validation_runs AS r
@@ -455,10 +590,30 @@ EXCEPTION
       RETURN pg_catalog.jsonb_build_object('resultCode', 'VALIDATION_FAILED');
     END IF;
 
-    SELECT pg_catalog.count(*)
-      INTO v_existing_count
+    SELECT pg_catalog.count(*),
+           COALESCE(
+             pg_catalog.jsonb_agg(
+               pg_catalog.jsonb_build_object(
+                 'checkType', f.check_type,
+                 'outcome', f.outcome,
+                 'classification', f.classification,
+                 'reasonCode', f.reason_code,
+                 'affectedField', f.affected_field,
+                 'origin', f.origin,
+                 'scoreKind', f.score_kind,
+                 'scoreValue', f.score_value,
+                 'evidence', f.evidence
+               ) ORDER BY f.ordinal
+             ),
+             '[]'::jsonb
+           )
+      INTO v_existing_count, v_existing_findings
       FROM public.assistive_validation_findings AS f
      WHERE f.run_id = v_existing_run_id;
+
+    IF v_status <> 'COMPLETED' OR v_existing_findings IS DISTINCT FROM p_findings THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'IDENTITY_CONFLICT');
+    END IF;
 
     RETURN pg_catalog.jsonb_build_object(
       'resultCode', 'ALREADY_PERSISTED',

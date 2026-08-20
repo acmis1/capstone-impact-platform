@@ -131,13 +131,30 @@ describe('assistive validation persistence migration contract', () => {
     expect(persistBody).not.toMatch(/element(\.value)?\s*->>\s*'classification'/);
   });
 
-  it('closes the persisted evidence contract by version, key set, shape, and size', () => {
+  it('closes the persisted evidence contract by version, keys, field bounds, geometry, and size', () => {
     expect(compact).toContain("CHECK (evidence ->> 'version' = 'assistive-finding-evidence/v1')");
     expect(compact).toContain("CHECK (pg_catalog.jsonb_typeof(evidence) = 'object')");
     expect(compact).toContain('CHECK (pg_catalog.length(evidence::text) <= 8192)');
     expect(compact).toContain(
-      "CHECK (pg_catalog.jsonb_typeof(evidence -> 'explanation') = 'string' AND pg_catalog.length(evidence ->> 'explanation') BETWEEN 1 AND 300)",
+      "CHECK (pg_catalog.jsonb_typeof(evidence -> 'explanation') = 'string' AND pg_catalog.length(evidence ->> 'explanation') BETWEEN 1 AND 300",
     );
+    expect(compact).toContain('CONSTRAINT check_assistive_finding_evidence_excerpt');
+    expect(compact).toContain("pg_catalog.length(evidence ->> 'evidenceExcerpt') <= 500");
+    expect(compact).toContain('CONSTRAINT check_assistive_finding_evidence_values');
+    for (const field of [
+      'metadataValue', 'normalizedMetadataValue', 'candidateValue', 'normalizedCandidateValue',
+    ]) {
+      expect(compact).toContain(`pg_catalog.jsonb_typeof(evidence -> '${field}') IN ('null', 'string')`);
+      expect(compact).toContain(`pg_catalog.length(evidence ->> '${field}') <= 400`);
+    }
+    expect(compact).toContain('CONSTRAINT check_assistive_finding_evidence_page_number');
+    expect(compact).toContain("(evidence ->> 'pageNumber')::numeric BETWEEN 1 AND 10");
+    expect(compact).toContain('CONSTRAINT check_assistive_finding_evidence_bounding_box');
+    expect(compact).toContain("ARRAY['left', 'top', 'right', 'bottom', 'unit']");
+    expect(compact).toContain("'PDF_POINTS_TOP_LEFT', 'IMAGE_PIXELS_TOP_LEFT'");
+    expect(compact).toContain("(evidence -> 'boundingBox' ->> 'right')::numeric >= (evidence -> 'boundingBox' ->> 'left')::numeric");
+    expect(compact).toContain("(evidence -> 'boundingBox' ->> 'bottom')::numeric >= (evidence -> 'boundingBox' ->> 'top')::numeric");
+    expect(compact).toContain("!~ U&'[\\0001-\\0008\\000B\\000C\\000E-\\001F\\007F]'");
     // Presence of every declared key AND rejection of any other key.
     expect(compact).toMatch(/CHECK \(evidence \?& ARRAY\[/);
     expect(compact).toMatch(/AND \(evidence - ARRAY\[[^\]]+\]\) = '\{\}'::jsonb\)/);
@@ -245,7 +262,7 @@ describe('assistive validation persistence migration contract', () => {
     expect(firstInsert).toBeLessThan(body.indexOf('INSERT INTO public.assistive_validation_findings'));
   });
 
-  it('serializes identical concurrent attempts and converges on the durable run', () => {
+  it('serializes concurrent attempts and converges only for an exact completed retry', () => {
     const compactPersist = persistBody.replace(/\s+/g, ' ');
     expect(compactPersist).toContain(
       "PERFORM pg_catalog.pg_advisory_xact_lock( pg_catalog.hashtext(p_project_id::text || ':' || v_input_hash || ':' || v_pipeline_version) )",
@@ -255,6 +272,16 @@ describe('assistive validation persistence migration contract', () => {
     expect(lock).toBeGreaterThan(-1);
     expect(idempotencyRead).toBeGreaterThan(lock);
     expect(compactPersist).toContain('EXCEPTION WHEN unique_violation THEN');
+    expect(compactPersist.match(/v_existing_findings IS DISTINCT FROM p_findings/g)).toHaveLength(2);
+    expect(compactPersist.match(/v_status <> 'COMPLETED'/g)).toHaveLength(2);
+    expect(compactPersist.match(/'resultCode', 'IDENTITY_CONFLICT'/g)).toHaveLength(2);
+    expect(compactPersist.match(/'resultCode', 'ALREADY_PERSISTED'/g)).toHaveLength(2);
+    const deterministicProjection = "'checkType', f.check_type, 'outcome', f.outcome, 'classification', f.classification, 'reasonCode', f.reason_code, 'affectedField', f.affected_field, 'origin', f.origin, 'scoreKind', f.score_kind, 'scoreValue', f.score_value, 'evidence', f.evidence";
+    expect(compactPersist.split(deterministicProjection)).toHaveLength(3);
+    for (const durableMetadata of ['findingId', 'createdAt', 'disposition', 'reviewedBy', 'reviewedAt']) {
+      expect(compactPersist).not.toContain(`'${durableMetadata}'`);
+    }
+    expect(compactPersist.match(/ORDER BY f\.ordinal/g)).toHaveLength(2);
   });
 
   it('re-proves the actor against a recognized staff role inside the database', () => {
