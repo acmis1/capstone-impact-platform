@@ -11,6 +11,7 @@ import {
   revalidateLocalDockerNetwork,
   safeProcessResult,
   supabaseCommandArguments,
+  waitForLocalStackReadiness,
 } from './safeSupabaseCli';
 
 const sensitiveFixtures = [
@@ -35,6 +36,31 @@ describe('safe local process results', () => {
   it('keeps signal and spawn failures category-only', () => {
     expect(safeProcessResult({ ok: false, signal: 'SIGTERM' })).toEqual({ ok: false, exitCode: null, signal: 'SIGTERM', failureCategory: 'COMMAND_TERMINATED' });
     expect(safeProcessResult({ ok: false })).toEqual({ ok: false, exitCode: null, signal: null, failureCategory: 'SPAWN_FAILED' });
+  });
+});
+
+describe('local stack readiness polling', () => {
+  it('accepts a stack that becomes ready within the bounded polling window', () => {
+    const states: Array<'DEGRADED' | 'RUNNING'> = ['DEGRADED', 'DEGRADED', 'RUNNING'];
+    const pauses: number[] = [];
+
+    expect(waitForLocalStackReadiness(
+      () => states.shift() ?? 'RUNNING',
+      (milliseconds) => pauses.push(milliseconds),
+      3,
+    )).toBe(true);
+    expect(pauses).toEqual([250, 250]);
+  });
+
+  it('fails closed when the stack never becomes ready', () => {
+    const pauses: number[] = [];
+
+    expect(waitForLocalStackReadiness(
+      () => 'DEGRADED',
+      (milliseconds) => pauses.push(milliseconds),
+      3,
+    )).toBe(false);
+    expect(pauses).toEqual([250, 250]);
   });
 });
 

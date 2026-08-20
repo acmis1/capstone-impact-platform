@@ -289,6 +289,18 @@ function waitBriefly(milliseconds: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
+export function waitForLocalStackReadiness(
+  observe: () => ReturnType<typeof observeLocalStack>,
+  pause: (milliseconds: number) => void = waitBriefly,
+  attempts = 40,
+): boolean {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (observe() === 'RUNNING') return true;
+    if (attempt + 1 < attempts) pause(250);
+  }
+  return false;
+}
+
 function childProcessIsAlive(pid: number | undefined): boolean {
   if (!pid || !Number.isSafeInteger(pid) || pid <= 0) return false;
   try {
@@ -569,7 +581,7 @@ export function runLocalSupabaseCli(
       if (!bindings.ok) {
         return { ok: false, exitCode: 0, signal: null, failureCategory: bindings.category };
       }
-      if (observeLocalStack(repoRoot) !== 'RUNNING') {
+      if (!waitForLocalStackReadiness(() => observeLocalStack(repoRoot))) {
         return { ok: false, exitCode: 0, signal: null, failureCategory: 'STACK_NOT_READY' };
       }
     }
