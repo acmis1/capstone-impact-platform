@@ -1,0 +1,42 @@
+{
+  "born-digital-multi-page.pdf": {
+    "bytes": 1022,
+    "sha256": "21c0e613fe0b2f2cdab783fcc42922b83f0217bf0f0b65a619c2664ccd6f062c"
+  },
+  "born-digital-one-page.pdf": {
+    "bytes": 705,
+    "sha256": "8b74153b77da80e58d54848ec5acc4b59c96860437320fb2a97f4a944fd2ceb7"
+  },
+  "corrupt.pdf": {
+    "bytes": 60,
+    "sha256": "362cc812f0858ab50c61532734ac65c4a004f3175d332c4536373f681c625050"
+  },
+  "empty.pdf": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "low-resolution.png": {
+    "bytes": 501,
+    "sha256": "793cdd726906c43f30875cdf0cace23d5fb5edb5c98e4b6eec902247e7958a35"
+  },
+  "oversized-dimensions.png": {
+    "bytes": 45,
+    "sha256": "5f30f81f7864fd8612975cfde74c03a9c08769748559406e91809db1f14679f5"
+  },
+  "scanned-raster.pdf": {
+    "bytes": 3405,
+    "sha256": "be3f9b5edbda955b8efa52bfbc558e9bcba6e83672658840a9fc7d304bdd25cf"
+  },
+  "unsupported.txt": {
+    "bytes": 36,
+    "sha256": "51885422bd75c7cb44ff0af64f402b7507ad1ce449275550776dd699a442c92b"
+  },
+  "valid.jpg": {
+    "bytes": 7552,
+    "sha256": "6ef5846dadb1a88bb0d81c7035e9d6175d35fd842b0567f25182027eeafb3c44"
+  },
+  "valid.png": {
+    "bytes": 3548,
+    "sha256": "b353e8c88ed728c7307eabd3952b89dfa9ddea32e874bf0e7c92fe8d91c6e850"
+  }
+}

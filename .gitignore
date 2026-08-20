@@ -38,3 +38,9 @@ tools/assistive-validation-benchmark/.paddleocr/
 tools/assistive-validation-benchmark/**/__pycache__/
 tools/assistive-validation-benchmark/.pytest_cache/
 tools/assistive-validation-benchmark/src/*.egg-info/
+
+# local-only production assistive-worker environments and Python caches
+apps/assistive-worker/.venv/
+apps/assistive-worker/**/__pycache__/
+apps/assistive-worker/.pytest_cache/
+apps/assistive-worker/src/*.egg-info/
