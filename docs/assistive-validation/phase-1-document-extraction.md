@@ -130,7 +130,9 @@ py -3.11 -m venv .venv
 .venv\Scripts\python tests\fixtures\generate.py --output-dir $env:TEMP\capstone-phase1-fixtures
 ```
 
-Normal CI installs only `pypdfium2==5.13.0` and `Pillow==12.3.0`, runs the production unit/golden/security suite, generates the deterministic fixtures, and confirms no generated output changed tracked files. It requires no Tesseract installation, Paddle weights, GPU, database, or external AI service.
+Normal CI installs only `pypdfium2==5.13.0` and `Pillow==12.3.0`, runs the production unit/golden/security suite on Ubuntu, Windows, and macOS, generates the deterministic fixtures, and confirms no generated output changed tracked files. It requires no Tesseract installation, Paddle weights, GPU, database, or external AI service.
+
+Fixture contract: the hand-built PDFs, malformed headers, and all generated fixture files are byte-golden. The tiny PNG/JPEG inputs under `tests/fixtures/canonical/` are checked-in canonical source bytes: generation copies them after verifying their SHA-256, rather than asking Pillow to render default-font text or re-encode images. The scanned PDF embeds that canonical JPEG, so it is byte-golden too. Tests additionally decode the canonical PNG/JPEG fixtures to assert their format and dimensions; the low-resolution fixture remains 64×64.
 
 Dependency licenses:
 

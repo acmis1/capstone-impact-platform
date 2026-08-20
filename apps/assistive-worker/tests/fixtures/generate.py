@@ -5,10 +5,16 @@ import hashlib
 import json
 import struct
 import zlib
-from io import BytesIO
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+
+CANONICAL_RASTER_DIR = Path(__file__).with_name("canonical")
+CANONICAL_RASTER_SHA256 = {
+    "valid.png": "b353e8c88ed728c7307eabd3952b89dfa9ddea32e874bf0e7c92fe8d91c6e850",
+    "valid.jpg": "6ef5846dadb1a88bb0d81c7035e9d6175d35fd842b0567f25182027eeafb3c44",
+    "low-resolution.png": "793cdd726906c43f30875cdf0cace23d5fb5edb5c98e4b6eec902247e7958a35",
+    "scanned.jpg": "d156fab59917c4eac9a5701ddd26da7bb519963886191d0bf414c5e96bbd105a",
+}
 
 
 def _pdf_escape(text: str) -> str:
@@ -58,17 +64,13 @@ def born_digital_pdf(pages: list[list[str]]) -> bytes:
     return _assemble_pdf(objects)
 
 
-def _image_bytes(fmt: str, size: tuple[int, int], text: str) -> bytes:
-    image = Image.new("RGB", size, (248, 248, 244))
-    draw = ImageDraw.Draw(image)
-    draw.text((12, 12), text, fill=(20, 35, 50))
-    output = BytesIO()
-    if fmt == "JPEG":
-        image.save(output, "JPEG", quality=85, subsampling=1, optimize=False, progressive=False)
-    else:
-        image.save(output, "PNG", optimize=False, compress_level=6)
-    image.close()
-    return output.getvalue()
+def canonical_raster(name: str) -> bytes:
+    data = (CANONICAL_RASTER_DIR / name).read_bytes()
+    expected = CANONICAL_RASTER_SHA256[name]
+    actual = hashlib.sha256(data).hexdigest()
+    if actual != expected:
+        raise ValueError(f"canonical raster hash mismatch for {name}")
+    return data
 
 
 def scanned_pdf(jpeg: bytes, width: int, height: int) -> bytes:
@@ -100,10 +102,10 @@ def oversized_png_header(width: int, height: int) -> bytes:
 
 def generate(output_dir: Path) -> dict[str, dict[str, str | int]]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    png = _image_bytes("PNG", (640, 480), "Synthetic PNG poster")
-    jpeg = _image_bytes("JPEG", (640, 480), "Synthetic JPEG poster")
-    low = _image_bytes("PNG", (64, 64), "Low")
-    scanned_jpeg = _image_bytes("JPEG", (320, 220), "Scanned raster only")
+    png = canonical_raster("valid.png")
+    jpeg = canonical_raster("valid.jpg")
+    low = canonical_raster("low-resolution.png")
+    scanned_jpeg = canonical_raster("scanned.jpg")
     assets = {
         "born-digital-one-page.pdf": born_digital_pdf(
             [["Synthetic Native Extraction Poster", "Bounded evidence for Phase 1 validation."]]
