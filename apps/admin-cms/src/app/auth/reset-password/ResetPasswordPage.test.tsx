@@ -26,6 +26,9 @@ vi.mock('next/navigation', () => ({
 
 import ResetPasswordPage from './page';
 
+/** Both supported recovery-entry AMRs reach the form only while the durable gate grants access. */
+const SUPPORTED_RECOVERY_METHODS = ['otp', 'recovery'] as const;
+
 describe('recovery reset-password page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -46,6 +49,24 @@ describe('recovery reset-password page', () => {
       'NEXT_REDIRECT:/auth/recovery/invalid',
     );
   });
+
+  it.each(SUPPORTED_RECOVERY_METHODS)(
+    'renders the reset form for the %s recovery AMR only while the durable gate grants access',
+    async (method) => {
+      mocks.verifyAccess.mockResolvedValue({
+        userId: '11111111-1111-4111-8111-111111111111',
+        sessionId: '22222222-2222-4222-8222-222222222222',
+        authenticationMethods: [method],
+      });
+      render(await ResetPasswordPage());
+      expect(screen.getByRole('heading', { name: 'Choose a new password' })).toBeDefined();
+      cleanup();
+
+      // A denied gate (no durable row, invalid context, or mismatched user/session) still wins.
+      mocks.verifyAccess.mockResolvedValue(null);
+      await expect(ResetPasswordPage()).rejects.toThrow('NEXT_REDIRECT:/auth/recovery/invalid');
+    },
+  );
 
   it('renders only required new-password fields without user identity', async () => {
     render(await ResetPasswordPage());

@@ -97,8 +97,19 @@ export async function getCurrentPasswordRecoverySessionState(
   return parseRecoverySessionState(data);
 }
 
+/**
+ * Exact verified recovery-entry provenance. Local custom TokenHash recovery
+ * (`verifyOtp({ type: 'recovery' })`) proves `otp`, and Supabase's documented `amr` contract also
+ * defines `recovery`, which the hosted default-template PKCE exchange emits. Each is accepted only
+ * as the sole verified method - never by prefix, substring, or within a mixed set.
+ */
+const RECOVERY_ENTRY_METHODS: readonly string[] = ['otp', 'recovery'];
+
 export function hasRecoveryAcceptanceProvenance(claims: VerifiedAuthClaims): boolean {
-  return claims.authenticationMethods.length === 1 && claims.authenticationMethods[0] === 'otp';
+  return (
+    claims.authenticationMethods.length === 1 &&
+    RECOVERY_ENTRY_METHODS.includes(claims.authenticationMethods[0])
+  );
 }
 
 export function hasSupportedAdminPasswordProvenance(claims: VerifiedAuthClaims): boolean {

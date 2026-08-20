@@ -27,16 +27,37 @@ import { GET } from './route';
 const USER = { id: '11111111-1111-4111-8111-111111111111' };
 const SESSION_ID = '22222222-2222-4222-8222-222222222222';
 const SESSION = { access_token: 'synthetic-session' };
-const CLAIMS = {
+const claimsFor = (methods: readonly string[]) => ({
   data: {
     claims: {
       sub: USER.id,
       session_id: SESSION_ID,
-      amr: [{ method: 'otp', timestamp: 1_800_000_000 }],
+      amr: methods.map((method) => ({ method, timestamp: 1_800_000_000 })),
     },
   },
   error: null,
-};
+});
+const CLAIMS = claimsFor(['otp']);
+
+/** Documented recovery-entry AMRs: Local custom TokenHash proves `otp`; hosted PKCE emits `recovery`. */
+const SUPPORTED_RECOVERY_METHODS = ['otp', 'recovery'] as const;
+
+/** Documented non-recovery and mixed AMRs that must never establish a recovery session. */
+const UNSUPPORTED_RECOVERY_METHOD_CASES: readonly [readonly string[]][] = ([
+  [],
+  ['password'],
+  ['magiclink'],
+  ['invite'],
+  ['email/signup'],
+  ['email_change'],
+  ['oauth'],
+  ['token_refresh'],
+  ['unknown'],
+  ['otp', 'password'],
+  ['recovery', 'password'],
+  ['otp', 'recovery'],
+  ['magiclink', 'recovery'],
+] as const).map((methods) => [methods]);
 
 describe('PKCE password-recovery callback', () => {
   const originalRender = process.env.RENDER;
@@ -93,6 +114,74 @@ describe('PKCE password-recovery callback', () => {
       mocks.issueContext.mock.invocationCallOrder[0],
     );
   });
+
+  it.each(SUPPORTED_RECOVERY_METHODS)(
+    'establishes a session-bound recovery context for the documented %s AMR',
+    async (method) => {
+      mocks.getClaims.mockResolvedValueOnce(claimsFor([method]));
+      const response = await GET(new NextRequest(
+        'http://localhost:3000/auth/recovery/callback?code=hosted-pkce_code-123',
+      ));
+
+      // Exactly: exchangeCodeForSession -> getClaims -> register -> issue context -> 303 reset.
+      expect(response.status).toBe(303);
+      expect(response.headers.get('Location')).toBe('http://localhost:3000/auth/reset-password');
+      expect(mocks.exchangeCode).toHaveBeenCalledOnce();
+      expect(mocks.exchangeCode).toHaveBeenCalledWith('hosted-pkce_code-123');
+      expect(mocks.getClaims).toHaveBeenCalledOnce();
+      expect(mocks.registrationRpc).toHaveBeenCalledOnce();
+      expect(mocks.registrationRpc).toHaveBeenCalledWith(
+        'register_password_recovery_session',
+        { p_session_id: SESSION_ID, p_auth_user_id: USER.id },
+      );
+      expect(mocks.issueContext).toHaveBeenCalledOnce();
+      // Identity comes only from the verified claims, never the exchange payload or URL.
+      expect(mocks.issueContext).toHaveBeenCalledWith(USER.id, SESSION_ID);
+      expect(mocks.exchangeCode.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.getClaims.mock.invocationCallOrder[0],
+      );
+      expect(mocks.getClaims.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.registrationRpc.mock.invocationCallOrder[0],
+      );
+      expect(mocks.registrationRpc.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.issueContext.mock.invocationCallOrder[0],
+      );
+
+      // A successful recovery entry must not terminate the session it just established.
+      expect(mocks.signOut).not.toHaveBeenCalled();
+
+      // No authorization code, session token, or provider detail reaches the client.
+      const exposed = `${response.headers.get('Location') ?? ''}|${[...response.headers]
+        .map(([key, value]) => `${key}=${value}`)
+        .join('|')}|${await response.text()}`;
+      expect(exposed).not.toContain('hosted-pkce_code-123');
+      expect(exposed).not.toContain(SESSION.access_token);
+      expect(exposed).not.toContain(method);
+      expect(response.headers.get('Cache-Control')).toBe('no-store, max-age=0');
+      expect(response.headers.get('Referrer-Policy')).toBe('no-referrer');
+    },
+  );
+
+  it.each(UNSUPPORTED_RECOVERY_METHOD_CASES)(
+    'fails generically and cleans up for unsupported AMR %j',
+    async (authenticationMethods) => {
+      mocks.getClaims.mockResolvedValueOnce(claimsFor(authenticationMethods));
+      const response = await GET(new NextRequest(
+        'http://localhost:3000/auth/recovery/callback?code=valid-code',
+      ));
+
+      expect(response.status).toBe(303);
+      expect(response.headers.get('Location')).toBe(
+        'http://localhost:3000/login?error=RECOVERY_LINK_INVALID',
+      );
+      // Rejected before any durable registration or recovery context is created.
+      expect(mocks.registrationRpc).not.toHaveBeenCalled();
+      expect(mocks.issueContext).not.toHaveBeenCalled();
+      // The unusable session is terminated rather than left live.
+      expect(mocks.signOut).toHaveBeenCalledOnce();
+      expect(mocks.signOut).toHaveBeenCalledWith({ scope: 'local' });
+    },
+  );
 
   it.each([
     '',

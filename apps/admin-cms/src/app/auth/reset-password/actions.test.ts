@@ -34,6 +34,9 @@ const ACCESS = {
   authenticationMethods: ['otp'],
 };
 
+/** Both supported recovery-entry AMRs must reach the reset action only through the durable gate. */
+const SUPPORTED_RECOVERY_METHODS = ['otp', 'recovery'] as const;
+
 describe('dedicated recovery password update action', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -76,6 +79,29 @@ describe('dedicated recovery password update action', () => {
     expect(mocks.clearContext).toHaveBeenCalledOnce();
   });
 
+  it.each(SUPPORTED_RECOVERY_METHODS)(
+    'updates the password for the %s recovery AMR once the durable session-bound gate grants access',
+    async (method) => {
+      mocks.verifyAccess.mockResolvedValue({ ...ACCESS, authenticationMethods: [method] });
+      const password = 'ValidPassword1';
+      await expect(resetPasswordAction({ password, confirmation: password })).rejects.toThrow(
+        'NEXT_REDIRECT:/login?status=PASSWORD_RESET',
+      );
+      expect(mocks.updateUser).toHaveBeenCalledOnce();
+      expect(mocks.signOut).toHaveBeenCalledWith({ scope: 'local' });
+      expect(mocks.clearContext).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('derives reset authorization only from the durable gate, never from an AMR literal', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, 'actions.ts'), 'utf8');
+    expect(source).toContain('getVerifiedPasswordRecoveryAccess');
+    expect(source).not.toMatch(/'otp'|'recovery'|amr|authenticationMethods/);
+  });
+
+  // getVerifiedPasswordRecoveryAccess is the single gate for both supported recovery AMRs: it
+  // returns null for a missing durable RECOVERY_SESSION row, an absent/invalid signed context, or
+  // a context bound to another user or session. Neither AMR can bypass it.
   it('terminates generically when claims, durable state, or exact context binding is invalid', async () => {
     mocks.verifyAccess.mockResolvedValueOnce(null);
     const password = 'ValidPassword1';
