@@ -1,0 +1,11 @@
+{
+  "name": "pp1-assistive-validation-harper-adapter",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.14.1 <25"
+  },
+  "dependencies": {
+    "harper.js": "2.7.0"
+  }
+}

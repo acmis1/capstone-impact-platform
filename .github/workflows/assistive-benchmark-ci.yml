@@ -1,0 +1,52 @@
+name: Assistive Benchmark Lightweight CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/assistive-benchmark-ci.yml'
+      - 'tools/assistive-validation-benchmark/**'
+      - 'docs/assistive-validation/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/assistive-benchmark-ci.yml'
+      - 'tools/assistive-validation-benchmark/**'
+      - 'docs/assistive-validation/**'
+
+permissions:
+  contents: read
+
+jobs:
+  lightweight-benchmark-tests:
+    name: Assistive Benchmark Unit & Corpus Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: tools/assistive-validation-benchmark/pyproject.toml
+
+      - name: Install isolated benchmark dependencies
+        run: python -m pip install -e tools/assistive-validation-benchmark
+
+      - name: Run lightweight benchmark unit tests
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m unittest discover -s tests -v
+
+      - name: Validate committed benchmark manifest
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark validate
+
+      - name: Generate deterministic synthetic corpus smoke fixture
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark generate --output-dir artifacts/ci-corpus
+
+      - name: Confirm generated/model artifacts remain untracked
+        run: git diff --exit-code -- . ':!docs/assistive-validation/evidence/phase-0-report.json'
