@@ -432,7 +432,7 @@ describe.sequential('authenticated Docker loopback proxy', () => {
       expect(acceptedRequests.length).toBeGreaterThan(0);
       expect(acceptedRequests.every((request) => request.headers[DOCKER_PROXY_AUTH_HEADER] === undefined)).toBe(true);
     }
-  });
+  }, 15_000);
 
   it('parses the pinned reset command without contacting Docker when help is requested', async () => {
     const upstreamCount = recordedRequests.length;

@@ -254,8 +254,8 @@ async function main(): Promise<void> {
     // ---------------------------------------------------------------------
     // Schema, constraints, RLS and privileges
     // ---------------------------------------------------------------------
-    await scenario(1, 'Local Supabase applied exactly 30 migrations from zero', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '30');
+    await scenario(1, 'Local Supabase applied exactly 31 migrations from zero', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '31');
     });
 
     await scenario(2, 'both assistive tables exist and a finding cannot restate run identity', () => {
@@ -269,7 +269,7 @@ async function main(): Promise<void> {
       );
       assert.equal(
         psql("SELECT string_agg(column_name, ',' ORDER BY column_name) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'assistive_validation_runs';"),
-        'created_at,failure_code,id,input_hash,pipeline_version,project_id,requested_by,status',
+        'completed_at,created_at,failure_code,id,input_hash,pipeline_version,project_id,requested_by,started_at,status',
       );
     });
 
@@ -313,7 +313,7 @@ async function main(): Promise<void> {
         'check_assistive_finding_score_pair', 'check_assistive_finding_score_value',
         'check_assistive_run_failure_code', 'check_assistive_run_failure_coherence',
         'check_assistive_run_input_hash', 'check_assistive_run_pipeline_version',
-        'check_assistive_run_status',
+        'check_assistive_run_status', 'check_assistive_run_timestamps',
       ];
       assert.equal(
         psql(`SELECT string_agg(c.conname, ',' ORDER BY c.conname)
@@ -366,11 +366,11 @@ async function main(): Promise<void> {
       );
     });
 
-    await scenario(9, 'no trigger exists on either assistive table', () => {
+    await scenario(9, 'Phase 3 findings retain no trigger-driven mutation path', () => {
       assert.equal(
         psql(`SELECT count(*) FROM pg_catalog.pg_trigger tg
               JOIN pg_catalog.pg_class t ON t.oid = tg.tgrelid
-              WHERE NOT tg.tgisinternal AND t.relname IN ('assistive_validation_runs','assistive_validation_findings');`),
+              WHERE NOT tg.tgisinternal AND t.relname = 'assistive_validation_findings';`),
         '0',
       );
     });
@@ -423,6 +423,7 @@ async function main(): Promise<void> {
       assertDenied('service run select', await service.from('assistive_validation_runs').select('*'));
       assertDenied('service finding select', await service.from('assistive_validation_findings').select('*'));
       assertDenied('service finding insert', await service.from('assistive_validation_findings').insert({ run_id: projectId }));
+      assertDenied('service job select', await service.from('assistive_validation_jobs').select('*'));
     });
 
     // ---------------------------------------------------------------------
@@ -442,6 +443,10 @@ async function main(): Promise<void> {
       runId = result.runId;
       assert.equal(runRow(inputHash), '1');
       assert.equal(findingCountFor(inputHash), '3');
+      assert.equal(
+        psql(`SELECT j.status || ':' || j.attempt_count::text FROM public.assistive_validation_jobs j WHERE j.run_id = '${runId}'::uuid;`),
+        'COMPLETED:0',
+      );
       assert.equal(
         psql(`SELECT string_agg(DISTINCT classification, ',') FROM public.assistive_validation_findings WHERE run_id = '${runId}'::uuid;`),
         'NON_BLOCKING',
@@ -837,27 +842,24 @@ async function main(): Promise<void> {
       );
     });
 
-    await scenario(35, 'the assistive domain added exactly two tables and three functions, and no queue', () => {
-      // Scoped to the assistive domain: the repository already owns unrelated claim_* functions for
-      // publication, provisioning, removal, and reminders, and this phase must add none of its own.
+    await scenario(35, 'Phase 4 preserves all three Phase 3 RPCs and supplies one coherent job per legacy run', () => {
       assert.equal(
-        psql("SELECT string_agg(table_name, ',' ORDER BY table_name) FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE '%assistive%';"),
-        'assistive_validation_findings,assistive_validation_runs',
+        psql("SELECT string_agg(table_name, ',' ORDER BY table_name) FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'assistive_validation_%';"),
+        'assistive_validation_findings,assistive_validation_jobs,assistive_validation_runs',
       );
       assert.equal(
         psql(`SELECT string_agg(p.proname, ',' ORDER BY p.proname)
               FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-              WHERE n.nspname = 'public' AND p.proname LIKE '%assistive%';`),
+              WHERE n.nspname = 'public' AND p.proname IN (
+                'get_latest_assistive_validation_run','persist_assistive_validation_run',
+                'record_assistive_finding_disposition');`),
         'get_latest_assistive_validation_run,persist_assistive_validation_run,record_assistive_finding_disposition',
       );
       assert.equal(
-        psql("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE '%assistive%job%';"),
-        '0',
-      );
-      assert.equal(
-        psql(`SELECT count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-              WHERE n.nspname = 'public' AND p.proname LIKE '%assistive%'
-                AND (p.prosrc LIKE '%SKIP LOCKED%' OR p.prosrc LIKE '%lease_until%' OR p.prosrc LIKE '%worker_id%');`),
+        psql(`SELECT count(*) FROM public.assistive_validation_runs r
+              LEFT JOIN public.assistive_validation_jobs j ON j.run_id = r.id
+              WHERE r.project_id = '${projectId}'::uuid
+                AND (j.id IS NULL OR j.status <> r.status OR j.attempt_count <> 0);`),
         '0',
       );
     });

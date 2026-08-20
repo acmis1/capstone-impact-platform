@@ -62,6 +62,10 @@
     "verify:controlled-publication-runtime": "npm run verify:controlled-publication-runtime --workspace=apps/admin-cms",
     "verify:controlled-public-removal-runtime": "npm run verify:controlled-public-removal-runtime --workspace=apps/admin-cms",
     "verify:assistive-persistence-runtime": "npm run verify:assistive-persistence-runtime --workspace=apps/admin-cms",
+    "verify:assistive-jobs-runtime": "npm run verify:assistive-jobs-runtime --workspace=apps/admin-cms",
+    "run:assistive-worker": "npm run run:assistive-worker --workspace=apps/admin-cms",
+    "run:assistive-worker-once": "npm run run:assistive-worker-once --workspace=apps/admin-cms",
+    "assistive-worker:health": "npm run assistive-worker:health --workspace=apps/admin-cms",
     "verify:scaling-runtime": "npm run verify:scaling-runtime --workspace=apps/admin-cms",
     "benchmark:local-scaling": "npm run benchmark:local-scaling --workspace=apps/admin-cms --"
   },

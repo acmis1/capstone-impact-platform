@@ -43,6 +43,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     '20260817090000_private_media_approval_gate.sql',
     '20260819214431_password_recovery_session_provenance.sql',
     '20260820120000_assistive_validation_persistence.sql',
+    '20260820160000_assistive_validation_job_coordination.sql',
   ];
 
   const defaultMockExec = (cmd: string): string => {
@@ -239,7 +240,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const shuffled = [...validMigrations].reverse();
     const result = validateMigrationsList(shuffled);
     expect(result.passed).toBe(true);
-    expect(result.message).toContain('30 timestamped migrations');
+    expect(result.message).toContain('31 timestamped migrations');
   });
 
   it('10. Duplicate migration timestamps fail', () => {
@@ -274,6 +275,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260817090000_private_media_approval_gate.sql',
       '20260819214431_password_recovery_session_provenance.sql',
       '20260820120000_assistive_validation_persistence.sql',
+      '20260820160000_assistive_validation_job_coordination.sql',
     ];
     const result = validateMigrationsList(duplicateMigrations);
     expect(result.passed).toBe(false);
@@ -312,6 +314,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260817090000_private_media_approval_gate.sql',
       '20260819214431_password_recovery_session_provenance.sql',
       '20260820120000_assistive_validation_persistence.sql',
+      '20260820160000_assistive_validation_job_coordination.sql',
     ];
     const result = validateMigrationsList(missing0008);
     expect(result.passed).toBe(false);
@@ -575,6 +578,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260817090000_private_media_approval_gate.sql',
       '20260819214431_password_recovery_session_provenance.sql',
       '20260820120000_assistive_validation_persistence.sql',
+      '20260820160000_assistive_validation_job_coordination.sql',
     ];
     const result = validateMigrationsList(invalidMigrationNames);
     expect(result.passed).toBe(false);

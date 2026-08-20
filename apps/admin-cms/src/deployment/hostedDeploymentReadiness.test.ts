@@ -151,20 +151,18 @@ function completeEvidence(overrides: Partial<HostedReadinessEvidence> = {}): Hos
 
 describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () => {
   describe('authoritative migration, table, and RPC inventory', () => {
-    it('matches the exact 30 migration files and keeps every historical file byte-identical to origin/main', () => {
+    it('matches the exact 31 migration files and keeps every historical file byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(30);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(31);
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
-      for (const historical of EXPECTED_REPOSITORY_MIGRATIONS.slice(0, -1)) {
-        expect(() =>
-          execFileSync(
-            'git',
-            ['diff', '--exit-code', 'origin/main', '--', `infra/supabase/migrations/${historical}`],
-            { cwd: repoRoot, stdio: 'pipe' },
-          )
-        ).not.toThrow();
-      }
+      expect(() => execFileSync(
+        'git',
+        ['diff', '--exit-code', 'origin/main', '--', ...EXPECTED_REPOSITORY_MIGRATIONS.slice(0, -1).map(
+          (historical) => `infra/supabase/migrations/${historical}`,
+        )],
+        { cwd: repoRoot, stdio: 'pipe' },
+      )).not.toThrow();
     });
 
     it('matches exact application CREATE TABLE definitions rather than a count alone', () => {
@@ -175,9 +173,10 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       );
 
       expect([...ALL_REQUIRED_TABLES].sort()).toEqual([...new Set(createdTables)].sort());
-      expect(ALL_REQUIRED_TABLES).toHaveLength(26);
+      expect(ALL_REQUIRED_TABLES).toHaveLength(27);
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_runs');
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_findings');
+      expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_jobs');
       expect(ALL_REQUIRED_TABLES).toContain('publication_attempts');
       expect(ALL_REQUIRED_TABLES).toContain('public_removal_attempts');
       expect(ALL_REQUIRED_TABLES).not.toContain('participant_preview_tokens');
@@ -187,9 +186,10 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches every final service-role application RPC signature and isolates the one internal helper', () => {
       const contracts = migrationServiceRoleContracts();
       expect(contracts.application.map(contractKey).sort()).toEqual(REQUIRED_RPC_SIGNATURES.map(contractKey).sort());
-      expect(contracts.application).toHaveLength(47);
+      expect(contracts.application).toHaveLength(57);
       expect(REQUIRED_RPC_NAMES).toContain('persist_assistive_validation_run');
       expect(REQUIRED_RPC_NAMES).toContain('record_assistive_finding_disposition');
+      expect(REQUIRED_RPC_NAMES).toContain('claim_next_assistive_validation_job');
       expect(contracts.internal.map(contractKey)).toEqual(['canonical_staff_roles(text[]):p_roles']);
       expect(REQUIRED_RPC_NAMES).not.toContain('execute_controlled_publication');
       expect(REQUIRED_RPC_NAMES).not.toContain('execute_controlled_public_removal');
@@ -236,7 +236,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const missingMigration = evaluateHostedDeploymentReadiness(
         completeEvidence({ recordedMigrationVersions: [], manualEvidence: undefined })
       );
-      expect(missingMigration.missingMigrations).toHaveLength(30);
+      expect(missingMigration.missingMigrations).toHaveLength(31);
       expect(missingMigration.deploymentClassification).toBe('RECONCILIATION_REQUIRED');
     });
 
@@ -312,7 +312,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const inspected = inspectPostgrestOpenApi(openApiDocument());
       expect(inspected?.publicRelations).toEqual([...ALL_REQUIRED_TABLES].sort());
       expect(inspected?.rpcNames).toEqual([...REQUIRED_RPC_NAMES].sort());
-      expect(inspected?.rpcSignatures).toHaveLength(46);
+      expect(inspected?.rpcSignatures).toHaveLength(56);
       expect(inspected?.rpcSignatures.some((signature) => signature.name === 'execute_controlled_publication')).toBe(false);
     });
 

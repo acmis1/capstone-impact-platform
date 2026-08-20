@@ -26,7 +26,7 @@ describe('accessible full-text gate migration contract', () => {
   it('is exactly Migration 0025 and preserves all inherited migration bytes', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(30);
+    expect(files).toHaveLength(31);
     expect(files[24]).toBe(filename);
     for (const inherited of files.slice(0, 24)) {
       const local = fs.readFileSync(path.join(migrations, inherited), 'utf8').replace(/\r\n/g, '\n');

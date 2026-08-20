@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { formattingInformation } from '../deterministic/formatting';
@@ -35,11 +35,19 @@ describe('formatting information and purity boundary', () => {
 
   it('imports no project mutation, approval, publication, archive, or Duda boundary', () => {
     const root = join(process.cwd(), 'src', 'assistive-validation');
-    const files = readdirSync(root, { recursive: true }).filter((entry) => String(entry).endsWith('.ts') && !String(entry).includes('__tests__'));
+    const files = [
+      'domain/evidence.ts',
+      'domain/extractionContract.ts',
+      'deterministic/formatting.ts',
+      'deterministic/informational.ts',
+      'deterministic/normalization.ts',
+      'deterministic/titleCandidates.ts',
+      'deterministic/titleConsistency.ts',
+    ];
     for (const file of files) {
-      const source = readFileSync(join(root, String(file)), 'utf8');
-      // `../../` is the domain boundary itself: Phase 3 added an in-domain repositories/ directory,
-      // so the rule is now that no assistive module may escape src/assistive-validation at all.
+      const source = readFileSync(join(root, file), 'utf8');
+      // This is the Phase 2 purity boundary. Phase 4 input loading deliberately reuses the shared
+      // storage byte validator and is covered by its own read-only authority test.
       expect(source).not.toMatch(/from\s+['"][^'"]*(projects|workflow|publication|duda|\.\.\/\.\.\/)[^'"]*['"]/i);
     }
   });

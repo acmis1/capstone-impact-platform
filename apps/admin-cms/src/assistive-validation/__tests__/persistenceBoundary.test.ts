@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, posix, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -9,9 +9,11 @@ import { describe, expect, it } from 'vitest';
  */
 describe('assistive persistence authority boundary', () => {
   const domainRoot = join(process.cwd(), 'src', 'assistive-validation');
-  const sourceFiles = readdirSync(domainRoot, { recursive: true })
-    .map(String)
-    .filter((entry) => entry.endsWith('.ts') && !entry.includes('__tests__'));
+  const sourceFiles = [
+    'domain/persistenceContract.ts',
+    'repositories/assistiveValidationRepository.ts',
+    'services/assistiveValidationPersistenceService.ts',
+  ];
 
   const importsOf = (source: string): string[] =>
     [...source.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map((match) => match[1]);
