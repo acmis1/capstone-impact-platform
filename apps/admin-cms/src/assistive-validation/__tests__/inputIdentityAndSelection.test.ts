@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { MEDIA_VALIDATION_LIMITS } from '../../storage/mediaValidationCore';
 import { hashAssistiveInput } from '../domain/inputIdentity';
 import type { AssistiveInputGateway } from '../repositories/assistiveInputRepository';
 import { loadAssistiveInput } from '../services/assistiveInputService';
@@ -61,5 +62,29 @@ describe('assistive input identity and private poster selection', () => {
       await expect(loadAssistiveInput(gateway, '11111111-1111-4111-8111-111111111111', 'private'))
         .resolves.toBeNull();
     }
+  });
+
+  it('rejects oversized metadata before downloading the private object', async () => {
+    const gateway: AssistiveInputGateway = {
+      loadProject: vi.fn().mockResolvedValue({ id: '11111111-1111-4111-8111-111111111111', public_id: 'P-1', title: 'Title' }),
+      loadPosterAssets: vi.fn().mockResolvedValue([{
+        id: '33333333-3333-4333-8333-333333333333',
+        asset_type: 'poster_pdf',
+        file_name: 'poster.pdf',
+        storage_bucket: 'private',
+        storage_path: 'drafts/P-1/poster_pdf/poster.pdf',
+        mime_type: 'application/pdf',
+        file_size_bytes: MEDIA_VALIDATION_LIMITS.MAX_PDF_SIZE_BYTES + 1,
+        created_at: '2026-08-19T00:00:00Z',
+      }]),
+      download: vi.fn(),
+    };
+
+    await expect(loadAssistiveInput(
+      gateway,
+      '11111111-1111-4111-8111-111111111111',
+      'private',
+    )).resolves.toBeNull();
+    expect(gateway.download).not.toHaveBeenCalled();
   });
 });

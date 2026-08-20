@@ -66,6 +66,21 @@ describe('assistive validation job coordination migration contract', () => {
     expect(compact).toContain('REFERENCES public.assistive_validation_runs(id) ON DELETE CASCADE');
   });
 
+  it('backfills every pre-existing Phase 3 run before pair coherence becomes authoritative', () => {
+    const table = compact.indexOf('CREATE TABLE public.assistive_validation_jobs');
+    const backfill = compact.indexOf('INSERT INTO public.assistive_validation_jobs', table);
+    const insertTrigger = compact.indexOf('CREATE OR REPLACE FUNCTION public.create_assistive_validation_job_for_run');
+    const pairConstraints = compact.indexOf('CREATE CONSTRAINT TRIGGER assistive_validation_runs_job_pair');
+    const statement = compact.slice(backfill, insertTrigger);
+
+    expect(table).toBeGreaterThan(-1);
+    expect(backfill).toBeGreaterThan(table);
+    expect(insertTrigger).toBeGreaterThan(backfill);
+    expect(pairConstraints).toBeGreaterThan(insertTrigger);
+    expect(statement).toContain('SELECT r.id, r.status, 0, r.created_at, r.failure_code, NULL, NULL FROM public.assistive_validation_runs AS r');
+    expect(statement).not.toContain('ON CONFLICT');
+  });
+
   it('claims fairly with skip-locked leases, two attempts, and rotating database tokens', () => {
     expect(compact).toContain('FOR UPDATE SKIP LOCKED LIMIT 1');
     expect(compact).toContain('ORDER BY j.available_at, j.created_at, j.id');

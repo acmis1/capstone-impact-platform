@@ -48,6 +48,12 @@ export interface AssistiveWorkerRunner {
   run(input: AssistiveWorkerRunInput): Promise<WorkerTaskResult>;
 }
 
+interface CollectedProcessResult {
+  stdout: string;
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+}
+
 function stagedFileName(documentType: AssistiveDocumentType): string {
   if (documentType === 'PDF') return 'document.pdf';
   if (documentType === 'PNG') return 'document.png';
@@ -120,11 +126,11 @@ export class PythonAssistiveWorkerProcess implements AssistiveWorkerRunner {
 
   async run(input: AssistiveWorkerRunInput): Promise<WorkerTaskResult> {
     const stagingRoot = await mkdtemp(join(tmpdir(), STAGING_PREFIX));
-    assertOwnedStagingRoot(stagingRoot);
-    const taskId = randomUUID();
-    const relativePath = stagedFileName(input.documentType);
-    await writeFile(join(stagingRoot, relativePath), input.content, { mode: 0o600 });
     try {
+      assertOwnedStagingRoot(stagingRoot);
+      const taskId = randomUUID();
+      const relativePath = stagedFileName(input.documentType);
+      await writeFile(join(stagingRoot, relativePath), input.content, { mode: 0o600 });
       const args = [
         ...this.prefixArguments,
         '-m', 'capstone_assistive_worker.task_cli',
@@ -149,14 +155,37 @@ export class PythonAssistiveWorkerProcess implements AssistiveWorkerRunner {
         ocr_provider: input.ocrProvider ?? 'NONE',
         raster_dpi: input.rasterDpi ?? null,
       });
-      const raw = await this.collect(child, task, input.onPulse);
+      const collected = await this.collect(child, task, input.onPulse);
+      if (collected.signal !== null || collected.exitCode === null
+          || ![0, 1, 2].includes(collected.exitCode)) {
+        throw new WorkerProcessError('WORKER_CRASHED');
+      }
       let decoded: unknown;
-      try { decoded = JSON.parse(raw); } catch { throw new WorkerProcessError('EXTRACTION_CONTRACT_REJECTED'); }
+      try {
+        decoded = JSON.parse(collected.stdout);
+      } catch {
+        throw new WorkerProcessError(
+          collected.exitCode === 0 ? 'EXTRACTION_CONTRACT_REJECTED' : 'WORKER_CRASHED',
+        );
+      }
       const parsed = workerTaskResultSchema.safeParse(decoded);
-      if (!parsed.success || parsed.data.task_id !== taskId) {
+      if (!parsed.success) {
+        throw new WorkerProcessError(
+          collected.exitCode === 0 ? 'EXTRACTION_CONTRACT_REJECTED' : 'WORKER_CRASHED',
+        );
+      }
+      const result = parsed.data;
+      const coherent = collected.exitCode === 0
+        ? result.task_id === taskId && result.extraction !== null && result.error === null
+        : collected.exitCode === 1
+          ? result.task_id === taskId && result.extraction === null
+            && result.error?.code === 'TASK_EXECUTION_FAILED'
+          : (result.task_id === null || result.task_id === taskId) && result.extraction === null
+            && result.error?.code === 'TASK_CONTRACT_REJECTED';
+      if (!coherent) {
         throw new WorkerProcessError('EXTRACTION_CONTRACT_REJECTED');
       }
-      return parsed.data;
+      return result;
     } finally {
       assertOwnedStagingRoot(stagingRoot);
       await rm(stagingRoot, { recursive: true, force: true });
@@ -177,8 +206,9 @@ export class PythonAssistiveWorkerProcess implements AssistiveWorkerRunner {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     try {
-      const raw = await this.collect(child, '');
-      const decoded = JSON.parse(raw) as unknown;
+      const collected = await this.collect(child, '');
+      if (collected.exitCode !== 0 || collected.signal !== null) return false;
+      const decoded = JSON.parse(collected.stdout) as unknown;
       return typeof decoded === 'object' && decoded !== null
         && Object.keys(decoded).sort().join(',') === 'schema_version,status'
         && (decoded as { schema_version?: unknown }).schema_version === 'assistive-worker-health/v1'
@@ -192,18 +222,30 @@ export class PythonAssistiveWorkerProcess implements AssistiveWorkerRunner {
     child: ChildProcessWithoutNullStreams,
     task: string,
     onPulse?: () => Promise<WorkerPulseResult>,
-  ): Promise<string> {
+  ): Promise<CollectedProcessResult> {
     return new Promise((resolveResult, rejectResult) => {
       const stdout: Buffer[] = [];
       let stdoutBytes = 0;
       let stderrBytes = 0;
       let forcedError: WorkerProcessError | null = null;
       let pulsePending = false;
+      let settled = false;
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        if (pulse) clearInterval(pulse);
+      };
 
       const stop = (error: WorkerProcessError) => {
         if (forcedError) return;
         forcedError = error;
-        void terminateProcessTree(child);
+        void terminateProcessTree(child).finally(() => {
+          cleanup();
+          if (!settled) {
+            settled = true;
+            rejectResult(error);
+          }
+        });
       };
       const timeout = setTimeout(() => stop(new WorkerProcessError('WORKER_TIMEOUT')), this.timeoutMs);
       const pulse = onPulse ? setInterval(async () => {
@@ -229,11 +271,11 @@ export class PythonAssistiveWorkerProcess implements AssistiveWorkerRunner {
         if (stderrBytes > MAX_STDERR_BYTES) stop(new WorkerProcessError('WORKER_CRASHED'));
       });
       child.once('error', () => stop(new WorkerProcessError('WORKER_UNAVAILABLE')));
-      child.once('close', () => {
-        clearTimeout(timeout);
-        if (pulse) clearInterval(pulse);
-        if (forcedError) rejectResult(forcedError);
-        else resolveResult(Buffer.concat(stdout).toString('utf8'));
+      child.once('close', (exitCode, signal) => {
+        if (forcedError || settled) return;
+        settled = true;
+        cleanup();
+        resolveResult({ stdout: Buffer.concat(stdout).toString('utf8'), exitCode, signal });
       });
       child.stdin.once('error', () => stop(new WorkerProcessError('WORKER_CRASHED')));
       child.stdin.end(task, 'utf8');

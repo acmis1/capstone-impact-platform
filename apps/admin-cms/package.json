@@ -58,6 +58,7 @@
     "seed:buckets:local": "tsx src/scripts/seedLocalSupabaseFixtures.ts",
     "setup:local": "tsx src/scripts/setupLocal.ts",
     "verify:assistive-persistence-runtime": "tsx src/scripts/verifyAssistiveValidationPersistenceRuntime.ts",
+    "verify:assistive-upgrade-runtime": "tsx src/scripts/verifyAssistiveValidationUpgradeRuntime.ts",
     "verify:assistive-jobs-runtime": "tsx src/scripts/verifyAssistiveValidationJobRuntime.ts",
     "run:assistive-worker": "tsx src/scripts/runAssistiveCoordinator.ts --loop",
     "run:assistive-worker-once": "tsx src/scripts/runAssistiveCoordinator.ts --once",

@@ -106,6 +106,26 @@ describe('assistive coordinator', () => {
     expect(jobs.fail).toHaveBeenCalledWith(JOB_ID, TOKEN, 'EXTRACTION_CONTRACT_REJECTED');
   });
 
+  it('keeps a structured task execution failure in the retryable worker-crash class', async () => {
+    const inputHash = hashAssistiveInput({ title: TITLE, documentType: 'PDF', content: PDF }).inputHash;
+    const jobs = jobGateway(inputHash);
+    const failed: AssistiveWorkerRunner = {
+      run: vi.fn().mockResolvedValue({
+        schema_version: 'assistive-worker-task-result/v1',
+        task_id: '88888888-8888-4888-8888-888888888888',
+        extraction: null,
+        error: { code: 'TASK_EXECUTION_FAILED', message: 'Failed safely.' },
+        duration_ms: 1,
+      }),
+    };
+    const coordinator = new AssistiveValidationCoordinator(
+      jobs, inputGateway([PDF]), 'private', failed, WORKER_ID,
+    );
+
+    await expect(coordinator.runOnce()).resolves.toEqual({ outcome: 'FAILED', runId: RUN_ID });
+    expect(jobs.fail).toHaveBeenCalledWith(JOB_ID, TOKEN, 'WORKER_CRASHED');
+  });
+
   it('reports cancellation distinctly when a heartbeat cancels the running child', async () => {
     const inputHash = hashAssistiveInput({ title: TITLE, documentType: 'PDF', content: PDF }).inputHash;
     const jobs = jobGateway(inputHash);

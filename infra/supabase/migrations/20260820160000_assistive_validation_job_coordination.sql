@@ -153,6 +153,28 @@ CREATE POLICY deny_assistive_validation_jobs_direct_access
 REVOKE ALL PRIVILEGES ON TABLE public.assistive_validation_jobs
   FROM PUBLIC, anon, authenticated, service_role;
 
+-- Migration 0030 could already contain terminal runs when this migration begins. Backfill them
+-- before the one-to-one pair constraints become authoritative. The new job table is empty here,
+-- and its unique run_id constraint makes any unexpected duplicate fail the migration visibly.
+INSERT INTO public.assistive_validation_jobs (
+  run_id,
+  status,
+  attempt_count,
+  available_at,
+  last_error_code,
+  cancellation_requested_at,
+  cancelled_at
+)
+SELECT
+  r.id,
+  r.status,
+  0,
+  r.created_at,
+  r.failure_code,
+  NULL,
+  NULL
+FROM public.assistive_validation_runs AS r;
+
 -- A Phase 3 caller still inserts a terminal run directly. This trigger supplies its matching
 -- terminal job; a Phase 4 enqueue inserts QUEUED and receives a QUEUED job by the same path.
 CREATE OR REPLACE FUNCTION public.create_assistive_validation_job_for_run()

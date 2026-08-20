@@ -216,6 +216,9 @@ jobs:
       - name: Verify assistive validation persistence runtime behavior
         run: npm run verify:assistive-persistence-runtime --workspace=apps/admin-cms
 
+      - name: Verify Migration 0030 to 0031 assistive upgrade behavior
+        run: npm run verify:assistive-upgrade-runtime --workspace=apps/admin-cms
+
       - name: Verify assistive validation job coordination runtime behavior
         run: npm run verify:assistive-jobs-runtime --workspace=apps/admin-cms
 

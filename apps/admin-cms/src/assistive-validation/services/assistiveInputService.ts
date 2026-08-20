@@ -1,4 +1,4 @@
-import { validateMediaAssetBytes } from '../../storage/mediaValidationCore';
+import { validateMediaAsset, validateMediaAssetBytes } from '../../storage/mediaValidationCore';
 
 import type { AssistiveDocumentType } from '../domain/inputIdentity';
 import { hashAssistiveInput } from '../domain/inputIdentity';
@@ -46,6 +46,12 @@ export async function loadAssistiveInput(
   if (!type) return null;
   const expectedPrefix = `drafts/${project.public_id}/${asset.asset_type}/`;
   if (!asset.storage_path.startsWith(expectedPrefix) || asset.storage_path.includes('..')) return null;
+  const metadataValidation = validateMediaAsset({
+    fileName: asset.file_name,
+    fileSizeBytes: asset.file_size_bytes,
+    mimeType: type.mime,
+  });
+  if (!metadataValidation.valid) return null;
 
   const content = await gateway.download(asset.storage_bucket, asset.storage_path);
   const validation = validateMediaAssetBytes({
