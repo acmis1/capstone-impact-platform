@@ -1,5 +1,5 @@
 {
-  "corpus_version": "pp1-assistive-phase6a-v3",
+  "corpus_version": "pp1-assistive-phase6a-v4",
   "duplicate_candidates": [
     {
       "background": "The same domain requires clearer governance, but no monitoring product is proposed.",
@@ -6676,160 +6676,179 @@
     },
     {
       "field": "summary",
-      "id": "g6-041",
+      "id": "g6v4-h001",
       "intentionally_clean": false,
       "issues": [
         {
           "accepted_corrections": [
-            "monitor"
+            "report"
           ],
           "category": "SPELLING_ORDINARY",
-          "end": 11,
-          "source": "monitro",
+          "end": 22,
+          "source": "reprot",
+          "start": 16
+        }
+      ],
+      "legitimate_technical_terms": [],
+      "source_text": "The calibration reprot lists every bounded threshold.",
+      "split": "holdout"
+    },
+    {
+      "field": "solution",
+      "id": "g6v4-h002",
+      "intentionally_clean": false,
+      "issues": [
+        {
+          "accepted_corrections": [
+            "scheduler"
+          ],
+          "category": "SPELLING_REPEATED_CHARACTER",
+          "end": 14,
+          "source": "schedulerr",
           "start": 4
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "The monitro records vibration at the bridge joint.",
-      "split": "holdout"
-    },
-    {
-      "field": "solution",
-      "id": "g6-042",
-      "intentionally_clean": false,
-      "issues": [
-        {
-          "accepted_corrections": [
-            "writes"
-          ],
-          "category": "SPELLING_REPEATED_CHARACTER",
-          "end": 19,
-          "source": "writess",
-          "start": 12
-        }
-      ],
-      "legitimate_technical_terms": [],
-      "source_text": "The process writess one audit event per change.",
+      "source_text": "The schedulerr retries the failed upload once.",
       "split": "holdout"
     },
     {
       "field": "background",
-      "id": "g6-043",
+      "id": "g6v4-h003",
       "intentionally_clean": false,
       "issues": [
         {
           "accepted_corrections": [
-            "notification"
+            "validation"
           ],
           "category": "SPELLING_DROPPED_CHARACTER",
-          "end": 36,
-          "source": "notifcation",
-          "start": 25
-        }
-      ],
-      "legitimate_technical_terms": [],
-      "source_text": "A dropped packet delayed notifcation delivery.",
-      "split": "holdout"
-    },
-    {
-      "field": "summary",
-      "id": "g6-044",
-      "intentionally_clean": false,
-      "issues": [
-        {
-          "accepted_corrections": [
-            "then"
-          ],
-          "category": "SPELLING_REAL_WORD",
-          "end": 21,
-          "source": "than",
-          "start": 17
-        }
-      ],
-      "legitimate_technical_terms": [],
-      "source_text": "The operator can than compare both forecasts.",
-      "split": "holdout"
-    },
-    {
-      "field": "solution",
-      "id": "g6-045",
-      "intentionally_clean": false,
-      "issues": [
-        {
-          "accepted_corrections": [
-            "capture"
-          ],
-          "category": "GRAMMAR_SUBJECT_VERB_AGREEMENT",
-          "end": 27,
-          "source": "captures",
-          "start": 19
-        }
-      ],
-      "legitimate_technical_terms": [],
-      "source_text": "The camera modules captures one image per hour.",
-      "split": "holdout"
-    },
-    {
-      "field": "background",
-      "id": "g6-046",
-      "intentionally_clean": false,
-      "issues": [
-        {
-          "accepted_corrections": [
-            "processes"
-          ],
-          "category": "GRAMMAR_SUBJECT_VERB_AGREEMENT",
-          "end": 29,
-          "source": "process",
-          "start": 22
-        }
-      ],
-      "legitimate_technical_terms": [],
-      "source_text": "The ingestion service process new readings in batches.",
-      "split": "holdout"
-    },
-    {
-      "field": "summary",
-      "id": "g6-047",
-      "intentionally_clean": false,
-      "issues": [
-        {
-          "accepted_corrections": [
-            "actuators"
-          ],
-          "category": "GRAMMAR_SINGULAR_PLURAL",
-          "end": 13,
-          "source": "actuator",
+          "end": 14,
+          "source": "validaton",
           "start": 5
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "Five actuator regulate the greenhouse vents.",
+      "source_text": "Weak validaton allowed an oversized attachment.",
       "split": "holdout"
     },
     {
-      "field": "solution",
-      "id": "g6-048",
+      "field": "summary",
+      "id": "g6v4-h004",
       "intentionally_clean": false,
       "issues": [
         {
           "accepted_corrections": [
-            "results",
-            "a result"
+            "choose"
           ],
-          "category": "GRAMMAR_SINGULAR_PLURAL",
-          "end": 30,
-          "source": "result",
-          "start": 24
+          "category": "SPELLING_REAL_WORD",
+          "end": 23,
+          "source": "chose",
+          "start": 18
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "The prototype publishes result to a local dashboard.",
+      "source_text": "The reviewer must chose one shortlisted project.",
+      "split": "holdout"
+    },
+    {
+      "field": "solution",
+      "id": "g6v4-h005",
+      "intentionally_clean": false,
+      "issues": [
+        {
+          "accepted_corrections": [
+            "deletes"
+          ],
+          "category": "GRAMMAR_SUBJECT_VERB_AGREEMENT",
+          "end": 25,
+          "source": "delete",
+          "start": 19
+        }
+      ],
+      "legitimate_technical_terms": [],
+      "source_text": "The archive worker delete stale attachments nightly.",
       "split": "holdout"
     },
     {
       "field": "background",
-      "id": "g6-049",
+      "id": "g6v4-h006",
+      "intentionally_clean": false,
+      "issues": [
+        {
+          "accepted_corrections": [
+            "need"
+          ],
+          "category": "GRAMMAR_SUBJECT_VERB_AGREEMENT",
+          "end": 28,
+          "source": "needs",
+          "start": 23
+        }
+      ],
+      "legitimate_technical_terms": [],
+      "source_text": "The uploaded documents needs a second reviewer.",
+      "split": "holdout"
+    },
+    {
+      "field": "background",
+      "id": "g6v4-h007",
+      "intentionally_clean": false,
+      "issues": [
+        {
+          "accepted_corrections": [
+            "has"
+          ],
+          "category": "GRAMMAR_SUBJECT_VERB_AGREEMENT",
+          "end": 21,
+          "source": "have",
+          "start": 17
+        }
+      ],
+      "legitimate_technical_terms": [],
+      "source_text": "Neither reviewer have opened the submitted draft.",
+      "split": "holdout"
+    },
+    {
+      "field": "summary",
+      "id": "g6v4-h008",
+      "intentionally_clean": false,
+      "issues": [
+        {
+          "accepted_corrections": [
+            "reviewers"
+          ],
+          "category": "GRAMMAR_SINGULAR_PLURAL",
+          "end": 14,
+          "source": "reviewer",
+          "start": 6
+        }
+      ],
+      "legitimate_technical_terms": [],
+      "source_text": "Seven reviewer assess the shortlisted submissions.",
+      "split": "holdout"
+    },
+    {
+      "field": "solution",
+      "id": "g6v4-h009",
+      "intentionally_clean": false,
+      "issues": [
+        {
+          "accepted_corrections": [
+            "summaries",
+            "a summary"
+          ],
+          "category": "GRAMMAR_SINGULAR_PLURAL",
+          "end": 29,
+          "source": "summary",
+          "start": 22
+        }
+      ],
+      "legitimate_technical_terms": [],
+      "source_text": "The dashboard exports summary for each approved project.",
+      "split": "holdout"
+    },
+    {
+      "field": "background",
+      "id": "g6v4-h010",
       "intentionally_clean": false,
       "issues": [
         {
@@ -6838,429 +6857,405 @@
           ],
           "category": "GRAMMAR_PRONOUN_AGREEMENT",
           "end": 24,
-          "source": "her",
+          "source": "his",
           "start": 21
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "The server refreshed her certificate automatically.",
+      "source_text": "The scanner finished his nightly calibration pass.",
       "split": "holdout"
     },
     {
       "field": "solution",
-      "id": "g6-050",
+      "id": "g6v4-h011",
       "intentionally_clean": false,
       "issues": [
         {
           "accepted_corrections": [
-            "broken"
+            "written"
           ],
           "category": "GRAMMAR_VERB_FORM",
-          "end": 20,
-          "source": "broke",
-          "start": 15
+          "end": 22,
+          "source": "wrote",
+          "start": 17
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "The parser had broke on an empty document.",
+      "source_text": "The importer has wrote the audit trail twice.",
+      "split": "holdout"
+    },
+    {
+      "field": "solution",
+      "id": "g6v4-h012",
+      "intentionally_clean": false,
+      "issues": [
+        {
+          "accepted_corrections": [
+            "approve"
+          ],
+          "category": "GRAMMAR_VERB_FORM",
+          "end": 29,
+          "source": "approves",
+          "start": 21
+        }
+      ],
+      "legitimate_technical_terms": [],
+      "source_text": "The reviewer did not approves the revised submission.",
       "split": "holdout"
     },
     {
       "field": "summary",
-      "id": "g6-051",
+      "id": "g6v4-h013",
       "intentionally_clean": false,
       "issues": [
         {
           "accepted_corrections": [
-            "The primary link was unavailable.",
-            "While the primary link was unavailable, the gateway buffered events."
+            "The reviewer requested a second opinion.",
+            "Although the reviewer requested a second opinion, the draft was approved."
           ],
           "category": "GRAMMAR_SENTENCE_FRAGMENT",
-          "end": 39,
-          "source": "While the primary link was unavailable.",
+          "end": 49,
+          "source": "Although the reviewer requested a second opinion.",
           "start": 0
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "While the primary link was unavailable.",
+      "source_text": "Although the reviewer requested a second opinion.",
       "split": "holdout"
     },
     {
       "field": "background",
-      "id": "g6-052",
+      "id": "g6v4-h014",
       "intentionally_clean": false,
       "issues": [
         {
           "accepted_corrections": [
-            "Before deployment,"
+            "During the outage,"
           ],
           "category": "PUNCTUATION_INTRODUCTORY_COMMA",
           "end": 17,
-          "source": "Before deployment",
+          "source": "During the outage",
           "start": 0
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "Before deployment the team rotated the test key.",
+      "source_text": "During the outage the queue retained every event.",
       "split": "holdout"
     },
     {
       "field": "solution",
-      "id": "g6-053",
+      "id": "g6v4-h015",
       "intentionally_clean": false,
       "issues": [
         {
           "accepted_corrections": [
-            "opened, and the",
-            "opened; the",
-            "opened. The"
+            "failed, and the",
+            "failed; the",
+            "failed. The"
           ],
           "category": "PUNCTUATION_COMMA_SPLICE",
-          "end": 21,
-          "source": "opened, the",
-          "start": 10
+          "end": 22,
+          "source": "failed, the",
+          "start": 11
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "The valve opened, the tank level fell.",
+      "source_text": "The upload failed, the reviewer retried it.",
       "split": "holdout"
     },
     {
       "field": "summary",
-      "id": "g6-054",
+      "id": "g6v4-h016",
       "intentionally_clean": false,
       "issues": [
         {
           "accepted_corrections": [
-            "each"
+            "every"
           ],
           "category": "GRAMMAR_DUPLICATED_WORD",
-          "end": 28,
-          "source": "each each",
+          "end": 30,
+          "source": "every every",
           "start": 19
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "The model compares each each daily estimate.",
+      "source_text": "The register lists every every approved supervisor.",
       "split": "holdout"
     },
     {
       "field": "background",
-      "id": "g6-055",
+      "id": "g6v4-h017",
       "intentionally_clean": false,
       "issues": [
         {
           "accepted_corrections": [
-            "All"
+            "Each"
           ],
           "category": "GRAMMAR_CAPITALIZATION",
-          "end": 3,
-          "source": "all",
+          "end": 4,
+          "source": "each",
           "start": 0
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "all telemetry remains inside the laboratory network.",
+      "source_text": "each submission keeps its original timestamp.",
       "split": "holdout"
     },
     {
       "field": "summary",
-      "id": "g6-056",
+      "id": "g6v4-h018",
       "intentionally_clean": false,
       "issues": [
         {
           "accepted_corrections": [
-            "gateway's"
+            "supervisor's"
           ],
           "category": "GRAMMAR_POSSESSIVE",
-          "end": 12,
-          "source": "gateways",
+          "end": 15,
+          "source": "supervisors",
           "start": 4
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "The gateways status appears beside the device name.",
+      "source_text": "The supervisors signature is missing from the form.",
       "split": "holdout"
     },
     {
       "field": "solution",
-      "id": "g6-057",
+      "id": "g6v4-h019",
       "intentionally_clean": false,
       "issues": [
         {
           "accepted_corrections": [
-            "retry"
-          ],
-          "category": "GRAMMAR_VERB_FORM",
-          "end": 30,
-          "source": "retries",
-          "start": 23
-        }
-      ],
-      "legitimate_technical_terms": [],
-      "source_text": "The scheduler does not retries completed tasks.",
-      "split": "holdout"
-    },
-    {
-      "field": "background",
-      "id": "g6-058",
-      "intentionally_clean": false,
-      "issues": [
-        {
-          "accepted_corrections": [
-            "provides"
-          ],
-          "category": "GRAMMAR_SUBJECT_VERB_AGREEMENT",
-          "end": 28,
-          "source": "provide",
-          "start": 21
-        }
-      ],
-      "legitimate_technical_terms": [],
-      "source_text": "Neither backup route provide continuous coverage.",
-      "split": "holdout"
-    },
-    {
-      "field": "solution",
-      "id": "g6-059",
-      "intentionally_clean": false,
-      "issues": [
-        {
-          "accepted_corrections": [
-            "PostgreSQL"
+            "Kubernetes"
           ],
           "category": "SPELLING_TECHNICAL_NEAR_MISS",
-          "end": 10,
-          "source": "PostgreSQl",
+          "end": 9,
+          "source": "Kubernets",
           "start": 0
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "PostgreSQl stores the synthetic benchmark records.",
+      "source_text": "Kubernets orchestrates the isolated batch worker.",
       "split": "holdout"
     },
     {
       "field": "summary",
-      "id": "g6-060",
+      "id": "g6v4-h020",
       "intentionally_clean": false,
       "issues": [
         {
           "accepted_corrections": [
-            "an effective"
+            "an hourly"
           ],
           "category": "GRAMMAR_ARTICLE",
-          "end": 32,
-          "source": "a effective",
-          "start": 21
+          "end": 26,
+          "source": "a hourly",
+          "start": 18
         }
       ],
       "legitimate_technical_terms": [],
-      "source_text": "The project provides a effective anomaly detector.",
+      "source_text": "The team produced a hourly summary of ingest failures.",
       "split": "holdout"
     },
     {
       "field": "summary",
-      "id": "g6-061",
+      "id": "g6v4-h021",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "Datadog"
+        "PostgreSQL"
       ],
-      "source_text": "Datadog displays aggregate latency without exposing source text.",
+      "source_text": "PostgreSQL stores every bounded benchmark record locally.",
       "split": "holdout"
     },
     {
       "field": "solution",
-      "id": "g6-062",
+      "id": "g6v4-h022",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "Telegraf"
+        "WebAuthn"
       ],
-      "source_text": "Telegraf collects counters from the isolated worker.",
+      "source_text": "WebAuthn removes the shared password from the staff sign-in path.",
       "split": "holdout"
     },
     {
       "field": "background",
-      "id": "g6-063",
+      "id": "g6v4-h023",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "Redis"
+        "Nginx"
       ],
-      "source_text": "Redis was considered unnecessary for the bounded candidate pool.",
+      "source_text": "Nginx terminates the loopback connection before the worker responds.",
       "split": "holdout"
     },
     {
       "field": "summary",
-      "id": "g6-064",
+      "id": "g6v4-h024",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "gRPC"
+        "Kafka"
       ],
-      "source_text": "The gRPC document describes the local request contract.",
+      "source_text": "Kafka was rejected because the bounded queue never needed partitioning.",
       "split": "holdout"
     },
     {
       "field": "solution",
-      "id": "g6-065",
+      "id": "g6v4-h025",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "Pandas"
+        "Keycloak"
       ],
-      "source_text": "Pandas calculates deterministic vectors for the synthetic fixture.",
+      "source_text": "Keycloak issues the short-lived token used by the isolated harness.",
       "split": "holdout"
     },
     {
       "field": "background",
-      "id": "g6-066",
+      "id": "g6v4-h026",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "Scikit-learn"
+        "MinIO"
       ],
-      "source_text": "Scikit-learn is not required by the lexical baseline.",
+      "source_text": "MinIO provides object storage only inside the offline laboratory.",
       "split": "holdout"
     },
     {
       "field": "solution",
-      "id": "g6-067",
+      "id": "g6v4-h027",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "TensorFlow"
+        "Vitest"
       ],
-      "source_text": "TensorFlow would add operational cost to an embedding challenger.",
+      "source_text": "Vitest exercises the adapter without contacting any network service.",
       "split": "holdout"
     },
     {
       "field": "summary",
-      "id": "g6-068",
+      "id": "g6v4-h028",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "CloudFormation"
+        "Zigbee"
       ],
-      "source_text": "CloudFormation is outside the scope of this local benchmark.",
+      "source_text": "Zigbee radios report battery level to the local coordinator.",
       "split": "holdout"
     },
     {
       "field": "background",
-      "id": "g6-069",
+      "id": "g6v4-h029",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "Puppet"
+        "SQLAlchemy"
       ],
-      "source_text": "Puppet playbooks are not executed by corpus text.",
+      "source_text": "SQLAlchemy was considered unnecessary for the deterministic fixture.",
       "split": "holdout"
     },
     {
       "field": "solution",
-      "id": "g6-070",
+      "id": "g6v4-h030",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "OIDC",
-        "JWT"
+        "LoRaWAN"
       ],
-      "source_text": "OIDC uses JWT to bind the authorisation request.",
+      "source_text": "LoRaWAN gateways forward readings during scheduled maintenance windows.",
       "split": "holdout"
     },
     {
       "field": "title",
-      "id": "g6-071",
+      "id": "g6v4-h031",
       "intentionally_clean": true,
       "issues": [],
-      "legitimate_technical_terms": [
-        "OCR"
-      ],
-      "source_text": "OCR Review Workflow",
+      "legitimate_technical_terms": [],
+      "source_text": "Duplicate Shortlist Review",
       "split": "holdout"
     },
     {
       "field": "title",
-      "id": "g6-072",
+      "id": "g6v4-h032",
       "intentionally_clean": true,
       "issues": [],
-      "legitimate_technical_terms": [
-        "API"
-      ],
-      "source_text": "API Security Controls",
+      "legitimate_technical_terms": [],
+      "source_text": "Grammar Suggestion Boundaries",
       "split": "holdout"
     },
     {
       "field": "summary",
-      "id": "g6-073",
+      "id": "g6v4-h033",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [],
-      "source_text": "The organisation standardises licence metadata for each dependency.",
+      "source_text": "The organisation recognises the licence renewal as a scheduled obligation.",
       "split": "holdout"
     },
     {
       "field": "background",
-      "id": "g6-074",
+      "id": "g6v4-h034",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [],
-      "source_text": "The metre reading was normalised before analysis.",
+      "source_text": "Each colour-coded label was standardised before the analysis commenced.",
       "split": "holdout"
     },
     {
       "field": "solution",
-      "id": "g6-075",
+      "id": "g6v4-h035",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [],
-      "source_text": "The request was rejected because its payload exceeded the documented bound.",
+      "source_text": "The threshold was agreed by the supervisors before the corpus was frozen.",
+      "split": "holdout"
+    },
+    {
+      "field": "background",
+      "id": "g6v4-h036",
+      "intentionally_clean": true,
+      "issues": [],
+      "legitimate_technical_terms": [],
+      "source_text": "The loopback listener rejects unauthenticated queries against the replica.",
       "split": "holdout"
     },
     {
       "field": "summary",
-      "id": "g6-076",
+      "id": "g6v4-h037",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [],
-      "source_text": "Use `git diff --check` to inspect whitespace safely.",
-      "split": "holdout"
-    },
-    {
-      "field": "background",
-      "id": "g6-077",
-      "intentionally_clean": true,
-      "issues": [],
-      "legitimate_technical_terms": [],
-      "source_text": "The trace ID 123e4567-e89b-12d3-a456-426614174000 is synthetic.",
+      "source_text": "Run `npm run typecheck:admin` before publishing the review summary.",
       "split": "holdout"
     },
     {
       "field": "solution",
-      "id": "g6-078",
+      "id": "g6v4-h038",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [],
-      "source_text": "The command `python -m unittest` is shown as inert text.",
+      "source_text": "Send the report to review@example.invalid or read https://bench.example.invalid/notes.",
       "split": "holdout"
     },
     {
       "field": "background",
-      "id": "g6-079",
+      "id": "g6v4-h039",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [],
-      "source_text": "The filename phase6.report.json is excluded from prose checking.",
+      "source_text": "The trace 9f8b2c31-4d5e-11ef-9c7a-0242ac120002 is synthetic and inert.",
       "split": "holdout"
     },
     {
       "field": "solution",
-      "id": "g6-080",
+      "id": "g6v4-h040",
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [],
-      "source_text": "The passive sensor was installed beside the existing pump.",
+      "source_text": "The file phase6.v4.report.json is written to a temporary directory.",
       "split": "holdout"
     }
   ],

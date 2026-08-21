@@ -14,20 +14,49 @@ The compact machine-readable audit is [phase-6a-report.json](evidence/phase-6a-r
 | Migration count | 32 |
 | Branch | `feat/assistive-language-duplicate-benchmark` |
 | Phase 0 harness | Python package, deterministic manifest/generator, local engine adapters, reports, tests, and lightweight CI |
-| Phase 6A corpus | `pp1-assistive-phase6a-v2`, seed `61062026` |
-| Frozen manifest SHA-256 | `62f1111c7578875b00990f003c54b579af07a6251e5f162648009f758d8ade06` |
+| Phase 6A corpus | `pp1-assistive-phase6a-v4`, seed `61062026` |
+| Frozen manifest SHA-256 | `b2a29bcea0aa59bc4ae534705a47baadb4423f5dcf876b774a7dccef13da6dad` |
+| Frozen vocabulary policy SHA-256 | `d4336e182a8e0b9c0c78bb8829fddd13e65bc8e28f3a0e9234a7ad980ba946a3` |
+| Policy freeze commit | `001cde3fda6aa6120c3fb08d8c06d73003555581` |
 
 The production schema on this baseline exposes the prose fields `title`, `summary`, `background`, and `solution`. Duplicate ranking uses only those four fields. Grammar cases also model bounded extracted text, but no benchmark module is imported by production.
 
 ## Scientific-integrity protocol
 
-The corpus is deterministic, synthetic, and new for Phase 6A. It contains no real participant, staff, or production project content. Case text, labels, seed, spans, accepted corrections, relationship labels, and split assignments were committed to the generated manifest before the final engine run.
+The corpus is deterministic, synthetic, and contains no real participant, staff, or production project content. Case text, labels, seed, spans, accepted corrections, relationship labels, and split assignments were committed to the generated manifest before the final engine run.
 
-The first final run used corpus v1 (`08a397dd74d4154c7ade2f12cd56c8e1f67bd0a1d24c570e7b2ad1471cd96fb8`). A repository terminology contract then exposed a wording-only design flaw in synthetic text and safety metadata. Its complete holdout metrics and decisions are preserved in the v2 machine report's `benchmark_history`. Corpus v2 changes only that terminology-safe wording; it does not change labels, quality thresholds, vocabulary, weights, filters, engine settings, splits, or case counts. V2 therefore receives its own frozen hash and one new final measurement rather than silently reusing v1 evidence.
+### Why v4 exists
 
-Calibration was used to confirm the exact-token technical vocabulary policy and to identify a masking artefact: replacing excluded code/URL spans with spaces caused both engines to report repeated whitespace. The input policy now excludes findings overlapping those non-prose spans. Calibration ended with Harper at 100.0% precision / 45.0% recall and LanguageTool at 90.9% / 50.0% after policy application.
+Three earlier iterations are preserved as audit history in [`phase6/history/benchmark-history.json`](../../tools/assistive-validation-benchmark/phase6/history/benchmark-history.json) and, for v3, in [phase-6a-report-v3-superseded.json](evidence/phase-6a-report-v3-superseded.json). None of them is the authoritative grammar decision.
 
-The vocabulary policy, input normalisation, scorer, lexical configuration, manifest, and manifest hash were then frozen. The final holdout was measured once. No threshold, vocabulary entry, weight, rule filter, corpus label, or engine setting was changed in response to the holdout result.
+- **v1** was superseded because a repository terminology contract required a wording-only corpus revision after the first holdout.
+- **v2** reported `LanguageTool: SELECT` at 91.7% holdout precision. That result is **not defensible**. The approved vocabulary term `OAuth` declared repository provenance, but the term occurs in no repository file; its only real occurrence was holdout case `g6-070`. The policy was therefore partly derived from the holdout it was scored against, and the term suppressed a false positive in that same holdout.
+- **v3** attempted to correct v2 but introduced three further defects: only the clean holdout cases `g6-061`–`g6-070` were replaced, so the already-exposed `g6-041`–`g6-060` and `g6-071`–`g6-080` were reused; the run executed **LanguageTool 6.4** instead of the reviewed 6.6 candidate, silently changing the measured engine; and Harper never executed at all, leaving no comparison. Its summary also reported an F1 of 68.7% for TP=11 / FP=2 / FN=9, which is arithmetically 66.7% — a value carried over from v2.
+
+v4 replaces the **entire** grammar holdout, restores the reviewed LanguageTool 6.6 candidate, and executes both engines.
+
+### Freeze ordering
+
+Git history is the evidence of ordering, not a self-declared flag.
+
+1. Commit `001cde3fda6aa6120c3fb08d8c06d73003555581` froze the vocabulary policy, its provenance validator, the masking rules, the issue matcher, the scorer, and the selection threshold. **The fresh holdout did not exist in the repository at that commit.**
+2. The next commit added the fresh v4 holdout and the single final measurement.
+
+Every stored report records `policy_freeze_commit_sha`, and validation rejects evidence whose policy bytes differ from those committed at that commit. No vocabulary term, rule filter, threshold, mask, label, or case wording was changed in response to the v4 result.
+
+### Vocabulary provenance
+
+The policy holds **14 approved terms: 3 repository-sourced, 11 calibration-sourced, 0 holdout-sourced.** Every term is proven mechanically:
+
+- A **repository** term must resolve to an existing in-tree file that literally contains the term, and that file may not be generated Phase 6 corpus or evidence material.
+- A **calibration** term must resolve to a corpus case whose declared split is `calibration`, and which both contains the term and declares it in its legitimate technical terms.
+- Provenance pointing at any case whose declared split is `holdout` is rejected structurally, from the manifest's own split field rather than from identifier-prefix guessing.
+
+Calibration was used to confirm the exact-token vocabulary policy and to identify a masking artefact: replacing excluded code/URL spans with spaces caused both engines to report repeated whitespace, so findings overlapping those non-prose spans are excluded. Calibration ended with Harper at 100.0% precision / 45.0% recall and LanguageTool at 90.9% / 50.0% after policy application.
+
+### Metric arithmetic
+
+Every stored `precision`, `recall`, and `F1` is recomputed from its own `TP`/`FP`/`FN` counts during evidence validation and rejected on disagreement beyond floating-point tolerance. The stale v3-style inconsistency cannot recur.
 
 ## Corpus
 
@@ -37,38 +66,33 @@ The 80 cases are split evenly:
 
 | Split | Clean | Erroneous | Total |
 |---|---:|---:|---:|
-| Calibration | 20 | 20 | 40 |
-| Holdout | 20 | 20 | 40 |
+| Calibration (`g6-001`–`g6-040`) | 20 | 20 | 40 |
+| Holdout (`g6v4-h001`–`g6v4-h040`) | 20 | 20 | 40 |
 | Total | 40 | 40 | 80 |
 
-Every labelled issue stores its source span, category, accepted correction or corrections, field, legitimate technical terms, and split. Coverage includes ordinary, repeated-character, dropped-character, real-word, and technical near-miss spelling errors; agreement, number, article, pronoun, and verb-form grammar errors; fragments; comma splices; introductory punctuation; duplicated words; possessives; and capitalisation.
+The holdout uses a distinct identifier scheme so that any accidental reuse of the retired `g6-041`–`g6-080` range is obvious. CI hashes every retired holdout text (whitespace- and case-normalised) and fails if any v4 holdout text matches one: **50 exposed texts checked, 0 reused.**
 
-Clean adversarial cases cover Australian spelling, legitimate passive voice, technical noun phrases, concise headings, acronyms, product/framework names, engineering and security terms, and inert snippets resembling code, commands, URLs, email addresses, UUIDs, database identifiers, and filenames. Dangerous near-misses such as misspelled approved tool names remain labelled errors and are not removed by the vocabulary policy.
+Every labelled issue stores its source span, category, accepted corrections, field, legitimate technical terms, and split. The holdout covers all 16 error categories with the same distribution as the retired holdout: ordinary, repeated-character, dropped-character, real-word, and technical near-miss spelling; subject-verb agreement, number, article, pronoun, and verb-form grammar; fragments; comma splices; introductory punctuation; duplicated words; possessives; and capitalisation.
+
+Clean holdout cases deliberately test generalisation. They include Australian spelling, passive voice, concise headings, security/network/database vocabulary, inert code spans, URLs, email addresses, UUIDs, and dotted filenames — and **legitimate technical names that are deliberately absent from the frozen vocabulary** (`Nginx`, `Kafka`, `Keycloak`, `MinIO`, `Vitest`, `Zigbee`, `SQLAlchemy`, `LoRaWAN`). Approving those terms after seeing the result would be exactly the tuning this protocol forbids, so they remain unapproved.
 
 ### Grammar input policy
 
 - Check `summary`, `background`, and `solution` for grammar, spelling, punctuation, and capitalisation.
 - Treat `title` as spelling-only because concise headings are legitimate.
 - Preserve source offsets while masking code spans, URLs, email addresses, UUIDs, filenames, and database identifiers.
-- Exclude findings overlapping those deliberately masked non-prose spans.
+- Exclude findings overlapping those deliberately masked non-prose spans. Ten such findings were removed for each engine before scoring.
 - Never interpret text as a command, argument, URL to fetch, model instruction, or credential lookup.
-
-### Domain vocabulary policy
-
-The versioned policy contains a bounded list of approved repository/tool and controlled engineering terminology. A finding is removed only when:
-
-1. the engine classifies it as spelling/typo-related; and
-2. its source span is an exact, case-sensitive match for an approved term.
-
-Unknown words are not automatically accepted. Flagged words are not automatically added. A one-character near-miss therefore remains visible. The policy file SHA-256 in the evidence is `f598a2069317170cac74bab850283f67c27f79b62fa536fd1f19d2e83e9b3964`.
 
 ### Grammar truth matching
 
-An engine finding matches one human-authored issue when at least half of the shorter non-empty span overlaps and, when the engine supplies replacements, at least one normalised replacement is an accepted correction. Zero-width punctuation findings must fall within one character of the truth span. Multiple findings that describe the same already-matched issue are counted once. Unmatched findings are false positives and unmatched truth issues are false negatives. No LLM is a judge.
+An engine finding matches one human-authored issue when at least half of the shorter non-empty span overlaps and, when the engine supplies replacements, at least one normalised replacement is an accepted correction. Zero-width punctuation findings must fall within one character of the truth span. Multiple findings describing the same already-matched issue are counted once. Unmatched findings are false positives and unmatched truth issues are false negatives. No LLM is a judge.
+
+This matcher is strict about correction granularity: where a truth span covers `a hourly` and an engine returns the narrower span `a` with replacement `an`, the finding is scored as both a false positive and a miss. The retired v3 holdout case `g6-060` behaved identically, so the comparison across iterations is consistent. The convention was frozen before v4 and was not revisited afterwards.
 
 ### Duplicates
 
-The duplicate corpus has 120 synthetic candidate projects and 40 queries:
+The duplicate corpus is unchanged from v2/v3 — 120 synthetic candidate projects and 40 queries — because no defect was found in it:
 
 | Split | Exact/normalised | Near duplicate | Total |
 |---|---:|---:|---:|
@@ -80,52 +104,58 @@ Every query labels every candidate as `EXACT_DUPLICATE`, `NEAR_DUPLICATE`, `RELA
 
 ## Engine versions and execution
 
-No benchmark candidate was silently upgraded. The pinned versions measured in Phase 0 were retained so Phase 6A isolates corpus and policy effects.
+No benchmark candidate was silently upgraded or downgraded. Both reviewed Phase 0 candidates were executed once, in one run.
 
 | Candidate | Source and licence | Configuration |
 |---|---|---|
 | Harper 2.7.0 | pinned `harper.js` npm artifact; Apache-2.0 | local inlined WASM, Australian dialect, plaintext |
 | LanguageTool 6.6 | official numbered self-hosted distribution; LGPL-2.1-or-later plus distribution notices | local Java 21 loopback server, `en-AU`, 25,000-character limit, 10-second per-check bound, one check thread |
 
-The LanguageTool 6.6 archive was the same reviewed Phase 0 artifact (`LanguageTool-stable.zip`, SHA-256 `53600506b399bb5ffe1e4c8dec794fd378212f14aaf38ccef9b6f89314d11631`). Java was invoked with an argument array and `shell=False`; stdout/stderr were discarded to bounded null sinks, startup and requests had timeouts, and the process was deterministically terminated. Benchmark text never entered process arguments.
+The LanguageTool 6.6 archive was verified to be the same reviewed Phase 0 artifact: `LanguageTool-stable.zip`, SHA-256 `53600506b399bb5ffe1e4c8dec794fd378212f14aaf38ccef9b6f89314d11631`. The running server reported version `6.6`, build `2025-03-27`. Evidence validation fails if either engine reports a version other than the contracted Harper 2.7.0 / LanguageTool 6.6, or if either engine did not execute.
+
+Recorded runtime, queried rather than assumed: OpenJDK `21.0.12.1` (Temurin), Node `v24.14.1`, Python `3.13.2`, `macOS-15.5-arm64-arm-64bit-Mach-O`, CPU only. Java was invoked with an argument array and `shell=False`; stdout/stderr were discarded to bounded null sinks, startup and requests had timeouts, and the process was deterministically terminated. Benchmark text never entered process arguments.
 
 ## Grammar results
 
 ### Harper 2.7.0
 
-| Split/configuration | Precision | Recall | F1 | False positives | Vocabulary FP | Non-vocabulary FP | Clean silence |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Calibration raw | 60.0% | 45.0% | 51.4% | 6 | 6 | 0 | 15/20 |
-| Calibration + vocabulary policy | 100.0% | 45.0% | 62.1% | 0 | 0 | 0 | 20/20 |
-| Holdout raw | 50.0% | 30.0% | 37.5% | 6 | 3 | 3 | 17/20 |
-| Holdout + vocabulary policy | **66.7%** | **30.0%** | **41.4%** | **3** | 0 | 3 | 20/20 |
+| Split/configuration | Precision | Recall | F1 | TP | FP | FN | Vocab FP | Non-vocab FP | Clean silence |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Calibration raw | 60.0% | 45.0% | 51.4% | 9 | 6 | 11 | 6 | 0 | 15/20 |
+| Calibration + vocabulary policy | 100.0% | 45.0% | 62.1% | 9 | 0 | 11 | 0 | 0 | 20/20 |
+| Holdout raw | 42.9% | 30.0% | 35.3% | 6 | 8 | 14 | 6 | 2 | 14/20 |
+| Holdout + vocabulary policy | **46.2%** | **30.0%** | **36.4%** | **6** | **7** | **14** | 5 | 2 | 15/20 |
 
-Cold start was 856 ms. Per-case latency was 1.8 ms p50 / 5.2 ms p95. Peak measured child-process working set was 467 MiB. Nine findings overlapping deliberately excluded non-prose spans were removed before scoring.
+Cold start was 1.5 s. Per-case latency was 4.4 ms p50 / 11.7 ms p95.
 
-Harper fails the required 90% holdout precision gate after the frozen policy. Its low 30% holdout recall is also not useful enough to offset the false-positive burden.
+Harper fails the required 90% holdout precision gate by a wide margin. Five of its seven holdout false positives are unknown-vocabulary flags on legitimate technical names; the remaining two are a wrong-correction typo suggestion (`reprot` → `rep rot`) and the article-granularity case. Its 30% holdout recall does not offset that burden.
 
 ### LanguageTool 6.6
 
-| Split/configuration | Precision | Recall | F1 | False positives | Vocabulary FP | Non-vocabulary FP | Clean silence |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Calibration raw | 62.5% | 50.0% | 55.6% | 6 | 5 | 1 | 16/20 |
-| Calibration + vocabulary policy | 90.9% | 50.0% | 64.5% | 1 | 0 | 1 | 20/20 |
-| Holdout raw | 78.6% | 55.0% | 64.7% | 3 | 2 | 1 | 18/20 |
-| Holdout + vocabulary policy | **91.7%** | **55.0%** | **68.7%** | **1** | 0 | 1 | 20/20 |
+| Split/configuration | Precision | Recall | F1 | TP | FP | FN | Vocab FP | Non-vocab FP | Clean silence |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Calibration raw | 62.5% | 50.0% | 55.6% | 10 | 6 | 10 | 5 | 1 | 16/20 |
+| Calibration + vocabulary policy | 90.9% | 50.0% | 64.5% | 10 | 1 | 10 | 0 | 1 | 20/20 |
+| Holdout raw | 60.0% | 60.0% | 60.0% | 12 | 8 | 8 | 5 | 3 | 13/20 |
+| Holdout + vocabulary policy | **63.2%** | **60.0%** | **61.5%** | **12** | **7** | **8** | 4 | 3 | 14/20 |
 
-Cold start was 12.8 seconds. Per-case request latency was 22.5 ms p50 / 67.6 ms p95. Peak measured Java working set was 781 MiB. Nine findings overlapping deliberately excluded non-prose spans were removed before scoring.
+Cold start was 6.8 s. Per-case request latency was 27.4 ms p50 / 113.8 ms p95.
 
-LanguageTool clears the 90% precision gate, though it remains below the preferred 95% target. Its 55% holdout recall is materially higher than Harper's 30%, and the single holdout false positive occurred in an already erroneous case rather than a clean case.
+LanguageTool has the better recall of the two candidates and reaches 90.9% precision on **calibration**, but only **63.2% on the fresh holdout**. The gap is the whole point of a holdout: calibration precision was achieved with a vocabulary curated against calibration text, and that curation does not generalise. Six of its seven holdout false positives are dictionary flags on legitimate but unapproved technical vocabulary (`loopback` twice, `Keycloak`, `MinIO`, `Vitest`, `SQLAlchemy`); the seventh is the article-granularity case. Only 14 of 20 clean holdout cases were fully silent.
 
 ## Grammar decision
 
-**LanguageTool: SELECT** for a bounded Phase 6B production candidate that produces non-authoritative grammar/spelling suggestions for staff review. Exact holdout basis: 91.7% precision, 55.0% recall, 68.7% F1, one false positive, and 20/20 clean cases silent after the frozen vocabulary policy.
+**LanguageTool 6.6: DEFER.** Exact holdout basis: 63.2% precision, 60.0% recall, 61.5% F1, TP=12 / FP=7 / FN=8, and 14/20 clean cases silent after the frozen vocabulary policy. This fails the required 90% precision gate.
 
-**Harper: DEFER.** Exact holdout basis: 66.7% precision, 30.0% recall, and three false positives after policy. Easier or cheaper integration does not override the failed precision gate.
+**Harper 2.7.0: DEFER.** Exact holdout basis: 46.2% precision, 30.0% recall, 36.4% F1, TP=6 / FP=7 / FN=14, and 15/20 clean cases silent after the frozen vocabulary policy.
+
+The v2 `SELECT` at 91.7% is withdrawn. It was produced against a holdout the vocabulary had partly been derived from, and it did not survive an independent holdout.
+
+Neither engine is production-ready as a bounded suggestion source under a precision-first gate. The gate was not weakened to accommodate the result. The realistic route to a future `SELECT` is a defensible domain vocabulary with genuine repository or controlled-PP1 provenance, plus a rule-category policy — both of which must be built and frozen against calibration material, then measured once against a further fresh holdout.
 
 ## Lexical duplicate results
 
-Phase 6A reproduces the selected Phase 0 lexical approach before any rewrite: canonical SHA-256 equality, normalised title equality, token Jaccard overlap, and character-trigram cosine similarity. `summary`, `background`, and `solution` are concatenated in their schema order; no Phase 6 weight search or score threshold is used.
+Phase 6A reproduces the selected Phase 0 lexical approach before any rewrite: canonical SHA-256 equality, normalised title equality, token Jaccard overlap, and character-trigram cosine similarity. `summary`, `background`, and `solution` are concatenated in their schema order; no Phase 6 weight search or score threshold is used. This configuration was not modified during the grammar recovery.
 
 | Metric | Calibration | Holdout | All |
 |---|---:|---:|---:|
@@ -139,7 +169,7 @@ Phase 6A reproduces the selected Phase 0 lexical approach before any rewrite: ca
 | Related-not-duplicate candidates in top 5 | 20 | 20 | 40 |
 | Related-not-duplicate outranked the true duplicate | 0 | 0 | 0 |
 
-The average top-five shortlist contains one hard related-not-duplicate candidate, making human review necessary even though the true duplicate ranks first in every query. Query latency was 12.3 ms p50 / 13.3 ms p95 across the 120-project pool.
+The average top-five shortlist contains one hard related-not-duplicate candidate, making human review necessary even though the true duplicate ranks first in every query. Query latency was 20.5 ms p50 / 21.1 ms p95 across the 120-project pool.
 
 **Lexical ranking: SELECT** for bounded ranked candidate generation and human review. It is not selected as a score threshold or automatic duplicate decision.
 
@@ -147,9 +177,9 @@ The average top-five shortlist contains one hard related-not-duplicate candidate
 
 **TRIGGERED: NO.** No labelled near duplicate misses the top five, Recall@5 is 100%, useful recall does not require a shortlist longer than five, and related lexical decoys do not systematically outrank the duplicate.
 
-No embedding runtime executed. No model, weight, cache, vector database, daemon, cloud API, GPU runtime, or browser-accessible service was downloaded or used.
+No embedding runtime executed. No model, weight, cache, vector database, daemon, cloud API, GPU runtime, or browser-accessible service was downloaded or used. The grammar deferral is not a reason to run embeddings: the trigger is defined on duplicate evidence alone, and that evidence is unchanged.
 
-**Embeddings: DEFER / NOT_RUN.** The expanded lexical evidence supplies no incremental-value case for an embedding challenger.
+**Embeddings: DEFER / NOT_RUN.**
 
 ## Decisions
 
@@ -157,9 +187,9 @@ No embedding runtime executed. No model, weight, cache, vector database, daemon,
 
 | Candidate | Decision | Bounded role | Numerical evidence | Operational cost and reason |
 |---|---|---|---|---|
-| Harper 2.7.0 | **DEFER** | grammar/spelling candidate | 66.7% / 30.0% holdout precision/recall after policy; 3 FP | 0.9 s cold start, 1.8/5.2 ms p50/p95, 467 MiB; precision gate failed |
-| LanguageTool 6.6 | **SELECT** | staff-reviewed grammar/spelling suggestions | 91.7% / 55.0% holdout precision/recall after policy; 1 FP | 12.8 s cold start, 22.5/67.6 ms p50/p95, 781 MiB; only engine clearing the precision gate |
-| Lexical duplicate ranking | **SELECT** | top-five candidate shortlist for human review | 100% exact detection and Recall@1/@3/@5; 4 irrelevant candidates in average top five | 12.3/13.3 ms p50/p95 over 120 candidates; no service/model dependency |
+| Harper 2.7.0 | **DEFER** | grammar/spelling candidate | 46.2% / 30.0% holdout precision/recall after policy; 7 FP | 1.5 s cold start, 4.4/11.7 ms p50/p95; precision gate failed |
+| LanguageTool 6.6 | **DEFER** | grammar/spelling candidate | 63.2% / 60.0% holdout precision/recall after policy; 7 FP | 6.8 s cold start, 27.4/113.8 ms p50/p95; precision gate failed |
+| Lexical duplicate ranking | **SELECT** | top-five candidate shortlist for human review | 100% exact detection and Recall@1/@3/@5; 4 irrelevant candidates in average top five | 20.5/21.1 ms p50/p95 over 120 candidates; no service/model dependency |
 | Embeddings | **DEFER / NOT_RUN** | possible semantic challenger | trigger false; lexical Recall@5 100%, zero top-five misses | no model cost incurred because incremental value was not demonstrated |
 
 ## Production and safety boundary
@@ -176,10 +206,10 @@ No embedding runtime executed. No model, weight, cache, vector database, daemon,
 - Hosted Supabase touched: **NO**
 - Duda or publication code touched: **NO**
 
-Because embeddings remain deferred and OCR still has no selected production default, **genuine AI productionization remains an unresolved final-delivery requirement.** The next roadmap must close that requirement with separate evidence-backed OCR/model productionisation rather than force an unjustified embedding dependency.
+Because both grammar candidates are deferred, embeddings remain deferred, and OCR still has no selected production default, **genuine AI productionization remains an unresolved final-delivery requirement.** The next roadmap must close that requirement with separate evidence-backed OCR/model productionisation rather than force an unjustified dependency.
 
 ## Verification contract
 
-Lightweight CI validates the Phase 0 manifest and regression suite, deterministically regenerates the Phase 6A manifest, checks its locked SHA-256, validates both corpus schemas and split stability, exercises grammar scoring and lexical label-independence, recomputes deterministic duplicate metrics, and parses the stored decisions. It does not install Harper, download LanguageTool, run Java, download model weights, require a GPU, or access the network.
+Lightweight CI validates the Phase 0 manifest and regression suite, deterministically regenerates the Phase 6A manifest, checks its locked SHA-256, proves the 20 clean / 20 erroneous fresh holdout reuses none of the retired holdout texts, proves every vocabulary term's provenance and that none is holdout-derived, recompiles every stored precision/recall/F1 from its counts, checks the engine version contract and decision contract, recomputes deterministic duplicate metrics, and confirms the preserved historical version metadata. It does not install Harper, download LanguageTool, run Java, download model weights, require a GPU, or access the network.
 
-The exact final repository verification and exact-head CI outcomes are recorded in the PR and final task report after the implementation diff is complete.
+The exact final repository verification and exact-head CI outcomes are recorded in the PR and final task report.

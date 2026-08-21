@@ -1,0 +1,7 @@
+{
+  "freeze_schema_version": 1,
+  "frozen_for_corpus_version": "pp1-assistive-phase6a-v4",
+  "note": "The vocabulary policy and grammar-quality filters were committed at this commit, before the fresh v4 holdout existed in the repository. Git history is the evidence of that ordering.",
+  "policy_freeze_commit_sha": "001cde3fda6aa6120c3fb08d8c06d73003555581",
+  "vocabulary_policy_sha256": "d4336e182a8e0b9c0c78bb8829fddd13e65bc8e28f3a0e9234a7ad980ba946a3"
+}

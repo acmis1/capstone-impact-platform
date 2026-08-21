@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from assistive_validation_benchmark.phase6.corpus import (
+    PHASE6_CORPUS_VERSION,
     PHASE6_SEED,
     build_phase6_manifest,
     canonical_json_bytes,
@@ -48,6 +49,7 @@ HASH_PATH = TOOL_ROOT / "phase6" / "corpus" / "manifest.sha256"
 POLICY_PATH = TOOL_ROOT / "phase6" / "grammar" / "vocabulary-policy.json"
 EVIDENCE_DIR = REPOSITORY_ROOT / "docs" / "assistive-validation" / "evidence"
 EVIDENCE_PATH = EVIDENCE_DIR / "phase-6a-report.json"
+DOC_PATH = REPOSITORY_ROOT / "docs" / "assistive-validation" / "phase-6a-language-duplicate-benchmark.md"
 
 
 def _load_policy() -> dict:
@@ -113,6 +115,53 @@ class Phase6HoldoutIndependenceTests(unittest.TestCase):
         disguised = f"  {holdout['source_text'].upper()}  "
         self.assertEqual(holdout_text_digest(disguised), holdout_text_digest(holdout["source_text"]))
 
+    def test_current_corpus_is_not_itself_superseded(self) -> None:
+        history = load_benchmark_history(TOOL_ROOT)
+        versions = [entry["corpus_version"] for entry in history["superseded"]]
+        self.assertNotIn(PHASE6_CORPUS_VERSION, versions)
+        self.assertEqual(history["current_corpus_version"], PHASE6_CORPUS_VERSION)
+
+    def test_fresh_holdout_uses_its_own_identifier_scheme(self) -> None:
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        holdout = [case for case in manifest["grammar_cases"] if case["split"] == "holdout"]
+        self.assertEqual(len(holdout), 40)
+        self.assertEqual(sum(case["intentionally_clean"] for case in holdout), 20)
+        self.assertEqual(sum(not case["intentionally_clean"] for case in holdout), 20)
+        # Distinct IDs make any accidental reuse of the retired g6-041..g6-080 range obvious.
+        for case in holdout:
+            self.assertTrue(case["id"].startswith("g6v4-h"), case["id"])
+        calibration = [case for case in manifest["grammar_cases"] if case["split"] == "calibration"]
+        self.assertTrue(all(not case["id"].startswith("g6v4-") for case in calibration))
+
+    def test_fresh_holdout_covers_every_required_error_category(self) -> None:
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        categories = {
+            issue["category"]
+            for case in manifest["grammar_cases"]
+            if case["split"] == "holdout"
+            for issue in case["issues"]
+        }
+        self.assertEqual(categories, {
+            "SPELLING_ORDINARY", "SPELLING_REPEATED_CHARACTER", "SPELLING_DROPPED_CHARACTER",
+            "SPELLING_REAL_WORD", "SPELLING_TECHNICAL_NEAR_MISS",
+            "GRAMMAR_SUBJECT_VERB_AGREEMENT", "GRAMMAR_SINGULAR_PLURAL", "GRAMMAR_ARTICLE",
+            "GRAMMAR_PRONOUN_AGREEMENT", "GRAMMAR_VERB_FORM", "GRAMMAR_SENTENCE_FRAGMENT",
+            "GRAMMAR_DUPLICATED_WORD", "GRAMMAR_CAPITALIZATION", "GRAMMAR_POSSESSIVE",
+            "PUNCTUATION_INTRODUCTORY_COMMA", "PUNCTUATION_COMMA_SPLICE",
+        })
+
+    def test_some_clean_holdout_terms_are_outside_the_frozen_vocabulary(self) -> None:
+        """Generalisation is only tested honestly if legitimate unknown terms remain unapproved."""
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        approved = approved_terms(_load_policy())
+        declared = {
+            term
+            for case in manifest["grammar_cases"]
+            if case["split"] == "holdout" and case["intentionally_clean"]
+            for term in case["legitimate_technical_terms"]
+        }
+        self.assertTrue(declared - approved, "every clean holdout term is already approved")
+
     def test_history_preserves_every_superseded_attempt(self) -> None:
         history = load_benchmark_history(TOOL_ROOT)
         versions = [entry["corpus_version"] for entry in history["superseded"]]
@@ -165,13 +214,18 @@ class Phase6ProvenanceTests(unittest.TestCase):
 
     def test_holdout_sourced_term_is_rejected_structurally(self) -> None:
         manifest = load_phase6_manifest(MANIFEST_PATH)
-        holdout = next(
-            case for case in manifest["grammar_cases"]
-            if case["split"] == "holdout" and case["legitimate_technical_terms"]
-        )
         policy = _load_policy()
+        approved = approved_terms(policy)
+        # Pick a holdout term that is not already approved, so uniqueness cannot mask the real check.
+        holdout, term = next(
+            (case, term)
+            for case in manifest["grammar_cases"]
+            if case["split"] == "holdout"
+            for term in case["legitimate_technical_terms"]
+            if term not in approved
+        )
         policy["approved_terms"].append({
-            "term": holdout["legitimate_technical_terms"][0],
+            "term": term,
             "sourceType": "calibration",
             "source": holdout["id"],
         })
@@ -393,6 +447,45 @@ class Phase6EvidenceTests(unittest.TestCase):
 
     def test_evidence_uses_only_policy_approved_terms(self) -> None:
         self.assertEqual(approved_terms(self.report["vocabulary_policy"]), approved_terms(_load_policy()))
+
+    def test_markdown_agrees_with_machine_evidence(self) -> None:
+        """The prose must never state a decision or metric the stored evidence contradicts."""
+        doc = DOC_PATH.read_text(encoding="utf-8")
+        self.assertIn(self.report["corpus_version"], doc)
+        self.assertIn(self.report["manifest_sha256"], doc)
+        self.assertIn(self.report["vocabulary_policy_sha256"], doc)
+        self.assertIn(self.report["policy_freeze_commit_sha"], doc)
+        for name, expected in EXPECTED_ENGINE_VERSIONS.items():
+            engine_label = {"harper": "Harper", "languagetool": "LanguageTool"}[name]
+            holdout = self.report["grammar"][name]["scores"]["by_split"]["holdout"]["vocabulary_policy"]
+            decision = self.report["decisions"][name]["decision"]
+            self.assertIn(f"{engine_label} {expected}", doc)
+            self.assertIn(f"**{engine_label} {expected}: {decision}.**", doc)
+            for field in ("precision", "recall", "f1"):
+                self.assertIn(f"{holdout[field] * 100:.1f}%", doc)
+        # The current decision section must not assert a decision the evidence contradicts.
+        # Historical sections may still quote a withdrawn result, so scope the check.
+        section = doc.split("## Grammar decision", 1)[1].split("\n## ", 1)[0]
+        for name in EXPECTED_ENGINE_VERSIONS:
+            label = {"harper": "Harper", "languagetool": "LanguageTool"}[name]
+            decision = self.report["decisions"][name]["decision"]
+            self.assertIn(f"{label} {EXPECTED_ENGINE_VERSIONS[name]}: {decision}", section)
+            if decision == "DEFER":
+                self.assertNotIn(f"{label} {EXPECTED_ENGINE_VERSIONS[name]}: SELECT", section)
+        # The decision table must carry the same verdict.
+        table = doc.split("## Decisions", 1)[1].split("\n## ", 1)[0]
+        for name in EXPECTED_ENGINE_VERSIONS:
+            label = {"harper": "Harper", "languagetool": "LanguageTool"}[name]
+            row = next(line for line in table.splitlines() if line.startswith(f"| {label} "))
+            self.assertIn(f"**{self.report['decisions'][name]['decision']}**", row)
+
+    def test_markdown_reports_the_measured_duplicate_recall(self) -> None:
+        doc = DOC_PATH.read_text(encoding="utf-8")
+        holdout = self.report["duplicates"]["by_split"]["holdout"]
+        for key in ("recall_at_1", "recall_at_3", "recall_at_5"):
+            self.assertIn(f"{holdout[key] * 100:.1f}%", doc)
+        self.assertEqual(self.report["embedding"]["triggered"], False)
+        self.assertIn("**TRIGGERED: NO.**", doc)
 
     def test_production_boundary_remains_closed(self) -> None:
         boundary = self.report["production_boundary"]

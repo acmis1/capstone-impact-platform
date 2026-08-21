@@ -2,7 +2,7 @@
 
 This directory is an isolated, local-only Phase 0 and Phase 6A evidence harness. It measures native PDF extraction, OCR, deterministic title consistency, grammar/spelling tools, and lexical duplicate ranking on deterministic synthetic PP1-style material. It does not import application code, alter workflow state, access Supabase, call cloud AI/OCR, publish, or grant any document instruction authority.
 
-Phase 6A extends the original harness under `phase6/` with a new frozen grammar and 120-project duplicate corpus. Its method and reviewed result live in [phase-6a-language-duplicate-benchmark.md](../../docs/assistive-validation/phase-6a-language-duplicate-benchmark.md).
+Phase 6A extends the original harness under `phase6/` with a frozen grammar and 120-project duplicate corpus. Its method and reviewed result live in [phase-6a-language-duplicate-benchmark.md](../../docs/assistive-validation/phase-6a-language-duplicate-benchmark.md). Superseded iterations are preserved under `phase6/history/`; only the current corpus version carries an authoritative decision.
 
 ## Quick start
 
@@ -166,12 +166,19 @@ Unit tests cover manifest rejection, traversal protection, layout/typeface valid
 
 ### Phase 6A commands
 
-Generate and validate the new committed manifest before running an engine:
+Generate and validate the committed manifest, then prove the frozen policy, before running an engine:
 
 ```powershell
 .venv\Scripts\python -m assistive_validation_benchmark phase6-generate
 .venv\Scripts\python -m assistive_validation_benchmark phase6-validate
+.venv\Scripts\python -m assistive_validation_benchmark phase6-check-policy
 ```
+
+`phase6-validate` also rejects any holdout text already scored by a superseded iteration.
+`phase6-check-policy` proves every approved vocabulary term against authoritative non-holdout
+provenance: a repository term must resolve to an existing in-tree file that literally contains it,
+and a calibration term must resolve to a case whose declared split is `calibration` and which
+contains and declares it. No term may be justified by holdout material.
 
 Calibration is the only run that may inform the exact-token vocabulary policy or safe input filtering:
 
@@ -196,6 +203,12 @@ Freeze the corpus, hash, vocabulary policy, scorer, and configuration before the
 ```
 
 The Java server launcher accepts only a local `languagetool-server.jar`, binds LanguageTool to loopback, uses an argument array without shell interpolation, bounds text/check time/stdout/stderr, and terminates the child deterministically. Corpus text is sent only in local HTTP request bodies. The embedding trigger is evaluated after lexical ranking; a false trigger leaves embeddings `NOT_RUN` and downloads nothing.
+
+A final run is refused unless both reviewed candidates actually execute at their contracted
+versions (Harper 2.7.0, LanguageTool 6.6) and a `phase6/history/policy-freeze.json` record proves
+the vocabulary policy is byte-identical to the one committed at its freeze commit. Evidence
+validation additionally recomputes every stored precision, recall, and F1 from its own TP/FP/FN
+counts, so a copied or stale metric cannot be published.
 
 ## Adding a case or challenger
 
