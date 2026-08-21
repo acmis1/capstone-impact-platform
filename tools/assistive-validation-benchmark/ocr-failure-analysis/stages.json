@@ -1,0 +1,57 @@
+{
+  "schema_version": "pp1-ocr-failure-analysis-stages/v1",
+  "iteration": "pp1-ocr-productionization-iteration-2a",
+  "cost_policy": "PP-OCRv6 Medium is roughly forty times slower per case than Tiny, so a configuration reaches Medium only after cheaper engines show it is worth measuring.",
+  "stages": [
+    {
+      "stage": 1,
+      "name": "stored-evidence analysis without OCR rerun",
+      "ocr_executed": false,
+      "description": "Read the merged v1 report, the frozen protocol, the corpus manifest and the production worker OCR path. Established that the merged report stores per-case metrics but no OCR blocks, so failure decomposition requires a block-level capture; and that the production worker performs no downscaling at all, so the benchmark's 960-pixel long-edge bound is a benchmark-only preprocessing choice.",
+      "promotion": "A block-level capture harness is required before any taxonomy can be evidence-backed."
+    },
+    {
+      "stage": 2,
+      "name": "cheap-engine capture and resolution sensitivity",
+      "ocr_executed": true,
+      "engines": ["tesseract", "paddle-tiny"],
+      "configurations": [
+        "dpi150-edge960",
+        "dpi150-edge1280",
+        "dpi150-edge1600",
+        "dpi150-edge1920",
+        "dpi180-edge1920",
+        "dpi200-edge1920"
+      ],
+      "description": "Captured every exposed development case for the two cheapest engines across the bounded resolution matrix. Verified each baseline capture reproduces the merged per-case measurement exactly before trusting any derived number.",
+      "promotion": "Resolution changed exact-title recovery by at most one case in either direction for both engines, so no resolution above the baseline was promoted on title-quality grounds. Higher raster settings did materially reduce whole-page WER, so dpi180-edge1920 was promoted for the WER decomposition only."
+    },
+    {
+      "stage": 3,
+      "name": "mid-size confirmation",
+      "ocr_executed": true,
+      "engines": ["paddle-small"],
+      "configurations": ["dpi150-edge960", "dpi180-edge1920"],
+      "description": "Confirmed on a second neural engine that the Tiny resolution result was not engine-specific.",
+      "promotion": "Small reproduced the Tiny pattern (+1 exact title, materially lower WER at higher raster). No further resolution configuration was promoted to Medium."
+    },
+    {
+      "stage": 4,
+      "name": "Medium at the baseline configuration only",
+      "ocr_executed": true,
+      "engines": ["paddle-medium"],
+      "configurations": ["dpi150-edge960"],
+      "description": "Medium was measured across the full exposed corpus at the merged baseline configuration so its failure decomposition is directly comparable with the merged evidence.",
+      "promotion": "No higher-resolution Medium run was justified: Tiny and Small showed no material title-quality gain from resolution, and Medium already exceeds every operational ceiling at the baseline configuration, so a slower configuration could not become a candidate."
+    },
+    {
+      "stage": 5,
+      "name": "controlled corpus instrument probe",
+      "ocr_executed": true,
+      "engines": ["paddle-tiny", "paddle-small", "paddle-medium"],
+      "configurations": ["title-band-960"],
+      "description": "Single-variable probe rendering each title alone on its own band, changing only the corpus title stroke. Isolates recognition from reading order, layout and candidate ranking, and measures what the corpus itself can support.",
+      "promotion": "Terminal stage: it establishes the upper bound on exact-title recovery achievable on this corpus by any provisioned engine."
+    }
+  ]
+}
