@@ -1,0 +1,166 @@
+{
+  "current_corpus_version": "pp1-assistive-phase6a-v4",
+  "current_iteration": 4,
+  "history_schema_version": 1,
+  "note": "Every superseded Phase 6A attempt is preserved as audit history. Only the current corpus version carries an authoritative grammar decision.",
+  "superseded": [
+    {
+      "completed_at": "2026-08-21T03:40:30.221247+00:00",
+      "corpus_version": "pp1-assistive-phase6a-v1",
+      "decisions": {
+        "embeddings": "DEFER_NOT_RUN",
+        "harper": "DEFER",
+        "languagetool": "SELECT",
+        "lexical_duplicate_ranking": "SELECT"
+      },
+      "holdout": {
+        "embedding_triggered": false,
+        "harper_raw": {
+          "f1": 0.375,
+          "precision": 0.5,
+          "recall": 0.3
+        },
+        "harper_vocabulary_policy": {
+          "f1": 0.41379310344827586,
+          "precision": 0.6666666666666666,
+          "recall": 0.3
+        },
+        "languagetool_raw": {
+          "f1": 0.6470588235294118,
+          "precision": 0.7857142857142857,
+          "recall": 0.55
+        },
+        "languagetool_vocabulary_policy": {
+          "f1": 0.6875,
+          "precision": 0.9166666666666666,
+          "recall": 0.55
+        },
+        "lexical_recall_at_1": 1.0,
+        "lexical_recall_at_3": 1.0,
+        "lexical_recall_at_5": 1.0
+      },
+      "languagetool_version": "6.6",
+      "manifest_sha256": "08a397dd74d4154c7ade2f12cd56c8e1f67bd0a1d24c570e7b2ad1471cd96fb8",
+      "superseded_reason": "A repository terminology contract required a wording-only corpus revision after the first holdout; no quality threshold, label, policy, weight, filter, or engine setting changed."
+    },
+    {
+      "completed_at": "2026-08-21T03:56:23.448843+00:00",
+      "corpus_version": "pp1-assistive-phase6a-v2",
+      "decisions": {
+        "embeddings": "DEFER",
+        "harper": "DEFER",
+        "languagetool": "SELECT",
+        "lexical_duplicate_ranking": "SELECT"
+      },
+      "holdout": {
+        "embedding_triggered": false,
+        "harper": {
+          "raw": {
+            "clean_case_count": 20,
+            "clean_cases_fully_silent": 17,
+            "f1": 0.37499999999999994,
+            "false_positives": 6,
+            "missed_issues": 14,
+            "precision": 0.5,
+            "recall": 0.3,
+            "true_positives": 6
+          },
+          "status": "ok",
+          "version": "2.7.0",
+          "vocabulary_policy": {
+            "clean_case_count": 20,
+            "clean_cases_fully_silent": 20,
+            "f1": 0.41379310344827586,
+            "false_positives": 3,
+            "missed_issues": 14,
+            "precision": 0.6666666666666666,
+            "recall": 0.3,
+            "true_positives": 6
+          }
+        },
+        "languagetool": {
+          "raw": {
+            "clean_case_count": 20,
+            "clean_cases_fully_silent": 18,
+            "f1": 0.6470588235294117,
+            "false_positives": 3,
+            "missed_issues": 9,
+            "precision": 0.7857142857142857,
+            "recall": 0.55,
+            "true_positives": 11
+          },
+          "status": "ok",
+          "version": "6.6",
+          "vocabulary_policy": {
+            "clean_case_count": 20,
+            "clean_cases_fully_silent": 20,
+            "f1": 0.6874999999999999,
+            "false_positives": 1,
+            "missed_issues": 9,
+            "precision": 0.9166666666666666,
+            "recall": 0.55,
+            "true_positives": 11
+          }
+        },
+        "lexical": {
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0
+        }
+      },
+      "languagetool_version": "6.6",
+      "manifest_sha256": "62f1111c7578875b00990f003c54b579af07a6251e5f162648009f758d8ade06",
+      "superseded_reason": "Vocabulary-policy holdout independence was not defensible: the approved term OAuth was justified only by holdout case g6-070 while claiming repository provenance, and no repository file contains that term. Its reported LanguageTool SELECT therefore rests on a policy partly derived from the holdout it was measured on.",
+      "vocabulary_policy_sha256": "f598a2069317170cac74bab850283f67c27f79b62fa536fd1f19d2e83e9b3964"
+    },
+    {
+      "completed_at": "2026-08-21T04:43:15.991592+00:00",
+      "corpus_version": "pp1-assistive-phase6a-v3",
+      "decisions": {
+        "embeddings": "DEFER",
+        "harper": "DEFER",
+        "languagetool": "DEFER",
+        "lexical_duplicate_ranking": "SELECT"
+      },
+      "holdout": {
+        "embedding_triggered": false,
+        "harper": {
+          "status": "unavailable"
+        },
+        "languagetool": {
+          "raw": {
+            "clean_case_count": 20,
+            "clean_cases_fully_silent": 19,
+            "f1": 0.6666666666666667,
+            "false_positives": 2,
+            "missed_issues": 9,
+            "precision": 0.8461538461538461,
+            "recall": 0.55,
+            "true_positives": 11
+          },
+          "status": "ok",
+          "version": "6.4",
+          "vocabulary_policy": {
+            "clean_case_count": 20,
+            "clean_cases_fully_silent": 19,
+            "f1": 0.6666666666666667,
+            "false_positives": 2,
+            "missed_issues": 9,
+            "precision": 0.8461538461538461,
+            "recall": 0.55,
+            "true_positives": 11
+          }
+        },
+        "lexical": {
+          "recall_at_1": 1.0,
+          "recall_at_3": 1.0,
+          "recall_at_5": 1.0
+        }
+      },
+      "languagetool_version": "6.4",
+      "manifest_sha256": "d903603947b38f2d52da4fc494c17e9a79006c7f277ac1b8ca0cd624d0e3c683",
+      "superseded_reason": "Three protocol defects: only clean holdout cases g6-061..g6-070 were replaced, so the already-exposed holdout g6-041..g6-060 and g6-071..g6-080 were reused; the run executed LanguageTool 6.4 instead of the reviewed 6.6 candidate, silently changing the measured engine; and Harper never executed because its pinned dependency was absent, leaving no grammar comparison.",
+      "vocabulary_policy_sha256": "657dcca1664da343f9254a97123b4c8f2272fc6d746c2624c51f2376e5e1b63c"
+    }
+  ]
+}

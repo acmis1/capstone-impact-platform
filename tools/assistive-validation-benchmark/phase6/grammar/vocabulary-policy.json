@@ -1,0 +1,29 @@
+{
+  "policy_version": 2,
+  "frozen_before_holdout": true,
+  "matching": "case-sensitive exact token; spelling-category findings only",
+  "provenance_contract": "Every term must resolve to authoritative non-holdout material: an existing repository file that literally contains the term, or a calibration case that contains and declares it. Holdout material may never justify a term.",
+  "approved_terms": [
+    { "term": "API", "sourceType": "repository", "source": "infra/supabase/migrations/20260719003407_explicit_data_api_grants.sql" },
+    { "term": "Argon2id", "sourceType": "calibration", "source": "g6-027" },
+    { "term": "FastAPI", "sourceType": "calibration", "source": "g6-021" },
+    { "term": "Kubernetes", "sourceType": "calibration", "source": "g6-023" },
+    { "term": "Modbus", "sourceType": "calibration", "source": "g6-030" },
+    { "term": "MQTT", "sourceType": "calibration", "source": "g6-029" },
+    { "term": "OCR", "sourceType": "repository", "source": "infra/supabase/migrations/20260814140000_snapshot_image_alt_text.sql" },
+    { "term": "OpenTelemetry", "sourceType": "calibration", "source": "g6-025" },
+    { "term": "PKCE", "sourceType": "repository", "source": "infra/supabase/password-recovery-setup.md" },
+    { "term": "PostgreSQL", "sourceType": "calibration", "source": "g6-022" },
+    { "term": "TypeScript", "sourceType": "calibration", "source": "g6-024" },
+    { "term": "WebAuthn", "sourceType": "calibration", "source": "g6-026" },
+    { "term": "WebRTC", "sourceType": "calibration", "source": "g6-028" },
+    { "term": "deidentified", "sourceType": "calibration", "source": "g6-015" }
+  ],
+  "field_policy": {
+    "title": "spelling findings only",
+    "summary": "grammar, spelling, punctuation, and capitalisation",
+    "background": "grammar, spelling, punctuation, and capitalisation",
+    "solution": "grammar, spelling, punctuation, and capitalisation",
+    "extracted_text": "grammar, spelling, punctuation, and capitalisation after masking"
+  }
+}
