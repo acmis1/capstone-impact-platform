@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
+import shutil
+import subprocess
 from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -12,6 +14,39 @@ from typing import Any
 from .corpus import PHASE6_CORPUS_VERSION, PHASE6_SEED, manifest_sha256, validate_phase6_manifest
 from .duplicates import evaluate_lexical_duplicates
 from .grammar import local_languagetool_server, run_harper, run_languagetool, score_grammar_engine
+from .history import (
+    check_holdout_independence,
+    check_policy_freeze,
+    load_benchmark_history,
+    load_exposed_holdout_texts,
+)
+from .metrics import check_report_metrics
+from .provenance import approved_terms, validate_vocabulary_policy
+
+# The reviewed Phase 0 candidates. A silently different build invalidates every comparison.
+EXPECTED_ENGINE_VERSIONS = {"harper": "2.7.0", "languagetool": "6.6"}
+
+
+def _command_version(command: list[str]) -> str | None:
+    """Query a real runtime version instead of recording an assumed one."""
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30, shell=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    output = f"{result.stdout}\n{result.stderr}".strip()
+    return output.splitlines()[0].strip() if output else None
+
+
+def _environment() -> dict[str, Any]:
+    node = shutil.which("node")
+    java = shutil.which("java")
+    return {
+        "python": platform.python_version(),
+        "node": _command_version([node, "--version"]) if node else None,
+        "java": _command_version([java, "-version"]) if java else None,
+        "os": platform.platform(),
+        "cpu_only": True,
+    }
 
 
 def _score_splits(
@@ -128,17 +163,33 @@ def run_phase6_benchmark(
     ]
     policy_path = tool_root / "phase6" / "grammar" / "vocabulary-policy.json"
     policy = json.loads(policy_path.read_text(encoding="utf-8"))
-    approved_terms = {item["term"] for item in policy["approved_terms"]}
+    repository_root = tool_root.parents[1]
+    provenance = validate_vocabulary_policy(policy, manifest, repository_root)
+    terms = approved_terms(policy)
+    exposed = load_exposed_holdout_texts(tool_root)
+    holdout_independence = check_holdout_independence(manifest, exposed)
+    freeze = check_policy_freeze(tool_root, policy_path) if final_measurement else None
 
     harper = run_harper(grammar_cases, tool_root)
     if harper["status"] == "ok":
-        harper["scores"] = _score_splits(grammar_cases, harper.pop("case_findings"), approved_terms)
+        harper["scores"] = _score_splits(grammar_cases, harper.pop("case_findings"), terms)
 
     with local_languagetool_server(languagetool_jar) as server:
         languagetool = run_languagetool(grammar_cases, server["base_url"], server["pid"])
         languagetool["cold_start_ms"] = server["cold_start_ms"]
     if languagetool["status"] == "ok":
-        languagetool["scores"] = _score_splits(grammar_cases, languagetool.pop("case_findings"), approved_terms)
+        languagetool["scores"] = _score_splits(grammar_cases, languagetool.pop("case_findings"), terms)
+
+    for name, engine in (("harper", harper), ("languagetool", languagetool)):
+        expected = EXPECTED_ENGINE_VERSIONS[name]
+        if engine.get("status") == "ok" and engine.get("version") != expected:
+            raise RuntimeError(
+                f"{name} reported version {engine.get('version')!r}; the reviewed Phase 6A candidate is {expected}"
+            )
+        if final_measurement and engine.get("status") != "ok":
+            raise RuntimeError(
+                f"{name} did not execute ({engine.get('status')}); final evidence requires both grammar candidates"
+            )
 
     duplicates = evaluate_lexical_duplicates(duplicate_queries, manifest["duplicate_candidates"])
     if final_measurement and duplicates["embedding_trigger"]["triggered"]:
@@ -154,13 +205,11 @@ def run_phase6_benchmark(
         "vocabulary_policy_sha256": hashlib.sha256(policy_path.read_bytes()).hexdigest(),
         "measurement": measurement,
         "completed_at": completed.isoformat(),
-        "environment": {
-            "python": platform.python_version(),
-            "node": "24.14.1 required by pinned adapter",
-            "java": "local runtime; version captured in documented execution",
-            "os": platform.platform(),
-            "cpu_only": True,
-        },
+        "policy_freeze_commit_sha": (freeze or {}).get("policy_freeze_commit_sha"),
+        "engine_version_contract": dict(EXPECTED_ENGINE_VERSIONS),
+        "vocabulary_provenance": provenance,
+        "holdout_independence": holdout_independence,
+        "environment": _environment(),
         "corpus": {
             "grammar_cases": len(manifest["grammar_cases"]),
             "grammar_calibration": sum(case["split"] == "calibration" for case in manifest["grammar_cases"]),
@@ -173,31 +222,7 @@ def run_phase6_benchmark(
             "duplicate_holdout": sum(query["split"] == "holdout" for query in manifest["duplicate_queries"]),
             "provenance": manifest["provenance"],
         },
-        "benchmark_history": {
-            "current_iteration": 2,
-            "previous_result": {
-                "corpus_version": "pp1-assistive-phase6a-v1",
-                "manifest_sha256": "08a397dd74d4154c7ade2f12cd56c8e1f67bd0a1d24c570e7b2ad1471cd96fb8",
-                "completed_at": "2026-08-21T03:40:30.221247+00:00",
-                "preservation_reason": "A repository terminology contract required a wording-only corpus revision after the first holdout; no quality threshold, label, policy, weight, filter, or engine setting changed.",
-                "holdout": {
-                    "harper_raw": {"precision": 0.5, "recall": 0.3, "f1": 0.375},
-                    "harper_vocabulary_policy": {"precision": 2 / 3, "recall": 0.3, "f1": 12 / 29},
-                    "languagetool_raw": {"precision": 11 / 14, "recall": 0.55, "f1": 11 / 17},
-                    "languagetool_vocabulary_policy": {"precision": 11 / 12, "recall": 0.55, "f1": 11 / 16},
-                    "lexical_recall_at_1": 1.0,
-                    "lexical_recall_at_3": 1.0,
-                    "lexical_recall_at_5": 1.0,
-                    "embedding_triggered": False,
-                },
-                "decisions": {
-                    "harper": "DEFER",
-                    "languagetool": "SELECT",
-                    "lexical_duplicate_ranking": "SELECT",
-                    "embeddings": "DEFER_NOT_RUN",
-                },
-            },
-        },
+        "benchmark_history": load_benchmark_history(tool_root),
         "input_policy": {
             "grammar_fields": ["title", "summary", "background", "solution", "bounded extracted text"],
             "masked_before_checking": ["code spans", "URLs", "email addresses", "UUIDs", "filenames/database identifiers"],
@@ -239,7 +264,14 @@ def run_phase6_benchmark(
     return report
 
 
-def validate_phase6_evidence(report: Any, manifest: dict[str, Any], policy_path: Path) -> dict[str, Any]:
+def validate_phase6_evidence(
+    report: Any,
+    manifest: dict[str, Any],
+    policy_path: Path,
+    *,
+    tool_root: Path | None = None,
+    repository_root: Path | None = None,
+) -> dict[str, Any]:
     if not isinstance(report, dict) or report.get("report_schema_version") != 1:
         raise ValueError("Phase 6 evidence schema is invalid")
     if report.get("measurement") != "final":
@@ -250,6 +282,43 @@ def validate_phase6_evidence(report: Any, manifest: dict[str, Any], policy_path:
         raise ValueError("Stored evidence vocabulary policy hash is stale")
     if report.get("corpus", {}).get("grammar_cases") != 80 or report.get("corpus", {}).get("duplicate_candidates") < 100:
         raise ValueError("Stored evidence corpus counts are inconsistent")
+
+    tool_root = tool_root or policy_path.resolve().parents[2]
+    repository_root = repository_root or tool_root.parents[1]
+
+    # Every printed precision/recall/F1 must follow from its own TP/FP/FN counts.
+    check_report_metrics(report)
+
+    # The measured candidates must be the reviewed ones, and both must actually have run.
+    if report.get("engine_version_contract") != EXPECTED_ENGINE_VERSIONS:
+        raise ValueError("Stored evidence does not declare the reviewed engine version contract")
+    for name, expected in EXPECTED_ENGINE_VERSIONS.items():
+        engine = report.get("grammar", {}).get(name, {})
+        if engine.get("status") != "ok":
+            raise ValueError(f"Stored final evidence requires an executed {name} run")
+        if engine.get("version") != expected:
+            raise ValueError(
+                f"Stored evidence measured {name} {engine.get('version')!r} instead of the reviewed {expected}"
+            )
+
+    # The vocabulary policy must still be provable and unchanged since its recorded freeze commit.
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    provenance = validate_vocabulary_policy(policy, manifest, repository_root)
+    if report.get("vocabulary_provenance") != provenance:
+        raise ValueError("Stored vocabulary provenance summary is inconsistent")
+    freeze = check_policy_freeze(tool_root, policy_path)
+    if report.get("policy_freeze_commit_sha") != freeze["policy_freeze_commit_sha"]:
+        raise ValueError("Stored evidence does not record the frozen policy commit")
+
+    # The measured holdout must not reuse text from any superseded iteration.
+    independence = check_holdout_independence(manifest, load_exposed_holdout_texts(tool_root))
+    if report.get("holdout_independence") != independence:
+        raise ValueError("Stored holdout independence summary is inconsistent")
+    if report.get("benchmark_history") != load_benchmark_history(tool_root):
+        raise ValueError("Stored benchmark history does not match the preserved record")
+
+    if report.get("environment", {}).get("java") is None:
+        raise ValueError("Stored evidence must record the actual Java runtime that was queried")
     duplicates = report.get("duplicates", {})
     recomputed_duplicates = evaluate_lexical_duplicates(manifest["duplicate_queries"], manifest["duplicate_candidates"])
     deterministic_keys = [

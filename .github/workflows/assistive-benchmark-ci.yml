@@ -48,6 +48,10 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark phase6-validate
 
+      - name: Prove Phase 6A vocabulary provenance and holdout independence
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark phase6-check-policy
+
       - name: Verify stored Phase 6A evidence and decision contract
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark phase6-check-evidence

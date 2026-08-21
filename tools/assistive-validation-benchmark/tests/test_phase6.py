@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import json
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -20,13 +19,39 @@ from assistive_validation_benchmark.phase6.grammar import (
     prepare_grammar_text,
     score_grammar_engine,
 )
-from assistive_validation_benchmark.phase6.runner import compact_phase6_evidence, validate_phase6_evidence
+from assistive_validation_benchmark.phase6.history import (
+    check_holdout_independence,
+    holdout_text_digest,
+    load_benchmark_history,
+    load_exposed_holdout_texts,
+    load_policy_freeze,
+)
+from assistive_validation_benchmark.phase6.metrics import (
+    check_metric_group,
+    check_report_metrics,
+    recompute_metrics,
+)
+from assistive_validation_benchmark.phase6.provenance import (
+    approved_terms,
+    validate_vocabulary_policy,
+)
+from assistive_validation_benchmark.phase6.runner import (
+    EXPECTED_ENGINE_VERSIONS,
+    compact_phase6_evidence,
+    validate_phase6_evidence,
+)
 
 TOOL_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = TOOL_ROOT.parents[1]
 MANIFEST_PATH = TOOL_ROOT / "phase6" / "corpus" / "manifest.json"
 HASH_PATH = TOOL_ROOT / "phase6" / "corpus" / "manifest.sha256"
 POLICY_PATH = TOOL_ROOT / "phase6" / "grammar" / "vocabulary-policy.json"
-EVIDENCE_PATH = TOOL_ROOT.parents[1] / "docs" / "assistive-validation" / "evidence" / "phase-6a-report.json"
+EVIDENCE_DIR = REPOSITORY_ROOT / "docs" / "assistive-validation" / "evidence"
+EVIDENCE_PATH = EVIDENCE_DIR / "phase-6a-report.json"
+
+
+def _load_policy() -> dict:
+    return json.loads(POLICY_PATH.read_text(encoding="utf-8"))
 
 
 class Phase6CorpusTests(unittest.TestCase):
@@ -66,52 +91,188 @@ class Phase6CorpusTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "label every candidate"):
             validate_phase6_manifest(manifest)
 
-    def test_stored_evidence_and_decisions_match_frozen_contract(self) -> None:
+
+class Phase6HoldoutIndependenceTests(unittest.TestCase):
+    def test_holdout_reuses_no_superseded_text(self) -> None:
         manifest = load_phase6_manifest(MANIFEST_PATH)
-        report = json.loads(EVIDENCE_PATH.read_text(encoding="utf-8"))
-        self.assertIs(validate_phase6_evidence(report, manifest, POLICY_PATH), report)
-        self.assertEqual(compact_phase6_evidence(report), report)
+        summary = check_holdout_independence(manifest, load_exposed_holdout_texts(TOOL_ROOT))
+        self.assertEqual(summary["reused_texts"], 0)
+        self.assertEqual(summary["holdout_cases"], 40)
+
+    def test_reused_holdout_text_is_rejected(self) -> None:
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        holdout = next(case for case in manifest["grammar_cases"] if case["split"] == "holdout")
+        # Attributed to a different iteration, so it counts as prior exposure.
+        exposed = {holdout_text_digest(holdout["source_text"]): ["pp1-assistive-phase6a-v2:g6-041"]}
+        with self.assertRaisesRegex(ValueError, "reuses superseded holdout text"):
+            check_holdout_independence(manifest, exposed)
+
+    def test_reuse_detection_ignores_whitespace_and_case(self) -> None:
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        holdout = next(case for case in manifest["grammar_cases"] if case["split"] == "holdout")
+        disguised = f"  {holdout['source_text'].upper()}  "
+        self.assertEqual(holdout_text_digest(disguised), holdout_text_digest(holdout["source_text"]))
+
+    def test_history_preserves_every_superseded_attempt(self) -> None:
+        history = load_benchmark_history(TOOL_ROOT)
+        versions = [entry["corpus_version"] for entry in history["superseded"]]
+        self.assertIn("pp1-assistive-phase6a-v1", versions)
+        self.assertIn("pp1-assistive-phase6a-v2", versions)
+        self.assertIn("pp1-assistive-phase6a-v3", versions)
+        for entry in history["superseded"]:
+            self.assertTrue(entry["superseded_reason"].strip())
+
+    def test_superseded_v3_evidence_is_preserved_unmodified(self) -> None:
+        path = EVIDENCE_DIR / "phase-6a-report-v3-superseded.json"
+        report = json.loads(path.read_text(encoding="utf-8"))
+        history = {entry["corpus_version"]: entry for entry in load_benchmark_history(TOOL_ROOT)["superseded"]}
+        entry = history["pp1-assistive-phase6a-v3"]
+        self.assertEqual(report["corpus_version"], "pp1-assistive-phase6a-v3")
+        self.assertEqual(report["manifest_sha256"], entry["manifest_sha256"])
+        self.assertEqual(report["vocabulary_policy_sha256"], entry["vocabulary_policy_sha256"])
+        # The superseded run measured LanguageTool 6.4, which is why it cannot be the decision basis.
+        self.assertEqual(report["grammar"]["languagetool"]["version"], "6.4")
+        self.assertNotEqual(report["grammar"]["languagetool"]["version"], EXPECTED_ENGINE_VERSIONS["languagetool"])
+        check_report_metrics(report)
+
+
+class Phase6ProvenanceTests(unittest.TestCase):
+    def test_frozen_policy_provenance_is_fully_proven(self) -> None:
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        summary = validate_vocabulary_policy(_load_policy(), manifest, REPOSITORY_ROOT)
+        self.assertEqual(summary["holdout_sourced_terms"], 0)
+        self.assertEqual(summary["approved_term_count"], sum(summary["source_type_counts"].values()))
+        self.assertGreater(summary["approved_term_count"], 0)
+
+    def test_repository_terms_exist_and_contain_their_term(self) -> None:
+        for entry in _load_policy()["approved_terms"]:
+            if entry["sourceType"] != "repository":
+                continue
+            path = REPOSITORY_ROOT / entry["source"]
+            self.assertTrue(path.is_file(), f"{entry['term']} source {entry['source']} is missing")
+            self.assertIn(entry["term"], path.read_text(encoding="utf-8"))
+
+    def test_calibration_terms_are_declared_in_a_calibration_case(self) -> None:
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        cases = {case["id"]: case for case in manifest["grammar_cases"]}
+        for entry in _load_policy()["approved_terms"]:
+            if entry["sourceType"] != "calibration":
+                continue
+            case = cases[entry["source"]]
+            self.assertEqual(case["split"], "calibration")
+            self.assertIn(entry["term"], case["source_text"])
+            self.assertIn(entry["term"], case["legitimate_technical_terms"])
+
+    def test_holdout_sourced_term_is_rejected_structurally(self) -> None:
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        holdout = next(
+            case for case in manifest["grammar_cases"]
+            if case["split"] == "holdout" and case["legitimate_technical_terms"]
+        )
+        policy = _load_policy()
+        policy["approved_terms"].append({
+            "term": holdout["legitimate_technical_terms"][0],
+            "sourceType": "calibration",
+            "source": holdout["id"],
+        })
+        with self.assertRaisesRegex(ValueError, "holdout"):
+            validate_vocabulary_policy(policy, manifest, REPOSITORY_ROOT)
+
+    def test_unproven_repository_term_is_rejected(self) -> None:
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        policy = _load_policy()
+        policy["approved_terms"].append({
+            "term": "NotARealProjectTerm",
+            "sourceType": "repository",
+            "source": "infra/supabase/password-recovery-setup.md",
+        })
+        with self.assertRaisesRegex(ValueError, "does not occur in its claimed repository source"):
+            validate_vocabulary_policy(policy, manifest, REPOSITORY_ROOT)
+
+    def test_missing_repository_path_is_rejected(self) -> None:
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        policy = _load_policy()
+        policy["approved_terms"].append({
+            "term": "Ghost",
+            "sourceType": "repository",
+            "source": "infra/supabase/this-file-does-not-exist.md",
+        })
+        with self.assertRaisesRegex(ValueError, "does not exist in the repository"):
+            validate_vocabulary_policy(policy, manifest, REPOSITORY_ROOT)
+
+    def test_generated_corpus_cannot_supply_repository_provenance(self) -> None:
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        policy = _load_policy()
+        policy["approved_terms"].append({
+            "term": "Flood",
+            "sourceType": "repository",
+            "source": "tools/assistive-validation-benchmark/phase6/corpus/manifest.json",
+        })
+        with self.assertRaisesRegex(ValueError, "generated Phase 6 corpus or evidence material"):
+            validate_vocabulary_policy(policy, manifest, REPOSITORY_ROOT)
+
+    def test_unsupported_source_type_is_rejected(self) -> None:
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        policy = _load_policy()
+        policy["approved_terms"].append({"term": "Whatever", "sourceType": "holdout", "source": "g6-041"})
+        with self.assertRaisesRegex(ValueError, "unsupported sourceType"):
+            validate_vocabulary_policy(policy, manifest, REPOSITORY_ROOT)
+
+    def test_policy_terms_are_unique(self) -> None:
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        policy = _load_policy()
+        policy["approved_terms"].append(dict(policy["approved_terms"][0]))
+        with self.assertRaisesRegex(ValueError, "unique"):
+            validate_vocabulary_policy(policy, manifest, REPOSITORY_ROOT)
+
+
+class Phase6MetricArithmeticTests(unittest.TestCase):
+    def test_recompute_matches_worked_example(self) -> None:
+        # TP=11, FP=2, FN=9 gives 22/33, not the 0.6875 produced by TP=11, FP=1.
+        values = recompute_metrics(11, 2, 9)
+        self.assertAlmostEqual(values["precision"], 11 / 13)
+        self.assertAlmostEqual(values["recall"], 0.55)
+        self.assertAlmostEqual(values["f1"], 22 / 33)
+        self.assertNotAlmostEqual(values["f1"], 0.6875)
+
+    def test_empty_counts_do_not_divide_by_zero(self) -> None:
+        self.assertEqual(recompute_metrics(0, 0, 0), {"precision": 0.0, "recall": 0.0, "f1": 0.0})
+
+    def test_stale_metric_is_rejected(self) -> None:
+        group = {
+            "true_positives": 11, "false_positives": 2, "missed_issues": 9, "issue_count": 20,
+            "precision": 11 / 13, "recall": 0.55, "f1": 0.6875,
+        }
+        with self.assertRaisesRegex(ValueError, "stored f1"):
+            check_metric_group("unit", group)
+        group["f1"] = 22 / 33
+        check_metric_group("unit", group)
+
+    def test_inconsistent_issue_count_is_rejected(self) -> None:
+        group = {
+            "true_positives": 1, "false_positives": 0, "missed_issues": 1, "issue_count": 5,
+            "precision": 1.0, "recall": 0.5, "f1": 2 / 3,
+        }
+        with self.assertRaisesRegex(ValueError, "issue_count"):
+            check_metric_group("unit", group)
+
+    def test_scorer_output_is_arithmetically_consistent(self) -> None:
+        case = {
+            "id": "unit-grammar", "split": "calibration", "field": "summary",
+            "source_text": "The nodes reports status.", "intentionally_clean": False,
+            "legitimate_technical_terms": [],
+            "issues": [{
+                "start": 10, "end": 17, "source": "reports",
+                "category": "GRAMMAR_SUBJECT_VERB_AGREEMENT", "accepted_corrections": ["report"],
+            }],
+        }
+        finding = {"start": 10, "end": 17, "kind": "Agreement", "replacements": ["report"]}
+        scored = score_grammar_engine([case], [[finding]], set())
+        for configuration in ("raw", "vocabulary_policy"):
+            check_metric_group(configuration, scored[configuration])
 
 
 class Phase6GrammarContractTests(unittest.TestCase):
-    def test_vocabulary_provenance_contract(self) -> None:
-        policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
-        manifest = load_phase6_manifest(MANIFEST_PATH)
-        approved_terms = policy["approved_terms"]
-        
-        self.assertEqual(policy["policy_version"], 2)
-        
-        terms = [item["term"] for item in approved_terms]
-        self.assertEqual(len(terms), len(set(terms)), "Duplicate terms in vocabulary policy")
-        
-        for item in approved_terms:
-            term = item["term"]
-            source_type = item["sourceType"]
-            source = item["source"]
-            
-            self.assertIn(source_type, ["repository", "calibration", "controlled_pp1"])
-            self.assertTrue(source, f"{term} missing explicit source")
-            
-            if source_type == "calibration":
-                # Must be a valid calibration case
-                is_grammar = any(c["id"] == source and c["split"] == "calibration" for c in manifest["grammar_cases"])
-                is_duplicate = any(q["id"] == source and q["split"] == "calibration" for q in manifest["duplicate_queries"])
-                self.assertTrue(is_grammar or is_duplicate, f"{term} claims calibration source {source} but it is not a calibration case")
-                
-                # Check that term is actually in the text
-                found = False
-                for c in manifest["grammar_cases"]:
-                    if c["id"] == source and term in c["source_text"]:
-                        found = True
-                for q in manifest["duplicate_queries"]:
-                    if q["id"] == source:
-                        if term in q["title"] or term in q["summary"] or term in q["background"] or term in q["solution"]:
-                            found = True
-                self.assertTrue(found, f"{term} not found in calibration case {source}")
-            
-            # 3. no policy term has a holdout case as provenance
-            self.assertFalse("holdout" in source.lower() or source.startswith("g6-04") or source.startswith("g6-05") or source.startswith("g6-06") or source.startswith("g6-07") or source.startswith("g6-08") or "holdout" in source_type)
-
     def test_masking_preserves_offsets_and_removes_non_prose(self) -> None:
         source = "Run `npm run test` then visit https://example.invalid/path."
         prepared, spans = prepare_grammar_text(source)
@@ -121,10 +282,7 @@ class Phase6GrammarContractTests(unittest.TestCase):
         self.assertEqual(len(spans), 2)
 
     def test_vocabulary_policy_is_exact_case_sensitive_and_spelling_only(self) -> None:
-        case = {
-            "field": "summary",
-            "source_text": "Kubernetes Kubernetees",
-        }
+        case = {"field": "summary", "source_text": "Kubernetes Kubernetees"}
         findings = [
             {"start": 0, "end": 10, "kind": "Spelling", "replacements": []},
             {"start": 11, "end": 22, "kind": "Spelling", "replacements": []},
@@ -136,18 +294,12 @@ class Phase6GrammarContractTests(unittest.TestCase):
 
     def test_span_and_correction_matching_contract(self) -> None:
         case = {
-            "id": "unit-grammar",
-            "split": "calibration",
-            "field": "summary",
-            "source_text": "The nodes reports status.",
-            "intentionally_clean": False,
+            "id": "unit-grammar", "split": "calibration", "field": "summary",
+            "source_text": "The nodes reports status.", "intentionally_clean": False,
             "legitimate_technical_terms": [],
             "issues": [{
-                "start": 10,
-                "end": 17,
-                "source": "reports",
-                "category": "GRAMMAR_SUBJECT_VERB_AGREEMENT",
-                "accepted_corrections": ["report"],
+                "start": 10, "end": 17, "source": "reports",
+                "category": "GRAMMAR_SUBJECT_VERB_AGREEMENT", "accepted_corrections": ["report"],
             }],
         }
         finding = {"start": 10, "end": 17, "kind": "Agreement", "replacements": ["report"]}
@@ -177,6 +329,77 @@ class Phase6DuplicateContractTests(unittest.TestCase):
             {"id": "b", "title": "Roster", "summary": "Plan shifts", "background": "Manual roster", "solution": "Calendar"},
         ]
         self.assertEqual(rank_phase6_query(query, candidates)[0]["id"], "a")
+
+
+class Phase6EvidenceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        if not EVIDENCE_PATH.is_file():
+            self.skipTest(
+                "no current final Phase 6A evidence; the vocabulary policy is frozen ahead of the fresh holdout run"
+            )
+        self.manifest = load_phase6_manifest(MANIFEST_PATH)
+        self.report = json.loads(EVIDENCE_PATH.read_text(encoding="utf-8"))
+
+    def _validate(self, report: dict) -> dict:
+        return validate_phase6_evidence(
+            report, self.manifest, POLICY_PATH,
+            tool_root=TOOL_ROOT, repository_root=REPOSITORY_ROOT,
+        )
+
+    def test_stored_evidence_and_decisions_match_frozen_contract(self) -> None:
+        self.assertIs(self._validate(self.report), self.report)
+        self.assertEqual(compact_phase6_evidence(self.report), self.report)
+
+    def test_stored_evidence_metrics_recompute_from_counts(self) -> None:
+        self.assertGreaterEqual(check_report_metrics(self.report), 8)
+
+    def test_stored_evidence_measured_the_reviewed_engine_versions(self) -> None:
+        self.assertEqual(self.report["engine_version_contract"], EXPECTED_ENGINE_VERSIONS)
+        for name, expected in EXPECTED_ENGINE_VERSIONS.items():
+            self.assertEqual(self.report["grammar"][name]["status"], "ok")
+            self.assertEqual(self.report["grammar"][name]["version"], expected)
+
+    def test_wrong_languagetool_version_is_rejected(self) -> None:
+        tampered = copy.deepcopy(self.report)
+        tampered["grammar"]["languagetool"]["version"] = "6.4"
+        with self.assertRaisesRegex(ValueError, "instead of the reviewed 6.6"):
+            self._validate(tampered)
+
+    def test_stale_metric_in_stored_evidence_is_rejected(self) -> None:
+        tampered = copy.deepcopy(self.report)
+        tampered["grammar"]["languagetool"]["scores"]["by_split"]["holdout"]["vocabulary_policy"]["f1"] = 0.6875
+        with self.assertRaisesRegex(ValueError, "stored f1"):
+            self._validate(tampered)
+
+    def test_evidence_records_the_policy_freeze_commit(self) -> None:
+        freeze = load_policy_freeze(TOOL_ROOT)
+        self.assertIsNotNone(freeze)
+        self.assertEqual(self.report["policy_freeze_commit_sha"], freeze["policy_freeze_commit_sha"])
+
+    def test_evidence_records_actual_queried_runtimes(self) -> None:
+        environment = self.report["environment"]
+        for key in ("python", "node", "java", "os"):
+            self.assertTrue(environment.get(key), f"{key} runtime was not recorded")
+        self.assertNotIn("required by pinned adapter", str(environment["node"]))
+        self.assertNotIn("captured in documented execution", str(environment["java"]))
+
+    def test_declared_decisions_respect_the_precision_gate(self) -> None:
+        for name in EXPECTED_ENGINE_VERSIONS:
+            holdout = self.report["grammar"][name]["scores"]["by_split"]["holdout"]["vocabulary_policy"]
+            decision = self.report["decisions"][name]["decision"]
+            if holdout["precision"] < 0.90:
+                self.assertEqual(decision, "DEFER", f"{name} failed the gate but is not deferred")
+            self.assertIn(decision, {"SELECT", "DEFER"})
+
+    def test_evidence_uses_only_policy_approved_terms(self) -> None:
+        self.assertEqual(approved_terms(self.report["vocabulary_policy"]), approved_terms(_load_policy()))
+
+    def test_production_boundary_remains_closed(self) -> None:
+        boundary = self.report["production_boundary"]
+        self.assertTrue(boundary)
+        for key, value in boundary.items():
+            self.assertIs(value, False, f"{key} crossed the production boundary")
+        self.assertEqual(self.report["embedding"]["execution"], "NOT_RUN")
 
 
 if __name__ == "__main__":

@@ -17,6 +17,13 @@ from .phase6.corpus import (
     manifest_sha256,
     validate_phase6_manifest,
 )
+from .phase6.history import (
+    check_holdout_independence,
+    load_benchmark_history,
+    load_exposed_holdout_texts,
+    load_policy_freeze,
+)
+from .phase6.provenance import validate_vocabulary_policy
 from .phase6.runner import compact_phase6_evidence, run_phase6_benchmark, validate_phase6_evidence
 
 
@@ -65,6 +72,8 @@ def _parser() -> argparse.ArgumentParser:
     phase6_run.add_argument("--measurement", choices=("calibration", "final"), required=True)
     phase6_run.add_argument("--languagetool-jar", type=Path, required=True)
     phase6_run.add_argument("--output", type=Path, required=True)
+    phase6_policy = subparsers.add_parser("phase6-check-policy", help="prove Phase 6A vocabulary provenance and holdout independence")
+    phase6_policy.add_argument("--phase6-manifest", type=Path, default=phase6_manifest)
     phase6_evidence = subparsers.add_parser("phase6-check-evidence", help="verify stored Phase 6A evidence and decisions")
     phase6_evidence.add_argument("--phase6-manifest", type=Path, default=phase6_manifest)
     phase6_evidence.add_argument("--evidence", type=Path, default=repository_root / "docs" / "assistive-validation" / "evidence" / "phase-6a-report.json")
@@ -88,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         args.output.write_bytes(canonical_json_bytes(phase6_manifest))
         print(json.dumps({"generated": str(args.output), "sha256": manifest_sha256(phase6_manifest)}, indent=2))
         return 0
-    if args.command in {"phase6-validate", "phase6-run", "phase6-check-evidence", "phase6-export-evidence"}:
+    if args.command in {"phase6-validate", "phase6-run", "phase6-check-evidence", "phase6-export-evidence", "phase6-check-policy"}:
         phase6_manifest = load_phase6_manifest(args.phase6_manifest.resolve())
         generated = validate_phase6_manifest(build_phase6_manifest())
         if canonical_json_bytes(phase6_manifest) != canonical_json_bytes(generated):
@@ -98,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
             locked_hash = hash_path.read_text(encoding="utf-8").strip()
             if manifest_sha256(phase6_manifest) != locked_hash:
                 raise SystemExit("committed Phase 6 manifest hash lock is stale")
+            independence = check_holdout_independence(phase6_manifest, load_exposed_holdout_texts(tool_root))
             print(json.dumps({
                 "valid": True,
                 "deterministic": True,
@@ -107,6 +117,24 @@ def main(argv: list[str] | None = None) -> int:
                 "grammar_cases": len(phase6_manifest["grammar_cases"]),
                 "duplicate_candidates": len(phase6_manifest["duplicate_candidates"]),
                 "duplicate_queries": len(phase6_manifest["duplicate_queries"]),
+                "holdout_independence": independence,
+            }, indent=2))
+            return 0
+        if args.command == "phase6-check-policy":
+            policy_path = tool_root / "phase6" / "grammar" / "vocabulary-policy.json"
+            policy = json.loads(policy_path.read_text(encoding="utf-8"))
+            provenance = validate_vocabulary_policy(policy, phase6_manifest, repository_root)
+            freeze = load_policy_freeze(tool_root)
+            print(json.dumps({
+                "valid": True,
+                "vocabulary_provenance": provenance,
+                "holdout_independence": check_holdout_independence(
+                    phase6_manifest, load_exposed_holdout_texts(tool_root)
+                ),
+                "policy_freeze_commit_sha": (freeze or {}).get("policy_freeze_commit_sha"),
+                "superseded_iterations": [
+                    entry["corpus_version"] for entry in load_benchmark_history(tool_root)["superseded"]
+                ],
             }, indent=2))
             return 0
         if args.command == "phase6-run":
@@ -124,13 +152,19 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "phase6-export-evidence":
             source_report = json.loads(args.input_report.read_text(encoding="utf-8"))
             compact_report = compact_phase6_evidence(source_report)
-            validate_phase6_evidence(compact_report, phase6_manifest, policy_path)
+            validate_phase6_evidence(
+                compact_report, phase6_manifest, policy_path,
+                tool_root=tool_root, repository_root=repository_root,
+            )
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(compact_report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             print(f"Compact Phase 6 evidence: {args.output}")
             return 0
         evidence = json.loads(args.evidence.read_text(encoding="utf-8"))
-        validate_phase6_evidence(evidence, phase6_manifest, policy_path)
+        validate_phase6_evidence(
+            evidence, phase6_manifest, policy_path,
+            tool_root=tool_root, repository_root=repository_root,
+        )
         print(json.dumps({"valid": True, "evidence": str(args.evidence), "decisions": evidence["decisions"]}, indent=2))
         return 0
 

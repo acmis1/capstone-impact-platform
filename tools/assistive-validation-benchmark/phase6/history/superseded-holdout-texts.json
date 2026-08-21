@@ -1,0 +1,341 @@
+{
+  "exposed_texts": [
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-061"
+      ],
+      "normalised_sha256": "000980dd60c44b7d76f2296a47dabde033daac7bdeb72114ab938e6e7ac584b0"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-057",
+        "pp1-assistive-phase6a-v3:g6-057"
+      ],
+      "normalised_sha256": "00b2a2c6cb95ddb56419391b6cb9454116be99cf7105048517f0d72d925915f3"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-056",
+        "pp1-assistive-phase6a-v3:g6-056"
+      ],
+      "normalised_sha256": "01a20af58780a3fb22737ada60b940343ca2c0f5f0e0504163b9f66dbc0639e9"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v3:g6-066"
+      ],
+      "normalised_sha256": "03af6e28644b679e3c99a37bc2ad102a708f6ba2eab10d3ac7ed13f5b3c07321"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-041",
+        "pp1-assistive-phase6a-v3:g6-041"
+      ],
+      "normalised_sha256": "11fe7f18f7e410b1828130ac9436737715fa708f0d4df54ae6147101b90d5be2"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v3:g6-067"
+      ],
+      "normalised_sha256": "123c1fb5948c39d5580614606e81da4cf801869771923eecf8cbb860f27f390f"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-073",
+        "pp1-assistive-phase6a-v3:g6-073"
+      ],
+      "normalised_sha256": "1ff5e924b5446c73b321cfb6c89d57d05c05af95f56873a43ac23efe4c34a4df"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-053",
+        "pp1-assistive-phase6a-v3:g6-053"
+      ],
+      "normalised_sha256": "25e81aafd6c1eb75b333e46e7f7fad0ce52dc316c75247b1d0744c2a6d16890c"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-068"
+      ],
+      "normalised_sha256": "293b6ab8c2b0c80900e663d30d3beef2841a5b6130f168f661d7dca976dacc46"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-048",
+        "pp1-assistive-phase6a-v3:g6-048"
+      ],
+      "normalised_sha256": "2958176823a98ab9d0bb4d6c5ffcd40e54b88538394aeab0da631757170cb345"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-051",
+        "pp1-assistive-phase6a-v3:g6-051"
+      ],
+      "normalised_sha256": "2ec3b179663f0102861286c65dd988b72c1cd2a2150d3267a6b647e39e262d45"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-072",
+        "pp1-assistive-phase6a-v3:g6-072"
+      ],
+      "normalised_sha256": "2fe0d5777b940f95c8548443640c45d8c19d588c9e9872a5686ce1119a45acfc"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v3:g6-068"
+      ],
+      "normalised_sha256": "312b2c92dfd5ffe638e9b8648f8e460cb936ea7a158c19c4881d2b7550149206"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-044",
+        "pp1-assistive-phase6a-v3:g6-044"
+      ],
+      "normalised_sha256": "3d3327d341bbc0cb519354f17a86aa09f34f082a1cf173d54adac88752539f60"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-062"
+      ],
+      "normalised_sha256": "3d53f5ca893827f801cd88c5b791e3a6d8f7e5ee8ca710bb4332a13eb07cdce7"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v3:g6-069"
+      ],
+      "normalised_sha256": "3de39b1ddf0e4331687e27b7ad1d2a81aaee33f0a66f270a2e9b95eb274cef3b"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v3:g6-064"
+      ],
+      "normalised_sha256": "41965fdd38e7c17423232579c0e99e670d4e6dcacd21ad8ce13f9b86903e9637"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-071",
+        "pp1-assistive-phase6a-v3:g6-071"
+      ],
+      "normalised_sha256": "41bceccae0b579b9f0810f510643388f73532d33b817ba9bb04efdd99d710609"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-064"
+      ],
+      "normalised_sha256": "4483362f981af741a2691e7e40b9f166bbb8b3596ae84930629ede5522c04c69"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-063"
+      ],
+      "normalised_sha256": "4c66b3d38e6fd781cdfffb4392b207db42b2aa72b5fb0bfea3c82f13f440c485"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-079",
+        "pp1-assistive-phase6a-v3:g6-079"
+      ],
+      "normalised_sha256": "4de7e5f332554b6b177268b0f0420f4e9e31e12548991a67dbe38d3a2be520df"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-043",
+        "pp1-assistive-phase6a-v3:g6-043"
+      ],
+      "normalised_sha256": "513397cc3a0cb1c89534be3dc787cc18d928782678c0dde0effa2b61641da955"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-076",
+        "pp1-assistive-phase6a-v3:g6-076"
+      ],
+      "normalised_sha256": "53aab324391386d6cb6fbccb26e91e5e723380b535de2a5a95218a8423311f19"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-050",
+        "pp1-assistive-phase6a-v3:g6-050"
+      ],
+      "normalised_sha256": "54b11601ae261feb22ef0af0113890a6efa0c2467431f455e5465f963c636910"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v3:g6-070"
+      ],
+      "normalised_sha256": "564765a4bcb445321f5b043ce7f7e23b6c87adfde3d7d5c9411d965e970296d1"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-080",
+        "pp1-assistive-phase6a-v3:g6-080"
+      ],
+      "normalised_sha256": "5e35fafe4cea6ac2721b73c1d0fb896f8b72360b90ed0d256f00a3b719ebbe18"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-067"
+      ],
+      "normalised_sha256": "6b90811cfbe85c1dcd14421dd2b275de2b0e65845cdd01ae8f9f64a6b34a5e18"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-065"
+      ],
+      "normalised_sha256": "6bb93a33f6ac48cacd1d8514fe49ed8799770734bb49b63e73a2f89a9eb062dc"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-045",
+        "pp1-assistive-phase6a-v3:g6-045"
+      ],
+      "normalised_sha256": "6ce3b608d8f53664c2f670fe1ad65cd12e81d295a4bb0bfd6c278f96f85e4a05"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v3:g6-063"
+      ],
+      "normalised_sha256": "716cbb01540f6b90ebd8ccb3cf0e98c8612a4873c5f25012d4ff26ab7f6beae2"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-069"
+      ],
+      "normalised_sha256": "796dea7a72c7cfc57ba7044b2951cb4582610dc60e6229b6d745441c6522b509"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-070"
+      ],
+      "normalised_sha256": "80f81aa7aca62364d8cfc5856d5e199fd9eeb8c72a21baaf4662f81ad4605b60"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-052",
+        "pp1-assistive-phase6a-v3:g6-052"
+      ],
+      "normalised_sha256": "884278862b9082fa1bcaabe12d1d704480aab4cd3715e86cd162b772ee2495b7"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v3:g6-062"
+      ],
+      "normalised_sha256": "8d6a06041a7972297b40888883c5842e832b5b23dfc7f20608d3a5b411d1ed30"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-059",
+        "pp1-assistive-phase6a-v3:g6-059"
+      ],
+      "normalised_sha256": "a1c65b1da0a1bc8bb8373e3feb0a3a29efce093f0af782a98006ea2316ae51dc"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-077",
+        "pp1-assistive-phase6a-v3:g6-077"
+      ],
+      "normalised_sha256": "a2865df5e7a31939322609792c019bc77d2497445041e642b764e635838130dc"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-060",
+        "pp1-assistive-phase6a-v3:g6-060"
+      ],
+      "normalised_sha256": "ac6957670e46bc5e479700d937440639824a463ec85d4d1503ffbfc12d37cefa"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-054",
+        "pp1-assistive-phase6a-v3:g6-054"
+      ],
+      "normalised_sha256": "afe4f8258c09b9d5db75e397e3e61f29f2595c777e887ffcfade429c2df50781"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-047",
+        "pp1-assistive-phase6a-v3:g6-047"
+      ],
+      "normalised_sha256": "b96d9434aa2b3b3b292aefee91e615a95cc96180f26453d8e300381af2c40282"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-058",
+        "pp1-assistive-phase6a-v3:g6-058"
+      ],
+      "normalised_sha256": "c30a932732e7aff6fb09c4142b5406f7d7c5c067541e11c723efd2858e851140"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-078",
+        "pp1-assistive-phase6a-v3:g6-078"
+      ],
+      "normalised_sha256": "c618c0ef9873af919659517f55880216cf946005f424451d2114620df107bf83"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-075",
+        "pp1-assistive-phase6a-v3:g6-075"
+      ],
+      "normalised_sha256": "ce4fa0baad1e968efde8ccf0a744b3a1570432e84d1560419215e25b05ee74a2"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-049",
+        "pp1-assistive-phase6a-v3:g6-049"
+      ],
+      "normalised_sha256": "d25e3c13da7747479011c7208f6d518de52a04db58aeea8df0bc628d1ad51161"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-055",
+        "pp1-assistive-phase6a-v3:g6-055"
+      ],
+      "normalised_sha256": "dcbf74d35408e0bffac149f874992cd89743dcb03f5f4a493fac1768bfba9930"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-042",
+        "pp1-assistive-phase6a-v3:g6-042"
+      ],
+      "normalised_sha256": "de002055e7ab50993c9170c8a27f5d425922ffbb408acf002671b2fa65c88ffe"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v3:g6-065"
+      ],
+      "normalised_sha256": "e8963dfbbd605bf91453b923ce5e47306785390aafda3c029c3f790d57785de7"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-074",
+        "pp1-assistive-phase6a-v3:g6-074"
+      ],
+      "normalised_sha256": "f4e2743b592863701d74985aba4d97210a13b8d50243fbb5b68f57032bfa0893"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-066"
+      ],
+      "normalised_sha256": "f7b2db40ccc940d1f73920cfb7f607989212c31518f615b2ffa39f5fdaae4daf"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v3:g6-061"
+      ],
+      "normalised_sha256": "fab780512d92ee4a40310549cfda8576cd6f24179ac1b858c44e1a61f40f5e90"
+    },
+    {
+      "case_ids": [
+        "pp1-assistive-phase6a-v2:g6-046",
+        "pp1-assistive-phase6a-v3:g6-046"
+      ],
+      "normalised_sha256": "fe954beebb1398155f616c0317c057180332a4099a6854f5c6860b19af462b37"
+    }
+  ],
+  "lock_schema_version": 1,
+  "normalisation": "collapse whitespace, casefold, then SHA-256 of the UTF-8 bytes",
+  "purpose": "Every grammar holdout text already exposed to a scored Phase 6A iteration. A new holdout must not reuse any of these.",
+  "superseded_corpus_versions": [
+    "pp1-assistive-phase6a-v2",
+    "pp1-assistive-phase6a-v3"
+  ]
+}
