@@ -7,6 +7,7 @@ from pathlib import Path
 
 from assistive_validation_benchmark.ocr_productionization.boundary import check_production_boundary
 from assistive_validation_benchmark.ocr_productionization.corpus import generate_assets
+from assistive_validation_benchmark.ocr_productionization.evidence import verify_protocol_freeze
 from assistive_validation_benchmark.ocr_productionization.provision import tree_sha256
 from assistive_validation_benchmark.ocr_productionization.schema import (
     data_root,
@@ -55,12 +56,47 @@ class OcrProductionizationTests(unittest.TestCase):
         self.assertGreater(proof["phase0_holdout_cases_checked"], 0)
 
     def test_corpus_generation_is_byte_deterministic(self) -> None:
-        manifest = validate_combined_corpus(self.calibration, None)
+        holdout_path = data_root() / "corpus" / "holdout.json"
+        holdout = load_json(holdout_path) if holdout_path.is_file() else None
+        manifest = validate_combined_corpus(self.calibration, holdout)
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
             left = generate_assets(manifest, Path(first))
             right = generate_assets(manifest, Path(second))
         self.assertEqual(left["corpus_asset_sha256"], right["corpus_asset_sha256"])
         self.assertEqual(left["assets"], right["assets"])
+        report_path = repository_root() / "docs" / "assistive-validation" / "evidence" / "ocr-productionization-report.json"
+        if report_path.is_file():
+            report = load_json(report_path)
+            self.assertEqual(report["hashes"]["generated_corpus_asset_sha256"], left["corpus_asset_sha256"])
+
+    def test_stored_evidence_is_bound_to_the_git_protocol_freeze(self) -> None:
+        report_path = repository_root() / "docs" / "assistive-validation" / "evidence" / "ocr-productionization-report.json"
+        if not report_path.is_file():
+            self.skipTest("final evidence is added only after the protocol-freeze commit")
+        report = load_json(report_path)
+        observed = verify_protocol_freeze(data_root().parent, report["protocol_freeze"]["protocol_freeze_commit_sha"])
+        self.assertEqual(report["protocol_freeze"], observed)
+
+    def test_stored_gate_booleans_match_frozen_numeric_thresholds(self) -> None:
+        report_path = repository_root() / "docs" / "assistive-validation" / "evidence" / "ocr-productionization-report.json"
+        if not report_path.is_file():
+            self.skipTest("final evidence is added only after the protocol-freeze commit")
+        report = load_json(report_path)
+        protocol = validate_protocol(load_json(data_root() / "protocol.json"))
+        for engine in report["engines"].values():
+            self.assertEqual(
+                engine["gate_checks"]["exact_title"],
+                engine["exact_title_rate"] >= protocol["quality_gate"]["holdout_exact_title_recovery_minimum"],
+            )
+            self.assertEqual(
+                engine["gate_checks"]["wer"],
+                engine["mean_wer"] <= protocol["quality_gate"]["holdout_mean_wer_maximum"],
+            )
+            self.assertEqual(
+                engine["gate_checks"]["title_safety"],
+                engine["downstream_title_safety"]["material_false_agreements"]
+                <= protocol["quality_gate"]["material_false_agreements_maximum"],
+            )
 
     def test_title_normalization_preserves_production_parity(self) -> None:
         self.assertEqual(
@@ -68,8 +104,8 @@ class OcrProductionizationTests(unittest.TestCase):
             normalize_production_title("AI-Enabled Flood Warning System"),
         )
         self.assertEqual(
-            normalize_metric_title("Students’ Safe—Route Planner"),
-            normalize_metric_title("students safe route planner"),
+            normalize_metric_title("Learners’ Safe—Route Planner"),
+            normalize_metric_title("learners safe route planner"),
         )
 
     def test_title_candidates_are_metadata_blind_and_join_wrapped_heading(self) -> None:

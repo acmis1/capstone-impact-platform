@@ -64,7 +64,37 @@ The compact calibration result is [`calibration-summary.json`](../../tools/assis
 
 ## Fresh holdout and final result
 
-The fresh holdout and one-shot final result are intentionally absent from the protocol-freeze commit. The next normal commit adds them and this section's reviewed machine evidence without changing any frozen configuration.
+The final protocol-freeze commit is `0485a8b7fda3f3e9f9873849104cd90917b4f395`. It retains the initial protocol commit and two normal pre-measurement portability corrections; it contains no holdout. Machine evidence verifies all 15 frozen files against their Git blob IDs and records the holdout's absence at that commit.
+
+The fresh corpus contains 16 calibration and 32 holdout OCR-required cases. The holdout is evenly split between 16 clean and 16 challenging cases, with 11 PNG, 11 JPEG and 10 scanned-PDF posters and 11 one-column, 11 two-column and 10 three-column layouts. Eight cases are one-character material title negatives. Six native-PDF controls recovered 6/6 exact titles. A malformed PDF and truncated PNG were both rejected without reaching OCR. Content-hash comparison found zero reuse among the 21 historical Phase 0 holdout cases and 48 fresh scored cases.
+
+Deterministic regeneration produced corpus asset hash `1cdfca0e65c084f018e3926d46929eaf00642c1252801ba645f9a9afd721e1ee` twice. The corpus manifest hash is `94bea0cc40dff2f448eb8ec203e8f72ef00d6994c7f208bbbb954d05e382b226`; holdout-part hash is `ea612ca065421031cdd5815be2902ace9d222b03fc92c46e1ac5cda1901939b8`.
+
+### One-shot holdout measurements
+
+All candidates executed all 32 holdout cases under the process-wide offline guard. Times are seconds and memory/footprint values are MiB.
+
+| Candidate | Exact title | Assistive title | CER | WER | Clean WER | Challenging WER | Cold | p50 | p95 | Peak | Footprint | Decision |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| Tesseract 5.5.3 | 12/32 (37.5%) | 18/32 (56.3%) | 24.7% | 43.1% | 29.4% | 56.9% | 0.275 | 0.202 | 0.227 | 65.5 | 5.7 | `DEFER` baseline |
+| PP-OCRv6 Tiny | 14/32 (43.8%) | 18/32 (56.3%) | 17.9% | 28.7% | 7.7% | 49.8% | 5.701 | 1.123 | 1.912 | 511.5 | 6.2 | `DEFER` |
+| PP-OCRv6 Small | 14/32 (43.8%) | 19/32 (59.4%) | 19.8% | 29.7% | 12.1% | 47.4% | 10.790 | 4.578 | 6.525 | 814.4 | 30.0 | `DEFER` |
+| PP-OCRv6 Medium | 15/32 (46.9%) | 21/32 (65.6%) | 16.8% | 24.8% | 7.1% | 42.6% | 60.114 | 46.034 | 71.746 | 1,033.4 | 132.7 | `DEFER` |
+
+Medium remains the fresh quality leader but misses the unchanged exact-title gate by 16 cases: a 32-case holdout requires at least 31 exact recoveries to reach 95%, while Medium recovers 15. Its WER exceeds the 12% ceiling by 12.85 percentage points. It also exceeds the 30-second cold-start, 10-second p50 and 20-second p95 ceilings. Tiny and Small meet every operational ceiling but fail exact-title and WER, so latency does not compensate for failed quality.
+
+### Downstream title safety and Tesseract role
+
+| Candidate | Equality precision | Equality recall | Review precision | Review recall | Material false agreements |
+|---|---:|---:|---:|---:|---:|
+| Tesseract | 100.0% | 45.8% | 100.0% | 75.0% | 0 |
+| PP-OCRv6 Tiny | 100.0% | 58.3% | 88.9% | 66.7% | 0 |
+| PP-OCRv6 Small | 100.0% | 58.3% | 89.5% | 70.8% | 0 |
+| PP-OCRv6 Medium | 100.0% | 62.5% | 90.5% | 79.2% | 0 |
+
+No material negative became automatic deterministic agreement. Review remains assistive and human-authoritative. Tesseract exactly rescued zero Medium title failures; any label-derived quality trigger would be truth-dependent, and no bounded provider failure occurred. A production fallback is therefore not justified.
+
+The final evidence decision is **`NEEDS_MORE_OCR_BENCHMARKING`**. No production OCR provider is selected or activated. A later benchmark may evaluate a justified challenger or preprocessing improvement on a new frozen holdout; this result does not authorise lowering the gate.
 
 ## Security and CI boundary
 

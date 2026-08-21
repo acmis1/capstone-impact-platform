@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
@@ -75,3 +77,10 @@ jobs:
 
       - name: Confirm generated/model artifacts remain untracked
         run: git diff --exit-code -- . ':!docs/assistive-validation/evidence/phase-0-report.json'
+
+      - name: Confirm OCR benchmark did not change production paths
+        run: |
+          git diff --exit-code 284765d7ee820f68dbe6d8122c4b81dfb8e783b2...HEAD -- \
+            apps/assistive-worker \
+            apps/admin-cms/src/assistive-validation \
+            infra/supabase
