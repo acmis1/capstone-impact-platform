@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 PHASE6_SCHEMA_VERSION = 1
-PHASE6_CORPUS_VERSION = "pp1-assistive-phase6a-v2"
+PHASE6_CORPUS_VERSION = "pp1-assistive-phase6a-v3"
 PHASE6_SEED = 61062026
 SPLITS = {"calibration", "holdout"}
 FIELDS = {"title", "summary", "background", "solution", "extracted_text"}
@@ -128,16 +128,16 @@ def _grammar_cases() -> list[dict[str, Any]]:
         ("g6-038", "calibration", "solution", "Contact benchmark@example.invalid only in the synthetic fixture.", []),
         ("g6-039", "calibration", "background", "The database identifier `assistive_validation_jobs` is not prose.", []),
         ("g6-040", "calibration", "solution", "The file report.final.json is generated in a temporary directory.", []),
-        ("g6-061", "holdout", "summary", "Grafana displays aggregate latency without exposing source text.", ["Grafana"]),
-        ("g6-062", "holdout", "solution", "Prometheus collects counters from the isolated worker.", ["Prometheus"]),
-        ("g6-063", "holdout", "background", "Elasticsearch was considered unnecessary for the bounded candidate pool.", ["Elasticsearch"]),
-        ("g6-064", "holdout", "summary", "The OpenAPI document describes the local request contract.", ["OpenAPI"]),
-        ("g6-065", "holdout", "solution", "NumPy calculates deterministic vectors for the synthetic fixture.", ["NumPy"]),
-        ("g6-066", "holdout", "background", "SciPy is not required by the lexical baseline.", ["SciPy"]),
-        ("g6-067", "holdout", "solution", "PyTorch would add operational cost to an embedding challenger.", ["PyTorch"]),
-        ("g6-068", "holdout", "summary", "Terraform is outside the scope of this local benchmark.", ["Terraform"]),
-        ("g6-069", "holdout", "background", "Ansible playbooks are not executed by corpus text.", ["Ansible"]),
-        ("g6-070", "holdout", "solution", "OAuth uses PKCE to bind the authorisation request.", ["OAuth", "PKCE"]),
+        ("g6-061", "holdout", "summary", "Datadog displays aggregate latency without exposing source text.", ["Datadog"]),
+        ("g6-062", "holdout", "solution", "Telegraf collects counters from the isolated worker.", ["Telegraf"]),
+        ("g6-063", "holdout", "background", "Redis was considered unnecessary for the bounded candidate pool.", ["Redis"]),
+        ("g6-064", "holdout", "summary", "The gRPC document describes the local request contract.", ["gRPC"]),
+        ("g6-065", "holdout", "solution", "Pandas calculates deterministic vectors for the synthetic fixture.", ["Pandas"]),
+        ("g6-066", "holdout", "background", "Scikit-learn is not required by the lexical baseline.", ["Scikit-learn"]),
+        ("g6-067", "holdout", "solution", "TensorFlow would add operational cost to an embedding challenger.", ["TensorFlow"]),
+        ("g6-068", "holdout", "summary", "CloudFormation is outside the scope of this local benchmark.", ["CloudFormation"]),
+        ("g6-069", "holdout", "background", "Puppet playbooks are not executed by corpus text.", ["Puppet"]),
+        ("g6-070", "holdout", "solution", "OIDC uses JWT to bind the authorisation request.", ["OIDC", "JWT"]),
         ("g6-071", "holdout", "title", "OCR Review Workflow", ["OCR"]),
         ("g6-072", "holdout", "title", "API Security Controls", ["API"]),
         ("g6-073", "holdout", "summary", "The organisation standardises licence metadata for each dependency.", []),

@@ -1,5 +1,5 @@
 {
-  "corpus_version": "pp1-assistive-phase6a-v2",
+  "corpus_version": "pp1-assistive-phase6a-v3",
   "duplicate_candidates": [
     {
       "background": "The same domain requires clearer governance, but no monitoring product is proposed.",
@@ -7064,9 +7064,9 @@
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "Grafana"
+        "Datadog"
       ],
-      "source_text": "Grafana displays aggregate latency without exposing source text.",
+      "source_text": "Datadog displays aggregate latency without exposing source text.",
       "split": "holdout"
     },
     {
@@ -7075,9 +7075,9 @@
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "Prometheus"
+        "Telegraf"
       ],
-      "source_text": "Prometheus collects counters from the isolated worker.",
+      "source_text": "Telegraf collects counters from the isolated worker.",
       "split": "holdout"
     },
     {
@@ -7086,9 +7086,9 @@
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "Elasticsearch"
+        "Redis"
       ],
-      "source_text": "Elasticsearch was considered unnecessary for the bounded candidate pool.",
+      "source_text": "Redis was considered unnecessary for the bounded candidate pool.",
       "split": "holdout"
     },
     {
@@ -7097,9 +7097,9 @@
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "OpenAPI"
+        "gRPC"
       ],
-      "source_text": "The OpenAPI document describes the local request contract.",
+      "source_text": "The gRPC document describes the local request contract.",
       "split": "holdout"
     },
     {
@@ -7108,9 +7108,9 @@
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "NumPy"
+        "Pandas"
       ],
-      "source_text": "NumPy calculates deterministic vectors for the synthetic fixture.",
+      "source_text": "Pandas calculates deterministic vectors for the synthetic fixture.",
       "split": "holdout"
     },
     {
@@ -7119,9 +7119,9 @@
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "SciPy"
+        "Scikit-learn"
       ],
-      "source_text": "SciPy is not required by the lexical baseline.",
+      "source_text": "Scikit-learn is not required by the lexical baseline.",
       "split": "holdout"
     },
     {
@@ -7130,9 +7130,9 @@
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "PyTorch"
+        "TensorFlow"
       ],
-      "source_text": "PyTorch would add operational cost to an embedding challenger.",
+      "source_text": "TensorFlow would add operational cost to an embedding challenger.",
       "split": "holdout"
     },
     {
@@ -7141,9 +7141,9 @@
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "Terraform"
+        "CloudFormation"
       ],
-      "source_text": "Terraform is outside the scope of this local benchmark.",
+      "source_text": "CloudFormation is outside the scope of this local benchmark.",
       "split": "holdout"
     },
     {
@@ -7152,9 +7152,9 @@
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "Ansible"
+        "Puppet"
       ],
-      "source_text": "Ansible playbooks are not executed by corpus text.",
+      "source_text": "Puppet playbooks are not executed by corpus text.",
       "split": "holdout"
     },
     {
@@ -7163,10 +7163,10 @@
       "intentionally_clean": true,
       "issues": [],
       "legitimate_technical_terms": [
-        "OAuth",
-        "PKCE"
+        "OIDC",
+        "JWT"
       ],
-      "source_text": "OAuth uses PKCE to bind the authorisation request.",
+      "source_text": "OIDC uses JWT to bind the authorisation request.",
       "split": "holdout"
     },
     {

@@ -128,7 +128,7 @@ def run_phase6_benchmark(
     ]
     policy_path = tool_root / "phase6" / "grammar" / "vocabulary-policy.json"
     policy = json.loads(policy_path.read_text(encoding="utf-8"))
-    approved_terms = set(policy["approved_terms"])
+    approved_terms = {item["term"] for item in policy["approved_terms"]}
 
     harper = run_harper(grammar_cases, tool_root)
     if harper["status"] == "ok":

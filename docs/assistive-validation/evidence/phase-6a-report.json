@@ -41,7 +41,7 @@
       "preservation_reason": "A repository terminology contract required a wording-only corpus revision after the first holdout; no quality threshold, label, policy, weight, filter, or engine setting changed."
     }
   },
-  "completed_at": "2026-08-21T03:56:23.448843+00:00",
+  "completed_at": "2026-08-21T04:43:15.991592+00:00",
   "corpus": {
     "duplicate_calibration": 20,
     "duplicate_candidates": 120,
@@ -54,7 +54,7 @@
     "grammar_holdout": 40,
     "provenance": "Deterministic synthetic technical prose; no participant or production project data."
   },
-  "corpus_version": "pp1-assistive-phase6a-v2",
+  "corpus_version": "pp1-assistive-phase6a-v3",
   "decisions": {
     "embeddings": {
       "bounded_role": "possible semantic shortlist challenger only",
@@ -65,12 +65,12 @@
     "harper": {
       "bounded_role": "grammar/spelling candidate",
       "decision": "DEFER",
-      "reason": "Holdout vocabulary-policy precision 66.7%, recall 30.0%, and 3 false positives fail the required 90.0% precision gate."
+      "reason": "Required local holdout execution evidence is unavailable."
     },
     "languagetool": {
-      "bounded_role": "non-authoritative grammar/spelling suggestions for staff review",
-      "decision": "SELECT",
-      "reason": "Holdout vocabulary-policy precision 91.7%, recall 55.0%, and 1 false positives meet the precision-first gate and lead the eligible candidates."
+      "bounded_role": "grammar/spelling candidate",
+      "decision": "DEFER",
+      "reason": "Holdout vocabulary-policy precision 84.6%, recall 55.0%, and 2 false positives fail the required 90.0% precision gate."
     },
     "lexical_duplicate_ranking": {
       "bounded_role": "ranked top-five candidate generation for human review",
@@ -150,8 +150,8 @@
     },
     "exact_duplicate_detection": 1.0,
     "exact_query_count": 20,
-    "latency_p50_ms": 12.305149997700937,
-    "latency_p95_ms": 13.322785004856993,
+    "latency_p50_ms": 20.47445849984797,
+    "latency_p95_ms": 21.895504150688783,
     "note": "Relationships are attached only after ranking. The production-facing contract is a ranked shortlist for human review, never a score threshold or authoritative duplicate decision.",
     "queries_missed_at_5": 0,
     "queries_where_related_outranks_duplicate": 0,
@@ -1735,272 +1735,19 @@
     "cpu_only": true,
     "java": "local runtime; version captured in documented execution",
     "node": "24.14.1 required by pinned adapter",
-    "os": "Windows-10-10.0.26200-SP0",
-    "python": "3.11.15"
+    "os": "macOS-15.5-arm64-arm-64bit-Mach-O",
+    "python": "3.13.2"
   },
   "genuine_ai_requirement": "genuine AI productionization remains an unresolved final-delivery requirement.",
   "grammar": {
     "harper": {
-      "backend": "harper.js WASM/local",
-      "cold_start_ms": 855.8958,
-      "configuration": {
-        "dialect": "Australian",
-        "language": "plaintext"
-      },
-      "dependency_source": "npm package harper.js pinned by package-lock.json",
       "engine": "harper",
-      "excluded_non_prose_finding_count": 9,
-      "latency_p50_ms": 1.7538999999999305,
-      "latency_p95_ms": 5.1711699999997105,
-      "license": "Apache-2.0",
-      "peak_memory_bytes": 489517056,
-      "process_runtime_ms": 2349.91699999955,
-      "scores": {
-        "by_split": {
-          "calibration": {
-            "policy_filter_summary": {
-              "affected_cases": 6,
-              "filtered_findings": 6,
-              "reasons": {
-                "approved_exact_term": 6
-              }
-            },
-            "raw": {
-              "clean_case_count": 20,
-              "clean_case_silence_rate": 0.75,
-              "clean_cases_fully_silent": 15,
-              "f1": 0.5142857142857143,
-              "false_positive_case_ids": [
-                "g6-015",
-                "g6-021",
-                "g6-025",
-                "g6-026",
-                "g6-027",
-                "g6-030"
-              ],
-              "false_positive_rate": 0.4,
-              "false_positives": 6,
-              "issue_count": 20,
-              "missed_issue_categories": {
-                "GRAMMAR_ARTICLE": 1,
-                "GRAMMAR_POSSESSIVE": 1,
-                "GRAMMAR_PRONOUN_AGREEMENT": 1,
-                "GRAMMAR_SENTENCE_FRAGMENT": 1,
-                "GRAMMAR_SINGULAR_PLURAL": 1,
-                "GRAMMAR_SUBJECT_VERB_AGREEMENT": 3,
-                "PUNCTUATION_COMMA_SPLICE": 1,
-                "PUNCTUATION_INTRODUCTORY_COMMA": 1,
-                "SPELLING_REAL_WORD": 1
-              },
-              "missed_issues": 11,
-              "non_vocabulary_false_positives": 0,
-              "precision": 0.6,
-              "recall": 0.45,
-              "redundant_finding_count": 0,
-              "true_positives": 9,
-              "vocabulary_false_positives": 6
-            },
-            "vocabulary_policy": {
-              "clean_case_count": 20,
-              "clean_case_silence_rate": 1.0,
-              "clean_cases_fully_silent": 20,
-              "f1": 0.6206896551724138,
-              "false_positive_case_ids": [],
-              "false_positive_rate": 0.0,
-              "false_positives": 0,
-              "issue_count": 20,
-              "missed_issue_categories": {
-                "GRAMMAR_ARTICLE": 1,
-                "GRAMMAR_POSSESSIVE": 1,
-                "GRAMMAR_PRONOUN_AGREEMENT": 1,
-                "GRAMMAR_SENTENCE_FRAGMENT": 1,
-                "GRAMMAR_SINGULAR_PLURAL": 1,
-                "GRAMMAR_SUBJECT_VERB_AGREEMENT": 3,
-                "PUNCTUATION_COMMA_SPLICE": 1,
-                "PUNCTUATION_INTRODUCTORY_COMMA": 1,
-                "SPELLING_REAL_WORD": 1
-              },
-              "missed_issues": 11,
-              "non_vocabulary_false_positives": 0,
-              "precision": 1.0,
-              "recall": 0.45,
-              "redundant_finding_count": 0,
-              "true_positives": 9,
-              "vocabulary_false_positives": 0
-            }
-          },
-          "holdout": {
-            "policy_filter_summary": {
-              "affected_cases": 3,
-              "filtered_findings": 3,
-              "reasons": {
-                "approved_exact_term": 3
-              }
-            },
-            "raw": {
-              "clean_case_count": 20,
-              "clean_case_silence_rate": 0.85,
-              "clean_cases_fully_silent": 17,
-              "f1": 0.37499999999999994,
-              "false_positive_case_ids": [
-                "g6-041",
-                "g6-058",
-                "g6-060",
-                "g6-064",
-                "g6-066",
-                "g6-070"
-              ],
-              "false_positive_rate": 0.5,
-              "false_positives": 6,
-              "issue_count": 20,
-              "missed_issue_categories": {
-                "GRAMMAR_ARTICLE": 1,
-                "GRAMMAR_POSSESSIVE": 1,
-                "GRAMMAR_PRONOUN_AGREEMENT": 1,
-                "GRAMMAR_SENTENCE_FRAGMENT": 1,
-                "GRAMMAR_SINGULAR_PLURAL": 2,
-                "GRAMMAR_SUBJECT_VERB_AGREEMENT": 3,
-                "GRAMMAR_VERB_FORM": 1,
-                "PUNCTUATION_COMMA_SPLICE": 1,
-                "PUNCTUATION_INTRODUCTORY_COMMA": 1,
-                "SPELLING_ORDINARY": 1,
-                "SPELLING_REAL_WORD": 1
-              },
-              "missed_issues": 14,
-              "non_vocabulary_false_positives": 3,
-              "precision": 0.5,
-              "recall": 0.3,
-              "redundant_finding_count": 0,
-              "true_positives": 6,
-              "vocabulary_false_positives": 3
-            },
-            "vocabulary_policy": {
-              "clean_case_count": 20,
-              "clean_case_silence_rate": 1.0,
-              "clean_cases_fully_silent": 20,
-              "f1": 0.41379310344827586,
-              "false_positive_case_ids": [
-                "g6-041",
-                "g6-058",
-                "g6-060"
-              ],
-              "false_positive_rate": 0.3333333333333333,
-              "false_positives": 3,
-              "issue_count": 20,
-              "missed_issue_categories": {
-                "GRAMMAR_ARTICLE": 1,
-                "GRAMMAR_POSSESSIVE": 1,
-                "GRAMMAR_PRONOUN_AGREEMENT": 1,
-                "GRAMMAR_SENTENCE_FRAGMENT": 1,
-                "GRAMMAR_SINGULAR_PLURAL": 2,
-                "GRAMMAR_SUBJECT_VERB_AGREEMENT": 3,
-                "GRAMMAR_VERB_FORM": 1,
-                "PUNCTUATION_COMMA_SPLICE": 1,
-                "PUNCTUATION_INTRODUCTORY_COMMA": 1,
-                "SPELLING_ORDINARY": 1,
-                "SPELLING_REAL_WORD": 1
-              },
-              "missed_issues": 14,
-              "non_vocabulary_false_positives": 3,
-              "precision": 0.6666666666666666,
-              "recall": 0.3,
-              "redundant_finding_count": 0,
-              "true_positives": 6,
-              "vocabulary_false_positives": 0
-            }
-          }
-        },
-        "policy_filter_summary": {
-          "affected_cases": 9,
-          "filtered_findings": 9,
-          "reasons": {
-            "approved_exact_term": 9
-          }
-        },
-        "raw": {
-          "clean_case_count": 40,
-          "clean_case_silence_rate": 0.8,
-          "clean_cases_fully_silent": 32,
-          "f1": 0.44776119402985076,
-          "false_positive_case_ids": [
-            "g6-015",
-            "g6-021",
-            "g6-025",
-            "g6-026",
-            "g6-027",
-            "g6-030",
-            "g6-041",
-            "g6-058",
-            "g6-060",
-            "g6-064",
-            "g6-066",
-            "g6-070"
-          ],
-          "false_positive_rate": 0.4444444444444444,
-          "false_positives": 12,
-          "issue_count": 40,
-          "missed_issue_categories": {
-            "GRAMMAR_ARTICLE": 2,
-            "GRAMMAR_POSSESSIVE": 2,
-            "GRAMMAR_PRONOUN_AGREEMENT": 2,
-            "GRAMMAR_SENTENCE_FRAGMENT": 2,
-            "GRAMMAR_SINGULAR_PLURAL": 3,
-            "GRAMMAR_SUBJECT_VERB_AGREEMENT": 6,
-            "GRAMMAR_VERB_FORM": 1,
-            "PUNCTUATION_COMMA_SPLICE": 2,
-            "PUNCTUATION_INTRODUCTORY_COMMA": 2,
-            "SPELLING_ORDINARY": 1,
-            "SPELLING_REAL_WORD": 2
-          },
-          "missed_issues": 25,
-          "non_vocabulary_false_positives": 3,
-          "precision": 0.5555555555555556,
-          "recall": 0.375,
-          "redundant_finding_count": 0,
-          "true_positives": 15,
-          "vocabulary_false_positives": 9
-        },
-        "vocabulary_policy": {
-          "clean_case_count": 40,
-          "clean_case_silence_rate": 1.0,
-          "clean_cases_fully_silent": 40,
-          "f1": 0.5172413793103448,
-          "false_positive_case_ids": [
-            "g6-041",
-            "g6-058",
-            "g6-060"
-          ],
-          "false_positive_rate": 0.16666666666666666,
-          "false_positives": 3,
-          "issue_count": 40,
-          "missed_issue_categories": {
-            "GRAMMAR_ARTICLE": 2,
-            "GRAMMAR_POSSESSIVE": 2,
-            "GRAMMAR_PRONOUN_AGREEMENT": 2,
-            "GRAMMAR_SENTENCE_FRAGMENT": 2,
-            "GRAMMAR_SINGULAR_PLURAL": 3,
-            "GRAMMAR_SUBJECT_VERB_AGREEMENT": 6,
-            "GRAMMAR_VERB_FORM": 1,
-            "PUNCTUATION_COMMA_SPLICE": 2,
-            "PUNCTUATION_INTRODUCTORY_COMMA": 2,
-            "SPELLING_ORDINARY": 1,
-            "SPELLING_REAL_WORD": 2
-          },
-          "missed_issues": 25,
-          "non_vocabulary_false_positives": 3,
-          "precision": 0.8333333333333334,
-          "recall": 0.375,
-          "redundant_finding_count": 0,
-          "true_positives": 15,
-          "vocabulary_false_positives": 0
-        }
-      },
-      "status": "ok",
-      "version": "2.7.0"
+      "error": "Pinned local Harper dependency is unavailable",
+      "status": "unavailable"
     },
     "languagetool": {
       "backend": "bounded local loopback Java server",
-      "cold_start_ms": 12768.633100000443,
+      "cold_start_ms": 7556.991041999936,
       "configuration": {
         "language": "en-AU",
         "max_check_time_ms": 10000,
@@ -2009,10 +1756,10 @@
       "dependency_source": "official numbered local LanguageTool distribution",
       "engine": "languagetool",
       "excluded_non_prose_finding_count": 9,
-      "latency_p50_ms": 22.532449998834636,
-      "latency_p95_ms": 67.62659001033165,
+      "latency_p50_ms": 20.185145999676024,
+      "latency_p95_ms": 106.274172899657,
       "license": "LGPL-2.1-or-later; distribution third-party notices apply",
-      "peak_memory_bytes": 819412992,
+      "peak_memory_bytes": null,
       "scores": {
         "by_split": {
           "calibration": {
@@ -2025,16 +1772,16 @@
             },
             "raw": {
               "clean_case_count": 20,
-              "clean_case_silence_rate": 0.8,
-              "clean_cases_fully_silent": 16,
+              "clean_case_silence_rate": 0.75,
+              "clean_cases_fully_silent": 15,
               "f1": 0.5555555555555556,
               "false_positive_case_ids": [
-                "g6-007",
                 "g6-015",
                 "g6-021",
                 "g6-025",
                 "g6-026",
-                "g6-027"
+                "g6-027",
+                "g6-030"
               ],
               "false_positive_rate": 0.375,
               "false_positives": 6,
@@ -2059,11 +1806,11 @@
             },
             "vocabulary_policy": {
               "clean_case_count": 20,
-              "clean_case_silence_rate": 1.0,
-              "clean_cases_fully_silent": 20,
+              "clean_case_silence_rate": 0.95,
+              "clean_cases_fully_silent": 19,
               "f1": 0.6451612903225806,
               "false_positive_case_ids": [
-                "g6-007"
+                "g6-030"
               ],
               "false_positive_rate": 0.09090909090909091,
               "false_positives": 1,
@@ -2089,24 +1836,21 @@
           },
           "holdout": {
             "policy_filter_summary": {
-              "affected_cases": 2,
-              "filtered_findings": 2,
-              "reasons": {
-                "approved_exact_term": 2
-              }
+              "affected_cases": 0,
+              "filtered_findings": 0,
+              "reasons": {}
             },
             "raw": {
               "clean_case_count": 20,
-              "clean_case_silence_rate": 0.9,
-              "clean_cases_fully_silent": 18,
-              "f1": 0.6470588235294117,
+              "clean_case_silence_rate": 0.95,
+              "clean_cases_fully_silent": 19,
+              "f1": 0.6666666666666667,
               "false_positive_case_ids": [
                 "g6-060",
-                "g6-064",
-                "g6-070"
+                "g6-062"
               ],
-              "false_positive_rate": 0.21428571428571427,
-              "false_positives": 3,
+              "false_positive_rate": 0.15384615384615385,
+              "false_positives": 2,
               "issue_count": 20,
               "missed_issue_categories": {
                 "GRAMMAR_ARTICLE": 1,
@@ -2119,22 +1863,23 @@
               },
               "missed_issues": 9,
               "non_vocabulary_false_positives": 1,
-              "precision": 0.7857142857142857,
+              "precision": 0.8461538461538461,
               "recall": 0.55,
               "redundant_finding_count": 0,
               "true_positives": 11,
-              "vocabulary_false_positives": 2
+              "vocabulary_false_positives": 1
             },
             "vocabulary_policy": {
               "clean_case_count": 20,
-              "clean_case_silence_rate": 1.0,
-              "clean_cases_fully_silent": 20,
-              "f1": 0.6874999999999999,
+              "clean_case_silence_rate": 0.95,
+              "clean_cases_fully_silent": 19,
+              "f1": 0.6666666666666667,
               "false_positive_case_ids": [
-                "g6-060"
+                "g6-060",
+                "g6-062"
               ],
-              "false_positive_rate": 0.08333333333333333,
-              "false_positives": 1,
+              "false_positive_rate": 0.15384615384615385,
+              "false_positives": 2,
               "issue_count": 20,
               "missed_issue_categories": {
                 "GRAMMAR_ARTICLE": 1,
@@ -2147,39 +1892,38 @@
               },
               "missed_issues": 9,
               "non_vocabulary_false_positives": 1,
-              "precision": 0.9166666666666666,
+              "precision": 0.8461538461538461,
               "recall": 0.55,
               "redundant_finding_count": 0,
               "true_positives": 11,
-              "vocabulary_false_positives": 0
+              "vocabulary_false_positives": 1
             }
           }
         },
         "policy_filter_summary": {
-          "affected_cases": 7,
-          "filtered_findings": 7,
+          "affected_cases": 5,
+          "filtered_findings": 5,
           "reasons": {
-            "approved_exact_term": 7
+            "approved_exact_term": 5
           }
         },
         "raw": {
           "clean_case_count": 40,
           "clean_case_silence_rate": 0.85,
           "clean_cases_fully_silent": 34,
-          "f1": 0.6,
+          "f1": 0.6086956521739131,
           "false_positive_case_ids": [
-            "g6-007",
             "g6-015",
             "g6-021",
             "g6-025",
             "g6-026",
             "g6-027",
+            "g6-030",
             "g6-060",
-            "g6-064",
-            "g6-070"
+            "g6-062"
           ],
-          "false_positive_rate": 0.3,
-          "false_positives": 9,
+          "false_positive_rate": 0.27586206896551724,
+          "false_positives": 8,
           "issue_count": 40,
           "missed_issue_categories": {
             "GRAMMAR_ARTICLE": 2,
@@ -2193,23 +1937,24 @@
           },
           "missed_issues": 19,
           "non_vocabulary_false_positives": 2,
-          "precision": 0.7,
+          "precision": 0.7241379310344828,
           "recall": 0.525,
           "redundant_finding_count": 0,
           "true_positives": 21,
-          "vocabulary_false_positives": 7
+          "vocabulary_false_positives": 6
         },
         "vocabulary_policy": {
           "clean_case_count": 40,
-          "clean_case_silence_rate": 1.0,
-          "clean_cases_fully_silent": 40,
-          "f1": 0.6666666666666667,
+          "clean_case_silence_rate": 0.95,
+          "clean_cases_fully_silent": 38,
+          "f1": 0.6562500000000001,
           "false_positive_case_ids": [
-            "g6-007",
-            "g6-060"
+            "g6-030",
+            "g6-060",
+            "g6-062"
           ],
-          "false_positive_rate": 0.08695652173913043,
-          "false_positives": 2,
+          "false_positive_rate": 0.125,
+          "false_positives": 3,
           "issue_count": 40,
           "missed_issue_categories": {
             "GRAMMAR_ARTICLE": 2,
@@ -2223,15 +1968,15 @@
           },
           "missed_issues": 19,
           "non_vocabulary_false_positives": 2,
-          "precision": 0.9130434782608695,
+          "precision": 0.875,
           "recall": 0.525,
           "redundant_finding_count": 0,
           "true_positives": 21,
-          "vocabulary_false_positives": 0
+          "vocabulary_false_positives": 1
         }
       },
       "status": "ok",
-      "version": "6.6"
+      "version": "6.4"
     }
   },
   "input_policy": {
@@ -2257,7 +2002,7 @@
     ],
     "offset_preservation": "masked characters are replaced by spaces"
   },
-  "manifest_sha256": "62f1111c7578875b00990f003c54b579af07a6251e5f162648009f758d8ade06",
+  "manifest_sha256": "d903603947b38f2d52da4fc494c17e9a79006c7f277ac1b8ca0cd624d0e3c683",
   "measurement": "final",
   "production_boundary": {
     "cloud_ai_used": false,
@@ -2286,41 +2031,81 @@
   },
   "vocabulary_policy": {
     "approved_terms": [
-      "Ansible",
-      "API",
-      "Argon2id",
-      "Bluetooth",
-      "CAN",
-      "Elasticsearch",
-      "FastAPI",
-      "Grafana",
-      "Kubernetes",
-      "LoRaWAN",
-      "Modbus",
-      "MQTT",
-      "Next.js",
-      "NFC",
-      "NumPy",
-      "OAuth",
-      "OCR",
-      "OpenAPI",
-      "OpenStreetMap",
-      "OpenTelemetry",
-      "PKCE",
-      "PostGIS",
-      "PostgreSQL",
-      "Prometheus",
-      "PyTorch",
-      "SciPy",
-      "SQLite",
-      "Terraform",
-      "TimescaleDB",
-      "TypeScript",
-      "WebAuthn",
-      "WebRTC",
-      "WebSockets",
-      "Zigbee",
-      "deidentified"
+      {
+        "source": "infra/supabase/migrations/20260719003407_explicit_data_api_grants.sql",
+        "sourceType": "repository",
+        "term": "API"
+      },
+      {
+        "source": "g6-027",
+        "sourceType": "calibration",
+        "term": "Argon2id"
+      },
+      {
+        "source": "g6-021",
+        "sourceType": "calibration",
+        "term": "FastAPI"
+      },
+      {
+        "source": "g6-023",
+        "sourceType": "calibration",
+        "term": "Kubernetes"
+      },
+      {
+        "source": "g6-030",
+        "sourceType": "calibration",
+        "term": "Modbus"
+      },
+      {
+        "source": "g6-029",
+        "sourceType": "calibration",
+        "term": "MQTT"
+      },
+      {
+        "source": "infra/supabase/password-recovery-setup.md",
+        "sourceType": "repository",
+        "term": "OAuth"
+      },
+      {
+        "source": "infra/supabase/migrations/20260814140000_snapshot_image_alt_text.sql",
+        "sourceType": "repository",
+        "term": "OCR"
+      },
+      {
+        "source": "g6-025",
+        "sourceType": "calibration",
+        "term": "OpenTelemetry"
+      },
+      {
+        "source": "infra/supabase/password-recovery-setup.md",
+        "sourceType": "repository",
+        "term": "PKCE"
+      },
+      {
+        "source": "g6-022",
+        "sourceType": "calibration",
+        "term": "PostgreSQL"
+      },
+      {
+        "source": "g6-024",
+        "sourceType": "calibration",
+        "term": "TypeScript"
+      },
+      {
+        "source": "g6-026",
+        "sourceType": "calibration",
+        "term": "WebAuthn"
+      },
+      {
+        "source": "g6-028",
+        "sourceType": "calibration",
+        "term": "WebRTC"
+      },
+      {
+        "source": "g6-015",
+        "sourceType": "calibration",
+        "term": "deidentified"
+      }
     ],
     "field_policy": {
       "background": "grammar, spelling, punctuation, and capitalisation",
@@ -2331,12 +2116,7 @@
     },
     "frozen_before_holdout": true,
     "matching": "case-sensitive exact token; spelling-category findings only",
-    "policy_version": 1,
-    "sources": [
-      "Repository-approved framework and tool terminology",
-      "Controlled PP1 engineering and security terminology",
-      "Calibration corpus legitimate technical terms"
-    ]
+    "policy_version": 2
   },
-  "vocabulary_policy_sha256": "f598a2069317170cac74bab850283f67c27f79b62fa536fd1f19d2e83e9b3964"
+  "vocabulary_policy_sha256": "657dcca1664da343f9254a97123b4c8f2272fc6d746c2624c51f2376e5e1b63c"
 }

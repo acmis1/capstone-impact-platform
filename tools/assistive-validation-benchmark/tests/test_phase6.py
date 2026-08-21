@@ -74,6 +74,44 @@ class Phase6CorpusTests(unittest.TestCase):
 
 
 class Phase6GrammarContractTests(unittest.TestCase):
+    def test_vocabulary_provenance_contract(self) -> None:
+        policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+        manifest = load_phase6_manifest(MANIFEST_PATH)
+        approved_terms = policy["approved_terms"]
+        
+        self.assertEqual(policy["policy_version"], 2)
+        
+        terms = [item["term"] for item in approved_terms]
+        self.assertEqual(len(terms), len(set(terms)), "Duplicate terms in vocabulary policy")
+        
+        for item in approved_terms:
+            term = item["term"]
+            source_type = item["sourceType"]
+            source = item["source"]
+            
+            self.assertIn(source_type, ["repository", "calibration", "controlled_pp1"])
+            self.assertTrue(source, f"{term} missing explicit source")
+            
+            if source_type == "calibration":
+                # Must be a valid calibration case
+                is_grammar = any(c["id"] == source and c["split"] == "calibration" for c in manifest["grammar_cases"])
+                is_duplicate = any(q["id"] == source and q["split"] == "calibration" for q in manifest["duplicate_queries"])
+                self.assertTrue(is_grammar or is_duplicate, f"{term} claims calibration source {source} but it is not a calibration case")
+                
+                # Check that term is actually in the text
+                found = False
+                for c in manifest["grammar_cases"]:
+                    if c["id"] == source and term in c["source_text"]:
+                        found = True
+                for q in manifest["duplicate_queries"]:
+                    if q["id"] == source:
+                        if term in q["title"] or term in q["summary"] or term in q["background"] or term in q["solution"]:
+                            found = True
+                self.assertTrue(found, f"{term} not found in calibration case {source}")
+            
+            # 3. no policy term has a holdout case as provenance
+            self.assertFalse("holdout" in source.lower() or source.startswith("g6-04") or source.startswith("g6-05") or source.startswith("g6-06") or source.startswith("g6-07") or source.startswith("g6-08") or "holdout" in source_type)
+
     def test_masking_preserves_offsets_and_removes_non_prose(self) -> None:
         source = "Run `npm run test` then visit https://example.invalid/path."
         prepared, spans = prepare_grammar_text(source)
