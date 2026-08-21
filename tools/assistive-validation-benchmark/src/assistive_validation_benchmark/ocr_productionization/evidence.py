@@ -81,8 +81,9 @@ def verify_protocol_freeze(tool_root: Path, freeze_sha: str) -> dict[str, Any]:
     checked = 0
     for path in protocol_frozen_paths(tool_root):
         relative = path.relative_to(root).as_posix()
-        frozen = _git(root, ["show", f"{freeze_sha}:{relative}"]).stdout.encode("utf-8")
-        if frozen != path.read_bytes():
+        frozen_blob = _git(root, ["rev-parse", f"{freeze_sha}:{relative}"]).stdout.strip()
+        working_blob = _git(root, ["hash-object", "--path", relative, relative]).stdout.strip()
+        if frozen_blob != working_blob:
             raise ValueError(f"protocol-frozen file changed after holdout exposure: {relative}")
         checked += 1
     holdout_relative = (
