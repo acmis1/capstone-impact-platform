@@ -61,6 +61,7 @@ def _parser() -> argparse.ArgumentParser:
         "probe", help="controlled single-variable title stroke probe (corpus instrument validity)"
     )
     probe.add_argument("--engine", required=True)
+    probe.add_argument("--raster-dpi", type=int, default=150)
     probe.add_argument("--max-input-dimension", type=int, default=960)
     probe.add_argument("--workspace", type=Path, default=defaults["workspace"])
     probe.add_argument("--models-dir", type=Path, default=defaults["models"])
@@ -138,6 +139,8 @@ def _probe(args: argparse.Namespace) -> dict[str, Any]:
     result = run_probe(
         lambda path: _run_paddle(instance, path),
         workspace=args.workspace / "stroke-probe" / str(args.max_input_dimension),
+        seed=load_json(data_root() / "corpus" / "calibration.json")["seed"],
+        raster_dpi=args.raster_dpi,
         max_input_dimension=args.max_input_dimension,
     )
     target = args.workspace / "probes" / f"stroke-probe-{args.engine}-{args.max_input_dimension}.json"
@@ -150,6 +153,8 @@ def _probe(args: argparse.Namespace) -> dict[str, Any]:
         "stroke_exact_count": result["stroke_exact_count"],
         "no_stroke_exact_count": result["no_stroke_exact_count"],
         "recovered_only_without_stroke": result["recovered_only_without_stroke"],
+        "by_selector": result["by_selector"],
+        "stroke_variant_matches_corpus_cases": result["stroke_variant_matches_corpus_cases"],
     }
 
 
@@ -258,7 +263,7 @@ def _build_report(args: argparse.Namespace) -> dict[str, Any]:
     probes = {}
     for path in sorted((args.workspace / "probes").glob("stroke-probe-*.json")):
         probe = load_json(path)
-        if probe.get("schema_version") != "pp1-ocr-stroke-probe/v1":
+        if probe.get("schema_version") != "pp1-ocr-stroke-probe/v2":
             raise ValueError(f"unsupported probe schema in {path.name}")
         probes[path.stem.replace("stroke-probe-", "").rsplit("-", 1)[0]] = probe
 

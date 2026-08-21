@@ -47,7 +47,7 @@ PP-OCRv6 Medium is roughly forty times slower per case than Tiny, so configurati
 | 2 | Tesseract and Tiny across the full resolution matrix | Resolution moved exact-title recovery by at most one case either way, so no resolution was promoted on title quality; higher raster was promoted for WER only |
 | 3 | Small at baseline and at the best Stage 2 configuration | Confirmed the Stage 2 resolution result was not engine-specific; no further configuration promoted to Medium |
 | 4 | Medium at the baseline configuration across all 48 cases | No higher-resolution Medium run justified: no material title gain existed to chase, and Medium already exceeds operational ceilings at baseline |
-| 5 | Controlled corpus instrument probe on all three PP-OCRv6 variants | Terminal stage; establishes what the corpus itself can support |
+| 5 | Controlled full-poster title stroke A/B probe on all three PP-OCRv6 variants | Terminal stage; measures how much one corpus rendering choice moves the tested candidates |
 
 ## Failure decomposition
 
@@ -111,7 +111,11 @@ Every alternative is metadata blind, deterministic and bounded, and every one is
 
 `first_bounded_group@geometry` — take the topmost recognised line in geometric reading order, then extend it into a bounded adjacent group of at most three lines of comparable height separated by at most one line height — reaches the oracle ceiling exactly for every candidate. Nothing is left on the table for selection at this configuration.
 
-This also explains part of the apparent Phase 0 regression. Phase 0's headline PP-OCRv6 Medium figure of 92.6% used a metadata-**guided** candidate chooser, with a metadata-blind first-line baseline reported beside it. The merged v1 benchmark scored a strictly blind prominence-ranked selector. The two numbers were never measuring the same thing, and the blind first-line baseline recovers markedly more titles than the merged selector on this corpus.
+### On comparing with Phase 0
+
+Phase 0's PP-OCRv6 Medium figure of 92.6% is **not** explained by metadata guidance. The merged Phase 0 report states plainly that "the metadata-guided and metadata-blind tracks are identical for every OCR engine", that guidance "buys nothing on OCR output, because the title is already the first line", and that the title figures "are therefore not inflated by knowing the answer" — guidance helped only PDFium. The stored Phase 0 machine evidence agrees: `title_recovery_rate` and `title_recovery_rate_blind` are equal for all four OCR engines. Any suggestion that Phase 0's OCR result was better because the chooser knew the answer is wrong, and this document previously made that error.
+
+What differs between Phase 0 and v1 is the pipeline, not the presence of ground truth. Phase 0's blind selector was the first non-empty OCR line, on a corpus whose titles were the first line and were drawn without a title stroke; v1 scores a prominence-ranked adjacent-group selector on a differently rendered corpus. Those are materially different corpora, rendering choices and selection algorithms at once, so no single-cause attribution is available from the evidence here. The defensible statement is narrower and is the one the table above supports: **on the exposed v1 corpus, a first-line or bounded-adjacent-group selector recovers markedly more titles than the merged prominence-ranked selector.**
 
 `centred_top_band_prominence` uses horizontal centring, which is pure geometry but does assume posters centre their titles. It is recorded and scored, but it never beat the simpler bounded-group rule, so nothing rests on that assumption.
 
@@ -165,36 +169,47 @@ Exact-title recoveries out of 48 under the best selector, with mean provider-ord
 
 Resolution does help whole-page WER, by roughly two percentage points for PP-OCRv6 and by a much larger margin for Tesseract (47.6% at baseline to 30.7% at 200 DPI / 1920 px). Only five case-classifications change across the entire matrix (`E_RESOLUTION_SENSITIVE`: one for Tesseract, two each for Tiny and Small, none for Medium).
 
-## The corpus itself caps exact-title recovery at 77%
+## A corpus rendering choice measurably moves the tested candidates
 
-Once resolution, selection and reading order are excluded, the residual failure is transcription of the title. A controlled single-variable probe isolates it.
+Once resolution, selection and reading order are accounted for, the residual failure is transcription of the title. A controlled A/B probe measures how much one corpus rendering decision contributes to it.
 
-The corpus draws poster titles with `stroke_width=1` and a stroke colour equal to the text colour, which dilates every title glyph by one pixel. Body text is drawn with no stroke. Phase 0's corpus drew titles with no stroke either. The probe renders each title alone on its own band with identical font, size, colour, position, background and downscaling, changing **only** the stroke, and runs the same OCR adapters over both.
+The corpus draws poster titles with `stroke_width=1` and a stroke colour equal to the text colour, dilating every title glyph by one pixel. Body text is drawn with no stroke. The probe renders the **complete poster** twice and changes only that stroke. Two properties make it a genuine single-variable manipulation: the stroke variant is proved **pixel-identical to the corpus asset for all 48 cases** before any OCR runs, and title position is held fixed by always computing layout with the stroked metrics. Layout, section headings, body text, noise, contrast and the decorative title shadow are all present, so this is not an isolated fragment.
 
-| Candidate | Exact title, with stroke | Exact title, without stroke | Fixed by removing the stroke | Broken by removing it |
-|---|---:|---:|---:|---:|
-| PP-OCRv6 Tiny | 27/48 | 37/48 | 10 | 0 |
-| PP-OCRv6 Small | 32/48 | 35/48 | 3 | 0 |
-| PP-OCRv6 Medium | 35/48 | 36/48 | 1 | 0 |
+Exact-title recoveries out of 48:
 
-Removing one pixel of stroke lifts Tiny by ten cases and breaks nothing. The stroke dilation merges the dot of a lowercase `i` into its stem, and the recognition failures show exactly that signature — `Callbratlon`, `Houslng`, `Cycllst's Safe-Passlng DIstance DIsplay`, `Hydratlon`, `Reslllent`. The smaller the model, the more the artifact costs it, which is why the effect is largest for Tiny and smallest for Medium.
+| Candidate | Selector | With stroke | Without stroke | Change |
+|---|---|---:|---:|---:|
+| PP-OCRv6 Tiny | merged production selector | 23 | 23 | 0.0 pp |
+| PP-OCRv6 Small | merged production selector | 20 | 21 | +2.1 pp |
+| PP-OCRv6 Medium | merged production selector | 24 | 23 | -2.1 pp |
+| PP-OCRv6 Tiny | `first_bounded_group@geometry` | 27 | **35** | **+16.7 pp** |
+| PP-OCRv6 Small | `first_bounded_group@geometry` | 26 | **31** | **+10.4 pp** |
+| PP-OCRv6 Medium | `first_bounded_group@geometry` | 31 | **36** | **+10.4 pp** |
 
-The decisive number is the union across all three PP-OCRv6 variants of titles exactly recoverable from an isolated, un-dilated title band, with no layout, no reading order and no candidate ranking able to interfere:
+The two halves of that table are the interesting result. **Under the merged production selector the stroke makes essentially no difference**, because that selector is usually choosing body text regardless of how the title is rendered. The stroke only begins to cost anything once the selector defect is repaired, and it then costs 10 to 17 percentage points. The two defects are not independent: the selector defect masks the rendering effect.
+
+The dilation merges the dot of a lowercase `i` into its stem, and the recognition failures carry exactly that signature, as in `Callbratlon`, `Houslng`, `Hydratlon` and `Reslllent`.
+
+Across the three tested PP-OCRv6 variants, under the best selector, the union of exact recoveries is:
 
 | Measure | Cases | Rate |
 |---|---:|---:|
-| Recoverable by any PP-OCRv6 variant, as the corpus renders titles | 36/48 | 75.0% |
-| Recoverable by any PP-OCRv6 variant, stroke removed | **37/48** | **77.1%** |
-| Not recoverable by any variant under any of these conditions | 11/48 | 22.9% |
+| Recovered by at least one tested candidate, as the corpus renders titles | 33/48 | 68.8% |
+| Recovered by at least one tested candidate, stroke removed | **37/48** | **77.1%** |
+| Not recovered by any tested candidate in this diagnostic | 11/48 | 22.9% |
 
-The eleven permanently unrecoverable cases are:
+**What this union is, and is not.** It describes the three provisioned PP-OCRv6 variants under this diagnostic, and nothing more. It is **not** a maximum for the corpus, and it does not show that no OCR model could do better: an unseen model, a different recognition architecture, or another legitimate deterministic configuration could recover more, and this experiment cannot exclude that. The machine report names the field `tested_engine_union_exact_rate` for exactly this reason, and CI asserts that the stored evidence claims no model-independent limit. An earlier revision of this document drew that stronger inference; it was not supported by the experiment and has been withdrawn.
 
-- **six letter-spaced titles** — the corpus renders these by inserting two spaces between every character, which destroys word boundaries by construction (`Ca m pus De mand ModelX`);
-- **three Unicode cases** — a subscript `CO₂`, an accented `Café`, and an en-dash range `2019–2026` that recognises as `201982026`;
-- **two `AI`-initial titles** — `AI-Enabled` recognises as `Al-Enabled`;
-- **one em-dash fusion** — `Telemetry—CRC-32` recognises as `TelemetryCRC-32`.
+The eleven cases **not recovered by any tested candidate in this diagnostic** are:
 
-**This is the central finding.** The exposed corpus caps exact-title recovery at 77.1% for every provisioned engine. The final production gate requires 95%. The corpus therefore cannot demonstrate gate compliance for *any* OCR model, and an engine's exact-title score on it cannot be attributed to that engine's capability. The machine report records this as `instrument_supports_final_gate: false`, and CI re-derives it.
+- **six letter-spaced titles**, which the corpus renders by inserting two spaces between every character, destroying word boundaries by construction (`Ca m pus De mand ModelX`);
+- **three Unicode cases**, a subscript `CO₂`, an accented `Café`, and an en-dash range `2019–2026` that recognises as `201982026`;
+- **two `AI`-initial titles**, where `AI-Enabled` recognises as `Al-Enabled`;
+- **one em-dash fusion**, where `Telemetry—CRC-32` recognises as `TelemetryCRC-32`.
+
+Several of these look like unrealistic rendering or scoring choices rather than realistic poster content, which is a reason to revisit the corpus. None of them is a proof of impossibility: a different model may segment letter-spaced text or handle these characters differently, so they are recorded as not recovered here, not as unrecoverable in principle.
+
+What the probe **does** establish is bounded, and sufficient for this iteration's decision: a single corpus rendering parameter moves tested-candidate exact-title recovery by up to 16.7 percentage points, far above the 5-point materiality threshold. That is a measured confound in the development corpus, recorded as `corpus_rendering_confound_detected`.
 
 ## Where failures concentrate
 
@@ -288,17 +303,23 @@ Three defects are established, each with independent evidence:
 
 1. **The title-candidate selector is defective.** Ranking by the combined height of an adjacent group lets three body lines outrank a heading. Replacing it with a bounded top-of-page adjacent group recovers the full oracle ceiling for every candidate — plus 16 cases for Tesseract, plus 7 for Medium — with zero safety cost.
 2. **Reading order inflates WER on multi-column pages.** Bounded, geometry-only column reconstruction removes roughly nine percentage points of PP-OCRv6 whole-page WER, and one-column pages need none of it.
-3. **The corpus is not a valid instrument for a 95% exact-title gate.** Its title stroke dilation systematically penalises smaller models, and 22.9% of its titles cannot be recovered exactly by any provisioned engine even after that artifact is removed.
+3. **A corpus rendering choice measurably moves the tested candidates.** Toggling the title stroke alone, on complete posters, changes exact-title recovery for the tested PP-OCRv6 candidates by more than the materiality threshold under the corrected selector. That is a confound in the development corpus, measured on the candidates actually run.
 
-What is **not** established is that PP-OCRv6 is inadequate. Recognition is numerically the dominant residual failure, but the corpus contributes an unknown and demonstrably large share of it, so attributing that residual to model capability is not supportable. Buying a new challenger model against this corpus would be measuring the instrument, not the model.
+What is **not** established is that PP-OCRv6 is inadequate. Recognition is numerically the dominant residual failure, but a measured part of it is attributable to a corpus rendering decision rather than to engine capability, so attributing the residual to the model is not supportable from this evidence.
+
+Equally, what is **not** established is any ceiling for OCR models in general. The union figure below describes the three provisioned PP-OCRv6 variants under this diagnostic. An unseen model, a different recognition architecture, or another legitimate deterministic configuration could recover more, and nothing here rules that out. An earlier revision of this document asserted a model-independent corpus ceiling; that inference was not supported by the experiment and has been withdrawn.
 
 Resolution is affirmatively ruled out as a material cause of exact-title failure, and the merged 960-pixel bound is exonerated.
 
 ## Recommendation
 
-The evidence is sufficient to reject two hypotheses and to identify two fixable deterministic defects, but insufficient to support either a fresh holdout or a model-challenger benchmark, because the measuring instrument is confounded with the thing being measured.
+The evidence is sufficient to reject the resolution hypothesis and to identify two fixable deterministic defects, but insufficient to support either a fresh holdout or a model-challenger benchmark.
 
-Before Iteration 2B spends either a fresh holdout or a new model, the corpus generator should be corrected so that it measures OCR rather than its own rendering: draw poster titles without stroke dilation, render letter-spaced titles the way real posters set them rather than by inserting two spaces between every character, and either represent Unicode subscripts, accents and dashes in a way the frozen normalisation can score or exclude them from the exact-title metric and score them separately. A corrected corpus needs its own instrument-ceiling measurement before any gate is applied to it, and that corpus change is a new frozen corpus version, not an edit to the merged v1 corpus.
+The reason is specific and measured, and it is *not* a claim about a corpus ceiling. Under the corrected selector, toggling one corpus rendering parameter moves tested-candidate exact-title recovery by more than the materiality threshold. While a development-corpus rendering choice moves the tested engines that much, the residual recognition failure cannot be cleanly attributed to engine capability, so a challenger benchmark run against this corpus would be scoring rendering robustness alongside recognition quality.
+
+Before Iteration 2B spends either a fresh holdout or a new model, the corpus generator should be corrected so that it measures OCR rather than its own rendering: draw poster titles without stroke dilation, render letter-spaced titles the way real posters set them rather than by inserting two spaces between every character, and either represent Unicode subscripts, accents and dashes in a way the frozen normalisation can score or exclude them from the exact-title metric and score them separately. A corrected corpus should have its own stroke-sensitivity and selector-sensitivity measured before any gate is applied to it, and that corpus change is a new frozen corpus version, not an edit to the merged v1 corpus.
+
+Had no material corpus confound been measured, this evidence would instead have supported `NEEDS_OCR_MODEL_CHALLENGER`, because recognition is the dominant residual failure once selection and reading order are corrected. The decision contract is written so that outcome remains reachable; it is not hard-coded to the answer below.
 
 The two deterministic improvements identified here — the bounded top-of-page title selector and the bounded column-aware reading order — are ready to carry into that work as the challenger configuration, on development evidence.
 
@@ -310,4 +331,4 @@ No production OCR provider is selected or activated, no holdout is created, and 
 
 This iteration changes no production OCR behaviour. Worker OCR task providers remain `NONE`, `TESSERACT`; the coordinator selection remains `NONE`; the migration count remains 33; no PaddleOCR import enters any production worker package; no model weights are tracked; and no local language model, vision-language model or cloud AI is used. All corpus content remains synthetic, and OCR text is never used as a command, URL, credential lookup, database input, workflow decision or publication authority.
 
-Lightweight CI additions are cheap and deterministic: they recompute the stored diagnostic arithmetic from its stored per-case rows, re-derive the failure-category counts and instrument ceiling, re-prove the exposed development corpus identity against the frozen corpus parts, re-prove the production boundary, and verify by hash that the merged v1 evidence is byte-unchanged and still records `NEEDS_MORE_OCR_BENCHMARKING`. CI does not install PaddlePaddle, download model weights, run neural OCR, require a GPU, or use runtime internet for models.
+Lightweight CI additions are cheap and deterministic: they recompute the stored diagnostic arithmetic from its stored per-case rows, re-derive the failure-category counts and the tested-engine union, assert that the stored evidence claims no model-independent ceiling, re-prove the exposed development corpus identity against the frozen corpus parts, re-prove the production boundary, and verify by hash that the merged v1 evidence is byte-unchanged and still records `NEEDS_MORE_OCR_BENCHMARKING`. CI does not install PaddlePaddle, download model weights, run neural OCR, require a GPU, or use runtime internet for models.

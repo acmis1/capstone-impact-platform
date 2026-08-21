@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import unittest
 from pathlib import Path
@@ -16,8 +17,9 @@ from assistive_validation_benchmark.ocr_failure_analysis.ordering import (
 )
 from assistive_validation_benchmark.ocr_failure_analysis.report import (
     FINAL_EXACT_TITLE_GATE,
+    MATERIAL_CONFOUND_DELTA,
     decide,
-    instrument_validity,
+    stroke_sensitivity,
     validate_report,
 )
 from assistive_validation_benchmark.ocr_failure_analysis.selectors import (
@@ -173,45 +175,158 @@ class TaxonomyTests(unittest.TestCase):
         self.assertIn(decomposition["best_order"], {"raw", "geometry", "column"})
 
 
-class InstrumentValidityTests(unittest.TestCase):
-    def probe(self, engine: str, stroke: list[str], no_stroke: list[str], cases: list[str]) -> dict[str, object]:
+class StrokeSensitivityTests(unittest.TestCase):
+    def probe(self, stroke: list[str], no_stroke: list[str], cases: list[str]) -> dict[str, object]:
         return {
+            "schema_version": "pp1-ocr-stroke-probe/v2",
+            "full_poster_context": True,
             "stroke_exact_count": len(stroke),
             "no_stroke_exact_count": len(no_stroke),
+            "by_selector": {
+                "production_geometry_prominence@raw": {
+                    "stroke_exact_count": len(stroke),
+                    "no_stroke_exact_count": len(no_stroke),
+                }
+            },
             "recovered_only_without_stroke": [item for item in no_stroke if item not in stroke],
             "recovered_only_with_stroke": [item for item in stroke if item not in no_stroke],
             "records": [
                 {
                     "case_id": item,
-                    "stroke": {"exact": item in stroke},
-                    "no_stroke": {"exact": item in no_stroke},
+                    "stroke": {
+                        "exact": item in stroke,
+                        "exact_by_selector": {"production_geometry_prominence@raw": item in stroke},
+                    },
+                    "no_stroke": {
+                        "exact": item in no_stroke,
+                        "exact_by_selector": {"production_geometry_prominence@raw": item in no_stroke},
+                    },
                 }
                 for item in cases
             ],
         }
 
-    def test_ceiling_is_the_union_across_engines(self) -> None:
+    def test_union_is_reported_as_a_tested_engine_union_not_a_ceiling(self) -> None:
         cases = ["a", "b", "c", "d"]
         probes = {
-            "paddle-tiny": self.probe("paddle-tiny", ["a"], ["a", "b"], cases),
-            "paddle-medium": self.probe("paddle-medium", ["a"], ["a", "c"], cases),
+            "paddle-tiny": self.probe(["a"], ["a", "b"], cases),
+            "paddle-medium": self.probe(["a"], ["a", "c"], cases),
         }
-        validity = instrument_validity(probes)
-        self.assertEqual(3, validity["union_recoverable_without_stroke"])
-        self.assertEqual(0.75, validity["instrument_ceiling_rate"])
-        self.assertEqual(["d"], validity["unrecoverable_case_ids"])
-        self.assertFalse(validity["instrument_supports_final_gate"])
+        sensitivity = stroke_sensitivity(probes)
+        self.assertEqual(3, sensitivity["tested_engine_union_without_stroke"])
+        self.assertEqual(0.75, sensitivity["tested_engine_union_exact_rate"])
+        self.assertEqual(["d"], sensitivity["cases_not_recovered_by_any_tested_candidate"])
+        self.assertFalse(sensitivity["tested_candidates_reach_final_gate"])
+        self.assertIn("not a bound on OCR models generally", sensitivity["scope"])
 
-    def test_a_corpus_reaching_the_final_gate_is_reported_as_supporting_it(self) -> None:
+    def test_no_field_name_implies_a_universal_model_bound(self) -> None:
+        cases = ["a", "b"]
+        sensitivity = stroke_sensitivity({"paddle-tiny": self.probe(["a"], ["a", "b"], cases)})
+        for key in sensitivity:
+            self.assertNotIn("ceiling", key)
+            self.assertNotIn("upper_bound", key)
+            self.assertNotIn("unrecoverable", key)
+
+    def test_tested_candidates_reaching_the_final_gate_is_reported_as_such(self) -> None:
         cases = [f"case-{index}" for index in range(20)]
-        probes = {"paddle-tiny": self.probe("paddle-tiny", cases, cases, cases)}
-        validity = instrument_validity(probes)
-        self.assertEqual(1.0, validity["instrument_ceiling_rate"])
-        self.assertTrue(validity["instrument_supports_final_gate"])
-        self.assertGreaterEqual(validity["instrument_ceiling_rate"], FINAL_EXACT_TITLE_GATE)
+        sensitivity = stroke_sensitivity({"paddle-tiny": self.probe(cases, cases, cases)})
+        self.assertEqual(1.0, sensitivity["tested_engine_union_exact_rate"])
+        self.assertTrue(sensitivity["tested_candidates_reach_final_gate"])
+        self.assertGreaterEqual(sensitivity["tested_engine_union_exact_rate"], FINAL_EXACT_TITLE_GATE)
+
+    def test_a_material_stroke_effect_is_flagged_as_a_corpus_confound(self) -> None:
+        cases = [f"case-{index}" for index in range(20)]
+        moved = stroke_sensitivity({"paddle-tiny": self.probe(cases[:10], cases[:16], cases)})
+        self.assertGreaterEqual(moved["largest_absolute_exact_rate_delta"], MATERIAL_CONFOUND_DELTA)
+        self.assertTrue(moved["corpus_rendering_confound_detected"])
+        steady = stroke_sensitivity({"paddle-tiny": self.probe(cases[:10], cases[:10], cases)})
+        self.assertEqual(0.0, steady["largest_absolute_exact_rate_delta"])
+        self.assertFalse(steady["corpus_rendering_confound_detected"])
 
     def test_absent_probe_is_reported_rather_than_assumed(self) -> None:
-        self.assertFalse(instrument_validity({})["measured"])
+        self.assertFalse(stroke_sensitivity({})["measured"])
+
+
+class ScientificInterpretationRegressionTests(unittest.TestCase):
+    """Guards against the specific interpretation errors corrected in this iteration.
+
+    Each test names the error it prevents from returning, so a future change that reintroduces
+    one fails with an explanation rather than a bare assertion.
+    """
+
+    def report(self) -> dict[str, object]:
+        if not DIAGNOSTIC_REPORT.is_file():
+            self.skipTest("diagnostic evidence is added after the measurement runs")
+        return json.loads(DIAGNOSTIC_REPORT.read_text(encoding="utf-8"))
+
+    def test_stored_evidence_never_claims_a_universal_ocr_model_ceiling(self) -> None:
+        sensitivity = self.report()["stroke_sensitivity"]
+        serialized = json.dumps(sensitivity, sort_keys=True).lower()
+        for forbidden in ("upper bound", "ceiling", "any ocr model", "corpus_caps", "achievable on this corpus"):
+            self.assertNotIn(forbidden, serialized, f"stroke sensitivity must not claim {forbidden!r}")
+        self.assertIn("tested_engine_union_exact_rate", sensitivity)
+        self.assertIn("not a bound on OCR models generally", sensitivity["scope"])
+
+    def test_decision_is_not_forced_solely_by_tested_engine_union_being_below_the_gate(self) -> None:
+        report = self.report()
+        sensitivity = report["stroke_sensitivity"]
+        # The union rate is below the final gate. That fact alone must not decide anything:
+        # with no measured confound and no reproduction problem, the contract must be free to
+        # return the challenger verdict instead.
+        self.assertFalse(sensitivity["tested_candidates_reach_final_gate"])
+        self.assertEqual(
+            "NEEDS_OCR_MODEL_CHALLENGER",
+            decide([{"holdout_worthy": False}], recognition_dominant=True, conflicting=False),
+            "a sub-gate tested-engine union must not by itself force NEEDS_MORE_OCR_FAILURE_ANALYSIS",
+        )
+
+    def test_all_forty_eight_cases_remain_exposed_development_data(self) -> None:
+        corpus = self.report()["development_corpus"]
+        self.assertEqual("exposed_development_corpus", corpus["role"])
+        self.assertEqual(48, corpus["exposed_case_count"])
+        self.assertIs(False, corpus["independent_holdout"])
+        self.assertIs(False, corpus["may_claim_unbiased_accuracy"])
+
+    def test_merged_v1_evidence_remains_byte_unchanged(self) -> None:
+        recorded = self.report()["source"]["merged_evidence"]
+        merged = repository_root() / "docs" / "assistive-validation" / "evidence" / "ocr-productionization-report.json"
+        observed = hashlib.sha256(merged.read_bytes()).hexdigest()
+        self.assertEqual(recorded["file_sha256"], observed)
+        self.assertEqual(
+            "NEEDS_MORE_OCR_BENCHMARKING",
+            json.loads(merged.read_text(encoding="utf-8"))["final_decision"],
+        )
+
+    def test_no_new_holdout_corpus_exists(self) -> None:
+        corpus_dir = tool_root() / "ocr-productionization" / "corpus"
+        self.assertEqual(
+            {"calibration.json", "holdout.json"},
+            {path.name for path in corpus_dir.glob("*.json")},
+            "this iteration must not add a new holdout corpus part",
+        )
+        for pattern in ("*v2*", "*iteration-2*", "*holdout-2*"):
+            self.assertEqual([], sorted(corpus_dir.glob(pattern)))
+
+    def test_documentation_does_not_claim_metadata_guidance_improved_ocr_recovery(self) -> None:
+        """Phase 0 records guided and blind OCR tracks as identical; the doc must not contradict it."""
+        phase0 = json.loads(
+            (repository_root() / "docs" / "assistive-validation" / "evidence" / "phase-0-report.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        engines = phase0["results"]["ocr"]["engines"]
+        for name, values in engines.items():
+            self.assertEqual(
+                values["title_recovery_rate"],
+                values["title_recovery_rate_blind"],
+                f"Phase 0 guided and blind OCR tracks must remain identical for {name}",
+            )
+        document = (
+            repository_root() / "docs" / "assistive-validation" / "ocr-productionization-failure-analysis.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("is **not** explained by metadata guidance", document)
+        for claim in ("used a metadata-**guided** candidate chooser", "never measuring the same thing"):
+            self.assertNotIn(claim, document)
 
 
 class DecisionContractTests(unittest.TestCase):

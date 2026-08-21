@@ -46,12 +46,12 @@
     },
     {
       "stage": 5,
-      "name": "controlled corpus instrument probe",
+      "name": "controlled full-poster title stroke A/B probe",
       "ocr_executed": true,
       "engines": ["paddle-tiny", "paddle-small", "paddle-medium"],
-      "configurations": ["title-band-960"],
-      "description": "Single-variable probe rendering each title alone on its own band, changing only the corpus title stroke. Isolates recognition from reading order, layout and candidate ranking, and measures what the corpus itself can support.",
-      "promotion": "Terminal stage: it establishes the upper bound on exact-title recovery achievable on this corpus by any provisioned engine."
+      "configurations": ["dpi150-edge960"],
+      "description": "Single-variable A/B probe over complete posters. The stroke variant is proved pixel-identical to the corpus asset for all 48 cases before OCR runs, and title position is held fixed, so the two variants differ only by the one-pixel title glyph dilation. Layout, section headings, body text, noise, contrast and the decorative title shadow are all present. Both the merged production selector and the best development selector are scored.",
+      "promotion": "Terminal stage. It measures how sensitive the tested PP-OCRv6 candidates are to one corpus rendering choice, and reports the union of exact recoveries across that tested candidate set. It does not establish a theoretical or model-independent ceiling: an unseen model, a different recognition architecture or another legitimate deterministic configuration could behave differently."
     }
   ]
 }

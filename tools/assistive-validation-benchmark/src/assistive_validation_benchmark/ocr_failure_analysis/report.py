@@ -8,6 +8,7 @@ prove the arithmetic without rerunning OCR.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -248,14 +249,19 @@ def latency_comparability(summaries: dict[str, dict[str, dict[str, Any]]]) -> di
     }
 
 
-def instrument_validity(probes: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Measure what the corpus itself can support, independently of any selector or layout.
+# A corpus rendering choice is treated as a measured confound when toggling it moves the
+# exact-title recovery of at least one tested candidate by this much. It is deliberately the
+# same materiality threshold already used for reading-order WER changes.
+MATERIAL_CONFOUND_DELTA = 0.05
 
-    The stroke probe isolates each title on its own band, so neither reading order nor
-    candidate ranking can contribute. The union across engines is therefore an upper bound
-    on exact-title recovery achievable on this corpus. If that bound sits below the final
-    production gate, the corpus cannot demonstrate gate compliance for *any* OCR model, and
-    an engine's score on it cannot be attributed to engine capability.
+
+def stroke_sensitivity(probes: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Summarize how much the corpus title stroke moves the *tested* candidates.
+
+    Scope is deliberately narrow. Every figure here describes the provisioned PP-OCRv6
+    candidate set under this diagnostic. None of it bounds what an unseen OCR model, a
+    different recognition architecture, or another legitimate deterministic configuration
+    could recover, and none of it establishes a theoretical maximum for the corpus.
     """
     if not probes:
         return {"measured": False, "reason": "no stroke probe available"}
@@ -263,38 +269,86 @@ def instrument_validity(probes: dict[str, dict[str, Any]]) -> dict[str, Any]:
     outcomes = {
         engine: {record["case_id"]: record for record in probe["records"]} for engine, probe in probes.items()
     }
-    def union(variant: str) -> list[str]:
-        return [
-            case_id
-            for case_id in case_ids
-            if any(
-                case_id in outcomes[engine] and outcomes[engine][case_id][variant]["exact"] for engine in outcomes
-            )
-        ]
 
-    with_stroke = union("stroke")
-    without_stroke = union("no_stroke")
-    ceiling = len(without_stroke) / len(case_ids) if case_ids else None
+    selector_keys = sorted(
+        {key for probe in probes.values() for key in (probe.get("by_selector") or {})}
+    ) or [None]
+
+    def union(variant: str, selector: str | None) -> list[str]:
+        def hit(engine: str, case_id: str) -> bool:
+            record = outcomes[engine].get(case_id)
+            if record is None:
+                return False
+            if selector is None:
+                return bool(record[variant]["exact"])
+            return bool(record[variant].get("exact_by_selector", {}).get(selector))
+
+        return [case_id for case_id in case_ids if any(hit(engine, case_id) for engine in outcomes)]
+
+    unions = {
+        (selector or "scored_selector"): {
+            "with_stroke": len(union("stroke", selector)),
+            "without_stroke": len(union("no_stroke", selector)),
+            "not_recovered_without_stroke": [
+                case_id for case_id in case_ids if case_id not in set(union("no_stroke", selector))
+            ],
+        }
+        for selector in selector_keys
+    }
+    # The headline union uses the strongest selector measured, so it is not depressed by the
+    # separately-established selector defect.
+    best_key = max(unions, key=lambda key: (unions[key]["without_stroke"], key))
+    with_stroke = unions[best_key]["with_stroke"]
+    without_stroke = unions[best_key]["without_stroke"]
+    union_rate = without_stroke / len(case_ids) if case_ids else None
+    engines = {
+        engine: {
+            "stroke_exact_count": probe["stroke_exact_count"],
+            "no_stroke_exact_count": probe["no_stroke_exact_count"],
+            "by_selector": probe.get("by_selector", {}),
+            "recovered_only_without_stroke": probe["recovered_only_without_stroke"],
+            "recovered_only_with_stroke": probe["recovered_only_with_stroke"],
+        }
+        for engine, probe in sorted(probes.items())
+    }
+    deltas = {
+        engine: {
+            key: (value["no_stroke_exact_count"] - value["stroke_exact_count"]) / len(case_ids)
+            for key, value in (probes[engine].get("by_selector") or {}).items()
+        }
+        for engine in engines
+    }
+    largest = max(
+        (abs(delta) for engine in deltas for delta in deltas[engine].values()),
+        default=(
+            max(
+                abs(value["no_stroke_exact_count"] - value["stroke_exact_count"]) / len(case_ids)
+                for value in engines.values()
+            )
+            if engines and case_ids
+            else 0.0
+        ),
+    )
     return {
         "measured": True,
-        "probe_schema": "pp1-ocr-stroke-probe/v1",
-        "method": "each title rendered alone on its own band; only the corpus stroke_width differs",
-        "engines": {
-            engine: {
-                "stroke_exact_count": probe["stroke_exact_count"],
-                "no_stroke_exact_count": probe["no_stroke_exact_count"],
-                "recovered_only_without_stroke": probe["recovered_only_without_stroke"],
-                "recovered_only_with_stroke": probe["recovered_only_with_stroke"],
-            }
-            for engine, probe in sorted(probes.items())
-        },
+        "probe_schema": next(iter(probes.values())).get("schema_version"),
+        "scope": "provisioned PP-OCRv6 candidates under this diagnostic; not a bound on OCR models generally",
+        "method": "complete posters rendered twice; the stroke variant is byte-identical to the corpus and only the title stroke differs",
+        "full_poster_context": all(probe.get("full_poster_context") for probe in probes.values()),
+        "engines": engines,
+        "exact_rate_delta_by_selector": deltas,
         "case_count": len(case_ids),
-        "union_recoverable_with_stroke": len(with_stroke),
-        "union_recoverable_without_stroke": len(without_stroke),
-        "instrument_ceiling_rate": ceiling,
+        "union_by_selector": unions,
+        "union_selector": best_key,
+        "tested_engine_union_with_stroke": with_stroke,
+        "tested_engine_union_without_stroke": without_stroke,
+        "tested_engine_union_exact_rate": union_rate,
         "final_gate_exact_title_minimum": FINAL_EXACT_TITLE_GATE,
-        "instrument_supports_final_gate": ceiling is not None and ceiling >= FINAL_EXACT_TITLE_GATE,
-        "unrecoverable_case_ids": [case_id for case_id in case_ids if case_id not in set(without_stroke)],
+        "tested_candidates_reach_final_gate": union_rate is not None and union_rate >= FINAL_EXACT_TITLE_GATE,
+        "cases_not_recovered_by_any_tested_candidate": unions[best_key]["not_recovered_without_stroke"],
+        "largest_absolute_exact_rate_delta": largest,
+        "material_confound_delta": MATERIAL_CONFOUND_DELTA,
+        "corpus_rendering_confound_detected": largest >= MATERIAL_CONFOUND_DELTA,
     }
 
 
@@ -314,6 +368,18 @@ def rank_finalists(gates: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def decide(finalists: list[dict[str, Any]], recognition_dominant: bool, conflicting: bool) -> str:
+    """Derive the iteration decision from defensible, measured inputs.
+
+    ``conflicting`` means the development evidence cannot support an attribution: either the
+    diagnostic did not reproduce the merged measurement, or a measured corpus rendering choice
+    materially moves the tested candidates' recognition outcomes. In the latter case the
+    residual recognition failure is partly a property of the corpus, so spending a challenger
+    benchmark against that corpus would measure the rendering as much as the model.
+
+    Note what is deliberately *not* an input: the tested-engine union recovery rate. That rate
+    describes only the candidates actually measured, so it cannot license a statement about
+    OCR models in general and must not by itself force a decision.
+    """
     if any(gate["holdout_worthy"] for gate in finalists):
         return "READY_TO_FREEZE_OCR_ITERATION_2_HOLDOUT"
     if conflicting:
@@ -377,10 +443,10 @@ def build_report(
         if baseline_engine and BASELINE_CONFIGURATION in summaries[baseline_engine]
         else {"comparable": False, "reason": "no baseline-configuration capture"}
     )
-    validity = instrument_validity(probes)
-    # A corpus that cannot itself reach the production gate cannot support a model-capability
-    # verdict, so it is treated as insufficient evidence rather than as engine failure.
-    conflicting = bool(conflicting or (validity.get("measured") and not validity["instrument_supports_final_gate"]))
+    sensitivity = stroke_sensitivity(probes)
+    # A measured corpus rendering confound blocks attribution of residual recognition failure
+    # to engine capability. The tested-engine union rate is deliberately NOT consulted here.
+    conflicting = bool(conflicting or sensitivity.get("corpus_rendering_confound_detected"))
     decision = decide(finalists, recognition_dominant, conflicting)
     return {
         "schema_version": REPORT_SCHEMA,
@@ -404,7 +470,7 @@ def build_report(
         "stages": stages,
         "capture_reproduction": reproduction,
         "latency_comparability": latency_comparability(summaries),
-        "instrument_validity": validity,
+        "stroke_sensitivity": sensitivity,
         "engines": resolved,
         "scored_variants": scored_variants,
         "finalists": finalists,
@@ -517,26 +583,33 @@ def validate_report(report: dict[str, Any]) -> dict[str, Any]:
         if gate["holdout_worthy"] != all(gate["checks"].values()):
             raise ValueError(f"finalist holdout-worthiness is inconsistent for {gate['engine']}")
 
-    validity = report["instrument_validity"]
-    if validity.get("measured"):
-        if validity["case_count"] <= 0:
-            raise ValueError("instrument validity must cover at least one case")
-        expected_ceiling = validity["union_recoverable_without_stroke"] / validity["case_count"]
-        if abs(validity["instrument_ceiling_rate"] - expected_ceiling) > 1e-12:
-            raise ValueError("stored instrument ceiling arithmetic is inconsistent")
-        if validity["union_recoverable_without_stroke"] > validity["case_count"]:
-            raise ValueError("instrument ceiling exceeds the case count")
-        if len(validity["unrecoverable_case_ids"]) != validity["case_count"] - validity[
-            "union_recoverable_without_stroke"
+    sensitivity = report["stroke_sensitivity"]
+    if sensitivity.get("measured"):
+        if sensitivity["case_count"] <= 0:
+            raise ValueError("stroke sensitivity must cover at least one case")
+        expected_rate = sensitivity["tested_engine_union_without_stroke"] / sensitivity["case_count"]
+        if abs(sensitivity["tested_engine_union_exact_rate"] - expected_rate) > 1e-12:
+            raise ValueError("stored tested-engine union arithmetic is inconsistent")
+        if sensitivity["tested_engine_union_without_stroke"] > sensitivity["case_count"]:
+            raise ValueError("tested-engine union exceeds the case count")
+        if len(sensitivity["cases_not_recovered_by_any_tested_candidate"]) != sensitivity["case_count"] - sensitivity[
+            "tested_engine_union_without_stroke"
         ]:
-            raise ValueError("stored unrecoverable case list is inconsistent with the instrument ceiling")
-        if validity["final_gate_exact_title_minimum"] != FINAL_EXACT_TITLE_GATE:
-            raise ValueError("instrument validity must compare against the unchanged final gate")
-        supports = expected_ceiling >= FINAL_EXACT_TITLE_GATE
-        if validity["instrument_supports_final_gate"] != supports:
-            raise ValueError("stored instrument-validity verdict is inconsistent")
-        if not supports and report["evidence_conflicting"] is not True:
-            raise ValueError("a corpus below the final gate must be recorded as insufficient evidence")
+            raise ValueError("stored not-recovered case list is inconsistent with the tested-engine union")
+        if sensitivity["final_gate_exact_title_minimum"] != FINAL_EXACT_TITLE_GATE:
+            raise ValueError("stroke sensitivity must compare against the unchanged final gate")
+        if sensitivity["tested_candidates_reach_final_gate"] != (expected_rate >= FINAL_EXACT_TITLE_GATE):
+            raise ValueError("stored tested-candidate gate verdict is inconsistent")
+        expected_confound = sensitivity["largest_absolute_exact_rate_delta"] >= sensitivity["material_confound_delta"]
+        if sensitivity["corpus_rendering_confound_detected"] != expected_confound:
+            raise ValueError("stored corpus-confound verdict is inconsistent with its own measurement")
+        # Guard the scientific error this iteration corrected: the tested-engine union rate
+        # describes only the measured candidates and must never be recorded as a bound on
+        # OCR models generally, nor be the sole reason a decision was taken.
+        serialized = json.dumps(sensitivity, sort_keys=True).lower()
+        for forbidden in ("upper bound", "ceiling for", "any ocr model", "corpus_caps", "instrument_ceiling"):
+            if forbidden in serialized:
+                raise ValueError(f"stroke sensitivity must not claim a universal model bound: {forbidden}")
 
     expected_worthy = [gate for gate in report["finalists"] if gate["holdout_worthy"]]
     if report["holdout_worthy_candidates"] != expected_worthy:
