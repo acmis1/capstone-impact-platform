@@ -24,8 +24,8 @@ const checkResultShape = assistiveCheckResultSchema.shape;
 /**
  * Browser-safe finding contract.
  *
- * Privacy Invariant: internal staff identity UUIDs (e.g. reviewedBy) are strictly omitted
- * from the browser-facing contract. Strict parsing rejects any payload carrying unexpected fields.
+ * Privacy Invariant: internal reviewer identity and audit timestamps are strictly omitted from the
+ * browser-facing contract. Strict parsing rejects any payload carrying unexpected fields.
  */
 export const assistiveInspectionFindingSchema = z.object({
   findingId: z.uuid(),
@@ -40,14 +40,10 @@ export const assistiveInspectionFindingSchema = z.object({
   scoreValue: z.number().finite().min(0).max(1).nullable(),
   evidence: persistedAssistiveEvidenceSchema,
   disposition: z.enum(ASSISTIVE_DISPOSITIONS),
-  reviewedAt: z.string().min(1).nullable(),
   createdAt: z.string().min(1),
 }).strict().superRefine((finding, context) => {
   if ((finding.scoreKind === null) !== (finding.scoreValue === null)) {
     context.addIssue({ code: 'custom', message: 'Score kind and value must both be present or both absent.' });
-  }
-  if (finding.disposition === 'UNREVIEWED' && finding.reviewedAt !== null) {
-    context.addIssue({ code: 'custom', message: 'An unreviewed finding must not claim review timestamp.' });
   }
 });
 

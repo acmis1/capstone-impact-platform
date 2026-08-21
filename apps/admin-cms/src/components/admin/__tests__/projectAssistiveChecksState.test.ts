@@ -39,7 +39,6 @@ const sampleFinding = (overrides: Partial<AssistiveInspectionFinding> = {}): Ass
     explanation: 'The poster title has high lexical similarity with the metadata title.',
   },
   disposition: 'UNREVIEWED',
-  reviewedAt: null,
   createdAt: '2026-08-21T09:00:00.000Z',
   ...overrides,
 });
@@ -60,7 +59,7 @@ const sampleInspection = (overrides: Partial<AssistiveInspectionView> = {}): Ass
 });
 
 describe('assistiveChecksReducer', () => {
-  it('handles LOAD_STARTED, LOAD_SUCCEEDED, LOAD_FAILED, and SET_READ_UNAVAILABLE', () => {
+  it('handles load lifecycle and coherent server snapshot synchronization', () => {
     let state = assistiveChecksReducer(initialAssistiveChecksUiState, { type: 'LOAD_STARTED' });
     expect(state.loading).toBe(true);
 
@@ -73,8 +72,43 @@ describe('assistiveChecksReducer', () => {
     state = assistiveChecksReducer(state, { type: 'LOAD_FAILED', error: 'Network error' });
     expect(state.error).toBe('Network error');
 
-    state = assistiveChecksReducer(state, { type: 'SET_READ_UNAVAILABLE', unavailable: true });
+    state = assistiveChecksReducer(state, {
+      type: 'SYNC_SERVER_SNAPSHOT',
+      inspection: null,
+      readUnavailable: true,
+    });
     expect(state.readUnavailable).toBe(true);
+  });
+
+  it('does not let an older server snapshot replace a newer client inspection', () => {
+    const newerInspection = sampleInspection({ createdAt: '2026-08-21T10:00:00.000Z' });
+    const olderInspection = sampleInspection({
+      runId: '11111111-1111-4111-8111-111111111111',
+      createdAt: '2026-08-21T09:00:00.000Z',
+    });
+
+    const state = assistiveChecksReducer(
+      { ...initialAssistiveChecksUiState, inspection: newerInspection },
+      { type: 'SYNC_SERVER_SNAPSHOT', inspection: olderInspection, readUnavailable: false },
+    );
+
+    expect(state.inspection).toEqual(newerInspection);
+  });
+
+  it('clears only the active run targeted by a NOT_FOUND poll', () => {
+    const inspection = sampleInspection({ runStatus: 'RUNNING', jobStatus: 'EXTRACTING' });
+    const initial = { ...initialAssistiveChecksUiState, inspection };
+
+    const unchanged = assistiveChecksReducer(initial, {
+      type: 'ACTIVE_RUN_NOT_FOUND',
+      runId: '11111111-1111-4111-8111-111111111111',
+    });
+    expect(unchanged).toBe(initial);
+
+    const missing = assistiveChecksReducer(initial, { type: 'ACTIVE_RUN_NOT_FOUND', runId: RUN_ID });
+    expect(missing.inspection).toBeNull();
+    expect(missing.readUnavailable).toBe(true);
+    expect(missing.error).toContain('no longer available');
   });
 
   it('handles RUN lifecycle and transitions', () => {

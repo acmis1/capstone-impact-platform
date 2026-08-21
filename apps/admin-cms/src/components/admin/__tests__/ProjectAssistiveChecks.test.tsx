@@ -42,7 +42,6 @@ const sampleFinding = (overrides: Partial<AssistiveInspectionFinding> = {}): Ass
     explanation: 'Poster title includes additional AI suffix.',
   },
   disposition: 'UNREVIEWED',
-  reviewedAt: null,
   createdAt: '2026-08-21T09:00:00.000Z',
   ...overrides,
 });
@@ -108,6 +107,60 @@ describe('ProjectAssistiveChecks Component', () => {
     );
 
     expect(screen.getByText('Assistive checks are temporarily unavailable.')).toBeTruthy();
+    expect(screen.queryByText('No assistive checks run yet')).toBeNull();
+  });
+
+  it('synchronizes a recovered server read from unavailable to empty history', async () => {
+    const { rerender } = renderWithNavigation(
+      <ProjectAssistiveChecks
+        publicId={PUBLIC_ID}
+        canEditMetadata={true}
+        canReview={true}
+        initialInspection={null}
+        initialReadFailed={true}
+      />,
+    );
+
+    rerender(
+      <ProjectMetadataNavigationProvider>
+        <ProjectAssistiveChecks
+          publicId={PUBLIC_ID}
+          canEditMetadata={true}
+          canReview={true}
+          initialInspection={null}
+          initialReadFailed={false}
+        />
+      </ProjectMetadataNavigationProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('No assistive checks run yet')).toBeTruthy());
+    expect(screen.queryByText('Assistive checks are temporarily unavailable.')).toBeNull();
+  });
+
+  it('synchronizes a failed server read from empty history to unavailable', async () => {
+    const { rerender } = renderWithNavigation(
+      <ProjectAssistiveChecks
+        publicId={PUBLIC_ID}
+        canEditMetadata={true}
+        canReview={true}
+        initialInspection={null}
+        initialReadFailed={false}
+      />,
+    );
+
+    rerender(
+      <ProjectMetadataNavigationProvider>
+        <ProjectAssistiveChecks
+          publicId={PUBLIC_ID}
+          canEditMetadata={true}
+          canReview={true}
+          initialInspection={null}
+          initialReadFailed={true}
+        />
+      </ProjectMetadataNavigationProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('Assistive checks are temporarily unavailable.')).toBeTruthy());
     expect(screen.queryByText('No assistive checks run yet')).toBeNull();
   });
 
@@ -501,6 +554,29 @@ describe('Mandatory Polling Lifecycle Tests (Scenarios A through G)', () => {
     await vi.advanceTimersByTimeAsync(10000);
     expect(assistiveActions.getAssistiveInspectionAction).not.toHaveBeenCalled();
   });
+
+  it('Scenario H: active NOT_FOUND exits the spinner, reports the missing run, and stops polling', async () => {
+    const activeInspection = sampleInspection({ runStatus: 'RUNNING', jobStatus: 'EXTRACTING' });
+    vi.mocked(assistiveActions.getAssistiveInspectionAction).mockResolvedValueOnce({ ok: true, found: false });
+
+    renderWithNavigation(
+      <ProjectAssistiveChecks
+        publicId={PUBLIC_ID}
+        canEditMetadata={true}
+        canReview={true}
+        initialInspection={activeInspection}
+      />,
+    );
+
+    await vi.advanceTimersByTimeAsync(2500);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(screen.queryByText('Extracting document text and metadata...')).toBeNull();
+    expect(screen.getByText('This assistive check run is no longer available. Refresh or run checks again.')).toBeTruthy();
+
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(assistiveActions.getAssistiveInspectionAction).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('Stale Prop Synchronization Tests (Blocker 3)', () => {
@@ -539,7 +615,7 @@ describe('Stale Prop Synchronization Tests (Blocker 3)', () => {
    * read. That read can land after the staff member has already started a newer run here, so the
    * prop must not be allowed to reinstate the older run and lose the one actually in flight.
    */
-  it('ignores a late server prop describing an older run than the one already displayed', () => {
+  it('ignores a late server prop describing an older run than one started locally', async () => {
     const olderRun = sampleInspection({
       runId: '11111111-1111-4111-8111-111111111111',
       createdAt: '2026-08-21T09:00:00.000Z',
@@ -549,6 +625,20 @@ describe('Stale Prop Synchronization Tests (Blocker 3)', () => {
       runId: '22222222-2222-4222-8222-222222222222',
       createdAt: '2026-08-21T10:00:00.000Z',
       staleState: 'CURRENT',
+      runStatus: 'RUNNING',
+      jobStatus: 'EXTRACTING',
+      findings: [],
+    });
+
+    vi.mocked(assistiveActions.runAssistiveChecksAction).mockResolvedValueOnce({
+      ok: true,
+      runId: newerRun.runId,
+      status: 'QUEUED',
+    });
+    vi.mocked(assistiveActions.getAssistiveInspectionAction).mockResolvedValueOnce({
+      ok: true,
+      found: true,
+      inspection: newerRun,
     });
 
     const { rerender } = renderWithNavigation(
@@ -556,11 +646,12 @@ describe('Stale Prop Synchronization Tests (Blocker 3)', () => {
         publicId={PUBLIC_ID}
         canEditMetadata={true}
         canReview={true}
-        initialInspection={newerRun}
+        initialInspection={olderRun}
       />,
     );
 
-    expect(screen.queryByText('Results may be outdated')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Re-run checks/i }));
+    await waitFor(() => expect(screen.getByText('Extracting document text and metadata...')).toBeTruthy());
 
     rerender(
       <ProjectMetadataNavigationProvider>
@@ -568,13 +659,62 @@ describe('Stale Prop Synchronization Tests (Blocker 3)', () => {
           publicId={PUBLIC_ID}
           canEditMetadata={true}
           canReview={true}
-          initialInspection={olderRun}
+          initialInspection={{ ...olderRun }}
         />
       </ProjectMetadataNavigationProvider>,
     );
 
-    // The stale banner belongs to the superseded run; it must not appear for the newer one.
+    // The stale banner belongs to the superseded server run; the locally started run remains active.
     expect(screen.queryByText('Results may be outdated')).toBeNull();
+    expect(screen.getByText('Extracting document text and metadata...')).toBeTruthy();
+  });
+
+  it('does not erase a newer locally started run when a read-failure prop arrives', async () => {
+    const newerRun = sampleInspection({
+      runId: '22222222-2222-4222-8222-222222222222',
+      createdAt: '2026-08-21T10:00:00.000Z',
+      runStatus: 'RUNNING',
+      jobStatus: 'EXTRACTING',
+      findings: [],
+    });
+    vi.mocked(assistiveActions.runAssistiveChecksAction).mockResolvedValueOnce({
+      ok: true,
+      runId: newerRun.runId,
+      status: 'QUEUED',
+    });
+    vi.mocked(assistiveActions.getAssistiveInspectionAction).mockResolvedValueOnce({
+      ok: true,
+      found: true,
+      inspection: newerRun,
+    });
+
+    const { rerender } = renderWithNavigation(
+      <ProjectAssistiveChecks
+        publicId={PUBLIC_ID}
+        canEditMetadata={true}
+        canReview={true}
+        initialInspection={null}
+        initialReadFailed={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Run checks now/i }));
+    await waitFor(() => expect(screen.getByText('Extracting document text and metadata...')).toBeTruthy());
+
+    rerender(
+      <ProjectMetadataNavigationProvider>
+        <ProjectAssistiveChecks
+          publicId={PUBLIC_ID}
+          canEditMetadata={true}
+          canReview={true}
+          initialInspection={null}
+          initialReadFailed={true}
+        />
+      </ProjectMetadataNavigationProvider>,
+    );
+
+    expect(screen.getByText('Extracting document text and metadata...')).toBeTruthy();
+    expect(screen.queryByText('Assistive checks are temporarily unavailable.')).toBeNull();
   });
 
   it('updates UI when server refreshes with UNVERIFIABLE status', () => {

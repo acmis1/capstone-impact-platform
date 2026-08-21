@@ -34,7 +34,8 @@ export type AssistiveChecksAction =
   | { type: 'LOAD_STARTED' }
   | { type: 'LOAD_SUCCEEDED'; inspection: AssistiveInspectionView | null }
   | { type: 'LOAD_FAILED'; error: string }
-  | { type: 'SET_READ_UNAVAILABLE'; unavailable: boolean }
+  | { type: 'SYNC_SERVER_SNAPSHOT'; inspection: AssistiveInspectionView | null; readUnavailable: boolean }
+  | { type: 'ACTIVE_RUN_NOT_FOUND'; runId: string }
   | { type: 'RUN_STARTED' }
   | { type: 'RUN_SUCCEEDED'; runId: string; status: string }
   | { type: 'RUN_FAILED'; error: string }
@@ -60,8 +61,28 @@ export function assistiveChecksReducer(
       return { ...state, loading: false, inspection: action.inspection, error: null, readUnavailable: false };
     case 'LOAD_FAILED':
       return { ...state, loading: false, error: action.error };
-    case 'SET_READ_UNAVAILABLE':
-      return { ...state, readUnavailable: action.unavailable };
+    case 'SYNC_SERVER_SNAPSHOT': {
+      if (!action.inspection) {
+        return { ...state, readUnavailable: action.readUnavailable };
+      }
+
+      const shouldUpdate =
+        !state.inspection ||
+        state.inspection.runId === action.inspection.runId ||
+        new Date(action.inspection.createdAt).getTime() >= new Date(state.inspection.createdAt).getTime();
+
+      return shouldUpdate
+        ? { ...state, inspection: action.inspection, readUnavailable: action.readUnavailable, error: null }
+        : { ...state, readUnavailable: action.readUnavailable };
+    }
+    case 'ACTIVE_RUN_NOT_FOUND':
+      if (state.inspection?.runId !== action.runId) return state;
+      return {
+        ...state,
+        inspection: null,
+        readUnavailable: true,
+        error: 'This assistive check run is no longer available. Refresh or run checks again.',
+      };
     case 'RUN_STARTED':
       return { ...state, actionInFlight: 'running', error: null, feedback: null };
     case 'RUN_SUCCEEDED':

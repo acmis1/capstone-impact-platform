@@ -61,9 +61,11 @@ describe('assistive validation staff inspection migration contract', () => {
     expect(compact).toContain('WHERE r.project_id = p_project_id AND r.pipeline_version = v_pipeline_version ORDER BY r.created_at DESC, r.id DESC LIMIT 1');
   });
 
-  it('strictly bounds finding count to 50 and omits staff identity UUIDs', () => {
+  it('strictly bounds finding count to 50 and omits reviewer identity and timestamps', () => {
     expect(compact).toContain('IF v_finding_count > 50 THEN RETURN pg_catalog.jsonb_build_object(\'resultCode\', \'INVARIANT_VIOLATION\');');
     expect(compact).not.toContain('reviewed_by');
     expect(compact).not.toContain('reviewedBy');
+    expect(compact).not.toContain('reviewed_at');
+    expect(compact).not.toContain('reviewedAt');
   });
 });

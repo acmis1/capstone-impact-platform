@@ -14,7 +14,8 @@
 --    closed and returns NOT_FOUND.
 -- 3. Bounded output: only non-sensitive evidence and lifecycle status are returned. Claim tokens,
 --    worker IDs, lease timestamps, private bucket names, internal storage paths, and reviewer identity
---    UUIDs (reviewed_by) are never returned. Finding count is strictly bounded to <= 50.
+--    UUIDs (reviewed_by) and audit timestamps (reviewed_at) are never returned. Finding count is
+--    strictly bounded to <= 50.
 -- 4. No fabricated job state: exactly one job must exist per run (Migration 31 invariant); if the job
 --    row is missing or finding count exceeds bounds, it fails closed with INVARIANT_VIOLATION.
 -- 5. No mutations: this function performs zero writes to projects, workflow, media, or findings.
@@ -99,7 +100,6 @@ BEGIN
       'scoreValue', f.score_value,
       'evidence', f.evidence,
       'disposition', f.disposition,
-      'reviewedAt', f.reviewed_at,
       'createdAt', f.created_at
     ) ORDER BY f.ordinal
   ), '[]'::jsonb) INTO v_findings

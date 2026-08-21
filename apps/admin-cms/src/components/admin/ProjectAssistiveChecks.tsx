@@ -88,26 +88,20 @@ export function ProjectAssistiveChecks({
     };
   }, []);
 
-  // Sync with refreshed server prop (e.g. after ProjectMetadataEditor save -> router.refresh())
-  const prevServerPropRef = useRef(initialInspection);
+  // Treat router.refresh() input as one server snapshot. The reducer updates same/newer runs while
+  // retaining a locally started run when an older or failed server read arrives late.
+  const prevServerSnapshotRef = useRef({ initialInspection, initialReadFailed });
   useEffect(() => {
-    if (initialInspection !== prevServerPropRef.current) {
-      prevServerPropRef.current = initialInspection;
-      if (state.actionInFlight === 'idle') {
-        if (initialInspection) {
-          const shouldUpdate =
-            !state.inspection ||
-            state.inspection.runId === initialInspection.runId ||
-            new Date(initialInspection.createdAt).getTime() >= new Date(state.inspection.createdAt).getTime();
-          if (shouldUpdate) {
-            dispatch({ type: 'LOAD_SUCCEEDED', inspection: initialInspection });
-          }
-        } else if (!state.inspection) {
-          dispatch({ type: 'LOAD_SUCCEEDED', inspection: null });
-        }
-      }
-    }
-  }, [initialInspection, state.actionInFlight, state.inspection]);
+    const previous = prevServerSnapshotRef.current;
+    if (initialInspection === previous.initialInspection && initialReadFailed === previous.initialReadFailed) return;
+
+    prevServerSnapshotRef.current = { initialInspection, initialReadFailed };
+    dispatch({
+      type: 'SYNC_SERVER_SNAPSHOT',
+      inspection: initialInspection,
+      readUnavailable: initialReadFailed,
+    });
+  }, [initialInspection, initialReadFailed]);
 
   // Keep track of active run ID for polling lifecycle
   useEffect(() => {
@@ -134,7 +128,7 @@ export function ProjectAssistiveChecks({
             schedulePollRef.current(targetRunId);
           }
         } else if (result.ok && !result.found) {
-          // Terminal/gone, stop polling
+          dispatch({ type: 'ACTIVE_RUN_NOT_FOUND', runId: targetRunId });
         } else {
           // Transient failure: preserve last known inspection, schedule next poll attempt
           schedulePollRef.current(targetRunId);

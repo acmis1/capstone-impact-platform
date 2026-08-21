@@ -435,8 +435,8 @@ async function main(): Promise<void> {
       assert.equal(json.includes('posterDocumentPath'), false);
     });
 
-    await scenario(20, 'no reviewedBy or staff UUID is returned (Privacy Invariant)', async () => {
-      // Record disposition first to put reviewed_by into table
+    await scenario(20, 'no reviewedBy or reviewedAt audit data is returned (Privacy Invariant)', async () => {
+      // Record disposition first to put both durable audit fields into the Phase 3 table.
       const rawFindings = psql(`SELECT id FROM public.assistive_validation_findings WHERE run_id = '${queuedRunId}'::uuid LIMIT 1;`);
       const findingId = rawFindings.trim();
       assert(findingId);
@@ -445,6 +445,8 @@ async function main(): Promise<void> {
         p_actor_admin_id: actorId,
         p_disposition: 'REVIEWED',
       });
+      const durableAudit = psql(`SELECT (reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)::text FROM public.assistive_validation_findings WHERE id = '${findingId}'::uuid;`);
+      assert.equal(durableAudit, 'true', 'Phase 3 reviewer attribution was not durably recorded.');
 
       const inspection = await rpc('get_project_assistive_validation_inspection', {
         p_project_id: projectIdA,
@@ -453,6 +455,7 @@ async function main(): Promise<void> {
       });
       const json = JSON.stringify(inspection);
       assert.equal(json.includes('reviewedBy'), false, 'reviewedBy unexpectedly returned in JSON');
+      assert.equal(json.includes('reviewedAt'), false, 'reviewedAt unexpectedly returned in JSON');
       assert.equal(json.includes(actorId), false, 'actorId UUID unexpectedly returned in JSON');
     });
 

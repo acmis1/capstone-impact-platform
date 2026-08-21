@@ -18,7 +18,7 @@ Assistive validation is strictly **advisory** and **non-blocking**:
 To provide bounded, read-only inspection of active/terminal runs, current job lifecycle status, and findings, Migration 0032 is introduced. Migrations 1–31 remain byte-for-byte unmodified against `origin/main`.
 
 - **Canonical Migration Filename**: `20260821090000_assistive_validation_staff_inspection.sql`
-- **SHA-256 Digest**: `dbef25a767ae147798f940f37df51b05ec928d18267066edc9268fef0278670a`
+- **SHA-256 Digest**: `817e6b0cbc87b33edde6bcaf64f56d9dedf65035e490446bc742854b667857f3`
 
 ```sql
 -- Migration 0032: bounded read-only inspection for staff assistive validation review.
@@ -38,7 +38,7 @@ SET search_path = ''
 2. **Deny-All Table Protection**: Direct table access remains denied on `assistive_validation_runs`, `assistive_validation_jobs`, and `assistive_validation_findings`.
 3. **Fail-Closed Project Association**: If `p_run_id` is supplied but belongs to a different project, the function returns `NOT_FOUND`.
 4. **No Secret or Token Leakage**: Claim tokens, worker IDs, lease timestamps, private bucket names, and storage paths are completely omitted from return payloads.
-5. **Privacy Boundary**: Staff identity UUIDs (`reviewed_by`) are strictly omitted from the inspection payload to protect internal user identities.
+5. **Privacy Boundary**: Reviewer identity UUIDs (`reviewed_by`) and audit timestamps (`reviewed_at`) remain durably stored by Phase 3 but are strictly omitted from the Phase 5 browser inspection payload.
 6. **Finding Count Bound**: Finding array is strictly capped to <= 50 findings. If count exceeds bounds, the RPC fails closed with `INVARIANT_VIOLATION`.
 7. **No Fabricated Job State**: Exactly one job row must exist per run (Migration 31 invariant). Missing job rows return `INVARIANT_VIOLATION`.
 8. **No Dynamic SQL & No Mutations**: The inspection function performs zero database writes and uses zero dynamic SQL formatting.
@@ -83,13 +83,14 @@ All interactions route through typed Next.js Server Actions with strict server-d
 - While a check job is active (`QUEUED`, `EXTRACTING`, `CHECKING`, `RUNNING`), the client component uses a self-scheduling bounded polling loop (`schedulePoll` every 2.5s).
 - Polling requests never overlap (`isPollingRef`). Polling stops on terminal state (`COMPLETED`, `PARTIAL`, `FAILED`, `CANCELLED`, `SUPERSEDED`) or unmount.
 - Transient read failures preserve the last known inspection view and re-schedule the next poll interval.
+- If a specific active run returns `NOT_FOUND`, polling clears that unavailable run, exits the active spinner, and reports that the run is no longer available without fabricating a terminal backend state.
 
 ### B. Stale-Run Detection & Synchronization
 - When a terminal run is evaluated, `loadAssistiveInspection` checks current project title and poster hash:
   - **`CURRENT`**: Title and poster match the evaluated snapshot.
   - **`STALE`**: Metadata or poster changed after the run. Warning banner is shown; "Apply to draft" is disabled.
   - **`UNVERIFIABLE`**: Document assets cannot be verified.
-- Client state synchronizes with refreshed server props (after `saveProjectMetadataAction` -> `router.refresh()`), transitioning old runs to `STALE` without overwriting newly started local runs.
+- Client state synchronizes `initialInspection` and `initialReadFailed` as one refreshed server snapshot (after `saveProjectMetadataAction` -> `router.refresh()`), transitioning same-run results to `STALE` or `UNVERIFIABLE`, recovering read availability in either direction, and retaining a newer locally started run when an older or failed server read arrives late.
 
 ### C. Graceful Partial / Degraded Mode
 - When OCR is not run (`OCR_REQUIRED`) or no provider is configured (`OCR_PROVIDER_UNAVAILABLE`), whatever native text layer the document carries is checked and the status is set to `PARTIAL`.
@@ -114,7 +115,7 @@ well (see section 7).
 - `assistiveInspectionService.test.ts`: Run loading, stale calculation, and in-flight polling isolation.
 - `assistiveActions.test.ts`: Server action authentication, authorization, project association, execution availability, and disposition handling.
 - `projectAssistiveChecksState.test.ts`: Reducer lifecycle, status formatters, 200-character title eligibility, and truthful partial notices.
-- `ProjectAssistiveChecks.test.tsx`: Component rendering, recursive polling, no overlap, unmount cleanup, transient failure recovery, stale prop sync, copy feedback, and XSS safety.
+- `ProjectAssistiveChecks.test.tsx`: Component rendering, recursive polling, no overlap, unmount cleanup, transient failure recovery, coherent server-prop sync, active-run `NOT_FOUND`, copy feedback, and XSS safety.
 - `ProjectMetadataEditor.test.tsx`: "Apply to draft" handler registration, mode switching, dirty tracking, reduced motion, status-versus-error notice channel, and unsaved changes confirmation.
 - `postgresCanonicalUuid.test.ts`: which identifier boundaries accept canonical database UUID text and which stay strict, including the job claim token.
 
@@ -135,8 +136,8 @@ historical run became `STALE` and its finding could no longer be applied; a revi
 surviving reload; an editor-only account offered no disposition controls and a reviewer-only account
 no "Apply to draft"; keyboard-focusable controls; and reduced-motion behaviour.
 
-Two states are covered by component and Server Action tests rather than in-browser observation. Both
+Additional failure and race states are covered by deterministic component and Server Action tests rather than in-browser observation. Both
 the execution-availability gate and the Supabase admin client read `NEXT_PUBLIC_SUPABASE_URL`, so
 rendering the execution-unavailable state in a browser would require pointing the application at a
 non-loopback Supabase, which the repository safety boundary does not permit. The assistive-read
-failure state likewise requires forcing a server-side read error.
+failure recovery and active-run `NOT_FOUND` states likewise require forcing server-side read outcomes.

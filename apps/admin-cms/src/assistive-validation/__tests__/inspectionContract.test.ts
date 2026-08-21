@@ -52,7 +52,6 @@ const validFinding = (ordinal = 1) => ({
     explanation: 'Synthetic candidate explanation.',
   },
   disposition: 'UNREVIEWED' as const,
-  reviewedAt: null,
   createdAt: CREATED_AT,
 });
 
@@ -68,15 +67,16 @@ describe('inspectionContract schemas', () => {
     expect(parsed.success).toBe(false);
   });
 
-  it('validates assistiveInspectionFindingSchema and rejects internal reviewedBy UUID (Privacy Invariant)', () => {
+  it('validates assistiveInspectionFindingSchema and rejects reviewer identity and timestamps', () => {
     const finding = validFinding();
     const validParsed = assistiveInspectionFindingSchema.safeParse(finding);
     expect(validParsed.success).toBe(true);
 
-    // Privacy boundary: if reviewedBy is passed, .strict() must reject it
     const withReviewer = { ...finding, reviewedBy: '55555555-5555-4555-8555-555555555555' };
-    const invalidParsed = assistiveInspectionFindingSchema.safeParse(withReviewer);
-    expect(invalidParsed.success).toBe(false);
+    expect(assistiveInspectionFindingSchema.safeParse(withReviewer).success).toBe(false);
+
+    const withReviewTimestamp = { ...finding, reviewedAt: CREATED_AT };
+    expect(assistiveInspectionFindingSchema.safeParse(withReviewTimestamp).success).toBe(false);
   });
 
   it('validates discriminated union responses for FOUND, NOT_FOUND, VALIDATION_FAILED, and INVARIANT_VIOLATION', () => {
