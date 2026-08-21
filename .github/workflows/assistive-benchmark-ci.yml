@@ -56,6 +56,19 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark phase6-check-evidence
 
+      - name: Validate OCR productionization corpus, evidence, decision and boundary
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_productionization check
+          python -m assistive_validation_benchmark.ocr_productionization check-evidence
+
+      - name: Prove OCR productionization corpus byte determinism
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_productionization generate --output-dir artifacts/ocr-repeat-a
+          python -m assistive_validation_benchmark.ocr_productionization generate --output-dir artifacts/ocr-repeat-b
+          cmp artifacts/ocr-repeat-a/generation.json artifacts/ocr-repeat-b/generation.json
+
       - name: Generate deterministic synthetic corpus smoke fixture
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark generate --output-dir artifacts/ci-corpus

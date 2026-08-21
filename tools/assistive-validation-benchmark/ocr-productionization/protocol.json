@@ -1,0 +1,72 @@
+{
+  "schema_version": "pp1-ocr-productionization-protocol/v1",
+  "benchmark_version": "pp1-ocr-productionization-v1",
+  "corpus_version": "pp1-ocr-productionization-corpus-v1",
+  "seed": 2026082101,
+  "scientific_integrity": {
+    "calibration_may_tune": true,
+    "holdout_may_tune": false,
+    "holdout_absent_at_protocol_freeze": true,
+    "final_holdout_runs_per_engine": 1,
+    "content_policy": "synthetic_or_explicitly_deidentified_only",
+    "phase0_holdout_reuse_allowed": false
+  },
+  "candidates": ["tesseract", "paddle-tiny", "paddle-small", "paddle-medium"],
+  "configuration": {
+    "raster_dpi": 150,
+    "max_input_dimension": 960,
+    "image_preprocessing": "decode to RGB; preserve aspect ratio; if needed downscale the long edge to 960 pixels with deterministic Lanczos resampling; no upscaling, adaptive thresholding, deskew, label-guided crop, or semantic post-processing",
+    "title_extraction": "production-title-candidates-python-parity/v1; page order, top-left geometry, prominence and adjacent groups of at most three OCR lines; metadata blind",
+    "title_normalization": "NFKC, casefold, Unicode dash/quote folding, non-alphanumeric-to-space, whitespace collapse",
+    "tesseract": {
+      "version": "5.5.3",
+      "language": "eng",
+      "page_segmentation_mode": 3
+    },
+    "paddle": {
+      "paddleocr_version": "3.7.0",
+      "paddlepaddle_version": "3.3.0",
+      "paddlex_version": "3.7.2",
+      "device": "cpu",
+      "enable_mkldnn": false,
+      "use_doc_orientation_classify": false,
+      "use_doc_unwarping": false,
+      "use_textline_orientation": false,
+      "explicit_model_directories_required": true
+    }
+  },
+  "quality_gate": {
+    "holdout_exact_title_recovery_minimum": 0.95,
+    "holdout_mean_wer_maximum": 0.12,
+    "material_false_agreements_maximum": 0,
+    "exact_title_definition": "OCR title equals poster ground-truth title after frozen normalization; fuzzy or review results excluded",
+    "cer_wer_normalization": "NFKC plus whitespace collapse only; punctuation and case preserved",
+    "arithmetic": "rates and means recomputed from per-case raw values"
+  },
+  "operational_gate": {
+    "cold_start_ms_maximum": 30000,
+    "holdout_p50_ms_maximum": 10000,
+    "holdout_p95_ms_maximum": 20000,
+    "peak_working_set_bytes_maximum": 4294967296,
+    "artifact_footprint_bytes_maximum": 1073741824,
+    "per_case_timeout_seconds": 90,
+    "basis": "16 GiB functional-minimum host, existing 90-second provider timeout, single-worker queue and approximately 100+ annual projects"
+  },
+  "worker_bounds": {
+    "max_pdf_bytes": 20971520,
+    "max_image_bytes": 5242880,
+    "max_pdf_pages": 10,
+    "max_raster_dpi": 200,
+    "max_raster_pixels_per_page": 40000000,
+    "max_total_raster_pixels": 80000000,
+    "max_extracted_characters": 100000,
+    "max_text_blocks": 5000,
+    "max_warnings": 50
+  },
+  "selection_contract": {
+    "neural_result_if_any_candidate_passes_all_gates": "READY_FOR_OCR_PROVIDER_INTEGRATION",
+    "result_if_no_neural_candidate_passes_all_gates": "NEEDS_MORE_OCR_BENCHMARKING",
+    "latency_cannot_compensate_for_quality_failure": true,
+    "production_integration_authorized": false
+  }
+}

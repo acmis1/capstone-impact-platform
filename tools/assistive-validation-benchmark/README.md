@@ -1,6 +1,6 @@
 # PP1 assistive-validation benchmark
 
-This directory is an isolated, local-only Phase 0 and Phase 6A evidence harness. It measures native PDF extraction, OCR, deterministic title consistency, grammar/spelling tools, and lexical duplicate ranking on deterministic synthetic PP1-style material. It does not import application code, alter workflow state, access Supabase, call cloud AI/OCR, publish, or grant any document instruction authority.
+This directory is an isolated, local-only Phase 0, Phase 6A, and OCR-productionization evidence harness. It measures native PDF extraction, OCR, deterministic title consistency, grammar/spelling tools, and lexical duplicate ranking on deterministic synthetic PP1-style material. It does not import application code, alter workflow state, access Supabase, call cloud AI/OCR, publish, or grant any document instruction authority.
 
 Phase 6A extends the original harness under `phase6/` with a frozen grammar and 120-project duplicate corpus. Its method and reviewed result live in [phase-6a-language-duplicate-benchmark.md](../../docs/assistive-validation/phase-6a-language-duplicate-benchmark.md). Superseded iterations are preserved under `phase6/history/`; only the current corpus version carries an authoritative decision.
 
@@ -163,6 +163,43 @@ Every query is ranked against the shared candidate pool using canonical SHA-256 
 ```
 
 Unit tests cover manifest rejection, traversal protection, layout/typeface validation, corpus composition guarantees, CER/WER edge cases, normalization, the flood/fire critical negative, the narrow glyph-confusion rule and its material-substitution regression guard, score separation, extracted-candidate tracks, degenerate-calibration reporting, grammar span scoring per split, latency exclusion of unscored controls, lexical ranking label independence, deterministic asset bytes, scanned PDFs carrying no native text, report generation, local-only LanguageTool, and missing Tesseract behaviour. Heavy models are never a normal CI prerequisite.
+
+### OCR productionization gate
+
+The final PP1 OCR gate has a separate frozen protocol, calibration/holdout corpus, official artifact manifest, provisioning verifier, and machine evidence under `ocr-productionization/`. Normal CI runs only deterministic generation, manifest/hash/split checks, metric arithmetic, decision validation, Phase 0 non-reuse, and the production boundary. It never installs Paddle or downloads model weights.
+
+Prepare the pinned Python runtime, then fetch and safely extract only the six allowlisted official PP-OCRv6 archives:
+
+```powershell
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_productionization provision --download
+```
+
+The command verifies the frozen archive size/SHA-256, rejects traversal, links, and device entries, extracts into the gitignored `artifacts/ocr-provisioning/models/` layout, and verifies a frozen hash of every extracted model tree. A later operator can prove cache-independent readiness without network access:
+
+```powershell
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_productionization provision
+```
+
+Generate and validate without heavy engines:
+
+```powershell
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_productionization check
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_productionization generate --output-dir artifacts\ocr-repeat-a
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_productionization generate --output-dir artifacts\ocr-repeat-b
+```
+
+The final run is deliberately one-shot. It creates a run-state file before exposing the holdout, runs Tesseract and each PP-OCRv6 variant in a separate process with a process-wide Python socket denial, writes every completed engine result immediately, and refuses a second final run in the same output directory:
+
+```powershell
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_productionization run `
+  --measurement final `
+  --protocol-freeze-sha <full-commit-a-sha> `
+  --tesseract-executable "C:\Program Files\Tesseract-OCR\tesseract.exe" `
+  --output-dir artifacts\ocr-final `
+  --evidence-output ..\..\docs\assistive-validation\evidence\ocr-productionization-report.json
+```
+
+The evidence validator proves that every protocol, configuration, and scoring source file is byte-identical to Commit A, that the holdout path did not exist at Commit A, recomputes all stored arithmetic and decisions, and confirms production remains `NONE`/`TESSERACT` with coordinator selection `NONE` and 33 migrations.
 
 ### Phase 6A commands
 
