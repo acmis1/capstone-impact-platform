@@ -102,7 +102,7 @@ async function main(): Promise<void> {
     { publicId: `${FIXTURE_PREFIX}candidate-2`, title: 'Normalized Browser Fixture Title', summaryExcerpt: 'A normalized-title candidate.', score: 0.87, titleMatch: true },
     { publicId: `${FIXTURE_PREFIX}candidate-3`, title: 'Related Community Platform', summaryExcerpt: 'A bounded lexical comparison summary.', score: 0.73 },
     { publicId: `${FIXTURE_PREFIX}candidate-4`, title: 'Regional Monitoring Dashboard', summaryExcerpt: 'Another bounded comparison summary.', score: 0.61 },
-    { publicId: `${FIXTURE_PREFIX}candidate-5`, title: 'Student Impact Archive', summaryExcerpt: 'The fifth deterministic shortlist entry.', score: 0.5 },
+    { publicId: `${FIXTURE_PREFIX}candidate-5`, title: 'Participant Impact Showcase', summaryExcerpt: 'The fifth deterministic shortlist entry.', score: 0.5 },
   ];
   for (const candidate of candidates) {
     await createProject(candidate.publicId, candidate.title, candidate.summaryExcerpt);
