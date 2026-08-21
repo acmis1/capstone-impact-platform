@@ -147,6 +147,8 @@ export function formatCheckType(checkType: string): string {
       return 'Document formatting';
     case 'EXTRACTION_INFORMATION':
       return 'Document extraction';
+    case 'DUPLICATE_SHORTLIST':
+      return 'Similar projects';
     default:
       return checkType.replace(/_/g, ' ').toLowerCase();
   }

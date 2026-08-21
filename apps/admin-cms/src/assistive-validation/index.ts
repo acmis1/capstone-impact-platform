@@ -1,6 +1,7 @@
 export * from './domain/evidence';
 export * from './domain/extractionContract';
 export * from './domain/persistenceContract';
+export * from './duplicate-detection/duplicateRanker';
 export * from './domain/inputIdentity';
 export * from './domain/jobContract';
 export * from './domain/inspectionContract';

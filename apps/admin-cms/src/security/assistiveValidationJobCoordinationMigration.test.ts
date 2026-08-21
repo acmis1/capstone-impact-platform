@@ -17,7 +17,7 @@ describe('assistive validation job coordination migration contract', () => {
   it('is exactly migration 0031 and preserves all thirty inherited migrations byte-for-byte', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(32);
+    expect(files).toHaveLength(33);
     expect(files[30]).toBe(filename);
     expect(() => execFileSync(
       'git',

@@ -254,8 +254,8 @@ async function main(): Promise<void> {
     // ---------------------------------------------------------------------
     // Schema, constraints, RLS and privileges
     // ---------------------------------------------------------------------
-    await scenario(1, 'Local Supabase applied exactly 32 migrations from zero', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '32');
+    await scenario(1, 'Local Supabase applied exactly 33 migrations from zero', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '33');
     });
 
     await scenario(2, 'both assistive tables exist and a finding cannot restate run identity', () => {
@@ -302,7 +302,8 @@ async function main(): Promise<void> {
       const expected = [
         'check_assistive_finding_affected_field', 'check_assistive_finding_check_type',
         'check_assistive_finding_classification', 'check_assistive_finding_disposition',
-        'check_assistive_finding_disposition_coherence', 'check_assistive_finding_evidence_bounding_box',
+        'check_assistive_finding_disposition_coherence', 'check_assistive_finding_duplicate_coherence',
+        'check_assistive_finding_evidence_bounding_box',
         'check_assistive_finding_evidence_excerpt', 'check_assistive_finding_evidence_explanation',
         'check_assistive_finding_evidence_keys', 'check_assistive_finding_evidence_object',
         'check_assistive_finding_evidence_page_number', 'check_assistive_finding_evidence_size',
@@ -883,7 +884,7 @@ async function main(): Promise<void> {
       const missingBottom: Record<string, unknown> = { ...box };
       delete missingBottom.bottom;
       const cases: Array<[Record<string, unknown>, RegExp]> = [
-        [{ ...complete, version: 'assistive-finding-evidence/v2' }, /check_assistive_finding_evidence_version/],
+        [{ ...complete, version: 'assistive-finding-evidence/v2' }, /check_assistive_finding_duplicate_coherence/],
         [{ ...complete, rawOcrTranscript: 'x' }, /check_assistive_finding_evidence_keys/],
         [missingPageNumber, /check_assistive_finding_evidence_keys/],
         [{ ...complete, explanation: 'x'.repeat(301) }, /check_assistive_finding_evidence_explanation/],

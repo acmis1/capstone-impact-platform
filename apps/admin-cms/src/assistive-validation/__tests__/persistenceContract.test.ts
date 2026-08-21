@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createAssistiveCheckResult, type AssistiveCheckResult } from '../domain/evidence';
 import {
   ASSISTIVE_FINDING_EVIDENCE_VERSION,
+  ASSISTIVE_DUPLICATE_EVIDENCE_VERSION,
   ASSISTIVE_PERSISTENCE_LIMITS,
   ASSISTIVE_PIPELINE_VERSION,
   assistiveInputHashSchema,
@@ -13,6 +14,7 @@ import {
   storedAssistiveFindingSchema,
   storedAssistiveRunSchema,
   toPersistedAssistiveFinding,
+  toPersistedDuplicateShortlistFinding,
 } from '../domain/persistenceContract';
 
 const PROJECT_ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
@@ -183,9 +185,56 @@ describe('assistive persistence contract - findings', () => {
 
   it('rejects an unknown or missing evidence contract version', () => {
     const base = finding();
-    for (const version of ['assistive-finding-evidence/v2', 'v1', undefined]) {
+    for (const version of ['assistive-finding-evidence/v3', 'v1', undefined]) {
       expect(persistedAssistiveEvidenceSchema.safeParse({ ...base.evidence, version }).success).toBe(false);
     }
+  });
+
+  it('creates one strict v2 shortlist with bounded candidate scores and no top-level score', () => {
+    const duplicate = toPersistedDuplicateShortlistFinding([{
+      rank: 1,
+      publicId: '2026-similar-project',
+      title: 'Similar Project',
+      summaryExcerpt: 'Bounded summary.',
+      lexicalScore: 0.85,
+      exactContentMatch: false,
+      normalizedTitleMatch: true,
+    }]);
+    expect(duplicate).toMatchObject({
+      checkType: 'DUPLICATE_SHORTLIST',
+      outcome: 'REVIEW',
+      reasonCode: 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT',
+      affectedField: 'project_content',
+      scoreKind: null,
+      scoreValue: null,
+      evidence: { version: ASSISTIVE_DUPLICATE_EVIDENCE_VERSION },
+    });
+    expect(toPersistedDuplicateShortlistFinding([])).toBeNull();
+  });
+
+  it('rejects malformed v2 candidate keys, rank order, duplicates, scores, and private identifiers', () => {
+    const base = toPersistedDuplicateShortlistFinding([{
+      rank: 1, publicId: 'project-a', title: 'A', summaryExcerpt: '', lexicalScore: 0.5,
+      exactContentMatch: false, normalizedTitleMatch: false,
+    }])!;
+    const parseCandidates = (duplicateCandidates: unknown[]) => persistedAssistiveFindingSchema.safeParse({
+      ...base,
+      evidence: { ...base.evidence, duplicateCandidates },
+    }).success;
+    const candidate = base.evidence.version === ASSISTIVE_DUPLICATE_EVIDENCE_VERSION
+      ? base.evidence.duplicateCandidates[0]
+      : null;
+    expect(candidate).not.toBeNull();
+    expect(parseCandidates([{ ...candidate!, databaseUuid: FINDING_ID }])).toBe(false);
+    expect(parseCandidates([{ ...candidate!, rank: 2 }])).toBe(false);
+    expect(parseCandidates([{ ...candidate!, lexicalScore: -0.1 }])).toBe(false);
+    expect(parseCandidates([{ ...candidate!, lexicalScore: 1.1 }])).toBe(false);
+    expect(parseCandidates([{ ...candidate! }, { ...candidate!, rank: 2 }])).toBe(false);
+    expect(parseCandidates(Array.from({ length: 6 }, (_, index) => ({
+      ...candidate!, rank: index + 1, publicId: `project-${index}`,
+    })))).toBe(false);
+    expect(persistedAssistiveFindingSchema.safeParse({ ...base, classification: 'BLOCKING' }).success).toBe(false);
+    expect(persistedAssistiveFindingSchema.safeParse({ ...base, scoreKind: 'LEXICAL_SIMILARITY', scoreValue: 0.5 }).success).toBe(false);
   });
 
   it('rejects unknown check types, outcomes, reasons, fields, and origins', () => {

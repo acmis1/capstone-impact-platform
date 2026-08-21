@@ -55,6 +55,36 @@ const validFinding = (ordinal = 1) => ({
   createdAt: CREATED_AT,
 });
 
+const duplicateFinding = () => ({
+  ...validFinding(),
+  checkType: 'DUPLICATE_SHORTLIST' as const,
+  outcome: 'INFORMATION' as const,
+  reasonCode: 'LEXICAL_DUPLICATE_SHORTLIST' as const,
+  affectedField: 'project_content' as const,
+  scoreKind: null,
+  scoreValue: null,
+  evidence: {
+    version: 'assistive-finding-evidence/v2' as const,
+    evidenceExcerpt: null,
+    pageNumber: null,
+    boundingBox: null,
+    metadataValue: null,
+    normalizedMetadataValue: null,
+    candidateValue: null,
+    normalizedCandidateValue: null,
+    explanation: 'Staff review similar projects.',
+    duplicateCandidates: [{
+      rank: 1,
+      publicId: '2026-similar-project',
+      title: 'Similar Project',
+      summaryExcerpt: 'A bounded excerpt.',
+      lexicalScore: 0.85,
+      exactContentMatch: false,
+      normalizedTitleMatch: false,
+    }],
+  },
+});
+
 describe('inspectionContract schemas', () => {
   it('validates a complete storedAssistiveInspectionRunSchema', () => {
     const parsed = storedAssistiveInspectionRunSchema.safeParse(validRun());
@@ -77,6 +107,18 @@ describe('inspectionContract schemas', () => {
 
     const withReviewTimestamp = { ...finding, reviewedAt: CREATED_AT };
     expect(assistiveInspectionFindingSchema.safeParse(withReviewTimestamp).success).toBe(false);
+  });
+
+  it('round-trips strict browser-safe duplicate evidence without private identifiers', () => {
+    expect(assistiveInspectionFindingSchema.safeParse(duplicateFinding()).success).toBe(true);
+    const candidate = duplicateFinding().evidence.duplicateCandidates[0];
+    expect(assistiveInspectionFindingSchema.safeParse({
+      ...duplicateFinding(),
+      evidence: {
+        ...duplicateFinding().evidence,
+        duplicateCandidates: [{ ...candidate, projectId: PROJECT_ID }],
+      },
+    }).success).toBe(false);
   });
 
   it('validates discriminated union responses for FOUND, NOT_FOUND, VALIDATION_FAILED, and INVARIANT_VIOLATION', () => {

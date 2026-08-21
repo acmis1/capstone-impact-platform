@@ -61,6 +61,7 @@
     "verify:assistive-upgrade-runtime": "tsx src/scripts/verifyAssistiveValidationUpgradeRuntime.ts",
     "verify:assistive-jobs-runtime": "tsx src/scripts/verifyAssistiveValidationJobRuntime.ts",
     "verify:assistive-staff-inspection-runtime": "tsx src/scripts/verifyAssistiveValidationStaffInspectionRuntime.ts",
+    "verify:assistive-duplicate-shortlist-runtime": "tsx src/scripts/verifyAssistiveDuplicateShortlistRuntime.ts",
     "run:assistive-worker": "tsx src/scripts/runAssistiveCoordinator.ts --loop",
     "run:assistive-worker-once": "tsx src/scripts/runAssistiveCoordinator.ts --once",
     "assistive-worker:health": "tsx src/scripts/runAssistiveCoordinator.ts --health",
