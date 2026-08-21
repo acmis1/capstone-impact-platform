@@ -5,9 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from assistive_validation_benchmark.ocr_productionization.boundary import check_production_boundary
 from assistive_validation_benchmark.ocr_productionization.corpus import generate_assets
-from assistive_validation_benchmark.ocr_productionization.evidence import verify_protocol_freeze
+from assistive_validation_benchmark.ocr_productionization.evidence import validate_evidence, verify_protocol_freeze
 from assistive_validation_benchmark.ocr_productionization.provision import tree_sha256
 from assistive_validation_benchmark.ocr_productionization.schema import (
     data_root,
@@ -54,6 +53,12 @@ class OcrProductionizationTests(unittest.TestCase):
         proof = prove_phase0_holdout_independence(validate_combined_corpus(self.calibration, None))
         self.assertEqual(0, proof["reused_cases"])
         self.assertGreater(proof["phase0_holdout_cases_checked"], 0)
+
+    def test_final_holdout_reuses_no_phase0_content_and_includes_all_fresh_scored_cases(self) -> None:
+        holdout = load_json(data_root() / "corpus" / "holdout.json")
+        proof = prove_phase0_holdout_independence(validate_combined_corpus(self.calibration, holdout))
+        self.assertEqual(0, proof["reused_cases"])
+        self.assertEqual(48, proof["new_scored_cases_checked"])
 
     def test_corpus_generation_is_byte_deterministic(self) -> None:
         holdout_path = data_root() / "corpus" / "holdout.json"
@@ -159,12 +164,32 @@ class OcrProductionizationTests(unittest.TestCase):
         }
         self.assertEqual(2, len(validate_corpus_part(holdout, "holdout")["security_controls"]))
 
-    def test_production_boundary_remains_none_tesseract_and_33_migrations(self) -> None:
-        boundary = check_production_boundary(repository_root())
+    def test_stored_production_boundary_is_historical_benchmark_evidence(self) -> None:
+        report = load_json(repository_root() / "docs" / "assistive-validation" / "evidence" / "ocr-productionization-report.json")
+        boundary = report["production_boundary"]
         self.assertEqual(["NONE", "TESSERACT"], boundary["production_ocr_task_providers"])
         self.assertEqual("NONE", boundary["coordinator_ocr_selection"])
         self.assertEqual(33, boundary["migration_count"])
         self.assertEqual(0, boundary["production_paddle_imports"])
+
+    def test_historical_evidence_validation_does_not_require_future_live_production_state(self) -> None:
+        report = load_json(repository_root() / "docs" / "assistive-validation" / "evidence" / "ocr-productionization-report.json")
+        protocol = validate_protocol(load_json(data_root() / "protocol.json"))
+        artifacts = validate_artifact_manifest(load_json(data_root() / "artifact-manifest.json"))
+        holdout = load_json(data_root() / "corpus" / "holdout.json")
+        hypothetical_future_production = {
+            "production_ocr_task_providers": ["NONE", "TESSERACT", "PADDLE"],
+            "coordinator_ocr_selection": "PADDLE",
+            "migration_count": 34,
+        }
+        self.assertNotEqual(report["production_boundary"], hypothetical_future_production)
+        self.assertEqual(report, validate_evidence(
+            report,
+            protocol=protocol,
+            artifact_manifest=artifacts,
+            calibration=self.calibration,
+            holdout=holdout,
+        ))
 
 
 if __name__ == "__main__":

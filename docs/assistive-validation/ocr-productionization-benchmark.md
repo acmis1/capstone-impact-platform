@@ -56,6 +56,8 @@ The complete quality gate is unchanged: holdout exact-title recovery at least 95
 
 Operational ceilings were frozen before holdout: cold start at most 30 seconds, p50 at most 10 seconds, p95 at most 20 seconds, peak working set at most 4 GiB, candidate model footprint at most 1 GiB, and every measured case within the existing 90-second provider ceiling. These are bounded evidence for a 16 GiB functional-minimum host, the existing single-worker queue and roughly 100+ annual projects; they are not a scalability claim.
 
+For this benchmark, `cold_start_ms` runs from provider/model construction through the warm-up/first inference: it is startup-to-first-result, not model-loading-only time. Phase 0 documented cold-start figures as model loading only, so those figures are not directly comparable. This clarification does not change the frozen measurement or gate: Medium's 60.114-second value still fails the 30-second operational ceiling.
+
 ## Calibration evidence
 
 The 16 scored calibration posters plus one unscored warm-up cover PNG, JPEG, scanned PDF, one/two/three-column layouts, clean/challenging conditions, high/low resolution, wrapped/decorative titles, mixed text sizes, contrast, compression, mild noise, Australian English, punctuation, numbers/acronyms, technical vocabulary, near-character confusions and material negatives.
@@ -98,6 +100,6 @@ The final evidence decision is **`NEEDS_MORE_OCR_BENCHMARKING`**. No production 
 
 ## Security and CI boundary
 
-Lightweight CI regenerates the corpus twice, compares generation hashes, validates split stability, proves no Phase 0 holdout title/body reuse, validates the closed artifact schema, recomputes metric arithmetic and decisions, proves protocol-freeze consistency, and checks the production boundary. CI does not install PaddlePaddle, download weights, run neural OCR, require a GPU, or use runtime internet.
+Lightweight CI regenerates the corpus twice, compares generation hashes, validates split stability, proves no Phase 0 holdout title/body reuse across all 48 fresh scored cases, validates the closed artifact schema, recomputes metric arithmetic and decisions, proves protocol-freeze consistency, and validates the stored benchmark-time production boundary: `NONE`/`TESSERACT`, coordinator `NONE`, 33 migrations and zero production Paddle imports. Those are historical facts about the measurement, not permanent requirements for future `main`; later legitimate OCR integration therefore does not invalidate this evidence. On pull requests that change benchmark material, a PR-relative scope check confirms that particular benchmark PR has not changed production paths. CI does not install PaddlePaddle, download weights, run neural OCR, require a GPU, or use runtime internet.
 
 The benchmark never uses document text as a command, URL, model instruction, credential lookup, database input, browser action, workflow decision or publication authority. Existing file, page, raster, pixel, text, block, warning and provider-time bounds are not weakened.
