@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 31;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 32;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -39,6 +39,7 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260819214431_password_recovery_session_provenance.sql',
   '20260820120000_assistive_validation_persistence.sql',
   '20260820160000_assistive_validation_job_coordination.sql',
+  '20260821090000_assistive_validation_staff_inspection.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [
@@ -170,6 +171,7 @@ export const REQUIRED_RPC_SIGNATURES = [
   ),
   rpc('record_assistive_finding_disposition', ['p_finding_id', 'p_actor_admin_id', 'p_disposition'], ['uuid', 'uuid', 'text']),
   rpc('get_latest_assistive_validation_run', ['p_project_id', 'p_pipeline_version'], ['uuid', 'text']),
+  rpc('get_project_assistive_validation_inspection', ['p_project_id', 'p_pipeline_version', 'p_run_id'], ['uuid', 'text', 'uuid']),
   rpc('enqueue_assistive_validation_run', ['p_project_id', 'p_actor_admin_id', 'p_input_hash', 'p_pipeline_version'], ['uuid', 'uuid', 'text', 'text']),
   rpc('get_assistive_validation_run_status', ['p_run_id'], ['uuid']),
   rpc('get_assistive_validation_job_health', [], []),

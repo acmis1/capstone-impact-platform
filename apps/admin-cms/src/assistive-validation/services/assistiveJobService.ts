@@ -10,6 +10,7 @@ import {
   ASSISTIVE_PIPELINE_VERSION,
   assistiveInputHashSchema,
   assistivePipelineVersionSchema,
+  postgresCanonicalUuidSchema,
 } from '../domain/persistenceContract';
 import type { AssistiveJobGateway } from '../repositories/assistiveJobRepository';
 import type { AssistiveInputGateway } from '../repositories/assistiveInputRepository';
@@ -28,7 +29,7 @@ export async function enqueueAssistiveValidation(
   },
 ) {
   const parsed = z.object({
-    projectId: uuid,
+    projectId: postgresCanonicalUuidSchema,
     actorAdminUserId: uuid,
     privateBucket: z.string().min(1).max(100),
     pipelineVersion: assistivePipelineVersionSchema.default(ASSISTIVE_PIPELINE_VERSION),

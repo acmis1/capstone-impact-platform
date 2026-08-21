@@ -45,6 +45,7 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260819214431_password_recovery_session_provenance.sql',
   '20260820120000_assistive_validation_persistence.sql',
   '20260820160000_assistive_validation_job_coordination.sql',
+  '20260821090000_assistive_validation_staff_inspection.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {

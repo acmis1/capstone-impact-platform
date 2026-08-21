@@ -41,19 +41,70 @@ export function ProjectMetadataEditor({
   headingLevel: Heading = 'h2',
 }: Props) {
   const router = useRouter();
-  const { setDirty, confirmDiscard } = useProjectMetadataNavigation();
+  const { setDirty, confirmDiscard, registerTitleSuggestionHandler } = useProjectMetadataNavigation();
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [initial, setInitial] = useState(initialMetadata);
   const [draft, setDraft] = useState(initialMetadata);
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
-  const [notice, setNotice] = useState<string | null>(null);
+  // Edit mode renders a failure notice as the form-level error description, so the kind has to
+  // travel with the message: applying a suggestion is a confirmation, not a validation failure.
+  const [notice, setNotice] = useState<{ kind: 'affirm' | 'blocker'; message: string } | null>(null);
   const inFlight = useRef(false);
   const summaryRef = useRef<HTMLParagraphElement>(null);
   const dirty = isMetadataDirty(initial, draft);
 
+  const protectedNotice = projectStatus === 'approved' ? 'This project is approved. Request changes before editing metadata.' : projectStatus === 'published' ? 'Published project metadata is locked until a controlled revision workflow is available.' : null;
+
   useEffect(() => { setDirty(dirty); return () => setDirty(false); }, [dirty, setDirty]);
-  useEffect(() => { if (notice && Object.keys(fieldErrors).length > 0) summaryRef.current?.focus(); }, [notice, fieldErrors]);
+  useEffect(() => {
+    if (notice?.kind === 'blocker' && Object.keys(fieldErrors).length > 0) summaryRef.current?.focus();
+  }, [notice, fieldErrors]);
+
+  const draftRef = useRef(draft);
+  const initialRef = useRef(initial);
+
+  useEffect(() => {
+    draftRef.current = draft;
+    initialRef.current = initial;
+  }, [draft, initial]);
+
+  useEffect(() => {
+    if (!canEdit || protectedNotice) {
+      registerTitleSuggestionHandler(null);
+      return;
+    }
+    const handler = (suggestedTitle: string): boolean => {
+      const currentDraft = draftRef.current;
+      const currentInitial = initialRef.current;
+      if (currentDraft.title !== currentInitial.title && currentDraft.title !== suggestedTitle) {
+        const proceed = window.confirm('You have unsaved changes in Project title. Replace it with the suggestion?');
+        if (!proceed) return false;
+      }
+      setMode('edit');
+      setDraft((prev) => ({ ...prev, title: suggestedTitle }));
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next.title;
+        return next;
+      });
+      setNotice({ kind: 'affirm', message: 'Suggestion applied to the draft. Review it and select Save metadata to persist the change.' });
+      requestAnimationFrame(() => {
+        const input = document.getElementById('metadata-title');
+        input?.focus();
+        const prefersReducedMotion =
+          typeof window !== 'undefined' &&
+          window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+        input?.scrollIntoView?.({
+          behavior: prefersReducedMotion ? 'auto' : 'smooth',
+          block: 'center',
+        });
+      });
+      return true;
+    };
+    registerTitleSuggestionHandler(handler);
+    return () => registerTitleSuggestionHandler(null);
+  }, [canEdit, protectedNotice, registerTitleSuggestionHandler]);
 
   const cancel = () => {
     if (!confirmDiscard()) return;
@@ -64,15 +115,15 @@ export function ProjectMetadataEditor({
     event.preventDefault();
     if (inFlight.current || !editorCanSubmit(pending, dirty)) return;
     const local = projectMetadataInputSchema.safeParse(draft);
-    if (!local.success) { setFieldErrors(local.error.flatten().fieldErrors); setNotice('Review the highlighted fields and try again.'); return; }
+    if (!local.success) { setFieldErrors(local.error.flatten().fieldErrors); setNotice({ kind: 'blocker', message: 'Review the highlighted fields and try again.' }); return; }
     inFlight.current = true;
     setPending(true); setFieldErrors({}); setNotice(null);
     try {
       const result = await invokeProjectMetadataSave(saveAction, draft);
-      if (!result.ok) { setFieldErrors(result.fieldErrors || {}); setNotice(result.message); return; }
-      setInitial(result.metadata); setDraft(result.metadata); setNotice('Project metadata saved.'); setMode('view'); router.refresh();
+      if (!result.ok) { setFieldErrors(result.fieldErrors || {}); setNotice({ kind: 'blocker', message: result.message }); return; }
+      setInitial(result.metadata); setDraft(result.metadata); setNotice({ kind: 'affirm', message: 'Project metadata saved.' }); setMode('view'); router.refresh();
     } catch {
-      setNotice('We could not save your changes. Please try again.');
+      setNotice({ kind: 'blocker', message: 'We could not save your changes. Please try again.' });
     } finally {
       inFlight.current = false;
       setPending(false);
@@ -80,7 +131,6 @@ export function ProjectMetadataEditor({
   };
 
   const message = (name: string) => fieldErrors[name]?.[0];
-  const protectedNotice = projectStatus === 'approved' ? 'This project is approved. Request changes before editing metadata.' : projectStatus === 'published' ? 'Published project metadata is locked until a controlled revision workflow is available.' : null;
   if (mode === 'view') return <section aria-labelledby="metadata-editor-title">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="min-w-0">
@@ -91,7 +141,7 @@ export function ProjectMetadataEditor({
         ? <Button type="button" className="shrink-0" onClick={() => { setNotice(null); setMode('edit'); }}><PencilLine aria-hidden="true" />Edit metadata</Button>
         : <p role="status" className="max-w-[40ch] shrink-0 text-sm text-muted-foreground sm:text-right">{protectedNotice || 'Read-only: your role cannot edit project metadata.'}</p>}
     </div>
-    {notice && <p role="status" className={`mt-4 p-3 text-sm font-medium ${PROJECT_DETAIL_SURFACE_CLASSES.affirm}`}>{notice}</p>}
+    {notice && <p role="status" className={`mt-4 p-3 text-sm font-medium ${PROJECT_DETAIL_SURFACE_CLASSES[notice.kind]}`}>{notice.message}</p>}
   </section>;
 
   return <section aria-labelledby="metadata-editor-title" className="-m-4 rounded-xl border-2 border-primary/40 bg-surface-subtle p-4 sm:-m-6 sm:p-6">
@@ -99,8 +149,10 @@ export function ProjectMetadataEditor({
       <Heading id="metadata-editor-title" className="text-base font-semibold tracking-tight text-foreground">Editing project information</Heading>
       {dirty && <p role="status" className={`px-2.5 py-1 text-sm font-medium ${PROJECT_DETAIL_SURFACE_CLASSES.caution}`}>Unsaved changes</p>}
     </div>
-    {notice && <p id="metadata-form-error" ref={summaryRef} tabIndex={-1} role="alert" className={`mt-3 p-3 text-sm font-medium ${PROJECT_DETAIL_SURFACE_CLASSES.blocker}`}>{notice}</p>}
-    <form className="mt-5 max-w-[70ch] space-y-5" onSubmit={submit} noValidate aria-describedby={notice ? 'metadata-form-error' : undefined}>
+    {notice?.kind === 'blocker'
+      ? <p id="metadata-form-error" ref={summaryRef} tabIndex={-1} role="alert" className={`mt-3 p-3 text-sm font-medium ${PROJECT_DETAIL_SURFACE_CLASSES.blocker}`}>{notice.message}</p>
+      : notice && <p role="status" className={`mt-3 p-3 text-sm font-medium ${PROJECT_DETAIL_SURFACE_CLASSES.affirm}`}>{notice.message}</p>}
+    <form className="mt-5 max-w-[70ch] space-y-5" onSubmit={submit} noValidate aria-describedby={notice?.kind === 'blocker' ? 'metadata-form-error' : undefined}>
       <Field id="metadata-title" label="Project title" error={message('title')}><Input id="metadata-title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} aria-invalid={Boolean(message('title'))} aria-describedby={message('title') ? 'metadata-title-error' : undefined} /></Field>
       <Field id="metadata-summary" label="Short summary" error={message('summary')}><Textarea id="metadata-summary" value={draft.summary} onChange={(e) => setDraft({ ...draft, summary: e.target.value })} aria-invalid={Boolean(message('summary'))} aria-describedby={message('summary') ? 'metadata-summary-error' : undefined} /></Field>
       <Field id="metadata-background" label="Problem background" error={message('background')}><Textarea id="metadata-background" value={draft.background} onChange={(e) => setDraft({ ...draft, background: e.target.value })} aria-invalid={Boolean(message('background'))} aria-describedby={message('background') ? 'metadata-background-error' : undefined} /></Field>

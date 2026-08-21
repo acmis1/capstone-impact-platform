@@ -5,6 +5,7 @@ import {
   assistiveInputHashSchema,
   assistivePipelineVersionSchema,
   persistedAssistiveFindingSchema,
+  postgresCanonicalUuidSchema,
 } from './persistenceContract';
 
 export const ASSISTIVE_RUN_STATUSES = [
@@ -36,7 +37,7 @@ export const assistiveClaimSchema = z.discriminatedUnion('resultCode', [
     resultCode: z.literal('CLAIMED'),
     jobId: z.uuid(),
     runId: z.uuid(),
-    projectId: z.uuid(),
+    projectId: postgresCanonicalUuidSchema,
     requestedBy: z.uuid().nullable(),
     inputHash: assistiveInputHashSchema,
     pipelineVersion: assistivePipelineVersionSchema,
@@ -62,7 +63,7 @@ export const assistiveStatusResponseSchema = z.discriminatedUnion('resultCode', 
   z.object({
     resultCode: z.literal('FOUND'),
     runId: z.uuid(),
-    projectId: z.uuid(),
+    projectId: postgresCanonicalUuidSchema,
     inputHash: assistiveInputHashSchema,
     pipelineVersion: assistivePipelineVersionSchema,
     runStatus,

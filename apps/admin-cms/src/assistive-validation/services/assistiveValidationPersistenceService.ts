@@ -9,6 +9,7 @@ import {
   type AssistiveDisposition,
   type StoredAssistiveFinding,
   type StoredAssistiveRun,
+  postgresCanonicalUuidSchema,
 } from '../domain/persistenceContract';
 import type { AssistiveValidationPersistenceGateway } from '../repositories/assistiveValidationRepository';
 
@@ -204,7 +205,7 @@ export async function loadLatestAssistiveValidationRun(
   projectId: string,
   pipelineVersion: string,
 ): Promise<AssistiveRunReadResult> {
-  const project = z.uuid().safeParse(projectId);
+  const project = postgresCanonicalUuidSchema.safeParse(projectId);
   const pipeline = assistivePipelineVersionSchema.safeParse(pipelineVersion);
   if (!project.success || !pipeline.success) return failure('VALIDATION_FAILED');
 

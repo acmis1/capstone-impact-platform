@@ -20,6 +20,15 @@ import { isParticipantPreviewRemindersEnabled } from '../../../../reminders/part
 import { SupabaseParticipantPreviewReminderRepository } from '../../../../repositories/SupabaseParticipantPreviewReminderRepository';
 import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetadataEditor';
 import { GuardedProjectBackLink, ProjectMetadataNavigationProvider } from '../../../../components/admin/ProjectMetadataNavigation';
+import { ProjectAssistiveChecks } from '../../../../components/admin/ProjectAssistiveChecks';
+import {
+  isAssistiveExecutionAvailable,
+  loadAssistiveInspection,
+  SupabaseAssistiveValidationRepository,
+  SupabaseAssistiveInputRepository,
+  ASSISTIVE_PIPELINE_VERSION,
+  type AssistiveInspectionView,
+} from '../../../../assistive-validation';
 import { SupabaseProjectMetadataGateway, loadProjectMetadataEditorData } from '../../../../projects/projectMetadataService';
 import { saveProjectMetadataAction, saveSnapshotAltTextAction } from './actions';
 import { ImportBatchRepository } from '../../../../repositories/ImportBatchRepository';
@@ -124,6 +133,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let mediaItems: ProjectMediaPreviewItem[] = [];
   let mediaAvailable = false;
   let approvalMedia: ApprovalMediaInput | null = null;
+  let canReview = false;
+  let initialAssistiveInspection: AssistiveInspectionView | null = null;
+  let initialAssistiveInspectionReadFailed = false;
+  const canExecuteAssistiveChecks = isAssistiveExecutionAvailable();
 
   // Essential dependencies: without the base project or authenticated staff context there is no
   // safe project-detail page to render.
@@ -140,6 +153,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
   if (project && adminContext && !loadError) {
     canEditMetadata = hasPermission(adminContext.permissions, 'projects.edit');
+    canReview = hasPermission(adminContext.permissions, 'projects.review');
     canManagePreview = canManageParticipantPreview(adminContext.permissions);
     canPreparePublicationPlan = canPreparePublication(adminContext.permissions);
     canResolveCorrection = canResolveParticipantCorrection(adminContext.permissions);
@@ -259,6 +273,28 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         mediaAvailable = true;
       } catch (error: unknown) {
         console.error('[Project detail: media preview load failure]', projectDetailFailureCategory(error));
+      }
+
+      try {
+        const inspectionResult = await loadAssistiveInspection(
+          new SupabaseAssistiveValidationRepository(supabase),
+          new SupabaseAssistiveInputRepository(supabase),
+          {
+            projectId: await projectDbId,
+            pipelineVersion: ASSISTIVE_PIPELINE_VERSION,
+            privateBucket: env.SUPABASE_DRAFT_BUCKET,
+          },
+        );
+        if (inspectionResult.ok) {
+          if (inspectionResult.found) {
+            initialAssistiveInspection = inspectionResult.inspection;
+          }
+        } else {
+          initialAssistiveInspectionReadFailed = true;
+        }
+      } catch (error: unknown) {
+        initialAssistiveInspectionReadFailed = true;
+        console.error('[Project detail: assistive inspection load failure]', projectDetailFailureCategory(error));
       }
     } catch (error: unknown) {
       // Configuration/client creation is shared setup for all secondary reads. Keep every
@@ -492,6 +528,16 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             </div>
           </div>
               </ProjectReviewSection>
+
+              <ProjectAssistiveChecks
+                publicId={publicId}
+                canEditMetadata={canEditMetadata}
+                canReview={canReview}
+                canExecute={canExecuteAssistiveChecks}
+                initialInspection={initialAssistiveInspection}
+                initialReadFailed={initialAssistiveInspectionReadFailed}
+                headingLevel="h3"
+              />
 
             {/* Editing is the highest-frequency task, so it opens the workspace */}
             {metadataEditorData && metadataEditorAvailable ? (

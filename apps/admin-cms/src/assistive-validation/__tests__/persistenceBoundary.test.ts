@@ -81,6 +81,7 @@ describe('assistive persistence authority boundary', () => {
     const rpcNames = [...repository.matchAll(/\.rpc\(\s*'([^']+)'/g)].map((match) => match[1]).sort();
     expect(rpcNames).toEqual([
       'get_latest_assistive_validation_run',
+      'get_project_assistive_validation_inspection',
       'persist_assistive_validation_run',
       'record_assistive_finding_disposition',
     ]);
@@ -89,7 +90,7 @@ describe('assistive persistence authority boundary', () => {
     expect(repository).not.toMatch(/\.(insert|update|delete|upsert)\(/);
     // The raw provider error is converted into a bounded code and never returned to a caller.
     for (const code of [
-      'ASSISTIVE_RUN_PERSIST_FAILED', 'ASSISTIVE_RUN_READ_FAILED', 'ASSISTIVE_DISPOSITION_FAILED',
+      'ASSISTIVE_RUN_PERSIST_FAILED', 'ASSISTIVE_RUN_READ_FAILED', 'ASSISTIVE_DISPOSITION_FAILED', 'ASSISTIVE_INSPECTION_READ_FAILED',
     ]) {
       expect(repository).toContain(code);
     }

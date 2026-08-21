@@ -31,7 +31,7 @@ describe('assistive validation persistence migration contract', () => {
   it('remains migration 0030 and leaves every pre-Phase-4 migration byte-identical', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(31);
+    expect(files).toHaveLength(32);
     expect(files[29]).toBe(filename);
     expect(files[30]).toBe('20260820160000_assistive_validation_job_coordination.sql');
 

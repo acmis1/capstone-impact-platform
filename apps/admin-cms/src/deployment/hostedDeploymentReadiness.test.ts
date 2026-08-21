@@ -151,9 +151,9 @@ function completeEvidence(overrides: Partial<HostedReadinessEvidence> = {}): Hos
 
 describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () => {
   describe('authoritative migration, table, and RPC inventory', () => {
-    it('matches the exact 31 migration files and keeps every historical file byte-identical to origin/main', () => {
+    it('matches the exact 32 migration files and keeps every historical file byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(31);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(32);
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
       expect(() => execFileSync(
@@ -186,7 +186,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches every final service-role application RPC signature and isolates the one internal helper', () => {
       const contracts = migrationServiceRoleContracts();
       expect(contracts.application.map(contractKey).sort()).toEqual(REQUIRED_RPC_SIGNATURES.map(contractKey).sort());
-      expect(contracts.application).toHaveLength(57);
+      expect(contracts.application).toHaveLength(58);
       expect(REQUIRED_RPC_NAMES).toContain('persist_assistive_validation_run');
       expect(REQUIRED_RPC_NAMES).toContain('record_assistive_finding_disposition');
       expect(REQUIRED_RPC_NAMES).toContain('claim_next_assistive_validation_job');
@@ -236,7 +236,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const missingMigration = evaluateHostedDeploymentReadiness(
         completeEvidence({ recordedMigrationVersions: [], manualEvidence: undefined })
       );
-      expect(missingMigration.missingMigrations).toHaveLength(31);
+      expect(missingMigration.missingMigrations).toHaveLength(32);
       expect(missingMigration.deploymentClassification).toBe('RECONCILIATION_REQUIRED');
     });
 
@@ -312,7 +312,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const inspected = inspectPostgrestOpenApi(openApiDocument());
       expect(inspected?.publicRelations).toEqual([...ALL_REQUIRED_TABLES].sort());
       expect(inspected?.rpcNames).toEqual([...REQUIRED_RPC_NAMES].sort());
-      expect(inspected?.rpcSignatures).toHaveLength(56);
+      expect(inspected?.rpcSignatures).toHaveLength(57);
       expect(inspected?.rpcSignatures.some((signature) => signature.name === 'execute_controlled_publication')).toBe(false);
     });
 

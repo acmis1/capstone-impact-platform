@@ -26,6 +26,8 @@ export interface AssistiveValidationPersistenceGateway {
     actorAdminUserId: string,
     disposition: AssistiveRecordableDisposition,
   ): Promise<unknown>;
+  /** Loads inspection data (run, job status, findings) for a project and optional run ID. */
+  loadInspection(projectId: string, pipelineVersion: string, runId?: string): Promise<unknown>;
 }
 
 export class SupabaseAssistiveValidationRepository implements AssistiveValidationPersistenceGateway {
@@ -66,6 +68,16 @@ export class SupabaseAssistiveValidationRepository implements AssistiveValidatio
       p_disposition: disposition,
     });
     if (error) throw new Error('ASSISTIVE_DISPOSITION_FAILED');
+    return data;
+  }
+
+  async loadInspection(projectId: string, pipelineVersion: string, runId?: string): Promise<unknown> {
+    const { data, error } = await this.client.rpc('get_project_assistive_validation_inspection', {
+      p_project_id: projectId,
+      p_pipeline_version: pipelineVersion,
+      p_run_id: runId ?? null,
+    });
+    if (error) throw new Error('ASSISTIVE_INSPECTION_READ_FAILED');
     return data;
   }
 }
