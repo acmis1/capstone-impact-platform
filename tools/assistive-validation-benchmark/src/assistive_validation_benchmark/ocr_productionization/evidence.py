@@ -42,6 +42,7 @@ def _git(root: Path, arguments: list[str], *, check: bool = True) -> subprocess.
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         shell=False,
         check=check,
     )
