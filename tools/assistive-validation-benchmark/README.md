@@ -1,6 +1,8 @@
 # PP1 assistive-validation benchmark
 
-This directory is an isolated, local-only Phase 0 evidence harness. It measures native PDF extraction, OCR, deterministic title consistency, grammar/spelling tools, and lexical duplicate ranking on deterministic synthetic PP1-style material. It does not import application code, alter workflow state, access Supabase, call cloud AI/OCR, publish, or grant any document instruction authority.
+This directory is an isolated, local-only Phase 0 and Phase 6A evidence harness. It measures native PDF extraction, OCR, deterministic title consistency, grammar/spelling tools, and lexical duplicate ranking on deterministic synthetic PP1-style material. It does not import application code, alter workflow state, access Supabase, call cloud AI/OCR, publish, or grant any document instruction authority.
+
+Phase 6A extends the original harness under `phase6/` with a new frozen grammar and 120-project duplicate corpus. Its method and reviewed result live in [phase-6a-language-duplicate-benchmark.md](../../docs/assistive-validation/phase-6a-language-duplicate-benchmark.md).
 
 ## Quick start
 
@@ -161,6 +163,39 @@ Every query is ranked against the shared candidate pool using canonical SHA-256 
 ```
 
 Unit tests cover manifest rejection, traversal protection, layout/typeface validation, corpus composition guarantees, CER/WER edge cases, normalization, the flood/fire critical negative, the narrow glyph-confusion rule and its material-substitution regression guard, score separation, extracted-candidate tracks, degenerate-calibration reporting, grammar span scoring per split, latency exclusion of unscored controls, lexical ranking label independence, deterministic asset bytes, scanned PDFs carrying no native text, report generation, local-only LanguageTool, and missing Tesseract behaviour. Heavy models are never a normal CI prerequisite.
+
+### Phase 6A commands
+
+Generate and validate the new committed manifest before running an engine:
+
+```powershell
+.venv\Scripts\python -m assistive_validation_benchmark phase6-generate
+.venv\Scripts\python -m assistive_validation_benchmark phase6-validate
+```
+
+Calibration is the only run that may inform the exact-token vocabulary policy or safe input filtering:
+
+```powershell
+.venv\Scripts\python -m assistive_validation_benchmark phase6-run `
+  --measurement calibration `
+  --languagetool-jar C:\path\to\LanguageTool-6.6\languagetool-server.jar `
+  --output artifacts\phase6-calibration\report.json
+```
+
+Freeze the corpus, hash, vocabulary policy, scorer, and configuration before the one final holdout run. Do not rerun and retune against the same holdout:
+
+```powershell
+.venv\Scripts\python -m assistive_validation_benchmark phase6-run `
+  --measurement final `
+  --languagetool-jar C:\path\to\LanguageTool-6.6\languagetool-server.jar `
+  --output artifacts\phase6-final\report.json
+.venv\Scripts\python -m assistive_validation_benchmark phase6-export-evidence `
+  --input-report artifacts\phase6-final\report.json `
+  --output ..\..\docs\assistive-validation\evidence\phase-6a-report.json
+.venv\Scripts\python -m assistive_validation_benchmark phase6-check-evidence
+```
+
+The Java server launcher accepts only a local `languagetool-server.jar`, binds LanguageTool to loopback, uses an argument array without shell interpolation, bounds text/check time/stdout/stderr, and terminates the child deterministically. Corpus text is sent only in local HTTP request bodies. The embedding trigger is evaluated after lexical ranking; a false trigger leaves embeddings `NOT_RUN` and downloads nothing.
 
 ## Adding a case or challenger
 

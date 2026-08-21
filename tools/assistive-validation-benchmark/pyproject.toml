@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pp1-assistive-validation-benchmark"
 version = "0.1.0"
-description = "Local, synthetic Phase 0 evidence harness for PP1 assistive validation"
+description = "Local, synthetic Phase 0 and Phase 6A evidence harness for PP1 assistive validation"
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "Pillow==12.3.0",
