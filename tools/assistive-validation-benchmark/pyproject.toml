@@ -16,6 +16,7 @@ dependencies = [
 paddle = [
   "paddleocr==3.7.0",
   "paddlepaddle==3.3.0",
+  "paddlex[ocr-core]==3.7.2",
 ]
 
 [project.scripts]

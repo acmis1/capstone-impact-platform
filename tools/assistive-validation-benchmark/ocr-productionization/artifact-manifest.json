@@ -1,0 +1,119 @@
+{
+  "schema_version": "pp1-ocr-artifact-manifest/v1",
+  "manifest_version": "pp1-ocr-productionization-artifacts-v1",
+  "checked_at": "2026-08-21",
+  "runtime": {
+    "python": ">=3.11,<3.14",
+    "paddleocr": "3.7.0",
+    "paddlepaddle_cpu": "3.3.0",
+    "paddlex_ocr_core": "3.7.2",
+    "supported_cpu": "x86_64 CPU; official PaddlePaddle 3.3.0 CPU wheel",
+    "paddleocr_license": "Apache-2.0",
+    "paddlepaddle_license": "Apache-2.0"
+  },
+  "official_sources": {
+    "paddleocr_release": "https://github.com/PaddlePaddle/PaddleOCR/releases/tag/v3.7.0",
+    "pp_ocrv6_models": "https://www.paddleocr.ai/main/en/version3.x/pipeline_usage/OCR.html",
+    "paddlepaddle_cpu_install": "https://www.paddlepaddle.org.cn/documentation/docs/en/install/index_en.html",
+    "paddleocr_license": "https://github.com/PaddlePaddle/PaddleOCR/blob/v3.7.0/LICENSE",
+    "paddlepaddle_license": "https://github.com/PaddlePaddle/Paddle/blob/v3.3.0/LICENSE",
+    "tesseract_release": "https://github.com/tesseract-ocr/tesseract/releases/tag/5.5.3",
+    "tesseract_license": "https://github.com/tesseract-ocr/tesseract/blob/5.5.3/LICENSE"
+  },
+  "candidates": {
+    "paddle-tiny": {
+      "provider": "paddleocr-local",
+      "family": "PP-OCRv6",
+      "variant": "tiny",
+      "license": "Apache-2.0",
+      "detection_model": "PP-OCRv6_tiny_det",
+      "recognition_model": "PP-OCRv6_tiny_rec",
+      "artifacts": ["PP-OCRv6_tiny_det_infer", "PP-OCRv6_tiny_rec_infer"]
+    },
+    "paddle-small": {
+      "provider": "paddleocr-local",
+      "family": "PP-OCRv6",
+      "variant": "small",
+      "license": "Apache-2.0",
+      "detection_model": "PP-OCRv6_small_det",
+      "recognition_model": "PP-OCRv6_small_rec",
+      "artifacts": ["PP-OCRv6_small_det_infer", "PP-OCRv6_small_rec_infer"]
+    },
+    "paddle-medium": {
+      "provider": "paddleocr-local",
+      "family": "PP-OCRv6",
+      "variant": "medium",
+      "license": "Apache-2.0",
+      "detection_model": "PP-OCRv6_medium_det",
+      "recognition_model": "PP-OCRv6_medium_rec",
+      "artifacts": ["PP-OCRv6_medium_det_infer", "PP-OCRv6_medium_rec_infer"]
+    },
+    "tesseract": {
+      "provider": "tesseract-local",
+      "family": "Tesseract LSTM",
+      "variant": "eng",
+      "version": "5.5.3",
+      "observed_runtime_version": "5.5.3.20260724",
+      "license": "Apache-2.0",
+      "language_artifact": "eng.traineddata",
+      "observed_language_sha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+      "role": "baseline_only"
+    }
+  },
+  "artifacts": [
+    {
+      "id": "PP-OCRv6_tiny_det_infer",
+      "model": "PP-OCRv6_tiny_det",
+      "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_tiny_det_infer.tar",
+      "archive_bytes": 1955840,
+      "archive_sha256": "33a23c5e18d83208f9eeeccd00ed789af891786ac9255c83aeb2495b3db9ce63",
+      "tree_sha256": "3e105903f60d5a1141530bf1b85a19fd587fd927ac62f9f51642cfd56efd912c",
+      "layout": "PP-OCRv6_tiny_det_infer"
+    },
+    {
+      "id": "PP-OCRv6_tiny_rec_infer",
+      "model": "PP-OCRv6_tiny_rec",
+      "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_tiny_rec_infer.tar",
+      "archive_bytes": 4597760,
+      "archive_sha256": "54403af57bc53981d3dce091c6c80dfc5ae30d58495541777126a54bac450604",
+      "tree_sha256": "496fbe17dff59d5d94308cc3e30432e402090fe591eb9cc6b2ea177f825bfaeb",
+      "layout": "PP-OCRv6_tiny_rec_infer"
+    },
+    {
+      "id": "PP-OCRv6_small_det_infer",
+      "model": "PP-OCRv6_small_det",
+      "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_small_det_infer.tar",
+      "archive_bytes": 10055680,
+      "archive_sha256": "bfb7c1e59f0faa6b540ebdca93aea3f4b1f2477805b389fbee117820d68fe9f5",
+      "tree_sha256": "8af984562965b7be9bd5d1c8acb52f6d0bf37de475947b520d876ed8640eb29a",
+      "layout": "PP-OCRv6_small_det_infer"
+    },
+    {
+      "id": "PP-OCRv6_small_rec_infer",
+      "model": "PP-OCRv6_small_rec",
+      "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_small_rec_infer.tar",
+      "archive_bytes": 21442560,
+      "archive_sha256": "da460f968ce9f88325ac3a34fa302077d6e9b0dcefb16ba3137cd7796f879d06",
+      "tree_sha256": "0ee2c443863549fabdb1120d7a58df5e8afa0d67bce0827b75529f105c993eae",
+      "layout": "PP-OCRv6_small_rec_infer"
+    },
+    {
+      "id": "PP-OCRv6_medium_det_infer",
+      "model": "PP-OCRv6_medium_det",
+      "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_medium_det_infer.tar",
+      "archive_bytes": 62279680,
+      "archive_sha256": "144d0621e059566e5086e228829171591c144c2deb07b2dad4962214fbabfcf7",
+      "tree_sha256": "b1876b8b09f9a87c89d4d9c6642be12fadb86d7e3d427807b08d5bca62debeed",
+      "layout": "PP-OCRv6_medium_det_infer"
+    },
+    {
+      "id": "PP-OCRv6_medium_rec_infer",
+      "model": "PP-OCRv6_medium_rec",
+      "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_medium_rec_infer.tar",
+      "archive_bytes": 76851200,
+      "archive_sha256": "4eecc1c6a4623765042e6fc15446da0da110b7d875b6b72b2d351d2b2dbd4da6",
+      "tree_sha256": "034d345e99f4f53e51970e2256be147224118173c6e50b732e501319c4501966",
+      "layout": "PP-OCRv6_medium_rec_infer"
+    }
+  ]
+}

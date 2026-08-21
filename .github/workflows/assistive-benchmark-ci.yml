@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
@@ -56,9 +58,29 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark phase6-check-evidence
 
+      - name: Validate OCR productionization evidence and decision
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_productionization check-evidence
+
+      - name: Prove OCR productionization corpus byte determinism
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_productionization generate --output-dir artifacts/ocr-repeat-a
+          python -m assistive_validation_benchmark.ocr_productionization generate --output-dir artifacts/ocr-repeat-b
+          cmp artifacts/ocr-repeat-a/generation.json artifacts/ocr-repeat-b/generation.json
+
       - name: Generate deterministic synthetic corpus smoke fixture
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark generate --output-dir artifacts/ci-corpus
 
       - name: Confirm generated/model artifacts remain untracked
         run: git diff --exit-code -- . ':!docs/assistive-validation/evidence/phase-0-report.json'
+
+      - name: Confirm benchmark PR did not change production paths
+        if: github.event_name == 'pull_request'
+        run: |
+          git diff --exit-code "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" -- \
+            apps/assistive-worker \
+            apps/admin-cms/src/assistive-validation \
+            infra/supabase

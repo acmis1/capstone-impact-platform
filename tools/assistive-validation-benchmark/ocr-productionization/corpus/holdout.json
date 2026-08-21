@@ -1,0 +1,218 @@
+{
+  "schema_version": "pp1-ocr-corpus-part/v1",
+  "corpus_version": "pp1-ocr-productionization-corpus-v1",
+  "seed": 2026082101,
+  "part": "holdout",
+  "ocr_cases": [
+    {
+      "id": "ocr-hold-001", "split": "holdout", "asset": "ocr-hold-001.png", "media": "png", "layout": "one_column", "difficulty": "clean", "width": 1800, "height": 1200,
+      "title": "Rainwater Analytics for Regional Libraries", "metadata_title": "Rainwater Analytics for Regional Libraries", "expected_agreement": true,
+      "body": "Australian councils need auditable evidence about tank levels and rainfall. This synthetic poster evaluates a local sensor dashboard using bounded sampling, transparent calculations, and staff review.",
+      "title_style": "plain", "contrast": "high", "noise": "none", "jpeg_quality": 88, "tags": ["australian_english", "technical_vocabulary", "clean_high_resolution"]
+    },
+    {
+      "id": "ocr-hold-002", "split": "holdout", "asset": "ocr-hold-002.jpg", "media": "jpeg", "layout": "one_column", "difficulty": "challenging", "width": 760, "height": 540,
+      "title": "Students’ Low-Carbon Commute Map", "metadata_title": "Students’ Low-Carbon Commute Map", "expected_agreement": true,
+      "body": "A compressed route poster compares walking, cycling and bus options near campus. Mild noise and small labels test whether the document remains readable without changing staff authority.",
+      "title_style": "wrapped", "contrast": "medium", "noise": "mild", "jpeg_quality": 58, "tags": ["low_resolution", "wrapped_title", "compression", "mild_noise", "apostrophe", "hyphen", "australian_english"]
+    },
+    {
+      "id": "ocr-hold-003", "split": "holdout", "asset": "ocr-hold-003.pdf", "media": "scanned_pdf", "layout": "one_column", "difficulty": "clean", "width": 1700, "height": 1100,
+      "title": "Secure QR Check-In Without Cloud Storage", "metadata_title": "Secure QR Check-In Without Cloud Storage", "expected_agreement": true,
+      "body": "The prototype validates QR tokens locally and retains only synthetic aggregate counts. Threat boundaries exclude credentials, browser automation, remote fetching, and publication decisions.",
+      "title_style": "decorative", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["acronym", "hyphen", "technical_vocabulary", "large_decorative_heading"]
+    },
+    {
+      "id": "ocr-hold-004", "split": "holdout", "asset": "ocr-hold-004.png", "media": "png", "layout": "one_column", "difficulty": "challenging", "width": 820, "height": 600,
+      "title": "Microgrid Forecasting: Stage 2", "metadata_title": "Microgrid Forecasting: Stage 3", "expected_agreement": false,
+      "body": "Stage two forecasts demand for a synthetic campus microgrid using fixed intervals. The stage number is materially authoritative even when every other title character agrees.",
+      "title_style": "letterspaced", "contrast": "low", "noise": "mild", "jpeg_quality": 72, "tags": ["numbers", "punctuation", "near_character_confusion", "one_character_material_negative", "contrast_variation", "mild_noise"]
+    },
+    {
+      "id": "ocr-hold-005", "split": "holdout", "asset": "ocr-hold-005.jpg", "media": "jpeg", "layout": "one_column", "difficulty": "clean", "width": 1900, "height": 1250,
+      "title": "Bushfire Shelter Capacity Dashboard", "metadata_title": "Bushfire Shelter Capacity Dashboard", "expected_agreement": true,
+      "body": "A deidentified simulation displays shelter capacity, travel time and accessibility status. Colour-independent labels preserve meaning for emergency planning in regional Australia.",
+      "title_style": "plain", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["australian_english", "technical_vocabulary", "clean_high_resolution"]
+    },
+    {
+      "id": "ocr-hold-006", "split": "holdout", "asset": "ocr-hold-006.pdf", "media": "scanned_pdf", "layout": "one_column", "difficulty": "challenging", "width": 880, "height": 620,
+      "title": "Coastal Sensor Calibration — Trial A", "metadata_title": "Coastal Sensor Calibration — Trial A", "expected_agreement": true,
+      "body": "Synthetic salinity and turbidity readings are calibrated against fixed reference values. A scanned low-contrast layout tests punctuation, technical terms and compact annotations.",
+      "title_style": "wrapped", "contrast": "low", "noise": "mild", "jpeg_quality": 64, "tags": ["low_resolution", "wrapped_title", "contrast_variation", "mild_noise", "punctuation", "technical_vocabulary"]
+    },
+    {
+      "id": "ocr-hold-007", "split": "holdout", "asset": "ocr-hold-007.png", "media": "png", "layout": "one_column", "difficulty": "clean", "width": 1760, "height": 1180,
+      "title": "Accessible Wayfinding for Building 80", "metadata_title": "Accessible Wayfinding for Building 80", "expected_agreement": true,
+      "body": "The prototype describes step-free paths, lift status and tactile landmarks through a synthetic building plan. Staff confirm all route claims before any public use.",
+      "title_style": "decorative", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["numbers", "australian_english", "large_decorative_heading"]
+    },
+    {
+      "id": "ocr-hold-008", "split": "holdout", "asset": "ocr-hold-008.jpg", "media": "jpeg", "layout": "one_column", "difficulty": "challenging", "width": 700, "height": 500,
+      "title": "Heat-Safe Housing Review 2026", "metadata_title": "Heat-Safe Housing Review 2027", "expected_agreement": false,
+      "body": "A compressed poster compares shading, insulation and night ventilation for synthetic dwellings. The reporting year changes project identity and must never become automatic agreement.",
+      "title_style": "wrapped", "contrast": "medium", "noise": "mild", "jpeg_quality": 52, "tags": ["low_resolution", "compression", "hyphen", "numbers", "near_character_confusion", "one_character_material_negative", "small_body_text"]
+    },
+    {
+      "id": "ocr-hold-009", "split": "holdout", "asset": "ocr-hold-009.pdf", "media": "scanned_pdf", "layout": "one_column", "difficulty": "clean", "width": 1850, "height": 1200,
+      "title": "Battery Health Estimation with LSTM Signals", "metadata_title": "Battery Health Estimation with LSTM Signals", "expected_agreement": true,
+      "body": "Synthetic voltage and temperature sequences demonstrate a local forecasting experiment. The poster distinguishes measured evidence from recommendations and keeps the reviewer authoritative.",
+      "title_style": "plain", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["acronym", "technical_vocabulary", "clean_high_resolution"]
+    },
+    {
+      "id": "ocr-hold-010", "split": "holdout", "asset": "ocr-hold-010.png", "media": "png", "layout": "one_column", "difficulty": "challenging", "width": 840, "height": 560,
+      "title": "Koala Corridor Evidence Tracker", "metadata_title": "Koala Corridor Evidence Tracker", "expected_agreement": true,
+      "body": "The synthetic tracker combines habitat observations with bounded map references. Faint text, mixed sizes and image noise test OCR without introducing real locations or wildlife records.",
+      "title_style": "decorative", "contrast": "low", "noise": "mild", "jpeg_quality": 70, "tags": ["contrast_variation", "mild_noise", "mixed_font_sizes", "australian_english"]
+    },
+    {
+      "id": "ocr-hold-011", "split": "holdout", "asset": "ocr-hold-011.jpg", "media": "jpeg", "layout": "one_column", "difficulty": "clean", "width": 1800, "height": 1160,
+      "title": "Café Queue Insights for Orientation Week", "metadata_title": "Café Queue Insights for Orientation Week", "expected_agreement": true,
+      "body": "Synthetic arrival counts compare three service layouts during a fictional orientation week. The analysis uses Australian English and preserves the accented project title.",
+      "title_style": "plain", "contrast": "high", "noise": "none", "jpeg_quality": 88, "tags": ["punctuation", "australian_english", "clean_high_resolution"]
+    },
+    {
+      "id": "ocr-hold-012", "split": "holdout", "asset": "ocr-hold-012.pdf", "media": "scanned_pdf", "layout": "two_column", "difficulty": "challenging", "width": 780, "height": 560,
+      "title": "Flood Alert Network — Zone A", "metadata_title": "Flood Alert Network — Zone B", "expected_agreement": false,
+      "body": "A two-column scanned poster describes threshold alerts for a fictional catchment. The single zone character is a material identifier and approximate OCR cannot approve it.",
+      "title_style": "wrapped", "contrast": "low", "noise": "mild", "jpeg_quality": 62, "tags": ["wrapped_title", "contrast_variation", "mild_noise", "punctuation", "near_character_confusion", "one_character_material_negative"]
+    },
+    {
+      "id": "ocr-hold-013", "split": "holdout", "asset": "ocr-hold-013.png", "media": "png", "layout": "two_column", "difficulty": "clean", "width": 1920, "height": 1280,
+      "title": "Digital Twin for Tram Stop Accessibility", "metadata_title": "Digital Twin for Tram Stop Accessibility", "expected_agreement": true,
+      "body": "A synthetic digital twin records kerb height, shelter clearance and passenger information features. Two columns separate the method from accessibility observations.",
+      "title_style": "plain", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["technical_vocabulary", "australian_english", "two_column"]
+    },
+    {
+      "id": "ocr-hold-014", "split": "holdout", "asset": "ocr-hold-014.jpg", "media": "jpeg", "layout": "two_column", "difficulty": "challenging", "width": 740, "height": 520,
+      "title": "Re-Use Hub: Materials Passport", "metadata_title": "Re-Use Hub: Materials Passport", "expected_agreement": true,
+      "body": "This compressed prototype records synthetic timber, steel and fixture attributes for later re-use. Small two-column text tests hyphens, punctuation and construction vocabulary.",
+      "title_style": "letterspaced", "contrast": "medium", "noise": "mild", "jpeg_quality": 55, "tags": ["compression", "hyphen", "punctuation", "small_body_text", "mild_noise", "technical_vocabulary"]
+    },
+    {
+      "id": "ocr-hold-015", "split": "holdout", "asset": "ocr-hold-015.pdf", "media": "scanned_pdf", "layout": "two_column", "difficulty": "clean", "width": 1780, "height": 1200,
+      "title": "Edge-AI Detection of Leaking Taps", "metadata_title": "Edge-AI Detection of Leaking Taps", "expected_agreement": true,
+      "body": "Synthetic acoustic features are processed locally to flag possible water loss. The model offers assistive evidence only; facilities staff verify every maintenance decision.",
+      "title_style": "decorative", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["hyphen", "acronym", "technical_vocabulary", "large_decorative_heading"]
+    },
+    {
+      "id": "ocr-hold-016", "split": "holdout", "asset": "ocr-hold-016.png", "media": "png", "layout": "two_column", "difficulty": "challenging", "width": 800, "height": 570,
+      "title": "Solar Canopy Controller — 10 kW", "metadata_title": "Solar Canopy Controller — 11 kW", "expected_agreement": false,
+      "body": "A compact two-column poster explains a synthetic power controller and its bounded telemetry. Rated capacity is materially different when one digit changes.",
+      "title_style": "wrapped", "contrast": "low", "noise": "mild", "jpeg_quality": 66, "tags": ["wrapped_title", "numbers", "acronym", "near_character_confusion", "one_character_material_negative", "contrast_variation"]
+    },
+    {
+      "id": "ocr-hold-017", "split": "holdout", "asset": "ocr-hold-017.jpg", "media": "jpeg", "layout": "two_column", "difficulty": "clean", "width": 1840, "height": 1220,
+      "title": "Neighbourhood Noise Mapping at Night", "metadata_title": "Neighbourhood Noise Mapping at Night", "expected_agreement": true,
+      "body": "A fictional survey maps equivalent sound levels without retaining addresses or participant data. The Australian spelling and two-column method remain explicit.",
+      "title_style": "plain", "contrast": "high", "noise": "none", "jpeg_quality": 89, "tags": ["australian_english", "technical_vocabulary", "two_column"]
+    },
+    {
+      "id": "ocr-hold-018", "split": "holdout", "asset": "ocr-hold-018.pdf", "media": "scanned_pdf", "layout": "two_column", "difficulty": "challenging", "width": 720, "height": 500,
+      "title": "Cyclist’s Safe-Passing Distance Display", "metadata_title": "Cyclist’s Safe-Passing Distance Display", "expected_agreement": true,
+      "body": "A low-resolution scan presents synthetic ultrasonic distances and a handlebar warning display. Curly apostrophes, a hyphen and small text increase realistic OCR difficulty.",
+      "title_style": "wrapped", "contrast": "medium", "noise": "mild", "jpeg_quality": 60, "tags": ["low_resolution", "apostrophe", "hyphen", "wrapped_title", "small_body_text", "mild_noise"]
+    },
+    {
+      "id": "ocr-hold-019", "split": "holdout", "asset": "ocr-hold-019.png", "media": "png", "layout": "two_column", "difficulty": "clean", "width": 1880, "height": 1260,
+      "title": "Food-Waste Audit for Campus Kitchens", "metadata_title": "Food-Waste Audit for Campus Kitchens", "expected_agreement": true,
+      "body": "Synthetic mass measurements compare preparation waste, leftovers and unavoidable scraps. The poster presents uncertainty and does not identify a real kitchen or staff member.",
+      "title_style": "decorative", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["hyphen", "australian_english", "large_decorative_heading"]
+    },
+    {
+      "id": "ocr-hold-020", "split": "holdout", "asset": "ocr-hold-020.jpg", "media": "jpeg", "layout": "two_column", "difficulty": "challenging", "width": 860, "height": 600,
+      "title": "Smart Bin Pilot: Trial 1", "metadata_title": "Smart Bin Pilot: Trial 2", "expected_agreement": false,
+      "body": "The fictional pilot measures fill estimates and collection intervals. Compression and faint columns are difficult, while the one-character trial number remains materially authoritative.",
+      "title_style": "letterspaced", "contrast": "low", "noise": "mild", "jpeg_quality": 50, "tags": ["compression", "numbers", "punctuation", "near_character_confusion", "one_character_material_negative", "contrast_variation"]
+    },
+    {
+      "id": "ocr-hold-021", "split": "holdout", "asset": "ocr-hold-021.pdf", "media": "scanned_pdf", "layout": "two_column", "difficulty": "clean", "width": 1760, "height": 1160,
+      "title": "Urban Tree Canopy Change, 2019–2026", "metadata_title": "Urban Tree Canopy Change, 2019–2026", "expected_agreement": true,
+      "body": "A synthetic geospatial comparison reports canopy classes and uncertainty across fictional precincts. The date range and en dash are part of the exact title.",
+      "title_style": "plain", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["numbers", "punctuation", "technical_vocabulary", "australian_english"]
+    },
+    {
+      "id": "ocr-hold-022", "split": "holdout", "asset": "ocr-hold-022.png", "media": "png", "layout": "two_column", "difficulty": "challenging", "width": 780, "height": 520,
+      "title": "Indoor Air Sensor QA/QC Workflow", "metadata_title": "Indoor Air Sensor QA/QC Workflow", "expected_agreement": true,
+      "body": "A compact technical poster checks synthetic particulate and carbon-dioxide readings. Slash punctuation, acronyms, faint contrast and small labels stress text ordering.",
+      "title_style": "wrapped", "contrast": "low", "noise": "mild", "jpeg_quality": 65, "tags": ["acronym", "punctuation", "technical_vocabulary", "small_body_text", "contrast_variation"]
+    },
+    {
+      "id": "ocr-hold-023", "split": "holdout", "asset": "ocr-hold-023.jpg", "media": "jpeg", "layout": "three_column", "difficulty": "clean", "width": 1960, "height": 1300,
+      "title": "Privacy-Preserving Study Space Counter", "metadata_title": "Privacy-Preserving Study Space Counter", "expected_agreement": true,
+      "body": "The synthetic system counts occupied zones without recording faces or device identifiers. Three columns describe sensing, aggregation and human review boundaries.",
+      "title_style": "decorative", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["hyphen", "technical_vocabulary", "three_column", "large_decorative_heading"]
+    },
+    {
+      "id": "ocr-hold-024", "split": "holdout", "asset": "ocr-hold-024.pdf", "media": "scanned_pdf", "layout": "three_column", "difficulty": "challenging", "width": 820, "height": 580,
+      "title": "Lift Demand Forecast — Level 4", "metadata_title": "Lift Demand Forecast — Level 5", "expected_agreement": false,
+      "body": "A noisy three-column scan shows fictional lift demand by interval. The level digit is a material project distinction and approximate recovery must remain review evidence.",
+      "title_style": "wrapped", "contrast": "medium", "noise": "mild", "jpeg_quality": 62, "tags": ["numbers", "punctuation", "near_character_confusion", "one_character_material_negative", "wrapped_title", "mild_noise"]
+    },
+    {
+      "id": "ocr-hold-025", "split": "holdout", "asset": "ocr-hold-025.png", "media": "png", "layout": "three_column", "difficulty": "clean", "width": 1860, "height": 1240,
+      "title": "Anaerobic Digestion Yield Explorer", "metadata_title": "Anaerobic Digestion Yield Explorer", "expected_agreement": true,
+      "body": "Synthetic feedstock ratios demonstrate methane-yield calculations with stated uncertainty. The three-column layout separates context, method and bounded findings.",
+      "title_style": "plain", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["technical_vocabulary", "three_column", "clean_high_resolution"]
+    },
+    {
+      "id": "ocr-hold-026", "split": "holdout", "asset": "ocr-hold-026.jpg", "media": "jpeg", "layout": "three_column", "difficulty": "challenging", "width": 700, "height": 500,
+      "title": "Drought-Resilient Garden Planner", "metadata_title": "Drought-Resilient Garden Planner", "expected_agreement": true,
+      "body": "A compressed synthetic poster compares native plants, soil cover and irrigation intervals. Dense three-column text and low resolution represent a difficult PP1 layout.",
+      "title_style": "letterspaced", "contrast": "low", "noise": "mild", "jpeg_quality": 48, "tags": ["low_resolution", "compression", "hyphen", "small_body_text", "contrast_variation", "australian_english"]
+    },
+    {
+      "id": "ocr-hold-027", "split": "holdout", "asset": "ocr-hold-027.pdf", "media": "scanned_pdf", "layout": "three_column", "difficulty": "clean", "width": 1800, "height": 1200,
+      "title": "NFC Tool-Lending Register Prototype", "metadata_title": "NFC Tool-Lending Register Prototype", "expected_agreement": true,
+      "body": "Synthetic NFC tags link tools to deidentified loan records. The prototype has no database credentials and cannot approve access, publication or real transactions.",
+      "title_style": "decorative", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["acronym", "hyphen", "technical_vocabulary", "large_decorative_heading"]
+    },
+    {
+      "id": "ocr-hold-028", "split": "holdout", "asset": "ocr-hold-028.png", "media": "png", "layout": "three_column", "difficulty": "challenging", "width": 760, "height": 540,
+      "title": "Electric Bus Monitor — Route 7", "metadata_title": "Electric Bus Monitor — Route 8", "expected_agreement": false,
+      "body": "Fictional telemetry shows charge, delay and energy use in three compact columns. The route digit is a one-character material negative that must never auto-agree.",
+      "title_style": "wrapped", "contrast": "low", "noise": "mild", "jpeg_quality": 60, "tags": ["numbers", "punctuation", "near_character_confusion", "one_character_material_negative", "wrapped_title", "contrast_variation"]
+    },
+    {
+      "id": "ocr-hold-029", "split": "holdout", "asset": "ocr-hold-029.jpg", "media": "jpeg", "layout": "three_column", "difficulty": "clean", "width": 1940, "height": 1280,
+      "title": "Robotic Sorting of Recyclable Packaging", "metadata_title": "Robotic Sorting of Recyclable Packaging", "expected_agreement": true,
+      "body": "Synthetic images classify cardboard, metal and rigid plastic for an assistive sorting prototype. Error cases are shown explicitly and a person remains responsible.",
+      "title_style": "plain", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["technical_vocabulary", "three_column", "clean_high_resolution"]
+    },
+    {
+      "id": "ocr-hold-030", "split": "holdout", "asset": "ocr-hold-030.pdf", "media": "scanned_pdf", "layout": "three_column", "difficulty": "challenging", "width": 840, "height": 580,
+      "title": "Wearable Hydration Cue for Fieldwork", "metadata_title": "Wearable Hydration Cue for Fieldwork", "expected_agreement": true,
+      "body": "A noisy scanned poster describes synthetic temperature and activity thresholds. It makes no medical claim and presents the wearable as an optional fieldwork cue.",
+      "title_style": "decorative", "contrast": "medium", "noise": "mild", "jpeg_quality": 64, "tags": ["mild_noise", "small_body_text", "mixed_font_sizes", "three_column"]
+    },
+    {
+      "id": "ocr-hold-031", "split": "holdout", "asset": "ocr-hold-031.png", "media": "png", "layout": "three_column", "difficulty": "clean", "width": 1820, "height": 1200,
+      "title": "Acoustic Detection of Cane-Toad Calls", "metadata_title": "Acoustic Detection of Cane-Toad Calls", "expected_agreement": true,
+      "body": "A synthetic spectrogram study compares local call features and background noise. No real ecological record or location is included in the benchmark poster.",
+      "title_style": "plain", "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["hyphen", "technical_vocabulary", "australian_english", "three_column"]
+    },
+    {
+      "id": "ocr-hold-032", "split": "holdout", "asset": "ocr-hold-032.jpg", "media": "jpeg", "layout": "three_column", "difficulty": "challenging", "width": 780, "height": 560,
+      "title": "Campus Demand Model X", "metadata_title": "Campus Demand Model Y", "expected_agreement": false,
+      "body": "A compressed three-column poster compares synthetic occupancy and electricity profiles. The final model letter changes identity and must remain a human-review mismatch.",
+      "title_style": "letterspaced", "contrast": "low", "noise": "mild", "jpeg_quality": 50, "tags": ["compression", "near_character_confusion", "one_character_material_negative", "contrast_variation", "small_body_text"]
+    }
+  ],
+  "native_controls": [
+    {
+      "id": "native-hold-001", "split": "control", "asset": "native-hold-001.pdf", "layout": "two_column",
+      "title": "Native Text Control — Circular Economy", "body": "A synthetic born-digital control proves that native extraction remains the deterministic first path after OCR benchmarking."
+    },
+    {
+      "id": "native-hold-002", "split": "control", "asset": "native-hold-002.pdf", "layout": "three_column",
+      "title": "Native Text Control: Water Quality", "body": "This second synthetic control preserves punctuation and three-column native text without requiring an OCR provider."
+    }
+  ],
+  "security_controls": [
+    {
+      "id": "security-hold-001", "split": "security_control", "asset": "security-hold-001.pdf", "kind": "malformed_pdf", "expected": "BOUNDED_REJECTION"
+    },
+    {
+      "id": "security-hold-002", "split": "security_control", "asset": "security-hold-002.png", "kind": "truncated_png", "expected": "BOUNDED_REJECTION"
+    }
+  ]
+}
