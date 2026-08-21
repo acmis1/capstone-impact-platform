@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useReducer, useRef } from 'react';
+import Link from 'next/link';
 import {
   AlertTriangle,
   Check,
@@ -381,7 +382,7 @@ export function ProjectAssistiveChecks({
             variant="warning"
             icon={AlertTriangle}
             title="Results may be outdated"
-            description="This check was performed on earlier project content. Re-run checks to evaluate current metadata and poster evidence."
+            description="Project content or comparison data changed after this check. Re-run checks to evaluate the current project, poster evidence, and comparison records."
           />
         </div>
       )}
@@ -462,7 +463,7 @@ export function ProjectAssistiveChecks({
                 {state.inspection?.jobStatus === 'EXTRACTING'
                   ? 'Extracting document text and metadata...'
                   : state.inspection?.jobStatus === 'CHECKING'
-                  ? 'Analyzing title consistency and document formatting...'
+                  ? 'Analyzing document evidence and comparing similar projects...'
                   : 'Checks are queued and will start shortly...'}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -523,6 +524,9 @@ export function ProjectAssistiveChecks({
                   );
                   const isCopied = state.copiedFindingId === finding.findingId && state.copyStatus === 'copied';
                   const isCopyFailed = state.copiedFindingId === finding.findingId && state.copyStatus === 'failed';
+                  const duplicateCandidates = finding.evidence.version === 'assistive-finding-evidence/v2'
+                    ? finding.evidence.duplicateCandidates
+                    : [];
 
                   return (
                     <li
@@ -549,6 +553,49 @@ export function ProjectAssistiveChecks({
                           {finding.evidence.explanation}
                         </p>
                       </div>
+
+                      {finding.checkType === 'DUPLICATE_SHORTLIST' && duplicateCandidates.length > 0 && (
+                        <div className="mt-3 rounded-md border border-border bg-surface-inset p-3 sm:p-4">
+                          <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                            These are the most lexically similar project records. Similarity is assistive evidence only;
+                            staff decide whether projects are duplicates. A lexical score is not a confidence probability.
+                          </p>
+                          <ol className="mt-3 flex flex-col gap-3" aria-label="Similar project candidates">
+                            {duplicateCandidates.map((candidate) => (
+                              <li
+                                key={candidate.publicId}
+                                className="min-w-0 rounded-md border border-border bg-card p-3"
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium text-muted-foreground">
+                                      Candidate {candidate.rank} · {candidate.publicId}
+                                    </p>
+                                    <Link
+                                      href={`/admin/projects/${encodeURIComponent(candidate.publicId)}`}
+                                      className="mt-0.5 block break-words text-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    >
+                                      {candidate.title || '(Untitled project)'}
+                                    </Link>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {candidate.exactContentMatch && <Badge variant="warning">Exact content match</Badge>}
+                                    {candidate.normalizedTitleMatch && <Badge variant="warning">Normalized title match</Badge>}
+                                  </div>
+                                </div>
+                                {candidate.summaryExcerpt && (
+                                  <p className="mt-2 break-words text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                                    {candidate.summaryExcerpt}
+                                  </p>
+                                )}
+                                <p className="mt-2 font-mono text-[11px] text-foreground-subtle">
+                                  Lexical similarity: {candidate.lexicalScore.toFixed(2)}
+                                </p>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
 
                       {/* Title Candidate Comparison Block */}
                       {finding.checkType === 'TITLE_CONSISTENCY' && finding.evidence.candidateValue && (

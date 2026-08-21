@@ -46,6 +46,43 @@ const sampleFinding = (overrides: Partial<AssistiveInspectionFinding> = {}): Ass
   ...overrides,
 });
 
+const duplicateFinding = (): AssistiveInspectionFinding => ({
+  findingId: '55555555-5555-4555-8555-555555555555',
+  ordinal: 2,
+  checkType: 'DUPLICATE_SHORTLIST',
+  outcome: 'REVIEW',
+  classification: 'NON_BLOCKING',
+  reasonCode: 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT',
+  affectedField: 'project_content',
+  origin: 'DETERMINISTIC_HELPER',
+  scoreKind: null,
+  scoreValue: null,
+  evidence: {
+    version: 'assistive-finding-evidence/v2',
+    evidenceExcerpt: null,
+    pageNumber: null,
+    boundingBox: null,
+    metadataValue: null,
+    normalizedMetadataValue: null,
+    candidateValue: null,
+    normalizedCandidateValue: null,
+    explanation: 'Review these lexically similar project records.',
+    duplicateCandidates: Array.from({ length: 5 }, (_, index) => ({
+      rank: index + 1,
+      publicId: `2026-similar-${index + 1}`,
+      title: index === 0 ? '<img src=x onerror=alert(1)> Similar Project' : `Similar Project ${index + 1}`,
+      summaryExcerpt: `Bounded synthetic summary ${index + 1}.`,
+      // Coherent with the persisted contract: the exact match implies the normalized-title match
+      // and scores 1, every other candidate is capped below it, and scores descend by rank.
+      lexicalScore: index === 0 ? 1 : Number((0.85 - index * 0.1).toFixed(2)),
+      exactContentMatch: index === 0,
+      normalizedTitleMatch: index <= 1,
+    })),
+  },
+  disposition: 'UNREVIEWED',
+  createdAt: '2026-08-21T09:00:00.000Z',
+});
+
 const sampleInspection = (overrides: Partial<AssistiveInspectionView> = {}): AssistiveInspectionView => ({
   runId: RUN_ID,
   runStatus: 'COMPLETED',
@@ -267,6 +304,35 @@ describe('ProjectAssistiveChecks Component', () => {
     expect(screen.queryByText(/85%/)).toBeNull();
     expect(screen.queryByText(/AI confidence/i)).toBeNull();
     expect(screen.queryByText(/Confidence score/i)).toBeNull();
+  });
+
+  it('renders one bounded similar-project shortlist with literal text, internal links, and no Apply to draft', () => {
+    renderWithNavigation(
+      <ProjectAssistiveChecks
+        publicId={PUBLIC_ID}
+        canEditMetadata={true}
+        canReview={true}
+        initialInspection={sampleInspection({ findings: [duplicateFinding()] })}
+      />,
+    );
+
+    expect(screen.getByText('Similar projects')).toBeTruthy();
+    expect(screen.getByText(/Similarity is assistive evidence only/i)).toBeTruthy();
+    expect(screen.getByText(/not a confidence probability/i)).toBeTruthy();
+    expect(screen.getAllByRole('listitem')).toHaveLength(6); // one finding plus five ordered candidates
+    expect(screen.getByText('<img src=x onerror=alert(1)> Similar Project')).toBeTruthy();
+    expect(document.querySelector('img')).toBeNull();
+    const link = screen.getByRole('link', { name: '<img src=x onerror=alert(1)> Similar Project' });
+    expect(link.getAttribute('href')).toBe('/admin/projects/2026-similar-1');
+    expect(screen.getByText('Exact content match')).toBeTruthy();
+    // An exact content match also matches the normalized title, so both badges appear on rank 1.
+    expect(screen.getAllByText('Normalized title match')).toHaveLength(2);
+    expect(screen.getByText('Lexical similarity: 1.00')).toBeTruthy();
+    expect(screen.getByText('Lexical similarity: 0.75')).toBeTruthy();
+    expect(screen.queryByText(/75%/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Apply to draft/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /Mark reviewed/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Ignore/i })).toBeTruthy();
   });
 
   it('records reviewer disposition without exposing staff UUIDs', async () => {

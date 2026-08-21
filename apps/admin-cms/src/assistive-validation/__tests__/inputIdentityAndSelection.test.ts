@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { MEDIA_VALIDATION_LIMITS } from '../../storage/mediaValidationCore';
 import { hashAssistiveInput } from '../domain/inputIdentity';
+import { hashDuplicateCorpus } from '../duplicate-detection/duplicateRanker';
 import type { AssistiveInputGateway } from '../repositories/assistiveInputRepository';
 import { loadAssistiveInput } from '../services/assistiveInputService';
 
@@ -9,25 +10,70 @@ const PNG = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
 ]);
 const PDF = Buffer.from('%PDF-1.4\n', 'ascii');
+const EMPTY_CORPUS_HASH = hashDuplicateCorpus([]);
+const project = {
+  id: '11111111-1111-4111-8111-111111111111',
+  public_id: 'P-1',
+  title: 'Exact title',
+  summary: 'Summary',
+  background: 'Background',
+  solution: 'Solution',
+};
+
+function identity(overrides: Partial<Parameters<typeof hashAssistiveInput>[0]> = {}) {
+  return hashAssistiveInput({
+    title: project.title,
+    summary: project.summary,
+    background: project.background,
+    solution: project.solution,
+    documentType: 'PDF',
+    content: PDF,
+    duplicateCorpusSha256: EMPTY_CORPUS_HASH,
+    ...overrides,
+  });
+}
 
 describe('assistive input identity and private poster selection', () => {
   it('hashes exact bytes, title, and detected document type deterministically', () => {
-    const first = hashAssistiveInput({ title: 'Exact title', documentType: 'PDF', content: PDF });
-    const repeat = hashAssistiveInput({ title: 'Exact title', documentType: 'PDF', content: PDF });
+    const first = identity();
+    const repeat = identity();
     expect(first).toEqual(repeat);
     expect(first.inputHash).toMatch(/^[a-f0-9]{64}$/);
     expect(first.documentHash).toMatch(/^[a-f0-9]{64}$/);
-    expect(hashAssistiveInput({ title: 'Changed', documentType: 'PDF', content: PDF }).inputHash)
-      .not.toBe(first.inputHash);
-    expect(hashAssistiveInput({ title: 'Exact title', documentType: 'PNG', content: PDF }).inputHash)
-      .not.toBe(first.inputHash);
-    expect(hashAssistiveInput({ title: 'Exact title', documentType: 'PDF', content: Buffer.concat([PDF, Buffer.from('x')]) }).inputHash)
-      .not.toBe(first.inputHash);
+    for (const changed of [
+      identity({ title: 'Changed' }),
+      identity({ summary: 'Changed' }),
+      identity({ background: 'Changed' }),
+      identity({ solution: 'Changed' }),
+      identity({ documentType: 'PNG' }),
+      identity({ content: Buffer.concat([PDF, Buffer.from('x')]) }),
+      identity({ duplicateCorpusSha256: 'a'.repeat(64) }),
+    ]) expect(changed.inputHash).not.toBe(first.inputHash);
+  });
+
+  it('ignores workflow, run, job, timestamp, and staff metadata outside the v2 identity', () => {
+    const operationallyDecorated = hashAssistiveInput({
+      title: project.title,
+      summary: project.summary,
+      background: project.background,
+      solution: project.solution,
+      documentType: 'PDF',
+      content: PDF,
+      duplicateCorpusSha256: EMPTY_CORPUS_HASH,
+      workflowStatus: 'APPROVED',
+      runId: 'run-2',
+      jobId: 'job-2',
+      updatedAt: '2026-08-21T00:00:00Z',
+      staffId: 'staff-2',
+    } as Parameters<typeof hashAssistiveInput>[0]);
+
+    expect(operationallyDecorated).toEqual(identity());
   });
 
   it('prefers the private poster PDF and validates its exact metadata and bytes', async () => {
     const gateway: AssistiveInputGateway = {
-      loadProject: vi.fn().mockResolvedValue({ id: '11111111-1111-4111-8111-111111111111', public_id: 'P-1', title: 'Title' }),
+      loadProject: vi.fn().mockResolvedValue(project),
+      loadDuplicateCandidates: vi.fn().mockResolvedValue([]),
       loadPosterAssets: vi.fn().mockResolvedValue([
         { id: '22222222-2222-4222-8222-222222222222', asset_type: 'poster_image', file_name: 'poster.png', storage_bucket: 'private', storage_path: 'drafts/P-1/poster_image/poster.png', mime_type: 'image/png', file_size_bytes: PNG.length, created_at: '2026-08-20T00:00:00Z' },
         { id: '33333333-3333-4333-8333-333333333333', asset_type: 'poster_pdf', file_name: 'poster.pdf', storage_bucket: 'private', storage_path: 'drafts/P-1/poster_pdf/poster.pdf', mime_type: 'application/pdf', file_size_bytes: PDF.length, created_at: '2026-08-19T00:00:00Z' },
@@ -49,7 +95,8 @@ describe('assistive input identity and private poster selection', () => {
       file_size_bytes: PNG.length, created_at: '2026-08-20T00:00:00Z',
     };
     const gateway: AssistiveInputGateway = {
-      loadProject: vi.fn().mockResolvedValue({ id: '11111111-1111-4111-8111-111111111111', public_id: 'P-1', title: 'Title' }),
+      loadProject: vi.fn().mockResolvedValue(project),
+      loadDuplicateCandidates: vi.fn().mockResolvedValue([]),
       loadPosterAssets: vi.fn(),
       download: vi.fn().mockResolvedValue(PDF),
     };
@@ -66,7 +113,8 @@ describe('assistive input identity and private poster selection', () => {
 
   it('rejects oversized metadata before downloading the private object', async () => {
     const gateway: AssistiveInputGateway = {
-      loadProject: vi.fn().mockResolvedValue({ id: '11111111-1111-4111-8111-111111111111', public_id: 'P-1', title: 'Title' }),
+      loadProject: vi.fn().mockResolvedValue(project),
+      loadDuplicateCandidates: vi.fn().mockResolvedValue([]),
       loadPosterAssets: vi.fn().mockResolvedValue([{
         id: '33333333-3333-4333-8333-333333333333',
         asset_type: 'poster_pdf',

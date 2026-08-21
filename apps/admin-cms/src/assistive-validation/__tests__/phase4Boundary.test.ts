@@ -43,10 +43,13 @@ describe('Phase 4 coordinator authority and process boundary', () => {
 
   it('limits input access to read-only project, private media metadata, and storage download', () => {
     const repository = code('repositories/assistiveInputRepository.ts');
-    expect(repository.match(/this\.client\.from\(/g)).toHaveLength(2);
-    expect(repository).toContain(".from('projects')");
+    expect(repository.match(/this\.client\.from\(/g)).toHaveLength(3);
+    expect(repository.match(/\.from\('projects'\)/g)).toHaveLength(2);
     expect(repository).toContain(".from('media_assets')");
     expect(repository).toContain('.download(');
+    expect(repository).toContain(".is('deleted_at', null)");
+    expect(repository).toContain(".neq('id', projectId)");
+    expect(repository).not.toMatch(/\.eq\('status'/);
     expect(repository).not.toMatch(/\.(insert|update|delete|upsert|upload|remove|move|copy)\(/);
   });
 

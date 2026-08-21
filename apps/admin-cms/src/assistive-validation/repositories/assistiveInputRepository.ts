@@ -1,12 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { postgresCanonicalUuidSchema } from '../domain/persistenceContract';
+import { DUPLICATE_SHORTLIST_LIMITS } from '../duplicate-detection/duplicateRanker';
 
 const projectRowSchema = z.object({
   id: postgresCanonicalUuidSchema,
-  public_id: z.string().min(1).max(100),
-  title: z.string().nullable(),
+  public_id: z.string().min(1).max(DUPLICATE_SHORTLIST_LIMITS.publicId).regex(/^[A-Za-z0-9_-]+$/),
+  title: z.string().max(DUPLICATE_SHORTLIST_LIMITS.title).nullable(),
+  summary: z.string().max(DUPLICATE_SHORTLIST_LIMITS.summary).nullable(),
+  background: z.string().max(DUPLICATE_SHORTLIST_LIMITS.background).nullable(),
+  solution: z.string().max(DUPLICATE_SHORTLIST_LIMITS.solution).nullable(),
 }).strict();
+
+const duplicateCandidateRowSchema = projectRowSchema.omit({ id: true });
 
 const assetRowSchema = z.object({
   id: postgresCanonicalUuidSchema,
@@ -20,10 +26,12 @@ const assetRowSchema = z.object({
 }).strict();
 
 export type AssistiveProjectRow = z.infer<typeof projectRowSchema>;
+export type AssistiveDuplicateCandidateRow = z.infer<typeof duplicateCandidateRowSchema>;
 export type AssistiveAssetRow = z.infer<typeof assetRowSchema>;
 
 export interface AssistiveInputGateway {
   loadProject(projectId: string): Promise<AssistiveProjectRow | null>;
+  loadDuplicateCandidates(projectId: string): Promise<AssistiveDuplicateCandidateRow[]>;
   loadPosterAssets(projectId: string, privateBucket: string): Promise<AssistiveAssetRow[]>;
   download(bucket: string, path: string): Promise<Buffer>;
 }
@@ -33,12 +41,29 @@ export class SupabaseAssistiveInputRepository implements AssistiveInputGateway {
 
   async loadProject(projectId: string): Promise<AssistiveProjectRow | null> {
     const result = await this.client.from('projects')
-      .select('id,public_id,title')
+      .select('id,public_id,title,summary,background,solution')
       .eq('id', projectId)
       .is('deleted_at', null)
       .maybeSingle();
     if (result.error) throw new Error('ASSISTIVE_PROJECT_READ_FAILED');
     return result.data === null ? null : projectRowSchema.parse(result.data);
+  }
+
+  async loadDuplicateCandidates(projectId: string): Promise<AssistiveDuplicateCandidateRow[]> {
+    const result = await this.client.from('projects')
+      .select('public_id,title,summary,background,solution', { count: 'exact' })
+      .neq('id', projectId)
+      .is('deleted_at', null)
+      .order('public_id', { ascending: true })
+      .limit(DUPLICATE_SHORTLIST_LIMITS.candidatePool);
+    if (result.error) throw new Error('ASSISTIVE_DUPLICATE_CANDIDATE_READ_FAILED');
+    if (result.count === null) throw new Error('ASSISTIVE_DUPLICATE_CANDIDATE_COUNT_UNAVAILABLE');
+    if (result.count > DUPLICATE_SHORTLIST_LIMITS.candidatePool) {
+      throw new Error('DUPLICATE_CANDIDATE_POOL_LIMIT_EXCEEDED');
+    }
+    return z.array(duplicateCandidateRowSchema)
+      .max(DUPLICATE_SHORTLIST_LIMITS.candidatePool)
+      .parse(result.data ?? []);
   }
 
   async loadPosterAssets(projectId: string, privateBucket: string): Promise<AssistiveAssetRow[]> {

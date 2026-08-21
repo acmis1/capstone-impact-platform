@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { assistiveMutationResponseSchema } from '../domain/jobContract';
 import { hashAssistiveInput } from '../domain/inputIdentity';
+import { hashDuplicateCorpus } from '../duplicate-detection/duplicateRanker';
 import type { AssistiveJobGateway } from '../repositories/assistiveJobRepository';
 import type { AssistiveInputGateway } from '../repositories/assistiveInputRepository';
 import { enqueueAssistiveValidation } from '../services/assistiveJobService';
@@ -21,7 +22,10 @@ function jobs(): AssistiveJobGateway {
 
 function inputs(): AssistiveInputGateway {
   return {
-    loadProject: vi.fn().mockResolvedValue({ id: PROJECT_ID, public_id: 'P-1', title: 'Title' }),
+    loadProject: vi.fn().mockResolvedValue({
+      id: PROJECT_ID, public_id: 'P-1', title: 'Title', summary: 'Summary', background: '', solution: '',
+    }),
+    loadDuplicateCandidates: vi.fn().mockResolvedValue([]),
     loadPosterAssets: vi.fn().mockResolvedValue([{
       id: '44444444-4444-4444-8444-444444444444', asset_type: 'poster_pdf',
       file_name: 'poster.pdf', storage_bucket: 'private',
@@ -43,8 +47,11 @@ describe('assistive job service and response contracts', () => {
     expect(gateway.enqueue).toHaveBeenCalledWith(
       PROJECT_ID,
       ACTOR_ID,
-      hashAssistiveInput({ title: 'Title', documentType: 'PDF', content: PDF }).inputHash,
-      'assistive-deterministic-checks/v1',
+      hashAssistiveInput({
+        title: 'Title', summary: 'Summary', background: '', solution: '',
+        documentType: 'PDF', content: PDF, duplicateCorpusSha256: hashDuplicateCorpus([]),
+      }).inputHash,
+      'assistive-deterministic-checks/v2',
     );
   });
 

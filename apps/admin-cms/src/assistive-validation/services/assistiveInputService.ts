@@ -2,11 +2,19 @@ import { validateMediaAsset, validateMediaAssetBytes } from '../../storage/media
 
 import type { AssistiveDocumentType } from '../domain/inputIdentity';
 import { hashAssistiveInput } from '../domain/inputIdentity';
+import {
+  DUPLICATE_SHORTLIST_LIMITS,
+  hashDuplicateCorpus,
+  type DuplicateProjectProse,
+} from '../duplicate-detection/duplicateRanker';
 import type { AssistiveAssetRow, AssistiveInputGateway } from '../repositories/assistiveInputRepository';
 
 export interface AssistiveInputSnapshot {
   projectId: string;
   title: string;
+  currentProject: DuplicateProjectProse;
+  duplicateCandidates: DuplicateProjectProse[];
+  duplicateCorpusHash: string;
   assetId: string;
   documentType: AssistiveDocumentType;
   content: Buffer;
@@ -40,6 +48,25 @@ export async function loadAssistiveInput(
 ): Promise<AssistiveInputSnapshot | null> {
   const project = await gateway.loadProject(projectId);
   if (!project) return null;
+  const candidateRows = await gateway.loadDuplicateCandidates(projectId);
+  if (candidateRows.length > DUPLICATE_SHORTLIST_LIMITS.candidatePool) {
+    throw new Error('DUPLICATE_CANDIDATE_POOL_LIMIT_EXCEEDED');
+  }
+  const currentProject: DuplicateProjectProse = {
+    publicId: project.public_id,
+    title: project.title ?? '',
+    summary: project.summary ?? '',
+    background: project.background ?? '',
+    solution: project.solution ?? '',
+  };
+  const duplicateCandidates = candidateRows.map((candidate) => ({
+    publicId: candidate.public_id,
+    title: candidate.title ?? '',
+    summary: candidate.summary ?? '',
+    background: candidate.background ?? '',
+    solution: candidate.solution ?? '',
+  }));
+  const duplicateCorpusHash = hashDuplicateCorpus(duplicateCandidates);
   const asset = selectAsset(await gateway.loadPosterAssets(projectId, privateBucket));
   if (!asset || asset.file_size_bytes === null) return null;
   const type = expectedType(asset);
@@ -61,10 +88,21 @@ export async function loadAssistiveInput(
     expectedFileSizeBytes: asset.file_size_bytes,
   });
   if (!validation.valid) return null;
-  const identity = hashAssistiveInput({ title: project.title ?? '', documentType: type.documentType, content });
+  const identity = hashAssistiveInput({
+    title: currentProject.title,
+    summary: currentProject.summary,
+    background: currentProject.background,
+    solution: currentProject.solution,
+    documentType: type.documentType,
+    content,
+    duplicateCorpusSha256: duplicateCorpusHash,
+  });
   return {
     projectId: project.id,
     title: project.title ?? '',
+    currentProject,
+    duplicateCandidates,
+    duplicateCorpusHash,
     assetId: asset.id,
     documentType: type.documentType,
     content,

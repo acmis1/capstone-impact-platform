@@ -8,6 +8,8 @@ import {
   type AssistiveJobFailureCode,
 } from '../domain/jobContract';
 import { toPersistedAssistiveFinding } from '../domain/persistenceContract';
+import { toPersistedDuplicateShortlistFinding } from '../domain/persistenceContract';
+import { rankDuplicateCandidates } from '../duplicate-detection/duplicateRanker';
 import type { AssistiveJobGateway } from '../repositories/assistiveJobRepository';
 import type { AssistiveInputGateway } from '../repositories/assistiveInputRepository';
 import { loadAssistiveInput } from './assistiveInputService';
@@ -124,6 +126,10 @@ export class AssistiveValidationCoordinator {
         ...formattingInformation(extraction.text),
         ...extractionInformationalChecks(extraction),
       ].map(toPersistedAssistiveFinding);
+      const duplicateFinding = toPersistedDuplicateShortlistFinding(
+        rankDuplicateCandidates(initial.currentProject, initial.duplicateCandidates),
+      );
+      if (duplicateFinding) findings.push(duplicateFinding);
     } catch {
       return failClaim(this.jobs, claim, 'DETERMINISTIC_CONTRACT_REJECTED');
     }

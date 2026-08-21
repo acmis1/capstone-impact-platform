@@ -47,7 +47,11 @@ function mockInputGateway(overrides: Partial<AssistiveInputGateway> = {}): Assis
       id: PROJECT_ID,
       public_id: 'PRJ-101',
       title: 'Current Project Title',
+      summary: 'Summary',
+      background: 'Background',
+      solution: 'Solution',
     }),
+    loadDuplicateCandidates: vi.fn().mockResolvedValue([]),
     loadPosterAssets: vi.fn().mockResolvedValue([
       {
         id: '44444444-4444-4444-8444-444444444444',

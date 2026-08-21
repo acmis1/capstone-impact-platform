@@ -1,6 +1,16 @@
 import { z } from 'zod';
 
-import { assistiveCheckResultSchema, type AssistiveCheckResult } from './evidence';
+import {
+  assistiveCheckResultSchema,
+  sanitizeAssistivePlainText,
+  type AssistiveCheckResult,
+} from './evidence';
+import {
+  boundedDuplicateEvidenceText,
+  comparePublicIds,
+  DUPLICATE_SHORTLIST_LIMITS,
+  type RankedDuplicateCandidate,
+} from '../duplicate-detection/duplicateRanker';
 
 /**
  * Phase 3 durable persistence contract for the Phase 2 deterministic assistive observations.
@@ -14,10 +24,11 @@ import { assistiveCheckResultSchema, type AssistiveCheckResult } from './evidenc
  * Identity of the deterministic evaluation that produced a run. It is part of the run's uniqueness
  * key, so bumping it is how a changed algorithm earns a new durable run for unchanged content.
  */
-export const ASSISTIVE_PIPELINE_VERSION = 'assistive-deterministic-checks/v1';
+export const ASSISTIVE_PIPELINE_VERSION = 'assistive-deterministic-checks/v2';
 
 /** Version tag stored inside every persisted evidence object. */
 export const ASSISTIVE_FINDING_EVIDENCE_VERSION = 'assistive-finding-evidence/v1';
+export const ASSISTIVE_DUPLICATE_EVIDENCE_VERSION = 'assistive-finding-evidence/v2';
 
 export const ASSISTIVE_PERSISTENCE_LIMITS = {
   findingsPerRun: 50,
@@ -80,7 +91,7 @@ const checkResultShape = assistiveCheckResultSchema.shape;
  * plain text. Only useful comparison evidence is stored: no reasoning trace, no raw transcript, no
  * prompt, no provider response, no URL, no credential.
  */
-export const persistedAssistiveEvidenceSchema = z.object({
+const persistedAssistiveEvidenceV1Schema = z.object({
   version: z.literal(ASSISTIVE_FINDING_EVIDENCE_VERSION),
   evidenceExcerpt: checkResultShape.evidenceExcerpt,
   pageNumber: checkResultShape.pageNumber,
@@ -94,6 +105,99 @@ export const persistedAssistiveEvidenceSchema = z.object({
     'Explanation must not be empty.',
   ),
 }).strict();
+
+const boundedDuplicateText = (maximum: number) => z.string().max(maximum)
+  .refine((value) => !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value), 'Must be plain text.');
+
+/**
+ * The durable candidate contract states what the selected deterministic ranker actually produces,
+ * not a superset of it. Canonical equality includes the normalized title and is the only comparison
+ * that scores 1, so a persisted candidate claiming otherwise describes a run that cannot have
+ * happened and is refused rather than stored. None of this is a duplicate decision: no score is a
+ * threshold, and staff remain the only party who decide whether two projects are the same work.
+ */
+export const persistedDuplicateCandidateSchema = z.object({
+  rank: z.number().int().min(1).max(DUPLICATE_SHORTLIST_LIMITS.shortlist),
+  publicId: boundedDuplicateText(DUPLICATE_SHORTLIST_LIMITS.publicId)
+    .regex(/^[A-Za-z0-9_-]+$/, 'Candidate public ID must be route-safe.'),
+  title: boundedDuplicateText(DUPLICATE_SHORTLIST_LIMITS.title),
+  summaryExcerpt: boundedDuplicateText(DUPLICATE_SHORTLIST_LIMITS.summaryExcerpt),
+  lexicalScore: z.number().finite().min(0).max(1),
+  exactContentMatch: z.boolean(),
+  normalizedTitleMatch: z.boolean(),
+}).strict().superRefine((candidate, context) => {
+  if (candidate.exactContentMatch && !candidate.normalizedTitleMatch) {
+    context.addIssue({
+      code: 'custom',
+      path: ['normalizedTitleMatch'],
+      message: 'Canonical equality includes the normalized title, so an exact match matches it too.',
+    });
+  }
+  if (candidate.exactContentMatch && candidate.lexicalScore !== 1) {
+    context.addIssue({
+      code: 'custom',
+      path: ['lexicalScore'],
+      message: 'An exact content match scores exactly 1.',
+    });
+  }
+  if (!candidate.exactContentMatch
+    && candidate.lexicalScore > DUPLICATE_SHORTLIST_LIMITS.inexactScoreCeiling) {
+    context.addIssue({
+      code: 'custom',
+      path: ['lexicalScore'],
+      message: 'A candidate that is not an exact content match is capped below 1.',
+    });
+  }
+});
+
+export type PersistedDuplicateCandidate = z.infer<typeof persistedDuplicateCandidateSchema>;
+
+/**
+ * True when the shortlist contains the signal that upgrades the finding from information to review.
+ * The converter and both database boundaries derive the outcome and reason from this one predicate,
+ * so the three can never disagree about what the same candidate list means.
+ */
+export function shortlistHasExactOrNormalizedMatch(
+  candidates: readonly Pick<PersistedDuplicateCandidate, 'exactContentMatch' | 'normalizedTitleMatch'>[],
+): boolean {
+  return candidates.some((candidate) => candidate.exactContentMatch || candidate.normalizedTitleMatch);
+}
+
+const persistedAssistiveEvidenceV2Schema = persistedAssistiveEvidenceV1Schema.extend({
+  version: z.literal(ASSISTIVE_DUPLICATE_EVIDENCE_VERSION),
+  duplicateCandidates: z.array(persistedDuplicateCandidateSchema)
+    .min(1)
+    .max(DUPLICATE_SHORTLIST_LIMITS.shortlist),
+}).strict().superRefine((evidence, context) => {
+  const publicIds = new Set<string>();
+  evidence.duplicateCandidates.forEach((candidate, index) => {
+    if (candidate.rank !== index + 1) {
+      context.addIssue({ code: 'custom', path: ['duplicateCandidates', index, 'rank'], message: 'Candidate ranks must be contiguous and ordered.' });
+    }
+    if (publicIds.has(candidate.publicId)) {
+      context.addIssue({ code: 'custom', path: ['duplicateCandidates', index, 'publicId'], message: 'Candidate public IDs must be unique.' });
+    }
+    publicIds.add(candidate.publicId);
+    /**
+     * The evidence calls itself a ranked shortlist, so the stored order must be the order the
+     * selected ranker produces: descending lexical score, then the deterministic public-ID tie
+     * breaker. Nothing is re-scored here; only the supplied bounded evidence is checked.
+     */
+    const previous = evidence.duplicateCandidates[index - 1];
+    if (previous === undefined) return;
+    if (candidate.lexicalScore > previous.lexicalScore) {
+      context.addIssue({ code: 'custom', path: ['duplicateCandidates', index, 'lexicalScore'], message: 'Candidate scores must not increase with rank.' });
+    } else if (candidate.lexicalScore === previous.lexicalScore
+      && comparePublicIds(previous.publicId, candidate.publicId) >= 0) {
+      context.addIssue({ code: 'custom', path: ['duplicateCandidates', index, 'publicId'], message: 'Equal-score candidates must be ordered by ascending public ID.' });
+    }
+  });
+});
+
+export const persistedAssistiveEvidenceSchema = z.discriminatedUnion('version', [
+  persistedAssistiveEvidenceV1Schema,
+  persistedAssistiveEvidenceV2Schema,
+]);
 
 export type PersistedAssistiveEvidence = z.infer<typeof persistedAssistiveEvidenceSchema>;
 
@@ -118,6 +222,32 @@ export const persistedAssistiveFindingSchema = z.object({
   }
   if (JSON.stringify(finding.evidence).length > ASSISTIVE_PERSISTENCE_LIMITS.evidenceJsonCharacters) {
     context.addIssue({ code: 'custom', message: 'Persisted evidence exceeds the bounded size.' });
+  }
+  const isDuplicate = finding.checkType === 'DUPLICATE_SHORTLIST';
+  if (isDuplicate !== (finding.evidence.version === ASSISTIVE_DUPLICATE_EVIDENCE_VERSION)) {
+    context.addIssue({ code: 'custom', message: 'Duplicate shortlist findings require evidence v2, and other findings require v1.' });
+  }
+  if (isDuplicate && (finding.scoreKind !== null || finding.scoreValue !== null)) {
+    context.addIssue({ code: 'custom', message: 'A shortlist must not carry an ambiguous finding-level score.' });
+  }
+  if (isDuplicate && !['EXACT_OR_NORMALIZED_DUPLICATE_PRESENT', 'LEXICAL_DUPLICATE_SHORTLIST'].includes(finding.reasonCode)) {
+    context.addIssue({ code: 'custom', message: 'Duplicate shortlist reason is invalid.' });
+  }
+  if (!isDuplicate && ['EXACT_OR_NORMALIZED_DUPLICATE_PRESENT', 'LEXICAL_DUPLICATE_SHORTLIST'].includes(finding.reasonCode)) {
+    context.addIssue({ code: 'custom', message: 'Duplicate shortlist reasons cannot be used by other checks.' });
+  }
+  if (isDuplicate && finding.evidence.version === ASSISTIVE_DUPLICATE_EVIDENCE_VERSION) {
+    const hasExactOrNormalized = shortlistHasExactOrNormalizedMatch(finding.evidence.duplicateCandidates);
+    const expectedOutcome = hasExactOrNormalized ? 'REVIEW' : 'INFORMATION';
+    const expectedReason = hasExactOrNormalized
+      ? 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT'
+      : 'LEXICAL_DUPLICATE_SHORTLIST';
+    if (finding.outcome !== expectedOutcome) {
+      context.addIssue({ code: 'custom', path: ['outcome'], message: `A shortlist ${hasExactOrNormalized ? 'containing' : 'without'} an exact or normalized-title candidate must be ${expectedOutcome}.` });
+    }
+    if (finding.reasonCode !== expectedReason) {
+      context.addIssue({ code: 'custom', path: ['reasonCode'], message: `A shortlist ${hasExactOrNormalized ? 'containing' : 'without'} an exact or normalized-title candidate must carry ${expectedReason}.` });
+    }
   }
 });
 
@@ -231,6 +361,9 @@ export type StoredAssistiveFinding = z.infer<typeof storedAssistiveFindingSchema
  * lexical score is restructured into its explicit (kind, value) pair.
  */
 export function toPersistedAssistiveFinding(result: AssistiveCheckResult): PersistedAssistiveFinding {
+  if (result.checkType === 'DUPLICATE_SHORTLIST') {
+    throw new Error('Use toPersistedDuplicateShortlistFinding for duplicate results.');
+  }
   return persistedAssistiveFindingSchema.parse({
     checkType: result.checkType,
     outcome: result.outcome,
@@ -250,6 +383,59 @@ export function toPersistedAssistiveFinding(result: AssistiveCheckResult): Persi
       candidateValue: result.candidateValue,
       normalizedCandidateValue: result.normalizedCandidateValue,
       explanation: result.explanation,
+    },
+  });
+}
+
+/**
+ * One bounded, browser-safe copy of untrusted candidate prose.
+ *
+ * A project row is only required to be bounded, not free of interior C0/DEL controls, and the
+ * strict persistence schema refuses those characters. Sanitizing here — after ranking and corpus
+ * hashing have already consumed the authoritative source, and before anything durable or visible is
+ * built from it — keeps one malformed historical record from failing every other project's run,
+ * without editing project metadata and without letting a control character reach storage.
+ */
+function duplicateEvidenceText(value: string, maximum: number): string {
+  return sanitizeAssistivePlainText(boundedDuplicateEvidenceText(value, maximum), maximum);
+}
+
+export function toPersistedDuplicateShortlistFinding(
+  candidates: readonly RankedDuplicateCandidate[],
+): PersistedAssistiveFinding | null {
+  if (candidates.length === 0) return null;
+  const hasExactOrNormalized = shortlistHasExactOrNormalizedMatch(candidates);
+  const evidenceCandidates = candidates.map((candidate) => ({
+    rank: candidate.rank,
+    publicId: candidate.publicId,
+    title: duplicateEvidenceText(candidate.title, DUPLICATE_SHORTLIST_LIMITS.title),
+    summaryExcerpt: duplicateEvidenceText(candidate.summaryExcerpt, DUPLICATE_SHORTLIST_LIMITS.summaryExcerpt),
+    lexicalScore: candidate.lexicalScore,
+    exactContentMatch: candidate.exactContentMatch,
+    normalizedTitleMatch: candidate.normalizedTitleMatch,
+  }));
+  return persistedAssistiveFindingSchema.parse({
+    checkType: 'DUPLICATE_SHORTLIST',
+    outcome: hasExactOrNormalized ? 'REVIEW' : 'INFORMATION',
+    classification: 'NON_BLOCKING',
+    reasonCode: hasExactOrNormalized
+      ? 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT'
+      : 'LEXICAL_DUPLICATE_SHORTLIST',
+    affectedField: 'project_content',
+    origin: 'DETERMINISTIC_HELPER',
+    scoreKind: null,
+    scoreValue: null,
+    evidence: {
+      version: ASSISTIVE_DUPLICATE_EVIDENCE_VERSION,
+      evidenceExcerpt: null,
+      pageNumber: null,
+      boundingBox: null,
+      metadataValue: null,
+      normalizedMetadataValue: null,
+      candidateValue: null,
+      normalizedCandidateValue: null,
+      explanation: 'Review these lexically similar project records. Staff decide whether any projects are duplicates.',
+      duplicateCandidates: evidenceCandidates,
     },
   });
 }
