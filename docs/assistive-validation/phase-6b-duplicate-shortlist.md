@@ -83,6 +83,34 @@ No candidate pool produces no duplicate finding. A non-empty pool produces exact
 - Candidate `lexicalScore` values are diagnostics in `[0, 1]`, not confidence probabilities and
   not duplicate thresholds.
 
+The outcome and reason are not independent values a caller may choose. They are determined by one
+predicate — whether any stored candidate is an exact or normalized-title match — and the persisted
+contract states the semantics of the selected ranker rather than a superset of them:
+
+- exact or normalized-title candidate present ⇔ `REVIEW` + `EXACT_OR_NORMALIZED_DUPLICATE_PRESENT`;
+- no such candidate ⇔ `INFORMATION` + `LEXICAL_DUPLICATE_SHORTLIST`;
+- `exactContentMatch` implies `normalizedTitleMatch`, because canonical equality includes the
+  normalized title;
+- `exactContentMatch` implies `lexicalScore` exactly 1, and every other candidate is capped at
+  0.999, so a stored 1 is a durable claim of canonical equality rather than a tuned threshold;
+- candidate order is the ranker's order: `lexicalScore` non-increasing by rank, with equal adjacent
+  scores broken by ascending `publicId` under the same route-safe ASCII comparison production uses.
+
+These hold in the TypeScript persisted contract, the SQL validation RPC, and the table `CHECK`
+constraint, so a direct or superuser insert cannot record evidence that contradicts itself merely
+because the current application caller happens to be correct. None of it introduces a duplicate
+decision: no score is a threshold and staff alone decide whether two projects are the same work.
+
+### Untrusted candidate prose
+
+Project rows are required to be bounded, not free of interior C0/DEL control characters, so a
+historical record may legitimately contain one. Ranking, corpus hashing, and input identity continue
+to consume the authoritative source exactly as stored; only the durable evidence copy built from a
+ranked candidate is sanitized, replacing prohibited controls with `U+FFFD` through the same
+`sanitizeAssistivePlainText` boundary Phase 2 already uses. Project metadata is never rewritten, the
+strict schema still refuses a raw control, and scores, ranks, and order are unaffected. One
+malformed legacy record therefore cannot fail every other project's non-authoritative run.
+
 Migration 0033 (`20260821140000_assistive_duplicate_shortlist.sql`) preserves the closed
 `assistive-finding-evidence/v1` contract and adds closed `assistive-finding-evidence/v2`. V2 retains
 the nine common v1 keys and adds only `duplicateCandidates`. Each candidate contains exactly:
@@ -134,11 +162,20 @@ latency or scalability beyond the measured in-memory workload.
 
 A clean disposable Local Supabase reset applied migrations 1 through 33 from zero. The Phase 3
 persistence verifier passed 39 scenarios, the 30-to-33 upgrade verifier passed seven, Phase 4 job
-coordination passed 23, Phase 5 staff inspection passed 26, and the Migration 33 verifier passed 22.
+coordination passed 23, Phase 5 staff inspection passed 26, and the Migration 33 verifier passed 35.
 The last set exercised v1/v2 round trips, zero/one/five/over-five candidates, bounds and hostile
 payload rejection, current/corpus identity changes, add/remove corpus drift, exclusion of workflow
 status, a real queued run superseded before finalization, dispositions, permissions, and unchanged
 project/approval/publication state.
+
+The same set also proves the coherence invariants at both database boundaries: coherent lexical-only
+and exact/normalized shortlists are accepted, while every incoherent outcome/reason pair, an exact
+match denying the normalized title, an exact score other than 1, a non-exact score of 1, ascending
+scores, and a reversed equal-score public-ID tie are all rejected — by the validation RPC and, via
+direct superuser inserts, by the table `CHECK` constraint itself. A final end-to-end scenario stores
+`U+001F`, `U+0001`, and `U+007F` in a candidate project row, runs the real coordinator, and confirms
+the run finalizes normally, the persisted and inspected evidence contain no raw control, and the
+authoritative project prose still contains the original characters unchanged.
 
 Real Local Admin browser checks used only reserved `phase6b-browser-*` synthetic fixtures:
 

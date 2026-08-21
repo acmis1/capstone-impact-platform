@@ -71,6 +71,27 @@ describe('assistive duplicate shortlist Migration 0033 contract', () => {
     }
   });
 
+  it('derives the shortlist outcome and reason from the candidate flags at both boundaries', () => {
+    expect(compact).toContain('CREATE OR REPLACE FUNCTION public.assistive_duplicate_shortlist_has_exact_or_normalized(');
+    expect(compact).toContain("'$[*] ? (@.exactContentMatch == true || @.normalizedTitleMatch == true)'");
+    expect(compact).toContain('REVOKE ALL ON FUNCTION public.assistive_duplicate_shortlist_has_exact_or_normalized(jsonb) FROM PUBLIC, anon, authenticated, service_role');
+    // Table CHECK: an incoherent shortlist cannot be inserted directly.
+    expect(compact).toContain("THEN outcome = 'REVIEW' AND reason_code = 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT' ELSE outcome = 'INFORMATION' AND reason_code = 'LEXICAL_DUPLICATE_SHORTLIST' END");
+    // Validation RPC: the same rule, expressed as an equivalence rather than an enumeration.
+    expect(compact).toContain("(v_finding ->> 'outcome' = 'REVIEW') IS DISTINCT FROM v_has_exact_or_normalized");
+    expect(compact).toContain("(v_finding ->> 'reasonCode' = 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT') IS DISTINCT FROM v_has_exact_or_normalized");
+  });
+
+  it('holds candidate flags, scores, and rank order to the selected deterministic ranker', () => {
+    expect(compact).toContain('(v_exact AND NOT v_normalized)');
+    expect(compact).toContain('OR (v_exact AND v_score <> 1)');
+    expect(compact).toContain('OR (NOT v_exact AND v_score > 0.999)');
+    expect(compact).toContain('v_position > 1 AND ( v_score > v_previous_score');
+    expect(compact).toContain('v_score = v_previous_score AND (v_public_id COLLATE pg_catalog."C") <= (v_previous_public_id COLLATE pg_catalog."C")');
+    // Ordering is validated against the supplied evidence only; similarity is never recomputed here.
+    expect(executable).not.toMatch(/\b(similarity|levenshtein|word_similarity|pg_trgm|tsvector|to_tsvector|embedding|vector)\b/i);
+  });
+
   it('replaces only the v1-enumerating persistence validator and RPC with hardened functions', () => {
     expect(compact).toContain('CREATE OR REPLACE FUNCTION public.is_valid_assistive_validation_findings(p_findings jsonb)');
     expect(compact).toContain('CREATE OR REPLACE FUNCTION public.persist_assistive_validation_run(');

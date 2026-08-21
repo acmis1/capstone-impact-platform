@@ -4,8 +4,39 @@
 -- browser-safe project candidates. Existing assistive-finding-evidence/v1 rows remain valid and
 -- unchanged. The new v2 object retains every bounded v1 field and adds only duplicateCandidates.
 -- Direct table access remains denied; no project metadata or workflow state is mutated here.
+--
+-- The stored evidence is held to the semantics of the selected deterministic ranker rather than to
+-- a looser superset of them: the finding outcome and reason follow from the candidate flags, an
+-- exact content match implies a normalized-title match and a score of exactly 1, every other
+-- candidate is capped below 1, and the persisted order is descending score with an ascending
+-- route-safe public-ID tie breaker. None of this is a duplicate decision -- no score is a
+-- threshold, the finding stays NON_BLOCKING, and staff alone decide whether projects are the same
+-- work. The database enforces these so a direct insert cannot record evidence that contradicts
+-- itself merely because the current application caller happens to be correct.
 
 BEGIN;
+
+-- The one shortlist-level signal that separates an informational shortlist from one staff are asked
+-- to review. The application converter derives the outcome and reason from the same predicate, so
+-- expressing it once here lets the table constraint and the validation RPC agree with it exactly.
+CREATE OR REPLACE FUNCTION public.assistive_duplicate_shortlist_has_exact_or_normalized(
+  p_candidates jsonb
+) RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  SELECT COALESCE(
+    pg_catalog.jsonb_path_exists(
+      p_candidates,
+      '$[*] ? (@.exactContentMatch == true || @.normalizedTitleMatch == true)'
+    ),
+    false
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.assistive_duplicate_shortlist_has_exact_or_normalized(jsonb)
+  FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.is_valid_assistive_duplicate_candidates(p_candidates jsonb)
 RETURNS boolean
@@ -17,6 +48,12 @@ DECLARE
   v_candidate jsonb;
   v_position bigint;
   v_public_ids text[] := ARRAY[]::text[];
+  v_public_id text;
+  v_score numeric;
+  v_exact boolean;
+  v_normalized boolean;
+  v_previous_public_id text;
+  v_previous_score numeric;
   v_keys text[] := ARRAY[
     'rank', 'publicId', 'title', 'summaryExcerpt', 'lexicalScore',
     'exactContentMatch', 'normalizedTitleMatch'
@@ -61,7 +98,36 @@ BEGIN
     THEN
       RETURN false;
     END IF;
-    v_public_ids := pg_catalog.array_append(v_public_ids, v_candidate ->> 'publicId');
+
+    v_public_id := v_candidate ->> 'publicId';
+    v_score := (v_candidate ->> 'lexicalScore')::numeric;
+    v_exact := (v_candidate ->> 'exactContentMatch')::boolean;
+    v_normalized := (v_candidate ->> 'normalizedTitleMatch')::boolean;
+
+    -- Canonical equality includes the normalized title and is the only comparison that scores 1, so
+    -- these combinations describe a run the selected deterministic ranker cannot have produced.
+    -- No score is a duplicate decision here; staff remain the only party who decide that.
+    IF (v_exact AND NOT v_normalized)
+       OR (v_exact AND v_score <> 1)
+       OR (NOT v_exact AND v_score > 0.999)
+    THEN
+      RETURN false;
+    END IF;
+
+    -- The evidence calls itself a ranked shortlist. The supplied order is checked against the
+    -- ranker's own rule -- descending score, then ascending public ID under the same route-safe
+    -- ASCII comparison -- without ever recomputing lexical similarity in the database.
+    IF v_position > 1 AND (
+      v_score > v_previous_score
+      OR (v_score = v_previous_score
+          AND (v_public_id COLLATE pg_catalog."C") <= (v_previous_public_id COLLATE pg_catalog."C"))
+    ) THEN
+      RETURN false;
+    END IF;
+
+    v_public_ids := pg_catalog.array_append(v_public_ids, v_public_id);
+    v_previous_public_id := v_public_id;
+    v_previous_score := v_score;
   END LOOP;
 
   RETURN true;
@@ -144,7 +210,17 @@ ALTER TABLE public.assistive_validation_findings
        AND pg_catalog.jsonb_typeof(evidence -> 'normalizedMetadataValue') = 'null'
        AND pg_catalog.jsonb_typeof(evidence -> 'candidateValue') = 'null'
        AND pg_catalog.jsonb_typeof(evidence -> 'normalizedCandidateValue') = 'null'
-       AND public.is_valid_assistive_duplicate_candidates(evidence -> 'duplicateCandidates'))
+       AND public.is_valid_assistive_duplicate_candidates(evidence -> 'duplicateCandidates')
+       -- Defence in depth: a direct or superuser insert must not be able to record a shortlist
+       -- whose outcome and reason contradict the candidate flags it stores.
+       AND CASE
+             WHEN public.assistive_duplicate_shortlist_has_exact_or_normalized(
+               evidence -> 'duplicateCandidates'
+             ) THEN outcome = 'REVIEW'
+               AND reason_code = 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT'
+             ELSE outcome = 'INFORMATION'
+               AND reason_code = 'LEXICAL_DUPLICATE_SHORTLIST'
+           END)
       OR
       (check_type <> 'DUPLICATE_SHORTLIST'
        AND reason_code NOT IN (
@@ -164,6 +240,7 @@ DECLARE
   v_finding jsonb;
   v_evidence jsonb;
   v_box jsonb;
+  v_has_exact_or_normalized boolean;
   v_finding_keys text[] := ARRAY[
     'checkType', 'outcome', 'classification', 'reasonCode', 'affectedField',
     'origin', 'scoreKind', 'scoreValue', 'evidence'
@@ -290,6 +367,18 @@ BEGIN
          OR pg_catalog.jsonb_typeof(v_evidence -> 'candidateValue') <> 'null'
          OR pg_catalog.jsonb_typeof(v_evidence -> 'normalizedCandidateValue') <> 'null'
          OR NOT public.is_valid_assistive_duplicate_candidates(v_evidence -> 'duplicateCandidates')
+      THEN
+        RETURN false;
+      END IF;
+
+      -- The shortlist outcome and reason are not free-standing enumerations: each is determined by
+      -- whether any stored candidate is an exact or normalized-title match.
+      v_has_exact_or_normalized := public.assistive_duplicate_shortlist_has_exact_or_normalized(
+        v_evidence -> 'duplicateCandidates'
+      );
+      IF (v_finding ->> 'outcome' = 'REVIEW') IS DISTINCT FROM v_has_exact_or_normalized
+         OR (v_finding ->> 'reasonCode' = 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT')
+            IS DISTINCT FROM v_has_exact_or_normalized
       THEN
         RETURN false;
       END IF;

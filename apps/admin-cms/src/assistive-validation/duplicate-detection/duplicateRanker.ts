@@ -9,6 +9,11 @@ export const DUPLICATE_SHORTLIST_LIMITS = {
   background: 10_000,
   solution: 10_000,
   summaryExcerpt: 240,
+  /**
+   * Only canonical equality scores 1. Every other comparison is capped here, so a persisted score
+   * of exactly 1 is a durable claim that the two canonical texts were identical.
+   */
+  inexactScoreCeiling: 0.999,
 } as const;
 
 export interface DuplicateProjectProse {
@@ -96,8 +101,12 @@ function trigramCosine(left: Map<string, number>, right: Map<string, number>): n
   return denominator === 0 ? 0 : numerator / denominator;
 }
 
-function boundedSummaryExcerpt(summary: string): string {
-  const excerpt = summary.slice(0, DUPLICATE_SHORTLIST_LIMITS.summaryExcerpt);
+/**
+ * Bounded copy of candidate prose that never ends on an orphaned high surrogate, so the truncated
+ * value stays encodable as UTF-8 text for both storage and the browser.
+ */
+export function boundedDuplicateEvidenceText(value: string, maximum: number): string {
+  const excerpt = value.slice(0, maximum);
   return /[\uD800-\uDBFF]$/.test(excerpt) ? excerpt.slice(0, -1) : excerpt;
 }
 
@@ -144,7 +153,7 @@ export function rankDuplicateCandidates(
       const lexicalScore = exactContentMatch
         ? 1
         : Math.min(
-          0.999,
+          DUPLICATE_SHORTLIST_LIMITS.inexactScoreCeiling,
           0.25 * Number(normalizedTitleMatch)
             + 0.40 * tokenJaccard(queryCanonical, canonical)
             + 0.35 * trigramCosine(queryTrigrams, trigrams(canonical)),
@@ -152,7 +161,7 @@ export function rankDuplicateCandidates(
       return {
         publicId: candidate.publicId,
         title: candidate.title,
-        summaryExcerpt: boundedSummaryExcerpt(candidate.summary),
+        summaryExcerpt: boundedDuplicateEvidenceText(candidate.summary, DUPLICATE_SHORTLIST_LIMITS.summaryExcerpt),
         lexicalScore,
         exactContentMatch,
         normalizedTitleMatch,
@@ -164,6 +173,7 @@ export function rankDuplicateCandidates(
     .map((candidate, index) => ({ ...candidate, rank: index + 1 }));
 }
 
-function comparePublicIds(left: string, right: string): number {
+/** Route-safe public IDs are ASCII, so code-unit order is the deterministic tie breaker. */
+export function comparePublicIds(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }

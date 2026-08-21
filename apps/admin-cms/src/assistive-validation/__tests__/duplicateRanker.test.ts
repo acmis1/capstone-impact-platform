@@ -11,6 +11,10 @@ import {
   rankDuplicateCandidates,
   type DuplicateProjectProse,
 } from '../duplicate-detection/duplicateRanker';
+import {
+  ASSISTIVE_DUPLICATE_EVIDENCE_VERSION,
+  toPersistedDuplicateShortlistFinding,
+} from '../domain/persistenceContract';
 
 const current: DuplicateProjectProse = {
   publicId: 'current-project',
@@ -83,6 +87,43 @@ describe('production lexical duplicate ranker', () => {
     expect(hashDuplicateCorpus([first, second, candidate('project-c')])).not.toBe(baseline);
   });
 
+  it('leaves the authoritative source prose untouched and unchanged by evidence sanitization', () => {
+    const hostile: DuplicateProjectProse = {
+      publicId: 'hostile-project',
+      title: 'Pump\u001FMonitor',
+      summary: 'Safe text\u0001unexpected',
+      background: 'Delete\u007Fmarker background.',
+      solution: 'Local sensors detect rising water.',
+    };
+    const benign = candidate('benign-project', { title: 'Unrelated Project', summary: 'Unrelated summary.' });
+    const pool = [hostile, benign];
+    const before = structuredClone(pool);
+    const corpusBefore = hashDuplicateCorpus(pool);
+
+    const ranked = rankDuplicateCandidates(current, pool);
+    const finding = toPersistedDuplicateShortlistFinding(ranked)!;
+
+    // The source rows, the corpus identity, and the ranking all still see the original characters.
+    expect(pool).toEqual(before);
+    expect(hostile.title).toBe('Pump\u001FMonitor');
+    expect(hashDuplicateCorpus(pool)).toBe(corpusBefore);
+    expect(ranked.find((item) => item.publicId === 'hostile-project')!.title).toBe('Pump\u001FMonitor');
+
+    // Only the durable copy is sanitized, and it carries the same scores in the same order.
+    expect(finding.evidence.version).toBe(ASSISTIVE_DUPLICATE_EVIDENCE_VERSION);
+    if (finding.evidence.version !== ASSISTIVE_DUPLICATE_EVIDENCE_VERSION) return;
+    const persisted = finding.evidence.duplicateCandidates;
+    expect(persisted.map((item) => [item.publicId, item.rank, item.lexicalScore]))
+      .toEqual(ranked.map((item) => [item.publicId, item.rank, item.lexicalScore]));
+    const persistedTitles = new Map(persisted.map((item) => [item.publicId, item.title]));
+    expect(persistedTitles.get('hostile-project')).toBe('Pump\uFFFDMonitor');
+    expect(persistedTitles.get('benign-project')).toBe('Unrelated Project');
+    for (const item of persisted) {
+      expect(item.title).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/);
+      expect(item.summaryExcerpt).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/);
+    }
+  });
+
   it('fails closed above the measured candidate-pool maximum', () => {
     const oversized = Array.from(
       { length: DUPLICATE_SHORTLIST_LIMITS.candidatePool + 1 },
@@ -115,16 +156,14 @@ const report = JSON.parse(readFileSync(
 )) as FrozenReport;
 
 describe('frozen Phase 6A TypeScript parity', () => {
-  const representativeQueries = [
-    'dq6-001-exact',
-    'dq6-001-near',
-    'dq6-003-near',
-    'dq6-004-exact',
-    'dq6-005-near',
-    'dq6-013-near',
-  ];
+  const frozenQueries = report.duplicates.records.map((record) => record.query_id);
 
-  it.each(representativeQueries)('reproduces ordering and score for %s', (queryId) => {
+  it('covers every frozen Phase 6A duplicate query', () => {
+    expect(frozenQueries).toHaveLength(40);
+    expect(new Set(frozenQueries).size).toBe(frozenQueries.length);
+  });
+
+  it.each(frozenQueries)('reproduces ordering and score for %s', (queryId) => {
     const query = manifest.duplicate_queries.find((item) => item.id === queryId)!;
     const expected = report.duplicates.records.find((item) => item.query_id === queryId)!.top_5;
     const actual = rankDuplicateCandidates(

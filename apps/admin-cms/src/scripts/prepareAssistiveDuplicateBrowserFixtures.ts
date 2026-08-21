@@ -8,6 +8,8 @@ import { createClient } from '@supabase/supabase-js';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
 
 const FIXTURE_PREFIX = 'phase6b-browser-';
+/** U+FFFD: what sanitizeAssistivePlainText substitutes for a prohibited control character. */
+const REPLACEMENT = '�';
 const PIPELINE = 'assistive-deterministic-checks/v2';
 
 function v1Finding() {
@@ -25,14 +27,20 @@ function v1Finding() {
   };
 }
 
-function duplicateFinding(candidates: Array<{
+interface BrowserFixtureCandidate {
   publicId: string;
+  /** Sanitized durable evidence, i.e. what the production converter would have persisted. */
   title: string;
   summaryExcerpt: string;
   score: number;
   exact?: boolean;
   titleMatch?: boolean;
-}>) {
+  /** Untouched authoritative prose for the fixture project row, when it differs from the evidence. */
+  sourceTitle?: string;
+  sourceSummary?: string;
+}
+
+function duplicateFinding(candidates: BrowserFixtureCandidate[]) {
   return {
     checkType: 'DUPLICATE_SHORTLIST', outcome: candidates.some((item) => item.exact || item.titleMatch) ? 'REVIEW' : 'INFORMATION',
     classification: 'NON_BLOCKING', reasonCode: candidates.some((item) => item.exact || item.titleMatch)
@@ -97,15 +105,26 @@ async function main(): Promise<void> {
     return String(result.data!.id);
   };
 
-  const candidates = [
-    { publicId: `${FIXTURE_PREFIX}candidate-1`, title: '<img src=x onerror=alert(1)> Literal candidate title', summaryExcerpt: '<script>alert("literal")</script> must render as text.', score: 1, exact: true },
+  const candidates: BrowserFixtureCandidate[] = [
+    { publicId: `${FIXTURE_PREFIX}candidate-1`, title: '<img src=x onerror=alert(1)> Literal candidate title', summaryExcerpt: '<script>alert("literal")</script> must render as text.', score: 1, exact: true, titleMatch: true },
     { publicId: `${FIXTURE_PREFIX}candidate-2`, title: 'Normalized Browser Fixture Title', summaryExcerpt: 'A normalized-title candidate.', score: 0.87, titleMatch: true },
-    { publicId: `${FIXTURE_PREFIX}candidate-3`, title: 'Related Community Platform', summaryExcerpt: 'A bounded lexical comparison summary.', score: 0.73 },
+    {
+      publicId: `${FIXTURE_PREFIX}candidate-3`,
+      title: 'Related Community' + REPLACEMENT + 'Platform',
+      summaryExcerpt: 'A bounded' + REPLACEMENT + 'lexical comparison summary.',
+      score: 0.73,
+      sourceTitle: 'Related Community\u001FPlatform',
+      sourceSummary: 'A bounded\u0001lexical comparison summary.',
+    },
     { publicId: `${FIXTURE_PREFIX}candidate-4`, title: 'Regional Monitoring Dashboard', summaryExcerpt: 'Another bounded comparison summary.', score: 0.61 },
     { publicId: `${FIXTURE_PREFIX}candidate-5`, title: 'Participant Impact Showcase', summaryExcerpt: 'The fifth deterministic shortlist entry.', score: 0.5 },
   ];
   for (const candidate of candidates) {
-    await createProject(candidate.publicId, candidate.title, candidate.summaryExcerpt);
+    await createProject(
+      candidate.publicId,
+      candidate.sourceTitle ?? candidate.title,
+      candidate.sourceSummary ?? candidate.summaryExcerpt,
+    );
   }
 
   const targets = [

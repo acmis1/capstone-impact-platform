@@ -72,9 +72,11 @@ const duplicateFinding = (): AssistiveInspectionFinding => ({
       publicId: `2026-similar-${index + 1}`,
       title: index === 0 ? '<img src=x onerror=alert(1)> Similar Project' : `Similar Project ${index + 1}`,
       summaryExcerpt: `Bounded synthetic summary ${index + 1}.`,
-      lexicalScore: 0.85 - index * 0.1,
+      // Coherent with the persisted contract: the exact match implies the normalized-title match
+      // and scores 1, every other candidate is capped below it, and scores descend by rank.
+      lexicalScore: index === 0 ? 1 : Number((0.85 - index * 0.1).toFixed(2)),
       exactContentMatch: index === 0,
-      normalizedTitleMatch: index === 1,
+      normalizedTitleMatch: index <= 1,
     })),
   },
   disposition: 'UNREVIEWED',
@@ -323,9 +325,11 @@ describe('ProjectAssistiveChecks Component', () => {
     const link = screen.getByRole('link', { name: '<img src=x onerror=alert(1)> Similar Project' });
     expect(link.getAttribute('href')).toBe('/admin/projects/2026-similar-1');
     expect(screen.getByText('Exact content match')).toBeTruthy();
-    expect(screen.getByText('Normalized title match')).toBeTruthy();
-    expect(screen.getByText('Lexical similarity: 0.85')).toBeTruthy();
-    expect(screen.queryByText(/85%/)).toBeNull();
+    // An exact content match also matches the normalized title, so both badges appear on rank 1.
+    expect(screen.getAllByText('Normalized title match')).toHaveLength(2);
+    expect(screen.getByText('Lexical similarity: 1.00')).toBeTruthy();
+    expect(screen.getByText('Lexical similarity: 0.75')).toBeTruthy();
+    expect(screen.queryByText(/75%/)).toBeNull();
     expect(screen.queryByRole('button', { name: /Apply to draft/i })).toBeNull();
     expect(screen.getByRole('button', { name: /Mark reviewed/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Ignore/i })).toBeTruthy();

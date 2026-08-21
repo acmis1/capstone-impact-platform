@@ -156,6 +156,38 @@ describe('assistive coordinator', () => {
     });
   });
 
+  it('completes normally when a candidate project carries a prohibited control character', async () => {
+    const hostile = {
+      publicId: 'P-2',
+      title: 'Pump\u001FMonitor',
+      summary: 'Safe text\u0001unexpected',
+      background: 'Candidate background\u007F',
+      solution: 'Candidate solution',
+    };
+    const inputHash = currentHash(PDF, [hostile]);
+    const jobs = jobGateway(inputHash);
+    const inputs = inputGateway([PDF, PDF]);
+    vi.mocked(inputs.loadDuplicateCandidates).mockResolvedValue([{
+      public_id: hostile.publicId, title: hostile.title, summary: hostile.summary,
+      background: hostile.background, solution: hostile.solution,
+    }]);
+    const coordinator = new AssistiveValidationCoordinator(
+      jobs, inputs, 'private', worker(), WORKER_ID,
+    );
+
+    await expect(coordinator.runOnce()).resolves.toEqual({ outcome: 'FINALIZED', runId: RUN_ID });
+    expect(jobs.fail).not.toHaveBeenCalled();
+    const findings = vi.mocked(jobs.finalize).mock.calls[0][0].findings;
+    const shortlist = findings.find((finding: { checkType: string }) => finding.checkType === 'DUPLICATE_SHORTLIST');
+    expect(shortlist).toBeDefined();
+    expect(JSON.stringify(shortlist)).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/);
+    expect(shortlist.evidence.duplicateCandidates[0]).toMatchObject({
+      publicId: 'P-2',
+      title: 'Pump\uFFFDMonitor',
+      summaryExcerpt: 'Safe text\uFFFDunexpected',
+    });
+  });
+
   it('records a bounded failure when the worker task contract rejects', async () => {
     const inputHash = currentHash(PDF);
     const jobs = jobGateway(inputHash);

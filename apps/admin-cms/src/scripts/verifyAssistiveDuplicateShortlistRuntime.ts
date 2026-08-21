@@ -28,17 +28,41 @@ function hash(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
-function candidate(rank: number) {
+interface VerifierCandidate {
+  rank: number;
+  publicId: string;
+  title: string;
+  summaryExcerpt: string;
+  lexicalScore: number;
+  exactContentMatch: boolean;
+  normalizedTitleMatch: boolean;
+}
+
+/**
+ * A lexical-only candidate: no exact content match, no normalized-title match, and a score strictly
+ * below the exact-match value, in the descending order the deterministic ranker produces.
+ */
+function candidate(rank: number, overrides: Partial<VerifierCandidate> = {}): VerifierCandidate {
   return {
     rank,
     publicId: `2026-synthetic-similar-${rank}`,
     title: `Synthetic Similar Project ${rank}`,
     summaryExcerpt: `Bounded synthetic summary ${rank}.`,
-    lexicalScore: Math.max(0, 0.9 - rank * 0.1),
-    exactContentMatch: rank === 1,
-    normalizedTitleMatch: rank === 2,
+    lexicalScore: Number((0.9 - rank * 0.1).toFixed(3)),
+    exactContentMatch: false,
+    normalizedTitleMatch: false,
+    ...overrides,
   };
 }
+
+/** Canonical equality: implies the normalized title matched, and scores exactly 1. */
+function exactCandidate(rank: number, overrides: Partial<VerifierCandidate> = {}): VerifierCandidate {
+  return candidate(rank, {
+    lexicalScore: 1, exactContentMatch: true, normalizedTitleMatch: true, ...overrides,
+  });
+}
+
+const PROHIBITED_CONTROLS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 
 const v1Finding = {
   checkType: 'TITLE_CONSISTENCY',
@@ -62,12 +86,25 @@ const v1Finding = {
   },
 };
 
-function duplicateFinding(count: number) {
+/**
+ * The outcome and reason are not independent knobs: they follow from the candidate flags, exactly
+ * as the production converter derives them. Passing candidates that disagree with the supplied
+ * outcome/reason is how the incoherence scenarios below are built.
+ */
+function shortlistFinding(
+  candidates: readonly VerifierCandidate[],
+  overrides: { outcome?: string; reasonCode?: string } = {},
+) {
+  const hasExactOrNormalized = candidates.some(
+    (item) => item.exactContentMatch || item.normalizedTitleMatch,
+  );
   return {
     checkType: 'DUPLICATE_SHORTLIST',
-    outcome: 'REVIEW',
+    outcome: overrides.outcome ?? (hasExactOrNormalized ? 'REVIEW' : 'INFORMATION'),
     classification: 'NON_BLOCKING',
-    reasonCode: 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT',
+    reasonCode: overrides.reasonCode ?? (hasExactOrNormalized
+      ? 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT'
+      : 'LEXICAL_DUPLICATE_SHORTLIST'),
     affectedField: 'project_content',
     origin: 'DETERMINISTIC_HELPER',
     scoreKind: null,
@@ -82,9 +119,13 @@ function duplicateFinding(count: number) {
       candidateValue: null,
       normalizedCandidateValue: null,
       explanation: 'Review these lexically similar project records. Staff decide whether any projects are duplicates.',
-      duplicateCandidates: Array.from({ length: count }, (_, index) => candidate(index + 1)),
+      duplicateCandidates: [...candidates],
     },
   };
+}
+
+function duplicateFinding(count: number) {
+  return shortlistFinding(Array.from({ length: count }, (_, index) => candidate(index + 1)));
 }
 
 async function main(): Promise<void> {
@@ -267,6 +308,66 @@ async function main(): Promise<void> {
       assert.equal(validator([{ ...duplicateFinding(1), checkType: 'FORMATTING' }]), false);
     });
 
+    const lexicalOnly = [candidate(1), candidate(2), candidate(3)];
+    const withExact = [exactCandidate(1), candidate(2)];
+    const withNormalizedTitleOnly = [candidate(1, { normalizedTitleMatch: true }), candidate(2)];
+
+    await scenario('11.1', 'a lexical-only shortlist is accepted as INFORMATION with the lexical reason', () => {
+      assert.equal(validator([shortlistFinding(lexicalOnly)]), true);
+    });
+    await scenario('11.2', 'exact and normalized-title shortlists are accepted as REVIEW with the exact reason', () => {
+      assert.equal(validator([shortlistFinding(withExact)]), true);
+      assert.equal(validator([shortlistFinding(withNormalizedTitleOnly)]), true);
+    });
+    await scenario('11.3', 'a lexical-only shortlist cannot claim REVIEW or the exact reason', () => {
+      assert.equal(validator([shortlistFinding(lexicalOnly, { outcome: 'REVIEW' })]), false);
+      assert.equal(validator([shortlistFinding(lexicalOnly, {
+        reasonCode: 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT',
+      })]), false);
+      assert.equal(validator([shortlistFinding(lexicalOnly, {
+        outcome: 'REVIEW', reasonCode: 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT',
+      })]), false);
+    });
+    await scenario('11.4', 'an exact or normalized-title shortlist cannot claim INFORMATION or the lexical reason', () => {
+      assert.equal(validator([shortlistFinding(withExact, { outcome: 'INFORMATION' })]), false);
+      assert.equal(validator([shortlistFinding(withExact, {
+        reasonCode: 'LEXICAL_DUPLICATE_SHORTLIST',
+      })]), false);
+      assert.equal(validator([shortlistFinding(withNormalizedTitleOnly, {
+        outcome: 'INFORMATION', reasonCode: 'LEXICAL_DUPLICATE_SHORTLIST',
+      })]), false);
+    });
+    await scenario('11.5', 'an exact content match that denies the normalized title is rejected', () => {
+      assert.equal(validator([shortlistFinding([
+        exactCandidate(1, { normalizedTitleMatch: false }),
+      ])]), false);
+    });
+    await scenario('11.6', 'the exact-match score is pinned to 1 and no other candidate may claim it', () => {
+      assert.equal(validator([shortlistFinding([exactCandidate(1, { lexicalScore: 0.7 })])]), false);
+      assert.equal(validator([shortlistFinding([exactCandidate(1, { lexicalScore: 0.999 })])]), false);
+      assert.equal(validator([shortlistFinding([candidate(1, { lexicalScore: 1 })])]), false);
+      assert.equal(validator([shortlistFinding([
+        candidate(1, { normalizedTitleMatch: true, lexicalScore: 1 }),
+      ])]), false);
+      assert.equal(validator([shortlistFinding([candidate(1, { lexicalScore: 0.999 })])]), true);
+    });
+    await scenario('11.7', 'a shortlist whose scores increase with rank is rejected', () => {
+      assert.equal(validator([shortlistFinding([
+        candidate(1, { lexicalScore: 0.20 }),
+        candidate(2, { lexicalScore: 0.90 }),
+      ])]), false);
+    });
+    await scenario('11.8', 'an equal-score tie ordered against the public-ID tie breaker is rejected', () => {
+      assert.equal(validator([shortlistFinding([
+        candidate(1, { publicId: '2026-synthetic-similar-a', lexicalScore: 0.5 }),
+        candidate(2, { publicId: '2026-synthetic-similar-b', lexicalScore: 0.5 }),
+      ])]), true);
+      assert.equal(validator([shortlistFinding([
+        candidate(1, { publicId: '2026-synthetic-similar-b', lexicalScore: 0.5 }),
+        candidate(2, { publicId: '2026-synthetic-similar-a', lexicalScore: 0.5 }),
+      ])]), false);
+    });
+
     const inputRepository = new SupabaseAssistiveInputRepository(service);
     const baselineInput = await loadAssistiveInput(inputRepository, projectId, PRIVATE_BUCKET);
     assert(baselineInput, 'Production input repository could not load the synthetic private poster.');
@@ -435,9 +536,140 @@ async function main(): Promise<void> {
       assert(anonResult.error, 'Anon inspection RPC unexpectedly succeeded.');
       assert.equal(psql("SELECT has_function_privilege('authenticated', 'public.get_project_assistive_validation_inspection(uuid,text,uuid)', 'EXECUTE');"), 'f');
     });
+    /**
+     * The application caller is correct today, so the table itself is exercised directly as a
+     * superuser: nothing but the CHECK constraint stands between these rows and the table.
+     */
+    let ordinal = 10;
+    const directInsert = (finding: ReturnType<typeof shortlistFinding>): boolean => {
+      ordinal += 1;
+      try {
+        psql(`INSERT INTO public.assistive_validation_findings (
+            run_id, check_type, outcome, classification, reason_code, affected_field, origin,
+            ordinal, score_kind, score_value, evidence
+          ) VALUES (
+            '${runId}'::uuid, 'DUPLICATE_SHORTLIST', '${finding.outcome}', 'NON_BLOCKING',
+            '${finding.reasonCode}', 'project_content', 'DETERMINISTIC_HELPER',
+            ${ordinal}, NULL, NULL, $json$${JSON.stringify(finding.evidence)}$json$::jsonb
+          );`);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    await scenario('17.1', 'a direct superuser insert of coherent shortlist evidence is accepted', () => {
+      assert.equal(directInsert(shortlistFinding([candidate(1), candidate(2)])), true);
+      assert.equal(directInsert(shortlistFinding([exactCandidate(1), candidate(2)])), true);
+      psql(`DELETE FROM public.assistive_validation_findings WHERE run_id = '${runId}'::uuid AND ordinal > 10;`);
+    });
+    await scenario('17.2', 'the table itself refuses incoherent duplicate evidence from a direct insert', () => {
+      const rejected = [
+        // Outcome and reason must follow from the candidate flags, in both directions.
+        shortlistFinding([candidate(1)], { outcome: 'REVIEW' }),
+        shortlistFinding([candidate(1)], { reasonCode: 'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT' }),
+        shortlistFinding([exactCandidate(1)], { outcome: 'INFORMATION' }),
+        shortlistFinding([exactCandidate(1)], { reasonCode: 'LEXICAL_DUPLICATE_SHORTLIST' }),
+        // Flag and score combinations the deterministic ranker cannot produce.
+        shortlistFinding([exactCandidate(1, { normalizedTitleMatch: false })]),
+        shortlistFinding([exactCandidate(1, { lexicalScore: 0.7 })]),
+        shortlistFinding([candidate(1, { lexicalScore: 1 })]),
+        // Rank order that is not the ranker's order.
+        shortlistFinding([candidate(1, { lexicalScore: 0.2 }), candidate(2, { lexicalScore: 0.9 })]),
+        shortlistFinding([
+          candidate(1, { publicId: '2026-synthetic-similar-b', lexicalScore: 0.5 }),
+          candidate(2, { publicId: '2026-synthetic-similar-a', lexicalScore: 0.5 }),
+        ]),
+      ];
+      for (const finding of rejected) {
+        assert.equal(directInsert(finding), false, `Table accepted incoherent evidence: ${JSON.stringify(finding.evidence.duplicateCandidates)}`);
+      }
+      assert.equal(psql(`SELECT count(*) FROM public.assistive_validation_findings WHERE run_id = '${runId}'::uuid;`), '2');
+    });
+
     await scenario(18, 'project metadata, workflow, approval, and publication state remain unchanged', () => {
       assert.equal(psql(`SELECT to_jsonb(p)::text FROM public.projects p WHERE p.id = '${projectId}'::uuid;`), projectBefore);
       assert.equal(psql(`SELECT count(*) FROM public.approval_records WHERE project_id = '${projectId}'::uuid;`), approvalBefore);
+      assert.equal(psql('SELECT count(*) FROM public.published_snapshots;'), publicationBefore);
+    });
+
+    /**
+     * A historical project row is only required to be bounded, not free of interior control
+     * characters. U+001F, U+0001 and U+007F are all storable PostgreSQL text (unlike NUL, which the
+     * text type itself refuses), so this is reachable legacy data rather than a hypothetical.
+     */
+    const controlTitle = 'Synthetic Control\u001FCandidate';
+    const controlSummary = 'Legacy prose with\u0001an unexpected control and\u007Fa delete marker.';
+    let controlRunId = '';
+    let candidateProseBefore = '';
+
+    await scenario(19, 'a candidate control character cannot fail the whole assistive run', async () => {
+      const hostile = await service.from('projects').update({
+        title: controlTitle, summary: controlSummary,
+      }).eq('id', candidateProjectIds[0]);
+      assert.ifError(hostile.error);
+      candidateProseBefore = psql(`SELECT to_jsonb(p)::text FROM public.projects p WHERE p.id = '${candidateProjectIds[0]}'::uuid;`);
+      assert(PROHIBITED_CONTROLS.test(candidateProseBefore), 'The hostile candidate prose was not stored with its control characters.');
+
+      const jobRepository = new SupabaseAssistiveJobRepository(service);
+      const enqueued = await enqueueAssistiveValidation(jobRepository, inputRepository, {
+        projectId,
+        actorAdminUserId: actorId,
+        privateBucket: PRIVATE_BUCKET,
+        pipelineVersion: ASSISTIVE_PIPELINE_VERSION,
+      });
+      assert.equal(enqueued.resultCode, 'ENQUEUED');
+      assert('runId' in enqueued);
+      controlRunId = enqueued.runId;
+
+      const worker: AssistiveWorkerRunner = {
+        run: async () => ({
+          schema_version: 'assistive-worker-task-result/v1',
+          task_id: crypto.randomUUID(),
+          extraction: nativeFixture,
+          error: null,
+          duration_ms: 1,
+        }),
+      } as AssistiveWorkerRunner;
+      const coordinator = new AssistiveValidationCoordinator(
+        jobRepository, inputRepository, PRIVATE_BUCKET, worker, crypto.randomUUID(),
+      );
+      const result = await coordinator.runOnce();
+      assert.deepEqual(result, { outcome: 'FINALIZED', runId: controlRunId });
+      assert.equal(psql(`SELECT failure_code IS NULL FROM public.assistive_validation_runs WHERE id = '${controlRunId}'::uuid;`), 't');
+      assert.equal(psql(`SELECT count(*) FROM public.assistive_validation_findings WHERE run_id = '${controlRunId}'::uuid AND check_type = 'DUPLICATE_SHORTLIST';`), '1');
+    });
+
+    await scenario(20, 'the persisted shortlist evidence is sanitized and round-trips through staff inspection', async () => {
+      const raw = await rpc('get_project_assistive_validation_inspection', {
+        p_project_id: projectId,
+        p_pipeline_version: PIPELINE,
+        p_run_id: controlRunId,
+      });
+      const parsed = assistiveInspectionResponseSchema.safeParse(raw);
+      assert.equal(parsed.success, true, parsed.success ? '' : JSON.stringify(parsed.error.issues));
+      assert(parsed.success && parsed.data.resultCode === 'FOUND');
+      const shortlist = parsed.data.findings.find((finding) => finding.checkType === 'DUPLICATE_SHORTLIST');
+      assert(shortlist && shortlist.evidence.version === 'assistive-finding-evidence/v2');
+      const hostileCandidate = shortlist.evidence.duplicateCandidates.find(
+        (item) => item.publicId === `2026-${prefix}-candidate`,
+      );
+      assert(hostileCandidate, 'The hostile candidate is missing from the shortlist.');
+      assert.equal(hostileCandidate.title, 'Synthetic Control�Candidate');
+      assert.equal(
+        hostileCandidate.summaryExcerpt,
+        'Legacy prose with�an unexpected control and�a delete marker.',
+      );
+      assert.equal(PROHIBITED_CONTROLS.test(JSON.stringify(raw)), false, 'Inspection returned a raw prohibited control.');
+      assert.equal(PROHIBITED_CONTROLS.test(psql(`SELECT evidence::text FROM public.assistive_validation_findings WHERE run_id = '${controlRunId}'::uuid AND check_type = 'DUPLICATE_SHORTLIST';`)), false);
+    });
+
+    await scenario(21, 'the authoritative candidate prose is never rewritten by evidence sanitization', () => {
+      const candidateProseAfter = psql(`SELECT to_jsonb(p)::text FROM public.projects p WHERE p.id = '${candidateProjectIds[0]}'::uuid;`);
+      assert.equal(candidateProseAfter, candidateProseBefore);
+      assert.equal(psql(`SELECT title FROM public.projects WHERE id = '${candidateProjectIds[0]}'::uuid;`), controlTitle);
+      assert(PROHIBITED_CONTROLS.test(candidateProseAfter), 'The source project prose was modified.');
+      assert.equal(psql(`SELECT to_jsonb(p)::text FROM public.projects p WHERE p.id = '${projectId}'::uuid;`), projectBefore);
       assert.equal(psql('SELECT count(*) FROM public.published_snapshots;'), publicationBefore);
     });
   } catch (error) {
