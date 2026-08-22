@@ -238,6 +238,14 @@ per-case booleans, edit counts, safety outcomes and timings needed to recompute 
 gate. A ready result stops at a protocol-freeze recommendation; it never creates the future
 independent holdout.
 
+Operational plausibility is a two-part gate. `check-report` recomputes the historical prior from
+the merged benchmark's own raw measurements and separately recomputes cold start, p50, p95, peak
+working set, artifact footprint and the slowest single case from the scored configuration's own
+calibration capture. A configuration is operationally plausible only when the merged prior passes
+*and* the current capture violates no frozen ceiling, so no configuration inherits plausibility
+from an older run of the same engine. A current-configuration pass is a necessary condition
+measured on the calibration machine, not proof for every supported deployment machine.
+
 ### Phase 6A commands
 
 Generate and validate the committed manifest, then prove the frozen policy, before running an engine:

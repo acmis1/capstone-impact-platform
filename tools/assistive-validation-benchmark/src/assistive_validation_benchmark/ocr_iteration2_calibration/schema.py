@@ -23,6 +23,14 @@ ALLOWED_DECISIONS = {
     "NEEDS_OCR_MODEL_CHALLENGER",
     "NEEDS_MORE_OCR_CORPUS_CALIBRATION",
 }
+FROZEN_OPERATIONAL_CEILINGS = {
+    "cold_start_ms_maximum": 30000,
+    "p50_ms_maximum": 10000,
+    "p95_ms_maximum": 20000,
+    "peak_working_set_bytes_maximum": 4294967296,
+    "artifact_footprint_bytes_maximum": 1073741824,
+    "per_case_timeout_seconds": 90,
+}
 
 
 def tool_root() -> Path:
@@ -88,6 +96,10 @@ def validate_protocol(value: dict[str, Any]) -> dict[str, Any]:
         or gate.get("material_false_agreements_maximum") != 0
     ):
         raise ValueError("the development gate must remain 90% exact title, 15% WER, and zero false agreements")
+    if gate.get("all_cases_execute_safely") is not True or gate.get("operational_plausibility_required") is not True:
+        raise ValueError("the development gate must keep safe execution and operational plausibility required")
+    if value.get("operational_ceilings") != FROZEN_OPERATIONAL_CEILINGS:
+        raise ValueError("the frozen operational ceilings may not be loosened or removed")
     final_gate = value.get("future_holdout_gate", {})
     if (
         final_gate.get("exact_title_rate_minimum") != 0.95

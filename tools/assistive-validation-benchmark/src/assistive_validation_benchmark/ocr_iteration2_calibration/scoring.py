@@ -40,6 +40,84 @@ def _percentile(values: list[float], quantile: float) -> float:
     return ordered[max(0, math.ceil(quantile * len(ordered)) - 1)]
 
 
+OPERATIONAL_CHECK_KEYS = ("cold_start", "p50", "p95", "peak_memory", "artifact_footprint", "per_case_timeout")
+
+
+def operational_measurements(
+    *,
+    cold_start_ms: float | None,
+    runtimes_ms: list[float],
+    peak_working_set_bytes: int | None,
+    artifact_footprint_bytes: int | None,
+) -> dict[str, Any]:
+    """Reduce raw measured values to the six quantities the frozen operational ceilings bound."""
+    return {
+        "cold_start_ms": None if cold_start_ms is None else float(cold_start_ms),
+        "p50_ms": _percentile(runtimes_ms, 0.5) if runtimes_ms else None,
+        "p95_ms": _percentile(runtimes_ms, 0.95) if runtimes_ms else None,
+        "peak_working_set_bytes": peak_working_set_bytes,
+        "artifact_footprint_bytes": artifact_footprint_bytes,
+        "maximum_case_runtime_ms": max(runtimes_ms) if runtimes_ms else None,
+    }
+
+
+def operational_checks(measurements: dict[str, Any], ceilings: dict[str, Any]) -> dict[str, bool]:
+    """Recompute every ceiling check from measured values; a missing measurement never passes."""
+
+    def within(value: Any, limit: Any) -> bool:
+        return value is not None and float(value) <= float(limit)
+
+    return {
+        "cold_start": within(measurements["cold_start_ms"], ceilings["cold_start_ms_maximum"]),
+        "p50": within(measurements["p50_ms"], ceilings["p50_ms_maximum"]),
+        "p95": within(measurements["p95_ms"], ceilings["p95_ms_maximum"]),
+        "peak_memory": within(measurements["peak_working_set_bytes"], ceilings["peak_working_set_bytes_maximum"]),
+        "artifact_footprint": within(
+            measurements["artifact_footprint_bytes"], ceilings["artifact_footprint_bytes_maximum"]
+        ),
+        "per_case_timeout": within(
+            measurements["maximum_case_runtime_ms"], float(ceilings["per_case_timeout_seconds"]) * 1000.0
+        ),
+    }
+
+
+def current_configuration_measurements(scored: dict[str, Any]) -> dict[str, Any]:
+    """Measure the configuration actually scored here, never an older run of the same engine."""
+    return operational_measurements(
+        cold_start_ms=scored.get("cold_start_ms"),
+        runtimes_ms=[float(record["runtime_ms"]) for record in scored["records"]],
+        peak_working_set_bytes=scored.get("peak_working_set_bytes"),
+        artifact_footprint_bytes=scored.get("artifact_footprint_bytes"),
+    )
+
+
+def operational_evidence(
+    scored: dict[str, Any],
+    *,
+    historical_prior_checks: dict[str, bool],
+    operational_ceilings: dict[str, Any],
+) -> dict[str, Any]:
+    """Combine the historical cross-machine prior with a current-configuration sanity gate.
+
+    The current-configuration result is a necessary condition measured on this calibration
+    machine only. It never proves that every supported deployment machine stays inside the
+    ceilings, and it never rehabilitates an engine whose merged benchmark already failed.
+    """
+    prior = {key: bool(historical_prior_checks[key]) for key in OPERATIONAL_CHECK_KEYS}
+    measurements = current_configuration_measurements(scored)
+    checks = operational_checks(measurements, operational_ceilings)
+    historical_prior_plausible = all(prior.values())
+    current_configuration_plausible = all(checks.values())
+    return {
+        "historical_prior_checks": prior,
+        "current_configuration_measurements": measurements,
+        "current_configuration_checks": checks,
+        "historical_prior_plausible": historical_prior_plausible,
+        "current_configuration_plausible": current_configuration_plausible,
+        "operational_plausible": historical_prior_plausible and current_configuration_plausible,
+    }
+
+
 def score_capture(
     capture: dict[str, Any],
     *,
@@ -148,9 +226,15 @@ def select_configuration(
     selector_priority: list[str],
     order_priority: list[str],
     development_gate: dict[str, Any],
-    operational_plausible: bool,
+    historical_prior_checks: dict[str, bool],
+    operational_ceilings: dict[str, Any],
 ) -> dict[str, Any]:
     aggregate = summarize_records(scored)
+    operational = operational_evidence(
+        scored,
+        historical_prior_checks=historical_prior_checks,
+        operational_ceilings=operational_ceilings,
+    )
     selectors = aggregate["selectors"]
     safe_selectors = [
         selector_id
@@ -179,10 +263,11 @@ def select_configuration(
         "primary_wer": order["wer"] <= development_gate["primary_mean_wer_maximum"],
         "title_safety": title["material_false_automatic_agreements"] == 0,
         "executed_all_cases": len(scored["failures"]) == 0 and len(scored["records"]) == scored["case_count"],
-        "operational_plausibility": operational_plausible,
+        "operational_plausibility": operational["operational_plausible"],
     }
     return {
         **aggregate,
+        "operational_evidence": operational,
         "selected_selector": selected_selector,
         "selected_reading_order": selected_order,
         "selected_exact_title_rate": title["exact_title_rate"],

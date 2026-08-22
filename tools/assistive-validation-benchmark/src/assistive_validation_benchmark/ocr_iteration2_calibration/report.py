@@ -17,24 +17,61 @@ from .schema import (
     validate_font_manifest,
     validate_protocol,
 )
-from .scoring import score_capture, select_configuration
+from .scoring import (
+    OPERATIONAL_CHECK_KEYS,
+    operational_checks,
+    operational_measurements,
+    score_capture,
+    select_configuration,
+)
 
 
-OPERATIONAL_CHECK_KEYS = ("cold_start", "p50", "p95", "peak_memory", "artifact_footprint", "per_case_timeout")
+LATENCY_COMPARABILITY_AUTHORITY = (
+    "merged operational measurements remain authoritative; current calibration timing is machine-specific"
+)
+CURRENT_CONFIGURATION_CEILING_SEMANTICS = (
+    "a current-configuration pass means only that this configuration does not violate the frozen ceilings on "
+    "the calibration machine; it is a necessary condition and is not proof that the configuration meets the "
+    "limits on every supported deployment machine"
+)
 
 
-def _merged_operational_evidence() -> dict[str, Any]:
+def _merged_operational_gate(report: dict[str, Any]) -> dict[str, Any]:
+    """Restate the merged benchmark's own operational gate under the Iteration 2 ceiling names."""
+    gate = report["protocol"]["operational_gate"]
+    return {
+        "cold_start_ms_maximum": gate["cold_start_ms_maximum"],
+        "p50_ms_maximum": gate["holdout_p50_ms_maximum"],
+        "p95_ms_maximum": gate["holdout_p95_ms_maximum"],
+        "peak_working_set_bytes_maximum": gate["peak_working_set_bytes_maximum"],
+        "artifact_footprint_bytes_maximum": gate["artifact_footprint_bytes_maximum"],
+        "per_case_timeout_seconds": gate["per_case_timeout_seconds"],
+    }
+
+
+def _merged_operational_evidence(operational_ceilings: dict[str, Any]) -> dict[str, Any]:
+    """Recompute the historical operational prior from the merged benchmark's own raw measurements."""
     report = load_json(repository_root() / "docs" / "assistive-validation" / "evidence" / "ocr-productionization-report.json")
+    if _merged_operational_gate(report) != operational_ceilings:
+        raise ValueError("merged operational gate differs from the frozen Iteration 2 ceilings")
     result: dict[str, Any] = {}
     for engine, values in report["engines"].items():
-        checks = {key: bool(values["gate_checks"][key]) for key in OPERATIONAL_CHECK_KEYS}
+        runtimes = [float(record["runtime_ms"]) for record in values["records"]]
+        measurements = operational_measurements(
+            cold_start_ms=values["cold_start_ms"],
+            runtimes_ms=runtimes,
+            peak_working_set_bytes=values["peak_working_set_bytes"],
+            artifact_footprint_bytes=values["artifact_footprint_bytes"],
+        )
+        if (measurements["p50_ms"], measurements["p95_ms"]) != (values["latency"]["p50_ms"], values["latency"]["p95_ms"]):
+            raise ValueError(f"merged latency summary does not follow its own per-case runtimes: {engine}")
+        checks = operational_checks(measurements, operational_ceilings)
+        if checks != {key: bool(values["gate_checks"][key]) for key in OPERATIONAL_CHECK_KEYS}:
+            raise ValueError(f"merged operational verdict does not follow its own raw measurements: {engine}")
         result[engine] = {
             "source": "merged productionization benchmark; retained as cross-machine operational authority",
-            "cold_start_ms": values["cold_start_ms"],
-            "p50_ms": values["latency"]["p50_ms"],
-            "p95_ms": values["latency"]["p95_ms"],
-            "peak_working_set_bytes": values["peak_working_set_bytes"],
-            "artifact_footprint_bytes": values["artifact_footprint_bytes"],
+            "recomputed_from_merged_raw_measurements": True,
+            **measurements,
             "checks": checks,
             "plausibly_inside_established_limits": all(checks.values()),
         }
@@ -70,7 +107,8 @@ def recommend_medium_configuration(captures_dir: Path) -> dict[str, Any]:
     cases = [case for case in corpus["ocr_cases"] if case["split"] == "calibration"]
     selector_priority = [item["id"] for item in protocol["selectors"]]
     order_priority = protocol["reading_orders"]
-    merged_operational = _merged_operational_evidence()
+    ceilings = protocol["operational_ceilings"]
+    merged_operational = _merged_operational_evidence(ceilings)
     candidates = []
     for engine in ("paddle-tiny", "paddle-small"):
         for configuration_id in protocol["staged_cost_policy"]["stage_1_configurations"]:
@@ -81,7 +119,8 @@ def recommend_medium_configuration(captures_dir: Path) -> dict[str, Any]:
                     selector_priority=selector_priority,
                     order_priority=order_priority,
                     development_gate=protocol["development_gate"],
-                    operational_plausible=merged_operational[engine]["plausibly_inside_established_limits"],
+                    historical_prior_checks=merged_operational[engine]["checks"],
+                    operational_ceilings=ceilings,
                 )
             )
     winner = max(
@@ -133,7 +172,8 @@ def build_report(captures_dir: Path, generation: dict[str, Any]) -> dict[str, An
     controls = evaluate_controls(corpus, captures_dir.parent / "corpus")
     selector_priority = [item["id"] for item in protocol["selectors"]]
     order_priority = protocol["reading_orders"]
-    merged_operational = _merged_operational_evidence()
+    ceilings = protocol["operational_ceilings"]
+    merged_operational = _merged_operational_evidence(ceilings)
     scored: dict[str, dict[str, Any]] = {}
     selected: dict[str, dict[str, Any]] = {}
     for engine in protocol["staged_cost_policy"]["stage_1_engines"]:
@@ -147,7 +187,8 @@ def build_report(captures_dir: Path, generation: dict[str, Any]) -> dict[str, An
                 selector_priority=selector_priority,
                 order_priority=order_priority,
                 development_gate=protocol["development_gate"],
-                operational_plausible=merged_operational[engine]["plausibly_inside_established_limits"],
+                historical_prior_checks=merged_operational[engine]["checks"],
+                operational_ceilings=ceilings,
             )
 
     raster_winner = recommend_medium_configuration(captures_dir)["configuration_id"]
@@ -159,7 +200,8 @@ def build_report(captures_dir: Path, generation: dict[str, Any]) -> dict[str, An
             selector_priority=selector_priority,
             order_priority=order_priority,
             development_gate=protocol["development_gate"],
-            operational_plausible=merged_operational["paddle-medium"]["plausibly_inside_established_limits"],
+            historical_prior_checks=merged_operational["paddle-medium"]["checks"],
+            operational_ceilings=ceilings,
         )
     }
     neural_candidates = [value for engine, configurations in selected.items() if engine.startswith("paddle-") for value in configurations.values()]
@@ -236,10 +278,12 @@ def build_report(captures_dir: Path, generation: dict[str, Any]) -> dict[str, An
             "stage_1_configurations": protocol["staged_cost_policy"]["stage_1_configurations"],
             "medium_configuration_selected_from_stage_1": raster_winner,
         },
+        "operational_ceilings": ceilings,
         "merged_operational_evidence": merged_operational,
         "latency_comparability": {
             "comparable_to_merged_machine": False,
-            "authority": "merged operational measurements remain authoritative; current calibration timing is machine-specific",
+            "authority": LATENCY_COMPARABILITY_AUTHORITY,
+            "current_configuration_ceiling_semantics": CURRENT_CONFIGURATION_CEILING_SEMANTICS,
         },
         "captures": scored,
         "configuration_results": selected,
@@ -319,9 +363,18 @@ def validate_report(report: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("stored capture engine set differs from the staged protocol")
     selector_priority = [item["id"] for item in protocol["selectors"]]
     order_priority = protocol["reading_orders"]
-    merged_operational = _merged_operational_evidence()
+    ceilings = protocol["operational_ceilings"]
+    if report.get("operational_ceilings") != ceilings:
+        raise ValueError("stored operational ceilings differ from the frozen protocol")
+    merged_operational = _merged_operational_evidence(ceilings)
     if report.get("merged_operational_evidence") != merged_operational:
         raise ValueError("stored merged operational evidence differs from the immutable benchmark")
+    if report.get("latency_comparability") != {
+        "comparable_to_merged_machine": False,
+        "authority": LATENCY_COMPARABILITY_AUTHORITY,
+        "current_configuration_ceiling_semantics": CURRENT_CONFIGURATION_CEILING_SEMANTICS,
+    }:
+        raise ValueError("stored evidence hides or overstates cross-machine latency comparability")
     expected_stage1 = protocol["staged_cost_policy"]
     if (
         report["staged_cost_execution"].get("stage_1_engines") != expected_stage1["stage_1_engines"]
@@ -339,9 +392,15 @@ def validate_report(report: dict[str, Any]) -> dict[str, Any]:
                 selector_priority=selector_priority,
                 order_priority=order_priority,
                 development_gate=protocol["development_gate"],
-                operational_plausible=merged_operational[engine]["plausibly_inside_established_limits"],
+                historical_prior_checks=merged_operational[engine]["checks"],
+                operational_ceilings=ceilings,
             )
             stored = report["configuration_results"][engine][configuration_id]
+            if stored.get("operational_evidence") != observed["operational_evidence"]:
+                raise ValueError(
+                    "stored operational evidence does not follow the raw capture metrics for "
+                    f"{engine}/{configuration_id}"
+                )
             if stored != observed:
                 raise ValueError(f"stored selection, arithmetic or gate changed for {engine}/{configuration_id}")
             recomputed_selections[engine][configuration_id] = observed

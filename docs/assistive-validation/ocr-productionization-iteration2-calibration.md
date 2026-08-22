@@ -134,7 +134,7 @@ and peak working set are recorded as calibration evidence only.
 | PP-OCRv6 Tiny | 180/1920 | 100% | 36.2% | 11.2% | 0 | 844 / 1,670 ms | 895 MiB | pass |
 | PP-OCRv6 Small | 150/960 | 96.4% | 36.1% | 11.4% | 0 | 1,959 / 2,352 ms | 637 MiB | pass |
 | PP-OCRv6 Small | 180/1920 | **100%** | 35.1% | **10.0%** | 0 | 2,355 / 4,317 ms | 1,185 MiB | **pass; selected** |
-| PP-OCRv6 Medium | 180/1920 only | 92.9% | 33.4% | 8.5% | 0 | 10,941 / 19,664 ms | 2,303 MiB | fail operational plausibility |
+| PP-OCRv6 Medium | 180/1920 only | 92.9% | 33.4% | 8.5% | 0 | 10,941 / 19,664 ms | 2,303 MiB | fail operational: merged prior and current p50 |
 
 Resolution was kept to the smallest justified pair. Small improves from 96.4%/11.4% at
 150/960 to 100%/10.0% at 180/1920. Tiny retains 100% title recovery while column WER improves
@@ -143,11 +143,60 @@ calibration corpus without becoming a broad resolution sweep.
 
 ## Operational interpretation
 
-This workstation is not the merged benchmark machine, so its wall-clock results are not treated
-as directly comparable. The merged operational evidence remains authoritative for planning:
-Tiny and Small remain plausibly within the established cold-start, p50, p95, 4 GiB memory,
-1 GiB model-footprint and 90-second per-case limits. Medium remains outside the merged cold-start,
-p50 and p95 ceilings and is retained only as a quality reference. No ceiling was loosened.
+Operational plausibility is not a single inherited engine verdict. The development gate requires
+**both** of the following, and every value below is recomputed from raw stored measurements
+rather than read from a stored boolean:
+
+1. **Historical operational prior** — the engine's merged productionization benchmark does not
+   already disqualify it. This remains the authority for the previously measured machine and
+   environment.
+2. **Current-configuration sanity gate** — the calibration capture of the *selected* engine and
+   raster configuration does not violate any frozen operational ceiling.
+
+`operational_plausible = historical_prior_plausible AND every current-configuration check`. A
+configuration cannot inherit plausibility from an older benchmark of the same engine at a
+different raster configuration, and a fast calibration workstation cannot rehabilitate an engine
+whose merged evidence already failed.
+
+The frozen ceilings are unchanged: cold start at most 30,000 ms, p50 at most 10,000 ms, p95 at
+most 20,000 ms, peak working set at most 4 GiB, artifact/model footprint at most 1 GiB, and no
+single case above the 90-second provider timeout. No ceiling was loosened.
+
+### Historical operational prior (merged benchmark machine)
+
+| Engine | Cold start | p50 | p95 | Peak working set | Footprint | Slowest case | Prior |
+|---|---:|---:|---:|---:|---:|---:|---|
+| PP-OCRv6 Tiny | 5,701 ms | 1,123 ms | 1,912 ms | 512 MiB | 6.2 MiB | 1,966 ms | pass |
+| PP-OCRv6 Small | 10,790 ms | 4,578 ms | 6,525 ms | 814 MiB | 30.0 MiB | 7,580 ms | pass |
+| PP-OCRv6 Medium | 60,114 ms | 46,034 ms | 71,746 ms | 1,033 MiB | 132.7 MiB | 74,148 ms | **fail** (cold start, p50, p95) |
+
+### Current-configuration sanity gate (this calibration machine)
+
+Selected configuration, PP-OCRv6 Small at 180/1920, recomputed from its own stored capture:
+
+| Check | Ceiling | Observed | Result |
+|---|---:|---:|---|
+| Cold start | 30,000 ms | 6,451 ms | pass |
+| p50 | 10,000 ms | 2,355 ms | pass |
+| p95 | 20,000 ms | 4,317 ms | pass |
+| Peak working set | 4 GiB | 1,185 MiB | pass |
+| Artifact footprint | 1 GiB | 30.0 MiB | pass |
+| Slowest single case | 90,000 ms | 4,710 ms | pass |
+
+PP-OCRv6 Medium at 180/1920 also fails the current-configuration gate on its own capture: p50 is
+10,941 ms against the 10,000 ms ceiling. Medium is therefore disqualified twice over — by its
+merged prior and by the configuration measured here — and is retained only as a quality
+reference.
+
+### What the current-configuration result does and does not prove
+
+This workstation is not the merged benchmark machine, so
+`latency_comparability.comparable_to_merged_machine` remains `false` and the wall-clock numbers
+above are not directly comparable across the two tables. A current-configuration pass means only
+that **this configuration does not violate the frozen ceilings on the calibration machine**. It
+is a necessary condition. It is emphatically *not* a claim that **this configuration is proven to
+meet the limits on every supported machine**; deployment-hardware performance remains unproven
+and is a future holdout and provisioning concern.
 
 ## Development gate and decision
 
@@ -160,7 +209,9 @@ The selected neural configuration is PP-OCRv6 Small at 180/1920 with
 | Primary deterministic-order WER at most 15% | 100/1004 (9.96%) | pass |
 | Material false automatic agreements | 0 | pass |
 | Every scored case executes safely | 28/28 | pass |
-| Operational behaviour remains plausible | yes, using merged Small evidence | pass |
+| Historical operational prior intact | merged Small evidence stays within the established limits | pass |
+| Current configuration inside every frozen ceiling | selected `dpi180-edge1920` capture violates no ceiling (6,451 / 2,355 / 4,317 ms, 1,185 MiB, 30.0 MiB, 4,710 ms) | pass |
+| Operational plausibility (prior **and** current) | both hold | pass |
 
 This is a development gate only. The future independent holdout still requires at least 95%
 exact-title recovery, at most 12% WER, zero material false automatic agreements, and the
@@ -179,5 +230,22 @@ unchanged operational/provisioning/security gates.
 The result authorizes only freezing a protocol before a separate future independent holdout is
 created. It does not authorize that holdout to be created in this change and does not authorize
 production integration.
+
+## Prerequisites for the future holdout
+
+These are recorded as next-step prerequisites only. Neither is implemented here, and the
+calibration selector was not tuned against either.
+
+1. **Freeze a canonical renderer environment before the holdout is created.** The future holdout
+   protocol must pin the operating system or container image, the Python version, Pillow,
+   FreeType and the renderer font before any holdout asset is generated. The current calibration
+   demonstrates byte-deterministic regeneration *within* one fixed renderer environment; it does
+   not demonstrate identical assets across different operating-system FreeType implementations.
+2. **Include realistic upper-page textual distractors and header material.** The v2 calibration
+   generator places the semantic title as the first textual region on every page, so the current
+   evidence cannot separate a genuine prominence-and-geometry selector from a first-region
+   heuristic. A fresh holdout should add mastheads, unit codes, dates, supervisor lines and
+   similar upper-page material to test how the selected metadata-blind selector generalises.
+   That holdout must be scored once and never tuned against.
 
 **`READY_TO_FREEZE_OCR_ITERATION_2_HOLDOUT_PROTOCOL`**
