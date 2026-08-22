@@ -31,7 +31,7 @@ from .schema import (
 
 
 MANIFEST_SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-freeze-manifest/v1"
-FREEZE_COMMIT_SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-freeze-commit/v2"
+FREEZE_COMMIT_SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-freeze-commit/v3"
 TEXT_SUFFIXES = {".py", ".json", ".toml", ".txt", ".md"}
 
 SUPERSEDED_FREEZE = {
@@ -49,6 +49,23 @@ SUPERSEDED_FREEZE = {
     ),
 }
 
+RENDERER_CORRECTED_FREEZE = {
+    "protocol_freeze_commit_sha": "a30af31a4eb7f2a473c3e30e30aded0843a1ecd8",
+    "chronology_commit_sha": "de744bfa58db3f60d3988378ed0b0406d0ee9fc3",
+    "freeze_manifest_sha256": "38e293f05bb85fc769aae39d20a79ab123f11380696da376ba2b19be555b8e91",
+    "freeze_tree_sha256": "96a823b5b9200a419006a527506192479cbc248eb6cdaa13172f10b852a4c851",
+    "freeze_commit_record_sha256": "6942c32d36ede91c4b33ecbe5d7656c35635a05058ba4e6dd423ce532362575b",
+    "component_count": 29,
+    "holdout_absent_at_freeze": True,
+    "superseded": True,
+    "supersession_reason": (
+        "independent review found that first_bounded_group was structurally incompatible with "
+        "above-title distractors and the WER reference penalised correctly recognised distractor "
+        "text, all before any fresh holdout existed"
+    ),
+    "supersedes": SUPERSEDED_FREEZE,
+}
+
 # Roles make the manifest auditable: a reviewer can see *why* each file is bound.
 FROZEN_ROLES: tuple[tuple[str, str], ...] = (
     ("ocr-iteration2-holdout-protocol/protocol.json", "protocol_file"),
@@ -56,6 +73,7 @@ FROZEN_ROLES: tuple[tuple[str, str], ...] = (
     ("src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/__init__.py", "protocol_freeze_source"),
     ("src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/schema.py", "protocol_freeze_source"),
     ("src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/holdout_contract.py", "holdout_schema_and_generator_contract"),
+    ("src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/distractor_calibration.py", "development_correction_evidence_builder"),
     ("src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/renderer.py", "renderer_and_reference_fixture"),
     ("src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/fingerprint.py", "renderer_fingerprint"),
     ("src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/manifest.py", "freeze_manifest"),
@@ -250,10 +268,10 @@ def verify_freeze_commit(commit: str, *, require_commit_object: bool = False) ->
 
 
 def _validate_superseded_record(stored: dict[str, Any]) -> None:
-    if stored.get("schema_version") != "pp1-ocr-iteration2-holdout-freeze-commit/v1":
-        raise ValueError("the superseded chronology record is not the preserved v1 record")
-    if value_sha256(stored) != SUPERSEDED_FREEZE["freeze_commit_record_sha256"]:
-        raise ValueError("the superseded chronology record changed before correction")
+    if stored.get("schema_version") != "pp1-ocr-iteration2-holdout-freeze-commit/v2":
+        raise ValueError("the superseded chronology record is not the preserved renderer-corrected record")
+    if value_sha256(stored) != RENDERER_CORRECTED_FREEZE["freeze_commit_record_sha256"]:
+        raise ValueError("the renderer-corrected chronology record changed before protocol correction")
     for key in (
         "protocol_freeze_commit_sha",
         "freeze_manifest_sha256",
@@ -261,8 +279,10 @@ def _validate_superseded_record(stored: dict[str, Any]) -> None:
         "component_count",
         "holdout_absent_at_freeze",
     ):
-        if stored.get(key) != SUPERSEDED_FREEZE[key]:
-            raise ValueError(f"the superseded chronology record changed: {key}")
+        if stored.get(key) != RENDERER_CORRECTED_FREEZE[key]:
+            raise ValueError(f"the renderer-corrected chronology record changed: {key}")
+    if stored.get("supersedes") != SUPERSEDED_FREEZE:
+        raise ValueError("the original A/B supersession record changed")
 
 
 def build_freeze_commit_record(commit: str, superseded_record: dict[str, Any]) -> dict[str, Any]:
@@ -274,17 +294,19 @@ def build_freeze_commit_record(commit: str, superseded_record: dict[str, Any]) -
     return {
         "schema_version": FREEZE_COMMIT_SCHEMA_VERSION,
         "protocol_version": PROTOCOL_VERSION,
-        "recorded_by": "iteration 2B2 corrected freeze chronology commit D",
+        "recorded_by": "iteration 2B2 final corrected freeze chronology commit G",
         "chronology": (
-            "commits A and B preserve the original pre-review freeze and record; exact-head CI then "
-            "exposed a renderer-platform defect before any holdout existed; commit C is the corrected "
-            "authoritative freeze and commit D adds only this supersession record"
+            "commits A/B preserve the original freeze, C/D preserve the renderer-corrected freeze, "
+            "commit E records exposed development-only distractor and WER evidence, commit F is the "
+            "final corrected authoritative freeze, and commit G adds only this chronology record"
         ),
         "durable_identity": "freeze_tree_sha256",
         "commit_sha_is_branch_local": True,
         "freeze_manifest_sha256": value_sha256(manifest),
         "original_history_preserved": True,
-        "supersedes": SUPERSEDED_FREEZE,
+        "renderer_corrected_history_preserved": True,
+        "development_evidence_commit_precedes_freeze": True,
+        "supersedes": RENDERER_CORRECTED_FREEZE,
         **verification,
     }
 
@@ -303,7 +325,11 @@ def validate_freeze_commit_record(stored: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("the freeze commit record does not prove holdout absence at the corrected freeze")
     if stored.get("original_history_preserved") is not True:
         raise ValueError("the corrected freeze must preserve the original A/B history")
-    if stored.get("supersedes") != SUPERSEDED_FREEZE:
+    if stored.get("renderer_corrected_history_preserved") is not True:
+        raise ValueError("the corrected freeze must preserve the renderer-corrected C/D history")
+    if stored.get("development_evidence_commit_precedes_freeze") is not True:
+        raise ValueError("the development evidence must precede the authoritative freeze")
+    if stored.get("supersedes") != RENDERER_CORRECTED_FREEZE:
         raise ValueError("the corrected freeze supersession record changed")
     reachable = verify_freeze_commit(stored["protocol_freeze_commit_sha"])
     if reachable["commit_object_reachable"] and reachable["holdout_absent_at_freeze"] is not True:
@@ -313,8 +339,9 @@ def validate_freeze_commit_record(stored: dict[str, Any]) -> dict[str, Any]:
         "freeze_tree_sha256": stored["freeze_tree_sha256"],
         "content_addressed_match": True,
         "holdout_absent_at_freeze": True,
-        "superseded_protocol_freeze_commit_sha": SUPERSEDED_FREEZE["protocol_freeze_commit_sha"],
+        "superseded_protocol_freeze_commit_sha": RENDERER_CORRECTED_FREEZE["protocol_freeze_commit_sha"],
         "original_history_preserved": True,
+        "renderer_corrected_history_preserved": True,
     }
 
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import PROTOCOL_VERSION, SCHEMA_VERSION
+from .distractor_calibration import validate_development_evidence
 from .fingerprint import environment_path, validate_environment, verify_fingerprint
 from .holdout_contract import HOLDOUT_CORPUS_VERSION
 from .manifest import manifest_path, verify_freeze_manifest
@@ -22,6 +23,7 @@ from .schema import (
     assert_no_holdout_content,
     data_root,
     load_json,
+    repository_root,
     validate_protocol,
     value_sha256,
     verify_historical_evidence,
@@ -41,7 +43,12 @@ PRODUCTION_BOUNDARY = {
     "migration_34": False,
     "supabase_changed": False,
 }
-IMPLEMENTED = ["holdout_protocol_freeze", "canonical_renderer_environment", "renderer_fingerprint"]
+IMPLEMENTED = [
+    "holdout_protocol_freeze",
+    "canonical_renderer_environment",
+    "renderer_fingerprint",
+    "development_distractor_selector_and_wer_correction",
+]
 NOT_IMPLEMENTED = [
     "fresh_holdout",
     "holdout_measurement",
@@ -57,6 +64,9 @@ SCIENTIFIC_INTEGRITY = {
     "unbiased_accuracy_claimed": False,
     "historical_evidence_mutated": False,
     "calibration_results_are_not_holdout_results": True,
+    "development_ocr_executed": True,
+    "fresh_holdout_ocr_executed": False,
+    "development_evidence_is_not_holdout_evidence": True,
 }
 
 
@@ -94,6 +104,14 @@ def _evidence_from_state(state: dict[str, Any]) -> dict[str, Any]:
     protocol = state["protocol"]
     environment = state["environment"]
     fingerprint = state["fingerprint"]
+    development_path = (
+        repository_root()
+        / "docs"
+        / "assistive-validation"
+        / "evidence"
+        / "ocr-productionization-iteration2-distractor-calibration.json"
+    )
+    development = validate_development_evidence(load_json(development_path))
     return {
         "schema_version": SCHEMA_VERSION,
         "protocol_version": PROTOCOL_VERSION,
@@ -103,7 +121,8 @@ def _evidence_from_state(state: dict[str, Any]) -> dict[str, Any]:
             "merged_calibration_decision": "READY_TO_FREEZE_OCR_ITERATION_2_HOLDOUT_PROTOCOL",
             "calibration_selected_engine": "PP-OCRv6 Small",
             "calibration_selected_raster": "dpi180-edge1920",
-            "calibration_selected_selector": protocol["title_contract"]["selector_id"],
+            "merged_calibration_selected_selector": "first_bounded_group@geometry",
+            "corrected_frozen_selector": protocol["title_contract"]["selector_id"],
             "calibration_primary_reading_order": protocol["wer_contract"]["primary_order"],
             "calibration_results_role": "development calibration only; not holdout accuracy",
         },
@@ -118,6 +137,14 @@ def _evidence_from_state(state: dict[str, Any]) -> dict[str, Any]:
         "frozen_material_title_negatives": protocol["material_title_negatives"],
         "frozen_controls": protocol["controls"],
         "frozen_decision_contract": protocol["decision_contract"],
+        "development_correction_evidence": {
+            "path": "docs/assistive-validation/evidence/ocr-productionization-iteration2-distractor-calibration.json",
+            "sha256": protocol["development_evidence_sha256"][
+                "docs/assistive-validation/evidence/ocr-productionization-iteration2-distractor-calibration.json"
+            ],
+            "commit_sha": protocol["development_evidence_commit_sha"],
+            **development,
+        },
         "future_run_contract": protocol["future_run_contract"],
         "future_holdout_corpus_version": HOLDOUT_CORPUS_VERSION,
         "hashes": {

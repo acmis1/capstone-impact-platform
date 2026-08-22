@@ -5,9 +5,10 @@
 This iteration freezes the protocol for a genuinely independent Iteration 2 OCR holdout. It
 freezes; it does not measure.
 
-**IMPLEMENTED here:** the holdout protocol freeze, the canonical renderer environment, the
-deterministic renderer fingerprint, the holdout schema and generator contract, the freeze
-manifest, and the freeze chronology.
+**IMPLEMENTED here:** the exposed development-only distractor correction evidence, the corrected
+holdout protocol freeze, the canonical renderer environment, the deterministic renderer
+fingerprint, the holdout schema and generator contract, the freeze manifest, and the freeze
+chronology.
 
 **NOT IMPLEMENTED here:** the fresh holdout, any holdout case, any holdout asset, any holdout
 OCR capture, any holdout accuracy number, any production OCR provider and any production
@@ -15,6 +16,10 @@ OCR capture, any holdout accuracy number, any production OCR provider and any pr
 
 The machine-readable freeze evidence is
 [`evidence/ocr-productionization-iteration2-holdout-protocol.json`](evidence/ocr-productionization-iteration2-holdout-protocol.json).
+The selector/WER correction is independently recomputable from the stored PP-OCRv6 Small
+development captures in
+[`evidence/ocr-productionization-iteration2-distractor-calibration.json`](evidence/ocr-productionization-iteration2-distractor-calibration.json).
+It is explicitly `development_only`, not an independent holdout, and consumed no fresh holdout.
 [Phase 0](phase-0-results.md), the
 [v1 productionization benchmark](ocr-productionization-benchmark.md), the
 [Iteration 2A failure analysis](ocr-productionization-failure-analysis.md) and the
@@ -48,8 +53,13 @@ are calibration numbers on an exposed corpus. Two named prerequisites remained:
    the evidence cannot separate a genuine prominence-and-geometry selector from a first-region
    heuristic.
 
-This freeze closes both, and it does so *before* any holdout case exists, so the future run
-cannot negotiate a threshold, a renderer or a distribution after seeing a result.
+The renderer portability issue was corrected by commits C/D. Independent review then found two
+further pre-holdout contradictions: `first_bounded_group@geometry` selected a correctly
+recognised above-title masthead instead of the title, and whole-page WER treated correctly
+recognised distractor text as insertions because the reference excluded it. Commit E records a
+bounded offline PP-OCRv6 Small run on deterministic `ocr2-dev-*` variants derived from the
+already-exposed 28-case calibration corpus. No future holdout title, body, asset, capture or
+metric was created.
 
 ## Frozen OCR candidate
 
@@ -100,11 +110,18 @@ blocks.
 
 ## Frozen title contract
 
-The selector is `first_bounded_group@geometry` — the exact reviewed implementation from `main`,
-bound by source hash rather than copied. It is metadata blind and ground-truth blind; ground
-truth is used only after inference, to score. Title normalization, exact equality, the
-deterministic assistive comparison and the material-mismatch behaviour are frozen to the merged
-title-safety implementation.
+The selector is `top_band_prominence@geometry` — an existing reviewed deterministic selector,
+bound by source hash rather than copied. On the original exposed calibration corpus and the
+exposed distractor challenge it recovered 27/28 exact titles (96.4 %) with zero material false
+automatic agreements on each dataset. `first_bounded_group@geometry` fell from 28/28 on the
+original corpus to 6/28 (21.4 %) with distractors. The centred top-band alternative also reached
+27/28 on both datasets, so the deterministic tie-break chose the simpler top-band selector
+without its extra centring assumption.
+
+The selected implementation is metadata blind and ground-truth blind; ground truth is used only
+after inference to score exposed development evidence. Title normalization, exact equality, the
+deterministic assistive comparison and the material-mismatch behaviour remain frozen to the
+merged title-safety implementation.
 
 Semantic similarity may never convert a material mismatch into automatic agreement. The future
 holdout must include material metadata-title negatives specifically to test that, and the
@@ -117,9 +134,15 @@ page. Provider/raw order is a required diagnostic and geometry order is reported
 
 Four things are explicitly forbidden and are refused by the protocol validator: choosing the
 lowest-WER order per page, using ground truth to choose an order, switching order based on the
-resulting WER, and reporting a best-of-oracle figure as the primary metric. Reference text is
-the project title plus the body sections; upper-page distractor text is rendered pixels and is
-deliberately not reference text.
+resulting WER, and reporting a best-of-oracle figure as the primary metric.
+
+The reference is now every intentionally rendered semantic string in visual/logical order:
+above-title distractors, the project title, near-title distractors, then section headings and
+body in the frozen column order. Distractors remain noise for title selection but valid visible
+text for OCR transcription. Perfect recognition therefore produces WER 0; dropping or
+mistranscribing a distractor produces an OCR error. The exposed distractor challenge measured
+8.62 % primary column-order WER after this correction (raw and geometry diagnostics: 31.2 %),
+below the 15 % development direction. The future fresh-holdout gate remains 12 %.
 
 ## Frozen gates
 
@@ -231,8 +254,9 @@ masthead, program name, discipline, unit or course code, year or date, superviso
 category or tag, event or showcase heading, and team label. The project title is therefore not
 always the first OCR line or block.
 
-The frozen selector is not tuned against these cases, and no distractor text is authored here.
-This is a genuine generalisation test.
+The selector was selected using only exposed `ocr2-dev-*` calibration derivatives, never these
+future cases. No future distractor text is authored here. This remains a genuine generalisation
+test.
 
 ### Title and style coverage
 
@@ -282,39 +306,50 @@ CI, and it is tested against each of those forms of accidental contamination.
 
 ## Freeze manifest
 
-The manifest binds 29 components by SHA-256 over git-normalised content and by Git blob id:
+The manifest binds 30 components by SHA-256 over git-normalised content and by Git blob id:
 the protocol file, the holdout schema and generator contract, the renderer and reference
-fixture, the fingerprint, the OCR candidate artifact manifest and its validator, the offline
+fixture, the development-correction evidence builder, the fingerprint, the OCR candidate
+artifact manifest and its validator, the offline
 guard and provisioning, the engine runtime configuration, the selector, the reading order, the
 title normalization and safety implementation, the WER/metric and operational-gate
 implementation, the raster and capture pipeline, the canonical renderer definition, the pinned
 font manifest, blob and licence, and the benchmark dependency pins.
 
 It binds **no production code**. The corrected durable content-addressed identity is
-`freeze_tree_sha256 = 96a823b5b9200a419006a527506192479cbc248eb6cdaa13172f10b852a4c851`,
+`freeze_tree_sha256 = a47957b3d1621b50eb1f40701a44bc3360180ef73b7f0a00a25be54146ed674e`,
 with manifest SHA-256
-`38e293f05bb85fc769aae39d20a79ab123f11380696da376ba2b19be555b8e91`.
+`c6c5d55a26640c20ee2396b47aaef97e4fe97b494c04cb733b11ee21620a4e1a`.
 
 ## Freeze chronology
 
-The corrected freeze is four ordinary commits, and no commit is amended or rewritten:
+The final corrected freeze is seven ordinary commits, and no commit is amended or rewritten:
 
 * **Commit A — freeze.** Every protocol, environment, contract, source, test, document and CI
   step. It contains no holdout content and no commit-identity record.
 * **Commit B — record freeze commit identity.** Adds only `freeze-commit.json`, which records
   Commit A's SHA together with the freeze tree and manifest digests, and proves against Commit A
   that every bound file's Git blob matches the working tree and that no holdout path existed.
-* **Commit C — corrected authoritative freeze.**
+* **Commit C — renderer-corrected freeze.**
   `a30af31a4eb7f2a473c3e30e30aded0843a1ecd8` preserves A/B and corrects the
   platform-specific renderer attestation defect exposed by exact-head CI before any holdout
   existed.
-* **Commit D — corrected chronology record.** Records Commit C and marks A/B as preserved but
-  superseded. It adds no corrected freeze material of its own.
+* **Commit D — renderer-corrected chronology record.** Records Commit C and marks A/B as
+  preserved but superseded. It adds no corrected freeze material of its own.
+* **Commit E — development-only correction evidence.** Records the exposed `ocr2-dev-*`
+  distractor challenge, stored PP-OCRv6 Small captures, selector comparison and corrected WER
+  measurement. It is not an authoritative freeze and consumed no fresh holdout.
+* **Commit F — final corrected authoritative freeze.** Freezes the accepted renderer correction,
+  PP-OCRv6 Small, `top_band_prominence@geometry`, full-visible-text WER, all gates and the
+  no-holdout contract.
+* **Commit G — final chronology record.** Records Commit F and marks C/D as preserved but
+  superseded because independent review found the selector and WER contradictions before any
+  fresh holdout existed. It adds no freeze material of its own.
 
 The original protocol-freeze commit is `ab9ee241c6ea70f00c8e4fe063ef28c73b37802a`, with chronology
 commit `b08c8fa3723a9c16157944de8f3d4a362fa03bc6`. Both remain in history and both predate any
 holdout, but the first exact-head CI result superseded their renderer cross-platform assertion.
-The corrected authoritative Commit C is recorded by Commit D after all 29 blobs were verified.
+Commit C remains preserved and is recorded by Commit D, but it is no longer authoritative after
+the selector/WER correction. Commit G records Commit F after all 30 blobs are verified.
 
 `main` squash-merges, so a branch commit SHA does not survive as an ancestor of `main` — the v1
 protocol-freeze commit `0485a8b7fda3f3e9f9873849104cd90917b4f395` is not one today. The
@@ -361,7 +396,8 @@ The future run may return exactly one of:
 
 - Fresh holdout created: **NO**.
 - Holdout measurement or accuracy: **NO**.
-- OCR executed: **NO**.
+- Development-only PP-OCRv6 Small OCR executed: **YES**, on exposed `ocr2-dev-*` variants only.
+- Fresh holdout OCR executed: **NO**.
 - Production `SELECT` classification: **NO**.
 - Production OCR provider, coordinator, enum or pipeline changed: **NO**.
 - Migration, Supabase, staff UI, publication, Duda or workflow authority changed: **NO**.
@@ -376,8 +412,9 @@ renderer definition, the platform-independent renderer binding, within-run refer
 determinism, the selected
 candidate identity, the fixed selector, reading order, title-safety and metric identities, the
 exact quality gates and operational ceilings, the 40-case distribution contract, the upper-page
-distractor and material-negative requirements, the no-holdout guard, and that the historical
-evidence is unchanged and the Iteration 2 calibration still validates.
+distractor and material-negative requirements, the no-holdout guard, the recomputable
+development correction evidence, and that the historical evidence is unchanged and the
+Iteration 2 calibration still validates.
 
 It does not install PaddlePaddle, download weights, run neural OCR, require a GPU or create a
 holdout. Permanent CI does not require future `main` to keep `NONE`/`TESSERACT`, coordinator

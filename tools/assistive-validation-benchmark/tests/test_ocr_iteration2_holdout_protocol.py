@@ -62,6 +62,7 @@ from assistive_validation_benchmark.ocr_iteration2_holdout_protocol.schema impor
 )
 from assistive_validation_benchmark.ocr_failure_analysis.selectors import run_variant
 from assistive_validation_benchmark.ocr_failure_analysis.taxonomy import edit_counts, order_text
+from assistive_validation_benchmark.ocr_productionization.title_safety import evaluate_title_safety
 
 
 EVIDENCE = repository_root() / "docs" / "assistive-validation" / "evidence" / "ocr-productionization-iteration2-holdout-protocol.json"
@@ -238,8 +239,13 @@ class ProtocolFreezeContractTests(unittest.TestCase):
         self.assertEqual("PP-OCRv6_small_rec_infer", self.protocol["candidate"]["recognition_artifact"])
         self.assertEqual(180, self.protocol["raster_contract"]["raster_dpi"])
         self.assertEqual(1920, self.protocol["raster_contract"]["max_input_dimension"])
-        self.assertEqual("first_bounded_group@geometry", self.protocol["title_contract"]["selector_id"])
+        self.assertEqual("top_band_prominence@geometry", self.protocol["title_contract"]["selector_id"])
         self.assertEqual("column", self.protocol["wer_contract"]["primary_order"])
+        self.assertEqual(
+            "all_intentionally_rendered_semantic_text",
+            self.protocol["wer_contract"]["reference_scope"],
+        )
+        self.assertIs(self.protocol["wer_contract"]["reference_text_includes_upper_page_distractors"], True)
         self.assertEqual(["paddle-small"], self.protocol["candidates"])
         self.assertEqual([], self.protocol["additional_candidates"])
 
@@ -304,6 +310,25 @@ class ProtocolFreezeContractTests(unittest.TestCase):
         retuned["future_run_contract"]["protocol_bug_supersession"]["retune_and_rerun_same_holdout_permitted"] = True
         with self.assertRaisesRegex(ValueError, "rerun as though independent"):
             validate_protocol(retuned)
+
+    def test_previous_freeze_chronology_and_development_evidence_commit_are_preserved(self) -> None:
+        self.assertEqual(
+            "ab9ee241c6ea70f00c8e4fe063ef28c73b37802a",
+            manifest_module.SUPERSEDED_FREEZE["protocol_freeze_commit_sha"],
+        )
+        self.assertEqual(
+            "b08c8fa3723a9c16157944de8f3d4a362fa03bc6",
+            manifest_module.SUPERSEDED_FREEZE["chronology_commit_sha"],
+        )
+        self.assertEqual(
+            "a30af31a4eb7f2a473c3e30e30aded0843a1ecd8",
+            manifest_module.RENDERER_CORRECTED_FREEZE["protocol_freeze_commit_sha"],
+        )
+        self.assertEqual(
+            "de744bfa58db3f60d3988378ed0b0406d0ee9fc3",
+            manifest_module.RENDERER_CORRECTED_FREEZE["chronology_commit_sha"],
+        )
+        self.assertEqual("02dd8522cec6ec6e7a70a8ff9d886de0787ab092", self.protocol["development_evidence_commit_sha"])
 
     def test_near_miss_may_not_select(self) -> None:
         lenient = copy.deepcopy(self.protocol)
@@ -726,6 +751,63 @@ class IndependentReviewBlockerTests(unittest.TestCase):
             edit_counts(reference_text(case), order_text(mistranscribed, "column"))["word_edits"],
             0,
         )
+
+
+class CorrectedFrozenSelectorTests(unittest.TestCase):
+    @staticmethod
+    def blocks() -> list[dict[str, object]]:
+        return [
+            {"text": "SCHOOL OF SCIENCE AND ENGINEERING", "box": {"left": 90, "top": 20, "right": 610, "bottom": 42}},
+            {"text": "COSC2758 Capstone Project", "box": {"left": 110, "top": 55, "right": 460, "bottom": 76}},
+            {"text": "Accessible Water Quality", "box": {"left": 230, "top": 110, "right": 900, "bottom": 160}},
+            {"text": "Monitoring Dashboard", "box": {"left": 290, "top": 163, "right": 850, "bottom": 213}},
+            {"text": "2026 Project Showcase", "box": {"left": 390, "top": 242, "right": 720, "bottom": 263}},
+            {"text": "Team Delta", "box": {"left": 470, "top": 272, "right": 640, "bottom": 293}},
+            {"text": "BACKGROUND", "box": {"left": 60, "top": 390, "right": 230, "bottom": 415}},
+            {"text": "Body text", "box": {"left": 60, "top": 430, "right": 360, "bottom": 455}},
+            {"text": "METHOD", "box": {"left": 620, "top": 390, "right": 750, "bottom": 415}},
+            {"text": "More body text", "box": {"left": 620, "top": 430, "right": 960, "bottom": 455}},
+        ]
+
+    def test_selected_selector_recovers_wrapped_title_among_above_and_near_distractors(self) -> None:
+        protocol = validate_protocol(load_json(data_root() / "protocol.json"))
+        candidates = run_variant(
+            protocol["title_contract"]["selector"],
+            protocol["title_contract"]["order"],
+            self.blocks(),
+        )
+        self.assertEqual("Accessible Water Quality Monitoring Dashboard", candidates[0].text)
+
+    def test_selected_selector_is_metadata_blind(self) -> None:
+        protocol = validate_protocol(load_json(data_root() / "protocol.json"))
+        plain = self.blocks()
+        contaminated = [
+            {**block, "metadata_title": "An Oracle Title That Must Be Ignored", "ground_truth": "ignored"}
+            for block in plain
+        ]
+        first = run_variant(protocol["title_contract"]["selector"], protocol["title_contract"]["order"], plain)
+        second = run_variant(
+            protocol["title_contract"]["selector"],
+            protocol["title_contract"]["order"],
+            contaminated,
+        )
+        self.assertEqual([candidate.text for candidate in first], [candidate.text for candidate in second])
+
+    def test_material_title_negatives_never_auto_agree(self) -> None:
+        protocol = validate_protocol(load_json(data_root() / "protocol.json"))
+        candidates = run_variant(
+            protocol["title_contract"]["selector"],
+            protocol["title_contract"]["order"],
+            self.blocks(),
+        )
+        negatives = [
+            "Accessible Waste Quality Monitoring Dashboard",
+            "Accessible Water Quality Monitoring Portal",
+            "Accessible Water Quality Monitoring Dashboard 2",
+            "Accessible Water Safety Monitoring Dashboard",
+        ]
+        for metadata_title in negatives:
+            self.assertNotEqual("AGREES", evaluate_title_safety(metadata_title, candidates)["outcome"])
 
 
 class DistractorDevelopmentEvidenceTests(unittest.TestCase):

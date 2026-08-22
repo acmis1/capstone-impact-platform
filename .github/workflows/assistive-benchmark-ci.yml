@@ -123,8 +123,15 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_iteration2_calibration check-report
 
-      # Iteration 2B2 froze the fresh-holdout protocol. These steps stay cheap on purpose: no
-      # PaddlePaddle install, no model download, no neural OCR, no GPU and no holdout creation.
+      # Recomputes the committed development-only correction evidence from its stored captures.
+      # It runs no OCR and consumes no fresh holdout.
+      - name: Validate OCR Iteration 2 distractor development evidence
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration2_holdout_protocol check-development-evidence
+
+      # Iteration 2B2 froze the corrected fresh-holdout protocol. These steps stay cheap on
+      # purpose: no PaddlePaddle install, no model download, no neural OCR, no GPU and no holdout
+      # creation.
       - name: Validate OCR Iteration 2 holdout protocol freeze and no-holdout contract
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_iteration2_holdout_protocol check

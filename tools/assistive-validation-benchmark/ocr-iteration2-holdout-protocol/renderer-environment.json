@@ -1,7 +1,7 @@
 {
   "attested_platforms": [
     {
-      "attested_at": "2026-08-22",
+      "attested_at": "2026-08-23",
       "machine": "AMD64",
       "platform_id": "windows-amd64-cpython3.11",
       "python": "3.11.9; reverified with 3.11.16",
@@ -53,10 +53,10 @@
         "ocr-iteration2-calibration/font/NotoSans-Regular.ttf": "114a6bf229142e7aac8ee83e70ca77563b46b16e80e2e50ad3a053b442f969b6",
         "ocr-iteration2-calibration/font/manifest.json": "e80298bb754c86f8018e3c1fbf2d66aedfded1afbc99564df9d874e1838575b4",
         "src/assistive_validation_benchmark/ocr_iteration2_calibration/corpus.py": "5bd9c70905bbc29172b819001982131f5e62d229b94801f14bb99df2faa79608",
-        "src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/renderer.py": "7e026aac59951a8b7eddfa9080662fb59ed9d9578087ba4a25e2ac26081a8784"
+        "src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/renderer.py": "95714a267d395ab1f0a8a2718f960acf57d2c128052aa3a4b5a63979122ae692"
       }
     },
-    "fingerprint_sha256": "33a4fc7dfcbcc8b9d7b78385abc34340a76eb7ee70ce40b6208ccd12aba53367"
+    "fingerprint_sha256": "d2f6571e2840f653cdb6c6f382e3a0834cd6c520ee525cccd5597533f026fb35"
   },
   "floating_version_tags_permitted": false,
   "font": {

@@ -1,6 +1,6 @@
 {
-  "schema_version": "pp1-ocr-iteration2-holdout-protocol/v1",
-  "protocol_version": "pp1-ocr-iteration2-holdout-protocol-v1",
+  "schema_version": "pp1-ocr-iteration2-holdout-protocol/v2",
+  "protocol_version": "pp1-ocr-iteration2-holdout-protocol-v2",
   "measurement_role": "protocol_freeze_only",
   "holdout_created": false,
   "holdout_measurement_exists": false,
@@ -78,8 +78,8 @@
     "max_text_blocks": 5000
   },
   "title_contract": {
-    "selector_id": "first_bounded_group@geometry",
-    "selector": "first_bounded_group",
+    "selector_id": "top_band_prominence@geometry",
+    "selector": "top_band_prominence",
     "order": "geometry",
     "metadata_blind": true,
     "ground_truth_in_selection": false,
@@ -89,6 +89,14 @@
     "order_source": "src/assistive_validation_benchmark/ocr_failure_analysis/ordering.py",
     "normalization_source": "src/assistive_validation_benchmark/ocr_productionization/title_safety.py",
     "safety_source": "src/assistive_validation_benchmark/ocr_productionization/title_safety.py",
+    "selection_evidence": "docs/assistive-validation/evidence/ocr-productionization-iteration2-distractor-calibration.json",
+    "development_gate": {
+      "exact_title_rate_minimum": 0.9,
+      "material_false_automatic_agreements_maximum": 0,
+      "original_exposed_calibration_exact_titles": "27/28",
+      "exposed_distractor_challenge_exact_titles": "27/28",
+      "material_false_automatic_agreements": 0
+    },
     "exact_title_definition": "OCR title equals the poster ground-truth title after the frozen normalization; fuzzy and review results are excluded",
     "safety_outcomes": ["AGREES", "REVIEW", "MISMATCH", "NOT_EVALUATED"],
     "material_mismatch_behaviour": "a material token difference must produce MISMATCH or REVIEW and may never produce automatic agreement"
@@ -102,7 +110,15 @@
     "best_of_oracle_primary_permitted": false,
     "wer_driven_order_switching_permitted": false,
     "normalization": "NFKC plus whitespace collapse; word-level edit distance against the frozen reference text",
-    "reference_text_excludes_upper_page_distractors": true,
+    "reference_scope": "all_intentionally_rendered_semantic_text",
+    "reference_text_includes_upper_page_distractors": true,
+    "reference_visual_order": [
+      "above_title_distractors",
+      "project_title",
+      "near_title_distractors",
+      "section_headings_and_body_in_frozen_column_order"
+    ],
+    "reference_source": "src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/renderer.py",
     "ordering_source": "src/assistive_validation_benchmark/ocr_failure_analysis/ordering.py",
     "metric_source": "src/assistive_validation_benchmark/ocr_iteration2_calibration/scoring.py"
   },
@@ -170,7 +186,7 @@
       "team_label": 3
     },
     "selector_tuned_against_these_cases": false,
-    "distractor_text_is_not_reference_text": true
+    "distractor_text_is_reference_text": true
   },
   "title_style_coverage": {
     "plain_minimum": 20,
@@ -279,5 +295,9 @@
     "docs/assistive-validation/evidence/ocr-productionization-iteration2-calibration.json": "75701511d89924d00ef162134cfba4415b0795587ad5377c8a502952be177eff",
     "tools/assistive-validation-benchmark/ocr-iteration2-calibration/corpus/calibration.json": "793b10d09c354fd06a4e0468af2ae303e2a21aacd3780388e42b531c67fb9c07",
     "tools/assistive-validation-benchmark/ocr-productionization/corpus/holdout.json": "5587124cb2e4540a58f45eb7fc20106da8a121411bff3bd6f7a855fd3bddd8ed"
-  }
+  },
+  "development_evidence_sha256": {
+    "docs/assistive-validation/evidence/ocr-productionization-iteration2-distractor-calibration.json": "7e6a340aeec92b7007e130aeb4372e711f29c5bc5133bd0c4bc458b87e0b3588"
+  },
+  "development_evidence_commit_sha": "02dd8522cec6ec6e7a70a8ff9d886de0787ab092"
 }

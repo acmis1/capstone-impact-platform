@@ -33,11 +33,12 @@ FROZEN_RUNTIME = {
 }
 FROZEN_RASTER_DPI = 180
 FROZEN_MAX_INPUT_DIMENSION = 1920
-FROZEN_SELECTOR_ID = "first_bounded_group@geometry"
-FROZEN_SELECTOR = "first_bounded_group"
+FROZEN_SELECTOR_ID = "top_band_prominence@geometry"
+FROZEN_SELECTOR = "top_band_prominence"
 FROZEN_SELECTOR_ORDER = "geometry"
 FROZEN_PRIMARY_READING_ORDER = "column"
 FROZEN_DIAGNOSTIC_READING_ORDERS = ["raw", "geometry"]
+DEVELOPMENT_EVIDENCE_COMMIT_SHA = "02dd8522cec6ec6e7a70a8ff9d886de0787ab092"
 
 SCORED_CASE_COUNT = 40
 FROZEN_QUALITY_GATE = {
@@ -262,6 +263,11 @@ def _validate_title_and_wer(value: dict[str, Any]) -> None:
         "semantic relatedness may never convert a material mismatch into automatic agreement",
     )
     _require(title.get("negative_metadata_titles_required") is True, "the holdout must test material title negatives")
+    _require(
+        title.get("selection_evidence")
+        == "docs/assistive-validation/evidence/ocr-productionization-iteration2-distractor-calibration.json",
+        "the corrected selector must remain bound to the exposed development evidence",
+    )
     for key in ("selector_source", "order_source", "normalization_source", "safety_source"):
         _require(isinstance(title.get(key), str) and title[key], f"title contract {key} must name a frozen source file")
     wer = value.get("wer_contract", {})
@@ -271,6 +277,21 @@ def _validate_title_and_wer(value: dict[str, Any]) -> None:
         "the required diagnostic reading orders changed",
     )
     _require(wer.get("applies_to_every_scored_page") is True, "the primary order must apply to every scored page")
+    _require(
+        wer.get("reference_scope") == "all_intentionally_rendered_semantic_text"
+        and wer.get("reference_text_includes_upper_page_distractors") is True,
+        "whole-page WER must include every intentionally rendered semantic string",
+    )
+    _require(
+        wer.get("reference_visual_order")
+        == [
+            "above_title_distractors",
+            "project_title",
+            "near_title_distractors",
+            "section_headings_and_body_in_frozen_column_order",
+        ],
+        "the full-visible-text WER reference order changed",
+    )
     for key in (
         "per_page_order_selection_permitted",
         "ground_truth_order_selection_permitted",
@@ -278,7 +299,7 @@ def _validate_title_and_wer(value: dict[str, Any]) -> None:
         "wer_driven_order_switching_permitted",
     ):
         _require(wer.get(key) is False, f"WER contract {key} must remain false")
-    for key in ("ordering_source", "metric_source"):
+    for key in ("ordering_source", "metric_source", "reference_source"):
         _require(isinstance(wer.get(key), str) and wer[key], f"WER contract {key} must name a frozen source file")
 
 
@@ -350,6 +371,10 @@ def _validate_generalisation(value: dict[str, Any]) -> None:
     _require(
         distractors.get("selector_tuned_against_these_cases") is False,
         "the frozen selector may never be tuned against the future distractor cases",
+    )
+    _require(
+        distractors.get("distractor_text_is_reference_text") is True,
+        "visible distractor text must remain part of whole-page OCR reference text",
     )
     styles = value.get("title_style_coverage", {})
     _minimum(styles, "plain_minimum", 20)
@@ -473,18 +498,32 @@ def validate_protocol(value: dict[str, Any]) -> dict[str, Any]:
     _require(isinstance(historical, dict) and len(historical) >= 6, "the historical evidence binding is incomplete")
     for relative, digest in historical.items():
         _require(bool(HEX_64.fullmatch(str(digest))), f"historical evidence hash is invalid: {relative}")
+    development = value.get("development_evidence_sha256")
+    _require(
+        isinstance(development, dict)
+        and set(development)
+        == {"docs/assistive-validation/evidence/ocr-productionization-iteration2-distractor-calibration.json"},
+        "the development correction evidence binding is incomplete",
+    )
+    for relative, digest in development.items():
+        _require(bool(HEX_64.fullmatch(str(digest))), f"development evidence hash is invalid: {relative}")
+    _require(
+        value.get("development_evidence_commit_sha") == DEVELOPMENT_EVIDENCE_COMMIT_SHA,
+        "the development-only evidence commit identity changed",
+    )
     return value
 
 
 def verify_historical_evidence(protocol: dict[str, Any]) -> dict[str, str]:
-    """Prove every immutable predecessor document and machine report is byte-unchanged."""
+    """Prove every immutable predecessor and development evidence file is byte-unchanged."""
     observed: dict[str, str] = {}
-    for relative, expected in protocol["historical_evidence_sha256"].items():
-        path = repository_root() / relative
-        digest = normalized_text_file_sha256(path)
-        if digest != expected:
-            raise ValueError(f"historical evidence changed: {relative}")
-        observed[relative] = digest
+    for binding in ("historical_evidence_sha256", "development_evidence_sha256"):
+        for relative, expected in protocol[binding].items():
+            path = repository_root() / relative
+            digest = normalized_text_file_sha256(path)
+            if digest != expected:
+                raise ValueError(f"bound evidence changed: {relative}")
+            observed[relative] = digest
     return observed
 
 
@@ -507,6 +546,7 @@ def scanned_paths() -> list[Path]:
         *package_root().rglob("*"),
         tool_root() / "tests" / "test_ocr_iteration2_holdout_protocol.py",
         documentation / "ocr-productionization-iteration2-holdout-protocol.md",
+        documentation / "evidence" / "ocr-productionization-iteration2-distractor-calibration.json",
         documentation / "evidence" / "ocr-productionization-iteration2-holdout-protocol.json",
     ]
     # Byte-compiled caches are excluded so the scanned set is the same on every machine and the
@@ -557,11 +597,21 @@ def assert_no_holdout_content() -> dict[str, Any]:
 
 def check_inputs() -> dict[str, Any]:
     protocol = validate_protocol(load_json(data_root() / "protocol.json"))
+    from .distractor_calibration import validate_development_evidence
+
+    development_path = (
+        repository_root()
+        / "docs"
+        / "assistive-validation"
+        / "evidence"
+        / "ocr-productionization-iteration2-distractor-calibration.json"
+    )
     return {
         "protocol_sha256": value_sha256(protocol),
         "protocol_version": protocol["protocol_version"],
         "scored_case_count": protocol["holdout_distribution"]["scored_case_count"],
         "historical_evidence": verify_historical_evidence(protocol),
+        "development_correction": validate_development_evidence(load_json(development_path)),
         "no_holdout_assertion": assert_no_holdout_content(),
         "scanned_file_count": len(scanned_paths()),
     }
