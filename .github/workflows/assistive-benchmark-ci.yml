@@ -63,6 +63,31 @@ jobs:
         run: |
           python -m assistive_validation_benchmark.ocr_productionization check-evidence
 
+      # Validates the Iteration 2A diagnostic as historical evidence: stored arithmetic, decision
+      # contract and the production boundary recorded at benchmark time. It deliberately does not
+      # assert the *current* worker enum, coordinator selection or migration count, so a later
+      # legitimate OCR integration cannot invalidate an already-measured iteration. Benchmark PR
+      # scope is enforced by the PR-relative production-path diff at the end of this job.
+      - name: Validate OCR failure-analysis diagnostic evidence and decision
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_failure_analysis check-report
+
+      - name: Prove merged v1 OCR evidence is byte-unchanged
+        run: |
+          python - <<'PY'
+          import hashlib, json, pathlib, sys
+          merged = pathlib.Path("docs/assistive-validation/evidence/ocr-productionization-report.json")
+          diagnostic = pathlib.Path("docs/assistive-validation/evidence/ocr-productionization-diagnostic-report.json")
+          recorded = json.loads(diagnostic.read_text(encoding="utf-8"))["source"]["merged_evidence"]
+          observed = hashlib.sha256(merged.read_bytes()).hexdigest()
+          if observed != recorded["file_sha256"]:
+              sys.exit(f"merged v1 evidence changed: {observed} != {recorded['file_sha256']}")
+          if json.loads(merged.read_text(encoding="utf-8"))["final_decision"] != recorded["final_decision"]:
+              sys.exit("merged v1 final decision changed")
+          print(f"merged v1 evidence unchanged: {observed}")
+          PY
+
       - name: Prove OCR productionization corpus byte determinism
         working-directory: tools/assistive-validation-benchmark
         run: |
