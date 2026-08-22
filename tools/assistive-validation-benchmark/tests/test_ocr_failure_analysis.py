@@ -4,6 +4,7 @@ import hashlib
 import json
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from assistive_validation_benchmark.ocr_failure_analysis.analysis import (
     DEVELOPMENT_GATE,
@@ -15,11 +16,15 @@ from assistive_validation_benchmark.ocr_failure_analysis.ordering import (
     column_order,
     geometry_order,
 )
+from assistive_validation_benchmark.ocr_failure_analysis import report as report_module
 from assistive_validation_benchmark.ocr_failure_analysis.report import (
     FINAL_EXACT_TITLE_GATE,
+    ITERATION_2A_PRODUCTION_BOUNDARY,
     MATERIAL_CONFOUND_DELTA,
+    STROKE_PROBE_METHOD,
     decide,
     stroke_sensitivity,
+    validate_historical_production_boundary,
     validate_report,
 )
 from assistive_validation_benchmark.ocr_failure_analysis.selectors import (
@@ -379,7 +384,7 @@ class StoredDiagnosticEvidenceTests(unittest.TestCase):
         self.assertFalse(report["development_corpus"]["independent_holdout"])
         self.assertFalse(report["final_production_gate_unchanged"]["altered_by_this_iteration"])
 
-    def test_stored_diagnostic_report_keeps_the_production_boundary(self) -> None:
+    def test_stored_production_boundary_is_iteration_2a_historical_evidence(self) -> None:
         if not DIAGNOSTIC_REPORT.is_file():
             self.skipTest("diagnostic evidence is added after the measurement runs")
         report = json.loads(DIAGNOSTIC_REPORT.read_text(encoding="utf-8"))
@@ -387,7 +392,67 @@ class StoredDiagnosticEvidenceTests(unittest.TestCase):
         self.assertEqual(["NONE", "TESSERACT"], boundary["production_ocr_task_providers"])
         self.assertEqual("NONE", boundary["coordinator_ocr_selection"])
         self.assertEqual(33, boundary["migration_count"])
+        self.assertEqual(0, boundary["production_paddle_imports"])
         self.assertFalse(boundary["migration_34"])
+        self.assertEqual(ITERATION_2A_PRODUCTION_BOUNDARY, validate_historical_production_boundary(boundary))
+
+    def test_historical_validation_does_not_require_future_live_production_state(self) -> None:
+        """A later legitimate OCR integration must not invalidate an already-measured iteration."""
+        if not DIAGNOSTIC_REPORT.is_file():
+            self.skipTest("diagnostic evidence is added after the measurement runs")
+        report = json.loads(DIAGNOSTIC_REPORT.read_text(encoding="utf-8"))
+        hypothetical_future_production = {
+            "production_ocr_task_providers": ["NONE", "TESSERACT", "PADDLE"],
+            "coordinator_ocr_selection": "PADDLE",
+            "production_paddle_imports": 4,
+            "migration_count": 34,
+            "production_provider_integration": True,
+            "production_default_changed": True,
+            "migration_34": True,
+            "supabase_schema_changed": True,
+        }
+        self.assertNotEqual(report["production_boundary"], hypothetical_future_production)
+        # No production file is touched: the live boundary reader is replaced so that any
+        # dependency of validation on current repository state would surface as a failure.
+        with mock.patch.object(
+            report_module, "check_production_boundary", return_value=hypothetical_future_production
+        ) as live_boundary:
+            self.assertEqual(report, validate_report(report))
+        live_boundary.assert_not_called()
+
+    def test_historical_boundary_record_itself_is_still_asserted(self) -> None:
+        for key, replacement in (
+            ("production_ocr_task_providers", ["NONE", "TESSERACT", "PADDLE"]),
+            ("coordinator_ocr_selection", "PADDLE"),
+            ("migration_count", 34),
+            ("production_paddle_imports", 1),
+        ):
+            with self.subTest(key=key):
+                tampered = dict(ITERATION_2A_PRODUCTION_BOUNDARY, **{key: replacement})
+                with self.assertRaises(ValueError):
+                    validate_historical_production_boundary(tampered)
+
+    def test_stroke_probe_method_wording_matches_what_the_probe_proves(self) -> None:
+        if not DIAGNOSTIC_REPORT.is_file():
+            self.skipTest("diagnostic evidence is added after the measurement runs")
+        report = json.loads(DIAGNOSTIC_REPORT.read_text(encoding="utf-8"))
+        sensitivity = report["stroke_sensitivity"]
+        if not sensitivity.get("measured"):
+            self.skipTest("stroke probe was not measured")
+        self.assertEqual(STROKE_PROBE_METHOD, sensitivity["method"])
+        self.assertIn("pixel-identical", STROKE_PROBE_METHOD)
+        self.assertNotIn("byte-identical", STROKE_PROBE_METHOD)
+
+    def test_permanent_ci_validates_history_and_never_the_live_production_boundary(self) -> None:
+        """Permanent CI must not gate on live production state; PR scope is the diff check."""
+        workflow = (repository_root() / ".github" / "workflows" / "assistive-benchmark-ci.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("ocr_failure_analysis check-report", workflow)
+        self.assertNotIn("ocr_failure_analysis check-boundary", workflow)
+        self.assertIn("Confirm benchmark PR did not change production paths", workflow)
+        self.assertIn("apps/assistive-worker", workflow)
+        self.assertIn("infra/supabase", workflow)
 
     def test_stored_diagnostic_report_does_not_carry_ocr_transcripts(self) -> None:
         if not DIAGNOSTIC_REPORT.is_file():

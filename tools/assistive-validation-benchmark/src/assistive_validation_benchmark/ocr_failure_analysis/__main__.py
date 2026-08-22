@@ -75,10 +75,20 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--output", type=Path, default=DEFAULT_REPORT)
     build.add_argument("--stages", type=Path, required=True, help="JSON file describing staged promotion")
 
-    check = subparsers.add_parser("check-report", help="recompute stored diagnostic arithmetic and boundary")
+    check = subparsers.add_parser(
+        "check-report",
+        help="recompute stored diagnostic arithmetic and re-check the recorded historical boundary",
+    )
     check.add_argument("--report", type=Path, default=DEFAULT_REPORT)
 
-    subparsers.add_parser("check-boundary", help="re-prove the production OCR boundary")
+    # Operator/PR-time command only. It reads *live* repository state, so it must never become a
+    # permanent CI gate: a later legitimate OCR integration would otherwise fail historical
+    # Iteration 2A evidence. Benchmark PRs are scoped instead by the workflow's PR-relative
+    # production-path diff.
+    subparsers.add_parser(
+        "check-boundary",
+        help="operator command: inspect the live production OCR boundary in this working tree",
+    )
     return parser
 
 
@@ -323,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
                 "decision": report["decision"],
                 "development_corpus": report["development_corpus"],
                 "merged_evidence_unchanged": True,
-                "production_boundary": report["production_boundary"],
+                "historical_production_boundary": report["production_boundary"],
             }
         else:
             result = check_production_boundary(repository_root())

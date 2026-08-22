@@ -9,8 +9,11 @@ Scope, stated precisely:
 * It renders the **complete poster**, not an isolated title band, so layout, section
   headings, body text, noise, contrast and the decorative title shadow are all present
   exactly as the corpus produces them.
-* The stroke variant is proved byte-identical to the corpus asset before any OCR runs, so
-  the A side is the real corpus and the B side differs from it in the stroke alone.
+* The stroke variant is proved pixel-identical to the frozen corpus generator's output —
+  same size, same raw pixel buffer — before any encoding or OCR runs, so the A side is the
+  real corpus rendering and the B side differs from it in the stroke alone. Encoded asset
+  bytes are not separately compared; both sides are written through the same corpus media
+  path, so the claim proved here is pixel equality, not file equality.
 * Title *position* is held fixed: the layout bounding box is always computed with
   ``stroke_width=1``, so the two variants place identical glyphs at identical coordinates
   and differ only by the one-pixel dilation.

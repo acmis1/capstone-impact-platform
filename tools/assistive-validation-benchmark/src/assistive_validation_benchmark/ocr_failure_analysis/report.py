@@ -50,6 +50,28 @@ DECISIONS = (
     "NEEDS_MORE_OCR_FAILURE_ANALYSIS",
 )
 
+# The production boundary observed when Iteration 2A was measured. This is a *historical*
+# fact about the repository at benchmark time, recorded so the diagnostic stays auditable.
+# It is deliberately not a claim about future main: a later legitimate neural OCR
+# integration may add a provider, change the coordinator selection and add migrations
+# without invalidating anything measured here. Validation therefore checks the stored
+# record against these frozen benchmark-time values, never against live repository state.
+ITERATION_2A_PRODUCTION_BOUNDARY: dict[str, Any] = {
+    "production_ocr_task_providers": ["NONE", "TESSERACT"],
+    "coordinator_ocr_selection": "NONE",
+    "production_paddle_imports": 0,
+    "migration_count": 33,
+    "production_provider_integration": False,
+    "production_default_changed": False,
+    "migration_34": False,
+    "supabase_schema_changed": False,
+}
+
+STROKE_PROBE_METHOD = (
+    "complete posters rendered twice; the stroke variant is pixel-identical to the frozen corpus "
+    "generator output before encoding and only the title stroke differs"
+)
+
 
 RECORD_PRECISION = 6
 
@@ -333,7 +355,7 @@ def stroke_sensitivity(probes: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "measured": True,
         "probe_schema": next(iter(probes.values())).get("schema_version"),
         "scope": "provisioned PP-OCRv6 candidates under this diagnostic; not a bound on OCR models generally",
-        "method": "complete posters rendered twice; the stroke variant is byte-identical to the corpus and only the title stroke differs",
+        "method": STROKE_PROBE_METHOD,
         "full_poster_context": all(probe.get("full_poster_context") for probe in probes.values()),
         "engines": engines,
         "exact_rate_delta_by_selector": deltas,
@@ -478,13 +500,33 @@ def build_report(
         "recognition_dominant": recognition_dominant,
         "evidence_conflicting": conflicting,
         "notes": notes,
+        # Recorded once, at measurement time, as the boundary Iteration 2A was performed under.
+        # Only this build path reads live production state; validation never does.
         "production_boundary": check_production_boundary(repository_root()),
         "decision": decision,
     }
 
 
+def validate_historical_production_boundary(boundary: dict[str, Any]) -> dict[str, Any]:
+    """Confirm the stored boundary still records what Iteration 2A observed at benchmark time.
+
+    This is evidence validation, not a live-repository assertion. Comparing the record against
+    the current worker enum, coordinator selection or migration count would make historical
+    evidence fail the moment production legitimately evolves, which is exactly backwards.
+    """
+    for key, expected in ITERATION_2A_PRODUCTION_BOUNDARY.items():
+        if boundary.get(key) != expected:
+            raise ValueError(f"stored Iteration 2A production boundary record changed: {key}")
+    return boundary
+
+
 def validate_report(report: dict[str, Any]) -> dict[str, Any]:
-    """Recompute every stored aggregate from stored per-case values and re-prove the boundary."""
+    """Recompute every stored aggregate from stored per-case values, without rerunning OCR.
+
+    Every check here is a function of the stored report, the frozen corpus parts and the merged
+    v1 evidence. Nothing is compared against live production OCR state, so this validation keeps
+    passing after a future OCR integration changes the worker enum, coordinator or migrations.
+    """
     if report.get("schema_version") != REPORT_SCHEMA:
         raise ValueError("unsupported OCR failure-analysis schema")
     if report["decision"] not in DECISIONS:
@@ -618,9 +660,7 @@ def validate_report(report: dict[str, Any]) -> dict[str, Any]:
     if report["decision"] != expected_decision:
         raise ValueError("stored diagnostic decision is inconsistent with the stored evidence")
 
-    boundary = check_production_boundary(repository_root())
-    if report["production_boundary"] != boundary:
-        raise ValueError("stored production boundary no longer matches the repository")
+    validate_historical_production_boundary(report["production_boundary"])
     return report
 
 
