@@ -1,0 +1,69 @@
+{
+  "schema_version": "pp1-ocr-iteration2-calibration-protocol/v1",
+  "benchmark_version": "pp1-ocr-iteration2-calibration-v1",
+  "corpus_version": "pp1-ocr-productionization-corpus-v2",
+  "seed": 2026082201,
+  "measurement_role": "calibration_only",
+  "independent_holdout": false,
+  "production_selection_authorized": false,
+  "content_policy": "synthetic_or_explicitly_deidentified_only",
+  "candidates": ["tesseract", "paddle-tiny", "paddle-small", "paddle-medium"],
+  "staged_cost_policy": {
+    "stage_1_engines": ["tesseract", "paddle-tiny", "paddle-small"],
+    "stage_1_configurations": ["dpi150-edge960", "dpi180-edge1920"],
+    "stage_2_engine": "paddle-medium",
+    "stage_2_rule": "run only the raster configuration selected by stage-1 neural quality, with lower cost breaking a quality tie"
+  },
+  "raster_configurations": {
+    "dpi150-edge960": {"raster_dpi": 150, "max_input_dimension": 960},
+    "dpi180-edge1920": {"raster_dpi": 180, "max_input_dimension": 1920}
+  },
+  "selectors": [
+    {"id": "production_geometry_prominence@raw", "selector": "production_geometry_prominence", "order": "raw"},
+    {"id": "first_line@raw", "selector": "first_line", "order": "raw"},
+    {"id": "first_bounded_group@geometry", "selector": "first_bounded_group", "order": "geometry"}
+  ],
+  "reading_orders": ["raw", "geometry", "column"],
+  "primary_holdout_wer_selection_rule": "choose one lowest-WER deterministic ordering on aggregate calibration evidence; freeze it for all future holdout pages; never choose per page",
+  "development_gate": {
+    "exact_title_rate_minimum": 0.9,
+    "primary_mean_wer_maximum": 0.15,
+    "material_false_agreements_maximum": 0,
+    "all_cases_execute_safely": true,
+    "operational_plausibility_required": true
+  },
+  "future_holdout_gate": {
+    "exact_title_rate_minimum": 0.95,
+    "primary_mean_wer_maximum": 0.12,
+    "material_false_agreements_maximum": 0
+  },
+  "operational_ceilings": {
+    "cold_start_ms_maximum": 30000,
+    "p50_ms_maximum": 10000,
+    "p95_ms_maximum": 20000,
+    "peak_working_set_bytes_maximum": 4294967296,
+    "artifact_footprint_bytes_maximum": 1073741824,
+    "per_case_timeout_seconds": 90
+  },
+  "worker_safety_ceilings": {
+    "max_raster_dpi": 200,
+    "max_raster_pixels_per_page": 40000000,
+    "max_total_raster_pixels": 80000000,
+    "max_extracted_characters": 100000,
+    "max_text_blocks": 5000
+  },
+  "allowed_decisions": [
+    "READY_TO_FREEZE_OCR_ITERATION_2_HOLDOUT_PROTOCOL",
+    "NEEDS_OCR_MODEL_CHALLENGER",
+    "NEEDS_MORE_OCR_CORPUS_CALIBRATION"
+  ],
+  "historical_evidence_sha256": {
+    "docs/assistive-validation/evidence/ocr-productionization-report.json": "425630046c3c1295800d6bbdeb3a6ca3d5a0f6fda8cb675ccb17a50b2b506041",
+    "docs/assistive-validation/evidence/ocr-productionization-diagnostic-report.json": "0202eaacac0d98377d09806b5dcee9deb28940515e1007d9741deac54663a309",
+    "docs/assistive-validation/ocr-productionization-benchmark.md": "c427c286dba425fc31fc076991d14bc388edb3e1f27b65b2f9dcf087025c8dc2",
+    "docs/assistive-validation/ocr-productionization-failure-analysis.md": "962a29257543ba4e592c61aa1e8fdd46eaef7e48e71c1992cc4f603c7abdf82d",
+    "tools/assistive-validation-benchmark/ocr-productionization/corpus/calibration.json": "bbc114a148f8145d89137514f9482710754d8bc157edccc7a594f2bcaa3492a3",
+    "tools/assistive-validation-benchmark/ocr-productionization/corpus/holdout.json": "5587124cb2e4540a58f45eb7fc20106da8a121411bff3bd6f7a855fd3bddd8ed",
+    "tools/assistive-validation-benchmark/ocr-productionization/protocol.json": "d38146a046877b125c98db36a0f82c6c08a4ecd185c559235e918bd043323e70"
+  }
+}

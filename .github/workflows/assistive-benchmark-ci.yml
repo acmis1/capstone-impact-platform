@@ -88,12 +88,45 @@ jobs:
           print(f"merged v1 evidence unchanged: {observed}")
           PY
 
+      - name: Confirm benchmark PR did not modify frozen OCR history
+        if: github.event_name == 'pull_request'
+        run: |
+          git diff --exit-code "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" -- \
+            docs/assistive-validation/evidence/ocr-productionization-report.json \
+            docs/assistive-validation/evidence/ocr-productionization-diagnostic-report.json \
+            docs/assistive-validation/ocr-productionization-benchmark.md \
+            docs/assistive-validation/ocr-productionization-failure-analysis.md \
+            tools/assistive-validation-benchmark/ocr-productionization
+
       - name: Prove OCR productionization corpus byte determinism
         working-directory: tools/assistive-validation-benchmark
         run: |
           python -m assistive_validation_benchmark.ocr_productionization generate --output-dir artifacts/ocr-repeat-a
           python -m assistive_validation_benchmark.ocr_productionization generate --output-dir artifacts/ocr-repeat-b
           cmp artifacts/ocr-repeat-a/generation.json artifacts/ocr-repeat-b/generation.json
+
+      - name: Validate OCR Iteration 2 corrected calibration corpus and no-holdout contract
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration2_calibration check
+
+      - name: Prove OCR Iteration 2 renderer and corpus byte determinism
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_iteration2_calibration generate --output-dir artifacts/ocr2-repeat-a
+          python -m assistive_validation_benchmark.ocr_iteration2_calibration generate --output-dir artifacts/ocr2-repeat-b
+          cmp artifacts/ocr2-repeat-a/generation.json artifacts/ocr2-repeat-b/generation.json
+          python - <<'PY'
+          import json, pathlib, sys
+          generated = json.loads(pathlib.Path("artifacts/ocr2-repeat-a/generation.json").read_text(encoding="utf-8"))
+          evidence = json.loads(pathlib.Path("../../docs/assistive-validation/evidence/ocr-productionization-iteration2-calibration.json").read_text(encoding="utf-8"))
+          if generated != evidence["corpus"]["generation"]:
+              sys.exit("stored Iteration 2 corpus generation evidence differs from deterministic regeneration")
+          print(f"Iteration 2 corpus generation unchanged: {generated['corpus_asset_sha256']}")
+          PY
+
+      - name: Validate OCR Iteration 2 calibration arithmetic and decision
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration2_calibration check-report
 
       - name: Generate deterministic synthetic corpus smoke fixture
         working-directory: tools/assistive-validation-benchmark
