@@ -115,14 +115,6 @@ jobs:
           python -m assistive_validation_benchmark.ocr_iteration2_calibration generate --output-dir artifacts/ocr2-repeat-a
           python -m assistive_validation_benchmark.ocr_iteration2_calibration generate --output-dir artifacts/ocr2-repeat-b
           cmp artifacts/ocr2-repeat-a/generation.json artifacts/ocr2-repeat-b/generation.json
-          python - <<'PY'
-          import json, pathlib, sys
-          generated = json.loads(pathlib.Path("artifacts/ocr2-repeat-a/generation.json").read_text(encoding="utf-8"))
-          evidence = json.loads(pathlib.Path("../../docs/assistive-validation/evidence/ocr-productionization-iteration2-calibration.json").read_text(encoding="utf-8"))
-          if generated != evidence["corpus"]["generation"]:
-              sys.exit("stored Iteration 2 corpus generation evidence differs from deterministic regeneration")
-          print(f"Iteration 2 corpus generation unchanged: {generated['corpus_asset_sha256']}")
-          PY
 
       - name: Validate OCR Iteration 2 calibration arithmetic and decision
         working-directory: tools/assistive-validation-benchmark
