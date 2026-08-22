@@ -474,10 +474,14 @@ class FreezeCommitRecordTests(unittest.TestCase):
         self.assertEqual(build_freeze_manifest()["freeze_tree_sha256"], result["freeze_tree_sha256"])
         self.assertIs(result["content_addressed_match"], True)
         self.assertIs(self.record["holdout_absent_at_freeze"], True)
-        self.assertEqual(29, self.record["component_count"])
+        self.assertEqual(build_freeze_manifest()["component_count"], self.record["component_count"])
+        self.assertEqual(
+            "a30af31a4eb7f2a473c3e30e30aded0843a1ecd8",
+            result["superseded_protocol_freeze_commit_sha"],
+        )
         self.assertEqual(
             "ab9ee241c6ea70f00c8e4fe063ef28c73b37802a",
-            result["superseded_protocol_freeze_commit_sha"],
+            self.record["supersedes"]["supersedes"]["protocol_freeze_commit_sha"],
         )
         self.assertIs(result["original_history_preserved"], True)
 
