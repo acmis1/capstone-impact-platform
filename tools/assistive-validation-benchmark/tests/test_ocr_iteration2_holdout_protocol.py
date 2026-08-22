@@ -14,6 +14,12 @@ from assistive_validation_benchmark.ocr_iteration2_holdout_protocol import (
     renderer as renderer_module,
     schema as schema_module,
 )
+from assistive_validation_benchmark.ocr_iteration2_holdout_protocol.distractor_calibration import (
+    DISTRACTOR_LIBRARY,
+    development_cases,
+    load_calibration_corpus,
+    validate_development_evidence,
+)
 from assistive_validation_benchmark.ocr_iteration2_holdout_protocol.fingerprint import (
     RendererFingerprintMismatch,
     compute_fingerprint,
@@ -54,9 +60,18 @@ from assistive_validation_benchmark.ocr_iteration2_holdout_protocol.schema impor
     tool_root,
     validate_protocol,
 )
+from assistive_validation_benchmark.ocr_failure_analysis.selectors import run_variant
+from assistive_validation_benchmark.ocr_failure_analysis.taxonomy import edit_counts, order_text
 
 
 EVIDENCE = repository_root() / "docs" / "assistive-validation" / "evidence" / "ocr-productionization-iteration2-holdout-protocol.json"
+DEVELOPMENT_EVIDENCE = (
+    repository_root()
+    / "docs"
+    / "assistive-validation"
+    / "evidence"
+    / "ocr-productionization-iteration2-distractor-calibration.json"
+)
 DISTRACTOR_KINDS = (
     "school_or_faculty_masthead",
     "program_name",
@@ -651,6 +666,118 @@ class HoldoutDistributionContractTests(unittest.TestCase):
         self.assertEqual(1, holdout_non_reuse_evidence(reused)["exact_title_body_reuse_count"])
 
 
+class IndependentReviewBlockerTests(unittest.TestCase):
+    @staticmethod
+    def block(text: str, *, left: int, top: int, right: int, bottom: int) -> dict[str, object]:
+        return {
+            "text": text,
+            "box": {"left": left, "top": top, "right": right, "bottom": bottom},
+        }
+
+    def test_first_bounded_group_selects_recognized_masthead_instead_of_title(self) -> None:
+        blocks = [
+            self.block(
+                "SCHOOL OF SCIENCE AND ENGINEERING",
+                left=80,
+                top=20,
+                right=520,
+                bottom=40,
+            ),
+            self.block("Actual Project Title", left=120, top=90, right=880, bottom=142),
+            self.block("BACKGROUND", left=60, top=240, right=260, bottom=264),
+            self.block("Body text", left=60, top=278, right=360, bottom=300),
+        ]
+
+        candidates = run_variant("first_bounded_group", "geometry", blocks)
+
+        self.assertEqual("SCHOOL OF SCIENCE AND ENGINEERING", candidates[0].text)
+        self.assertNotEqual("Actual Project Title", candidates[0].text)
+
+    def test_perfect_visible_text_ocr_has_zero_primary_wer(self) -> None:
+        case = synthetic_case(0)
+        visible_text = [
+            *[item["text"] for item in case["distractors"] if item["position"] == "above"],
+            case["title"],
+            *[item["text"] for item in case["distractors"] if item["position"] == "near"],
+        ]
+        for heading, section in zip(renderer_module.SECTION_HEADINGS, case["body_sections"]):
+            visible_text.extend([heading, section])
+        blocks = [{"text": text} for text in visible_text]
+
+        result = edit_counts(reference_text(case), order_text(blocks, "column"))
+
+        self.assertEqual(0, result["word_edits"])
+        self.assertEqual(0, result["wer"])
+
+    def test_missing_or_mistranscribed_distractor_is_an_ocr_error(self) -> None:
+        case = synthetic_case(0)
+        visible_text = [
+            *[item["text"] for item in case["distractors"] if item["position"] == "above"],
+            case["title"],
+            *[item["text"] for item in case["distractors"] if item["position"] == "near"],
+        ]
+        for heading, section in zip(renderer_module.SECTION_HEADINGS, case["body_sections"]):
+            visible_text.extend([heading, section])
+        missing = [{"text": text} for text in visible_text[1:]]
+        mistranscribed = [{"text": "SCHOOL OF INCORRECT STUDIES"}, *[{"text": text} for text in visible_text[1:]]]
+
+        self.assertGreater(edit_counts(reference_text(case), order_text(missing, "column"))["word_edits"], 0)
+        self.assertGreater(
+            edit_counts(reference_text(case), order_text(mistranscribed, "column"))["word_edits"],
+            0,
+        )
+
+
+class DistractorDevelopmentEvidenceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.stored = load_json(DEVELOPMENT_EVIDENCE)
+
+    def test_development_challenge_uses_only_the_exposed_namespace_and_all_required_kinds(self) -> None:
+        cases = development_cases(load_calibration_corpus())
+        self.assertEqual(28, len(cases))
+        self.assertTrue(all(case["id"].startswith("ocr2-dev-") for case in cases))
+        self.assertTrue(all(case["measurement_role"] == "development_only" for case in cases))
+        observed_kinds = {
+            item["kind"]
+            for case in cases
+            for item in case["distractors"]
+        }
+        self.assertEqual({item["kind"] for item in DISTRACTOR_LIBRARY}, observed_kinds)
+
+    def test_stored_development_evidence_recomputes_without_consuming_a_holdout(self) -> None:
+        result = validate_development_evidence(self.stored)
+        self.assertEqual("development_only", result["measurement_role"])
+        self.assertEqual("top_band_prominence@geometry", result["selected_selector"])
+        self.assertIs(result["selector_gate_passed"], True)
+        self.assertIs(result["development_wer_passed"], True)
+        self.assertIs(result["fresh_holdout_consumed"], False)
+        self.assertIs(self.stored["independent_holdout"], False)
+        self.assertTrue(all(value is False for value in self.stored["holdout_status"].values()))
+
+    def test_selector_gate_reports_original_and_distractor_datasets_separately(self) -> None:
+        datasets = self.stored["datasets"]
+        self.assertEqual(
+            {"original_exposed_calibration", "exposed_development_distractor_challenge"},
+            set(datasets),
+        )
+        for dataset in datasets.values():
+            selected = dataset["selectors"]["top_band_prominence@geometry"]
+            self.assertGreaterEqual(selected["exact_title_rate"], 0.90)
+            self.assertEqual(0, selected["material_false_automatic_agreements"])
+        self.assertLess(
+            datasets["exposed_development_distractor_challenge"]["selectors"]
+            ["first_bounded_group@geometry"]["exact_title_rate"],
+            0.90,
+        )
+
+    def test_development_primary_wer_is_fixed_column_order_and_below_directional_gate(self) -> None:
+        check = self.stored["development_wer_check"]
+        self.assertEqual("column", check["primary_order"])
+        self.assertEqual(["raw", "geometry"], check["diagnostic_orders"])
+        self.assertLessEqual(check["primary_mean_wer"], 0.15)
+        self.assertEqual(0.12, check["future_fresh_holdout_gate_unchanged"])
+
+
 class FrozenRendererTests(unittest.TestCase):
     def setUp(self) -> None:
         self.case = synthetic_case(20)
@@ -685,11 +812,12 @@ class FrozenRendererTests(unittest.TestCase):
             plain_image.close()
             distracted_image.close()
 
-    def test_distractor_text_never_enters_the_reference_text(self) -> None:
+    def test_distractor_text_enters_the_reference_in_visual_order(self) -> None:
         text = reference_text(self.case)
-        for distractor in synthetic_distractors(20):
-            self.assertNotIn(distractor["text"], text)
-        self.assertIn(self.case["title"], text)
+        above = [item["text"] for item in synthetic_distractors(20) if item["position"] == "above"]
+        near = [item["text"] for item in synthetic_distractors(20) if item["position"] == "near"]
+        expected_prefix = "\n".join([*above, self.case["title"], *near])
+        self.assertTrue(text.startswith(expected_prefix))
 
     def test_visual_tracking_changes_pixels_but_not_the_semantic_title(self) -> None:
         tracked = synthetic_case(6)

@@ -1,8 +1,9 @@
 """Command surface for the Iteration 2 holdout protocol freeze.
 
-Every command here is read-only with respect to measurement: nothing runs OCR, downloads a
-model, creates a holdout case or authorises a production selection. ``verify-freeze`` is the
-gate the future Iteration 2B3 branch must pass before it is allowed to create anything.
+The development commands operate only on exposed ``ocr2-dev-*`` calibration derivatives.
+No command downloads a model, creates a fresh holdout case, runs fresh holdout OCR or
+authorises a production selection. ``verify-freeze`` remains the gate the future Iteration
+2B3 branch must pass before it is allowed to create anything.
 """
 
 from __future__ import annotations
@@ -13,6 +14,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from ..ocr_iteration2_calibration.capture import capture_engine
+from .distractor_calibration import (
+    build_development_evidence,
+    development_cases,
+    development_warmup,
+    generate_development_assets,
+    load_calibration_corpus,
+    validate_development_evidence,
+)
 from .fingerprint import (
     compute_fingerprint,
     environment_path,
@@ -48,6 +58,17 @@ def _defaults() -> dict[str, Path]:
         / "ocr-productionization-iteration2-holdout-protocol.json",
         "freeze_commit": data_root() / "freeze-commit.json",
         "models": tool_root() / "artifacts" / "ocr-provisioning" / "models",
+        "development_run": tool_root() / "artifacts" / "ocr-iteration2-distractor-calibration",
+        "original_capture": tool_root()
+        / "artifacts"
+        / "ocr-iteration2-calibration"
+        / "captures"
+        / "paddle-small--dpi180-edge1920.json",
+        "development_evidence": repository_root()
+        / "docs"
+        / "assistive-validation"
+        / "evidence"
+        / "ocr-productionization-iteration2-distractor-calibration.json",
     }
 
 
@@ -82,6 +103,29 @@ def _parser() -> argparse.ArgumentParser:
 
     candidate = subparsers.add_parser("verify-candidate", help="verify the frozen PP-OCRv6 Small model trees offline")
     candidate.add_argument("--models-dir", type=Path, default=defaults["models"])
+
+    generate_development = subparsers.add_parser(
+        "generate-development", help="generate exposed ocr2-dev distractor variants"
+    )
+    generate_development.add_argument("--run-dir", type=Path, default=defaults["development_run"])
+
+    capture_development = subparsers.add_parser(
+        "capture-development", help="run PP-OCRv6 Small on exposed ocr2-dev distractor variants"
+    )
+    capture_development.add_argument("--run-dir", type=Path, default=defaults["development_run"])
+    capture_development.add_argument("--models-dir", type=Path, default=defaults["models"])
+
+    build_development = subparsers.add_parser(
+        "build-development-evidence", help="score and store the exposed distractor correction evidence"
+    )
+    build_development.add_argument("--run-dir", type=Path, default=defaults["development_run"])
+    build_development.add_argument("--original-capture", type=Path, default=defaults["original_capture"])
+    build_development.add_argument("--output", type=Path, default=defaults["development_evidence"])
+
+    check_development = subparsers.add_parser(
+        "check-development-evidence", help="recompute the exposed distractor correction evidence"
+    )
+    check_development.add_argument("--report", type=Path, default=defaults["development_evidence"])
     return parser
 
 
@@ -127,9 +171,45 @@ def main(argv: list[str] | None = None) -> int:
             result = {"freeze_commit_record": str(args.output), **record}
         elif args.command == "check-freeze-commit":
             result = validate_freeze_commit_record(load_json(args.record))
-        else:
+        elif args.command == "verify-candidate":
             protocol = validate_protocol(load_json(data_root() / "protocol.json"))
             result = verify_candidate_artifacts(protocol, args.models_dir)
+        elif args.command == "generate-development":
+            corpus = load_calibration_corpus()
+            result = generate_development_assets(corpus, args.run_dir / "corpus")
+        elif args.command == "capture-development":
+            corpus = load_calibration_corpus()
+            cases = development_cases(corpus)
+            warmup = development_warmup(corpus)
+            generate_development_assets(corpus, args.run_dir / "corpus")
+            capture = capture_engine(
+                "paddle-small",
+                configuration_id="dpi180-edge1920",
+                cases=cases,
+                warmup_case=warmup,
+                assets_dir=args.run_dir / "corpus",
+                rendered_dir=args.run_dir / "rendered" / "dpi180-edge1920",
+                models_dir=args.models_dir,
+                raster_dpi=180,
+                max_input_dimension=1920,
+                tesseract_executable=None,
+            )
+            output = args.run_dir / "captures" / "paddle-small--dpi180-edge1920.json"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(canonical_json_bytes(capture))
+            result = {"capture": str(output), "case_count": capture["case_count"], "failures": capture["failures"]}
+        elif args.command == "build-development-evidence":
+            capture_path = args.run_dir / "captures" / "paddle-small--dpi180-edge1920.json"
+            report = build_development_evidence(load_json(args.original_capture), load_json(capture_path))
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_bytes(canonical_json_bytes(report))
+            result = {
+                "evidence": str(args.output),
+                "selected_selector": report["selector_gate"]["selected_selector"],
+                "development_primary_wer": report["development_wer_check"]["primary_mean_wer"],
+            }
+        else:
+            result = validate_development_evidence(load_json(args.report))
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:

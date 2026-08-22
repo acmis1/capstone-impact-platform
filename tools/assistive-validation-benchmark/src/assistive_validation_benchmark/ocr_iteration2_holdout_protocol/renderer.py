@@ -255,13 +255,15 @@ def render_tracking_pair(case: dict[str, Any], seed: int) -> tuple[Image.Image, 
 
 
 def reference_text(case: dict[str, Any]) -> str:
-    """Whole-page reference text for WER.
+    """Every intentionally rendered semantic string in deterministic visual order.
 
-    Upper-page distractors are rendered pixels and are deliberately *not* reference text: the
-    holdout measures recovery of the project title and body, and crediting a distractor would
-    reward the very header noise the generalisation test introduces.
+    Upper-page labels are noise for title *selection*, but they remain valid visible text for
+    whole-page OCR. Including them makes perfect recognition score WER 0 instead of treating a
+    correctly recognised masthead, course code or team label as an insertion error.
     """
-    parts = [case["title"]]
+    parts = [item["text"] for item in _distractors(case, "above")]
+    parts.append(case["title"])
+    parts.extend(item["text"] for item in _distractors(case, "near"))
     for heading, section in zip(SECTION_HEADINGS, case["body_sections"]):
         parts.extend([heading, section])
     return "\n".join(parts)
