@@ -304,15 +304,17 @@ The corrected freeze is four ordinary commits, and no commit is amended or rewri
 * **Commit B — record freeze commit identity.** Adds only `freeze-commit.json`, which records
   Commit A's SHA together with the freeze tree and manifest digests, and proves against Commit A
   that every bound file's Git blob matches the working tree and that no holdout path existed.
-* **Commit C — corrected authoritative freeze.** Preserves A/B and corrects the platform-specific
-  renderer attestation defect exposed by exact-head CI before any holdout existed.
+* **Commit C — corrected authoritative freeze.**
+  `a30af31a4eb7f2a473c3e30e30aded0843a1ecd8` preserves A/B and corrects the
+  platform-specific renderer attestation defect exposed by exact-head CI before any holdout
+  existed.
 * **Commit D — corrected chronology record.** Records Commit C and marks A/B as preserved but
   superseded. It adds no corrected freeze material of its own.
 
 The original protocol-freeze commit is `ab9ee241c6ea70f00c8e4fe063ef28c73b37802a`, with chronology
 commit `b08c8fa3723a9c16157944de8f3d4a362fa03bc6`. Both remain in history and both predate any
 holdout, but the first exact-head CI result superseded their renderer cross-platform assertion.
-The corrected authoritative Commit C is recorded by Commit D after its 29 blobs are verified.
+The corrected authoritative Commit C is recorded by Commit D after all 29 blobs were verified.
 
 `main` squash-merges, so a branch commit SHA does not survive as an ancestor of `main` — the v1
 protocol-freeze commit `0485a8b7fda3f3e9f9873849104cd90917b4f395` is not one today. The
