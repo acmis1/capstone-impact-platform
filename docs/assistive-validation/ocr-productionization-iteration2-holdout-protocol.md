@@ -303,6 +303,10 @@ The freeze is two ordinary commits, and no commit is amended:
   Commit A's SHA together with the freeze tree and manifest digests, and proves against Commit A
   that every bound file's Git blob matches the working tree and that no holdout path existed.
 
+The protocol-freeze commit is `ab9ee241c6ea70f00c8e4fe063ef28c73b37802a`. All 29 bound
+components were verified against it by Git blob identity, and no holdout path existed at that
+commit — the frozen files provably came before any holdout case or result.
+
 `main` squash-merges, so a branch commit SHA does not survive as an ancestor of `main` — the v1
 protocol-freeze commit `0485a8b7fda3f3e9f9873849104cd90917b4f395` is not one today. The
 content-addressed `freeze_tree_sha256` is therefore the primary identity and the commit SHA is

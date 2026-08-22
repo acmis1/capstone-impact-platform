@@ -417,6 +417,35 @@ class FreezeManifestTests(unittest.TestCase):
             verify_freeze_commit(absent, require_commit_object=True)
 
 
+class FreezeCommitRecordTests(unittest.TestCase):
+    """The chronology record is verification metadata only; it adds no freeze material."""
+
+    def setUp(self) -> None:
+        self.path = data_root() / "freeze-commit.json"
+        if not self.path.is_file():
+            self.skipTest("the freeze chronology record is added by the second freeze commit")
+        self.record = load_json(self.path)
+
+    def test_record_matches_the_content_addressed_freeze(self) -> None:
+        result = manifest_module.validate_freeze_commit_record(self.record)
+        self.assertEqual(build_freeze_manifest()["freeze_tree_sha256"], result["freeze_tree_sha256"])
+        self.assertIs(result["content_addressed_match"], True)
+        self.assertIs(self.record["holdout_absent_at_freeze"], True)
+        self.assertEqual(29, self.record["component_count"])
+
+    def test_record_is_rejected_when_the_frozen_tree_moves(self) -> None:
+        tampered = copy.deepcopy(self.record)
+        tampered["freeze_tree_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "freeze tree digest"):
+            manifest_module.validate_freeze_commit_record(tampered)
+
+    def test_record_is_rejected_when_it_admits_holdout_content(self) -> None:
+        tampered = copy.deepcopy(self.record)
+        tampered["holdout_absent_at_freeze"] = False
+        with self.assertRaisesRegex(ValueError, "existed at the freeze"):
+            manifest_module.validate_freeze_commit_record(tampered)
+
+
 class CanonicalRendererTests(unittest.TestCase):
     def setUp(self) -> None:
         self.environment = validate_environment(load_json(environment_path()))
