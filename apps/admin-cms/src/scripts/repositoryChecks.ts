@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const yaml = require('js-yaml') as { load(input: string): unknown };
 const prohibited = /stu[d]ents?/i;
-const frozenSyntheticOcrEvidence = /^(?:tools\/assistive-validation-benchmark\/(?:ocr-productionization\/corpus\/(?:calibration|holdout)|ocr-iteration2-calibration\/corpus\/calibration)\.json|docs\/assistive-validation\/evidence\/ocr-productionization-report\.json)$/;
+const frozenSyntheticOcrEvidence = /^(?:tools\/assistive-validation-benchmark\/(?:ocr-productionization\/corpus\/(?:calibration|holdout)|ocr-iteration2-calibration\/corpus\/calibration)\.json|tools\/assistive-validation-benchmark\/src\/assistive_validation_benchmark\/ocr_iteration2_holdout_protocol\/distractor_calibration\.py|docs\/assistive-validation\/evidence\/ocr-productionization(?:-iteration2-distractor-calibration|-report)\.json)$/;
 
 function trackedFiles(repoRoot: string): string[] {
   return execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
