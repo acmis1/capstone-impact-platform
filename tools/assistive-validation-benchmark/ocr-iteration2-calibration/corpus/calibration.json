@@ -1,0 +1,193 @@
+{
+  "schema_version": "pp1-ocr-iteration2-corpus-part/v1",
+  "corpus_version": "pp1-ocr-productionization-corpus-v2",
+  "seed": 2026082201,
+  "part": "calibration",
+  "measurement_role": "calibration_only",
+  "independent_holdout": false,
+  "ocr_cases": [
+    {
+      "id": "ocr2-warmup-001", "split": "warmup", "asset": "ocr2-warmup-001.png", "media": "png", "layout": "one_column", "difficulty": "clean", "width": 1600, "height": 1000,
+      "title": "Iteration 2 OCR Calibration Warm-Up", "metadata_title": "Iteration 2 OCR Calibration Warm-Up", "expected_agreement": true,
+      "body_sections": ["A synthetic poster prepares the local engine before measurements.", "The warm-up is excluded from every quality and latency aggregate.", "No participant identity, command, URL, or workflow authority is present."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["warmup", "synthetic"]
+    },
+    {
+      "id": "ocr2-cal-001", "split": "calibration", "asset": "ocr2-cal-001.png", "media": "png", "layout": "one_column", "difficulty": "clean", "width": 1800, "height": 1200,
+      "title": "Coastal Drone Safety Ledger", "metadata_title": "Coastal Drone Safety Ledger", "expected_agreement": true,
+      "body_sections": ["Volunteer pilots record synthetic coastal survey routes and battery checks.", "A bounded offline ledger validates timestamps and CRC-32 payload integrity.", "Staff compare planned and observed routes without automatic operational authority."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["acronym", "numbers", "australian_english"]
+    },
+    {
+      "id": "ocr2-cal-002", "split": "calibration", "asset": "ocr2-cal-002.jpg", "media": "jpeg", "layout": "two_column", "difficulty": "clean", "width": 1900, "height": 1250,
+      "title": "Café Queue Forecasting", "metadata_title": "Café Queue Forecasting", "expected_agreement": true,
+      "body_sections": ["A campus café needs a clearer view of lunch-hour demand.", "The prototype aggregates synthetic orders into fifteen-minute intervals.", "Forecasts remain advisory and are reviewed against ordinary service records."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 82, "tags": ["accented_latin", "jpeg", "two_column"]
+    },
+    {
+      "id": "ocr2-cal-003", "split": "calibration", "asset": "ocr2-cal-003.pdf", "media": "scanned_pdf", "layout": "three_column", "difficulty": "clean", "width": 1800, "height": 1200,
+      "title": "CO₂ Classroom Ventilation Map", "metadata_title": "CO₂ Classroom Ventilation Map", "expected_agreement": true,
+      "body_sections": ["Synthetic CO₂ readings describe ventilation patterns in teaching rooms.", "A local map groups bounded samples without identifying students or staff.", "The evaluation checks readable trends and preserves human facilities decisions."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["subscript", "technical_vocabulary", "three_column", "scanned_pdf"]
+    },
+    {
+      "id": "ocr2-cal-004", "split": "calibration", "asset": "ocr2-cal-004.png", "media": "png", "layout": "two_column", "difficulty": "clean", "width": 2000, "height": 1400,
+      "title": "Farmer’s Offline Irrigation Adviser", "metadata_title": "Farmer’s Offline Irrigation Adviser", "expected_agreement": true,
+      "body_sections": ["Regional growers need useful guidance when connectivity is intermittent.", "The adviser compares synthetic moisture bands with a bounded crop schedule.", "Australian spelling and a curly apostrophe remain part of the scored text."],
+      "title_style": "wrapped", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["curly_apostrophe", "wrapped_title", "australian_english"]
+    },
+    {
+      "id": "ocr2-cal-005", "split": "calibration", "asset": "ocr2-cal-005.jpg", "media": "jpeg", "layout": "one_column", "difficulty": "clean", "width": 1700, "height": 1100,
+      "title": "Rail Delay Explorer – North Line", "metadata_title": "Rail Delay Explorer – North Line", "expected_agreement": true,
+      "body_sections": ["A teaching dataset models delays across a fictional suburban rail line.", "The interface groups causes, durations and transfer impacts for inspection.", "An en dash is intentional semantic punctuation and must render as a real glyph."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 78, "tags": ["en_dash", "numbers", "punctuation"]
+    },
+    {
+      "id": "ocr2-cal-006", "split": "calibration", "asset": "ocr2-cal-006.pdf", "media": "scanned_pdf", "layout": "three_column", "difficulty": "clean", "width": 2100, "height": 1400,
+      "title": "Secure API Inventory — Lab 7", "metadata_title": "Secure API Inventory — Lab 7", "expected_agreement": true,
+      "body_sections": ["A synthetic inventory lists local teaching services and ownership roles.", "The analyser flags stale examples without contacting any network endpoint.", "The em dash, acronym and numeral are preserved in the reference contract."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "medium", "noise": "none", "jpeg_quality": 90, "tags": ["em_dash", "acronym", "numbers", "scanned_pdf"]
+    },
+    {
+      "id": "ocr2-cal-007", "split": "calibration", "asset": "ocr2-cal-007.png", "media": "png", "layout": "two_column", "difficulty": "clean", "width": 1800, "height": 1200,
+      "title": "Wildlife Audio Event Index", "metadata_title": "Wildlife Audio Event Index", "expected_agreement": true,
+      "body_sections": ["Synthetic bird calls are labelled for an offline classroom demonstration.", "A deterministic index groups clips by duration and frequency band.", "No recording is treated as proof of a real species or conservation event."],
+      "title_style": "shadow", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["shadow", "decorative_heading", "technical_vocabulary"]
+    },
+    {
+      "id": "ocr2-cal-008", "split": "calibration", "asset": "ocr2-cal-008.jpg", "media": "jpeg", "layout": "three_column", "difficulty": "clean", "width": 1950, "height": 1300,
+      "title": "Battery Health: Campus E-Bikes", "metadata_title": "Battery Health: Campus E-Bikes", "expected_agreement": true,
+      "body_sections": ["A synthetic fleet trace records charging cycles and ambient temperature.", "The dashboard estimates capacity bands with transparent bounded arithmetic.", "Maintenance staff retain final authority over inspection and replacement."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 74, "tags": ["colon", "hyphen", "three_column", "jpeg"]
+    },
+    {
+      "id": "ocr2-cal-009", "split": "calibration", "asset": "ocr2-cal-009.pdf", "media": "scanned_pdf", "layout": "one_column", "difficulty": "clean", "width": 1800, "height": 1200,
+      "title": "Bush Track Accessibility Notes", "metadata_title": "Bush Track Accessibility Notes", "expected_agreement": true,
+      "body_sections": ["A deidentified route catalogue describes synthetic gradients and surfaces.", "The prototype formats observations for later accessibility review.", "It does not publish routes or claim authoritative mobility guidance."],
+      "title_style": "wrapped", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["wrapped_title", "australian_english", "scanned_pdf"]
+    },
+    {
+      "id": "ocr2-cal-010", "split": "calibration", "asset": "ocr2-cal-010.png", "media": "png", "layout": "three_column", "difficulty": "clean", "width": 1900, "height": 1250,
+      "title": "Microgrid Load-Balancing Tutor", "metadata_title": "Microgrid Load-Balancing Tutor", "expected_agreement": true,
+      "body_sections": ["Students explore a fictional microgrid with solar and storage profiles.", "A bounded simulator allocates loads across three teaching scenarios.", "Charts explain trade-offs without controlling any physical equipment."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "medium", "noise": "none", "jpeg_quality": 90, "tags": ["hyphen", "technical_vocabulary", "three_column"]
+    },
+    {
+      "id": "ocr2-cal-011", "split": "calibration", "asset": "ocr2-cal-011.jpg", "media": "jpeg", "layout": "two_column", "difficulty": "clean", "width": 1750, "height": 1150,
+      "title": "Museum Visit Planner (Beta)", "metadata_title": "Museum Visit Planner (Beta)", "expected_agreement": true,
+      "body_sections": ["A fictional collection supports a classroom itinerary-planning exercise.", "The planner balances walking time, opening windows and selected exhibits.", "Parentheses are scored as ordinary punctuation under the frozen metric."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 80, "tags": ["parentheses", "two_column", "mixed_font_sizes"]
+    },
+    {
+      "id": "ocr2-cal-012", "split": "calibration", "asset": "ocr2-cal-012.pdf", "media": "scanned_pdf", "layout": "one_column", "difficulty": "clean", "width": 2000, "height": 1350,
+      "title": "Open-Source Licence Catalogue", "metadata_title": "Open-Source Licence Catalogue", "expected_agreement": true,
+      "body_sections": ["A synthetic repository catalogue records package names and licence families.", "The tool highlights review notes without making legal conclusions.", "Australian spelling and technical vocabulary remain visible in the poster."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["hyphen", "australian_english", "technical_vocabulary"]
+    },
+    {
+      "id": "ocr2-cal-013", "split": "calibration", "asset": "ocr2-cal-013.png", "media": "png", "layout": "two_column", "difficulty": "clean", "width": 1850, "height": 1200,
+      "title": "Stormwater Sensor Calibration", "metadata_title": "Stormwater Sensor Calibration", "expected_agreement": true,
+      "body_sections": ["Synthetic conductivity samples represent a bounded stormwater teaching rig.", "A calibration worksheet compares offsets before and after maintenance.", "Results are informational and require a human operator to interpret them."],
+      "title_style": "tracked", "tracking_px": 2, "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["visual_tracking", "two_column", "australian_english"]
+    },
+    {
+      "id": "ocr2-cal-014", "split": "calibration", "asset": "ocr2-cal-014.jpg", "media": "jpeg", "layout": "three_column", "difficulty": "clean", "width": 1800, "height": 1200,
+      "title": "Regional Telehealth Waiting-Room Display", "metadata_title": "Regional Telehealth Waiting-Room Display", "expected_agreement": true,
+      "body_sections": ["A fictional clinic scenario explores accessible appointment information.", "The display uses deidentified placeholders and bounded local timestamps.", "No diagnosis, real patient record or clinical action is represented."],
+      "title_style": "wrapped", "tracking_px": 0, "contrast": "medium", "noise": "none", "jpeg_quality": 76, "tags": ["wrapped_title", "hyphen", "three_column"]
+    },
+    {
+      "id": "ocr2-cal-015", "split": "calibration", "asset": "ocr2-cal-015.pdf", "media": "scanned_pdf", "layout": "two_column", "difficulty": "challenging", "width": 960, "height": 640,
+      "title": "AI-Enabled Fire Warning System", "metadata_title": "AI-Enabled Flood Warning System", "expected_agreement": false,
+      "body_sections": ["A synthetic bushland scenario compares smoke and temperature signals.", "The local prototype records bounded alerts for later human review.", "The one-word material negative must never become automatic agreement."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "high", "noise": "mild", "jpeg_quality": 90, "tags": ["material_negative", "low_resolution", "mild_noise", "acronym"]
+    },
+    {
+      "id": "ocr2-cal-016", "split": "calibration", "asset": "ocr2-cal-016.png", "media": "png", "layout": "one_column", "difficulty": "challenging", "width": 900, "height": 600,
+      "title": "Harbour Algae Bloom Monitor", "metadata_title": "Harbour Algae Bloom Monitor", "expected_agreement": true,
+      "body_sections": ["A synthetic harbour model combines temperature and colour observations.", "Small labels distinguish sampling zones and weekly calibration notes.", "The display supports staff review and makes no environmental claim."],
+      "title_style": "wrapped", "tracking_px": 0, "contrast": "medium", "noise": "mild", "jpeg_quality": 90, "tags": ["low_resolution", "small_body_text", "mild_noise", "wrapped_title"]
+    },
+    {
+      "id": "ocr2-cal-017", "split": "calibration", "asset": "ocr2-cal-017.jpg", "media": "jpeg", "layout": "two_column", "difficulty": "challenging", "width": 960, "height": 640,
+      "title": "Kerbside Recycling Sorter", "metadata_title": "Kerbside Recycling Sorter", "expected_agreement": true,
+      "body_sections": ["Fictional waste labels train a classroom image-sorting demonstration.", "Moderate JPEG compression tests edges without hiding semantic content.", "The sorter is assistive and never authorises a disposal decision."],
+      "title_style": "tracked", "tracking_px": 2, "contrast": "high", "noise": "none", "jpeg_quality": 58, "tags": ["low_resolution", "compression", "visual_tracking", "australian_english"]
+    },
+    {
+      "id": "ocr2-cal-018", "split": "calibration", "asset": "ocr2-cal-018.pdf", "media": "scanned_pdf", "layout": "three_column", "difficulty": "challenging", "width": 1100, "height": 760,
+      "title": "Autonomous Rover: Mine-Site Map", "metadata_title": "Autonomous Rover: Mine-Site Map", "expected_agreement": true,
+      "body_sections": ["A fictional mine-site grid supports a bounded robotics exercise.", "The rover logs synthetic waypoints, obstacles and battery states.", "Small technical text and three columns preserve realistic poster density."],
+      "title_style": "shadow", "tracking_px": 0, "contrast": "medium", "noise": "mild", "jpeg_quality": 90, "tags": ["small_body_text", "mild_noise", "three_column", "colon", "hyphen"]
+    },
+    {
+      "id": "ocr2-cal-019", "split": "calibration", "asset": "ocr2-cal-019.png", "media": "png", "layout": "two_column", "difficulty": "challenging", "width": 1200, "height": 800,
+      "title": "Emergency Shelter Capacity Board", "metadata_title": "Emergency Shelter Capacity Board", "expected_agreement": true,
+      "body_sections": ["A synthetic council exercise models beds, meals and accessible spaces.", "The board uses compact labels and varied heading sizes for inspection.", "All numbers are fictional and no public message is generated."],
+      "title_style": "outlined", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 90, "tags": ["outlined_title_minority", "mixed_font_sizes", "two_column"]
+    },
+    {
+      "id": "ocr2-cal-020", "split": "calibration", "asset": "ocr2-cal-020.jpg", "media": "jpeg", "layout": "one_column", "difficulty": "challenging", "width": 1000, "height": 700,
+      "title": "Night Bus Demand: Route N6", "metadata_title": "Night Bus Demand: Route N6", "expected_agreement": true,
+      "body_sections": ["Synthetic tap-on counts describe a fictional late-night service.", "The chart compares weekdays, weekends and event-night scenarios.", "Low contrast and compression test ordinary presentation limitations."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "low", "noise": "none", "jpeg_quality": 54, "tags": ["low_contrast", "compression", "numbers", "colon"]
+    },
+    {
+      "id": "ocr2-cal-021", "split": "calibration", "asset": "ocr2-cal-021.pdf", "media": "scanned_pdf", "layout": "three_column", "difficulty": "challenging", "width": 1150, "height": 780,
+      "title": "TinyML Acoustic Leak Detector", "metadata_title": "TinyML Acoustic Leak Detector", "expected_agreement": true,
+      "body_sections": ["Synthetic pipe recordings represent normal flow and controlled leaks.", "A TinyML classifier reports bounded confidence bands for teaching.", "The poster contains dense labels but no real infrastructure location."],
+      "title_style": "tracked", "tracking_px": 2, "contrast": "medium", "noise": "mild", "jpeg_quality": 90, "tags": ["technical_vocabulary", "visual_tracking", "small_body_text", "three_column"]
+    },
+    {
+      "id": "ocr2-cal-022", "split": "calibration", "asset": "ocr2-cal-022.png", "media": "png", "layout": "three_column", "difficulty": "challenging", "width": 1050, "height": 720,
+      "title": "Library Occupancy – Privacy First", "metadata_title": "Library Occupancy – Privacy First", "expected_agreement": true,
+      "body_sections": ["Anonymous synthetic counters represent entries and exits at a library.", "The local service stores only bounded totals and coarse time windows.", "Privacy notes use small body text across a compact three-column poster."],
+      "title_style": "wrapped", "tracking_px": 0, "contrast": "low", "noise": "none", "jpeg_quality": 90, "tags": ["en_dash", "wrapped_title", "small_body_text", "low_contrast"]
+    },
+    {
+      "id": "ocr2-cal-023", "split": "calibration", "asset": "ocr2-cal-023.jpg", "media": "jpeg", "layout": "two_column", "difficulty": "challenging", "width": 1024, "height": 700,
+      "title": "Solar Inverter Fault Triage", "metadata_title": "Solar Inverter Fault Triage", "expected_agreement": true,
+      "body_sections": ["A synthetic inverter log contains ordinary warnings and fault codes.", "The triage view groups events for a qualified human to inspect.", "JPEG artefacts and mild noise challenge punctuation and compact labels."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "medium", "noise": "mild", "jpeg_quality": 56, "tags": ["compression", "mild_noise", "technical_vocabulary", "two_column"]
+    },
+    {
+      "id": "ocr2-cal-024", "split": "calibration", "asset": "ocr2-cal-024.pdf", "media": "scanned_pdf", "layout": "one_column", "difficulty": "challenging", "width": 1000, "height": 700,
+      "title": "Sensor Drift Detection", "metadata_title": "Censor Drift Detection", "expected_agreement": false,
+      "body_sections": ["Synthetic measurements illustrate gradual drift in a teaching sensor.", "The analyser compares bounded reference samples and maintenance notes.", "The one-character material negative must remain a deterministic mismatch."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "medium", "noise": "mild", "jpeg_quality": 90, "tags": ["one_character_material_negative", "mild_noise", "scanned_pdf"]
+    },
+    {
+      "id": "ocr2-cal-025", "split": "calibration", "asset": "ocr2-cal-025.png", "media": "png", "layout": "one_column", "difficulty": "challenging", "width": 980, "height": 680,
+      "title": "Bicycle Lane Conflict Mapper", "metadata_title": "Bicycle Lane Conflict Mapper", "expected_agreement": true,
+      "body_sections": ["A fictional intersection map records synthetic near-conflict observations.", "The tool clusters time bands while preserving human transport analysis.", "Low resolution and decorative headings retain realistic OCR difficulty."],
+      "title_style": "shadow", "tracking_px": 0, "contrast": "low", "noise": "mild", "jpeg_quality": 90, "tags": ["low_resolution", "low_contrast", "mild_noise", "decorative_heading"]
+    },
+    {
+      "id": "ocr2-cal-026", "split": "calibration", "asset": "ocr2-cal-026.jpg", "media": "jpeg", "layout": "three_column", "difficulty": "challenging", "width": 1100, "height": 760,
+      "title": "Passwordless Access: FIDO2 Trial", "metadata_title": "Passwordless Access: FIDO2 Trial", "expected_agreement": true,
+      "body_sections": ["Synthetic staff accounts support a bounded authentication demonstration.", "The trial records local success codes without storing real credentials.", "Acronyms, numerals and compact columns exercise technical recognition."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "high", "noise": "none", "jpeg_quality": 60, "tags": ["acronym", "numbers", "compression", "three_column"]
+    },
+    {
+      "id": "ocr2-cal-027", "split": "calibration", "asset": "ocr2-cal-027.pdf", "media": "scanned_pdf", "layout": "two_column", "difficulty": "challenging", "width": 1080, "height": 740,
+      "title": "Wetland Survey — Drone-to-GIS", "metadata_title": "Wetland Survey — Drone-to-GIS", "expected_agreement": true,
+      "body_sections": ["A synthetic wetland grid illustrates image capture and map annotation.", "The workflow exports bounded GeoJSON examples for classroom review.", "An em dash, hyphens and technical vocabulary remain semantically ordinary."],
+      "title_style": "wrapped", "tracking_px": 0, "contrast": "medium", "noise": "mild", "jpeg_quality": 90, "tags": ["em_dash", "hyphen", "wrapped_title", "mild_noise"]
+    },
+    {
+      "id": "ocr2-cal-028", "split": "calibration", "asset": "ocr2-cal-028.jpg", "media": "jpeg", "layout": "one_column", "difficulty": "challenging", "width": 960, "height": 640,
+      "title": "Heatwave Check-In Dashboard", "metadata_title": "Heatwave Check-In Dashboard", "expected_agreement": true,
+      "body_sections": ["A fictional community exercise records deidentified check-in counts.", "The dashboard shows bounded suburb-level totals and follow-up status.", "It cannot send messages, publish data or authorise a welfare response."],
+      "title_style": "plain", "tracking_px": 0, "contrast": "low", "noise": "mild", "jpeg_quality": 62, "tags": ["compression", "low_contrast", "mild_noise", "hyphen"]
+    }
+  ],
+  "native_controls": [
+    {"id": "ocr2-native-001", "asset": "ocr2-native-001.pdf", "layout": "one_column", "title": "Native PDF Water Audit", "body": "Synthetic native text confirms that born-digital extraction remains a useful control."},
+    {"id": "ocr2-native-002", "asset": "ocr2-native-002.pdf", "layout": "two_column", "title": "Native PDF Timetable Review", "body": "A two-column native control exercises deterministic extraction without OCR model scoring."},
+    {"id": "ocr2-native-003", "asset": "ocr2-native-003.pdf", "layout": "three_column", "title": "Native PDF Energy Notes", "body": "A three-column native control contains only synthetic technical prose for calibration context."}
+  ],
+  "security_controls": [
+    {"id": "ocr2-security-001", "asset": "ocr2-security-001.pdf", "kind": "malformed_pdf"},
+    {"id": "ocr2-security-002", "asset": "ocr2-security-002.png", "kind": "truncated_png"}
+  ]
+}

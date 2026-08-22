@@ -1,0 +1,18 @@
+{
+  "schema_version": "pp1-ocr-renderer-font/v1",
+  "renderer": "Pillow 12.3.0 FreeType rendering with an explicit repository font path",
+  "family": "Noto Sans",
+  "style": "Regular",
+  "font_version": "2.003",
+  "file": "NotoSans-Regular.ttf",
+  "bytes": 512592,
+  "sha256": "114a6bf229142e7aac8ee83e70ca77563b46b16e80e2e50ad3a053b442f969b6",
+  "license": "SIL Open Font License 1.1",
+  "license_file": "OFL.txt",
+  "license_sha256": "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb",
+  "source_repository": "https://github.com/googlefonts/noto-fonts",
+  "source_commit": "b7086582d72f537474b61285a81e0d30a250bcfa",
+  "source_path": "phaseIII_only/hinted/ttf/NotoSans/NotoSans-Regular.ttf",
+  "runtime_download": false,
+  "required_glyphs": ["é", "’", "–", "—", "₂", "-", ":", "/", "(", ")"]
+}

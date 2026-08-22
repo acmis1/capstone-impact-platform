@@ -201,6 +201,51 @@ The final run is deliberately one-shot. It creates a run-state file before expos
 
 The evidence validator proves that every protocol, configuration, and scoring source file is byte-identical to Commit A, that the holdout path did not exist at Commit A, recomputes all stored arithmetic and decisions, and confirms production remains `NONE`/`TESSERACT` with coordinator selection `NONE` and 33 migrations.
 
+### OCR Iteration 2 corrected-corpus calibration
+
+Iteration 2 is a calibration-only benchmark under `ocr-iteration2-calibration/`. It has no
+holdout corpus part and cannot authorize a production OCR selection. Its lightweight checks
+validate the corrected v2 schema, pinned Noto Sans renderer and glyph coverage, deterministic
+visual tracking, exact title+body non-reuse, historical evidence hashes, decision arithmetic,
+and the absence of any Iteration 2 holdout artifact:
+
+```powershell
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_iteration2_calibration check
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_iteration2_calibration generate --output-dir artifacts\ocr2-repeat-a
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_iteration2_calibration generate --output-dir artifacts\ocr2-repeat-b
+```
+
+The real OCR run is explicitly staged. Stage 1 runs Tesseract, PP-OCRv6 Tiny and Small on
+the bounded raster pair. The tool then chooses one raster configuration from the cheaper
+neural evidence and runs Medium only once at that configuration:
+
+```powershell
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_iteration2_calibration run-stage1 `
+  --run-dir artifacts\ocr-iteration2-calibration `
+  --tesseract-executable "C:\Program Files\Tesseract-OCR\tesseract.exe"
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_iteration2_calibration recommend-medium `
+  --run-dir artifacts\ocr-iteration2-calibration
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_iteration2_calibration run-medium `
+  --run-dir artifacts\ocr-iteration2-calibration
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_iteration2_calibration build-report `
+  --run-dir artifacts\ocr-iteration2-calibration `
+  --output ..\..\docs\assistive-validation\evidence\ocr-productionization-iteration2-calibration.json
+.venv\Scripts\python -m assistive_validation_benchmark.ocr_iteration2_calibration check-report
+```
+
+Raw OCR blocks remain in gitignored run artifacts. The committed evidence keeps only the
+per-case booleans, edit counts, safety outcomes and timings needed to recompute the calibration
+gate. A ready result stops at a protocol-freeze recommendation; it never creates the future
+independent holdout.
+
+Operational plausibility is a two-part gate. `check-report` recomputes the historical prior from
+the merged benchmark's own raw measurements and separately recomputes cold start, p50, p95, peak
+working set, artifact footprint and the slowest single case from the scored configuration's own
+calibration capture. A configuration is operationally plausible only when the merged prior passes
+*and* the current capture violates no frozen ceiling, so no configuration inherits plausibility
+from an older run of the same engine. A current-configuration pass is a necessary condition
+measured on the calibration machine, not proof for every supported deployment machine.
+
 ### Phase 6A commands
 
 Generate and validate the committed manifest, then prove the frozen policy, before running an engine:
