@@ -1,0 +1,283 @@
+{
+  "schema_version": "pp1-ocr-iteration2-holdout-protocol/v1",
+  "protocol_version": "pp1-ocr-iteration2-holdout-protocol-v1",
+  "measurement_role": "protocol_freeze_only",
+  "holdout_created": false,
+  "holdout_measurement_exists": false,
+  "ocr_executed": false,
+  "production_selection_authorized": false,
+  "content_policy": "synthetic_or_explicitly_deidentified_only",
+  "holdout_case_id_pattern": "^ocr2h-[0-9]{3}$",
+  "instantiated_holdout_case_ids": [],
+  "candidates": ["paddle-small"],
+  "additional_candidates": [],
+  "candidate": {
+    "engine": "paddle-small",
+    "family": "PP-OCRv6",
+    "variant": "small",
+    "detection_model": "PP-OCRv6_small_det",
+    "recognition_model": "PP-OCRv6_small_rec",
+    "detection_artifact": "PP-OCRv6_small_det_infer",
+    "recognition_artifact": "PP-OCRv6_small_rec_infer",
+    "detection_archive_sha256": "bfb7c1e59f0faa6b540ebdca93aea3f4b1f2477805b389fbee117820d68fe9f5",
+    "recognition_archive_sha256": "da460f968ce9f88325ac3a34fa302077d6e9b0dcefb16ba3137cd7796f879d06",
+    "detection_tree_sha256": "8af984562965b7be9bd5d1c8acb52f6d0bf37de475947b520d876ed8640eb29a",
+    "recognition_tree_sha256": "0ee2c443863549fabdb1120d7a58df5e8afa0d67bce0827b75529f105c993eae",
+    "detection_archive_bytes": 10055680,
+    "recognition_archive_bytes": 21442560,
+    "artifact_footprint_bytes": 31481281,
+    "runtime": {
+      "paddleocr": "3.7.0",
+      "paddlepaddle_cpu": "3.3.0",
+      "paddlex_ocr_core": "3.7.2"
+    },
+    "python": ">=3.11,<3.14",
+    "device": "cpu",
+    "enable_mkldnn": false,
+    "use_doc_orientation_classify": false,
+    "use_doc_unwarping": false,
+    "use_textline_orientation": false,
+    "license": "Apache-2.0",
+    "official_sources": {
+      "paddleocr_release": "https://github.com/PaddlePaddle/PaddleOCR/releases/tag/v3.7.0",
+      "pp_ocrv6_models": "https://www.paddleocr.ai/main/en/version3.x/pipeline_usage/OCR.html",
+      "artifact_manifest": "tools/assistive-validation-benchmark/ocr-productionization/artifact-manifest.json"
+    },
+    "freshness_check": {
+      "checked_at": "2026-08-22",
+      "reviewed_versions_confirmed_available": true,
+      "newer_release_observed": "paddlepaddle 3.3.1",
+      "upgrade_applied": false,
+      "reason": "the freeze locks the reviewed calibration candidate; chasing a newer release would invalidate the calibration evidence"
+    },
+    "offline_provisioning": {
+      "verification_source": "src/assistive_validation_benchmark/ocr_productionization/provision.py",
+      "runtime_download_during_holdout": false,
+      "network_disabled_during_run": true,
+      "official_host_allowlist": ["paddle-model-ecology.bj.bcebos.com"],
+      "archive_and_tree_sha256_verified_before_run": true
+    }
+  },
+  "raster_contract": {
+    "raster_dpi": 180,
+    "max_input_dimension": 1920,
+    "aspect_preserving": true,
+    "applies_to_every_scored_case": true,
+    "crop_permitted": false,
+    "upscaling_permitted": false,
+    "label_guided_preprocessing_permitted": false,
+    "per_case_switching_permitted": false,
+    "resampling": "deterministic Lanczos downscale of the long edge only",
+    "implementation_source": "src/assistive_validation_benchmark/ocr_iteration2_calibration/corpus.py"
+  },
+  "worker_safety_ceilings": {
+    "max_raster_dpi": 200,
+    "max_raster_pixels_per_page": 40000000,
+    "max_total_raster_pixels": 80000000,
+    "max_extracted_characters": 100000,
+    "max_text_blocks": 5000
+  },
+  "title_contract": {
+    "selector_id": "first_bounded_group@geometry",
+    "selector": "first_bounded_group",
+    "order": "geometry",
+    "metadata_blind": true,
+    "ground_truth_in_selection": false,
+    "semantic_similarity_may_create_automatic_agreement": false,
+    "negative_metadata_titles_required": true,
+    "selector_source": "src/assistive_validation_benchmark/ocr_failure_analysis/selectors.py",
+    "order_source": "src/assistive_validation_benchmark/ocr_failure_analysis/ordering.py",
+    "normalization_source": "src/assistive_validation_benchmark/ocr_productionization/title_safety.py",
+    "safety_source": "src/assistive_validation_benchmark/ocr_productionization/title_safety.py",
+    "exact_title_definition": "OCR title equals the poster ground-truth title after the frozen normalization; fuzzy and review results are excluded",
+    "safety_outcomes": ["AGREES", "REVIEW", "MISMATCH", "NOT_EVALUATED"],
+    "material_mismatch_behaviour": "a material token difference must produce MISMATCH or REVIEW and may never produce automatic agreement"
+  },
+  "wer_contract": {
+    "primary_order": "column",
+    "required_diagnostic_orders": ["raw", "geometry"],
+    "applies_to_every_scored_page": true,
+    "per_page_order_selection_permitted": false,
+    "ground_truth_order_selection_permitted": false,
+    "best_of_oracle_primary_permitted": false,
+    "wer_driven_order_switching_permitted": false,
+    "normalization": "NFKC plus whitespace collapse; word-level edit distance against the frozen reference text",
+    "reference_text_excludes_upper_page_distractors": true,
+    "ordering_source": "src/assistive_validation_benchmark/ocr_failure_analysis/ordering.py",
+    "metric_source": "src/assistive_validation_benchmark/ocr_iteration2_calibration/scoring.py"
+  },
+  "quality_gate": {
+    "exact_title_rate_minimum": 0.95,
+    "primary_mean_wer_maximum": 0.12,
+    "material_false_agreements_maximum": 0,
+    "minimum_exact_titles": 38,
+    "scored_case_count": 40
+  },
+  "required_reported_metrics": [
+    "title_exact_count",
+    "assistive_title_result",
+    "equality_precision_recall",
+    "assistive_precision_recall",
+    "provider_raw_wer",
+    "clean_wer",
+    "challenging_wer",
+    "media_breakdown",
+    "layout_breakdown"
+  ],
+  "operational_gate": {
+    "parts": ["historical_operational_prior", "holdout_run_current_configuration"],
+    "ceilings": {
+      "cold_start_ms_maximum": 30000,
+      "p50_ms_maximum": 10000,
+      "p95_ms_maximum": 20000,
+      "peak_working_set_bytes_maximum": 4294967296,
+      "artifact_footprint_bytes_maximum": 1073741824,
+      "per_case_timeout_seconds": 90
+    },
+    "recompute_from_raw_measurements_required": true,
+    "stored_boolean_override_permitted": false,
+    "faster_machine_cannot_clear_failing_prior": true,
+    "historical_prior_authority": "the merged productionization benchmark remains authoritative for the previously measured machine",
+    "current_configuration_semantics": "a pass means only that the holdout run did not violate a frozen ceiling on the machine that ran it; it is a necessary condition, not proof for every supported deployment machine",
+    "implementation_source": "src/assistive_validation_benchmark/ocr_iteration2_calibration/scoring.py"
+  },
+  "holdout_distribution": {
+    "scored_case_count": 40,
+    "rationale": "a 95% exact-title gate on 40 scored cases requires at least 38 exact titles, so one avoidable failure is not fatal and two are",
+    "difficulty": { "clean": 20, "challenging": 20 },
+    "media": { "png": 14, "jpeg": 13, "scanned_pdf": 13 },
+    "layout": { "one_column": 14, "two_column": 13, "three_column": 13 },
+    "minimum_cases_per_media_difficulty_cell": 6,
+    "minimum_cases_per_layout_difficulty_cell": 6,
+    "allocation_rule_fixed_before_content": true
+  },
+  "upper_page_distractors": {
+    "purpose": "the calibration generator always placed the semantic title as the first textual region, so the merged evidence cannot separate a genuine prominence-and-geometry selector from a first-region heuristic",
+    "cases_with_any_distractor_minimum": 32,
+    "cases_with_distractor_above_title_minimum": 32,
+    "cases_with_distractor_near_title_minimum": 16,
+    "cases_with_both_above_and_near_minimum": 8,
+    "cases_with_title_as_topmost_region_maximum": 8,
+    "required_kinds": {
+      "school_or_faculty_masthead": 3,
+      "program_name": 3,
+      "discipline": 3,
+      "unit_or_course_code": 3,
+      "year_or_date": 3,
+      "supervisor_label": 3,
+      "category_or_tag": 3,
+      "event_or_showcase_heading": 3,
+      "team_label": 3
+    },
+    "selector_tuned_against_these_cases": false,
+    "distractor_text_is_not_reference_text": true
+  },
+  "title_style_coverage": {
+    "plain_minimum": 20,
+    "wrapped_minimum": 6,
+    "tracked_minimum": 3,
+    "shadow_minimum": 3,
+    "outlined_maximum": 2,
+    "artificial_stroke_on_every_title": false,
+    "tracking_is_visual_only": true,
+    "semantic_string_mutation_permitted": false,
+    "tracking_px_bounds": [0, 4]
+  },
+  "title_text_coverage": [
+    "single_line",
+    "wrapped_multi_line",
+    "punctuation",
+    "hyphen_and_dash_variants",
+    "numbers_and_acronyms",
+    "australian_english",
+    "technical_vocabulary",
+    "accented_latin",
+    "curly_punctuation",
+    "subscripts"
+  ],
+  "degradation_coverage": {
+    "low_resolution_minimum": 6,
+    "moderate_compression_minimum": 6,
+    "mild_noise_minimum": 6,
+    "medium_or_low_contrast_minimum": 8,
+    "small_body_text_minimum": 6
+  },
+  "material_title_negatives": {
+    "minimum_scored_cases": 8,
+    "required_kinds": {
+      "one_character_material": 2,
+      "one_word_material": 2,
+      "semantically_related_incorrect": 2,
+      "number_or_version": 2
+    },
+    "punctuation_only_non_material_controls_minimum": 2,
+    "semantic_relatedness_may_produce_automatic_agreement": false,
+    "expected_agreement_labelling": "a material negative is labelled expected_agreement false; a punctuation-only non-material control stays expected_agreement true"
+  },
+  "controls": {
+    "native_pdf_control_minimum": 3,
+    "security_control_minimum": 2,
+    "unscored_warmup_count": 1,
+    "counted_toward_ocr_quality_rates": false,
+    "security_control_kinds": ["malformed_pdf", "truncated_image"]
+  },
+  "corpus_freshness_rule": {
+    "evidence_name": "fresh_holdout_non_reuse_independence_evidence",
+    "no_phase0_title_body_reuse": true,
+    "no_v1_productionization_title_body_reuse": true,
+    "no_iteration2_calibration_title_body_reuse": true,
+    "no_real_participant_or_project_data": true,
+    "comparison": "exact normalized title+body content hashes",
+    "implementation_source": "src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/holdout_contract.py"
+  },
+  "decision_contract": {
+    "allowed_decisions": [
+      "READY_FOR_OCR_PROVIDER_INTEGRATION",
+      "OCR_PROVIDER_DEFERRED",
+      "HOLDOUT_INVALID_PROTOCOL_BUG"
+    ],
+    "select_requires_all_gates": true,
+    "near_miss_may_select": false,
+    "select_gate_families": ["quality", "title_safety", "operational", "provisioning", "offline_security"],
+    "deferred_replaces": "the merged v1 NEEDS_MORE_OCR_BENCHMARKING outcome",
+    "invalid_protocol_bug_meaning": "the holdout exposed a genuine frozen-protocol defect; the result is preserved and superseded rather than retuned"
+  },
+  "future_run_contract": {
+    "branch": "the next Iteration 2B3 branch",
+    "branch_starts_from_merged_freeze_commit": true,
+    "holdout_runs": 1,
+    "post_result_tuning_permitted": false,
+    "ordered_steps": [
+      "verify every freeze manifest hash against the working tree",
+      "verify the canonical renderer fingerprint and refuse to continue on any divergence",
+      "verify the frozen PP-OCRv6 Small model artifacts offline against their frozen tree hashes",
+      "verify that no fresh holdout already exists",
+      "create the fresh forty-case holdout according to the frozen distribution, distractor, style and negative contracts",
+      "generate every asset only through the frozen canonical renderer",
+      "produce the fresh holdout non-reuse and independence evidence",
+      "provision the reviewed PP-OCRv6 Small artifacts without downloading",
+      "disable the network with the process-wide offline guard",
+      "run the holdout exactly once",
+      "store the raw capture and the recomputed evidence",
+      "change no frozen algorithm, threshold, selector, ordering or renderer afterwards"
+    ],
+    "protocol_bug_supersession": {
+      "preserve_exposed_result": true,
+      "mark_superseded_with_reason": true,
+      "fix_protocol_in_later_version": true,
+      "generate_new_fresh_holdout": true,
+      "retune_and_rerun_same_holdout_permitted": false
+    }
+  },
+  "historical_evidence_sha256": {
+    "docs/assistive-validation/phase-0-results.md": "e9e3ebb66ba40f24812520975786df29ab523256aa0fde222e1a28c30df8dbe0",
+    "docs/assistive-validation/ocr-productionization-benchmark.md": "c427c286dba425fc31fc076991d14bc388edb3e1f27b65b2f9dcf087025c8dc2",
+    "docs/assistive-validation/ocr-productionization-failure-analysis.md": "962a29257543ba4e592c61aa1e8fdd46eaef7e48e71c1992cc4f603c7abdf82d",
+    "docs/assistive-validation/ocr-productionization-iteration2-calibration.md": "eba8ccdc4c26e2825cf7b5b680f57e77e2da2318f88c61027ef4a15b24736e4b",
+    "docs/assistive-validation/evidence/ocr-productionization-report.json": "425630046c3c1295800d6bbdeb3a6ca3d5a0f6fda8cb675ccb17a50b2b506041",
+    "docs/assistive-validation/evidence/ocr-productionization-diagnostic-report.json": "0202eaacac0d98377d09806b5dcee9deb28940515e1007d9741deac54663a309",
+    "docs/assistive-validation/evidence/ocr-productionization-iteration2-calibration.json": "75701511d89924d00ef162134cfba4415b0795587ad5377c8a502952be177eff",
+    "tools/assistive-validation-benchmark/ocr-iteration2-calibration/corpus/calibration.json": "793b10d09c354fd06a4e0468af2ae303e2a21aacd3780388e42b531c67fb9c07",
+    "tools/assistive-validation-benchmark/ocr-productionization/corpus/holdout.json": "5587124cb2e4540a58f45eb7fc20106da8a121411bff3bd6f7a855fd3bddd8ed"
+  }
+}
