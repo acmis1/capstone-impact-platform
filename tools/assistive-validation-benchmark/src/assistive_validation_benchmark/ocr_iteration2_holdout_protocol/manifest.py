@@ -31,7 +31,7 @@ from .schema import (
 
 
 MANIFEST_SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-freeze-manifest/v1"
-FREEZE_COMMIT_SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-freeze-commit/v3"
+FREEZE_COMMIT_SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-freeze-commit/v4"
 TEXT_SUFFIXES = {".py", ".json", ".toml", ".txt", ".md"}
 
 SUPERSEDED_FREEZE = {
@@ -65,6 +65,37 @@ RENDERER_CORRECTED_FREEZE = {
     ),
     "supersedes": SUPERSEDED_FREEZE,
 }
+
+FINAL_CORRECTED_FREEZE = {
+    "protocol_freeze_commit_sha": "2369401198ba2bd39ae5bc0ce8ff05ce6fbcaca9",
+    "chronology_commit_sha": "a5c3d0369d44d98421517d273e32830eaad344bd",
+    "post_freeze_terminology_scope_commit_sha": "371905b38108afc362f04f08922e3686b993546d",
+    "freeze_manifest_sha256": "c6c5d55a26640c20ee2396b47aaef97e4fe97b494c04cb733b11ee21620a4e1a",
+    "freeze_tree_sha256": "a47957b3d1621b50eb1f40701a44bc3360180ef73b7f0a00a25be54146ed674e",
+    "freeze_commit_record_sha256": "44bd18c9159a09febc5f6aed61d92cb6fbc5e92ee4a01df0952f582d145ba0c3",
+    "component_count": 30,
+    "holdout_absent_at_freeze": True,
+    "superseded": True,
+    "supersession_reason": (
+        "Independent review found that the frozen material-negative distribution validated "
+        "category labels and expected-agreement booleans but did not verify that metadata_title "
+        "and poster title actually satisfied the claimed negative relationship, before any fresh "
+        "holdout existed."
+    ),
+    "supersedes": RENDERER_CORRECTED_FREEZE,
+}
+
+PRESERVED_HISTORY = {
+    "A": "ab9ee241c6ea70f00c8e4fe063ef28c73b37802a",
+    "B": "b08c8fa3723a9c16157944de8f3d4a362fa03bc6",
+    "C": "a30af31a4eb7f2a473c3e30e30aded0843a1ecd8",
+    "D": "de744bfa58db3f60d3988378ed0b0406d0ee9fc3",
+    "E": "02dd8522cec6ec6e7a70a8ff9d886de0787ab092",
+    "F": "2369401198ba2bd39ae5bc0ce8ff05ce6fbcaca9",
+    "G": "a5c3d0369d44d98421517d273e32830eaad344bd",
+    "H": "371905b38108afc362f04f08922e3686b993546d",
+}
+REGRESSION_COMMIT_SHA = "ebbd24664ced5c2d8a86781e182073f84c5f52f3"
 
 # Roles make the manifest auditable: a reviewer can see *why* each file is bound.
 FROZEN_ROLES: tuple[tuple[str, str], ...] = (
@@ -268,10 +299,10 @@ def verify_freeze_commit(commit: str, *, require_commit_object: bool = False) ->
 
 
 def _validate_superseded_record(stored: dict[str, Any]) -> None:
-    if stored.get("schema_version") != "pp1-ocr-iteration2-holdout-freeze-commit/v2":
-        raise ValueError("the superseded chronology record is not the preserved renderer-corrected record")
-    if value_sha256(stored) != RENDERER_CORRECTED_FREEZE["freeze_commit_record_sha256"]:
-        raise ValueError("the renderer-corrected chronology record changed before protocol correction")
+    if stored.get("schema_version") != "pp1-ocr-iteration2-holdout-freeze-commit/v3":
+        raise ValueError("the superseded chronology record is not the preserved final corrected record")
+    if value_sha256(stored) != FINAL_CORRECTED_FREEZE["freeze_commit_record_sha256"]:
+        raise ValueError("the final corrected chronology record changed before relationship correction")
     for key in (
         "protocol_freeze_commit_sha",
         "freeze_manifest_sha256",
@@ -279,10 +310,17 @@ def _validate_superseded_record(stored: dict[str, Any]) -> None:
         "component_count",
         "holdout_absent_at_freeze",
     ):
-        if stored.get(key) != RENDERER_CORRECTED_FREEZE[key]:
-            raise ValueError(f"the renderer-corrected chronology record changed: {key}")
-    if stored.get("supersedes") != SUPERSEDED_FREEZE:
-        raise ValueError("the original A/B supersession record changed")
+        if stored.get(key) != FINAL_CORRECTED_FREEZE[key]:
+            raise ValueError(f"the final corrected chronology record changed: {key}")
+    if stored.get("supersedes") != RENDERER_CORRECTED_FREEZE:
+        raise ValueError("the preserved A-G supersession chain changed")
+
+
+def _require_preserved_history_ancestry(commit: str) -> None:
+    for label, ancestor in {**PRESERVED_HISTORY, "I": REGRESSION_COMMIT_SHA}.items():
+        result = _git(["merge-base", "--is-ancestor", ancestor, commit], check=False)
+        if result.returncode != 0:
+            raise ValueError(f"preserved chronology commit {label} is not an ancestor of the corrected freeze")
 
 
 def build_freeze_commit_record(commit: str, superseded_record: dict[str, Any]) -> dict[str, Any]:
@@ -291,22 +329,27 @@ def build_freeze_commit_record(commit: str, superseded_record: dict[str, Any]) -
     _validate_superseded_record(superseded_record)
     manifest = build_freeze_manifest()
     verification = verify_freeze_commit(commit, require_commit_object=True)
+    _require_preserved_history_ancestry(commit)
     return {
         "schema_version": FREEZE_COMMIT_SCHEMA_VERSION,
         "protocol_version": PROTOCOL_VERSION,
-        "recorded_by": "iteration 2B2 final corrected freeze chronology commit G",
+        "recorded_by": "iteration 2B2 hard-negative corrected freeze chronology commit K",
         "chronology": (
-            "commits A/B preserve the original freeze, C/D preserve the renderer-corrected freeze, "
-            "commit E records exposed development-only distractor and WER evidence, commit F is the "
-            "final corrected authoritative freeze, and commit G adds only this chronology record"
+            "commits A-H remain preserved, commit I records the hard-negative relationship regressions "
+            "without freezing, commit J is the corrected authoritative protocol freeze, and commit K "
+            "adds only this chronology record"
         ),
         "durable_identity": "freeze_tree_sha256",
         "commit_sha_is_branch_local": True,
         "freeze_manifest_sha256": value_sha256(manifest),
         "original_history_preserved": True,
         "renderer_corrected_history_preserved": True,
+        "final_corrected_history_preserved": True,
+        "post_freeze_terminology_scope_preserved": True,
         "development_evidence_commit_precedes_freeze": True,
-        "supersedes": RENDERER_CORRECTED_FREEZE,
+        "preserved_history": PRESERVED_HISTORY,
+        "regression_commit_sha": REGRESSION_COMMIT_SHA,
+        "supersedes": FINAL_CORRECTED_FREEZE,
         **verification,
     }
 
@@ -327,9 +370,17 @@ def validate_freeze_commit_record(stored: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("the corrected freeze must preserve the original A/B history")
     if stored.get("renderer_corrected_history_preserved") is not True:
         raise ValueError("the corrected freeze must preserve the renderer-corrected C/D history")
+    if stored.get("final_corrected_history_preserved") is not True:
+        raise ValueError("the relationship-corrected freeze must preserve the F/G history")
+    if stored.get("post_freeze_terminology_scope_preserved") is not True:
+        raise ValueError("the relationship-corrected freeze must preserve the post-freeze H scope")
     if stored.get("development_evidence_commit_precedes_freeze") is not True:
         raise ValueError("the development evidence must precede the authoritative freeze")
-    if stored.get("supersedes") != RENDERER_CORRECTED_FREEZE:
+    if stored.get("preserved_history") != PRESERVED_HISTORY:
+        raise ValueError("the preserved A-H chronology changed")
+    if stored.get("regression_commit_sha") != REGRESSION_COMMIT_SHA:
+        raise ValueError("the relationship regression commit changed")
+    if stored.get("supersedes") != FINAL_CORRECTED_FREEZE:
         raise ValueError("the corrected freeze supersession record changed")
     reachable = verify_freeze_commit(stored["protocol_freeze_commit_sha"])
     if reachable["commit_object_reachable"] and reachable["holdout_absent_at_freeze"] is not True:
@@ -339,9 +390,12 @@ def validate_freeze_commit_record(stored: dict[str, Any]) -> dict[str, Any]:
         "freeze_tree_sha256": stored["freeze_tree_sha256"],
         "content_addressed_match": True,
         "holdout_absent_at_freeze": True,
-        "superseded_protocol_freeze_commit_sha": RENDERER_CORRECTED_FREEZE["protocol_freeze_commit_sha"],
+        "superseded_protocol_freeze_commit_sha": FINAL_CORRECTED_FREEZE["protocol_freeze_commit_sha"],
+        "superseded_chronology_commit_sha": FINAL_CORRECTED_FREEZE["chronology_commit_sha"],
+        "regression_commit_sha": REGRESSION_COMMIT_SHA,
         "original_history_preserved": True,
         "renderer_corrected_history_preserved": True,
+        "final_corrected_history_preserved": True,
     }
 
 

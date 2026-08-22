@@ -17,7 +17,7 @@ from typing import Any
 from . import PROTOCOL_VERSION, SCHEMA_VERSION
 from .distractor_calibration import validate_development_evidence
 from .fingerprint import environment_path, validate_environment, verify_fingerprint
-from .holdout_contract import HOLDOUT_CORPUS_VERSION
+from .holdout_contract import HOLDOUT_CORPUS_SCHEMA_VERSION, HOLDOUT_CORPUS_VERSION
 from .manifest import manifest_path, verify_freeze_manifest
 from .schema import (
     assert_no_holdout_content,
@@ -146,6 +146,7 @@ def _evidence_from_state(state: dict[str, Any]) -> dict[str, Any]:
             **development,
         },
         "future_run_contract": protocol["future_run_contract"],
+        "future_holdout_corpus_schema_version": HOLDOUT_CORPUS_SCHEMA_VERSION,
         "future_holdout_corpus_version": HOLDOUT_CORPUS_VERSION,
         "hashes": {
             "protocol_sha256": value_sha256(protocol),

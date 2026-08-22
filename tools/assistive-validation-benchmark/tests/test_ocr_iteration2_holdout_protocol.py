@@ -148,11 +148,32 @@ def synthetic_case(index: int) -> dict[str, object]:
     media = MEDIA_SEQUENCE[index]
     negative = NEGATIVES.get(index)
     title = synthetic_title(index)
-    if negative in {"one_character_material", "one_word_material", "semantically_related_incorrect", "number_or_version"}:
-        metadata_title = title.replace("Sensor", "Censor") + f" {negative[:4]}"
+    relation_evidence = None
+    if negative == "one_character_material":
+        metadata_title = title.replace("Sensor", "Censor")
+        agreement = False
+    elif negative == "one_word_material":
+        metadata_title = title.replace("Sensor", "Monitor")
+        agreement = False
+    elif negative == "semantically_related_incorrect":
+        metadata_title = title.replace("Sensor", "Telemetry")
+        agreement = False
+        relation_evidence = {
+            "authority": "human_ground_truth",
+            "classified_before_ocr": True,
+            "rationale": (
+                "Both synthetic titles concern the same study area, but the metadata names a different project concept."
+            ),
+        }
+    elif negative == "number_or_version":
+        metadata_title = title.replace(f"{index:02d}", f"{index + 10:02d}", 1)
         agreement = False
     elif negative == "punctuation_only_non_material":
-        metadata_title = title.replace("‘", "'").replace("’", "'")
+        metadata_title = (
+            title.replace("‘", "'").replace("’", "'")
+            if index == 38
+            else title.replace("–", "-")
+        )
         agreement = True
     else:
         metadata_title = title
@@ -180,6 +201,7 @@ def synthetic_case(index: int) -> dict[str, object]:
         "metadata_title": metadata_title,
         "expected_agreement": agreement,
         "negative_kind": negative,
+        "negative_relation_evidence": relation_evidence,
         "body_sections": synthetic_sections(index),
         "title_style": style,
         "tracking_px": 2 if style == "tracked" else 0,
@@ -234,6 +256,9 @@ class ProtocolFreezeContractTests(unittest.TestCase):
         self.protocol = validate_protocol(load_json(data_root() / "protocol.json"))
 
     def test_protocol_freezes_the_calibration_selected_candidate_and_configuration(self) -> None:
+        self.assertEqual("pp1-ocr-iteration2-holdout-protocol-v3", PROTOCOL_VERSION)
+        self.assertEqual("pp1-ocr-iteration2-holdout-corpus-part/v2", holdout_contract.HOLDOUT_CORPUS_SCHEMA_VERSION)
+        self.assertEqual("pp1-ocr-iteration2-holdout-corpus-v2", holdout_contract.HOLDOUT_CORPUS_VERSION)
         self.assertEqual("paddle-small", self.protocol["candidate"]["engine"])
         self.assertEqual("PP-OCRv6_small_det_infer", self.protocol["candidate"]["detection_artifact"])
         self.assertEqual("PP-OCRv6_small_rec_infer", self.protocol["candidate"]["recognition_artifact"])
@@ -293,6 +318,22 @@ class ProtocolFreezeContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "material mismatch"):
             validate_protocol(unsafe)
 
+    def test_relationship_contract_cannot_be_relaxed(self) -> None:
+        relationship = self.protocol["material_title_negatives"]["relationship_contract"]
+        self.assertEqual("human_ground_truth", relationship["semantic_relation_authority"])
+        self.assertIs(relationship["relation_evidence_enters_measurement_runtime"], False)
+        for key, value in (
+            ("material_normalized_difference_required", False),
+            ("punctuation_only_normalized_equality_required", False),
+            ("semantic_relation_rationale_required", False),
+            ("relation_evidence_enters_measurement_runtime", True),
+        ):
+            with self.subTest(key=key):
+                relaxed = copy.deepcopy(self.protocol)
+                relaxed["material_title_negatives"]["relationship_contract"][key] = value
+                with self.assertRaisesRegex(ValueError, "relationship contract"):
+                    validate_protocol(relaxed)
+
     def test_raster_contract_forbids_upscaling_cropping_and_per_case_switching(self) -> None:
         for key in ("upscaling_permitted", "crop_permitted", "per_case_switching_permitted", "label_guided_preprocessing_permitted"):
             relaxed = copy.deepcopy(self.protocol)
@@ -327,6 +368,22 @@ class ProtocolFreezeContractTests(unittest.TestCase):
         self.assertEqual(
             "de744bfa58db3f60d3988378ed0b0406d0ee9fc3",
             manifest_module.RENDERER_CORRECTED_FREEZE["chronology_commit_sha"],
+        )
+        self.assertEqual(
+            "2369401198ba2bd39ae5bc0ce8ff05ce6fbcaca9",
+            manifest_module.FINAL_CORRECTED_FREEZE["protocol_freeze_commit_sha"],
+        )
+        self.assertEqual(
+            "a5c3d0369d44d98421517d273e32830eaad344bd",
+            manifest_module.FINAL_CORRECTED_FREEZE["chronology_commit_sha"],
+        )
+        self.assertEqual(
+            "371905b38108afc362f04f08922e3686b993546d",
+            manifest_module.PRESERVED_HISTORY["H"],
+        )
+        self.assertEqual(
+            "ebbd24664ced5c2d8a86781e182073f84c5f52f3",
+            manifest_module.REGRESSION_COMMIT_SHA,
         )
         self.assertEqual("02dd8522cec6ec6e7a70a8ff9d886de0787ab092", self.protocol["development_evidence_commit_sha"])
 
@@ -476,14 +533,23 @@ class FreezeCommitRecordTests(unittest.TestCase):
         self.assertIs(self.record["holdout_absent_at_freeze"], True)
         self.assertEqual(build_freeze_manifest()["component_count"], self.record["component_count"])
         self.assertEqual(
-            "a30af31a4eb7f2a473c3e30e30aded0843a1ecd8",
+            "2369401198ba2bd39ae5bc0ce8ff05ce6fbcaca9",
             result["superseded_protocol_freeze_commit_sha"],
         )
         self.assertEqual(
+            "a5c3d0369d44d98421517d273e32830eaad344bd",
+            result["superseded_chronology_commit_sha"],
+        )
+        self.assertEqual(
             "ab9ee241c6ea70f00c8e4fe063ef28c73b37802a",
-            self.record["supersedes"]["supersedes"]["protocol_freeze_commit_sha"],
+            self.record["supersedes"]["supersedes"]["supersedes"]["protocol_freeze_commit_sha"],
+        )
+        self.assertEqual(
+            "371905b38108afc362f04f08922e3686b993546d",
+            self.record["preserved_history"]["H"],
         )
         self.assertIs(result["original_history_preserved"], True)
+        self.assertIs(result["final_corrected_history_preserved"], True)
 
     def test_record_is_rejected_when_the_frozen_tree_moves(self) -> None:
         tampered = copy.deepcopy(self.record)
@@ -629,6 +695,11 @@ class HoldoutDistributionContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "one-character"):
             validate_holdout_corpus(self.corpus, self.protocol)
 
+    def test_valid_one_character_material_pair_passes(self) -> None:
+        case = self.case_with_negative_kind("one_character_material")
+        self.assertEqual(str(case["title"]).replace("Sensor", "Censor"), case["metadata_title"])
+        validate_holdout_corpus(self.corpus, self.protocol)
+
     def test_one_word_label_rejects_several_changed_words(self) -> None:
         case = self.case_with_negative_kind("one_word_material")
         case["metadata_title"] = str(case["title"]).replace(
@@ -637,10 +708,32 @@ class HoldoutDistributionContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "one-word"):
             validate_holdout_corpus(self.corpus, self.protocol)
 
+    def test_valid_one_word_material_pair_passes(self) -> None:
+        case = self.case_with_negative_kind("one_word_material")
+        self.assertEqual(str(case["title"]).replace("Sensor", "Monitor"), case["metadata_title"])
+        validate_holdout_corpus(self.corpus, self.protocol)
+
+    def test_one_word_label_rejects_a_one_character_category(self) -> None:
+        case = self.case_with_negative_kind("one_word_material")
+        case["metadata_title"] = str(case["title"]).replace("Sensor", "Censor")
+        with self.assertRaisesRegex(ValueError, "one-character category"):
+            validate_holdout_corpus(self.corpus, self.protocol)
+
     def test_number_or_version_label_requires_a_number_or_version_change(self) -> None:
         case = self.case_with_negative_kind("number_or_version")
         case["metadata_title"] = str(case["title"]).replace("Sensor", "Controller")
         with self.assertRaisesRegex(ValueError, "number or version"):
+            validate_holdout_corpus(self.corpus, self.protocol)
+
+    def test_valid_number_or_version_pair_passes(self) -> None:
+        case = self.case_with_negative_kind("number_or_version")
+        self.assertNotEqual(case["title"], case["metadata_title"])
+        validate_holdout_corpus(self.corpus, self.protocol)
+
+    def test_number_or_version_label_rejects_a_non_number_word_change(self) -> None:
+        case = self.case_with_negative_kind("number_or_version")
+        case["metadata_title"] = str(case["metadata_title"]).replace("Sensor", "Controller")
+        with self.assertRaisesRegex(ValueError, "non-number token"):
             validate_holdout_corpus(self.corpus, self.protocol)
 
     def test_punctuation_only_label_rejects_a_semantic_word_substitution(self) -> None:
@@ -649,11 +742,72 @@ class HoldoutDistributionContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "punctuation-only"):
             validate_holdout_corpus(self.corpus, self.protocol)
 
+    def test_curly_and_straight_apostrophe_control_passes(self) -> None:
+        case = self.case_with_negative_kind("punctuation_only_non_material")
+        self.assertIn("'Sensor'", case["metadata_title"])
+        validate_holdout_corpus(self.corpus, self.protocol)
+
+    def test_dash_variant_control_passes(self) -> None:
+        cases = [
+            case for case in self.corpus["ocr_cases"]
+            if case["negative_kind"] == "punctuation_only_non_material"
+        ]
+        self.assertIn(" - Draft", cases[1]["metadata_title"])
+        validate_holdout_corpus(self.corpus, self.protocol)
+
     def test_material_negative_rejects_normalized_equal_titles(self) -> None:
         case = self.case_with_negative_kind("one_character_material")
         case["metadata_title"] = str(case["title"]).replace("‘", "'").replace("’", "'")
         with self.assertRaisesRegex(ValueError, "normalized titles"):
             validate_holdout_corpus(self.corpus, self.protocol)
+
+    def test_semantically_related_case_requires_relation_evidence(self) -> None:
+        case = self.case_with_negative_kind("semantically_related_incorrect")
+        case["negative_relation_evidence"] = None
+        with self.assertRaisesRegex(ValueError, "human relation evidence"):
+            validate_holdout_corpus(self.corpus, self.protocol)
+
+    def test_semantic_relation_evidence_field_may_not_be_missing(self) -> None:
+        case = self.case_with_negative_kind("semantically_related_incorrect")
+        case.pop("negative_relation_evidence")
+        with self.assertRaisesRegex(ValueError, "unknown or missing field"):
+            validate_holdout_corpus(self.corpus, self.protocol)
+
+    def test_semantic_relation_rationale_may_not_be_empty(self) -> None:
+        case = self.case_with_negative_kind("semantically_related_incorrect")
+        case["negative_relation_evidence"]["rationale"] = ""
+        with self.assertRaisesRegex(ValueError, "rationale is missing"):
+            validate_holdout_corpus(self.corpus, self.protocol)
+
+    def test_semantic_relation_rationale_rejects_urls_and_commands(self) -> None:
+        for rationale in (
+            "Review the claimed relation at https://example.invalid before accepting it.",
+            "Run powershell validation.ps1 before accepting this claimed relation.",
+        ):
+            with self.subTest(rationale=rationale):
+                corpus = synthetic_corpus()
+                case = next(
+                    item for item in corpus["ocr_cases"]
+                    if item["negative_kind"] == "semantically_related_incorrect"
+                )
+                case["negative_relation_evidence"]["rationale"] = rationale
+                with self.assertRaisesRegex(ValueError, "URL or command"):
+                    validate_holdout_corpus(corpus, self.protocol)
+
+    def test_semantic_relation_evidence_requires_human_pre_ocr_authority(self) -> None:
+        for key, value, message in (
+            ("authority", "automatic_lexical_model", "human ground truth"),
+            ("classified_before_ocr", False, "before OCR"),
+        ):
+            with self.subTest(key=key):
+                corpus = synthetic_corpus()
+                case = next(
+                    item for item in corpus["ocr_cases"]
+                    if item["negative_kind"] == "semantically_related_incorrect"
+                )
+                case["negative_relation_evidence"][key] = value
+                with self.assertRaisesRegex(ValueError, message):
+                    validate_holdout_corpus(corpus, self.protocol)
 
     def test_a_corpus_of_the_wrong_size_is_refused(self) -> None:
         short = copy.deepcopy(self.corpus)
@@ -681,6 +835,8 @@ class HoldoutDistributionContractTests(unittest.TestCase):
             if case["negative_kind"] in {"one_word_material", "semantically_related_incorrect", "number_or_version"}:
                 case["negative_kind"] = None
                 case["expected_agreement"] = True
+                case["metadata_title"] = case["title"]
+                case["negative_relation_evidence"] = None
         with self.assertRaisesRegex(ValueError, "material title negatives"):
             validate_holdout_corpus(weak, self.protocol)
 
@@ -821,7 +977,17 @@ class CorrectedFrozenSelectorTests(unittest.TestCase):
         protocol = validate_protocol(load_json(data_root() / "protocol.json"))
         plain = self.blocks()
         contaminated = [
-            {**block, "metadata_title": "An Oracle Title That Must Be Ignored", "ground_truth": "ignored"}
+            {
+                **block,
+                "metadata_title": "An Oracle Title That Must Be Ignored",
+                "ground_truth": "ignored",
+                "negative_kind": "semantically_related_incorrect",
+                "negative_relation_evidence": {
+                    "authority": "human_ground_truth",
+                    "classified_before_ocr": True,
+                    "rationale": "Synthetic relation evidence that the selector and safety runtime must ignore.",
+                },
+            }
             for block in plain
         ]
         first = run_variant(protocol["title_contract"]["selector"], protocol["title_contract"]["order"], plain)
@@ -831,6 +997,10 @@ class CorrectedFrozenSelectorTests(unittest.TestCase):
             contaminated,
         )
         self.assertEqual([candidate.text for candidate in first], [candidate.text for candidate in second])
+        self.assertEqual(
+            evaluate_title_safety("Accessible Water Quality Monitoring Dashboard", first),
+            evaluate_title_safety("Accessible Water Quality Monitoring Dashboard", second),
+        )
 
     def test_material_title_negatives_never_auto_agree(self) -> None:
         protocol = validate_protocol(load_json(data_root() / "protocol.json"))
@@ -940,6 +1110,22 @@ class FrozenRendererTests(unittest.TestCase):
         expected_prefix = "\n".join([*above, self.case["title"], *near])
         self.assertTrue(text.startswith(expected_prefix))
 
+    def test_relation_evidence_never_enters_pixels_or_ocr_reference_text(self) -> None:
+        first_case = synthetic_case(34)
+        second_case = copy.deepcopy(first_case)
+        second_case["negative_relation_evidence"]["rationale"] = (
+            "A different bounded synthetic rationale must remain ground truth only."
+        )
+        first_image = draw_holdout_poster(first_case, 2026082301)
+        second_image = draw_holdout_poster(second_case, 2026082301)
+        try:
+            self.assertEqual(first_image.tobytes(), second_image.tobytes())
+        finally:
+            first_image.close()
+            second_image.close()
+        self.assertEqual(reference_text(first_case), reference_text(second_case))
+        self.assertNotIn("rationale", reference_text(first_case).casefold())
+
     def test_visual_tracking_changes_pixels_but_not_the_semantic_title(self) -> None:
         tracked = synthetic_case(6)
         self.assertEqual("tracked", tracked["title_style"])
@@ -1027,6 +1213,7 @@ class FrozenAlgorithmIdentityTests(unittest.TestCase):
         protocol = validate_protocol(load_json(data_root() / "protocol.json"))
         components = set(load_json(manifest_path())["components"])
         prefix = "tools/assistive-validation-benchmark/"
+        relationship = protocol["material_title_negatives"]["relationship_contract"]
         for source in (
             protocol["title_contract"]["selector_source"],
             protocol["title_contract"]["order_source"],
@@ -1037,6 +1224,9 @@ class FrozenAlgorithmIdentityTests(unittest.TestCase):
             protocol["operational_gate"]["implementation_source"],
             protocol["raster_contract"]["implementation_source"],
             protocol["corpus_freshness_rule"]["implementation_source"],
+            relationship["metric_normalization_source"],
+            relationship["production_normalization_source"],
+            relationship["edit_distance_source"],
         ):
             self.assertIn(prefix + source, components, source)
 

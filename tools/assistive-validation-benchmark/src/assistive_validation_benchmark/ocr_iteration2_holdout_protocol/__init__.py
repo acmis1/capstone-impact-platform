@@ -9,5 +9,5 @@ from the merged freeze commit. The exposed development-only distractor calibrati
 why the title selector and full-visible-text WER semantics were corrected before that holdout.
 """
 
-SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-protocol/v2"
-PROTOCOL_VERSION = "pp1-ocr-iteration2-holdout-protocol-v2"
+SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-protocol/v3"
+PROTOCOL_VERSION = "pp1-ocr-iteration2-holdout-protocol-v3"

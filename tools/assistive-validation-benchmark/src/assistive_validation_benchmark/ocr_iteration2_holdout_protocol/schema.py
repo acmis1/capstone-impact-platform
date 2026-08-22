@@ -420,6 +420,28 @@ def _validate_negatives_and_controls(value: dict[str, Any]) -> None:
         negatives.get("semantic_relatedness_may_produce_automatic_agreement") is False,
         "semantic relatedness may never turn a material mismatch into automatic agreement",
     )
+    _require(
+        negatives.get("relationship_contract")
+        == {
+            "metric_normalization_source": "src/assistive_validation_benchmark/ocr_productionization/title_safety.py",
+            "production_normalization_source": "src/assistive_validation_benchmark/ocr_productionization/title_safety.py",
+            "edit_distance_source": "src/assistive_validation_benchmark/core.py",
+            "unlabelled_agreement_normalized_equality_required": True,
+            "material_normalized_difference_required": True,
+            "punctuation_only_raw_difference_required": True,
+            "punctuation_only_normalized_equality_required": True,
+            "one_character_metric_edit_distance": 1,
+            "one_word_metric_token_edit_distance": 1,
+            "one_word_excludes_one_character_and_number_version": True,
+            "number_version_non_number_tokens_identical": True,
+            "semantic_relation_authority": "human_ground_truth",
+            "semantic_relation_rationale_required": True,
+            "classified_before_ocr_required": True,
+            "semantic_relation_evidence_only": True,
+            "relation_evidence_enters_measurement_runtime": False,
+        },
+        "the material-negative relationship contract changed",
+    )
     controls = value.get("controls", {})
     _minimum(controls, "native_pdf_control_minimum", 3)
     _minimum(controls, "security_control_minimum", 2)

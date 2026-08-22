@@ -1,6 +1,6 @@
 {
-  "schema_version": "pp1-ocr-iteration2-holdout-protocol/v2",
-  "protocol_version": "pp1-ocr-iteration2-holdout-protocol-v2",
+  "schema_version": "pp1-ocr-iteration2-holdout-protocol/v3",
+  "protocol_version": "pp1-ocr-iteration2-holdout-protocol-v3",
   "measurement_role": "protocol_freeze_only",
   "holdout_created": false,
   "holdout_measurement_exists": false,
@@ -228,7 +228,25 @@
     },
     "punctuation_only_non_material_controls_minimum": 2,
     "semantic_relatedness_may_produce_automatic_agreement": false,
-    "expected_agreement_labelling": "a material negative is labelled expected_agreement false; a punctuation-only non-material control stays expected_agreement true"
+    "expected_agreement_labelling": "a material negative is labelled expected_agreement false; a punctuation-only non-material control stays expected_agreement true",
+    "relationship_contract": {
+      "metric_normalization_source": "src/assistive_validation_benchmark/ocr_productionization/title_safety.py",
+      "production_normalization_source": "src/assistive_validation_benchmark/ocr_productionization/title_safety.py",
+      "edit_distance_source": "src/assistive_validation_benchmark/core.py",
+      "unlabelled_agreement_normalized_equality_required": true,
+      "material_normalized_difference_required": true,
+      "punctuation_only_raw_difference_required": true,
+      "punctuation_only_normalized_equality_required": true,
+      "one_character_metric_edit_distance": 1,
+      "one_word_metric_token_edit_distance": 1,
+      "one_word_excludes_one_character_and_number_version": true,
+      "number_version_non_number_tokens_identical": true,
+      "semantic_relation_authority": "human_ground_truth",
+      "semantic_relation_rationale_required": true,
+      "classified_before_ocr_required": true,
+      "semantic_relation_evidence_only": true,
+      "relation_evidence_enters_measurement_runtime": false
+    }
   },
   "controls": {
     "native_pdf_control_minimum": 3,

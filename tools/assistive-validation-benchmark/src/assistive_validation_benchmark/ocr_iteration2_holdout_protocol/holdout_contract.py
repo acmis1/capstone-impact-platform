@@ -10,8 +10,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..core import levenshtein_distance
 from ..ocr_iteration2_calibration.schema import normalized_content_hash
 from ..ocr_iteration2_calibration.schema import load_json as _load_calibration_json
+from ..ocr_productionization.title_safety import normalize_metric_title, normalize_production_title
 from .schema import (
     HOLDOUT_CASE_ID,
     REQUIRED_DISTRACTOR_KINDS,
@@ -21,8 +23,8 @@ from .schema import (
 )
 
 
-HOLDOUT_CORPUS_SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-corpus-part/v1"
-HOLDOUT_CORPUS_VERSION = "pp1-ocr-iteration2-holdout-corpus-v1"
+HOLDOUT_CORPUS_SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-corpus-part/v2"
+HOLDOUT_CORPUS_VERSION = "pp1-ocr-iteration2-holdout-corpus-v2"
 
 # Identifier namespaces are frozen as patterns only. No instance exists in this branch.
 WARMUP_ID = re.compile(r"^ocr2h-warmup-[0-9]{3}$")
@@ -52,6 +54,7 @@ CASE_FIELDS = {
     "metadata_title",
     "expected_agreement",
     "negative_kind",
+    "negative_relation_evidence",
     "body_sections",
     "title_style",
     "tracking_px",
@@ -62,7 +65,13 @@ CASE_FIELDS = {
     "tags",
 }
 DISTRACTOR_FIELDS = {"kind", "text", "position"}
+RELATION_EVIDENCE_FIELDS = {"authority", "classified_before_ocr", "rationale"}
 ASSET_SUFFIX = {"png": ".png", "jpeg": ".jpg", "scanned_pdf": ".pdf"}
+SEMANTIC_RELATION_AUTHORITY = "human_ground_truth"
+UNSAFE_RELATION_EVIDENCE = re.compile(
+    r"(?:https?://|www\.|\b[a-z0-9-]+\.(?:com|net|org|io|ai|edu|gov)\b|[;&|`$<>]|\b(?:curl|wget|powershell|cmd(?:\.exe)?|bash)\b)",
+    re.IGNORECASE,
+)
 
 CURLY_PUNCTUATION = set("‘’“”")
 ACCENTED_LATIN = set("àáâäçèéêíñóôöúü")
@@ -80,6 +89,120 @@ def _validate_distractor(distractor: Any) -> None:
     _require(distractor["position"] in ALLOWED_DISTRACTOR_POSITIONS, "distractor position must be above or near the title")
     text = distractor["text"]
     _require(isinstance(text, str) and 3 <= len(text) <= 90, "distractor text is outside its bounds")
+
+
+def _title_tokens(value: str) -> list[str]:
+    return normalize_metric_title(value).split()
+
+
+def _number_or_version_tokens(tokens: list[str]) -> list[str]:
+    return [token for token in tokens if any(character.isdecimal() for character in token)]
+
+
+def _non_number_tokens(tokens: list[str]) -> list[str]:
+    return [token for token in tokens if not any(character.isdecimal() for character in token)]
+
+
+def _validate_semantic_relation_evidence(evidence: Any) -> None:
+    _require(
+        isinstance(evidence, dict) and set(evidence) == RELATION_EVIDENCE_FIELDS,
+        "semantically related incorrect titles require the frozen human relation evidence",
+    )
+    _require(
+        evidence["authority"] == SEMANTIC_RELATION_AUTHORITY,
+        "semantic relation evidence must identify human ground truth as its authority",
+    )
+    _require(
+        evidence["classified_before_ocr"] is True,
+        "semantic relation evidence must be classified before OCR",
+    )
+    rationale = evidence["rationale"]
+    _require(
+        isinstance(rationale, str) and 20 <= len(rationale) <= 240 and rationale == rationale.strip(),
+        "semantic relation rationale is missing or outside its plain-text bounds",
+    )
+    _require(
+        rationale.isprintable() and "\n" not in rationale and "\r" not in rationale,
+        "semantic relation rationale must be single-line printable text",
+    )
+    _require(
+        UNSAFE_RELATION_EVIDENCE.search(rationale) is None,
+        "semantic relation rationale may not contain a URL or command syntax",
+    )
+
+
+def _validate_title_relationship(case: dict[str, Any]) -> None:
+    poster = case["title"]
+    metadata = case["metadata_title"]
+    negative = case["negative_kind"]
+    evidence = case["negative_relation_evidence"]
+    poster_metric = normalize_metric_title(poster)
+    metadata_metric = normalize_metric_title(metadata)
+    poster_production = normalize_production_title(poster)
+    metadata_production = normalize_production_title(metadata)
+    poster_tokens = _title_tokens(poster)
+    metadata_tokens = _title_tokens(metadata)
+
+    if negative is None:
+        _require(evidence is None, "an ordinary agreement may not carry negative relation evidence")
+        _require(
+            poster_metric == metadata_metric and poster_production == metadata_production,
+            "an unlabelled expected agreement must have normalized-equal titles",
+        )
+        return
+    if negative == NON_MATERIAL_NEGATIVE_KIND:
+        _require(evidence is None, "a punctuation-only control may not carry semantic relation evidence")
+        _require(poster != metadata, "a punctuation-only control requires different raw title strings")
+        _require(
+            poster_metric == metadata_metric and poster_production == metadata_production,
+            "a punctuation-only control may not change semantic words under frozen normalization",
+        )
+        return
+
+    _require(
+        poster_metric != metadata_metric and poster_production != metadata_production,
+        "material negative normalized titles must be genuinely different",
+    )
+    if negative == "one_character_material":
+        _require(evidence is None, "a one-character negative may not carry semantic relation evidence")
+        _require(
+            levenshtein_distance(poster_metric, metadata_metric) == 1
+            and len(poster_tokens) == len(metadata_tokens)
+            and levenshtein_distance(poster_tokens, metadata_tokens) == 1,
+            "a one-character material negative must have exactly one normalized content-character edit",
+        )
+        _require(
+            _number_or_version_tokens(poster_tokens) == _number_or_version_tokens(metadata_tokens),
+            "a one-character material negative may not encode a number or version change",
+        )
+    elif negative == "one_word_material":
+        _require(evidence is None, "a one-word negative may not carry semantic relation evidence")
+        _require(
+            levenshtein_distance(poster_tokens, metadata_tokens) == 1,
+            "a one-word material negative must have exactly one normalized token edit",
+        )
+        _require(
+            levenshtein_distance(poster_metric, metadata_metric) > 1,
+            "a one-word material negative may not be a one-character category",
+        )
+        _require(
+            _number_or_version_tokens(poster_tokens) == _number_or_version_tokens(metadata_tokens),
+            "a one-word material negative may not encode a number or version change",
+        )
+    elif negative == "number_or_version":
+        _require(evidence is None, "a number or version negative may not carry semantic relation evidence")
+        poster_numbers = _number_or_version_tokens(poster_tokens)
+        metadata_numbers = _number_or_version_tokens(metadata_tokens)
+        _require(
+            bool(poster_numbers or metadata_numbers) and poster_numbers != metadata_numbers,
+            "a number or version negative requires an actual changed number or version token",
+        )
+        _require(
+            _non_number_tokens(poster_tokens) == _non_number_tokens(metadata_tokens),
+            "a number or version negative must keep every non-number token identical",
+        )
+    else:
+        _validate_semantic_relation_evidence(evidence)
 
 
 def _validate_case(case: Any, *, scored: bool) -> None:
@@ -122,6 +245,7 @@ def _validate_case(case: Any, *, scored: bool) -> None:
         _require(case["expected_agreement"] is False, "a material title negative may not be labelled as an agreement")
     if negative in (None, NON_MATERIAL_NEGATIVE_KIND):
         _require(case["expected_agreement"] is True, "only material negatives may be labelled as non-agreements")
+    _validate_title_relationship(case)
     distractors = case["distractors"]
     _require(isinstance(distractors, list) and len(distractors) <= 6, "distractor count is outside its bounds")
     for distractor in distractors:

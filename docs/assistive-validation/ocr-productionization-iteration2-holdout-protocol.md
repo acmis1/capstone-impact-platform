@@ -1,4 +1,4 @@
-# PP1 assistive OCR Iteration 2 fresh-holdout protocol freeze
+# PP1 assistive OCR Iteration 2 fresh-holdout protocol freeze v3
 
 ## Purpose and boundary
 
@@ -6,9 +6,9 @@ This iteration freezes the protocol for a genuinely independent Iteration 2 OCR 
 freezes; it does not measure.
 
 **IMPLEMENTED here:** the exposed development-only distractor correction evidence, the corrected
-holdout protocol freeze, the canonical renderer environment, the deterministic renderer
-fingerprint, the holdout schema and generator contract, the freeze manifest, and the freeze
-chronology.
+holdout protocol freeze, the deterministic hard-negative relationship contract, the canonical
+renderer environment, the deterministic renderer fingerprint, the holdout schema and generator
+contract, the freeze manifest, and the freeze chronology.
 
 **NOT IMPLEMENTED here:** the fresh holdout, any holdout case, any holdout asset, any holdout
 OCR capture, any holdout accuracy number, any production OCR provider and any production
@@ -280,8 +280,32 @@ material difference, a semantically related but incorrect title, and a number or
 difference. At least two further cases are punctuation-only **non-material** controls that
 remain expected agreements. No conceptual example here is authored as future holdout text.
 
-The invariant under test is simple: semantic relatedness can never turn a material mismatch into
-automatic agreement.
+The v3 corpus validator verifies each claimed relation before any OCR:
+
+* an unlabelled expected agreement is equal after both frozen normalizations;
+* every material negative differs after both frozen metric and production normalization;
+* a one-character material negative has exactly one content-character edit after metric
+  normalization, one changed token and no number/version change;
+* a one-word material negative has exactly one metric-token edit, is more than a one-character
+  change and carries no number/version change;
+* a number/version negative changes an actual digit-bearing token while every non-number token
+  remains identical; and
+* a punctuation-only control differs at the raw-string level but is equal after both frozen
+  normalizations. Curly/straight apostrophes and dash variants can therefore pass, while a word
+  substitution cannot hide under this label.
+
+Arbitrary semantic relatedness is not mechanically provable. A `semantically_related_incorrect`
+case therefore requires a bounded `negative_relation_evidence` object whose authority is
+`human_ground_truth`, whose classification is explicitly recorded before OCR and whose
+single-line rationale is plain, non-executable text without URLs or command syntax. The
+validator proves the titles are materially different and the evidence is structurally present;
+a human remains authoritative for the semantic judgment. The evidence object is ground truth
+only: it is excluded from rendered pixels, OCR reference text, title selection, title safety,
+WER ordering and production code, and is available later only to aggregate the already-fixed
+ground-truth result.
+
+The invariant under test remains simple: semantic relatedness can never turn a material mismatch
+into automatic agreement.
 
 ### Controls
 
@@ -316,13 +340,14 @@ implementation, the raster and capture pipeline, the canonical renderer definiti
 font manifest, blob and licence, and the benchmark dependency pins.
 
 It binds **no production code**. The corrected durable content-addressed identity is
-`freeze_tree_sha256 = a47957b3d1621b50eb1f40701a44bc3360180ef73b7f0a00a25be54146ed674e`,
+`freeze_tree_sha256 = 088d2a43da5c2595ff9098b6cabbc3af19582930ae741fc64dc0878768aef282`,
 with manifest SHA-256
-`c6c5d55a26640c20ee2396b47aaef97e4fe97b494c04cb733b11ee21620a4e1a`.
+`3a7e4d926bd377e7d7192327c5f41e936b8c430b7ee4c6416ff83b9d9fe535dc`.
 
 ## Freeze chronology
 
-The final corrected freeze is seven ordinary commits, and no commit is amended or rewritten:
+The relationship-corrected freeze is eleven ordinary commits, and no commit is amended or
+rewritten:
 
 * **Commit A — freeze.** Every protocol, environment, contract, source, test, document and CI
   step. It contains no holdout content and no commit-identity record.
@@ -344,12 +369,25 @@ The final corrected freeze is seven ordinary commits, and no commit is amended o
 * **Commit G — final chronology record.** Records Commit F and marks C/D as preserved but
   superseded because independent review found the selector and WER contradictions before any
   fresh holdout existed. It adds no freeze material of its own.
+* **Commit H — post-freeze terminology scope.** Preserves the accepted benchmark terminology
+  guard correction as an ordinary post-F commit.
+* **Commit I — hard-negative relationship regressions.**
+  `ebbd24664ced5c2d8a86781e182073f84c5f52f3` records focused tests proving that the v2
+  validator accepted five invalid claimed relationships. It is not a freeze.
+* **Commit J — relationship-corrected authoritative freeze.** Freezes protocol v3, the v2 future
+  corpus schema, the deterministic relationship validator, bounded human semantic evidence,
+  updated tests/evidence/document and the rebuilt complete manifest.
+* **Commit K — relationship-corrected chronology record.** Records Commit J as authoritative and
+  marks F/G preserved but superseded because their category and expected-agreement checks did not
+  verify the claimed title relationships before any fresh holdout existed. It adds no freeze
+  material of its own.
 
 The original protocol-freeze commit is `ab9ee241c6ea70f00c8e4fe063ef28c73b37802a`, with chronology
 commit `b08c8fa3723a9c16157944de8f3d4a362fa03bc6`. Both remain in history and both predate any
 holdout, but the first exact-head CI result superseded their renderer cross-platform assertion.
 Commit C remains preserved and is recorded by Commit D, but it is no longer authoritative after
-the selector/WER correction. Commit G records Commit F after all 30 blobs are verified.
+the selector/WER correction. Commits F/G and the ordinary post-freeze Commit H remain preserved,
+but Commit K records Commit J as the new authority after all 30 blobs are verified.
 
 `main` squash-merges, so a branch commit SHA does not survive as an ancestor of `main` — the v1
 protocol-freeze commit `0485a8b7fda3f3e9f9873849104cd90917b4f395` is not one today. The
@@ -395,6 +433,7 @@ The future run may return exactly one of:
 ## Scientific integrity and production boundary
 
 - Fresh holdout created: **NO**.
+- Fresh holdout case IDs instantiated: **NO**.
 - Holdout measurement or accuracy: **NO**.
 - Development-only PP-OCRv6 Small OCR executed: **YES**, on exposed `ocr2-dev-*` variants only.
 - Fresh holdout OCR executed: **NO**.
@@ -412,7 +451,8 @@ renderer definition, the platform-independent renderer binding, within-run refer
 determinism, the selected
 candidate identity, the fixed selector, reading order, title-safety and metric identities, the
 exact quality gates and operational ceilings, the 40-case distribution contract, the upper-page
-distractor and material-negative requirements, the no-holdout guard, the recomputable
+distractor and per-case material-negative relationship requirements, the bounded human semantic
+evidence boundary, the no-holdout guard, the recomputable
 development correction evidence, and that the historical evidence is unchanged and the
 Iteration 2 calibration still validates.
 
