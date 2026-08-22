@@ -1,42 +1,45 @@
 {
-  "schema_version": "pp1-ocr-canonical-renderer-environment/v1",
-  "environment_id": "pp1-ocr-canonical-renderer-v1",
-  "mechanism": "repository-pinned wheel toolchain proved by a deterministic reference-render fingerprint",
-  "rationale": "The repository has no container infrastructure, and a container image identity would not by itself make rendering reproducible: an image label pins an operating system, not the pixels. The Pillow wheel vendors its own FreeType and the pypdfium2 wheel vendors its own pdfium, so pinning those wheels pins the glyph rasteriser and the PDF rasteriser without consulting the host font stack at all. Canonicality is therefore measured rather than asserted: a tiny synthetic fixture is rendered and hashed, and generation refuses to run when the measured fingerprint differs.",
-  "pinned_toolchain": {
-    "python_major_minor": "3.11",
-    "pillow": "12.3.0",
-    "freetype": "2.14.3",
-    "pypdfium2": "5.13.0"
+  "attested_platforms": [
+    {
+      "attested_at": "2026-08-22",
+      "machine": "AMD64",
+      "platform_id": "windows-amd64-cpython3.11",
+      "python": "3.11.9; reverified with 3.11.16",
+      "reference_fixture_binding_digests": {
+        "glyph_raster_sha256": "2f81045b229f2ccd472a484df777aa8e0b9ae4d27574a808d29daea9d5c76430",
+        "jpeg_roundtrip_raster_sha256": "b1dd6036b29f0e47414f84817e1eb74b3bd7f7949502d219f3bfd1d0444a2095",
+        "pdf_raster_sha256": "62243f7d17af8f4357c718e1b3b894d74aa254a99432d40583d09ac0efcbc67f",
+        "png_roundtrip_raster_sha256": "2f81045b229f2ccd472a484df777aa8e0b9ae4d27574a808d29daea9d5c76430"
+      },
+      "reference_fixture_encoded_digests": {
+        "jpeg_bytes_sha256": "da6bed71c340a1d2fa492d397e4293fe8e52da108cd70590e02ce137722a203d",
+        "pdf_bytes_sha256": "ceee45bf0625bf5d5f892d9f041e5d03f50ea3eaa356fc9812fe1907629834fd",
+        "png_bytes_sha256": "1345b3fba5fe357e3c15cfb875b17443d99158a2695105f8d20c02634af47266"
+      },
+      "role": "canonical holdout generation; exact decoded-pixel profile",
+      "system": "Windows"
+    }
+  ],
+  "binding_semantics": {
+    "canonical_decoded_pixel_digests_are_binding": true,
+    "encoded_byte_digests_are_attestation_only": true,
+    "encoded_byte_reason": "an image compressor may take a different optimised code path on a different CPU and emit different valid bytes for identical pixels",
+    "noncanonical_render_digests_are_reported_not_compared": true,
+    "platform_independent_binding": "environment identity, pinned toolchain, font, renderer sources and reference-fixture specification"
+  },
+  "canonical_generation_platform": "windows-amd64-cpython3.11",
+  "continuous_cross_platform_attestation": {
+    "canonical_render_digest_parity_required": true,
+    "green_status_is_the_attestation": true,
+    "job": ".github/workflows/assistive-benchmark-ci.yml",
+    "mechanism": "ubuntu-latest verifies the platform-independent binding and repeated within-run fingerprint determinism without pretending its rendered pixels equal the canonical Windows profile",
+    "noncanonical_render_digest_parity_required": false,
+    "on_divergence": "fail when the pinned binding diverges anywhere or when canonical Windows pixels diverge; never permit noncanonical holdout generation",
+    "platform_independent_binding_required": true,
+    "within_run_determinism_required": true
   },
   "dependency_pin_source": "tools/assistive-validation-benchmark/pyproject.toml",
-  "system_font_fallback": false,
-  "runtime_font_download": false,
-  "network_during_generation": false,
-  "floating_version_tags_permitted": false,
-  "font": {
-    "path": "tools/assistive-validation-benchmark/ocr-iteration2-calibration/font/NotoSans-Regular.ttf",
-    "sha256": "114a6bf229142e7aac8ee83e70ca77563b46b16e80e2e50ad3a053b442f969b6",
-    "family": "Noto Sans",
-    "style": "Regular",
-    "version": "2.003",
-    "license": "SIL Open Font License 1.1",
-    "manifest": "tools/assistive-validation-benchmark/ocr-iteration2-calibration/font/manifest.json"
-  },
-  "reference_fixture": {
-    "id": "pp1-renderer-reference-fixture",
-    "role": "renderer_environment_proof",
-    "scored": false,
-    "holdout_content": false,
-    "reaches_ocr": false,
-    "source": "src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/renderer.py"
-  },
-  "binding_semantics": {
-    "binding_digests_are_decoded_pixels": true,
-    "reason": "an OCR engine consumes decoded pixels, so decoded pixels are the invariant that matters",
-    "encoded_byte_digests_are_attestation_only": true,
-    "encoded_byte_reason": "an image compressor may take a different optimised code path on a different CPU and emit different valid bytes for identical pixels; refusing a holdout run for that would be a false alarm"
-  },
+  "environment_id": "pp1-ocr-canonical-renderer-v1",
   "fingerprint": {
     "binding": {
       "environment_id": "pp1-ocr-canonical-renderer-v1",
@@ -45,12 +48,6 @@
       "pillow": "12.3.0",
       "pypdfium2": "5.13.0",
       "python_major_minor": "3.11",
-      "reference_fixture_binding_digests": {
-        "glyph_raster_sha256": "2f81045b229f2ccd472a484df777aa8e0b9ae4d27574a808d29daea9d5c76430",
-        "jpeg_roundtrip_raster_sha256": "b1dd6036b29f0e47414f84817e1eb74b3bd7f7949502d219f3bfd1d0444a2095",
-        "pdf_raster_sha256": "62243f7d17af8f4357c718e1b3b894d74aa254a99432d40583d09ac0efcbc67f",
-        "png_roundtrip_raster_sha256": "2f81045b229f2ccd472a484df777aa8e0b9ae4d27574a808d29daea9d5c76430"
-      },
       "reference_fixture_spec_sha256": "65ef104e815c8c483c05d91d90539a653431ff332955115a2ada3d58b360d67f",
       "renderer_source_sha256": {
         "ocr-iteration2-calibration/font/NotoSans-Regular.ttf": "114a6bf229142e7aac8ee83e70ca77563b46b16e80e2e50ad3a053b442f969b6",
@@ -59,28 +56,37 @@
         "src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/renderer.py": "7e026aac59951a8b7eddfa9080662fb59ed9d9578087ba4a25e2ac26081a8784"
       }
     },
-    "fingerprint_sha256": "7c6a95d1408355e688ed13f271f0b938f1c98e362684f100375733e91d076fe5"
+    "fingerprint_sha256": "33a4fc7dfcbcc8b9d7b78385abc34340a76eb7ee70ce40b6208ccd12aba53367"
   },
-  "attestation": {
-    "reference_fixture_encoded_digests": {
-      "jpeg_bytes_sha256": "da6bed71c340a1d2fa492d397e4293fe8e52da108cd70590e02ce137722a203d",
-      "pdf_bytes_sha256": "ceee45bf0625bf5d5f892d9f041e5d03f50ea3eaa356fc9812fe1907629834fd",
-      "png_bytes_sha256": "1345b3fba5fe357e3c15cfb875b17443d99158a2695105f8d20c02634af47266"
-    }
+  "floating_version_tags_permitted": false,
+  "font": {
+    "family": "Noto Sans",
+    "license": "SIL Open Font License 1.1",
+    "manifest": "tools/assistive-validation-benchmark/ocr-iteration2-calibration/font/manifest.json",
+    "path": "tools/assistive-validation-benchmark/ocr-iteration2-calibration/font/NotoSans-Regular.ttf",
+    "sha256": "114a6bf229142e7aac8ee83e70ca77563b46b16e80e2e50ad3a053b442f969b6",
+    "style": "Regular",
+    "version": "2.003"
   },
-  "attested_platforms": [
-    {
-      "system": "Windows",
-      "machine": "AMD64",
-      "python": "3.11.9",
-      "attested_at": "2026-08-22",
-      "role": "freeze measurement"
-    }
-  ],
-  "continuous_cross_platform_attestation": {
-    "mechanism": "the Assistive Benchmark Lightweight CI job re-verifies this exact binding on ubuntu-latest for every push and pull request",
-    "job": ".github/workflows/assistive-benchmark-ci.yml",
-    "green_status_is_the_attestation": true,
-    "on_divergence": "narrow attested_platforms to the platforms that actually reproduce the binding, or return NEEDS_MORE_PROTOCOL_FREEZE_WORK; never weaken the binding digests"
-  }
+  "mechanism": "platform-independent pinned binding plus one exact canonical-generation pixel profile and deterministic measurements on verification platforms",
+  "network_during_generation": false,
+  "pinned_toolchain": {
+    "freetype": "2.14.3",
+    "pillow": "12.3.0",
+    "pypdfium2": "5.13.0",
+    "python_major_minor": "3.11"
+  },
+  "rationale": "Pillow and pypdfium2 pin their bundled raster libraries, but the failed first cross-platform CI run proved that rendered output must not be assumed identical across every operating system and CPU path. The corrected freeze binds toolchain, font, source and fixture identity everywhere, binds exact decoded pixels on the single Windows generation profile, reports noncanonical measurements, and refuses generation anywhere else.",
+  "reference_fixture": {
+    "holdout_content": false,
+    "id": "pp1-renderer-reference-fixture",
+    "reaches_ocr": false,
+    "role": "renderer_environment_proof",
+    "scored": false,
+    "source": "src/assistive_validation_benchmark/ocr_iteration2_holdout_protocol/renderer.py"
+  },
+  "render_digests_are_platform_specific": true,
+  "runtime_font_download": false,
+  "schema_version": "pp1-ocr-canonical-renderer-environment/v2",
+  "system_font_fallback": false
 }

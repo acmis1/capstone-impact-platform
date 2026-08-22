@@ -135,7 +135,10 @@ def _evidence_from_state(state: dict[str, Any]) -> dict[str, Any]:
             "network_during_generation": False,
             "reference_fixture_is_scored": False,
             "fingerprint_sha256": fingerprint["expected_fingerprint_sha256"],
-            "matches_canonical_renderer": True,
+            "canonical_generation_platform": fingerprint["canonical_generation_platform"],
+            "attested_platform_ids": fingerprint["attested_platform_ids"],
+            "render_digests_are_platform_specific": True,
+            "noncanonical_render_digest_parity_required": False,
             "encoded_byte_parity_is_binding": False,
         },
         "frozen_component_count": state["manifest"]["component_count"],
@@ -150,8 +153,7 @@ def build_freeze_evidence() -> dict[str, Any]:
     state = _freeze_state()
     if not state["fingerprint"]["matches_canonical_renderer"]:
         raise ValueError(
-            "refusing to record freeze evidence outside the canonical renderer; divergent components: "
-            + ", ".join(state["fingerprint"]["divergent_binding_components"])
+            "refusing to record freeze evidence outside the canonical generation renderer"
         )
     return _evidence_from_state(state)
 
@@ -160,9 +162,9 @@ def validate_freeze_evidence(stored: dict[str, Any]) -> dict[str, Any]:
     if stored.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("unsupported stored Iteration 2 holdout protocol-freeze evidence")
     state = _freeze_state()
-    if not state["fingerprint"]["matches_canonical_renderer"]:
+    if not state["fingerprint"]["matches_verification_environment"]:
         raise ValueError(
-            "stored freeze evidence cannot be verified outside the canonical renderer; divergent components: "
+            "stored freeze evidence cannot be verified outside the pinned renderer environment; divergent components: "
             + ", ".join(state["fingerprint"]["divergent_binding_components"])
         )
     expected = _evidence_from_state(state)

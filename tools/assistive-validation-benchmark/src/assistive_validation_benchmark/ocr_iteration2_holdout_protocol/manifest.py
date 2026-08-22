@@ -31,8 +31,23 @@ from .schema import (
 
 
 MANIFEST_SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-freeze-manifest/v1"
-FREEZE_COMMIT_SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-freeze-commit/v1"
+FREEZE_COMMIT_SCHEMA_VERSION = "pp1-ocr-iteration2-holdout-freeze-commit/v2"
 TEXT_SUFFIXES = {".py", ".json", ".toml", ".txt", ".md"}
+
+SUPERSEDED_FREEZE = {
+    "protocol_freeze_commit_sha": "ab9ee241c6ea70f00c8e4fe063ef28c73b37802a",
+    "chronology_commit_sha": "b08c8fa3723a9c16157944de8f3d4a362fa03bc6",
+    "freeze_manifest_sha256": "c7c5783bd8f75a904f25613aa03c247b54b833517d2754f8b8d3bb8ccb1bc318",
+    "freeze_tree_sha256": "41493ccd8c2dea0057740af6fe514255fbbbf70318e8e35bfd0cae0424131fe5",
+    "freeze_commit_record_sha256": "5473d41c1bc1572a9735450640062b3d2e0eda2b7d83ce338990c8d3eb5bb62f",
+    "component_count": 29,
+    "holdout_absent_at_freeze": True,
+    "superseded": True,
+    "supersession_reason": (
+        "the first exact-head Ubuntu CI run disproved the original cross-platform render-pixel "
+        "equality assertion before any fresh holdout existed"
+    ),
+}
 
 # Roles make the manifest auditable: a reviewer can see *why* each file is bound.
 FROZEN_ROLES: tuple[tuple[str, str], ...] = (
@@ -234,22 +249,42 @@ def verify_freeze_commit(commit: str, *, require_commit_object: bool = False) ->
     }
 
 
-def build_freeze_commit_record(commit: str) -> dict[str, Any]:
+def _validate_superseded_record(stored: dict[str, Any]) -> None:
+    if stored.get("schema_version") != "pp1-ocr-iteration2-holdout-freeze-commit/v1":
+        raise ValueError("the superseded chronology record is not the preserved v1 record")
+    if value_sha256(stored) != SUPERSEDED_FREEZE["freeze_commit_record_sha256"]:
+        raise ValueError("the superseded chronology record changed before correction")
+    for key in (
+        "protocol_freeze_commit_sha",
+        "freeze_manifest_sha256",
+        "freeze_tree_sha256",
+        "component_count",
+        "holdout_absent_at_freeze",
+    ):
+        if stored.get(key) != SUPERSEDED_FREEZE[key]:
+            raise ValueError(f"the superseded chronology record changed: {key}")
+
+
+def build_freeze_commit_record(commit: str, superseded_record: dict[str, Any]) -> dict[str, Any]:
     from . import PROTOCOL_VERSION
 
+    _validate_superseded_record(superseded_record)
     manifest = build_freeze_manifest()
     verification = verify_freeze_commit(commit, require_commit_object=True)
     return {
         "schema_version": FREEZE_COMMIT_SCHEMA_VERSION,
         "protocol_version": PROTOCOL_VERSION,
-        "recorded_by": "iteration 2B2 freeze chronology commit B",
+        "recorded_by": "iteration 2B2 corrected freeze chronology commit D",
         "chronology": (
-            "commit A froze every protocol, environment and source component; this record was added "
-            "afterwards and adds no freeze material of its own"
+            "commits A and B preserve the original pre-review freeze and record; exact-head CI then "
+            "exposed a renderer-platform defect before any holdout existed; commit C is the corrected "
+            "authoritative freeze and commit D adds only this supersession record"
         ),
         "durable_identity": "freeze_tree_sha256",
         "commit_sha_is_branch_local": True,
         "freeze_manifest_sha256": value_sha256(manifest),
+        "original_history_preserved": True,
+        "supersedes": SUPERSEDED_FREEZE,
         **verification,
     }
 
@@ -262,12 +297,24 @@ def validate_freeze_commit_record(stored: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("recorded freeze tree digest no longer matches the frozen components")
     if stored.get("freeze_manifest_sha256") != value_sha256(manifest):
         raise ValueError("recorded freeze manifest digest no longer matches the frozen components")
-    if stored.get("holdout_absent_at_freeze") is False:
-        raise ValueError("the freeze commit record admits holdout content existed at the freeze")
+    if stored.get("component_count") != manifest["component_count"]:
+        raise ValueError("recorded freeze component count no longer matches the frozen components")
+    if stored.get("holdout_absent_at_freeze") is not True:
+        raise ValueError("the freeze commit record does not prove holdout absence at the corrected freeze")
+    if stored.get("original_history_preserved") is not True:
+        raise ValueError("the corrected freeze must preserve the original A/B history")
+    if stored.get("supersedes") != SUPERSEDED_FREEZE:
+        raise ValueError("the corrected freeze supersession record changed")
+    reachable = verify_freeze_commit(stored["protocol_freeze_commit_sha"])
+    if reachable["commit_object_reachable"] and reachable["holdout_absent_at_freeze"] is not True:
+        raise ValueError("fresh holdout content existed at the corrected freeze commit")
     return {
         "protocol_freeze_commit_sha": stored["protocol_freeze_commit_sha"],
         "freeze_tree_sha256": stored["freeze_tree_sha256"],
         "content_addressed_match": True,
+        "holdout_absent_at_freeze": True,
+        "superseded_protocol_freeze_commit_sha": SUPERSEDED_FREEZE["protocol_freeze_commit_sha"],
+        "original_history_preserved": True,
     }
 
 

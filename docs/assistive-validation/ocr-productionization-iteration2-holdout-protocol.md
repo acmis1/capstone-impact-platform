@@ -149,7 +149,7 @@ holdout machine cannot rehabilitate an engine whose merged evidence already fail
 
 PR #167 established that the corrected corpus is reproducible inside one fixed renderer
 environment but does not prove byte-identical rendering across different operating systems or
-FreeType builds. The canonical renderer closes that gap.
+CPU-dispatched codec paths. The corrected freeze makes that limitation an explicit boundary.
 
 The repository has no container infrastructure, and adding one would not have been the stronger
 answer: an image digest pins an operating system, not pixels, and it does not remove CPU-dispatch
@@ -171,31 +171,31 @@ rather than asserted.
 
 ### Renderer fingerprint
 
-The fingerprint binds the environment identity, the four toolchain versions, the font SHA-256,
-the renderer source hashes, the reference-fixture specification hash and the reference-render
-digests. Its value is
-`7c6a95d1408355e688ed13f271f0b938f1c98e362684f100375733e91d076fe5`.
+The platform-independent fingerprint binds the environment identity, the four toolchain
+versions, the font SHA-256, the renderer source hashes and the reference-fixture specification
+hash. Its corrected value is
+`33a4fc7dfcbcc8b9d7b78385abc34340a76eb7ee70ce40b6208ccd12aba53367`.
 
-The binding digests are **decoded-pixel** digests — the glyph raster, the PNG round-trip raster,
-the JPEG round-trip raster and the pdfium raster at 180 DPI — because decoded pixels are what an
-OCR engine actually consumes. Encoded byte digests are recorded as attestation only: an image
-compressor may take a different optimised code path on a different CPU and emit different valid
-bytes for identical pixels, and refusing a holdout run for that would be a false alarm.
+The single canonical generation profile is `windows-amd64-cpython3.11`. Its **decoded-pixel**
+digests — glyph raster, PNG round-trip, JPEG round-trip and pdfium raster at 180 DPI — are binding
+because decoded pixels are what OCR consumes. Encoded byte digests remain attestation only. A
+noncanonical platform reports its measured pixels but is not compared with the Windows profile
+and can never generate holdout assets.
 
-`generate_holdout_assets` calls the guard before drawing a single pixel and refuses to run when
-any bound component diverges, naming the divergent component. A holdout therefore cannot be
-generated on an unattested toolchain and then presented as reproducible evidence.
+`generate_holdout_assets` calls the guard before drawing a single pixel and refuses unless both
+the platform-independent binding and the exact canonical Windows decoded-pixel profile match. A
+holdout therefore cannot be generated on a noncanonical or divergent toolchain.
 
 The reference fixture is a tiny synthetic probe carrying no project meaning. It is explicitly
 unscored, is not corpus content and never reaches an OCR engine.
 
 ### Cross-platform attestation
 
-The frozen fingerprint was measured on the Windows workstation that performed the freeze. The
-lightweight benchmark CI job re-verifies the identical binding on `ubuntu-latest` for every push
-and pull request, so a green CI run *is* the second-platform attestation rather than a claim
-about one. If a platform ever diverges, the correct response is to narrow the attested platform
-list — or return `NEEDS_MORE_PROTOCOL_FREEZE_WORK` — never to weaken a binding digest.
+The first exact-head `ubuntu-latest` run disproved the original assumption that reference-render
+pixels could be required to match across platforms. The corrected job verifies the identical
+platform-independent binding and repeats the Ubuntu measurement byte-for-byte within the run. It
+does **not** claim Ubuntu pixels equal Windows pixels, and Ubuntu cannot generate the holdout. A
+binding divergence anywhere, or a decoded-pixel divergence on canonical Windows, remains fatal.
 
 ## Frozen holdout distribution
 
@@ -290,22 +290,29 @@ title normalization and safety implementation, the WER/metric and operational-ga
 implementation, the raster and capture pipeline, the canonical renderer definition, the pinned
 font manifest, blob and licence, and the benchmark dependency pins.
 
-It binds **no production code**. The durable content-addressed identity is
-`freeze_tree_sha256 = 41493ccd8c2dea0057740af6fe514255fbbbf70318e8e35bfd0cae0424131fe5`.
+It binds **no production code**. The corrected durable content-addressed identity is
+`freeze_tree_sha256 = 96a823b5b9200a419006a527506192479cbc248eb6cdaa13172f10b852a4c851`,
+with manifest SHA-256
+`38e293f05bb85fc769aae39d20a79ab123f11380696da376ba2b19be555b8e91`.
 
 ## Freeze chronology
 
-The freeze is two ordinary commits, and no commit is amended:
+The corrected freeze is four ordinary commits, and no commit is amended or rewritten:
 
 * **Commit A — freeze.** Every protocol, environment, contract, source, test, document and CI
   step. It contains no holdout content and no commit-identity record.
 * **Commit B — record freeze commit identity.** Adds only `freeze-commit.json`, which records
   Commit A's SHA together with the freeze tree and manifest digests, and proves against Commit A
   that every bound file's Git blob matches the working tree and that no holdout path existed.
+* **Commit C — corrected authoritative freeze.** Preserves A/B and corrects the platform-specific
+  renderer attestation defect exposed by exact-head CI before any holdout existed.
+* **Commit D — corrected chronology record.** Records Commit C and marks A/B as preserved but
+  superseded. It adds no corrected freeze material of its own.
 
-The protocol-freeze commit is `ab9ee241c6ea70f00c8e4fe063ef28c73b37802a`. All 29 bound
-components were verified against it by Git blob identity, and no holdout path existed at that
-commit — the frozen files provably came before any holdout case or result.
+The original protocol-freeze commit is `ab9ee241c6ea70f00c8e4fe063ef28c73b37802a`, with chronology
+commit `b08c8fa3723a9c16157944de8f3d4a362fa03bc6`. Both remain in history and both predate any
+holdout, but the first exact-head CI result superseded their renderer cross-platform assertion.
+The corrected authoritative Commit C is recorded by Commit D after its 29 blobs are verified.
 
 `main` squash-merges, so a branch commit SHA does not survive as an ancestor of `main` — the v1
 protocol-freeze commit `0485a8b7fda3f3e9f9873849104cd90917b4f395` is not one today. The
@@ -363,7 +370,8 @@ The future run may return exactly one of:
 ## CI boundary
 
 The lightweight benchmark CI job validates the freeze manifest schema and hashes, the canonical
-renderer definition, the renderer fingerprint, the reference-fixture determinism, the selected
+renderer definition, the platform-independent renderer binding, within-run reference-fixture
+determinism, the selected
 candidate identity, the fixed selector, reading order, title-safety and metric identities, the
 exact quality gates and operational ceilings, the 40-case distribution contract, the upper-page
 distractor and material-negative requirements, the no-holdout guard, and that the historical

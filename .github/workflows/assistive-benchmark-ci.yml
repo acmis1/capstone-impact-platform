@@ -129,10 +129,10 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_iteration2_holdout_protocol check
 
-      # This step is also the cross-platform attestation for the canonical renderer: the frozen
-      # fingerprint was measured on a Windows workstation, and a green run here proves an
-      # ubuntu-latest toolchain reproduces the same reference-render pixels.
-      - name: Verify the freeze manifest and the canonical renderer fingerprint
+      # Cross-platform verification binds the exact toolchain/font/source/fixture identity.
+      # Rendered pixels are platform-specific: only the exact Windows profile may generate the
+      # holdout, while ubuntu-latest reports its measurement and proves within-run determinism.
+      - name: Verify the freeze manifest and renderer environment binding
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_iteration2_holdout_protocol verify-freeze
 

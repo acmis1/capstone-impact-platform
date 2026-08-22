@@ -14,11 +14,10 @@ from pathlib import Path
 from typing import Any
 
 from .fingerprint import (
-    RendererFingerprintMismatch,
     compute_fingerprint,
     environment_path,
+    require_verification_environment,
     validate_environment,
-    verify_fingerprint,
 )
 from .manifest import (
     build_freeze_commit_record,
@@ -71,6 +70,12 @@ def _parser() -> argparse.ArgumentParser:
     record = subparsers.add_parser("record-freeze-commit", help="record the protocol-freeze commit identity")
     record.add_argument("--commit", required=True, help="the full protocol-freeze commit SHA")
     record.add_argument("--output", type=Path, default=defaults["freeze_commit"])
+    record.add_argument(
+        "--supersedes-record",
+        type=Path,
+        default=defaults["freeze_commit"],
+        help="the preserved v1 chronology record superseded by the corrected freeze",
+    )
 
     check_commit = subparsers.add_parser("check-freeze-commit", help="verify the stored freeze commit record")
     check_commit.add_argument("--record", type=Path, default=defaults["freeze_commit"])
@@ -84,12 +89,7 @@ def _verify_freeze() -> dict[str, Any]:
     protocol = validate_protocol(load_json(data_root() / "protocol.json"))
     manifest = verify_freeze_manifest(load_json(manifest_path()))
     environment = validate_environment(load_json(environment_path()))
-    fingerprint = verify_fingerprint(environment)
-    if not fingerprint["matches_canonical_renderer"]:
-        raise RendererFingerprintMismatch(
-            "renderer environment does not match the frozen canonical renderer; divergent components: "
-            + ", ".join(fingerprint["divergent_binding_components"])
-        )
+    fingerprint = require_verification_environment(environment)
     record_path = _defaults()["freeze_commit"]
     freeze_commit = validate_freeze_commit_record(load_json(record_path)) if record_path.is_file() else None
     return {
@@ -121,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "check-evidence":
             result = validate_freeze_evidence(load_json(args.report))
         elif args.command == "record-freeze-commit":
-            record = build_freeze_commit_record(args.commit)
+            record = build_freeze_commit_record(args.commit, load_json(args.supersedes_record))
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_bytes(canonical_json_bytes(record))
             result = {"freeze_commit_record": str(args.output), **record}

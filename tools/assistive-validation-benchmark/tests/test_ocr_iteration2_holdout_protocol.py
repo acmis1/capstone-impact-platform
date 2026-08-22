@@ -19,6 +19,7 @@ from assistive_validation_benchmark.ocr_iteration2_holdout_protocol.fingerprint 
     compute_fingerprint,
     environment_path,
     require_canonical_renderer,
+    require_verification_environment,
     validate_environment,
     verify_fingerprint,
 )
@@ -425,6 +426,8 @@ class FreezeCommitRecordTests(unittest.TestCase):
         if not self.path.is_file():
             self.skipTest("the freeze chronology record is added by the second freeze commit")
         self.record = load_json(self.path)
+        if self.record.get("schema_version") != manifest_module.FREEZE_COMMIT_SCHEMA_VERSION:
+            self.skipTest("the preserved v1 record is superseded by chronology commit D")
 
     def test_record_matches_the_content_addressed_freeze(self) -> None:
         result = manifest_module.validate_freeze_commit_record(self.record)
@@ -432,6 +435,11 @@ class FreezeCommitRecordTests(unittest.TestCase):
         self.assertIs(result["content_addressed_match"], True)
         self.assertIs(self.record["holdout_absent_at_freeze"], True)
         self.assertEqual(29, self.record["component_count"])
+        self.assertEqual(
+            "ab9ee241c6ea70f00c8e4fe063ef28c73b37802a",
+            result["superseded_protocol_freeze_commit_sha"],
+        )
+        self.assertIs(result["original_history_preserved"], True)
 
     def test_record_is_rejected_when_the_frozen_tree_moves(self) -> None:
         tampered = copy.deepcopy(self.record)
@@ -442,7 +450,13 @@ class FreezeCommitRecordTests(unittest.TestCase):
     def test_record_is_rejected_when_it_admits_holdout_content(self) -> None:
         tampered = copy.deepcopy(self.record)
         tampered["holdout_absent_at_freeze"] = False
-        with self.assertRaisesRegex(ValueError, "existed at the freeze"):
+        with self.assertRaisesRegex(ValueError, "does not prove holdout absence"):
+            manifest_module.validate_freeze_commit_record(tampered)
+
+    def test_record_is_rejected_when_supersession_history_moves(self) -> None:
+        tampered = copy.deepcopy(self.record)
+        tampered["supersedes"]["chronology_commit_sha"] = "0" * 40
+        with self.assertRaisesRegex(ValueError, "supersession record changed"):
             manifest_module.validate_freeze_commit_record(tampered)
 
 
@@ -453,8 +467,10 @@ class CanonicalRendererTests(unittest.TestCase):
     def test_running_environment_is_the_canonical_renderer(self) -> None:
         result = verify_fingerprint(self.environment)
         self.assertEqual([], result["divergent_binding_components"])
-        self.assertIs(result["matches_canonical_renderer"], True)
+        self.assertIs(result["matches_verification_environment"], True)
         self.assertEqual(result["expected_fingerprint_sha256"], result["observed_fingerprint_sha256"])
+        if result["is_canonical_generation_platform"]:
+            self.assertIs(result["matches_canonical_renderer"], True)
 
     def test_environment_pins_the_toolchain_and_forbids_a_host_font_stack(self) -> None:
         self.assertEqual("3.11", self.environment["pinned_toolchain"]["python_major_minor"])
@@ -465,6 +481,8 @@ class CanonicalRendererTests(unittest.TestCase):
         self.assertIs(self.environment["runtime_font_download"], False)
         self.assertIs(self.environment["network_during_generation"], False)
         self.assertIs(self.environment["floating_version_tags_permitted"], False)
+        self.assertIs(self.environment["render_digests_are_platform_specific"], True)
+        self.assertEqual("windows-amd64-cpython3.11", self.environment["canonical_generation_platform"])
         self.assertTrue(self.environment["attested_platforms"])
 
     def test_unpinned_or_host_font_environment_is_refused(self) -> None:
@@ -493,10 +511,24 @@ class CanonicalRendererTests(unittest.TestCase):
         tampered["fingerprint"]["binding"]["pillow"] = "11.0.0"
         tampered["fingerprint"]["fingerprint_sha256"] = value_sha256(tampered["fingerprint"]["binding"])
         result = verify_fingerprint(tampered)
-        self.assertIs(result["matches_canonical_renderer"], False)
+        self.assertIs(result["matches_verification_environment"], False)
         self.assertIn("pillow", result["divergent_binding_components"])
         with self.assertRaisesRegex(RendererFingerprintMismatch, "pillow"):
-            require_canonical_renderer(tampered)
+            require_verification_environment(tampered)
+
+    def test_noncanonical_platform_can_verify_but_cannot_generate(self) -> None:
+        noncanonical = copy.deepcopy(self.environment)
+        profile = copy.deepcopy(noncanonical["attested_platforms"][0])
+        profile["platform_id"] = "synthetic-other-cpython3.11"
+        profile["system"] = "Synthetic"
+        profile["machine"] = "other"
+        noncanonical["attested_platforms"] = [profile]
+        noncanonical["canonical_generation_platform"] = profile["platform_id"]
+        result = require_verification_environment(noncanonical)
+        self.assertIs(result["matches_verification_environment"], True)
+        self.assertIs(result["is_canonical_generation_platform"], False)
+        with self.assertRaisesRegex(RendererFingerprintMismatch, "outside the canonical renderer"):
+            require_canonical_renderer(noncanonical)
 
     def test_reference_fixture_is_deterministic_and_explicitly_unscored(self) -> None:
         self.assertIs(REFERENCE_FIXTURE["scored"], False)
@@ -521,9 +553,11 @@ class CanonicalRendererTests(unittest.TestCase):
             "font_sha256",
             "renderer_source_sha256",
             "reference_fixture_spec_sha256",
-            "reference_fixture_binding_digests",
         ):
             self.assertIn(key, binding)
+        measured = compute_fingerprint()["measured_platform_profile"]
+        self.assertIn("reference_fixture_binding_digests", measured)
+        self.assertIn("reference_fixture_encoded_digests", measured)
 
 
 class HoldoutDistributionContractTests(unittest.TestCase):
