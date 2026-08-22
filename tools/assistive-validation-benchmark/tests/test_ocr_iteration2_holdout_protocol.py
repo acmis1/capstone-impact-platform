@@ -609,6 +609,9 @@ class HoldoutDistributionContractTests(unittest.TestCase):
         self.protocol = validate_protocol(load_json(data_root() / "protocol.json"))
         self.corpus = synthetic_corpus()
 
+    def case_with_negative_kind(self, kind: str) -> dict[str, object]:
+        return next(case for case in self.corpus["ocr_cases"] if case["negative_kind"] == kind)
+
     def test_a_conforming_future_corpus_validates(self) -> None:
         summary = validate_holdout_corpus(self.corpus, self.protocol)
         self.assertEqual(40, summary["scored_case_count"])
@@ -619,6 +622,38 @@ class HoldoutDistributionContractTests(unittest.TestCase):
         self.assertGreaterEqual(summary["material_negative_count"], 8)
         self.assertIs(summary["controls_counted_toward_quality_rates"], False)
         self.assertTrue(all(summary["title_text_coverage"].values()))
+
+    def test_one_character_label_rejects_a_many_character_and_word_difference(self) -> None:
+        case = self.case_with_negative_kind("one_character_material")
+        case["metadata_title"] = "Completely Different Multi Word Synthetic Poster Heading"
+        with self.assertRaisesRegex(ValueError, "one-character"):
+            validate_holdout_corpus(self.corpus, self.protocol)
+
+    def test_one_word_label_rejects_several_changed_words(self) -> None:
+        case = self.case_with_negative_kind("one_word_material")
+        case["metadata_title"] = str(case["title"]).replace(
+            "Multi-Modal CO₂ Café", "Distributed Coastal Water Platform"
+        )
+        with self.assertRaisesRegex(ValueError, "one-word"):
+            validate_holdout_corpus(self.corpus, self.protocol)
+
+    def test_number_or_version_label_requires_a_number_or_version_change(self) -> None:
+        case = self.case_with_negative_kind("number_or_version")
+        case["metadata_title"] = str(case["title"]).replace("Sensor", "Controller")
+        with self.assertRaisesRegex(ValueError, "number or version"):
+            validate_holdout_corpus(self.corpus, self.protocol)
+
+    def test_punctuation_only_label_rejects_a_semantic_word_substitution(self) -> None:
+        case = self.case_with_negative_kind("punctuation_only_non_material")
+        case["metadata_title"] = str(case["title"]).replace("Sensor", "Controller")
+        with self.assertRaisesRegex(ValueError, "punctuation-only"):
+            validate_holdout_corpus(self.corpus, self.protocol)
+
+    def test_material_negative_rejects_normalized_equal_titles(self) -> None:
+        case = self.case_with_negative_kind("one_character_material")
+        case["metadata_title"] = str(case["title"]).replace("‘", "'").replace("’", "'")
+        with self.assertRaisesRegex(ValueError, "normalized titles"):
+            validate_holdout_corpus(self.corpus, self.protocol)
 
     def test_a_corpus_of_the_wrong_size_is_refused(self) -> None:
         short = copy.deepcopy(self.corpus)
