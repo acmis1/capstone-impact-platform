@@ -96,7 +96,10 @@ jobs:
             docs/assistive-validation/evidence/ocr-productionization-diagnostic-report.json \
             docs/assistive-validation/ocr-productionization-benchmark.md \
             docs/assistive-validation/ocr-productionization-failure-analysis.md \
-            tools/assistive-validation-benchmark/ocr-productionization
+            docs/assistive-validation/ocr-productionization-iteration2-calibration.md \
+            docs/assistive-validation/evidence/ocr-productionization-iteration2-calibration.json \
+            tools/assistive-validation-benchmark/ocr-productionization \
+            tools/assistive-validation-benchmark/ocr-iteration2-calibration
 
       - name: Prove OCR productionization corpus byte determinism
         working-directory: tools/assistive-validation-benchmark
@@ -119,6 +122,38 @@ jobs:
       - name: Validate OCR Iteration 2 calibration arithmetic and decision
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_iteration2_calibration check-report
+
+      # Recomputes the committed development-only correction evidence from its stored captures.
+      # It runs no OCR and consumes no fresh holdout.
+      - name: Validate OCR Iteration 2 distractor development evidence
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration2_holdout_protocol check-development-evidence
+
+      # Iteration 2B2 froze the corrected fresh-holdout protocol. These steps stay cheap on
+      # purpose: no PaddlePaddle install, no model download, no neural OCR, no GPU and no holdout
+      # creation.
+      - name: Validate OCR Iteration 2 holdout protocol freeze and no-holdout contract
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration2_holdout_protocol check
+
+      # Cross-platform verification binds the exact toolchain/font/source/fixture identity.
+      # Rendered pixels are platform-specific: only the exact Windows profile may generate the
+      # holdout, while ubuntu-latest reports its measurement and proves within-run determinism.
+      - name: Verify the freeze manifest and renderer environment binding
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration2_holdout_protocol verify-freeze
+
+      - name: Prove the canonical renderer reference fixture is deterministic
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_iteration2_holdout_protocol fingerprint > ocr2h-fingerprint-a.json
+          python -m assistive_validation_benchmark.ocr_iteration2_holdout_protocol fingerprint > ocr2h-fingerprint-b.json
+          cmp ocr2h-fingerprint-a.json ocr2h-fingerprint-b.json
+          rm ocr2h-fingerprint-a.json ocr2h-fingerprint-b.json
+
+      - name: Verify the stored OCR Iteration 2 holdout protocol-freeze evidence
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration2_holdout_protocol check-evidence
 
       - name: Generate deterministic synthetic corpus smoke fixture
         working-directory: tools/assistive-validation-benchmark
