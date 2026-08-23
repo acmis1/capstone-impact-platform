@@ -5,8 +5,8 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const yaml = require('js-yaml') as { load(input: string): unknown };
-const prohibited = /stu[d]ents?/i;
-const frozenSyntheticOcrEvidence = /^(?:tools\/assistive-validation-benchmark\/(?:ocr-productionization\/corpus\/(?:calibration|holdout)|ocr-iteration2-calibration\/corpus\/calibration|ocr-iteration2-fresh-holdout\/corpus\/holdout)\.json|tools\/assistive-validation-benchmark\/src\/assistive_validation_benchmark\/(?:ocr_iteration2_holdout_protocol\/distractor_calibration|ocr_iteration2_fresh_holdout\/corpus)\.py|docs\/assistive-validation\/evidence\/ocr-productionization(?:-iteration2-distractor-calibration|-report)\.json)$/;
+export const prohibited = /stu[d]ents?/i;
+export const frozenSyntheticOcrEvidence = /^(?:tools\/assistive-validation-benchmark\/(?:ocr-productionization\/corpus\/(?:calibration|holdout)|ocr-iteration2-calibration\/corpus\/calibration|ocr-iteration2-fresh-holdout\/corpus\/holdout)\.json|tools\/assistive-validation-benchmark\/src\/assistive_validation_benchmark\/(?:ocr_iteration2_holdout_protocol\/distractor_calibration|ocr_iteration2_fresh_holdout\/corpus)\.py|docs\/assistive-validation\/evidence\/ocr-productionization(?:-iteration2-distractor-calibration|-report)\.json|docs\/assistive-validation\/evidence\/ocr-iteration2-fresh-holdout\/holdout-capture\.json)$/;
 
 function trackedFiles(repoRoot: string): string[] {
   return execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
@@ -14,15 +14,27 @@ function trackedFiles(repoRoot: string): string[] {
     .filter(Boolean);
 }
 
-export function checkTerminology(repoRoot = path.resolve(__dirname, '../../../../')): string[] {
+export interface TerminologyCheckOptions {
+  trackedFilesProvider?: (repoRoot: string) => string[];
+  fileReader?: (filePath: string) => Buffer;
+}
+
+export function checkTerminology(
+  repoRoot = path.resolve(__dirname, '../../../../'),
+  options?: TerminologyCheckOptions,
+): string[] {
+  const files = options?.trackedFilesProvider
+    ? options.trackedFilesProvider(repoRoot)
+    : trackedFiles(repoRoot);
+  const read = options?.fileReader || ((filePath: string) => fs.readFileSync(filePath));
   const failures: string[] = [];
-  for (const file of trackedFiles(repoRoot)) {
+  for (const file of files) {
     if (prohibited.test(file)) failures.push(`${file}: filename`);
     // These machine files contain explicitly synthetic benchmark ground truth or immutable OCR
     // output. Product copy and all other repository content remain subject to the terminology gate.
     if (frozenSyntheticOcrEvidence.test(file)) continue;
     const absolutePath = path.join(repoRoot, file);
-    const bytes = fs.readFileSync(absolutePath);
+    const bytes = read(absolutePath);
     if (bytes.includes(0)) continue;
     const lines = bytes.toString('utf8').split(/\r?\n/);
     lines.forEach((line, index) => {
