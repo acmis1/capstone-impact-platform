@@ -32,7 +32,12 @@
 
             if (ref === 'xojnnhilqaldxoilmxli') return null;
 
-            if (parsed.pathname !== '/storage/v1/object/public/feeds/capstones-latest.json') return null;
+            const allowedFeedPaths = [
+                '/storage/v1/object/public/feeds/capstones-latest.json',
+                '/storage/v1/object/public/public-feeds/capstones-latest.json'
+            ];
+            const rawPath = rawUrl.slice(match[0].length).split(/[?#]/, 1)[0];
+            if (!allowedFeedPaths.includes(parsed.pathname) || !allowedFeedPaths.includes(rawPath)) return null;
 
             return rawUrl;
         } catch (e) {

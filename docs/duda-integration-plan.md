@@ -34,7 +34,9 @@ Missing, malformed, disabled, production/live, mismatched, arbitrary remote, HTT
 
 ## 4. Duda TEST compatibility
 
-The existing TEST-site renderer remains `Prototype/duda/bodyend.html`, with the reusable listing/detail HTML and CSS beside it. It consumes one `window.CAPSTONE_FEED_URL`, renders listing/search/filter data, selects detail records by the existing numeric `id`, and supports the current poster, `posterPdf`, accessible poster text, snapshots, layout configuration, links, categories, program, discipline, industry, and year fields.
+The existing TEST-site renderer remains `Prototype/duda/bodyend.html`, with the reusable listing/detail HTML and CSS beside it. It consumes one `window.CAPSTONE_FEED_URL`, renders listing/search/filter data, selects detail records by the existing numeric `id`, and supports the current poster, `posterPdf`, accessible poster text, snapshots, layout configuration, links, categories, program, discipline, industry, and year fields. Its feed URL validator intentionally accepts exactly the legacy Prototype `feeds/capstones-latest.json` path and the Admin/CMS staging `public-feeds/capstones-latest.json` path.
+
+The staging demonstration must configure the latter Admin/CMS staging path; legacy Prototype material legitimately continues to use the former path.
 
 The Admin/CMS feed also includes `publicId` and the additive `snapshotMedia: [{ url, altText }]` contract. The current Duda script still renders the unchanged `snapshots: string[]` shape and does not yet consume `snapshotMedia` alt text. That is a non-blocking media/accessibility follow-up owned outside this integration slice; no Duda template or teammate media work is absorbed here.
 
