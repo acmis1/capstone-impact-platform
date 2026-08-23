@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  canExecuteLocalPublication,
+  canExecutePublication,
   initialPublicationPreparationState,
   publicationPreparationReducer,
-  shouldShowLocalExecution,
+  shouldShowPublicationExecution,
 } from './publicationPreparationState';
 
 const plan = {
@@ -15,33 +15,35 @@ const plan = {
 };
 const planned = publicationPreparationReducer(initialPublicationPreparationState, { type: 'PLAN_SUCCEEDED', plan });
 
-describe('publication preparation local execution state', () => {
-  it('does not show execution without local availability', () => {
-    expect(shouldShowLocalExecution(true, false, planned)).toBe(false);
+describe('publication preparation execution state', () => {
+  it('does not show execution without an available target', () => {
+    expect(shouldShowPublicationExecution(true, null, planned)).toBe(false);
   });
 
   it('does not show execution without projects.publish authority', () => {
-    expect(shouldShowLocalExecution(false, true, planned)).toBe(false);
+    expect(shouldShowPublicationExecution(false, 'local', planned)).toBe(false);
   });
 
   it('does not show execution before a plan is generated', () => {
-    expect(shouldShowLocalExecution(true, true, initialPublicationPreparationState)).toBe(false);
+    expect(shouldShowPublicationExecution(true, 'local', initialPublicationPreparationState)).toBe(false);
   });
 
   it('reveals local execution acknowledgement after a successful plan', () => {
-    expect(shouldShowLocalExecution(true, true, planned)).toBe(true);
+    expect(shouldShowPublicationExecution(true, 'local', planned)).toBe(true);
+    expect(shouldShowPublicationExecution(true, 'staging', planned)).toBe(true);
   });
 
   it('requires explicit acknowledgement before execution', () => {
-    expect(canExecuteLocalPublication(true, true, planned)).toBe(false);
+    expect(canExecutePublication(true, 'local', planned)).toBe(false);
     const acknowledged = publicationPreparationReducer(planned, { type: 'ACKNOWLEDGEMENT_CHANGED', acknowledged: true });
-    expect(canExecuteLocalPublication(true, true, acknowledged)).toBe(true);
+    expect(canExecutePublication(true, 'local', acknowledged)).toBe(true);
+    expect(canExecutePublication(true, 'staging', acknowledged)).toBe(true);
   });
 
   it('prevents duplicate execution while pending', () => {
     const acknowledged = publicationPreparationReducer(planned, { type: 'ACKNOWLEDGEMENT_CHANGED', acknowledged: true });
     const pending = publicationPreparationReducer(acknowledged, { type: 'EXECUTION_STARTED' });
-    expect(canExecuteLocalPublication(true, true, pending)).toBe(false);
+    expect(canExecutePublication(true, 'local', pending)).toBe(false);
   });
 
   it('clears stale plan and acknowledgement after NOT_READY or another bounded execution error', () => {
@@ -53,15 +55,15 @@ describe('publication preparation local execution state', () => {
   it.each(['COMPLETED', 'ALREADY_COMPLETED'] as const)('records %s as successful evidence', (resultCode) => {
     const success = publicationPreparationReducer(planned, {
       type: 'EXECUTION_SUCCEEDED',
-      result: { resultCode, publicId: plan.publicId, snapshotId: 'snapshot-id', recordCount: 2, feedHash: plan.feedHash },
+      result: { resultCode, publicId: plan.publicId, snapshotId: 'snapshot-id', recordCount: 2, feedHash: plan.feedHash, feedPublicUrl: 'https://feed.example/capstones-latest.json' },
     });
     expect(success.success?.resultCode).toBe(resultCode);
     expect(success.error).toBeNull();
-    expect(canExecuteLocalPublication(true, true, success)).toBe(false);
+    expect(canExecutePublication(true, 'local', success)).toBe(false);
   });
 
   it('never enables execution in a hosted environment even with a plan and acknowledgement', () => {
     const acknowledged = publicationPreparationReducer(planned, { type: 'ACKNOWLEDGEMENT_CHANGED', acknowledged: true });
-    expect(canExecuteLocalPublication(true, false, acknowledged)).toBe(false);
+    expect(canExecutePublication(true, null, acknowledged)).toBe(false);
   });
 });

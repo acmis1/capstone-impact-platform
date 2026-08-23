@@ -21,13 +21,13 @@ import {
 } from './publicationArtifact';
 
 export type ControlledPublicationResult =
-  | { resultCode: 'COMPLETED' | 'ALREADY_COMPLETED'; attemptId: string; snapshotId: string; auditRecordId: string; recordCount: number; feedHash: string }
+  | { resultCode: 'COMPLETED' | 'ALREADY_COMPLETED'; attemptId: string; snapshotId: string; auditRecordId: string; recordCount: number; feedHash: string; feedPublicUrl: string }
   | { resultCode: 'PERMISSION_DENIED' | 'PUBLICATION_IN_PROGRESS' | 'COMPENSATION_INCOMPLETE' | 'ATTEMPT_OWNER_MISMATCH' }
   | { resultCode: 'NOT_READY'; readinessCode: string; blockers: string[] }
   | { resultCode: 'EXECUTION_FAILED'; failureCode: string; compensationFailureCode?: string };
 
 export interface ControlledPublicationDependencies {
-  assertDisposableLocalEnvironment(): void;
+  assertExecutionEnvironment(): void;
   getReadiness(): Promise<PublicationReadinessResult>;
   listProjects(): Promise<Project[]>;
   listProjectMedia(): Promise<PublicationMediaSource[]>;
@@ -162,7 +162,8 @@ async function verifyAlreadyCompletedPublication(params: {
   const { dependencies, completed, publicId, privateBucket, publicFeedBucket, publicFeedPath } = params;
   if (!completed.publishedSnapshotId || !completed.publishAuditRecordId || completed.artifactBoundAt === null
     || completed.candidateFeedHash === null || completed.candidateRecordCount === null
-    || completed.feedStorageBucket === null || completed.feedStoragePath === null || completed.mediaManifest === null) {
+    || completed.feedStorageBucket === null || completed.feedStoragePath === null
+    || completed.feedPublicUrl === null || completed.mediaManifest === null) {
     throw new BoundedFailure('COMPLETED_ATTEMPT_EVIDENCE_INCOMPLETE');
   }
 
@@ -173,10 +174,13 @@ async function verifyAlreadyCompletedPublication(params: {
   }
 
   const snapshot = await dependencies.getPublishedSnapshot(completed.publishedSnapshotId);
+  const currentFeedPublicUrl = dependencies.getPublicUrl(publicFeedBucket, publicFeedPath);
   if (!snapshot || snapshot.feedHash !== completed.candidateFeedHash
     || snapshot.recordCount !== completed.candidateRecordCount
     || snapshot.storageBucket !== completed.feedStorageBucket
     || snapshot.storagePath !== `${completed.feedStorageBucket}/${completed.feedStoragePath}`
+    || snapshot.publicUrl !== completed.feedPublicUrl
+    || snapshot.publicUrl !== currentFeedPublicUrl
     || snapshot.createdBy !== completed.adminId) {
     throw new BoundedFailure('COMPLETED_SNAPSHOT_EVIDENCE_INVALID');
   }
@@ -219,6 +223,7 @@ async function verifyAlreadyCompletedPublication(params: {
     auditRecordId: completed.publishAuditRecordId,
     recordCount: completed.candidateRecordCount,
     feedHash: completed.candidateFeedHash,
+    feedPublicUrl: currentFeedPublicUrl,
   };
 }
 
@@ -266,9 +271,9 @@ export async function executeControlledPublication(params: {
   if (!canPreparePublication(permissions)) return { resultCode: 'PERMISSION_DENIED' };
 
   try {
-    dependencies.assertDisposableLocalEnvironment();
+    dependencies.assertExecutionEnvironment();
   } catch {
-    return { resultCode: 'EXECUTION_FAILED', failureCode: 'NON_LOCAL_ENVIRONMENT' };
+    return { resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' };
   }
 
   let attemptId: string | null = null;
@@ -409,6 +414,7 @@ export async function executeControlledPublication(params: {
       auditRecordId: String(finalization.auditRecordId || ''),
       recordCount: plan.recordCount,
       feedHash: plan.feedHash,
+      feedPublicUrl: dependencies.getPublicUrl(publicFeedBucket, publicFeedPath),
     };
   } catch (error) {
     if (error instanceof SimulatedProcessCrash) throw error;

@@ -12,7 +12,10 @@ export interface PublicationSuccessEvidence {
   snapshotId: string;
   recordCount: number;
   feedHash: string;
+  feedPublicUrl: string;
 }
+
+export type PublicationExecutionTarget = 'local' | 'staging';
 
 export interface PublicationPreparationState {
   operation: 'idle' | 'planning' | 'executing';
@@ -61,19 +64,19 @@ export function publicationPreparationReducer(
   }
 }
 
-export function shouldShowLocalExecution(
+export function shouldShowPublicationExecution(
   canPrepare: boolean,
-  localExecutionAvailable: boolean,
+  executionTarget: PublicationExecutionTarget | null,
   state: PublicationPreparationState,
 ): boolean {
-  return canPrepare && localExecutionAvailable && state.plan !== null;
+  return canPrepare && executionTarget !== null && state.plan !== null && state.success === null;
 }
 
-export function canExecuteLocalPublication(
+export function canExecutePublication(
   canPrepare: boolean,
-  localExecutionAvailable: boolean,
+  executionTarget: PublicationExecutionTarget | null,
   state: PublicationPreparationState,
 ): boolean {
-  return shouldShowLocalExecution(canPrepare, localExecutionAvailable, state) &&
+  return shouldShowPublicationExecution(canPrepare, executionTarget, state) &&
     state.acknowledged && state.operation === 'idle' && state.success === null;
 }

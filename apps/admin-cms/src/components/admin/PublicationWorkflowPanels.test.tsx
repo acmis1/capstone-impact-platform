@@ -16,6 +16,7 @@ const PLAN = {
   confirmedAt: '2026-08-16T08:00:00.000Z',
   recordCount: 2,
   feedHash: 'feed-hash',
+  feedPublicUrl: 'http://127.0.0.1:54321/storage/v1/object/public/public-feeds/capstones-latest.json',
 };
 
 const SUCCESS = {
@@ -61,16 +62,16 @@ describe('PublicationReadinessPanel', () => {
 
 describe('PublicationPreparationPanel', () => {
   it('does not render publication mutations without permission or readiness', () => {
-    const { rerender } = render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare={false} localExecutionAvailable />);
+    const { rerender } = render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare={false} executionTarget="local" />);
     expect(screen.queryByRole('button')).toBeNull();
-    rerender(<PublicationPreparationPanel publicId={PLAN.publicId} ready={false} canPrepare localExecutionAvailable />);
+    rerender(<PublicationPreparationPanel publicId={PLAN.publicId} ready={false} canPrepare executionTarget="local" />);
     expect(screen.queryByRole('button')).toBeNull();
   });
 
   it('generates a plan through the exact POST endpoint without a body', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, result: PLAN }) });
     vi.stubGlobal('fetch', fetchMock);
-    render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare localExecutionAvailable={false} />);
+    render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare executionTarget={null} />);
 
     fireEvent.click(screen.getByRole('button', { name: /Generate publication plan/i }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/projects/2026-agri-iot/publication-plan', { method: 'POST' }));
@@ -83,7 +84,7 @@ describe('PublicationPreparationPanel', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, result: PLAN }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, result: SUCCESS }) });
     vi.stubGlobal('fetch', fetchMock);
-    render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare localExecutionAvailable />);
+    render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare executionTarget="local" />);
 
     fireEvent.click(screen.getByRole('button', { name: /Generate publication plan/i }));
     const executeButton = await screen.findByRole('button', { name: /Execute local publication/i });
@@ -101,12 +102,58 @@ describe('PublicationPreparationPanel', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, result: PLAN }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, result: { ...SUCCESS, resultCode: 'ALREADY_COMPLETED' } }) });
     vi.stubGlobal('fetch', fetchMock);
-    render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare localExecutionAvailable />);
+    render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare executionTarget="local" />);
 
     fireEvent.click(screen.getByRole('button', { name: /Generate publication plan/i }));
     fireEvent.click(await screen.findByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: /Execute local publication/i }));
     expect(await screen.findByText('Local publication was already completed.')).toBeTruthy();
+  });
+
+  it('labels staging publication explicitly, submits no browser authority, and shows stable feed evidence', async () => {
+    const stagingSuccess = {
+      ...SUCCESS,
+      feedPublicUrl: 'https://synthetic-pp1-staging.supabase.co/storage/v1/object/public/public-feeds/capstones-latest.json',
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, result: PLAN }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, result: stagingSuccess }) });
+    vi.stubGlobal('fetch', fetchMock);
+    const { rerender } = render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare executionTarget="staging" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Generate publication plan/i }));
+    expect(await screen.findByText('Staging showcase publication')).toBeTruthy();
+    expect(screen.getByText(/non-production staging public feed consumed by the Duda TEST showcase/i)).toBeTruthy();
+    expect(screen.getByText(/does not publish the live Impact site/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish to staging showcase' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/projects/2026-agri-iot/staging-publication',
+      { method: 'POST' },
+    ));
+    expect(await screen.findByText('Staging showcase publication completed.')).toBeTruthy();
+    const feedLink = screen.getByRole('link', { name: stagingSuccess.feedPublicUrl });
+    expect(feedLink.getAttribute('href')).toBe(stagingSuccess.feedPublicUrl);
+    expect(JSON.stringify(fetchMock.mock.calls[1])).not.toMatch(/service|secret|supabaseUrl|bucket/i);
+
+    rerender(<PublicationPreparationPanel publicId={PLAN.publicId} ready={false} canPrepare executionTarget="staging" />);
+    expect(screen.getByText('Staging showcase publication completed.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: stagingSuccess.feedPublicUrl })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Publish to staging showcase' })).toBeNull();
+  });
+
+  it('shows bounded staging route failures in understandable language', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, result: PLAN }) })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ success: false, error: 'Another publication is already in progress.' }) });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare executionTarget="staging" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Generate publication plan/i }));
+    fireEvent.click(await screen.findByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish to staging showcase' }));
+    expect(await screen.findByText('Another publication is already in progress.')).toBeTruthy();
   });
 });
 

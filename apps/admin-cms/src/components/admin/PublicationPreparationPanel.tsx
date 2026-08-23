@@ -4,12 +4,13 @@ import { useReducer, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, FileCheck2, FlaskConical } from 'lucide-react';
 import {
-  canExecuteLocalPublication,
+  canExecutePublication,
   initialPublicationPreparationState,
   publicationPreparationReducer,
-  PublicationPlanEvidence,
-  PublicationSuccessEvidence,
-  shouldShowLocalExecution,
+  type PublicationExecutionTarget,
+  type PublicationPlanEvidence,
+  type PublicationSuccessEvidence,
+  shouldShowPublicationExecution,
 } from './publicationPreparationState';
 import { Alert } from '../ui/alert';
 import { Button } from '../ui/button';
@@ -18,15 +19,15 @@ interface PublicationPreparationPanelProps {
   publicId: string;
   ready: boolean;
   canPrepare: boolean;
-  localExecutionAvailable: boolean;
+  executionTarget: PublicationExecutionTarget | null;
 }
 
-export function PublicationPreparationPanel({ publicId, ready, canPrepare, localExecutionAvailable }: PublicationPreparationPanelProps) {
+export function PublicationPreparationPanel({ publicId, ready, canPrepare, executionTarget }: PublicationPreparationPanelProps) {
   const router = useRouter();
   const [state, dispatch] = useReducer(publicationPreparationReducer, initialPublicationPreparationState);
   const inFlightRef = useRef(false);
 
-  if (!canPrepare || !ready) return null;
+  if (!canPrepare || (!ready && state.success === null)) return null;
 
   async function generate() {
     if (inFlightRef.current || state.operation !== 'idle') return;
@@ -45,24 +46,35 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, local
   }
 
   async function execute() {
-    if (inFlightRef.current || !canExecuteLocalPublication(canPrepare, localExecutionAvailable, state)) return;
+    if (inFlightRef.current || !canExecutePublication(canPrepare, executionTarget, state) || executionTarget === null) return;
     inFlightRef.current = true;
     dispatch({ type: 'EXECUTION_STARTED' });
+    const isStaging = executionTarget === 'staging';
+    const endpoint = isStaging ? 'staging-publication' : 'local-publication';
+    const fallbackError = isStaging
+      ? 'Staging showcase publication could not be completed.'
+      : 'Local publication could not be completed.';
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(publicId)}/local-publication`, { method: 'POST' });
+      const response = await fetch(`/api/projects/${encodeURIComponent(publicId)}/${endpoint}`, { method: 'POST' });
       const data = await response.json().catch(() => ({ success: false }));
-      if (!response.ok || !data.success) throw new Error('Local publication could not be completed.');
+      if (!response.ok || !data.success) {
+        throw new Error(typeof data.error === 'string' ? data.error : fallbackError);
+      }
       dispatch({ type: 'EXECUTION_SUCCEEDED', result: data.result as PublicationSuccessEvidence });
       router.refresh();
-    } catch {
-      dispatch({ type: 'EXECUTION_FAILED', error: 'Local publication could not be completed. Please try again.' });
+    } catch (error) {
+      dispatch({
+        type: 'EXECUTION_FAILED',
+        error: error instanceof Error ? error.message : `${fallbackError} Please try again.`,
+      });
     } finally {
       inFlightRef.current = false;
     }
   }
 
   const pending = state.operation !== 'idle';
-  const executionEnabled = canExecuteLocalPublication(canPrepare, localExecutionAvailable, state);
+  const executionEnabled = canExecutePublication(canPrepare, executionTarget, state);
+  const isStaging = executionTarget === 'staging';
 
   return (
     <div className="mt-5 flex flex-col gap-4 border-t border-border pt-5 text-xs sm:text-sm">
@@ -96,26 +108,35 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, local
         </Alert>
       )}
 
-      {shouldShowLocalExecution(canPrepare, localExecutionAvailable, state) && (
+      {shouldShowPublicationExecution(canPrepare, executionTarget, state) && (
         <div className="flex flex-col gap-4 border-t border-border pt-5">
           <div>
-            <div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-warning" aria-hidden="true" /><h4 className="text-sm font-semibold text-foreground">Local test publication</h4></div>
-            <p className="mt-1 text-sm text-muted-foreground">This test action publishes only to the disposable Local Supabase environment. It does not publish to Duda or the live showcase.</p>
+            <div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-warning" aria-hidden="true" /><h4 className="text-sm font-semibold text-foreground">{isStaging ? 'Staging showcase publication' : 'Local test publication'}</h4></div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {isStaging
+                ? 'This action writes the non-production staging public feed consumed by the Duda TEST showcase. It does not publish the live Impact site.'
+                : 'This test action publishes only to the disposable Local Supabase environment. It does not publish to Duda or the live showcase.'}
+            </p>
           </div>
           <label className="flex items-start gap-2 text-sm text-foreground">
             <input type="checkbox" checked={state.acknowledged} disabled={pending || state.success !== null} onChange={(event) => dispatch({ type: 'ACKNOWLEDGEMENT_CHANGED', acknowledged: event.target.checked })} className="mt-0.5 h-4 w-4 rounded border-input" />
-            <span>I understand this publishes only to the disposable Local Supabase test environment.</span>
+            <span>{isStaging
+              ? 'I understand this updates only the non-production staging feed for the Duda TEST showcase, not the live Impact site.'
+              : 'I understand this publishes only to the disposable Local Supabase test environment.'}</span>
           </label>
-          <div><Button type="button" variant="outline" onClick={execute} disabled={!executionEnabled} isLoading={state.operation === 'executing'}>{state.operation === 'executing' ? 'Executing local publication' : 'Execute local publication'}</Button></div>
+          <div><Button type="button" variant="outline" onClick={execute} disabled={!executionEnabled} isLoading={state.operation === 'executing'}>{state.operation === 'executing' ? (isStaging ? 'Publishing to staging showcase' : 'Executing local publication') : (isStaging ? 'Publish to staging showcase' : 'Execute local publication')}</Button></div>
         </div>
       )}
 
       {state.success && (
-        <Alert variant="success" title={state.success.resultCode === 'ALREADY_COMPLETED' ? 'Local publication was already completed.' : 'Local publication completed.'}>
+        <Alert variant="success" title={state.success.resultCode === 'ALREADY_COMPLETED'
+          ? (isStaging ? 'Staging showcase publication was already completed.' : 'Local publication was already completed.')
+          : (isStaging ? 'Staging showcase publication completed.' : 'Local publication completed.')}>
           <dl className="mt-2 space-y-1 text-sm text-muted-foreground">
             <div><dt className="inline font-medium text-foreground">Records:</dt> <dd className="inline">{state.success.recordCount}</dd></div>
             <div><dt className="inline font-medium text-foreground">SHA-256:</dt> <dd className="inline font-mono break-all">{state.success.feedHash}</dd></div>
             <div><dt className="inline font-medium text-foreground">Snapshot:</dt> <dd className="inline font-mono break-all">{state.success.snapshotId}</dd></div>
+            <div><dt className="inline font-medium text-foreground">Stable public feed:</dt> <dd className="inline break-all"><a className="underline" href={state.success.feedPublicUrl} target="_blank" rel="noopener noreferrer">{state.success.feedPublicUrl}</a></dd></div>
           </dl>
         </Alert>
       )}
