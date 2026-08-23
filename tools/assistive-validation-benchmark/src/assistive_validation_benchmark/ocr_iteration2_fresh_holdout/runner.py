@@ -40,11 +40,18 @@ from .seal import (
 RUN_STATE_SCHEMA = "pp1-ocr-iteration2-one-shot-state/v1"
 CAPTURE_FILENAME = "holdout-capture.json"
 REPORT_FILENAME = "holdout-report.json"
+CANONICAL_RUN_DIRECTORY = "ocr-iteration2-fresh-holdout-one-shot"
+OFFLINE_GUARD_MECHANISM = "process-wide Python socket connect/create_connection/connect_ex denial"
 T = TypeVar("T")
 
 
-def state_path(run_dir: Path) -> Path:
-    return run_dir / "one-shot-state.json"
+def canonical_run_dir() -> Path:
+    """Return the only authoritative run namespace for this sealed holdout checkout."""
+    return tool_root() / "artifacts" / CANONICAL_RUN_DIRECTORY
+
+
+def canonical_state_path() -> Path:
+    return canonical_run_dir() / "one-shot-state.json"
 
 
 def _write_state(path: Path, state: dict[str, Any]) -> None:
@@ -53,8 +60,9 @@ def _write_state(path: Path, state: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
-def atomic_claim_run_state(path: Path, binding: dict[str, Any]) -> dict[str, Any]:
+def atomic_claim_run_state(binding: dict[str, Any]) -> dict[str, Any]:
     """Claim the sole legitimate run with an O_EXCL create before crossing the OCR boundary."""
+    path = canonical_state_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     state = {
         "schema_version": RUN_STATE_SCHEMA,
@@ -81,15 +89,17 @@ def atomic_claim_run_state(path: Path, binding: dict[str, Any]) -> dict[str, Any
 
 
 def execute_once(
-    path: Path,
     binding: dict[str, Any],
     *,
     preflight: Callable[[], T],
     operation: Callable[[T], dict[str, Any]],
 ) -> dict[str, Any]:
     """Run preflight before claiming; every post-claim failure consumes the one shot."""
+    path = canonical_state_path()
+    if path.exists():
+        raise ValueError("one-shot run state already exists; a second first run is refused")
     prepared = preflight()
-    state = atomic_claim_run_state(path, binding)
+    state = atomic_claim_run_state(binding)
     try:
         result = operation(prepared)
     except Exception:
@@ -127,11 +137,62 @@ def _breakdown(records: list[dict[str, Any]], cases: dict[str, dict[str, Any]], 
     return result
 
 
+def _provisioning_gate(protocol: dict[str, Any], evidence: Any) -> dict[str, Any]:
+    candidate = protocol["candidate"]
+    observed = evidence if isinstance(evidence, dict) else {}
+    artifacts = observed.get("artifacts")
+    artifact_records = artifacts if isinstance(artifacts, list) else []
+    artifact_map = {
+        item.get("artifact"): item
+        for item in artifact_records
+        if isinstance(item, dict) and isinstance(item.get("artifact"), str)
+    }
+    detection = candidate["detection_artifact"]
+    recognition = candidate["recognition_artifact"]
+    extracted_bytes = [item.get("extracted_bytes") for item in artifact_records if isinstance(item, dict)]
+    checks = {
+        "candidate_engine": observed.get("engine") == candidate["engine"],
+        "frozen_artifact_identities": len(artifact_records) == 2
+        and set(artifact_map) == {detection, recognition},
+        "detection_tree": artifact_map.get(detection, {}).get("tree_sha256")
+        == candidate["detection_tree_sha256"],
+        "recognition_tree": artifact_map.get(recognition, {}).get("tree_sha256")
+        == candidate["recognition_tree_sha256"],
+        "verified_artifact_bytes": len(extracted_bytes) == 2
+        and all(isinstance(value, int) and value >= 0 for value in extracted_bytes)
+        and sum(extracted_bytes) == candidate["artifact_footprint_bytes"],
+        "artifact_footprint": observed.get("artifact_footprint_bytes")
+        == candidate["artifact_footprint_bytes"],
+        "no_download_during_verification": observed.get("downloaded_during_verification") is False,
+    }
+    return {
+        "verified_evidence": evidence,
+        "checks": checks,
+        "passed": all(checks.values()),
+    }
+
+
+def _offline_security_gate(capture: dict[str, Any]) -> dict[str, Any]:
+    evidence = capture.get("offline")
+    observed = evidence if isinstance(evidence, dict) else {}
+    checks = {
+        "enabled": observed.get("enabled") is True,
+        "self_test_passed": observed.get("self_test_passed") is True,
+        "frozen_mechanism": observed.get("mechanism") == OFFLINE_GUARD_MECHANISM,
+    }
+    return {
+        "recorded_evidence": evidence,
+        "checks": checks,
+        "passed": all(checks.values()),
+    }
+
+
 def score_holdout_capture(
     capture: dict[str, Any],
     *,
     corpus: dict[str, Any],
     protocol: dict[str, Any],
+    provisioning: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Score the one capture through frozen selector, safety, ordering, WER and ceiling APIs."""
     if capture.get("schema_version") != "pp1-ocr-iteration2-capture/v1":
@@ -192,7 +253,26 @@ def score_holdout_capture(
         "exact_title": exact_count >= quality["minimum_exact_titles"],
         "primary_wer": orders["column"]["wer"] is not None
         and orders["column"]["wer"] <= quality["primary_mean_wer_maximum"],
-        "material_false_automatic_agreements": material_false <= quality["material_false_agreements_maximum"],
+    }
+    quality_family = {
+        "checks": quality_checks,
+        "scored_case_count": len(records),
+        "failed_case_count": len(failures),
+        "exact_title_count": exact_count,
+        "minimum_exact_titles": quality["minimum_exact_titles"],
+        "primary_wer": orders["column"]["wer"],
+        "primary_wer_maximum": quality["primary_mean_wer_maximum"],
+        "passed": all(quality_checks.values()),
+    }
+    title_safety_checks = {
+        "material_false_automatic_agreements": material_false
+        <= quality["material_false_agreements_maximum"],
+    }
+    title_safety_family = {
+        "checks": title_safety_checks,
+        "material_false_automatic_agreements": material_false,
+        "maximum": quality["material_false_agreements_maximum"],
+        "passed": all(title_safety_checks.values()),
     }
     operational = {
         "historical_prior": historical,
@@ -200,7 +280,21 @@ def score_holdout_capture(
         "current_configuration_checks": current_checks,
         "passed": historical["plausibly_inside_established_limits"] and all(current_checks.values()),
     }
-    passed = all(quality_checks.values()) and operational["passed"]
+    gate_families = {
+        "quality": quality_family,
+        "title_safety": title_safety_family,
+        "operational": operational,
+        "provisioning": _provisioning_gate(protocol, provisioning),
+        "offline_security": _offline_security_gate(capture),
+    }
+    decision_contract = protocol["decision_contract"]
+    exact_gate_families = set(gate_families) == set(decision_contract["select_gate_families"])
+    passed = (
+        decision_contract["select_requires_all_gates"] is True
+        and decision_contract["near_miss_may_select"] is False
+        and exact_gate_families
+        and all(family["passed"] is True for family in gate_families.values())
+    )
     return {
         "schema_version": "pp1-ocr-iteration2-one-shot-result/v1",
         "protocol_version": protocol["protocol_version"],
@@ -212,7 +306,7 @@ def score_holdout_capture(
         "primary_reading_order": "column",
         "diagnostic_reading_orders": ["raw", "geometry"],
         "title_exact_count": exact_count,
-        "title_exact_rate": exact_count / 40,
+        "title_exact_rate": exact_count / quality["scored_case_count"],
         "assistive_title_result": {record["case_id"]: record["safety_outcome"] for record in records},
         "equality_precision_recall": _classification(expected, automatic),
         "assistive_precision_recall": _classification(expected, assistive),
@@ -222,6 +316,7 @@ def score_holdout_capture(
         "challenging_wer": _breakdown(records, cases, "difficulty")["challenging"]["primary_wer"],
         "media_breakdown": _breakdown(records, cases, "media"),
         "layout_breakdown": _breakdown(records, cases, "layout"),
+        "gate_families": gate_families,
         "quality_checks": quality_checks,
         "operational": operational,
         "records": records,
@@ -279,13 +374,19 @@ def _capture(prepared: dict[str, Any], run_dir: Path, models_dir: Path) -> dict[
         tesseract_executable=None,
     )
     (run_dir / CAPTURE_FILENAME).write_bytes(canonical_json_bytes(capture))
-    report = score_holdout_capture(capture, corpus=corpus, protocol=prepared["protocol"])
+    report = score_holdout_capture(
+        capture,
+        corpus=corpus,
+        protocol=prepared["protocol"],
+        provisioning=prepared["candidate"],
+    )
     (run_dir / REPORT_FILENAME).write_bytes(canonical_json_bytes(report))
     return report
 
 
-def run_one_shot(run_dir: Path, models_dir: Path) -> dict[str, Any]:
+def run_one_shot(models_dir: Path) -> dict[str, Any]:
     """Perform the later 2B3B run. This function must not be called during holdout sealing."""
+    run_dir = canonical_run_dir()
     if (run_dir / CAPTURE_FILENAME).exists() or (run_dir / REPORT_FILENAME).exists():
         raise ValueError("holdout capture or report already exists; rerun is refused")
     seal = load_json(pre_run_seal_path())
@@ -296,7 +397,6 @@ def run_one_shot(run_dir: Path, models_dir: Path) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="ocr2h-one-shot-preflight-") as temporary:
         prepared_dir = Path(temporary) / "corpus"
         return execute_once(
-            state_path(run_dir),
             binding,
             preflight=lambda: _prepare_assets(prepared_dir, models_dir),
             operation=lambda prepared: _capture(prepared, run_dir, models_dir),

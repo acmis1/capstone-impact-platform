@@ -40,7 +40,6 @@ def _parser() -> argparse.ArgumentParser:
     seal.add_argument("--approval-file", type=Path, required=True)
     subparsers.add_parser("check-seal", help="validate the committed seal without model loading or asset generation")
     run = subparsers.add_parser("run-one-shot", help="perform the separately authorised one-shot OCR run")
-    run.add_argument("--run-dir", type=Path, required=True)
     run.add_argument("--models-dir", type=Path, default=tool_root() / "artifacts" / "ocr-provisioning" / "models")
     return parser
 
@@ -79,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "check-seal":
             result = validate_seal()
         else:
-            result = run_one_shot(args.run_dir, args.models_dir)
+            result = run_one_shot(args.models_dir)
         print(json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False))
         return 0
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:

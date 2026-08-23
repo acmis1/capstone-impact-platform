@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import copy
+import contextlib
+import io
 import json
 import tempfile
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
+from assistive_validation_benchmark.ocr_iteration2_fresh_holdout.__main__ import _parser
 from assistive_validation_benchmark.ocr_iteration2_fresh_holdout.corpus import (
     FIXTURE_PREFIX,
     PREAPPROVAL_SCHEMA,
@@ -15,11 +19,18 @@ from assistive_validation_benchmark.ocr_iteration2_fresh_holdout.corpus import (
     SEED_DERIVATION_SHA256,
     SEED_INPUT,
     build_candidate,
+    corpus_path,
     preapproval_corpus_sha256,
     semantic_review_cases,
     validate_fixture_allocation,
 )
-from assistive_validation_benchmark.ocr_iteration2_fresh_holdout.runner import execute_once
+from assistive_validation_benchmark.ocr_iteration2_fresh_holdout.runner import (
+    CANONICAL_RUN_DIRECTORY,
+    OFFLINE_GUARD_MECHANISM,
+    canonical_run_dir,
+    run_one_shot,
+    score_holdout_capture,
+)
 from assistive_validation_benchmark.ocr_iteration2_fresh_holdout.seal import (
     APPROVAL_INPUT_SCHEMA,
     _generation_manifest,
@@ -27,11 +38,16 @@ from assistive_validation_benchmark.ocr_iteration2_fresh_holdout.seal import (
     apply_human_approval,
     validate_generation_manifest,
 )
+from assistive_validation_benchmark.ocr_iteration2_holdout_protocol.renderer import reference_text
 from assistive_validation_benchmark.ocr_iteration2_holdout_protocol.schema import (
     data_root as protocol_data_root,
     load_json,
+    tool_root,
     validate_protocol,
 )
+
+
+RUNNER_MODULE = "assistive_validation_benchmark.ocr_iteration2_fresh_holdout.runner"
 
 
 class FreshHoldoutAllocationTests(unittest.TestCase):
@@ -169,72 +185,293 @@ class FreshHoldoutAllocationTests(unittest.TestCase):
 class OneShotStateSafetyTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.state = Path(self.temporary.name) / "run" / "one-shot-state.json"
-        self.binding = {"pre_run_seal_sha256": "a" * 64, "corpus_sha256": "b" * 64}
+        self.run_dir = Path(self.temporary.name) / "canonical-run"
+        self.state = self.run_dir / "one-shot-state.json"
+        self.models_dir = Path(self.temporary.name) / "models"
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def test_canonical_execution_identity_is_repository_derived(self) -> None:
+        self.assertEqual(tool_root() / "artifacts" / CANONICAL_RUN_DIRECTORY, canonical_run_dir())
+
     def test_failed_preflight_does_not_consume_the_run(self) -> None:
-        def fail() -> None:
-            raise ValueError("preflight failed")
-
-        with self.assertRaisesRegex(ValueError, "preflight failed"):
-            execute_once(self.state, self.binding, preflight=fail, operation=lambda _: {"unexpected": True})
+        with (
+            patch(f"{RUNNER_MODULE}.canonical_run_dir", return_value=self.run_dir),
+            patch(f"{RUNNER_MODULE}._prepare_assets", side_effect=ValueError("preflight failed")),
+            patch(f"{RUNNER_MODULE}._capture") as capture,
+        ):
+            with self.assertRaisesRegex(ValueError, "preflight failed"):
+                run_one_shot(self.models_dir)
         self.assertFalse(self.state.exists())
+        capture.assert_not_called()
 
-    def test_first_simulated_invocation_completes_and_repeat_is_refused(self) -> None:
+    def test_first_public_invocation_completes_and_repeat_is_refused(self) -> None:
         calls = []
-        result = execute_once(
-            self.state,
-            self.binding,
-            preflight=lambda: "prepared",
-            operation=lambda prepared: calls.append(prepared) or {"mocked_capture": "completed"},
-        )
+        with (
+            patch(f"{RUNNER_MODULE}.canonical_run_dir", return_value=self.run_dir),
+            patch(f"{RUNNER_MODULE}._prepare_assets", return_value="prepared"),
+            patch(
+                f"{RUNNER_MODULE}._capture",
+                side_effect=lambda prepared, _run_dir, _models_dir: calls.append(prepared)
+                or {"mocked_capture": "completed"},
+            ),
+        ):
+            result = run_one_shot(self.models_dir)
+            with self.assertRaisesRegex(ValueError, "second first run"):
+                run_one_shot(self.models_dir)
         self.assertEqual({"mocked_capture": "completed"}, result)
         self.assertEqual(["prepared"], calls)
-        with self.assertRaisesRegex(ValueError, "second first run"):
-            execute_once(
-                self.state,
-                self.binding,
-                preflight=lambda: "prepared-again",
-                operation=lambda _: {"unexpected": True},
-            )
+        self.assertEqual("completed", json.loads(self.state.read_text(encoding="utf-8"))["status"])
 
-    def test_simultaneous_claims_allow_exactly_one_winner(self) -> None:
+    def test_concurrent_public_invocations_allow_exactly_one_winner(self) -> None:
         barrier = threading.Barrier(2)
 
-        def invoke() -> str:
-            def prepared() -> None:
-                barrier.wait()
+        def prepare(_prepared_dir: Path, _models_dir: Path) -> dict[str, object]:
+            barrier.wait()
+            return {"prepared": True}
 
+        def invoke() -> str:
             try:
-                execute_once(
-                    self.state,
-                    self.binding,
-                    preflight=prepared,
-                    operation=lambda _: {"mocked_capture": "completed"},
-                )
+                run_one_shot(self.models_dir)
                 return "completed"
             except ValueError:
                 return "refused"
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            outcomes = sorted(executor.map(lambda _: invoke(), range(2)))
+        with (
+            patch(f"{RUNNER_MODULE}.canonical_run_dir", return_value=self.run_dir),
+            patch(f"{RUNNER_MODULE}._prepare_assets", side_effect=prepare),
+            patch(f"{RUNNER_MODULE}._capture", return_value={"mocked_capture": "completed"}),
+        ):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                outcomes = sorted(executor.map(lambda _: invoke(), range(2)))
         self.assertEqual(["completed", "refused"], outcomes)
 
     def test_post_claim_failure_is_recorded_and_rerun_is_refused(self) -> None:
-        def fail(_: object) -> dict[str, object]:
-            raise RuntimeError("mocked OCR boundary failed")
-
-        with self.assertRaisesRegex(RuntimeError, "mocked OCR boundary failed"):
-            execute_once(self.state, self.binding, preflight=lambda: None, operation=fail)
+        with (
+            patch(f"{RUNNER_MODULE}.canonical_run_dir", return_value=self.run_dir),
+            patch(f"{RUNNER_MODULE}._prepare_assets", return_value={"prepared": True}),
+            patch(f"{RUNNER_MODULE}._capture", side_effect=RuntimeError("mocked OCR boundary failed")),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "mocked OCR boundary failed"):
+                run_one_shot(self.models_dir)
+            with self.assertRaisesRegex(ValueError, "second first run"):
+                run_one_shot(self.models_dir)
         stored = json.loads(self.state.read_text(encoding="utf-8"))
         self.assertEqual("failed", stored["status"])
         self.assertEqual(1, stored["ocr_run_count"])
         self.assertFalse(stored["rerun_permitted"])
-        with self.assertRaisesRegex(ValueError, "second first run"):
-            execute_once(self.state, self.binding, preflight=lambda: None, operation=lambda _: {})
+
+    def test_candidate_provisioning_failure_cannot_reach_capture_or_claim(self) -> None:
+        with (
+            patch(f"{RUNNER_MODULE}.canonical_run_dir", return_value=self.run_dir),
+            patch(
+                f"{RUNNER_MODULE}._prepare_assets",
+                side_effect=ValueError("frozen candidate model tree verification failed"),
+            ),
+            patch(f"{RUNNER_MODULE}._capture") as capture,
+        ):
+            with self.assertRaisesRegex(ValueError, "model tree verification failed"):
+                run_one_shot(self.models_dir)
+        self.assertFalse(self.state.exists())
+        capture.assert_not_called()
+
+    def test_alternate_run_directory_is_rejected_and_cannot_create_another_claim(self) -> None:
+        alternate = Path(self.temporary.name) / "alternate-run"
+        with (
+            patch(f"{RUNNER_MODULE}.canonical_run_dir", return_value=self.run_dir),
+            patch(f"{RUNNER_MODULE}._prepare_assets", return_value={"prepared": True}),
+            patch(f"{RUNNER_MODULE}._capture", return_value={"mocked_capture": "completed"}),
+        ):
+            run_one_shot(self.models_dir)
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                _parser().parse_args(["run-one-shot", "--run-dir", str(alternate)])
+        self.assertTrue(self.state.exists())
+        self.assertFalse((alternate / "one-shot-state.json").exists())
+
+
+class FiveGateDecisionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.protocol = validate_protocol(load_json(protocol_data_root() / "protocol.json"))
+        cls.corpus = load_json(corpus_path())
+        cls.cases = {case["id"]: case for case in cls.corpus["ocr_cases"] if case["split"] == "holdout"}
+
+    def _provisioning(self) -> dict[str, object]:
+        candidate = self.protocol["candidate"]
+        footprint = candidate["artifact_footprint_bytes"]
+        return {
+            "engine": candidate["engine"],
+            "artifacts": [
+                {
+                    "artifact": candidate["detection_artifact"],
+                    "tree_sha256": candidate["detection_tree_sha256"],
+                    "extracted_bytes": 1,
+                },
+                {
+                    "artifact": candidate["recognition_artifact"],
+                    "tree_sha256": candidate["recognition_tree_sha256"],
+                    "extracted_bytes": footprint - 1,
+                },
+            ],
+            "artifact_footprint_bytes": footprint,
+            "downloaded_during_verification": False,
+        }
+
+    @staticmethod
+    def _blocks(case: dict[str, object]) -> list[dict[str, object]]:
+        lines = reference_text(case).splitlines()
+        title_index = len([item for item in case["distractors"] if item["position"] == "above"])
+        blocks = []
+        top = 0.0
+        for index, line in enumerate(lines):
+            height = 30.0 if index == title_index else 10.0
+            blocks.append(
+                {
+                    "page_number": 1,
+                    "text": line,
+                    "box": {"left": 0.0, "top": top, "right": 100.0, "bottom": top + height},
+                }
+            )
+            top += height + 20.0
+        return blocks
+
+    def _capture(self) -> dict[str, object]:
+        return {
+            "schema_version": "pp1-ocr-iteration2-capture/v1",
+            "engine": "paddle-small",
+            "configuration_id": "dpi180-edge1920",
+            "offline": {
+                "enabled": True,
+                "mechanism": OFFLINE_GUARD_MECHANISM,
+                "self_test_passed": True,
+            },
+            "cold_start_ms": 1.0,
+            "peak_working_set_bytes": 1,
+            "artifact_footprint_bytes": self.protocol["candidate"]["artifact_footprint_bytes"],
+            "failures": [],
+            "records": [
+                {
+                    "case_id": case_id,
+                    "runtime_ms": 1.0,
+                    "blocks": self._blocks(case),
+                }
+                for case_id, case in sorted(self.cases.items())
+            ],
+        }
+
+    def _score(
+        self,
+        capture: dict[str, object],
+        provisioning: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        return score_holdout_capture(
+            capture,
+            corpus=self.corpus,
+            protocol=self.protocol,
+            provisioning=self._provisioning() if provisioning is None else provisioning,
+        )
+
+    def _title_block(self, record: dict[str, object]) -> dict[str, object]:
+        case = self.cases[record["case_id"]]
+        title_index = len([item for item in case["distractors"] if item["position"] == "above"])
+        return record["blocks"][title_index]
+
+    def test_all_five_gate_families_pass_before_ready(self) -> None:
+        result = self._score(self._capture())
+        self.assertEqual("READY_FOR_OCR_PROVIDER_INTEGRATION", result["decision"])
+        self.assertEqual(
+            {"quality", "title_safety", "operational", "provisioning", "offline_security"},
+            set(result["gate_families"]),
+        )
+        self.assertTrue(all(family["passed"] for family in result["gate_families"].values()))
+
+    def test_exact_title_failure_defers(self) -> None:
+        capture = self._capture()
+        agreeing = [record for record in capture["records"] if self.cases[record["case_id"]]["expected_agreement"]]
+        for record in agreeing[:3]:
+            self._title_block(record)["text"] += " Incorrect"
+        result = self._score(capture)
+        self.assertFalse(result["gate_families"]["quality"]["checks"]["exact_title"])
+        self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
+
+    def test_primary_wer_failure_defers(self) -> None:
+        capture = self._capture()
+        for record in capture["records"]:
+            last = record["blocks"][-1]["box"]["bottom"]
+            record["blocks"].append(
+                {
+                    "page_number": 1,
+                    "text": "incorrect " * 100,
+                    "box": {"left": 0.0, "top": last + 20.0, "right": 100.0, "bottom": last + 30.0},
+                }
+            )
+        result = self._score(capture)
+        self.assertFalse(result["gate_families"]["quality"]["checks"]["primary_wer"])
+        self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
+
+    def test_material_false_automatic_agreement_defers(self) -> None:
+        capture = self._capture()
+        record = next(
+            item for item in capture["records"] if not self.cases[item["case_id"]]["expected_agreement"]
+        )
+        self._title_block(record)["text"] = self.cases[record["case_id"]]["metadata_title"]
+        result = self._score(capture)
+        self.assertTrue(result["gate_families"]["quality"]["passed"])
+        self.assertFalse(result["gate_families"]["title_safety"]["passed"])
+        self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
+
+    def test_historical_operational_prior_failure_defers(self) -> None:
+        with patch(
+            f"{RUNNER_MODULE}._merged_operational_evidence",
+            return_value={"paddle-small": {"plausibly_inside_established_limits": False}},
+        ):
+            result = self._score(self._capture())
+        self.assertFalse(result["gate_families"]["operational"]["passed"])
+        self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
+
+    def test_current_operational_measurement_failure_defers(self) -> None:
+        capture = self._capture()
+        capture["cold_start_ms"] = self.protocol["operational_gate"]["ceilings"]["cold_start_ms_maximum"] + 1
+        result = self._score(capture)
+        self.assertFalse(result["gate_families"]["operational"]["passed"])
+        self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
+
+    def test_invalid_provisioning_evidence_defers(self) -> None:
+        provisioning = self._provisioning()
+        provisioning["artifacts"][0]["tree_sha256"] = "0" * 64
+        result = self._score(self._capture(), provisioning)
+        self.assertFalse(result["gate_families"]["provisioning"]["passed"])
+        self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
+
+    def test_offline_enabled_false_defers(self) -> None:
+        capture = self._capture()
+        capture["offline"]["enabled"] = False
+        result = self._score(capture)
+        self.assertFalse(result["gate_families"]["offline_security"]["passed"])
+        self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
+
+    def test_offline_self_test_false_defers(self) -> None:
+        capture = self._capture()
+        capture["offline"]["self_test_passed"] = False
+        result = self._score(capture)
+        self.assertFalse(result["gate_families"]["offline_security"]["passed"])
+        self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
+
+    def test_missing_or_malformed_offline_evidence_defers(self) -> None:
+        for label, evidence in (("missing", None), ("malformed", "not-an-offline-record"), ("wrong-mechanism", {})):
+            with self.subTest(label=label):
+                capture = self._capture()
+                if label == "missing":
+                    capture.pop("offline")
+                elif label == "wrong-mechanism":
+                    capture["offline"]["mechanism"] = "different"
+                else:
+                    capture["offline"] = evidence
+                result = self._score(capture)
+                self.assertFalse(result["gate_families"]["offline_security"]["passed"])
+                self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
 
 
 if __name__ == "__main__":
