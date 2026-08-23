@@ -159,6 +159,16 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_iteration2_fresh_holdout check-seal
 
+      # Iteration 2B3B consumed the single authorised holdout run. This step re-proves that
+      # final result from tracked bytes only: it verifies the byte identity of the preserved
+      # state/capture/report, re-scores the tracked capture through the frozen scoring path,
+      # requires the recomputed report to equal the tracked report canonically, and requires
+      # the decision to remain OCR_PROVIDER_DEFERRED. It stays deliberately cheap: no Paddle
+      # runtime, no model download, no network and no OCR. The holdout must never be rerun.
+      - name: Re-prove the final OCR Iteration 2 holdout result without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration2_fresh_holdout check-result-evidence
+
       - name: Generate deterministic synthetic corpus smoke fixture
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark generate --output-dir artifacts/ci-corpus

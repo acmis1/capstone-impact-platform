@@ -1,0 +1,4 @@
+# The one-shot holdout evidence is verified by exact SHA-256 over raw bytes.
+# Git must never rewrite line endings here, or a Windows checkout would break
+# the byte identity that makes this evidence auditable.
+* -text
