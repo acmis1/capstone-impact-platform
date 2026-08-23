@@ -23,6 +23,7 @@ from ..ocr_iteration2_holdout_protocol.schema import (
     validate_protocol,
     value_sha256,
 )
+from ..ocr_productionization.provision import verify_runtime_versions
 from ..ocr_productionization.title_safety import (
     binary_metrics,
     evaluate_title_safety,
@@ -137,9 +138,17 @@ def _breakdown(records: list[dict[str, Any]], cases: dict[str, dict[str, Any]], 
     return result
 
 
-def _provisioning_gate(protocol: dict[str, Any], evidence: Any) -> dict[str, Any]:
+def _provisioning_gate(protocol: dict[str, Any], evidence: Any, capture: dict[str, Any]) -> dict[str, Any]:
     candidate = protocol["candidate"]
     observed = evidence if isinstance(evidence, dict) else {}
+    runtime = candidate["runtime"]
+    expected_runtime = {
+        "paddleocr": runtime["paddleocr"],
+        "paddlepaddle": runtime["paddlepaddle_cpu"],
+        "paddlex": runtime["paddlex_ocr_core"],
+    }
+    capture_versions = capture.get("versions") if isinstance(capture.get("versions"), dict) else {}
+    expected_capture_fields = {*expected_runtime, "detection", "recognition"}
     artifacts = observed.get("artifacts")
     artifact_records = artifacts if isinstance(artifacts, list) else []
     artifact_map = {
@@ -164,6 +173,13 @@ def _provisioning_gate(protocol: dict[str, Any], evidence: Any) -> dict[str, Any
         "artifact_footprint": observed.get("artifact_footprint_bytes")
         == candidate["artifact_footprint_bytes"],
         "no_download_during_verification": observed.get("downloaded_during_verification") is False,
+        "preflight_runtime_versions": observed.get("runtime") == expected_runtime,
+        "capture_runtime_identity_fields": set(capture_versions) == expected_capture_fields,
+        "capture_paddleocr_version": capture_versions.get("paddleocr") == expected_runtime["paddleocr"],
+        "capture_paddlepaddle_version": capture_versions.get("paddlepaddle") == expected_runtime["paddlepaddle"],
+        "capture_paddlex_version": capture_versions.get("paddlex") == expected_runtime["paddlex"],
+        "capture_detection_model": capture_versions.get("detection") == candidate["detection_model"],
+        "capture_recognition_model": capture_versions.get("recognition") == candidate["recognition_model"],
     }
     return {
         "verified_evidence": evidence,
@@ -284,7 +300,7 @@ def score_holdout_capture(
         "quality": quality_family,
         "title_safety": title_safety_family,
         "operational": operational,
-        "provisioning": _provisioning_gate(protocol, provisioning),
+        "provisioning": _provisioning_gate(protocol, provisioning, capture),
         "offline_security": _offline_security_gate(capture),
     }
     decision_contract = protocol["decision_contract"]
@@ -334,7 +350,8 @@ def _prepare_assets(prepared_dir: Path, models_dir: Path) -> dict[str, Any]:
     sealed = validate_seal()
     protocol = validate_protocol(load_json(protocol_data_root() / "protocol.json"))
     corpus = load_json(corpus_path())
-    candidate = verify_candidate_artifacts(protocol, models_dir)
+    runtime = verify_runtime_versions()
+    candidate = {**verify_candidate_artifacts(protocol, models_dir), "runtime": runtime}
     renderer = require_canonical_renderer()
     generated = generate_holdout_assets(corpus, prepared_dir)
     observed_manifest = _generation_manifest(corpus, protocol, generated)

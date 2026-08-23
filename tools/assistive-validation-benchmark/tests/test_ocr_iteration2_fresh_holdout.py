@@ -48,6 +48,9 @@ from assistive_validation_benchmark.ocr_iteration2_holdout_protocol.schema impor
 
 
 RUNNER_MODULE = "assistive_validation_benchmark.ocr_iteration2_fresh_holdout.runner"
+CAPTURE_MODULE = "assistive_validation_benchmark.ocr_iteration2_calibration.capture"
+ENGINE_MODULE = "assistive_validation_benchmark.ocr_productionization.engine"
+PROVISION_MODULE = "assistive_validation_benchmark.ocr_productionization.provision"
 
 
 class FreshHoldoutAllocationTests(unittest.TestCase):
@@ -192,6 +195,51 @@ class OneShotStateSafetyTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    @contextlib.contextmanager
+    def _mocked_runtime_preflight(self, versions: dict[str, str]):
+        protocol = validate_protocol(load_json(protocol_data_root() / "protocol.json"))
+        manifest = {"mocked": "generation-manifest"}
+        candidate = {
+            "engine": protocol["candidate"]["engine"],
+            "artifacts": [],
+            "artifact_footprint_bytes": protocol["candidate"]["artifact_footprint_bytes"],
+            "downloaded_during_verification": False,
+        }
+        with (
+            patch(f"{RUNNER_MODULE}.canonical_run_dir", return_value=self.run_dir),
+            patch(f"{RUNNER_MODULE}.validate_seal", return_value={"sealed": True}),
+            patch(
+                f"{RUNNER_MODULE}.load_json",
+                side_effect=[
+                    {"corpus_sha256": "a" * 64},
+                    protocol,
+                    {"ocr_cases": []},
+                    manifest,
+                ],
+            ),
+            patch(f"{RUNNER_MODULE}.validate_protocol", side_effect=lambda value: value),
+            patch(f"{RUNNER_MODULE}.verify_candidate_artifacts", return_value=candidate),
+            patch(f"{RUNNER_MODULE}.require_canonical_renderer", return_value={"renderer": True}),
+            patch(f"{RUNNER_MODULE}.generate_holdout_assets", return_value={"assets": []}),
+            patch(f"{RUNNER_MODULE}._generation_manifest", return_value=manifest),
+            patch(f"{PROVISION_MODULE}.importlib.metadata.version", side_effect=lambda package: versions[package]),
+            patch(f"{CAPTURE_MODULE}.capture_engine") as real_capture,
+            patch(f"{ENGINE_MODULE}._run_paddle") as real_ocr,
+        ):
+            yield real_capture, real_ocr
+
+    def _assert_runtime_mismatch_is_preclaim(self, package: str, observed: str) -> None:
+        versions = {"paddleocr": "3.7.0", "paddlepaddle": "3.3.0", "paddlex": "3.7.2"}
+        versions[package] = observed
+        with self._mocked_runtime_preflight(versions) as (real_capture, real_ocr):
+            with patch(f"{RUNNER_MODULE}._capture") as capture:
+                with self.assertRaisesRegex(ValueError, "Paddle runtime version mismatch"):
+                    run_one_shot(self.models_dir)
+        self.assertFalse(self.state.exists())
+        capture.assert_not_called()
+        real_capture.assert_not_called()
+        real_ocr.assert_not_called()
+
     def test_canonical_execution_identity_is_repository_derived(self) -> None:
         self.assertEqual(tool_root() / "artifacts" / CANONICAL_RUN_DIRECTORY, canonical_run_dir())
 
@@ -205,6 +253,24 @@ class OneShotStateSafetyTests(unittest.TestCase):
                 run_one_shot(self.models_dir)
         self.assertFalse(self.state.exists())
         capture.assert_not_called()
+
+    def test_exact_frozen_runtime_preflight_passes_and_is_carried_forward(self) -> None:
+        versions = {"paddleocr": "3.7.0", "paddlepaddle": "3.3.0", "paddlex": "3.7.2"}
+        with self._mocked_runtime_preflight(versions):
+            with patch(f"{RUNNER_MODULE}._capture", return_value={"mocked_capture": "completed"}) as capture:
+                run_one_shot(self.models_dir)
+        prepared = capture.call_args.args[0]
+        self.assertEqual(versions, prepared["candidate"]["runtime"])
+        self.assertEqual("completed", json.loads(self.state.read_text(encoding="utf-8"))["status"])
+
+    def test_paddleocr_runtime_mismatch_fails_before_claim(self) -> None:
+        self._assert_runtime_mismatch_is_preclaim("paddleocr", "3.7.1")
+
+    def test_paddlepaddle_runtime_mismatch_fails_before_claim(self) -> None:
+        self._assert_runtime_mismatch_is_preclaim("paddlepaddle", "3.3.1")
+
+    def test_paddlex_runtime_mismatch_fails_before_claim(self) -> None:
+        self._assert_runtime_mismatch_is_preclaim("paddlex", "3.7.3")
 
     def test_first_public_invocation_completes_and_repeat_is_refused(self) -> None:
         calls = []
@@ -317,6 +383,11 @@ class FiveGateDecisionTests(unittest.TestCase):
             ],
             "artifact_footprint_bytes": footprint,
             "downloaded_during_verification": False,
+            "runtime": {
+                "paddleocr": candidate["runtime"]["paddleocr"],
+                "paddlepaddle": candidate["runtime"]["paddlepaddle_cpu"],
+                "paddlex": candidate["runtime"]["paddlex_ocr_core"],
+            },
         }
 
     @staticmethod
@@ -338,10 +409,18 @@ class FiveGateDecisionTests(unittest.TestCase):
         return blocks
 
     def _capture(self) -> dict[str, object]:
+        candidate = self.protocol["candidate"]
         return {
             "schema_version": "pp1-ocr-iteration2-capture/v1",
             "engine": "paddle-small",
             "configuration_id": "dpi180-edge1920",
+            "versions": {
+                "paddleocr": candidate["runtime"]["paddleocr"],
+                "paddlepaddle": candidate["runtime"]["paddlepaddle_cpu"],
+                "paddlex": candidate["runtime"]["paddlex_ocr_core"],
+                "detection": candidate["detection_model"],
+                "recognition": candidate["recognition_model"],
+            },
             "offline": {
                 "enabled": True,
                 "mechanism": OFFLINE_GUARD_MECHANISM,
@@ -386,6 +465,43 @@ class FiveGateDecisionTests(unittest.TestCase):
             set(result["gate_families"]),
         )
         self.assertTrue(all(family["passed"] for family in result["gate_families"].values()))
+        provisioning = result["gate_families"]["provisioning"]
+        self.assertTrue(provisioning["checks"]["preflight_runtime_versions"])
+        self.assertTrue(provisioning["checks"]["capture_runtime_identity_fields"])
+
+    def test_missing_preflight_runtime_evidence_defers(self) -> None:
+        provisioning = self._provisioning()
+        provisioning.pop("runtime")
+        result = self._score(self._capture(), provisioning)
+        self.assertFalse(result["gate_families"]["provisioning"]["checks"]["preflight_runtime_versions"])
+        self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
+
+    def test_wrong_preflight_runtime_evidence_defers(self) -> None:
+        provisioning = self._provisioning()
+        provisioning["runtime"]["paddleocr"] = "3.7.1"
+        result = self._score(self._capture(), provisioning)
+        self.assertFalse(result["gate_families"]["provisioning"]["checks"]["preflight_runtime_versions"])
+        self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
+
+    def test_capture_runtime_mismatch_defers_even_when_quality_passes(self) -> None:
+        for package in ("paddleocr", "paddlepaddle", "paddlex"):
+            with self.subTest(package=package):
+                capture = self._capture()
+                capture["versions"][package] = "wrong"
+                result = self._score(capture)
+                self.assertTrue(result["gate_families"]["quality"]["passed"])
+                self.assertFalse(result["gate_families"]["provisioning"]["passed"])
+                self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
+
+    def test_capture_model_identity_mismatch_defers(self) -> None:
+        for model in ("detection", "recognition"):
+            with self.subTest(model=model):
+                capture = self._capture()
+                capture["versions"][model] = "wrong"
+                result = self._score(capture)
+                self.assertTrue(result["gate_families"]["quality"]["passed"])
+                self.assertFalse(result["gate_families"]["provisioning"]["passed"])
+                self.assertEqual("OCR_PROVIDER_DEFERRED", result["decision"])
 
     def test_exact_title_failure_defers(self) -> None:
         capture = self._capture()
