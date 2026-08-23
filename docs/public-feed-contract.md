@@ -19,11 +19,9 @@ Ensure structural compatibility between the compiled JSON feed and Duda's client
 ---
 
 ## 3. Publication Eligibility
-Only project records with the following exact lowercase workflow status values are eligible to be compiled into the public feed:
+Ordinary compilation (`compilePublicFeed()`) includes only project records with the exact lowercase `published` status.
 
-*   **Eligible**:
-    *   `approved`
-    *   `published`
+During controlled publication, `compilePublicationCandidateFeed()` may include one exact `approved` target alongside the published baseline in a durable candidate artifact. That target joins the ordinary feed only after finalization changes its status to `published`.
 
 The following statuses are strictly **excluded** from compilation:
 *   `draft`
@@ -49,13 +47,20 @@ Every compiled project object must contain the following required fields to pass
 *   `teamMembers` — Roster of participant names (array)
 *   `poster` — Public poster image preview URL
 *   `posterPdf` — Public poster PDF file URL
+*   `posterText` — Required accessible full text for poster content
+*   `accessibilityText` — Required poster text alternative
+*   `snapshots` — Public snapshot URL array
+*   `snapshotMedia` — Exact `{ url, altText }` pairing for every snapshot
 *   `layoutConfig` — Visual preset settings object containing `templateId`.
 
 ### Runtime Validator Field Rules
 The runtime validator behaves as follows:
-*   Requires the above 13 fields to be present and non-null.
+*   Requires the above fields to be present and non-null.
 *   Checks `id` is an integer.
 *   Checks `teamMembers` is an array (does not currently check if every element inside the array is a string).
+*   Requires non-blank bounded `posterText` and `accessibilityText` values.
+*   Checks that each snapshot URL is an absolute HTTP(S), structurally public-safe URL; rejects malformed, relative, non-HTTP(S), private-draft, private-ingestion, signed, and authenticated-storage URLs. It does not perform network reachability checks.
+*   Requires unique snapshot URLs and an exact, order-independent one-to-one correspondence with `snapshotMedia`; each media item has only `url` and non-blank bounded `altText` fields.
 *   Checks `layoutConfig` is an object.
 *   Checks `layoutConfig.templateId` is one of: `poster_showcase`, `technical_detail`, `media_rich`.
 *   Does not require or type-check `featuredMedia` or `sectionOrder` at runtime. They are defined in the TypeScript domain, and `compilePublicFeed` supplies/defaults and emits them inside `layoutConfig`, but `validatePublicFeed` does not independently require or type-check them.
@@ -66,7 +71,7 @@ The runtime validator behaves as follows:
 The compiler matches and maps database projects directly to public fields.
 
 ### A. Always Emitted (using empty strings, empty arrays, or defaults when missing)
-*   `id`, `publicId`, `title`, `summary`, `background`, `solution`, `year`, `program`, `studyProgram`, `discipline`, `disciplines`, `industry`, `industryPartner`, `academicSupervisor`, `groupName`, `teamMembers`, `poster`, `posterPdf`, `posterText`, `accessibilityText`, `snapshots`, `layoutConfig`
+*   `id`, `publicId`, `title`, `summary`, `background`, `solution`, `year`, `program`, `studyProgram`, `discipline`, `disciplines`, `industry`, `industryPartner`, `academicSupervisor`, `groupName`, `teamMembers`, `poster`, `posterPdf`, `posterText`, `accessibilityText`, `snapshots`, `snapshotMedia`, `layoutConfig`
 
 ### B. Conditionally Emitted (only when populated with non-empty values)
 *   `videoUrl`, `demoUrl`, `repositoryUrl`, `externalLinks`, `citations`
@@ -102,9 +107,9 @@ If any of these fields are present in the payload sent to the validator (`valida
 *   **Empty Feed**: An empty feed array is technically valid but returns a validation warning.
 *   **Unknown or Forbidden Keys**: Triggers validation errors.
 *   **Missing/Null Required Fields**: Triggers validation errors.
-*   **Type Constraints**: `id` must be an integer, `teamMembers` must be an array, `templateId` must match one of the allowed template strings. Array elements are not checked.
-*   **Feed Validation Warnings**: Recommended fields (e.g., `accessibilityText` or `posterText`) generate non-blocking feed-validation warnings if missing, which do not make `validation.valid` false.
-*   **No Active URL Audits**: The validator does not check URL structures, protocols, or network reachability.
+*   **Type Constraints**: `id` must be an integer; `teamMembers`, `snapshots`, and `snapshotMedia` must be arrays; and `templateId` must match one of the allowed template strings. `teamMembers` elements are not checked.
+*   **Feed Validation Warnings**: An empty feed is valid with a warning; several optional indexing/display fields can also produce non-blocking warnings. Required accessibility fields are validation errors when missing, blank, or over their bounds.
+*   **Snapshot URL/Media Checks**: Snapshot URLs undergo structural public-safety checks and must correspond exactly to `snapshotMedia` entries and their alt text. These checks do not fetch URLs or establish network reachability.
 
 ---
 
@@ -122,10 +127,10 @@ If any of these fields are present in the payload sent to the validator (`valida
 ## 10. Known Current Limitations
 *   **Empty Strings**: Empty strings (`""`) can pass required-field presence checks.
 *   **Lack of Deep Type Checking**: Array elements (like `teamMembers` elements) are not type-checked at runtime.
-*   **No Media Verification**: URL protocols, media types, and reachability are not validated.
+*   **No Network Media Verification**: Snapshot URL checks are structural only; the validator does not fetch URLs, check reachability, or inspect remote media bytes/types.
 *   **No Layout Verification**: `featuredMedia` and `sectionOrder` are emitted by the compiler but not independently validated at runtime.
 *   **No Duplicate Check**: Duplicate `publicId` values are not checked.
-*   **Non-Atomic Publication**: Writing the feed JSON and recording the publication snapshot in the database are not executed as a single atomic database transaction.
+*   **Cross-System Atomicity Boundary**: Object storage and PostgreSQL are not one physical distributed transaction. Controlled publication instead uses durable attempts, bound artifacts, previous-feed preservation, upload verification, atomic database finalization, recovery, and compensation to manage failures.
 *   **Warning-Only Empty Feed**: An empty array feed does not block publishing.
 
 ---
@@ -133,6 +138,4 @@ If any of these fields are present in the payload sent to the validator (`valida
 ## 11. Future Hardening Requirements
 The following validations are planned as future improvements:
 *   **Non-empty Constraint**: Enforcing length rules on required string parameters.
-*   **URL Protocol Checking**: Enforcing secure `https://` schemas and file type checks on poster images.
 *   **Unique Public ID Validation**: Enforcing that `publicId` contains no duplicates in the compiled feed.
-*   **Transaction and Retry Hardening**: Wrapping database mutations in SQL transactions where applicable, verifying storage uploads, designing compensating cleanup/rollback if snapshot logging fails, implementing feed checksums, keeping immutable publication records, providing safe retry behavior, and testing restoration of previous feed snapshots.

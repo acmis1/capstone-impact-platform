@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "validate-feed": "node scripts/validate-feed.js",
     "test": "node scripts/test-recovery.js",
+    "test:duda-feed-url-validator": "node scripts/test-duda-feed-url-validator.js",
     "recovery:dry-run": "node scripts/recoverPrototypeSupabase.js",
     "recovery:apply": "node scripts/recoverPrototypeSupabase.js --apply"
   },
