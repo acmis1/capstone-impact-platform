@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const yaml = require('js-yaml') as { load(input: string): unknown };
 const prohibited = /stu[d]ents?/i;
-const frozenSyntheticOcrEvidence = /^(?:tools\/assistive-validation-benchmark\/(?:ocr-productionization\/corpus\/(?:calibration|holdout)|ocr-iteration2-calibration\/corpus\/calibration)\.json|tools\/assistive-validation-benchmark\/src\/assistive_validation_benchmark\/ocr_iteration2_holdout_protocol\/distractor_calibration\.py|docs\/assistive-validation\/evidence\/ocr-productionization(?:-iteration2-distractor-calibration|-report)\.json)$/;
+const frozenSyntheticOcrEvidence = /^(?:tools\/assistive-validation-benchmark\/(?:ocr-productionization\/corpus\/(?:calibration|holdout)|ocr-iteration2-calibration\/corpus\/calibration|ocr-iteration2-fresh-holdout\/corpus\/holdout)\.json|tools\/assistive-validation-benchmark\/src\/assistive_validation_benchmark\/(?:ocr_iteration2_holdout_protocol\/distractor_calibration|ocr_iteration2_fresh_holdout\/corpus)\.py|docs\/assistive-validation\/evidence\/ocr-productionization(?:-iteration2-distractor-calibration|-report)\.json)$/;
 
 function trackedFiles(repoRoot: string): string[] {
   return execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
@@ -18,7 +18,7 @@ export function checkTerminology(repoRoot = path.resolve(__dirname, '../../../..
   const failures: string[] = [];
   for (const file of trackedFiles(repoRoot)) {
     if (prohibited.test(file)) failures.push(`${file}: filename`);
-    // These machine files contain explicitly synthetic poster ground truth and immutable OCR
+    // These machine files contain explicitly synthetic benchmark ground truth or immutable OCR
     // output. Product copy and all other repository content remain subject to the terminology gate.
     if (frozenSyntheticOcrEvidence.test(file)) continue;
     const absolutePath = path.join(repoRoot, file);
