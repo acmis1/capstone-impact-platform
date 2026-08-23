@@ -122,7 +122,6 @@ def apply_human_approval(
         for item in preapproval["semantic_review_cases"]
     }
     evidence_items = []
-    corrections = []
     for case in _semantic_cases(approved):
         decision = by_id[case["id"]]
         poster = decision.get("poster_title")
@@ -131,19 +130,12 @@ def apply_human_approval(
         if not all(isinstance(value, str) and value.strip() == value for value in (poster, metadata, rationale)):
             raise ValueError(f"human approval fields are missing or unbounded: {case['id']}")
         original = original_pairs[case["id"]]
-        if (poster, metadata) != (original["poster_title"], original["metadata_title"]):
-            corrections.append(
-                {
-                    "case_id": case["id"],
-                    "original_poster_title": original["poster_title"],
-                    "original_metadata_title": original["metadata_title"],
-                    "approved_poster_title": poster,
-                    "approved_metadata_title": metadata,
-                    "correction_recorded_before_ocr": True,
-                }
-            )
-        case["title"] = poster
-        case["metadata_title"] = metadata
+        if (poster, metadata, rationale) != (
+            original["poster_title"],
+            original["metadata_title"],
+            original["proposed_rationale"],
+        ):
+            raise ValueError(f"human approval differs from the locked semantic judgement: {case['id']}")
         case["negative_relation_evidence"] = {
             "authority": "human_ground_truth",
             "classified_before_ocr": True,
@@ -163,17 +155,31 @@ def apply_human_approval(
         )
     review = {
         "schema_version": HUMAN_REVIEW_SCHEMA,
+        "protocol_version": preapproval["protocol_version"],
         "authority": "human_ground_truth",
         "classified_before_ocr": True,
         "preapproval_corpus_sha256": locked["preapproval_corpus_sha256"],
         "semantic_case_ids": locked["semantic_case_ids"],
         "cases": sorted(evidence_items, key=lambda item: item["case_id"]),
-        "corrections": sorted(corrections, key=lambda item: item["case_id"]),
+        "corrections": [],
         "corpus_regenerated_after_approval": False,
+        "ocr_result_available_during_review": False,
+        "ocr_executed_before_approval": False,
         "ocr_run_count": 0,
         "ocr_executed": False,
     }
     return approved, review
+
+
+def _bound_non_reuse_evidence(corpus: dict[str, Any]) -> dict[str, Any]:
+    """Record the frozen exact-match check without overstating semantic independence."""
+    evidence = holdout_non_reuse_evidence(corpus)
+    return {
+        **evidence,
+        "reuse_count": evidence["exact_title_body_reuse_count"],
+        "reuse_measure": "exact_normalized_title_and_body_match_only",
+        "semantic_independence_proven": False,
+    }
 
 
 def _generation_manifest(
@@ -277,7 +283,9 @@ def _build_pre_run_seal(
         "corpus_version": corpus["corpus_version"],
         "corpus_schema_version": corpus["schema_version"],
         "corpus_sha256": value_sha256(corpus),
+        "preapproval_corpus_sha256": review["preapproval_corpus_sha256"],
         "seed_derivation_sha256": SEED_DERIVATION_SHA256,
+        "seed": SEED,
         "human_ground_truth_review_sha256": value_sha256(review),
         "non_reuse_evidence_sha256": value_sha256(non_reuse),
         "generation_manifest_sha256": value_sha256(generation),
@@ -299,6 +307,7 @@ def _build_pre_run_seal(
         "ocr_executed": False,
         "holdout_result_exists": False,
         "holdout_capture_exists": False,
+        "production_selection": False,
         "post_result_tuning_permitted": False,
     }
 
@@ -314,8 +323,8 @@ def seal_approved_candidate(approval_file: Path) -> dict[str, Any]:
     preapproval = load_json(preapproval_path())
     approved, review = apply_human_approval(pending, preapproval, load_json(approval_file))
     validation = validate_holdout_corpus(approved, protocol)
-    non_reuse = holdout_non_reuse_evidence(approved)
-    if non_reuse["exact_title_body_reuse_count"] != 0 or non_reuse["real_participant_or_project_data"] is not False:
+    non_reuse = _bound_non_reuse_evidence(approved)
+    if non_reuse["reuse_count"] != 0 or non_reuse["real_participant_or_project_data"] is not False:
         raise ValueError("approved corpus failed the frozen non-reuse or synthetic-content rule")
     artifacts_parent = tool_root() / "artifacts"
     artifacts_parent.mkdir(parents=True, exist_ok=True)
@@ -354,8 +363,8 @@ def _restore_pending_for_lock(corpus: dict[str, Any], review: dict[str, Any]) ->
     by_id = {item["case_id"]: item for item in review["cases"]}
     for case in _semantic_cases(restored):
         item = by_id[case["id"]]
-        case["title"] = item["original_poster_title"]
-        case["metadata_title"] = item["original_metadata_title"]
+        if (case["title"], case["metadata_title"]) != (item["poster_title"], item["metadata_title"]):
+            raise ValueError("approved corpus differs from the human-reviewed semantic titles")
         case["negative_relation_evidence"] = None
     return restored
 
@@ -375,13 +384,23 @@ def validate_seal() -> dict[str, Any]:
     seal = load_json(pre_run_seal_path())
     if review.get("schema_version") != HUMAN_REVIEW_SCHEMA or review.get("authority") != "human_ground_truth":
         raise ValueError("human review evidence is missing its frozen authority")
-    if review.get("classified_before_ocr") is not True or review.get("ocr_executed") is not False:
+    if review.get("protocol_version") != protocol["protocol_version"]:
+        raise ValueError("human review evidence protocol binding changed")
+    if (
+        review.get("classified_before_ocr") is not True
+        or review.get("ocr_executed") is not False
+        or review.get("ocr_result_available_during_review") is not False
+        or review.get("ocr_executed_before_approval") is not False
+    ):
         raise ValueError("human review evidence was not recorded before OCR")
+    if review.get("final_corpus_sha256") != value_sha256(corpus):
+        raise ValueError("human review evidence final corpus binding changed")
+    if review.get("approved_semantic_case_count") != len(review.get("cases", [])):
+        raise ValueError("human review evidence semantic case count changed")
     restored = _restore_pending_for_lock(corpus, review)
-    if preapproval_corpus_sha256(restored) != preapproval.get("preapproval_corpus_sha256"):
-        raise ValueError("human review evidence cannot reconstruct the locked pre-approval corpus")
-    expected_non_reuse = holdout_non_reuse_evidence(corpus)
-    if non_reuse != expected_non_reuse or non_reuse["exact_title_body_reuse_count"] != 0:
+    verify_preapproval_lock(restored, preapproval)
+    expected_non_reuse = _bound_non_reuse_evidence(corpus)
+    if non_reuse != expected_non_reuse or non_reuse["reuse_count"] != 0:
         raise ValueError("stored non-reuse evidence does not recompute")
     validate_generation_manifest(generation, corpus)
     expected_seal = _build_pre_run_seal(protocol, freeze, corpus, review, non_reuse, generation)

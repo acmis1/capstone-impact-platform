@@ -23,6 +23,7 @@ from assistive_validation_benchmark.ocr_iteration2_fresh_holdout.runner import e
 from assistive_validation_benchmark.ocr_iteration2_fresh_holdout.seal import (
     APPROVAL_INPUT_SCHEMA,
     _generation_manifest,
+    _restore_pending_for_lock,
     apply_human_approval,
     validate_generation_manifest,
 )
@@ -96,6 +97,7 @@ class FreshHoldoutAllocationTests(unittest.TestCase):
         review_cases = semantic_review_cases(corpus)
         preapproval = {
             "schema_version": PREAPPROVAL_SCHEMA,
+            "protocol_version": self.protocol["protocol_version"],
             "seed": SEED,
             "seed_derivation_sha256": SEED_DERIVATION_SHA256,
             "preapproval_corpus_sha256": preapproval_corpus_sha256(corpus),
@@ -120,9 +122,26 @@ class FreshHoldoutAllocationTests(unittest.TestCase):
         approved, evidence = apply_human_approval(corpus, preapproval, approval)
         self.assertEqual([], evidence["corrections"])
         self.assertFalse(evidence["ocr_executed"])
+        self.assertFalse(evidence["ocr_result_available_during_review"])
+        self.assertFalse(evidence["ocr_executed_before_approval"])
         self.assertTrue(all(case["negative_relation_evidence"] is None for case in corpus["ocr_cases"]))
         approved_semantic = [case for case in approved["ocr_cases"] if case["negative_kind"] == "semantically_related_incorrect"]
         self.assertTrue(all(case["negative_relation_evidence"]["authority"] == "human_ground_truth" for case in approved_semantic))
+        restored = copy.deepcopy(approved)
+        for case in restored["ocr_cases"]:
+            if case["negative_kind"] == "semantically_related_incorrect":
+                case["negative_relation_evidence"] = None
+        self.assertEqual(corpus, restored)
+
+        tampered = copy.deepcopy(approved)
+        tampered["ocr_cases"][4]["title"] += " Changed"
+        with self.assertRaisesRegex(ValueError, "differs from the human-reviewed semantic titles"):
+            _restore_pending_for_lock(tampered, evidence)
+
+        changed = copy.deepcopy(approval)
+        changed["cases"][0]["poster_title"] += " Changed"
+        with self.assertRaisesRegex(ValueError, "differs from the locked semantic judgement"):
+            apply_human_approval(corpus, preapproval, changed)
 
     def test_generation_manifest_binds_every_case_and_control(self) -> None:
         corpus = build_candidate(prefix=FIXTURE_PREFIX)
