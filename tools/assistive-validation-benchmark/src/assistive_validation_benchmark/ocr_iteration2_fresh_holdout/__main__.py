@@ -14,6 +14,7 @@ from ..ocr_iteration2_holdout_protocol.manifest import (
     verify_freeze_manifest,
 )
 from ..ocr_iteration2_holdout_protocol.schema import (
+    canonical_json_bytes,
     data_root as protocol_data_root,
     load_json,
     tool_root,
@@ -26,7 +27,13 @@ from .corpus import (
     preapproval_path,
     validate_fixture_allocation,
 )
-from .runner import run_one_shot
+from .result_evidence import (
+    MANIFEST_FILENAME,
+    build_result_evidence,
+    evidence_dir,
+    validate_result_evidence,
+)
+from .runner import canonical_run_dir, run_one_shot
 from .seal import seal_approved_candidate, validate_seal
 
 
@@ -41,6 +48,15 @@ def _parser() -> argparse.ArgumentParser:
     subparsers.add_parser("check-seal", help="validate the committed seal without model loading or asset generation")
     run = subparsers.add_parser("run-one-shot", help="perform the separately authorised one-shot OCR run")
     run.add_argument("--models-dir", type=Path, default=tool_root() / "artifacts" / "ocr-provisioning" / "models")
+    build_result = subparsers.add_parser(
+        "build-result-evidence", help="bind the copied raw one-shot files into the tracked result manifest"
+    )
+    build_result.add_argument("--source-dir", type=Path, default=canonical_run_dir())
+    build_result.add_argument("--output", type=Path, default=evidence_dir() / MANIFEST_FILENAME)
+    check_result = subparsers.add_parser(
+        "check-result-evidence", help="re-prove the final holdout result from tracked evidence without OCR"
+    )
+    check_result.add_argument("--evidence-dir", type=Path, default=evidence_dir())
     return parser
 
 
@@ -77,6 +93,12 @@ def main(argv: list[str] | None = None) -> int:
             result = seal_approved_candidate(args.approval_file)
         elif args.command == "check-seal":
             result = validate_seal()
+        elif args.command == "build-result-evidence":
+            result = build_result_evidence(args.source_dir)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_bytes(canonical_json_bytes(result))
+        elif args.command == "check-result-evidence":
+            result = validate_result_evidence(args.evidence_dir)
         else:
             result = run_one_shot(args.models_dir)
         print(json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False))
