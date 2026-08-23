@@ -404,8 +404,8 @@ def _capture(prepared: dict[str, Any], run_dir: Path, models_dir: Path) -> dict[
 def run_one_shot(models_dir: Path) -> dict[str, Any]:
     """Perform the later 2B3B run. This function must not be called during holdout sealing."""
     run_dir = canonical_run_dir()
-    if (run_dir / CAPTURE_FILENAME).exists() or (run_dir / REPORT_FILENAME).exists():
-        raise ValueError("holdout capture or report already exists; rerun is refused")
+    if run_dir.exists():
+        raise ValueError("canonical one-shot run namespace already exists; first invocation requires an absent namespace")
     seal = load_json(pre_run_seal_path())
     binding = {
         "pre_run_seal_sha256": value_sha256(seal),

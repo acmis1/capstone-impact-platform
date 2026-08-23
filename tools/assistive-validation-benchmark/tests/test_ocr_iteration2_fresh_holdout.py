@@ -243,6 +243,39 @@ class OneShotStateSafetyTests(unittest.TestCase):
     def test_canonical_execution_identity_is_repository_derived(self) -> None:
         self.assertEqual(tool_root() / "artifacts" / CANONICAL_RUN_DIRECTORY, canonical_run_dir())
 
+    def _assert_existing_namespace_is_refused_before_claim(self) -> None:
+        with (
+            patch(f"{RUNNER_MODULE}.canonical_run_dir", return_value=self.run_dir),
+            patch(f"{RUNNER_MODULE}._prepare_assets") as prepare,
+            patch(f"{RUNNER_MODULE}._capture") as capture,
+            patch(f"{CAPTURE_MODULE}.capture_engine") as real_capture,
+            patch(f"{ENGINE_MODULE}._run_paddle") as real_ocr,
+        ):
+            with self.assertRaisesRegex(ValueError, "canonical one-shot run namespace already exists"):
+                run_one_shot(self.models_dir)
+        self.assertFalse(self.state.exists())
+        prepare.assert_not_called()
+        capture.assert_not_called()
+        real_capture.assert_not_called()
+        real_ocr.assert_not_called()
+
+    def test_existing_empty_canonical_run_namespace_is_refused_before_claim(self) -> None:
+        self.run_dir.mkdir()
+
+        self._assert_existing_namespace_is_refused_before_claim()
+
+    def test_existing_corpus_in_canonical_run_namespace_is_refused_before_claim(self) -> None:
+        (self.run_dir / "corpus").mkdir(parents=True)
+
+        self._assert_existing_namespace_is_refused_before_claim()
+
+    def test_existing_rendered_output_in_canonical_run_namespace_is_refused_before_claim(self) -> None:
+        rendered = self.run_dir / "rendered" / "dpi180-edge1920"
+        rendered.mkdir(parents=True)
+        (rendered / "ocr2h-001.png").write_bytes(b"stale rendered output")
+
+        self._assert_existing_namespace_is_refused_before_claim()
+
     def test_failed_preflight_does_not_consume_the_run(self) -> None:
         with (
             patch(f"{RUNNER_MODULE}.canonical_run_dir", return_value=self.run_dir),
@@ -284,7 +317,7 @@ class OneShotStateSafetyTests(unittest.TestCase):
             ),
         ):
             result = run_one_shot(self.models_dir)
-            with self.assertRaisesRegex(ValueError, "second first run"):
+            with self.assertRaisesRegex(ValueError, "canonical one-shot run namespace already exists"):
                 run_one_shot(self.models_dir)
         self.assertEqual({"mocked_capture": "completed"}, result)
         self.assertEqual(["prepared"], calls)
@@ -321,7 +354,7 @@ class OneShotStateSafetyTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "mocked OCR boundary failed"):
                 run_one_shot(self.models_dir)
-            with self.assertRaisesRegex(ValueError, "second first run"):
+            with self.assertRaisesRegex(ValueError, "canonical one-shot run namespace already exists"):
                 run_one_shot(self.models_dir)
         stored = json.loads(self.state.read_text(encoding="utf-8"))
         self.assertEqual("failed", stored["status"])
