@@ -158,11 +158,11 @@ export async function runControlledPublicationRuntimeVerification(): Promise<boo
     return fixture;
   };
   const execute = (fixture: Fixture, role: 'admin' | 'reviewer' | 'editor' = 'admin', failurePoint?: ControlledPublicationFailurePoint, barriers?: ControlledPublicationBarriers) => {
-    const baseDependencies = createControlledPublicationDependencies({ supabase: db, supabaseUrl: env.API_URL!, publicId: fixture.publicId, adminId, privateBucket: PRIVATE_BUCKET, publicFeedBucket: PUBLIC_FEED_BUCKET, publicFeedPath: PUBLIC_FEED_PATH });
+    const baseDependencies = createControlledPublicationDependencies({ supabase: db, supabaseUrl: env.API_URL!, publicId: fixture.publicId, adminId, privateBucket: PRIVATE_BUCKET, publicFeedBucket: PUBLIC_FEED_BUCKET, publicFeedPath: PUBLIC_FEED_PATH, executionTarget: 'local' });
     const dependencies = new Proxy(baseDependencies, {
       get(target, property, receiver) {
         const value = Reflect.get(target, property, receiver);
-        if (typeof value !== 'function' || property === 'assertDisposableLocalEnvironment' || property === 'getPublicUrl') return value;
+        if (typeof value !== 'function' || property === 'assertExecutionEnvironment' || property === 'getPublicUrl') return value;
         return async (...args: unknown[]) => {
           try { return await value(...args); }
           catch (error) {

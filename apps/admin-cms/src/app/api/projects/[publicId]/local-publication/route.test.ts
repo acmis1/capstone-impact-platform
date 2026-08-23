@@ -43,8 +43,9 @@ const COMPLETED = {
   auditRecordId: 'internal-audit-id',
   recordCount: 2,
   feedHash: 'a'.repeat(64),
+  feedPublicUrl: 'http://127.0.0.1:54321/storage/v1/object/public/server-public-feeds/server-feed.json',
 };
-const dependencies = { assertDisposableLocalEnvironment: vi.fn(), executionToken: 'server-token' };
+const dependencies = { assertExecutionEnvironment: vi.fn(), executionToken: 'server-token' };
 const supabase = { serverClient: true };
 const context = (publicId: string) => ({ params: Promise.resolve({ publicId }) });
 
@@ -91,6 +92,7 @@ describe('POST /api/projects/[publicId]/local-publication', () => {
         snapshotId: 'safe-snapshot-id',
         recordCount: 2,
         feedHash: 'a'.repeat(64),
+        feedPublicUrl: COMPLETED.feedPublicUrl,
       },
     });
     expect(mocks.createControlledPublicationDependencies).toHaveBeenCalledWith({
@@ -101,6 +103,7 @@ describe('POST /api/projects/[publicId]/local-publication', () => {
       privateBucket: 'server-draft-bucket',
       publicFeedBucket: 'server-public-feeds',
       publicFeedPath: 'server-feed.json',
+      executionTarget: 'local',
     });
     expect(mocks.executeControlledPublication).toHaveBeenCalledWith({
       permissions: ['projects.publish'],
@@ -238,8 +241,8 @@ describe('POST /api/projects/[publicId]/local-publication', () => {
     expect(await read(response)).toEqual({ success: false, error: 'Access denied.' });
   });
 
-  it('preserves the coordinator-level non-local failure as a second unavailable boundary', async () => {
-    mocks.executeControlledPublication.mockResolvedValue({ resultCode: 'EXECUTION_FAILED', failureCode: 'NON_LOCAL_ENVIRONMENT' });
+  it('preserves the coordinator-level policy failure as a second unavailable boundary', async () => {
+    mocks.executeControlledPublication.mockResolvedValue({ resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' });
     const response = await post('project_2026');
     expect(response.status).toBe(404);
     expect(await read(response)).toMatchObject({ success: false, code: 'LOCAL_PUBLICATION_UNAVAILABLE' });

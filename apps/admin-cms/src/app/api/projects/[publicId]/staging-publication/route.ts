@@ -9,13 +9,17 @@ import { getServerEnv } from '../../../../../lib/env';
 import { createSupabaseAdminClient } from '../../../../../lib/supabase/admin';
 import { executeControlledPublication } from '../../../../../projects/controlledPublicationService';
 import { createControlledPublicationDependencies } from '../../../../../projects/createControlledPublicationDependencies';
-import { isLocalPublicationExecutionAvailable } from '../../../../../projects/localPublicationExecution';
+import { isStagingPublicationExecutionAvailable } from '../../../../../projects/publicationExecutionPolicy';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
 function unavailable() {
   return NextResponse.json(
-    { success: false, code: 'LOCAL_PUBLICATION_UNAVAILABLE', error: 'Local publication execution is unavailable.' },
+    {
+      success: false,
+      code: 'STAGING_PUBLICATION_UNAVAILABLE',
+      error: 'Staging showcase publication is unavailable.',
+    },
     { status: 404, headers: NO_STORE },
   );
 }
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const env = getServerEnv();
-    if (!isLocalPublicationExecutionAvailable(env.supabaseUrl)) return unavailable();
+    if (!isStagingPublicationExecutionAvailable(env.supabaseUrl)) return unavailable();
 
     const dependencies = createControlledPublicationDependencies({
       supabase: createSupabaseAdminClient(),
@@ -56,7 +60,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       privateBucket: env.SUPABASE_DRAFT_BUCKET,
       publicFeedBucket: env.SUPABASE_PUBLIC_FEEDS_BUCKET,
       publicFeedPath: env.SUPABASE_PUBLIC_FEED_FILE,
-      executionTarget: 'local',
+      executionTarget: 'staging',
     });
     const result = await executeControlledPublication({
       permissions: admin.permissions,
@@ -120,7 +124,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       );
     }
     return NextResponse.json(
-      { success: false, error: 'Local publication could not be completed.' },
+      { success: false, error: 'Staging showcase publication could not be completed.' },
       { status: 500, headers: NO_STORE },
     );
   } catch (error) {
@@ -130,9 +134,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         { status: getAuthErrorHttpStatus(error.type), headers: NO_STORE },
       );
     }
-    console.error('[Local publication API Error]: unavailable');
+    console.error('[Staging publication API Error]: unavailable');
     return NextResponse.json(
-      { success: false, error: 'Local publication could not be completed.' },
+      { success: false, error: 'Staging showcase publication could not be completed.' },
       { status: 500, headers: NO_STORE },
     );
   }

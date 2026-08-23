@@ -121,6 +121,7 @@ Run from the repository root:
 | `SUPABASE_PUBLIC_ASSETS_BUCKET` | Server-only | Approved public asset bucket name. |
 | `SUPABASE_PUBLIC_FEEDS_BUCKET` | Server-only | Public feed bucket name. |
 | `SUPABASE_PUBLIC_FEED_FILE` | Server-only | Stable feed object name. |
+| `CAPSTONE_STAGING_PUBLICATION_ENABLED` | Server-only optional | Exact `true` enables the staging showcase action only when the shared staging runtime identity and exact Supabase-host guard also pass. Absent/invalid means disabled; it never enables live publication. |
 | `GEMINI_API_KEY` and `GEMINI_MODEL` | Server-side optional | Assistive extraction configuration. |
 | `GEMINI_ASSISTIVE_EXTRACTION_ENABLED` | Server-side optional | Enables assistive extraction only when explicitly set to `true`. |
 | `STAFF_PROVISIONING_ENABLED` | Server-only optional | Enables new staff invitations and, only on a separately verified staging runtime, direct UAT test-account creation. Fails closed when absent. Never gates activation of an existing pending invitation. |

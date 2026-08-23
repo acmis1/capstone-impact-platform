@@ -127,7 +127,7 @@ async function main(): Promise<void> {
     publicAssetsBucket: PUBLIC_BUCKET,
     publicFeedBucket: FEED_BUCKET,
     publicFeedPath: FEED_PATH,
-    dependencies: createControlledPublicationDependencies({ supabase: db, supabaseUrl: env.API_URL!, publicId: fixture.publicId, adminId, privateBucket: PRIVATE_BUCKET, publicFeedBucket: FEED_BUCKET, publicFeedPath: FEED_PATH }),
+    dependencies: createControlledPublicationDependencies({ supabase: db, supabaseUrl: env.API_URL!, publicId: fixture.publicId, adminId, privateBucket: PRIVATE_BUCKET, publicFeedBucket: FEED_BUCKET, publicFeedPath: FEED_PATH, executionTarget: 'local' }),
     barriers,
   });
   const attemptFor = async (fixture: Fixture) => {

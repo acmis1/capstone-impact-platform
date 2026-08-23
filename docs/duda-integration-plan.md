@@ -1,84 +1,58 @@
 # Duda Integration Plan: Stable Public Feed
 
-## 1. Overview
-The Capstone Impact Platform uses a **Hybrid Architecture**. The Admin/CMS manages the "Source of Truth" and publishes a subset of data to a stable, public JSON feed. Duda acts as the presentation layer, consuming this feed to dynamically render project cards and detail pages.
+## 1. Scope and capability states
 
-## 2. The Stable Feed Principle
-- **Single Source of Truth**: Duda points to exactly **one** stable URL.
-- **Persistence**: This URL never changes. When the Admin/CMS publishes updates, it overwrites the contents of this file.
-- **Dynamic Rendering**: The Duda front-end script handles new projects, new years, and content changes automatically without manual intervention in the Duda editor.
-- **No-Hero Design**: To match the premium showcase style, the Duda listing page should not use a static hero title or subtitle. Only dynamic year headings (with white background bars) are rendered.
-- **Poster-Only Listing**: The listing page intentionally renders poster-only cards to mimic the old showcase. Project metadata (title, program, etc.) is shown on the reusable detail page, not under listing cards.
-- **Automated Year Sections**: New years appear automatically when approved records with that year are published into the feed.
+The Admin/CMS is the source of truth. Duda is a presentation client that reads one approved-only JSON artifact; it never receives a Supabase secret and never queries private project tables.
 
-## 3. The Public Hosting Requirement
-Duda is a cloud-based platform. It cannot "see" your local machine (`localhost`). For the stakeholder demo to work:
-- The **JSON Feed** must be reachable via a public HTTPS URL.
-- All **Project Images** (posters and snapshots) must be reachable via public HTTPS URLs.
+| Capability | Target proof | Admin/CMS action | Duda effect |
+| --- | --- | --- | --- |
+| Disposable Local publication | Loopback Supabase URL | `POST /api/projects/[publicId]/local-publication` after a fresh plan and Local acknowledgement | Writes Local storage only; no Duda site can consume localhost. |
+| PP1 staging/test-showcase publication | Exact staging runtime identity, exact configured Supabase host match, and `CAPSTONE_STAGING_PUBLICATION_ENABLED=true` | `POST /api/projects/[publicId]/staging-publication` after a fresh plan and explicit staging acknowledgement | Replaces the stable non-production feed that the separately configured Duda TEST showcase can fetch. |
+| Live production publication | Unavailable | No route or UI control exists. | The live Impact site is not published or changed. |
 
-## 4. Public Hosting Implementation (Supabase)
-For the stakeholder demo, we use **Supabase Storage** to host the stable public feed.
+The staging route reuses the same controlled publication coordinator as Local execution. Fresh readiness, permission checks, global exclusivity, artifact binding, deterministic media promotion, prior-feed restoration, uploaded-byte/contract verification, audit, snapshot, finalization, recovery, and compensation remain authoritative. There is no unrestricted execution mode.
 
-### Step 1: Create Supabase Bucket
-1. Log in to [Supabase](https://supabase.com/).
-2. Go to **Storage** -> **New Bucket**.
-3. Name the bucket `feeds`.
-4. **IMPORTANT**: Make the bucket **Public**.
-5. (Optional) Create another public bucket named `assets` for future image mirroring.
+## 2. Stable feed contract
 
-### Step 2: Configure Environment Variables
-Create a `.env` file in the `Prototype/` directory (based on `.env.example`) with your project credentials:
-- `SUPABASE_URL`: Your project URL (e.g., `https://xyz.supabase.co`)
-- `SUPABASE_SERVICE_ROLE_KEY`: Your secret service role key (Backend only!)
-- `SUPABASE_FEED_BUCKET`: `feeds`
-- `SUPABASE_FEED_FILE`: `capstones-latest.json`
+- **Bucket**: server-derived `SUPABASE_PUBLIC_FEEDS_BUCKET` (default `public-feeds`).
+- **Object**: server-derived `SUPABASE_PUBLIC_FEED_FILE` (default and canonical value `capstones-latest.json`).
+- **URL shape**: `https://<staging-project>.supabase.co/storage/v1/object/public/public-feeds/capstones-latest.json` when the defaults are used.
+- **Stable URL principle**: Duda configuration stays fixed. Publication overwrites the verified object bytes at the same path.
+- **Caching**: `Prototype/duda/bodyend.html` appends a timestamp query parameter and requests the feed with `cache: "no-store"`.
 
-### Step 3: Stable Feed URL Format
-Once published, your stable feed URL will follow this pattern:
-`https://<GENERATED_PROJECT_REFERENCE>.supabase.co/storage/v1/object/public/feeds/capstones-latest.json`
+A successful Admin/CMS response displays the project public ID, `COMPLETED` or `ALREADY_COMPLETED`, record count, SHA-256, publication snapshot ID, and the server-derived public feed URL. It never returns a service key, private/signed URL, or client-selected bucket/path.
 
-### Step 4: One-Time Duda Setup
-1. Copy the public URL pattern from Step 3 (inserting your real project reference).
-2. Insert this configuration script block into Duda's **Head HTML** or at the top of **Body End** (before the main script):
-   ```html
-   <script>
-   window.CAPSTONE_FEED_URL = "<PUBLIC_FEED_URL>";
-   </script>
-   ```
-3. Paste the contents of `duda/bodyend.html` into the Duda **Body End** section.
-4. Publish the Duda site.
-5. **Do not change this setup again.** The Admin/CMS will overwrite the file at this exact path.
+## 3. Staging execution policy
 
-*   **Security Notice**: The feed URL is public; the secret API key is never placed in Duda. Duda does not query `public.projects` directly. It only reads the public JSON Storage object.
+All three trusted server conditions must hold:
 
-## 5. Design Guidelines
-- **Listing Page**: Mimics the original poster grid on a gradient background. Posters are transparent with white pill buttons.
-- **Detail Page**: Mimics the original white-background project detail page. **Duda Requirement**: Set the row/section background to white on the `project-detail` page to ensure maximum readability.
-- **Project Snapshots**: Rendered as a compact thumbnail grid that opens into a lightbox for full-size viewing.
-  - **Lightbox Close**: Supports clicking 'X', pressing 'Esc', or clicking the dark backdrop to return to the detail page.
-- **Get Project Poster**: 
-  - Opens the full poster file in a new tab. 
-  - Priority: `posterPdf` (PDF/Full File) > `poster` (Image Preview).
-- **Single Feed**: Duda uses one reusable project-detail page and one stable JSON URL for all project records across all years.
+1. `CAPSTONE_RUNTIME_ENV` is exactly `staging`;
+2. the actual HTTPS, non-loopback Supabase target hostname exactly matches `CAPSTONE_EXPECTED_SUPABASE_HOST`; and
+3. `CAPSTONE_STAGING_PUBLICATION_ENABLED` is exactly `true` (case-insensitive after trimming).
 
-## 5. Image Strategy
-Currently, image fields (`poster`, `snapshots`) store absolute public URLs. 
-- **Phase 1 (Now)**: Continue using external public image URLs.
-- **Phase 2 (Future)**: Implement automatic image mirroring to the Supabase `assets` bucket.
+Missing, malformed, disabled, production/live, mismatched, arbitrary remote, HTTP, and loopback configurations fail closed. `NODE_ENV`, request JSON, query parameters, browser flags, and browser-supplied storage destinations are never publication authority. `CAPSTONE_STAGING_MUTATION_CONFIRMATION` remains the separate acknowledgement contract for staging CLI mutation commands; it does not unlock the web route.
 
-## 6. Duda Configuration Steps
-- **Listing Page**: Create a Custom Widget using `listing-page.html` and `listing-page.css`.
-- **Detail Page**: Create a page named `project-detail` using `detail-page.html` and `detail-page.css`.
-- **Controller**: Add `bodyend.html` to the "Body End" section of the site.
+## 4. Duda TEST compatibility
 
-### ⚠️ Duda Configuration Warnings
-- **Container Separation**: The listing page must **only** contain the `capstone-project-grid` container (from `listing-page.html`). The detail page must **only** contain the `project-detail` container (from `detail-page.html`).
-- **Do not paste both containers on the same Duda page.** The `bodyend.html` script is site-wide and uses these IDs to decide whether to render a listing or a detail view.
-- **Slug Consistency**: Ensure the detail page slug is `project-detail` so the routing logic correctly identifies the page.
+The existing TEST-site renderer remains `Prototype/duda/bodyend.html`, with the reusable listing/detail HTML and CSS beside it. It consumes one `window.CAPSTONE_FEED_URL`, renders listing/search/filter data, selects detail records by the existing numeric `id`, and supports the current poster, `posterPdf`, accessible poster text, snapshots, layout configuration, links, categories, program, discipline, industry, and year fields.
 
-## 7. Feed Schema (19 Fields)
-The Duda script expects the following JSON structure:
-- `id`, `title`, `summary`, `year`, `program`, `discipline`.
-- `background`, `solution`, `poster`, `snapshots`, `imageAlt`.
-- `teamMembers` (Array), `disciplines` (Array), `citations` (Array).
-- `industryPartner`, `academicSupervisor`, `groupName`, `studyProgram`, `posterText`.
+The Admin/CMS feed also includes `publicId` and the additive `snapshotMedia: [{ url, altText }]` contract. The current Duda script still renders the unchanged `snapshots: string[]` shape and does not yet consume `snapshotMedia` alt text. That is a non-blocking media/accessibility follow-up owned outside this integration slice; no Duda template or teammate media work is absorbed here.
+
+Only `published` projects compile into the ordinary feed. An approved candidate appears in the candidate artifact only inside controlled publication, and becomes part of the ordinary feed only after atomic finalization changes it to `published`. Archived or removed records are excluded by the compiler; hosted public-removal execution remains a separate future capability.
+
+## 5. Separately authorised staging demonstration
+
+The implementation and CI must not execute these external-write steps. After review, an operator with separate authorisation for the specific hosted staging publication should:
+
+1. Verify the deployed Admin/CMS revision and that hosted staging has the required publication schema/RPC/storage baseline.
+2. Verify the web service has the exact staging runtime identity and expected Supabase hostname, then explicitly set `CAPSTONE_STAGING_PUBLICATION_ENABLED=true`. Keep all database administrative credentials server-only.
+3. Confirm `SUPABASE_PUBLIC_FEEDS_BUCKET` and `SUPABASE_PUBLIC_FEED_FILE` resolve to the intended public staging feed and canonical `capstones-latest.json` object. Do not accept a destination from the browser.
+4. Confirm the Duda TEST showcase—not the live site—already points `window.CAPSTONE_FEED_URL` at that exact stable public URL. Any Duda TEST configuration change requires its own authorisation.
+5. Sign in as publication-authorised staff, open the approved project, confirm authoritative readiness is `READY`, and generate a fresh publication plan.
+6. Review the plan evidence, acknowledge the non-production staging warning, and choose **Publish to staging showcase** once.
+7. Record the returned public ID, result code, record count, SHA-256, snapshot ID, and stable feed URL.
+8. Fetch the stable feed with cache busting, validate it against the public-feed contract, and confirm the intended `publicId` is present with only approved public fields.
+9. Refresh the Duda TEST listing and reusable detail page and confirm the project appears/updates correctly. Do not publish or modify the live Duda site.
+10. Disable `CAPSTONE_STAGING_PUBLICATION_ENABLED` after the demonstration if that is the agreed operational posture.
+
+The legacy Prototype `/api/publish-cloud-feed` path and the standalone simplified staging feed publisher are not the Admin/CMS publication architecture and must not be invoked for this demonstration.

@@ -38,6 +38,7 @@ import { PublicationReadinessPanel } from '../../../../components/admin/Publicat
 import { getServerEnv } from '../../../../lib/env';
 import { PublicationPreparationPanel } from '../../../../components/admin/PublicationPreparationPanel';
 import { isLocalPublicationExecutionAvailable } from '../../../../projects/localPublicationExecution';
+import { isStagingPublicationExecutionAvailable } from '../../../../projects/publicationExecutionPolicy';
 import { LocalArchivePanel } from '../../../../components/admin/LocalArchivePanel';
 import type { AuthenticatedAdminContext } from '../../../../auth/authTypes';
 import {
@@ -129,6 +130,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let publicationActionsAvailable = false;
   let canPreparePublicationPlan = false;
   let localPublicationExecutionAvailable = false;
+  let publicationExecutionTarget: 'local' | 'staging' | null = null;
   let canExecuteLocalArchive = false;
   let mediaItems: ProjectMediaPreviewItem[] = [];
   let mediaAvailable = false;
@@ -194,6 +196,11 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       const reminderRepository = new SupabaseParticipantPreviewReminderRepository();
       const env = getServerEnv();
       localPublicationExecutionAvailable = canPreparePublicationPlan && isLocalPublicationExecutionAvailable(env.supabaseUrl);
+      publicationExecutionTarget = localPublicationExecutionAvailable
+        ? 'local'
+        : canPreparePublicationPlan && isStagingPublicationExecutionAvailable(env.supabaseUrl)
+          ? 'staging'
+          : null;
       canExecuteLocalArchive = hasPermission(adminContext.permissions, 'projects.archive') && isLocalPublicationExecutionAvailable(env.supabaseUrl);
 
       const projectDbId = (async () => {
@@ -734,7 +741,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                   publicId={project.publicId || ''}
                   ready={publicationActionsAvailable}
                   canPrepare={canPreparePublicationPlan}
-                  localExecutionAvailable={localPublicationExecutionAvailable}
+                  executionTarget={publicationExecutionTarget}
                 />
                 {project.status === 'published' && canExecuteLocalArchive && (
                   <LocalArchivePanel publicId={project.publicId || ''} />

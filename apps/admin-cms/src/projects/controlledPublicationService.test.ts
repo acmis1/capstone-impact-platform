@@ -54,7 +54,7 @@ function harness(overrides: Partial<ControlledPublicationDependencies> = {}, opt
   let feed: Buffer | null = Buffer.from('[]', 'utf8');
   let finalized = false;
   const deps: ControlledPublicationDependencies = {
-    assertDisposableLocalEnvironment: vi.fn(),
+    assertExecutionEnvironment: vi.fn(),
     getReadiness: vi.fn().mockResolvedValue(ready),
     // Mirrors the real database: the target only becomes published once finalization commits.
     listProjects: vi.fn(async () => { calls.push('listProjects'); return [finalized ? published : approved]; }),
@@ -112,9 +112,9 @@ describe('controlled publication coordinator', () => {
     }
   });
 
-  it('fails closed before any write outside a loopback environment', async () => {
-    const { deps } = harness({ assertDisposableLocalEnvironment: vi.fn(() => { throw new Error('hosted'); }) });
-    await expect(run(deps)).resolves.toEqual({ resultCode: 'EXECUTION_FAILED', failureCode: 'NON_LOCAL_ENVIRONMENT' });
+  it('fails closed before any write when the selected execution policy is denied', async () => {
+    const { deps } = harness({ assertExecutionEnvironment: vi.fn(() => { throw new Error('denied'); }) });
+    await expect(run(deps)).resolves.toEqual({ resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' });
     expect(deps.reserveAttempt).not.toHaveBeenCalled(); expect(deps.overwriteObject).not.toHaveBeenCalled();
   });
 
@@ -147,7 +147,14 @@ describe('controlled publication coordinator', () => {
 
   it('binds the fresh confirmed evidence into the reservation and returns exact completion evidence', async () => {
     const { deps } = harness({ listProjects: vi.fn().mockResolvedValueOnce([approved]).mockResolvedValueOnce([published]) });
-    await expect(run(deps)).resolves.toEqual(expect.objectContaining({ resultCode: 'COMPLETED', attemptId: 'attempt', snapshotId: 'snapshot', auditRecordId: 'audit', recordCount: 1 }));
+    await expect(run(deps)).resolves.toEqual(expect.objectContaining({
+      resultCode: 'COMPLETED',
+      attemptId: 'attempt',
+      snapshotId: 'snapshot',
+      auditRecordId: 'audit',
+      recordCount: 1,
+      feedPublicUrl: 'http://127.0.0.1/public/capstones-latest.json',
+    }));
     expect(deps.reserveAttempt).toHaveBeenCalledWith(ready.confirmedPreviewId, ready.confirmedAt);
     expect(deps.prepareAttempt).toHaveBeenCalledWith('attempt', 'token', expect.objectContaining({ recordCount: 1 }), [], '[]');
     expect(deps.markStorageWritten).toHaveBeenCalledTimes(1); expect(deps.finalizeAttempt).toHaveBeenCalledTimes(1);
@@ -248,6 +255,7 @@ describe('controlled publication coordinator', () => {
     await expect(run(deps)).resolves.toEqual({
       resultCode: 'ALREADY_COMPLETED', attemptId: 'attempt', snapshotId: 'snapshot', auditRecordId: 'audit',
       recordCount: historical.recordCount, feedHash: historical.feedHash,
+      feedPublicUrl: 'http://127.0.0.1/public/capstones-latest.json',
     });
     expect(deps.reserveAttempt).not.toHaveBeenCalled();
     expect(deps.prepareAttempt).not.toHaveBeenCalled();
@@ -265,6 +273,30 @@ describe('controlled publication coordinator', () => {
     });
     await expect(run(deps)).resolves.toEqual({ resultCode: 'EXECUTION_FAILED', failureCode: 'CURRENT_FEED_DIVERGED' });
     expect(deps.failAttempt).not.toHaveBeenCalled();
+  });
+
+  it('rejects already-completed evidence whose snapshot URL is not the current canonical feed URL', async () => {
+    const historical = serializePublicFeedArtifact(compilePublicFeed([published]));
+    const { deps } = harness({
+      getCompletedAttempt: vi.fn().mockResolvedValue(completedAttempt()),
+      listProjects: vi.fn().mockResolvedValue([published]),
+      downloadObject: vi.fn(async () => Buffer.from(historical.content, 'utf8')),
+      getPublishedSnapshot: vi.fn().mockResolvedValue({
+        id: 'snapshot',
+        recordCount: historical.recordCount,
+        feedHash: historical.feedHash,
+        storageBucket: PUBLIC_FEED_BUCKET,
+        storagePath: `${PUBLIC_FEED_BUCKET}/${PUBLIC_FEED_PATH}`,
+        publicUrl: 'https://wrong.example/capstones-latest.json',
+        createdBy: 'admin',
+      }),
+      getPublishAuditRecord: vi.fn().mockResolvedValue({ id: 'audit', projectId: 'project', adminId: 'admin', actionTaken: 'publish', fromStatus: 'approved', toStatus: 'published' }),
+    });
+
+    await expect(run(deps)).resolves.toEqual({
+      resultCode: 'EXECUTION_FAILED',
+      failureCode: 'COMPLETED_SNAPSHOT_EVIDENCE_INVALID',
+    });
   });
 
   it('rejects an already-published target whose publish audit attribution does not match the attempt owner', async () => {

@@ -62,13 +62,13 @@ describe('project detail auxiliary failure isolation', () => {
 
     const readinessMarkup = renderToStaticMarkup(React.createElement(PublicationReadinessPanel, { readiness: result.publicationReadiness }));
     expect(readinessMarkup).toContain('Publication readiness unavailable.');
-    expect(readinessMarkup).toContain('Publication preparation and Local publication are disabled');
+    expect(readinessMarkup).toContain('Publication preparation and execution are disabled');
 
     const preparationMarkup = renderToStaticMarkup(React.createElement(PublicationPreparationPanel, {
       publicId: project.publicId,
       ready: result.publicationActionsAvailable,
       canPrepare: true,
-      localExecutionAvailable: true,
+      executionTarget: 'local',
     }));
     expect(preparationMarkup).toBe('');
   });

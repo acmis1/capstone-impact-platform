@@ -42,7 +42,7 @@ function getPresentation(readiness: PublicationReadinessResult): ReadinessPresen
     case 'INVALID_SELECTION':
     case 'INVALID_PRIVATE_BUCKET':
     case 'READINESS_UNAVAILABLE':
-      return { title: 'Readiness unavailable', description: 'Publication preparation and local publication remain unavailable until readiness can be verified.', variant: 'information', icon: ShieldAlert };
+      return { title: 'Readiness unavailable', description: 'Publication preparation and execution remain unavailable until readiness can be verified.', variant: 'information', icon: ShieldAlert };
     default:
       return { title: 'Not ready for publication', description: 'Publication readiness has not been satisfied.', variant: 'destructive', icon: AlertCircle };
   }
@@ -50,7 +50,7 @@ function getPresentation(readiness: PublicationReadinessResult): ReadinessPresen
 
 export function PublicationReadinessPanel({ readiness }: PublicationReadinessPanelProps) {
   if (!readiness) {
-    return <Alert variant="information" icon={ShieldAlert} title="Publication readiness unavailable." description="Publication preparation and Local publication are disabled until readiness can be verified." />;
+    return <Alert variant="information" icon={ShieldAlert} title="Publication readiness unavailable." description="Publication preparation and execution are disabled until readiness can be verified." />;
   }
 
   const presentation = getPresentation(readiness);

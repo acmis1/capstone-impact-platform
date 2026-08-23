@@ -79,6 +79,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 | `PARTICIPANT_PREVIEW_EMAIL_ENABLED` | `false` | Email delivery disabled. Generate-and-send returns `EMAIL_DELIVERY_DISABLED`; manual token generation remains operational. |
 | `PARTICIPANT_PREVIEW_REMINDERS_ENABLED` | `false` | Reminder scheduler disabled. Scheduled reminders are skipped safely. |
 | `STAFF_PROVISIONING_ENABLED` | `false` | New staff invitations and staging-only direct UAT account creation are disabled. Existing pending invitations can still be activated. Direct creation additionally requires exact staging runtime and Supabase-host identity checks. |
+| `CAPSTONE_STAGING_PUBLICATION_ENABLED` | `false` | Staging showcase publication is absent from the UI and route fails closed. Exact `true` enables it only when the staging runtime identity and expected Supabase host also match. It never enables live production publication. |
 
 ---
 
@@ -103,7 +104,8 @@ sequenceDiagram
     Staff->>CMS: 7. Generate secure participant preview link (Approved version)
     Participant->>CMS: 8. Access preview URL & confirm exact version
     Staff->>CMS: 9. Execute publication readiness verification
-    Staff->>CMS: 10. Prepare publication snapshot & compile public feed
+    Staff->>CMS: 10. Prepare publication plan (no write)
+    Staff->>CMS: 11. Separately authorised staging showcase publication
 ```
 
 1. **Staff Sign-In**: Authenticate using the verified initial administrator account at `/login`.
@@ -115,7 +117,8 @@ sequenceDiagram
 7. **Participant Preview Generation**: Generate a secure preview link for the approved project version (token hash persisted; raw token shown once).
 8. **Participant Confirmation**: Participant accesses preview URL and submits confirmation for the exact approved version.
 9. **Publication Readiness Check**: Execute `get_project_publication_readiness` verification (the database contract requires the project to already be in `approved` status, with confirmed preview evidence and complete accessibility texts).
-10. **Publication Preparation**: Compile and validate public feed snapshot via the controlled publication workflow.
+10. **Publication Preparation**: Compile and validate the candidate public feed via the no-write preparation action.
+11. **Staging Showcase Publication (separate authorisation required)**: When the server has exact staging identity/host proof and explicit staging-publication enablement, an Admin may acknowledge **Publish to staging showcase**. The existing controlled coordinator promotes approved media, verifies and replaces the stable staging feed, and returns bounded feed/snapshot evidence. See [Duda Integration Plan](duda-integration-plan.md#5-separately-authorised-staging-demonstration) for the exact later demonstration procedure.
 
 > [!NOTE]
 > There is no ordinary second "final approval" step after participant confirmation. The domain model and database contract require the project to be reviewed and transitioned to `approved` status prior to preview generation and publication readiness checks.
@@ -127,6 +130,8 @@ Stakeholder staging testing does **NOT** automatically authorize:
 - Outgoing email delivery to real participant addresses.
 
 Controlled staging preparation and synthetic demonstration remain strictly isolated from live public systems.
+
+Local publication, staging/test-showcase publication, and live production publication are distinct capabilities. Local remains loopback-only. Staging is fail-closed unless `CAPSTONE_RUNTIME_ENV=staging`, the actual Supabase hostname exactly matches `CAPSTONE_EXPECTED_SUPABASE_HOST`, and `CAPSTONE_STAGING_PUBLICATION_ENABLED=true`. Live production publication remains unavailable: there is no production route or UI control.
 
 ---
 

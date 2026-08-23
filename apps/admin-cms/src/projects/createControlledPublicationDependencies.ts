@@ -3,6 +3,10 @@ import { SupabaseParticipantPreviewRepositoryCore } from '../repositories/Supaba
 import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
 import { SupabasePublicationExecutionRepositoryCore } from '../repositories/SupabasePublicationExecutionRepositoryCore';
 import { ControlledPublicationDependencies } from './controlledPublicationService';
+import {
+  assertPublicationExecutionTarget,
+  type PublicationExecutionTarget,
+} from './publicationExecutionPolicy';
 
 export function createControlledPublicationDependencies(params: {
   supabase: SupabaseClient;
@@ -12,14 +16,27 @@ export function createControlledPublicationDependencies(params: {
   privateBucket: string;
   publicFeedBucket: string;
   publicFeedPath: string;
+  executionTarget: PublicationExecutionTarget;
 }): ControlledPublicationDependencies {
-  const { supabase, supabaseUrl, publicId, adminId, privateBucket, publicFeedBucket, publicFeedPath } = params;
+  const {
+    supabase,
+    supabaseUrl,
+    publicId,
+    adminId,
+    privateBucket,
+    publicFeedBucket,
+    publicFeedPath,
+    executionTarget,
+  } = params;
   const projects = new SupabaseProjectRepositoryCore(supabase);
   const previews = new SupabaseParticipantPreviewRepositoryCore(supabase);
   const publication = new SupabasePublicationExecutionRepositoryCore(supabase, supabaseUrl);
   const feedPublicUrl = publication.getPublicUrl(publicFeedBucket, publicFeedPath);
   return {
-    assertDisposableLocalEnvironment: () => publication.assertDisposableLocalEnvironment(),
+    assertExecutionEnvironment: () => assertPublicationExecutionTarget({
+      target: executionTarget,
+      supabaseUrl,
+    }),
     getReadiness: () => previews.getPublicationReadiness({ publicId, adminId, privateBucket }),
     listProjects: () => projects.listProjects(),
     listProjectMedia: () => publication.listProjectMedia(publicId),
