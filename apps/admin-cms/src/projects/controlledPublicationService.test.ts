@@ -4,10 +4,13 @@ import { createMockProject } from '../test/projectFixtures';
 import { createPublicFeedArtifact } from '../feed/publicFeedArtifact';
 import { toPublicFeedRecord } from '../feed/compilePublicFeed';
 
-const mocks = vi.hoisted(() => ({ execute: vi.fn(), inspect: vi.fn() }));
+const mocks = vi.hoisted(() => ({ execute: vi.fn(), inspect: vi.fn(), evidence: vi.fn() }));
 vi.mock('./publicFeedWriterCoordinator', () => ({
   executePublicFeedWriter: mocks.execute,
   inspectPublicFeedHead: mocks.inspect,
+}));
+vi.mock('./publicFeedTargetEvidence', () => ({
+  findPublicationCompletionEvidence: mocks.evidence,
 }));
 
 import { executeControlledPublication, type ControlledPublicationDependencies } from './controlledPublicationService';
@@ -29,8 +32,39 @@ function dependencies(): ControlledPublicationDependencies {
     getPublicUrl: (_bucket, path) => `https://example.com/${path}`,
     downloadObject: vi.fn().mockResolvedValue(null),
     uploadNewObject: vi.fn().mockResolvedValue(true),
-    removeObjects: vi.fn().mockResolvedValue(undefined),
   };
+}
+
+function deployedDependencies(): ControlledPublicationDependencies {
+  return {
+    ...dependencies(),
+    listProjects: vi.fn().mockResolvedValue([createMockProject({ publicId: 'target', status: 'published' })]),
+  };
+}
+
+/** A head that contains the retried target plus a later, unrelated project. */
+function headWithTargetAndLaterProject() {
+  const artifact = createPublicFeedArtifact(['target', 'later'].map((publicId) =>
+    toPublicFeedRecord(createMockProject({ publicId, status: 'published' }))));
+  return {
+    head: {
+      currentVersion: {
+        id: 'version-later', versionNumber: 3, operationId: 'operation-later',
+        publishedSnapshotId: 'snapshot-later', auditRecordId: 'audit-later',
+        feedHash: artifact.feedHash, recordCount: artifact.recordCount,
+      },
+    },
+    artifact,
+    publicUrl: 'https://example.com/feed.json',
+  };
+}
+
+function publish(deps: ControlledPublicationDependencies, overrides: Record<string, unknown> = {}) {
+  return executeControlledPublication({
+    permissions: ['projects.publish'], publicId: 'target', privateBucket: 'private',
+    publicAssetsBucket: 'assets', publicFeedBucket: 'feeds', publicFeedPath: 'feed.json',
+    dependencies: deps, ...overrides,
+  });
 }
 
 describe('ledger-backed controlled publication', () => {
@@ -56,18 +90,83 @@ describe('ledger-backed controlled publication', () => {
         recordCount: prepared.artifact.recordCount, feedPublicUrl: 'https://example.com/feed.json',
       };
     });
-    const result = await executeControlledPublication({
-      permissions: ['projects.publish'], publicId: 'target', privateBucket: 'private',
-      publicAssetsBucket: 'assets', publicFeedBucket: 'feeds', publicFeedPath: 'feed.json', dependencies: dependencies(),
+    await expect(publish(dependencies())).resolves.toMatchObject({ resultCode: 'COMPLETED', recordCount: 2 });
+  });
+
+  it('separates media validation from media promotion across the write-intent boundary', async () => {
+    mocks.execute.mockImplementation(async (params) => {
+      expect(typeof params.validateBeforeWriteIntent).toBe('function');
+      expect(typeof params.afterWriteIntent).toBe('function');
+      expect(params).not.toHaveProperty('beforeCanonicalWrite');
+      return {
+        resultCode: 'COMPLETED', operationId: 'operation', versionNumber: 2,
+        snapshotId: 'snapshot', auditRecordId: 'audit', feedHash: 'hash',
+        recordCount: 1, feedPublicUrl: 'https://example.com/feed.json',
+      };
     });
-    expect(result).toMatchObject({ resultCode: 'COMPLETED', recordCount: 2 });
+    await expect(publish(dependencies())).resolves.toMatchObject({ resultCode: 'COMPLETED' });
+  });
+
+  it('reports the retried target own completion evidence, not the operation that owns the head', async () => {
+    mocks.inspect.mockResolvedValue(headWithTargetAndLaterProject());
+    mocks.evidence.mockResolvedValue({
+      operationId: 'operation-target', versionNumber: 2,
+      publishedSnapshotId: 'snapshot-target', auditRecordId: 'audit-target',
+    });
+
+    await expect(publish(deployedDependencies())).resolves.toMatchObject({
+      resultCode: 'ALREADY_COMPLETED', attemptId: 'operation-target',
+      snapshotId: 'snapshot-target', auditRecordId: 'audit-target', recordCount: 2,
+    });
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it('never borrows a rollback head identifier when the target has no matching evidence', async () => {
+    mocks.inspect.mockResolvedValue({
+      ...headWithTargetAndLaterProject(),
+      head: {
+        currentVersion: {
+          id: 'version-rollback', versionNumber: 5, operationId: 'operation-rollback',
+          publishedSnapshotId: null, auditRecordId: null,
+        },
+      },
+    });
+    mocks.evidence.mockResolvedValue(null);
+
+    const result = await publish(deployedDependencies());
+    expect(result).toEqual({
+      resultCode: 'NOT_READY', readinessCode: 'ALREADY_DEPLOYED_UNVERIFIED',
+      blockers: [expect.stringContaining('no publication operation in its own history')],
+    });
+    expect(JSON.stringify(result)).not.toContain('operation-rollback');
+    expect(mocks.execute).not.toHaveBeenCalled();
   });
 
   it('surfaces durable recovery-required state without claiming compensation succeeded', async () => {
     mocks.execute.mockResolvedValue({ resultCode: 'RECOVERY_REQUIRED' });
-    await expect(executeControlledPublication({
-      permissions: ['projects.publish'], publicId: 'target', privateBucket: 'private',
-      publicAssetsBucket: 'assets', publicFeedBucket: 'feeds', publicFeedPath: 'feed.json', dependencies: dependencies(),
-    })).resolves.toEqual({ resultCode: 'RECOVERY_REQUIRED' });
+    await expect(publish(dependencies())).resolves.toEqual({ resultCode: 'RECOVERY_REQUIRED' });
+  });
+
+  it('reports a reconciliation publication with a null audit identifier instead of an empty string', async () => {
+    mocks.inspect.mockResolvedValue({ head: null, artifact: null, publicUrl: 'https://example.com/feed.json' });
+    mocks.execute.mockResolvedValue({
+      resultCode: 'COMPLETED', operationId: 'operation', versionNumber: 2,
+      snapshotId: 'snapshot', auditRecordId: null, feedHash: 'hash', recordCount: 1,
+      feedPublicUrl: 'https://example.com/feed.json',
+    });
+    await expect(publish(deployedDependencies(), { publicationMode: 'deployment_reconciliation' }))
+      .resolves.toMatchObject({ resultCode: 'COMPLETED', snapshotId: 'snapshot', auditRecordId: null });
+  });
+
+  it('reports readiness loss without reaching the canonical writer', async () => {
+    const deps = dependencies();
+    deps.getReadiness = vi.fn().mockResolvedValue({
+      resultCode: 'PREVIEW_NOT_CONFIRMED', ready: false, blockers: ['Preview not confirmed'], warnings: [],
+      confirmedPreviewId: null, confirmedAt: null,
+    });
+    await expect(publish(deps)).resolves.toEqual({
+      resultCode: 'NOT_READY', readinessCode: 'PREVIEW_NOT_CONFIRMED', blockers: ['Preview not confirmed'],
+    });
+    expect(mocks.execute).not.toHaveBeenCalled();
   });
 });

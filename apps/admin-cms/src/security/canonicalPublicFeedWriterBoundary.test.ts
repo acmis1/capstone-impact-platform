@@ -32,6 +32,40 @@ describe('canonical public feed writer boundary', () => {
     expect(activation).toContain('createPublicFeedArtifact(compilePublicFeed(projects))');
   });
 
+  it('keeps public media promotion behind the durable write-intent boundary', () => {
+    const coordinator = fs.readFileSync(path.join(src, 'projects/publicFeedWriterCoordinator.ts'), 'utf8');
+    expect(coordinator).not.toContain('beforeCanonicalWrite');
+    // Every promotion call site is reached only after mark_public_feed_write_started has
+    // revalidated permission, readiness and owner epoch/token for this request.
+    const promotions = [...coordinator.matchAll(/promoteMedia\(operation\.id, mediaManifest\)/g)];
+    expect(promotions).toHaveLength(4);
+    for (const promotion of promotions) {
+      const preceding = coordinator.slice(0, promotion.index);
+      expect(preceding).toMatch(/markWriteStarted|stored\?\.content === candidate\.content/);
+    }
+  });
+
+  it('exposes no reverse compensation path for public media', () => {
+    const promotion = fs.readFileSync(path.join(src, 'projects/boundPublicMediaPromotion.ts'), 'utf8');
+    const publication = fs.readFileSync(path.join(src, 'projects/controlledPublicationService.ts'), 'utf8');
+    for (const source of [promotion, publication]) {
+      expect(source).not.toContain('removeObjects');
+      expect(source).not.toMatch(/\.remove\(/);
+    }
+  });
+
+  it('resolves idempotent completion evidence from immutable per-target history', () => {
+    const publication = fs.readFileSync(path.join(src, 'projects/controlledPublicationService.ts'), 'utf8');
+    const removal = fs.readFileSync(path.join(src, 'projects/controlledPublicRemovalService.ts'), 'utf8');
+    expect(publication).toContain('findPublicationCompletionEvidence');
+    expect(removal).toContain('findRemovalCompletionEvidence');
+    for (const source of [publication, removal]) {
+      expect(source).not.toContain('currentVersion.operationId');
+      expect(source).not.toContain('currentVersion.auditRecordId');
+      expect(source).not.toContain('currentVersion.publishedSnapshotId');
+    }
+  });
+
   it('leaves the standalone staging publisher permanently fail closed', () => {
     const legacy = fs.readFileSync(path.join(src, 'scripts/publishStagingFeed.ts'), 'utf8');
     expect(legacy).toContain('LEGACY_CANONICAL_WRITER_DISABLED');
