@@ -79,55 +79,110 @@ describe('Local recovery readiness safety contract', () => {
 });
 
 describe('database backup and restore probe', () => {
-  function successfulCommands(): DatabaseProbeCommands & { psql: ReturnType<typeof vi.fn> } {
+  function successfulCommands(options: {
+    cleanupFails?: boolean;
+    ownershipProbeFails?: boolean;
+    restoredOwnership?: 'OWNED' | 'UNOWNED';
+    restoreFails?: boolean;
+    setupFails?: boolean;
+  } = {}): DatabaseProbeCommands & {
+    events: string[];
+    psql: ReturnType<typeof vi.fn>;
+    restoreSchema: ReturnType<typeof vi.fn>;
+  } {
+    const events: string[] = [];
+    let ownershipMarker = '';
+    let dropCalls = 0;
     const psql = vi.fn((sql: string) => {
+      if (sql.startsWith('CREATE SCHEMA')) {
+        events.push('create-owned-schema');
+        ownershipMarker = sql.match(/capstone-recovery-owner-v1:[a-f0-9]{64}/)?.[0] ?? '';
+        return '';
+      }
+      if (sql.includes('CREATE TABLE')) {
+        events.push('create-fixture');
+        if (options.setupFails) throw new Error('raw setup detail');
+        return '';
+      }
+      if (sql.startsWith('SELECT CASE WHEN EXISTS') && sql.includes('obj_description')) {
+        events.push(`prove-restored-ownership:${options.restoredOwnership ?? 'OWNED'}`);
+        if (options.ownershipProbeFails) throw new Error('raw ownership inspection detail');
+        if (!ownershipMarker || !sql.includes(`= '${ownershipMarker}'`)) return 'UNOWNED\n';
+        return `${options.restoredOwnership ?? 'OWNED'}\n`;
+      }
+      if (sql.includes('DO $capstone_recovery$') && sql.includes('DROP SCHEMA')) {
+        dropCalls += 1;
+        events.push(`drop-owned-schema:${dropCalls}`);
+        if (options.cleanupFails && dropCalls === 2) throw new Error('raw cleanup detail');
+        return '';
+      }
       if (sql.includes('to_regnamespace')) {
+        events.push('inspect-schema-absence');
         return 'ABSENT\n';
       }
-      if (sql.includes('SELECT id::text')) return `1|${PAYLOAD}|${CHECKSUM}\n`;
+      if (sql.includes('SELECT id::text')) {
+        events.push('verify-restored-row');
+        return `1|${PAYLOAD}|${CHECKSUM}\n`;
+      }
       return '';
     });
+    const restoreSchema = vi.fn(() => {
+      events.push('restore-schema');
+      if (options.restoreFails) throw new Error('raw restore detail');
+    });
     return {
+      events,
       psql,
-      dumpSchema: vi.fn(() => Buffer.concat([Buffer.from('PGDMP'), Buffer.alloc(128)])),
-      restoreSchema: vi.fn(),
+      dumpSchema: vi.fn(() => {
+        events.push('dump-schema');
+        return Buffer.concat([Buffer.from('PGDMP'), Buffer.alloc(128)]);
+      }),
+      restoreSchema,
     };
   }
 
-  it('backs up, removes, restores, verifies, and cleans the synthetic schema', () => {
+  it('backs up an ownership marker, proves it after restore, verifies, and cleans', () => {
     const commands = successfulCommands();
     const result = runDatabaseRecoveryProbeWithCommands(SCHEMA, commands);
 
     expect(result).toEqual({ dumpBytes: 133, restoredRows: 1, residueAbsent: true });
     expect(commands.dumpSchema).toHaveBeenCalledWith(SCHEMA);
     expect(commands.restoreSchema).toHaveBeenCalledTimes(1);
-    expect(commands.psql.mock.calls.some(([sql]) => sql.includes(`DROP SCHEMA "${SCHEMA}" CASCADE`))).toBe(true);
+    const createSql = commands.psql.mock.calls.find(([sql]) => sql.startsWith('CREATE SCHEMA'))?.[0];
+    const marker = createSql?.match(/capstone-recovery-owner-v1:[a-f0-9]{64}/)?.[0];
+    const ownershipSql = commands.psql.mock.calls.find(
+      ([sql]) => sql.startsWith('SELECT CASE WHEN EXISTS') && sql.includes('obj_description'),
+    )?.[0];
+    expect(marker).toBeTruthy();
+    expect(ownershipSql).toContain(`= '${marker}'`);
+    expect(commands.events).toEqual([
+      'inspect-schema-absence',
+      'create-owned-schema',
+      'create-fixture',
+      'dump-schema',
+      'drop-owned-schema:1',
+      'restore-schema',
+      'prove-restored-ownership:OWNED',
+      'verify-restored-row',
+      'drop-owned-schema:2',
+      'inspect-schema-absence',
+    ]);
     expect(commands.psql.mock.calls.at(-1)?.[0]).toContain('to_regnamespace');
   });
 
-  it('still removes the verifier-owned schema when restore fails', () => {
-    const commands = successfulCommands();
-    commands.restoreSchema = vi.fn(() => {
-      throw new Error('raw restore detail');
-    });
+  it('cleans a partial restore only when its exact ownership marker is present', () => {
+    const commands = successfulCommands({ restoreFails: true });
 
     expect(() => runDatabaseRecoveryProbeWithCommands(SCHEMA, commands)).toThrow(
       'DATABASE_BACKUP_RESTORE_FAILED',
     );
-    expect(commands.psql.mock.calls.at(-2)?.[0]).toContain('DROP SCHEMA IF EXISTS');
+    expect(commands.events).toContain('prove-restored-ownership:OWNED');
+    expect(commands.events.filter((event) => event.startsWith('drop-owned-schema'))).toHaveLength(2);
     expect(commands.psql.mock.calls.at(-1)?.[0]).toContain('to_regnamespace');
   });
 
   it('reports cleanup failure ahead of the primary operation failure', () => {
-    const commands = successfulCommands();
-    commands.restoreSchema = vi.fn(() => {
-      throw new Error('raw restore detail');
-    });
-    commands.psql.mockImplementation((sql: string) => {
-      if (sql.includes('DROP SCHEMA IF EXISTS')) throw new Error('raw cleanup detail');
-      if (sql.includes('to_regnamespace')) return 'ABSENT\n';
-      return '';
-    });
+    const commands = successfulCommands({ cleanupFails: true, restoreFails: true });
 
     expect(() => runDatabaseRecoveryProbeWithCommands(SCHEMA, commands)).toThrow(
       'DATABASE_PROBE_CLEANUP_FAILED',
@@ -171,19 +226,43 @@ describe('database backup and restore probe', () => {
   });
 
   it('cleans a schema owned by this run when setup fails after creation', () => {
-    const commands = successfulCommands();
-    commands.psql.mockImplementation((sql: string) => {
-      if (sql.includes('to_regnamespace')) return 'ABSENT\n';
-      if (sql.includes('CREATE TABLE')) throw new Error('setup failed');
-      return '';
-    });
+    const commands = successfulCommands({ setupFails: true });
 
     expect(() => runDatabaseRecoveryProbeWithCommands(SCHEMA, commands)).toThrow(
       'DATABASE_BACKUP_RESTORE_FAILED',
     );
-    expect(commands.psql.mock.calls.some(([sql]) => sql.includes('DROP SCHEMA IF EXISTS'))).toBe(
-      true,
+    expect(commands.events.filter((event) => event.startsWith('drop-owned-schema'))).toEqual([
+      'drop-owned-schema:1',
+    ]);
+  });
+
+  it('revokes ownership after intentional loss and never drops a post-loss competitor', () => {
+    const commands = successfulCommands({ restoredOwnership: 'UNOWNED', restoreFails: true });
+
+    expect(() => runDatabaseRecoveryProbeWithCommands(SCHEMA, commands)).toThrow(
+      'DATABASE_BACKUP_RESTORE_FAILED',
     );
+    expect(commands.events).toEqual([
+      'inspect-schema-absence',
+      'create-owned-schema',
+      'create-fixture',
+      'dump-schema',
+      'drop-owned-schema:1',
+      'restore-schema',
+      'prove-restored-ownership:UNOWNED',
+    ]);
+    expect(commands.events.filter((event) => event.startsWith('drop-owned-schema'))).toHaveLength(1);
+  });
+
+  it('does not clean after restore when ownership inspection itself fails', () => {
+    const commands = successfulCommands({ ownershipProbeFails: true, restoreFails: true });
+
+    expect(() => runDatabaseRecoveryProbeWithCommands(SCHEMA, commands)).toThrow(
+      'DATABASE_BACKUP_RESTORE_FAILED',
+    );
+    expect(commands.events.filter((event) => event.startsWith('drop-owned-schema'))).toEqual([
+      'drop-owned-schema:1',
+    ]);
   });
 });
 

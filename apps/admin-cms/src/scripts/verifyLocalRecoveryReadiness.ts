@@ -14,6 +14,7 @@ import {
 
 const DATABASE_PAYLOAD = 'synthetic-local-recovery-payload';
 const DATABASE_SCHEMA_PREFIX = 'capstone_recovery_probe_';
+const DATABASE_OWNERSHIP_MARKER_PREFIX = 'capstone-recovery-owner-v1:';
 const STORAGE_BUCKET_PREFIX = 'capstone-recovery-probe-';
 const MAX_STORAGE_LIST_PAGES = 100;
 const STORAGE_LIST_PAGE_SIZE = 100;
@@ -133,12 +134,56 @@ function quotedIdentifier(identifier: string): string {
   return `"${identifier}"`;
 }
 
+function databaseOwnershipIsProven(
+  schemaName: string,
+  ownershipMarker: string,
+  commands: DatabaseProbeCommands,
+): boolean {
+  return commands.psql(
+    `SELECT CASE WHEN EXISTS (` +
+      'SELECT 1 FROM pg_catalog.pg_namespace ' +
+      `WHERE nspname = '${schemaName}' ` +
+      `AND pg_catalog.obj_description(oid, 'pg_namespace') = '${ownershipMarker}'` +
+    `) THEN 'OWNED' ELSE 'UNOWNED' END;`,
+  ).trim() === 'OWNED';
+}
+
+function dropDatabaseProbeSchemaWhenOwned(input: {
+  schemaName: string;
+  ownershipMarker: string;
+  commands: DatabaseProbeCommands;
+  allowAbsent: boolean;
+}): void {
+  const schema = quotedIdentifier(input.schemaName);
+  const absentAction = input.allowAbsent
+    ? 'NULL;'
+    : `RAISE EXCEPTION 'DATABASE_PROBE_OWNERSHIP_UNPROVEN';`;
+  input.commands.psql([
+    'DO $capstone_recovery$',
+    'BEGIN',
+    `IF pg_catalog.to_regnamespace('${input.schemaName}') IS NULL THEN`,
+    absentAction,
+    'ELSIF NOT EXISTS (',
+    'SELECT 1 FROM pg_catalog.pg_namespace',
+    `WHERE nspname = '${input.schemaName}'`,
+    `AND pg_catalog.obj_description(oid, 'pg_namespace') = '${input.ownershipMarker}'`,
+    ') THEN',
+    `RAISE EXCEPTION 'DATABASE_PROBE_OWNERSHIP_UNPROVEN';`,
+    'ELSE',
+    `EXECUTE 'DROP SCHEMA ${schema} CASCADE';`,
+    'END IF;',
+    'END',
+    '$capstone_recovery$;',
+  ].join(' '));
+}
+
 export function runDatabaseRecoveryProbeWithCommands(
   schemaName: string,
   commands: DatabaseProbeCommands,
 ): DatabaseProbeResult {
   const schema = quotedIdentifier(schemaName);
   const checksum = sha256(Buffer.from(DATABASE_PAYLOAD, 'utf8'));
+  const ownershipMarker = `${DATABASE_OWNERSHIP_MARKER_PREFIX}${randomBytes(32).toString('hex')}`;
   let failure: Error | undefined;
   let cleanupFailure = false;
   let result: DatabaseProbeResult | undefined;
@@ -150,7 +195,10 @@ export function runDatabaseRecoveryProbeWithCommands(
   if (initialState !== 'ABSENT') throw new Error('DATABASE_PROBE_COLLISION');
 
   try {
-    commands.psql(`CREATE SCHEMA ${schema};`);
+    commands.psql(
+      `CREATE SCHEMA ${schema}; ` +
+      `COMMENT ON SCHEMA ${schema} IS '${ownershipMarker}';`,
+    );
     cleanupAuthorized = true;
     commands.psql([
       `CREATE TABLE ${schema}.recovery_evidence (` +
@@ -167,8 +215,22 @@ export function runDatabaseRecoveryProbeWithCommands(
       throw new Error('DATABASE_BACKUP_ARTIFACT_INVALID');
     }
 
-    commands.psql(`DROP SCHEMA ${schema} CASCADE;`);
-    commands.restoreSchema(dump);
+    try {
+      dropDatabaseProbeSchemaWhenOwned({
+        schemaName,
+        ownershipMarker,
+        commands,
+        allowAbsent: false,
+      });
+    } finally {
+      cleanupAuthorized = false;
+    }
+    try {
+      commands.restoreSchema(dump);
+    } finally {
+      cleanupAuthorized = databaseOwnershipIsProven(schemaName, ownershipMarker, commands);
+    }
+    if (!cleanupAuthorized) throw new Error('DATABASE_RESTORE_OWNERSHIP_UNPROVEN');
 
     const restored = commands.psql(
       `SELECT id::text || '|' || payload || '|' || checksum FROM ${schema}.recovery_evidence ORDER BY id;`,
@@ -183,7 +245,12 @@ export function runDatabaseRecoveryProbeWithCommands(
   } finally {
     if (cleanupAuthorized) {
       try {
-        commands.psql(`DROP SCHEMA IF EXISTS ${schema} CASCADE;`);
+        dropDatabaseProbeSchemaWhenOwned({
+          schemaName,
+          ownershipMarker,
+          commands,
+          allowAbsent: true,
+        });
         const finalState = commands.psql(
           `SELECT CASE WHEN to_regnamespace('${schemaName}') IS NULL THEN 'ABSENT' ELSE 'PRESENT' END;`,
         ).trim();
