@@ -134,6 +134,40 @@ describe('database backup and restore probe', () => {
     expect(psql).toHaveBeenCalledTimes(1);
     expect(psql.mock.calls[0][0]).toContain('to_regnamespace');
   });
+
+  it('never removes a competing schema created after the absence check', () => {
+    const psql = vi.fn((sql: string) => {
+      if (sql.includes('to_regnamespace')) return 'ABSENT\n';
+      if (sql.startsWith('CREATE SCHEMA')) throw new Error('schema already exists');
+      return '';
+    });
+    const commands: DatabaseProbeCommands = {
+      psql,
+      dumpSchema: vi.fn(),
+      restoreSchema: vi.fn(),
+    };
+
+    expect(() => runDatabaseRecoveryProbeWithCommands(SCHEMA, commands)).toThrow(
+      'DATABASE_BACKUP_RESTORE_FAILED',
+    );
+    expect(psql.mock.calls.some(([sql]) => sql.includes('DROP SCHEMA'))).toBe(false);
+  });
+
+  it('cleans a schema owned by this run when setup fails after creation', () => {
+    const commands = successfulCommands();
+    commands.psql.mockImplementation((sql: string) => {
+      if (sql.includes('to_regnamespace')) return 'ABSENT\n';
+      if (sql.includes('CREATE TABLE')) throw new Error('setup failed');
+      return '';
+    });
+
+    expect(() => runDatabaseRecoveryProbeWithCommands(SCHEMA, commands)).toThrow(
+      'DATABASE_BACKUP_RESTORE_FAILED',
+    );
+    expect(commands.psql.mock.calls.some(([sql]) => sql.includes('DROP SCHEMA IF EXISTS'))).toBe(
+      true,
+    );
+  });
 });
 
 describe('Storage backup discovery', () => {
@@ -169,11 +203,15 @@ describe('Storage backup discovery', () => {
 });
 
 describe('Storage backup and restore probe', () => {
-  function fakeLocalStorage(options: { failFirstUpload?: boolean } = {}): {
+  function fakeLocalStorage(
+    options: { failFirstUpload?: boolean; competingBucketWinsCreateRace?: boolean } = {},
+  ): {
     client: SupabaseClient;
     buckets: Map<string, { public: boolean; file_size_limit: number; allowed_mime_types: string[] }>;
     objects: Map<string, Map<string, { content: Buffer; contentType: string }>>;
     mutatedBuckets: string[];
+    emptiedBuckets: string[];
+    deletedBuckets: string[];
   } {
     const buckets = new Map([
       ['project-drafts-private', { public: false, file_size_limit: 20 * 1024 * 1024, allowed_mime_types: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'] }],
@@ -182,6 +220,9 @@ describe('Storage backup and restore probe', () => {
     ]);
     const objects = new Map<string, Map<string, { content: Buffer; contentType: string }>>();
     const mutatedBuckets: string[] = [];
+    const emptiedBuckets: string[] = [];
+    const deletedBuckets: string[] = [];
+    let createAttempts = 0;
     let uploadAttempts = 0;
 
     const client = {
@@ -192,6 +233,19 @@ describe('Storage backup and restore probe', () => {
         }),
         getBucket: async (name: string) => ({ data: buckets.get(name) ?? null, error: buckets.has(name) ? null : new Error('missing') }),
         createBucket: async (name: string, config: { public: boolean; fileSizeLimit: number; allowedMimeTypes: string[] }) => {
+          createAttempts += 1;
+          if (options.competingBucketWinsCreateRace && createAttempts === 1) {
+            buckets.set(name, {
+              public: false,
+              file_size_limit: 1024,
+              allowed_mime_types: ['text/plain'],
+            });
+            objects.set(name, new Map([[
+              'competitor.txt',
+              { content: Buffer.from('competitor-owned'), contentType: 'text/plain' },
+            ]]));
+            return { data: null, error: new Error('bucket already exists') };
+          }
           mutatedBuckets.push(name);
           buckets.set(name, {
             public: config.public,
@@ -203,11 +257,13 @@ describe('Storage backup and restore probe', () => {
         },
         emptyBucket: async (name: string) => {
           mutatedBuckets.push(name);
+          emptiedBuckets.push(name);
           objects.get(name)?.clear();
           return { data: {}, error: null };
         },
         deleteBucket: async (name: string) => {
           mutatedBuckets.push(name);
+          deletedBuckets.push(name);
           buckets.delete(name);
           objects.delete(name);
           return { data: {}, error: null };
@@ -248,7 +304,7 @@ describe('Storage backup and restore probe', () => {
       },
     } as unknown as SupabaseClient;
 
-    return { client, buckets, objects, mutatedBuckets };
+    return { client, buckets, objects, mutatedBuckets, emptiedBuckets, deletedBuckets };
   }
 
   it('backs up, removes, restores, verifies, and cleans only the probe bucket', async () => {
@@ -262,6 +318,8 @@ describe('Storage backup and restore probe', () => {
     expect(fake.buckets.has(BUCKET)).toBe(false);
     expect(fake.objects.has(BUCKET)).toBe(false);
     expect(new Set(fake.mutatedBuckets)).toEqual(new Set([BUCKET]));
+    expect(new Set(fake.emptiedBuckets)).toEqual(new Set([BUCKET]));
+    expect(new Set(fake.deletedBuckets)).toEqual(new Set([BUCKET]));
   });
 
   it('cleans the probe bucket when a Storage operation fails', async () => {
@@ -271,5 +329,21 @@ describe('Storage backup and restore probe', () => {
     );
     expect(fake.buckets.has(BUCKET)).toBe(false);
     expect(new Set(fake.mutatedBuckets)).toEqual(new Set([BUCKET]));
+    expect(fake.emptiedBuckets).toEqual([BUCKET]);
+    expect(fake.deletedBuckets).toEqual([BUCKET]);
+  });
+
+  it('never empties or deletes a competing bucket created after the absence check', async () => {
+    const fake = fakeLocalStorage({ competingBucketWinsCreateRace: true });
+
+    await expect(runStorageRecoveryProbe(fake.client, BUCKET)).rejects.toThrow(
+      'STORAGE_BACKUP_RESTORE_FAILED',
+    );
+    expect(fake.buckets.has(BUCKET)).toBe(true);
+    expect(fake.objects.get(BUCKET)?.get('competitor.txt')?.content.toString('utf8')).toBe(
+      'competitor-owned',
+    );
+    expect(fake.emptiedBuckets).not.toContain(BUCKET);
+    expect(fake.deletedBuckets).not.toContain(BUCKET);
   });
 });

@@ -121,9 +121,9 @@ export function runDatabaseRecoveryProbeWithCommands(
   if (initialState !== 'ABSENT') throw new Error('DATABASE_PROBE_COLLISION');
 
   try {
+    commands.psql(`CREATE SCHEMA ${schema};`);
     cleanupAuthorized = true;
     commands.psql([
-      `CREATE SCHEMA ${schema};`,
       `CREATE TABLE ${schema}.recovery_evidence (` +
         'id integer PRIMARY KEY, ' +
         'payload text NOT NULL CHECK (btrim(payload) <> \'\'), ' +
@@ -207,6 +207,10 @@ async function bucketNames(client: SupabaseClient): Promise<string[]> {
   return sorted(data.map(({ name }) => name));
 }
 
+interface ProbeBucketOwnership {
+  owned: boolean;
+}
+
 async function assertCanonicalLocalBuckets(client: SupabaseClient): Promise<void> {
   for (const expected of EXPECTED_BUCKETS) {
     const { data, error } = await client.storage.getBucket(expected.name);
@@ -222,14 +226,23 @@ async function assertCanonicalLocalBuckets(client: SupabaseClient): Promise<void
   }
 }
 
-async function removeProbeBucket(client: SupabaseClient, bucketName: string): Promise<void> {
+async function removeOwnedProbeBucket(
+  client: SupabaseClient,
+  bucketName: string,
+  ownership: ProbeBucketOwnership,
+): Promise<void> {
   assertSafeStorageProbeBucket(bucketName);
+  if (!ownership.owned) return;
   const names = await bucketNames(client);
-  if (!names.includes(bucketName)) return;
+  if (!names.includes(bucketName)) {
+    ownership.owned = false;
+    return;
+  }
   const emptied = await client.storage.emptyBucket(bucketName);
   if (emptied.error) throw new Error('STORAGE_PROBE_EMPTY_FAILED');
   const deleted = await client.storage.deleteBucket(bucketName);
   if (deleted.error) throw new Error('STORAGE_PROBE_DELETE_FAILED');
+  ownership.owned = false;
 }
 
 async function createProbeBucket(client: SupabaseClient, bucketName: string): Promise<void> {
@@ -305,6 +318,7 @@ export async function runStorageRecoveryProbe(
   let failure: Error | undefined;
   let cleanupFailure = false;
   let result: StorageProbeResult | undefined;
+  const ownership: ProbeBucketOwnership = { owned: false };
   const initialBuckets = await bucketNames(client);
 
   if (initialBuckets.includes(bucketName)) throw new Error('STORAGE_PROBE_COLLISION');
@@ -327,12 +341,14 @@ export async function runStorageRecoveryProbe(
 
   try {
     await createProbeBucket(client, bucketName);
+    ownership.owned = true;
     await uploadStorageEntries(client, bucketName, fixtureEntries);
     const backup = await backupStorageEntries(client, bucketName);
     if (backup.length !== fixtureEntries.length) throw new Error('STORAGE_BACKUP_OBJECT_SET_MISMATCH');
 
-    await removeProbeBucket(client, bucketName);
+    await removeOwnedProbeBucket(client, bucketName, ownership);
     await createProbeBucket(client, bucketName);
+    ownership.owned = true;
     await uploadStorageEntries(client, bucketName, backup);
     await verifyStorageRestore(client, bucketName, backup);
 
@@ -346,12 +362,9 @@ export async function runStorageRecoveryProbe(
     failure = new Error('STORAGE_BACKUP_RESTORE_FAILED');
   } finally {
     try {
-      await removeProbeBucket(client, bucketName);
-      const finalBuckets = await bucketNames(client);
-      cleanupFailure = finalBuckets.includes(bucketName);
-      if (!cleanupFailure && finalBuckets.join('|') !== initialBuckets.join('|')) {
-        cleanupFailure = true;
-      }
+      await removeOwnedProbeBucket(client, bucketName, ownership);
+      cleanupFailure = ownership.owned;
+      await assertCanonicalLocalBuckets(client);
     } catch {
       cleanupFailure = true;
     }

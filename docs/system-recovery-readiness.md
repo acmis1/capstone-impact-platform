@@ -22,7 +22,7 @@ The drill proves that the pinned Local toolchain can:
 8. recreate it, restore every object, and verify the exact object set, byte length, and SHA-256 checksums; and
 9. attempt cleanup on every outcome, verify that all verifier-owned residue is absent, and fail with a dedicated cleanup code if it is not.
 
-The drill reads the three canonical Local bucket configurations but never uploads, overwrites, removes, or restores their objects. It never resets the Local database. Backup bytes remain in memory and are not written into the repository or an operator-selected path.
+The drill reads the three canonical Local bucket configurations but never uploads, overwrites, removes, or restores their objects. Schema and bucket cleanup is authorized only after the current execution successfully creates that exact probe resource; a matching name alone never grants deletion authority. It never resets the Local database. Backup bytes remain in memory and are not written into the repository or an operator-selected path.
 
 ## Safety preconditions
 
