@@ -217,7 +217,7 @@ Expected automated inspection output on the clean v2 staging target:
 - `MIGRATION_HISTORY_READABLE = NO`
 - `SCHEMA_BASELINE = UNVERIFIED`
 - `REQUIRED_TABLE_SET = PRESENT` (All 27 public application tables detected)
-- `REQUIRED_RPC_NAMES = PRESENT` (All 57 application RPC names detected)
+- `REQUIRED_RPC_NAMES = PRESENT` (All 59 application RPC names detected)
 - `REQUIRED_STORAGE_BUCKETS = PRESENT` (All 3 buckets detected)
 - `AUTH_FOUNDATION = READY`
 - `MANUAL_EVIDENCE_REQUIRED = YES`

@@ -6,6 +6,7 @@ import { getAuthErrorHttpStatus, getPublicAuthErrorMessage } from '../../../../.
 import { validateBulkReviewExecuteInput } from '../../../../../auth/bulkProjectReviewInput';
 import { createSupabaseAdminClient } from '../../../../../lib/supabase/admin';
 import { SupabaseBulkProjectReviewGateway } from '../../../../../projects/SupabaseBulkProjectReviewGateway';
+import { bulkReviewRequestSizeRejection } from '../../../../../projects/bulkProjectReview';
 import { BulkReviewPermissionError, BulkReviewService } from '../../../../../projects/bulkProjectReviewService';
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' } as const;
@@ -17,6 +18,10 @@ export async function POST(request: NextRequest) {
     if (!validateSameOrigin(request.headers.get('origin'), request.nextUrl.origin)) {
       const error = getPublicAuthErrorMessage('PERMISSION_DENIED');
       return NextResponse.json({ success: false, error }, { status: 403, headers: NO_STORE_HEADERS });
+    }
+
+    if (bulkReviewRequestSizeRejection(request.headers.get('content-length')) !== null) {
+      return NextResponse.json({ success: false, error: 'Validation failed.' }, { status: 413, headers: NO_STORE_HEADERS });
     }
 
     const body = await request.json().catch(() => null);

@@ -8,6 +8,27 @@ export const BULK_REVIEW_MAX_REASON_LENGTH = 200;
 export const BULK_REVIEW_MAX_REASONS = 5;
 export const BULK_REVIEW_MAX_COMMENT_LENGTH = 4000;
 
+/**
+ * Upper bound for a bulk review request body, checked before the payload is read. A maximal legal
+ * request is 50 public IDs, 50 expected-version timestamps, and one 4,000 character comment, which
+ * stays well inside this limit even fully escaped.
+ */
+export const BULK_REVIEW_MAX_REQUEST_BYTES = 64 * 1024;
+
+/**
+ * Rejects an oversized or unstated body length before the request is parsed. Returns null when the
+ * request may proceed.
+ */
+export function bulkReviewRequestSizeRejection(
+  contentLength: string | null,
+): 'MISSING_CONTENT_LENGTH' | 'INVALID_CONTENT_LENGTH' | 'REQUEST_TOO_LARGE' | null {
+  if (contentLength === null || contentLength === '') return 'MISSING_CONTENT_LENGTH';
+  if (!/^(0|[1-9][0-9]*)$/.test(contentLength)) return 'INVALID_CONTENT_LENGTH';
+  const bytes = Number(contentLength);
+  if (!Number.isSafeInteger(bytes)) return 'INVALID_CONTENT_LENGTH';
+  return bytes > BULK_REVIEW_MAX_REQUEST_BYTES ? 'REQUEST_TOO_LARGE' : null;
+}
+
 export const BULK_REVIEW_ACTIONS = ['submit_for_review', 'approve', 'request_changes'] as const;
 export type BulkReviewAction = (typeof BULK_REVIEW_ACTIONS)[number];
 

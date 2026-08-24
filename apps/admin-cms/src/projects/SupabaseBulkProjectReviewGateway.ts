@@ -57,6 +57,38 @@ function reason(code: string, message: string): BulkReviewReason {
   return { code, message };
 }
 
+/**
+ * Staff-facing text for the workflow authorities' own bounded rule codes. The codes come from
+ * `perform_project_review_action` and `submit_import_projects_for_review`; anything outside this
+ * vocabulary keeps the generic sentence, so an unrecognized code can never leak database detail.
+ */
+const BLOCKED_REASON_MESSAGES: Record<string, string> = {
+  REVIEW_TRANSITION_INVALID: 'The project is no longer in a workflow state that allows this action.',
+  REVIEW_PERMISSION_DENIED: 'Your account is not permitted to apply this action to this project.',
+  REVIEW_PROJECT_NOT_FOUND: 'The project could not be found.',
+  REVIEW_COMMENTS_TOO_LONG: 'The shared review comment is longer than the allowed limit.',
+  PROJECT_STATE_CHANGED_CONCURRENTLY: 'The project changed while the action was being applied.',
+  INVALID_PROJECT_STATE: 'The project is not in a valid workflow state for this action.',
+  INVALID_BATCH_STATE: 'The project import batch is not in a submittable state.',
+  PROJECT_NOT_IN_BATCH: 'The project is no longer part of its import batch.',
+  PROJECT_NOT_FOUND: 'The project could not be found.',
+  BATCH_NOT_FOUND: 'The project import batch could not be found.',
+  READINESS_BLOCKED: 'The project has unresolved readiness blockers.',
+  SUBMIT_PERMISSION_DENIED: 'Your account is not permitted to submit this project.',
+  ACCESSIBILITY_CONTENT_REQUIRED: 'Required accessibility text is missing.',
+  ACCESSIBILITY_CONTENT_INVALID: 'The accessibility text does not meet the required format.',
+  MEDIA_ACCESSIBILITY_REQUIRED: 'Required image alternative text is missing.',
+  MEDIA_ACCESSIBILITY_INVALID: 'The image alternative text does not meet the required format.',
+  ACTIVE_PREVIEW_EXISTS: 'The project has an active participant preview.',
+  AMBIGUOUS_ACTIVE_PREVIEW: 'The project has more than one active participant preview.',
+  CORRECTION_RESOLUTION_REQUIRED: 'An outstanding participant correction must be resolved first.',
+  CONTROLLED_PUBLIC_REMOVAL_REQUIRED: 'The project must complete controlled public removal first.',
+};
+
+function blockedReasonMessage(code: string): string {
+  return BLOCKED_REASON_MESSAGES[code] ?? 'The project did not pass the current workflow checks.';
+}
+
 function readinessReasons(readiness: ReturnType<typeof computeReadinessForImportBatchRow>): BulkReviewReason[] {
   const reasons = readiness.blockingReasons.map((message) => reason('READINESS_BLOCKED', message));
   if (readiness.eligibility === 'ineligible') {
@@ -241,7 +273,7 @@ export class SupabaseBulkProjectReviewGateway implements BulkProjectReviewGatewa
     if (resultCode !== 'SUCCESS' || typeof result.auditRecordId !== 'string') {
       const code = typeof result.resultCode === 'string' ? result.resultCode : 'WORKFLOW_BLOCKED';
       const reasonCode = typeof result.reasonCode === 'string' ? result.reasonCode : code;
-      return { resultCode: 'BLOCKED', status, auditRecorded: false, reason: reason(reasonCode, 'The project did not pass the current workflow checks.') };
+      return { resultCode: 'BLOCKED', status, auditRecorded: false, reason: reason(reasonCode, blockedReasonMessage(reasonCode)) };
     }
     return { resultCode: 'SUCCESS', status, auditRecorded: true };
   }

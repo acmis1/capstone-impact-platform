@@ -26,6 +26,7 @@ DECLARE
   v_updated_at timestamptz;
   v_result jsonb;
   v_transition jsonb;
+  v_reason_code text;
 BEGIN
   IF p_public_id IS NULL THEN RAISE EXCEPTION 'BULK_REVIEW_PUBLIC_ID_REQUIRED'; END IF;
   v_public_id := pg_catalog.btrim(p_public_id);
@@ -103,9 +104,18 @@ BEGIN
         v_batch_id, ARRAY[v_public_id]::text[], p_admin_id, NULL
       );
     EXCEPTION WHEN OTHERS THEN
+      -- Only an explicit workflow rule violation (RAISE EXCEPTION, SQLSTATE P0001) is a bounded
+      -- per-project block. Deadlocks, serialization failures, constraint violations, and every
+      -- other condition are re-raised so this project is reported as FAILED instead of being
+      -- mislabelled as a workflow decision. The subtransaction rollback keeps the project
+      -- unmutated either way.
+      IF SQLSTATE <> 'P0001' THEN RAISE; END IF;
+      v_reason_code := COALESCE(NULLIF(pg_catalog.left(pg_catalog.regexp_replace(
+        pg_catalog.upper(pg_catalog.split_part(SQLERRM, ' ', 1)), '[^A-Z0-9_]', '', 'g'
+      ), 80), ''), 'WORKFLOW_BLOCKED');
       RETURN pg_catalog.jsonb_build_object(
         'resultCode', 'BLOCKED', 'publicId', v_public_id, 'status', v_status,
-        'reasonCode', 'WORKFLOW_BLOCKED'
+        'reasonCode', v_reason_code
       );
     END;
     IF v_result->>'resultCode' = 'SUCCESS'
@@ -129,9 +139,15 @@ BEGIN
       v_public_id, p_action, v_comments, p_admin_id
     );
   EXCEPTION WHEN OTHERS THEN
+    -- Same boundary as the submission branch: preserve the review authority's own rule code and
+    -- re-raise anything that is not an explicit workflow rule violation.
+    IF SQLSTATE <> 'P0001' THEN RAISE; END IF;
+    v_reason_code := COALESCE(NULLIF(pg_catalog.left(pg_catalog.regexp_replace(
+      pg_catalog.upper(pg_catalog.split_part(SQLERRM, ' ', 1)), '[^A-Z0-9_]', '', 'g'
+    ), 80), ''), 'WORKFLOW_BLOCKED');
     RETURN pg_catalog.jsonb_build_object(
       'resultCode', 'BLOCKED', 'publicId', v_public_id, 'status', v_status,
-      'reasonCode', 'WORKFLOW_BLOCKED'
+      'reasonCode', v_reason_code
     );
   END;
 

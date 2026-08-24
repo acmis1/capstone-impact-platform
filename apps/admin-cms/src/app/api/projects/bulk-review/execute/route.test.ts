@@ -18,11 +18,17 @@ vi.mock('../../../../../projects/SupabaseBulkProjectReviewGateway', () => ({
 
 import { POST } from './route';
 
-function request(body: unknown, origin = 'http://localhost'): NextRequest {
+function request(body: unknown, origin = 'http://localhost', contentLength?: string | null): NextRequest {
+  const payload = JSON.stringify(body);
+  const headers: Record<string, string> = { origin, 'content-type': 'application/json' };
+  // NextRequest does not derive this in the test environment, and the route requires a stated,
+  // bounded body length before it reads the payload.
+  const stated = contentLength === undefined ? String(Buffer.byteLength(payload, 'utf8')) : contentLength;
+  if (stated !== null) headers['content-length'] = stated;
   return new NextRequest('http://localhost/api/projects/bulk-review/execute', {
     method: 'POST',
-    headers: { origin, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    headers,
+    body: payload,
   });
 }
 

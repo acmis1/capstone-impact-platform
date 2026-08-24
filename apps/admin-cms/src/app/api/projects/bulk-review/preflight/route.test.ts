@@ -18,11 +18,17 @@ vi.mock('../../../../../projects/SupabaseBulkProjectReviewGateway', () => ({
 
 import { POST } from './route';
 
-function request(body: unknown, origin = 'http://localhost'): NextRequest {
+function request(body: unknown, origin = 'http://localhost', contentLength?: string | null): NextRequest {
+  const payload = JSON.stringify(body);
+  const headers: Record<string, string> = { origin, 'content-type': 'application/json' };
+  // NextRequest does not derive this in the test environment, and the route requires a stated,
+  // bounded body length before it reads the payload.
+  const stated = contentLength === undefined ? String(Buffer.byteLength(payload, 'utf8')) : contentLength;
+  if (stated !== null) headers['content-length'] = stated;
   return new NextRequest('http://localhost/api/projects/bulk-review/preflight', {
     method: 'POST',
-    headers: { origin, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    headers,
+    body: payload,
   });
 }
 
@@ -38,6 +44,22 @@ describe('bulk review preflight route', () => {
   it('rejects malformed input before authentication or database access', async () => {
     const response = await POST(request({ action: 'approve', publicIds: ['bad/id'] }));
     expect(response.status).toBe(400);
+    expect(auth.requireAdmin).not.toHaveBeenCalled();
+    expect(auth.gateway.loadProjectStates).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unstated or oversized body before the payload is read', async () => {
+    const valid = { action: 'approve', publicIds: ['synthetic-2026-0001'] };
+
+    const unstated = await POST(request(valid, 'http://localhost', null));
+    expect(unstated.status).toBe(413);
+
+    const oversized = await POST(request(valid, 'http://localhost', String(64 * 1024 + 1)));
+    expect(oversized.status).toBe(413);
+
+    const malformed = await POST(request(valid, 'http://localhost', '12x'));
+    expect(malformed.status).toBe(413);
+
     expect(auth.requireAdmin).not.toHaveBeenCalled();
     expect(auth.gateway.loadProjectStates).not.toHaveBeenCalled();
   });

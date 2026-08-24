@@ -231,6 +231,9 @@ jobs:
       - name: Verify bulk project review workflow runtime behavior
         run: npm run verify:bulk-project-review-runtime --workspace=apps/admin-cms
 
+      - name: Verify 120-project bulk review functional workflow
+        run: npm run verify:bulk-project-review-functional-workflow --workspace=apps/admin-cms
+
       - name: Admin Application Smoke Test (/api/health & /login 200 OK)
         run: npm run check:app-smoke
 

@@ -345,6 +345,14 @@ npm run verify:bulk-project-review-runtime
 
 The harness refuses non-loopback Supabase targets and does not use hosted services, real participant data or storage objects.
 
+A second Local-only harness proves the same contract at the assignment's stated scale. It seeds 120 synthetic projects across three completed import batches, builds the selection by walking the real filtered, paginated project index across pages, then submits that selection through bounded preflight/execute cohorts and reconciles every reported outcome against the stored status and audit rows:
+
+```bash
+npm run verify:bulk-project-review-functional-workflow
+```
+
+Each phase must return exactly one deterministic result row per requested project, with no dropped or duplicated row, no duplicate audit record, no foreign actor attribution, and a bounded stale result for any project changed between preflight and execution. Note the boundary this proves: the server contract accepts a 120-project selection accumulated across pages, while the current interface still scopes one bulk operation to the visible page.
+
 ## Import workflow
 
 The application provides two import workflows:

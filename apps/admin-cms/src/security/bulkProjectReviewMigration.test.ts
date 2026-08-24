@@ -39,9 +39,36 @@ describe('bulk project review concurrency migration contract', () => {
     expect(migration).toContain("v_result->>'auditRecordId' IS NOT NULL");
     expect(migration).toContain("'resultCode', 'BLOCKED'");
     expect(migration).toContain("'status', v_status");
-    expect(migration).toContain("'reasonCode', 'WORKFLOW_BLOCKED'");
+    expect(migration).toContain("'reasonCode', v_reason_code");
     expect(migration).toContain('get_bulk_project_review_evidence');
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.get_bulk_project_review_evidence(uuid[])');
+  });
+
+  it('reports the workflow authority rule code instead of one generic blocked code', () => {
+    const handlers = migration.match(/EXCEPTION WHEN OTHERS THEN/g) ?? [];
+    expect(handlers).toHaveLength(2);
+    // Both delegation handlers derive the reason from the authority's own raised token.
+    expect(
+      migration.match(/pg_catalog\.split_part\(SQLERRM, ' ', 1\)/g) ?? [],
+    ).toHaveLength(2);
+    expect(migration.match(/'\[\^A-Z0-9_\]', '', 'g'/g) ?? []).toHaveLength(2);
+    expect(migration.match(/, 80\), ''\), 'WORKFLOW_BLOCKED'\)/g) ?? []).toHaveLength(2);
+  });
+
+  it('re-raises anything that is not an explicit workflow rule violation', () => {
+    // A deadlock, serialization failure, or constraint violation must not be reported to staff as
+    // a workflow decision; it has to surface as a failed project instead.
+    expect(migration.match(/IF SQLSTATE <> 'P0001' THEN RAISE; END IF;/g) ?? []).toHaveLength(2);
+  });
+
+  it('adds no competing definition of the existing workflow authorities', () => {
+    // Binh's wrapper delegates rather than redefining, so a later migration that replaces
+    // perform_project_review_action (for example the pending multi-image gallery approval gate)
+    // composes with bulk review instead of being overwritten by it.
+    expect(migration).not.toContain('FUNCTION public.perform_project_review_action(');
+    expect(migration).not.toContain('FUNCTION public.submit_import_projects_for_review(');
+    expect(migration).toContain('public.perform_project_review_action(');
+    expect(migration).toContain('public.submit_import_projects_for_review(');
   });
 
   it('does not add a competing audit write or production media/publication behavior', () => {

@@ -9,6 +9,7 @@ import {
   ProjectFilterOptions,
 } from '../../domain/projectQuery';
 import { requireAdmin } from '../../auth/requireAdmin';
+import type { AuthenticatedAdminContext } from '../../auth/authTypes';
 import { hasPermission } from '../../auth/permissions';
 import { DashboardMetricsSummary } from '../../components/admin-dashboard/DashboardMetricsSummary';
 import { ProjectFilterBar } from '../../components/admin-dashboard/ProjectFilterBar';
@@ -39,19 +40,29 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   let metrics: ProjectDashboardMetrics | null = null;
   let filterOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [] };
   let loadError: boolean = false;
-  let canImport = false;
-  let canSubmitBulk = false;
-  let canReviewBulk = false;
 
+  // Authorization is the first gate, and it is authoritative for this page. The admin layout
+  // renders the canonical auth screen, but the page must never rely on that: a failure here
+  // returns immediately so no service-role repository is ever constructed or queried for an
+  // unverified session.
+  let authContext: AuthenticatedAdminContext;
   try {
-    const authContext = await requireAdmin();
-    canImport = hasPermission(authContext.permissions, 'projects.edit');
-    canSubmitBulk = hasPermission(authContext.permissions, 'projects.edit');
-    canReviewBulk = hasPermission(authContext.permissions, 'projects.review');
+    authContext = await requireAdmin();
   } catch {
-    // The admin layout already guards this route; an unavailable permission context
-    // only means the contextual import action stays hidden.
+    return (
+      <div className="flex w-full flex-col gap-6">
+        <ErrorState
+          title="Projects are unavailable"
+          description="Your administrative session could not be verified. Sign in again to view project records."
+          headingLevel="h1"
+        />
+      </div>
+    );
   }
+
+  const canImport = hasPermission(authContext.permissions, 'projects.edit');
+  const canSubmitBulk = hasPermission(authContext.permissions, 'projects.edit');
+  const canReviewBulk = hasPermission(authContext.permissions, 'projects.review');
 
   try {
     const repository = new SupabaseProjectRepository();
