@@ -124,6 +124,7 @@ export async function GET(
     resolved.mediaSnapshot.map(async (asset) => ({
       mediaAssetId: asset.mediaAssetId,
       assetType: asset.assetType,
+      galleryPosition: asset.galleryPosition,
       fileName: asset.fileName,
       mimeType: asset.mimeType,
       altText: asset.altText,

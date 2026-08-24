@@ -28,8 +28,16 @@ export function createMockProject(overrides: Partial<Project> = {}): Project {
       'https://example.com/assets/snap2.png'
     ],
     snapshotMedia: [
-      { url: 'https://example.com/assets/snap1.png', altText: 'Mock turbine layout diagram.' },
-      { url: 'https://example.com/assets/snap2.png', altText: 'Mock energy yield comparison chart.' }
+      {
+        url: 'https://example.com/assets/snap1.png',
+        altText: 'Mock turbine layout diagram.',
+        galleryPosition: 1,
+      },
+      {
+        url: 'https://example.com/assets/snap2.png',
+        altText: 'Mock energy yield comparison chart.',
+        galleryPosition: 2,
+      },
     ],
     videoUrl: 'https://www.youtube.com/watch?v=mockvideo',
     demoUrl: 'https://example.com/demo',

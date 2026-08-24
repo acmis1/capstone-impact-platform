@@ -58,7 +58,7 @@ const mockProject: Project = {
   poster: 'https://example.com/poster.png',
   posterPdf: 'https://example.com/poster.pdf',
   snapshots: ['https://example.com/snap1.png'],
-  snapshotMedia: [{ url: 'https://example.com/snap1.png', altText: 'Snapshot 1' }],
+  snapshotMedia: [{ url: 'https://example.com/snap1.png', altText: 'Snapshot 1', galleryPosition: 1}],
   layoutConfig: {
     templateId: 'poster_showcase',
     featuredMedia: 'poster',

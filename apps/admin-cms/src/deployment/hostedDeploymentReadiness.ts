@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 33;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 39;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -41,6 +41,12 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260820160000_assistive_validation_job_coordination.sql',
   '20260821090000_assistive_validation_staff_inspection.sql',
   '20260821140000_assistive_duplicate_shortlist.sql',
+  '20260824050000_multi_image_gallery.sql',
+  '20260824055000_snapshot_alt_text_media_identity.sql',
+  '20260824060000_multi_image_gallery_approval_gate.sql',
+  '20260824070000_multi_image_gallery_participant_preview.sql',
+  '20260824080000_multi_image_gallery_publication_readiness.sql',
+  '20260825025000_multi_image_gallery_review_submission.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [

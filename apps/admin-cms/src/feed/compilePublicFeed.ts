@@ -42,9 +42,13 @@ export function toPublicFeedRecord(p: Project): PublicFeedRecord {
         accessibilityText: p.accessibilityText || '',
         snapshots: Array.isArray(p.snapshots) ? p.snapshots : [],
         // Copied element-wise rather than by reference so the compiled record can never be mutated
-        // through the source project, and normalised to the exact two-key public shape.
+        // through the source project, and normalised to the exact three-key public shape.
         snapshotMedia: Array.isArray(p.snapshotMedia)
-          ? p.snapshotMedia.map((item) => ({ url: item.url, altText: item.altText }))
+          ? p.snapshotMedia.map((item) => ({
+              url: item.url,
+              altText: item.altText,
+              galleryPosition: item.galleryPosition,
+            }))
           : [],
         // Include optional fields conditionally if defined
         ...(p.videoUrl ? { videoUrl: p.videoUrl } : {}),

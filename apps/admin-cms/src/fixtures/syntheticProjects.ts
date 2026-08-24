@@ -135,9 +135,10 @@ export function createValidationFlags(index: number): ValidationFlagRecord {
 
 /** Deterministic synthetic description, paired with its URL so the two can never drift apart. */
 function createSyntheticSnapshotMedia(publicId: string, urls: string[]): Project['snapshotMedia'] {
-  return urls.map((url, position) => ({
+  return urls.map((url, index) => ({
     url,
-    altText: `Synthetic snapshot ${position + 1} for ${publicId}: a generated placeholder image used for repeatable local checks.`,
+    altText: `Synthetic snapshot description for ${publicId}`,
+    galleryPosition: index + 1,
   }));
 }
 

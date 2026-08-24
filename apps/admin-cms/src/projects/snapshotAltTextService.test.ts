@@ -16,6 +16,7 @@ const REVIEW_ONLY_PERMISSIONS = ['projects.review'] as unknown as AdminPermissio
 
 const input = (overrides: Record<string, unknown> = {}) => ({
   publicId: '2026-synthetic',
+  mediaAssetId: MEDIA_ID,
   snapshotAltText: VALID_ALT,
   expectedUpdatedAt: EXPECTED_UPDATED_AT,
   ...overrides,
@@ -85,7 +86,13 @@ describe('snapshot alt text save service', () => {
 
   it('rejects an unexpected extra field rather than forwarding it', async () => {
     const gateway = gatewayReturning(successResponse);
-    const result = await saveSnapshotAltText(gateway, input({ mediaAssetId: MEDIA_ID }), ADMIN_ID);
+
+    const result = await saveSnapshotAltText(
+      gateway,
+      input({ unexpectedField: 'not-allowed' }),
+      ADMIN_ID,
+    );
+
     expect(!result.ok && result.code).toBe('VALIDATION_FAILED');
     expect(gateway.updateSnapshotAltTextAtomically).not.toHaveBeenCalled();
   });

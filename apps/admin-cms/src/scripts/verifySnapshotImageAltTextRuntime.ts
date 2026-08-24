@@ -297,6 +297,47 @@ function seedProject(
   return publicId;
 }
 
+function addSnapshotMedia(
+  publicId: string,
+  position: number,
+  altText: string | null,
+  options: {
+    storageBucket?: string;
+  } = {},
+): void {
+  const fileName = `snapshot-${position}.png`;
+
+  executeLocalSql(`
+    INSERT INTO public.media_assets(
+      project_id,
+      asset_type,
+      gallery_position,
+      file_name,
+      mime_type,
+      file_size_bytes,
+      storage_bucket,
+      storage_path,
+      is_public_approved,
+      public_url,
+      alt_text_public
+    )
+    SELECT
+      id,
+      'snapshot_image',
+      ${position},
+      ${sqlText(fileName)},
+      'image/png',
+      524288,
+      ${sqlText(options.storageBucket ?? PRIVATE_BUCKET)},
+      ${sqlText(`drafts/${publicId}/snapshot_image/${fileName}`)},
+      false,
+      NULL,
+      ${sqlText(altText)}
+    FROM public.projects
+    WHERE public_id = ${sqlText(publicId)};
+  `);
+}
+
 function projectState(publicId: string): ProjectState {
   return queryLocalJson<ProjectState>(`
     SELECT pg_catalog.jsonb_build_object(
@@ -991,8 +1032,8 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
           citations: [], externalLinks: [], industryCategories: [],
         },
         media: [
-          { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', mimeType: 'image/png', altText: null, signedUrl: 'https://signed.invalid/poster.png' },
-          { mediaAssetId: 'm2', assetType: 'snapshot_image', fileName: 'snapshot-1.png', mimeType: 'image/png', altText: SNAPSHOT_ALT, signedUrl: 'https://signed.invalid/snapshot-1.png' },
+          { mediaAssetId: 'm1', assetType: 'poster_image', galleryPosition: null, fileName: 'poster.png', mimeType: 'image/png', altText: null, signedUrl: 'https://signed.invalid/poster.png' },
+          { mediaAssetId: 'm2', assetType: 'snapshot_image', galleryPosition: 1, fileName: 'snapshot-1.png', mimeType: 'image/png', altText: SNAPSHOT_ALT, signedUrl: 'https://signed.invalid/snapshot-1.png' },
         ],
         responseState: { type: 'unresponded' },
       });
@@ -1013,7 +1054,7 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
           citations: [], externalLinks: [], industryCategories: [],
         },
         media: [
-          { mediaAssetId: 'm2', assetType: 'snapshot_image', fileName: 'snapshot-1.png', mimeType: 'image/png', altText: '"><script>alert(1)</script>', signedUrl: 'https://signed.invalid/snapshot-1.png' },
+          { mediaAssetId: 'm2', assetType: 'snapshot_image', galleryPosition: 1, fileName: 'snapshot-1.png', mimeType: 'image/png', altText: '"><script>alert(1)</script>', signedUrl: 'https://signed.invalid/snapshot-1.png' },
         ],
         responseState: { type: 'unresponded' },
       });
@@ -1104,11 +1145,26 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
     await scenario(57, 'The public feed emits both snapshots and the structured pairing', () => {
       const url = 'https://cdn.invalid/published/runtime/snapshot-1.png';
       const [record] = compilePublicFeed([createMockProject({
-        status: 'published', snapshots: [url], snapshotMedia: [{ url, altText: SNAPSHOT_ALT }],
+        status: 'published',
+        snapshots: [url],
+        snapshotMedia: [
+          {
+            url,
+            altText: SNAPSHOT_ALT,
+            galleryPosition: 1,
+          },
+        ],
       })]);
       assert(JSON.stringify(record.snapshots) === JSON.stringify([url]), 'The compatible snapshots array changed shape.');
       assert(
-        JSON.stringify(record.snapshotMedia) === JSON.stringify([{ url, altText: SNAPSHOT_ALT }]),
+        JSON.stringify(record.snapshotMedia) ===
+          JSON.stringify([
+            {
+              url,
+              altText: SNAPSHOT_ALT,
+              galleryPosition: 1,
+            },
+          ]),
         'The structured snapshotMedia pairing was not emitted.',
       );
       assert(validatePublicFeed([record]).valid, 'A compliant feed record failed validation.');
@@ -1121,12 +1177,24 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
 
       const mismatched = createMockProject({
         status: 'published', snapshots: [url],
-        snapshotMedia: [{ url: 'https://cdn.invalid/other.png', altText: SNAPSHOT_ALT }],
+        snapshotMedia: [
+          {
+            url: 'https://cdn.invalid/other.png',
+            altText: SNAPSHOT_ALT,
+            galleryPosition: 1,
+          },
+        ],
       });
       assert(!validatePublicFeed(compilePublicFeed([mismatched])).valid, 'A mismatched pairing passed validation.');
 
       for (const altText of ['', '   ', 'a'.repeat(MAX_ALT + 1)]) {
-        const bad = createMockProject({ status: 'published', snapshots: [url], snapshotMedia: [{ url, altText }] });
+        const bad = createMockProject({ status: 'published', snapshots: [url], snapshotMedia: [
+          {
+            url,
+            altText,
+            galleryPosition: 1,
+          },
+        ] });
         assert(!validatePublicFeed(compilePublicFeed([bad])).valid, `An invalid alt text ("${altText.slice(0, 8)}") passed validation.`);
       }
     });
@@ -1144,7 +1212,13 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
         const record = createMockProject({
           status: 'published',
           snapshots: [badUrl],
-          snapshotMedia: [{ url: badUrl, altText: SNAPSHOT_ALT }],
+          snapshotMedia: [
+            {
+              url: badUrl,
+              altText: SNAPSHOT_ALT,
+              galleryPosition: 1,
+            },
+          ],
         });
         assert(!validatePublicFeed([record]).valid, `Unsafe snapshot URL "${badUrl}" passed validation.`);
       }
@@ -1156,8 +1230,16 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
         status: 'published',
         snapshots: [url, url],
         snapshotMedia: [
-          { url, altText: SNAPSHOT_ALT },
-          { url, altText: SNAPSHOT_ALT },
+          {
+            url,
+            altText: SNAPSHOT_ALT,
+            galleryPosition: 1,
+          },
+          {
+            url,
+            altText: SNAPSHOT_ALT,
+            galleryPosition: 2,
+          },
         ],
       });
       assert(!validatePublicFeed([dupSnapshots]).valid, 'Duplicate snapshot URLs in snapshots passed validation.');
@@ -1166,14 +1248,661 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
         status: 'published',
         snapshots: [url, 'https://cdn.invalid/published/runtime/snapshot-2.png'],
         snapshotMedia: [
-          { url, altText: 'First' },
-          { url, altText: 'Duplicate' },
+          {
+            url,
+            altText: 'First',
+            galleryPosition: 1,
+          },
+          {
+            url,
+            altText: 'Duplicate',
+            galleryPosition: 2,
+          },
         ],
       });
       assert(!validatePublicFeed([dupMedia]).valid, 'Duplicate URLs in snapshotMedia passed validation.');
     });
+    await scenario(61, 'Approval accepts a three-image gallery when every snapshot is valid and described', async () => {
+      const target = seedProject(
+        prefix,
+        'approve-gallery-ok',
+        fixture!,
+        {
+          status: 'in_review',
+          snapshotAlt: 'Description for snapshot one.',
+        },
+      );
 
-    await scenario(61, 'The verifier created no public media and no published rows', () => {
+      addSnapshotMedia(
+        target,
+        2,
+        'Description for snapshot two.',
+      );
+
+      addSnapshotMedia(
+        target,
+        3,
+        'Description for snapshot three.',
+      );
+
+      const { data } = await serviceClient.rpc(
+        'perform_project_review_action',
+        {
+          p_public_id: target,
+          p_action: 'approve',
+          p_comments: null,
+          p_admin_id: fixture!.admin.id,
+        },
+      ) as RpcResult;
+
+      assert(
+        data?.status === 'approved',
+        `Three-image gallery approval failed: ${JSON.stringify(data)}`,
+      );
+
+      assert(
+        projectState(target).status === 'approved',
+        'The three-image gallery did not transition to approved.',
+      );
+    });
+
+    await scenario(62, 'Approval blocks a multi-image gallery when one snapshot is missing alt text', async () => {
+      const target = seedProject(
+        prefix,
+        'approve-gallery-missing-alt',
+        fixture!,
+        {
+          status: 'in_review',
+          snapshotAlt: 'Description for snapshot one.',
+        },
+      );
+
+      addSnapshotMedia(
+        target,
+        2,
+        null,
+      );
+
+      addSnapshotMedia(
+        target,
+        3,
+        'Description for snapshot three.',
+      );
+
+      const before = projectState(target);
+
+      const { data } = await serviceClient.rpc(
+        'perform_project_review_action',
+        {
+          p_public_id: target,
+          p_action: 'approve',
+          p_comments: null,
+          p_admin_id: fixture!.admin.id,
+        },
+      ) as RpcResult;
+
+      assert(
+        data?.resultCode === 'MEDIA_ACCESSIBILITY_REQUIRED',
+        `Expected MEDIA_ACCESSIBILITY_REQUIRED, got ${JSON.stringify(data)}`,
+      );
+
+      assert(
+        projectState(target).status === 'in_review',
+        'A gallery with a missing alt text was approved.',
+      );
+
+      assert(
+        projectState(target).audits === before.audits,
+        'A blocked gallery approval created an audit row.',
+      );
+    });
+
+    await scenario(63, 'Approval blocks a multi-image gallery when one snapshot is not valid private media', async () => {
+      const target = seedProject(
+        prefix,
+        'approve-gallery-invalid-media',
+        fixture!,
+        {
+          status: 'in_review',
+          snapshotAlt: 'Description for snapshot one.',
+        },
+      );
+
+      addSnapshotMedia(
+        target,
+        2,
+        'Description for snapshot two.',
+      );
+
+      addSnapshotMedia(
+        target,
+        3,
+        'Description for snapshot three.',
+        {
+          storageBucket: 'invalid-private-bucket',
+        },
+      );
+
+      const before = projectState(target);
+
+      const { data } = await serviceClient.rpc(
+        'perform_project_review_action',
+        {
+          p_public_id: target,
+          p_action: 'approve',
+          p_comments: null,
+          p_admin_id: fixture!.admin.id,
+        },
+      ) as RpcResult;
+
+      assert(
+        data?.resultCode === 'PROJECT_MEDIA_INVALID',
+        `Expected PROJECT_MEDIA_INVALID, got ${JSON.stringify(data)}`,
+      );
+
+      assert(
+        projectState(target).status === 'in_review',
+        'A gallery containing invalid private media was approved.',
+      );
+
+      assert(
+        projectState(target).audits === before.audits,
+        'A blocked gallery approval created an audit row.',
+      );
+    });
+
+        // ------------------------------------------------------------ multi-gallery confirmation staleness
+
+    await scenario(64, 'Adding a snapshot after participant confirmation makes the media snapshot stale', async () => {
+      const target = seedProject(prefix, 'stale-gallery-add', fixture!, {
+        status: 'approved',
+        snapshotAlt: SNAPSHOT_ALT,
+      });
+
+      const token = tokenPair();
+
+      const { data: preview } = await serviceClient.rpc('generate_participant_preview', {
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_token_hash: token.hash,
+        p_expires_in_seconds: 604800,
+        p_private_bucket: PRIVATE_BUCKET,
+        p_is_correction_reissue: false,
+      }) as RpcResult;
+
+      assert(
+        preview?.resultCode === 'SUCCESS',
+        `Could not generate the baseline preview: ${JSON.stringify(preview)}`,
+      );
+
+      const { data: confirmation } = await serviceClient.rpc('confirm_participant_preview', {
+        p_token_hash: token.hash,
+      }) as RpcResult;
+
+      assert(
+        confirmation?.resultCode === 'SUCCESS',
+        `Could not confirm the baseline preview: ${JSON.stringify(confirmation)}`,
+      );
+
+      const { data: before } = await serviceClient.rpc('get_project_publication_readiness', {
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_private_bucket: PRIVATE_BUCKET,
+      }) as RpcResult;
+
+      assert(
+        before?.resultCode === 'READY',
+        `Baseline gallery was not READY before the add: ${JSON.stringify(before)}`,
+      );
+
+      addSnapshotMedia(
+        target,
+        2,
+        'Description for the snapshot added after confirmation.',
+      );
+
+      const { data: after } = await serviceClient.rpc('get_project_publication_readiness', {
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_private_bucket: PRIVATE_BUCKET,
+      }) as RpcResult;
+
+      assert(
+        after?.ready === false && after?.resultCode === 'MEDIA_SNAPSHOT_STALE',
+        `Adding a snapshot did not stale confirmation: ${JSON.stringify(after)}`,
+      );
+    });
+
+    await scenario(65, 'Removing a snapshot after participant confirmation makes the media snapshot stale', async () => {
+      const target = seedProject(prefix, 'stale-gallery-remove', fixture!, {
+        status: 'approved',
+        snapshotAlt: SNAPSHOT_ALT,
+      });
+
+      addSnapshotMedia(
+        target,
+        2,
+        'Description for snapshot two before confirmation.',
+      );
+
+      const token = tokenPair();
+
+      const { data: preview } = await serviceClient.rpc('generate_participant_preview', {
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_token_hash: token.hash,
+        p_expires_in_seconds: 604800,
+        p_private_bucket: PRIVATE_BUCKET,
+        p_is_correction_reissue: false,
+      }) as RpcResult;
+
+      assert(
+        preview?.resultCode === 'SUCCESS',
+        `Could not generate the two-image preview: ${JSON.stringify(preview)}`,
+      );
+
+      const { data: confirmation } = await serviceClient.rpc('confirm_participant_preview', {
+        p_token_hash: token.hash,
+      }) as RpcResult;
+
+      assert(
+        confirmation?.resultCode === 'SUCCESS',
+        `Could not confirm the two-image preview: ${JSON.stringify(confirmation)}`,
+      );
+
+      const { data: before } = await serviceClient.rpc('get_project_publication_readiness', {
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_private_bucket: PRIVATE_BUCKET,
+      }) as RpcResult;
+
+      assert(
+        before?.resultCode === 'READY',
+        `Baseline gallery was not READY before the remove: ${JSON.stringify(before)}`,
+      );
+
+      executeLocalSql(`
+        DELETE FROM public.media_assets
+         WHERE project_id = (
+           SELECT id
+             FROM public.projects
+            WHERE public_id = ${sqlText(target)}
+         )
+           AND asset_type = 'snapshot_image'
+           AND gallery_position = 2;
+      `);
+
+      const { data: after } = await serviceClient.rpc('get_project_publication_readiness', {
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_private_bucket: PRIVATE_BUCKET,
+      }) as RpcResult;
+
+      assert(
+        after?.ready === false && after?.resultCode === 'MEDIA_SNAPSHOT_STALE',
+        `Removing a snapshot did not stale confirmation: ${JSON.stringify(after)}`,
+      );
+    });
+
+    await scenario(66, 'Reordering snapshots after participant confirmation makes the media snapshot stale', async () => {
+      const target = seedProject(prefix, 'stale-gallery-reorder', fixture!, {
+        status: 'approved',
+        snapshotAlt: SNAPSHOT_ALT,
+      });
+
+      addSnapshotMedia(
+        target,
+        2,
+        'Description for snapshot two before confirmation.',
+      );
+
+      const token = tokenPair();
+
+      const { data: preview } = await serviceClient.rpc('generate_participant_preview', {
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_token_hash: token.hash,
+        p_expires_in_seconds: 604800,
+        p_private_bucket: PRIVATE_BUCKET,
+        p_is_correction_reissue: false,
+      }) as RpcResult;
+
+      assert(
+        preview?.resultCode === 'SUCCESS',
+        `Could not generate the ordered gallery preview: ${JSON.stringify(preview)}`,
+      );
+
+      const { data: confirmation } = await serviceClient.rpc('confirm_participant_preview', {
+        p_token_hash: token.hash,
+      }) as RpcResult;
+
+      assert(
+        confirmation?.resultCode === 'SUCCESS',
+        `Could not confirm the ordered gallery preview: ${JSON.stringify(confirmation)}`,
+      );
+
+      const { data: before } = await serviceClient.rpc('get_project_publication_readiness', {
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_private_bucket: PRIVATE_BUCKET,
+      }) as RpcResult;
+
+      assert(
+        before?.resultCode === 'READY',
+        `Baseline gallery was not READY before the reorder: ${JSON.stringify(before)}`,
+      );
+
+      /*
+       * Use position 10 as a valid temporary slot so the unique
+       * project/gallery-position index is never violated while swapping 1 and 2.
+       */
+      executeLocalSql(`
+        UPDATE public.media_assets
+           SET gallery_position = 10
+         WHERE project_id = (
+           SELECT id
+             FROM public.projects
+            WHERE public_id = ${sqlText(target)}
+         )
+           AND asset_type = 'snapshot_image'
+           AND gallery_position = 1;
+
+        UPDATE public.media_assets
+           SET gallery_position = 1
+         WHERE project_id = (
+           SELECT id
+             FROM public.projects
+            WHERE public_id = ${sqlText(target)}
+         )
+           AND asset_type = 'snapshot_image'
+           AND gallery_position = 2;
+
+        UPDATE public.media_assets
+           SET gallery_position = 2
+         WHERE project_id = (
+           SELECT id
+             FROM public.projects
+            WHERE public_id = ${sqlText(target)}
+         )
+           AND asset_type = 'snapshot_image'
+           AND gallery_position = 10;
+      `);
+
+      const { data: after } = await serviceClient.rpc('get_project_publication_readiness', {
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_private_bucket: PRIVATE_BUCKET,
+      }) as RpcResult;
+
+      assert(
+        after?.ready === false && after?.resultCode === 'MEDIA_SNAPSHOT_STALE',
+        `Reordering snapshots did not stale confirmation: ${JSON.stringify(after)}`,
+      );
+    });
+
+    await scenario(67, 'Replacing a snapshot after participant confirmation makes the media snapshot stale', async () => {
+      const target = seedProject(prefix, 'stale-gallery-replace', fixture!, {
+        status: 'approved',
+        snapshotAlt: SNAPSHOT_ALT,
+      });
+
+      addSnapshotMedia(
+        target,
+        2,
+        'Description for the original snapshot two.',
+      );
+
+      const token = tokenPair();
+
+      const { data: preview } = await serviceClient.rpc('generate_participant_preview', {
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_token_hash: token.hash,
+        p_expires_in_seconds: 604800,
+        p_private_bucket: PRIVATE_BUCKET,
+        p_is_correction_reissue: false,
+      }) as RpcResult;
+
+      assert(
+        preview?.resultCode === 'SUCCESS',
+        `Could not generate the gallery before replacement: ${JSON.stringify(preview)}`,
+      );
+
+      const { data: confirmation } = await serviceClient.rpc('confirm_participant_preview', {
+        p_token_hash: token.hash,
+      }) as RpcResult;
+
+      assert(
+        confirmation?.resultCode === 'SUCCESS',
+        `Could not confirm the gallery before replacement: ${JSON.stringify(confirmation)}`,
+      );
+
+      const { data: before } = await serviceClient.rpc('get_project_publication_readiness', {
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_private_bucket: PRIVATE_BUCKET,
+      }) as RpcResult;
+
+      assert(
+        before?.resultCode === 'READY',
+        `Baseline gallery was not READY before replacement: ${JSON.stringify(before)}`,
+      );
+
+      /*
+       * Remove the confirmed media identity and insert a new row into the
+       * same authoritative gallery position. Even if the filename/path and
+       * alt are identical, the mediaAssetId is different and confirmation
+       * must therefore become stale.
+       */
+      executeLocalSql(`
+        DELETE FROM public.media_assets
+         WHERE project_id = (
+           SELECT id
+             FROM public.projects
+            WHERE public_id = ${sqlText(target)}
+         )
+           AND asset_type = 'snapshot_image'
+           AND gallery_position = 2;
+      `);
+
+      addSnapshotMedia(
+        target,
+        2,
+        'Description for the original snapshot two.',
+      );
+
+      const { data: after } = await serviceClient.rpc('get_project_publication_readiness', {
+        p_public_id: target,
+        p_admin_id: fixture!.admin.id,
+        p_private_bucket: PRIVATE_BUCKET,
+      }) as RpcResult;
+
+      assert(
+        after?.ready === false && after?.resultCode === 'MEDIA_SNAPSHOT_STALE',
+        `Replacing a snapshot did not stale confirmation: ${JSON.stringify(after)}`,
+      );
+    });
+
+    await scenario(
+      68,
+      'Review submission blocks a multi-image gallery when any snapshot is missing alt text',
+      async () => {
+        const target = seedProject(
+          prefix,
+          'submit-gallery-missing-alt',
+          fixture!,
+          {
+            inBatch: true,
+            snapshotAlt: 'Description for snapshot one.',
+          },
+        );
+
+        addSnapshotMedia(
+          target,
+          2,
+          null,
+        );
+
+        addSnapshotMedia(
+          target,
+          3,
+          'Description for snapshot three.',
+        );
+
+        const before = projectState(target);
+
+        const { data } = await serviceClient.rpc(
+          'submit_import_projects_for_review',
+          {
+            p_batch_id: fixture!.batchId,
+            p_project_public_ids: [target],
+            p_admin_id: fixture!.admin.id,
+            p_comments: null,
+          },
+        ) as RpcResult;
+
+        assert(
+          data?.resultCode === 'READINESS_BLOCKED',
+          `Expected READINESS_BLOCKED, got ${JSON.stringify(data)}`,
+        );
+
+        assert(
+          JSON.stringify(data?.blockingReasons ?? []).includes(
+            'MISSING_SNAPSHOT_ALT_TEXT',
+          ),
+          `Expected MISSING_SNAPSHOT_ALT_TEXT, got ${JSON.stringify(
+            data?.blockingReasons,
+          )}`,
+        );
+
+        assert(
+          projectState(target).status === 'draft',
+          'A gallery with one missing snapshot alt entered review.',
+        );
+
+        assert(
+          projectState(target).audits === before.audits,
+          'A blocked multi-gallery submission created an audit row.',
+        );
+      },
+    );
+
+    await scenario(69, 'Participant preview snapshots a multi-image gallery in authoritative numeric order',
+      async () => {
+        const target = seedProject(
+          prefix,
+          'preview-gallery-order',
+          fixture!,
+          {
+            status: 'approved',
+            withSnapshot: false,
+          },
+        );
+        // Intentionally insert out of order. The immutable preview must not preserve
+        // insertion order; it must use authoritative gallery_position order.
+        addSnapshotMedia(
+          target,
+          3,
+          'Description for snapshot three.',
+        );
+        addSnapshotMedia(
+          target,
+          1,
+          'Description for snapshot one.',
+        );
+        addSnapshotMedia(
+          target,
+          2,
+          'Description for snapshot two.',
+        );
+        const token = tokenPair();
+
+        const { data } = await serviceClient.rpc(
+          'generate_participant_preview',
+          {
+            p_public_id: target,
+            p_admin_id: fixture!.admin.id,
+            p_token_hash: token.hash,
+            p_expires_in_seconds: 604800,
+            p_private_bucket: PRIVATE_BUCKET,
+            p_is_correction_reissue: false,
+          },
+        ) as RpcResult;
+
+        assert(
+          data?.resultCode === 'SUCCESS',
+          `Three-image participant preview generation failed: ${JSON.stringify(data)}`,
+        );
+
+        const storedSnapshots = queryLocalJson<
+          Array<{
+            galleryPosition: number;
+            altText: string | null;
+          }>
+        >(`
+          SELECT COALESCE((
+            SELECT pg_catalog.jsonb_agg(
+              pg_catalog.jsonb_build_object(
+                'galleryPosition',
+                (media.elem->>'galleryPosition')::integer,
+                'altText',
+                media.elem->>'altText'
+              )
+              ORDER BY media.ordinality
+            )
+            FROM public.participant_previews pp
+            JOIN public.projects p
+              ON p.id = pp.project_id
+            CROSS JOIN LATERAL
+              pg_catalog.jsonb_array_elements(pp.media_snapshot)
+              WITH ORDINALITY AS media(elem, ordinality)
+            WHERE p.public_id = ${sqlText(target)}
+              AND pp.status = 'active'
+              AND media.elem->>'assetType' = 'snapshot_image'
+          ), '[]'::jsonb)
+        `);
+
+        const expectedSnapshots = [
+          {
+            galleryPosition: 1,
+            altText: 'Description for snapshot one.',
+          },
+          {
+            galleryPosition: 2,
+            altText: 'Description for snapshot two.',
+          },
+          {
+            galleryPosition: 3,
+            altText: 'Description for snapshot three.',
+          },
+        ];
+
+        assert(
+          storedSnapshots.length === expectedSnapshots.length,
+          `Participant preview stored ${storedSnapshots.length} snapshots instead of ${expectedSnapshots.length}.`,
+        );
+
+        for (let index = 0; index < expectedSnapshots.length; index++) {
+          const actual = storedSnapshots[index];
+          const expected = expectedSnapshots[index];
+
+          assert(
+            actual.galleryPosition === expected.galleryPosition,
+            `Participant preview gallery order was incorrect at index ${index}: ${JSON.stringify(
+              storedSnapshots,
+            )}`,
+          );
+
+          assert(
+            actual.altText === expected.altText,
+            `Participant preview alt text was incorrect at gallery position ${expected.galleryPosition}: ${JSON.stringify(
+              storedSnapshots,
+            )}`,
+          );
+        }
+      },
+    );
+    await scenario(70, 'The verifier created no public media and no published rows', () => {
       const leakage = queryLocalJson<{ publicMedia: number; published: number; snapshots: number }>(`
         SELECT pg_catalog.jsonb_build_object(
           'publicMedia', (SELECT pg_catalog.count(*) FROM public.media_assets ma JOIN public.projects p ON p.id = ma.project_id

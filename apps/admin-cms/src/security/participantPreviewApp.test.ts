@@ -263,7 +263,7 @@ describe('SupabaseParticipantPreviewRepositoryCore', () => {
           resultCode: 'SUCCESS',
           previewId: 'p1',
           snapshot: { title: 'Test Project' },
-          mediaSnapshot: [{ mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'p.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/x/poster_image/p.png', mimeType: 'image/png', altText: null }],
+          mediaSnapshot: [{ mediaAssetId: 'm1', assetType: 'poster_image', galleryPosition: null, fileName: 'p.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/x/poster_image/p.png', mimeType: 'image/png', altText: null }],
           expiresAt: '2026-08-17T00:00:00.000Z',
         },
         error: null,

@@ -57,9 +57,13 @@ function isNonEmptyString(value: unknown): value is string {
  */
 function parseMediaSnapshot(raw: unknown[]): ParticipantPreviewMediaRef[] | null {
   const parsed: ParticipantPreviewMediaRef[] = [];
+  let previousGalleryPosition = 0;
 
   for (const element of raw) {
-    if (!element || typeof element !== 'object' || Array.isArray(element)) return null;
+    if (!element || typeof element !== 'object' || Array.isArray(element)) {
+      return null;
+    }
+
     const item = element as Record<string, unknown>;
 
     if (
@@ -72,24 +76,86 @@ function parseMediaSnapshot(raw: unknown[]): ParticipantPreviewMediaRef[] | null
       return null;
     }
 
-    const mimeType = item.mimeType === null || item.mimeType === undefined ? null : item.mimeType;
-    if (mimeType !== null && typeof mimeType !== 'string') return null;
+    const mimeType =
+      item.mimeType === null || item.mimeType === undefined
+        ? null
+        : item.mimeType;
 
-    if (!('altText' in item)) return null;
-    let altText: string | null;
+    if (mimeType !== null && typeof mimeType !== 'string') {
+      return null;
+    }
+
+    if (!('galleryPosition' in item)) {
+      return null;
+    }
+
+    let galleryPosition: number | null;
+
     if (item.assetType === 'snapshot_image') {
-      if (typeof item.altText !== 'string') return null;
+      if (
+        typeof item.galleryPosition !== 'number' ||
+        !Number.isInteger(item.galleryPosition) ||
+        item.galleryPosition < 1 ||
+        item.galleryPosition > 10
+      ) {
+        return null;
+      }
+
+      /*
+       * The immutable snapshot itself must already be in authoritative
+       * gallery order. Do not silently repair malformed evidence here.
+       */
+      if (item.galleryPosition <= previousGalleryPosition) {
+        return null;
+      }
+
+      galleryPosition = item.galleryPosition;
+      previousGalleryPosition = item.galleryPosition;
+    } else {
+      /*
+       * galleryPosition belongs only to snapshot_image.
+       * Keeping explicit null makes the immutable media shape uniform.
+       */
+      if (item.galleryPosition !== null) {
+        return null;
+      }
+
+      galleryPosition = null;
+    }
+
+    if (!('altText' in item)) {
+      return null;
+    }
+
+    let altText: string | null;
+
+    if (item.assetType === 'snapshot_image') {
+      if (typeof item.altText !== 'string') {
+        return null;
+      }
+
       const trimmed = item.altText.trim();
-      if (trimmed === '' || trimmed.length > ACCESSIBLE_CONTENT_LIMITS.snapshotAltText) return null;
+
+      if (
+        trimmed === '' ||
+        trimmed.length > ACCESSIBLE_CONTENT_LIMITS.snapshotAltText
+      ) {
+        return null;
+      }
+
       altText = item.altText;
     } else {
-      if (item.altText !== null) return null;
+      if (item.altText !== null) {
+        return null;
+      }
+
       altText = null;
     }
 
     parsed.push({
       mediaAssetId: item.mediaAssetId,
       assetType: item.assetType,
+      galleryPosition,
       fileName: item.fileName,
       storageBucket: item.storageBucket,
       storagePath: item.storagePath,

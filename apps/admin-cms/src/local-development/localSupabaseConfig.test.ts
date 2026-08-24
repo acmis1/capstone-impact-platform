@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { EXPECTED_MIGRATION_FILENAMES } from '../scripts/onboardingCheck';
 
 describe('Local Supabase Configuration & Migration Integrity Tests', () => {
   const repoRoot = path.resolve(__dirname, '../../../..');
@@ -9,12 +10,17 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
   const seedPath = path.resolve(repoRoot, 'infra/supabase/seed.sql');
   const adminPackagePath = path.resolve(repoRoot, 'apps/admin-cms/package.json');
 
-  it('1. Exactly 33 timestamped migration files exist in explicitly sorted ascending order', () => {
+  it('1. Exactly the expected timestamped migration files exist in explicitly sorted ascending order', () => {
     const rawFiles = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'));
-    expect(rawFiles.length).toBe(33);
+    expect(rawFiles.length).toBe(EXPECTED_MIGRATION_FILENAMES.length);
 
     // Sort explicitly to not rely on OS directory enumeration order
     const files = [...rawFiles].sort((a, b) => a.localeCompare(b));
+    const expectedFiles = [...EXPECTED_MIGRATION_FILENAMES].sort((a, b) =>
+      a.localeCompare(b),
+    );
+
+    expect(files).toEqual(expectedFiles);
 
     // Verify 14-digit timestamp format
     const timestampRegex = /^\d{14}_.+\.sql$/;
@@ -45,7 +51,7 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
     const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort((a, b) => a.localeCompare(b));
     const combinedSql = files.map((f) => fs.readFileSync(path.join(migrationsDir, f), 'utf8')).join('\n');
 
-    // 15 expected tables
+    // 16 expected tables
     const expectedTables = [
       'programs',
       'disciplines',

@@ -121,13 +121,17 @@ export class SupabasePublicationExecutionRepositoryCore {
     if (project.error) throw new Error('Publication project media lookup failed.');
     if (!project.data) return [];
     const result = await this.supabase.from('media_assets').select(
-      'id,project_id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public',
+      'id,project_id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public',
     ).eq('project_id', project.data.id).order('asset_type', { ascending: true });
     if (result.error) throw new Error('Publication media lookup failed.');
     return (result.data ?? []).map((row) => ({
       id: String(row.id),
       projectId: String(row.project_id),
       assetType: String(row.asset_type),
+      galleryPosition:
+        row.gallery_position === null
+          ? null
+          : Number(row.gallery_position),
       fileName: String(row.file_name),
       storageBucket: String(row.storage_bucket),
       storagePath: String(row.storage_path),
