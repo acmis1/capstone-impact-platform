@@ -16,6 +16,18 @@ The application currently owns:
 
 It includes a project metadata editor backed by one atomic, service-role-only database transaction. Hosted deployment and broader staff acceptance remain separate activities. Browser Back/Forward interception is not supported or claimed. Participant preview/confirmation and the public deployment-history UI are implemented technical foundations; integrated preview workspace, production Duda cutover, hosted rollback, and production-readiness certification remain unavailable.
 
+### Public deployment ledger runtime verification
+
+Activating the deployment head is a governed, irreversible, singleton operation, and its immutable history deliberately refuses deletion of any project or audit record it references. The runtimes that exercise it therefore cannot share the canonical Local stack; each provisions and destroys its own throwaway Supabase project, port block, Docker network, and workdir:
+
+```bash
+npm run verify:public-feed-ledger-runtime:disposable -- ledger
+npm run verify:public-feed-ledger-runtime:disposable -- publication
+npm run verify:public-feed-ledger-runtime:disposable -- removal
+```
+
+Omitting the argument runs all three against one throwaway stack. `CAPSTONE_LEDGER_RUNTIME_PORT_BASE` moves the port block when another local stack already occupies it. CI runs each of the three as its own gate.
+
 ## Current capability and verification
 
 | Capability | Implemented | Verification status | Remaining limitation |

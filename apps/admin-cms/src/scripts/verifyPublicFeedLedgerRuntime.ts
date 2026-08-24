@@ -13,6 +13,7 @@ import {
   verifyPublicFeedArtifact,
   type VerifiedPublicFeedArtifact,
 } from '../feed/publicFeedArtifact';
+import { promoteBoundPublicMedia } from '../projects/boundPublicMediaPromotion';
 import { executeControlledPublication } from '../projects/controlledPublicationService';
 import { createControlledPublicationDependencies } from '../projects/createControlledPublicationDependencies';
 import { executeControlledPublicRemoval } from '../projects/controlledPublicRemovalService';
@@ -30,6 +31,7 @@ import {
   type PublicFeedOperationState,
 } from '../repositories/SupabasePublicFeedLedgerRepositoryCore';
 import { SupabaseParticipantPreviewRepositoryCore } from '../repositories/SupabaseParticipantPreviewRepositoryCore';
+import { SupabasePublicationExecutionRepositoryCore } from '../repositories/SupabasePublicationExecutionRepositoryCore';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
 const workdir = process.env.CAPSTONE_VERIFY_SUPABASE_WORKDIR?.trim();
@@ -41,6 +43,8 @@ const publicAssetsBucket = 'project-public-assets';
 const adminId = '18600000-0000-4000-8000-000000000001';
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 const PDF_BYTES = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF', 'ascii');
+const CRASH_BOUNDARY_REASON = 'Runtime crash-boundary verification';
+const RESPONSE_LOSS_REASON = 'Committed response-loss verification';
 let runtimeApiUrl = '';
 
 function requireDisposableInputs(): void {
@@ -75,7 +79,7 @@ function expectPsqlFailure(sql: string, marker: string): void {
     assert.fail(`${marker} unexpectedly succeeded.`);
   } catch (error) {
     const stderr = String((error as { stderr?: unknown }).stderr ?? '');
-    assert.match(stderr, /PUBLIC_FEED_IMMUTABLE_HISTORY|permission denied|violates/i, marker);
+    assert.match(stderr, /PUBLIC_FEED_IMMUTABLE_HISTORY|PUBLIC_FEED_OPERATION_IN_PROGRESS|permission denied|violates/i, marker);
   }
 }
 
@@ -165,16 +169,117 @@ function historyDependencies(
   client: SupabaseClient,
   projects: ReturnType<typeof project>[],
 ): PublicFeedHistoryServiceDependencies {
+  const publication = new SupabasePublicationExecutionRepositoryCore(client, runtimeApiUrl);
   return {
     supabase: client, supabaseUrl: runtimeApiUrl, adminId,
     permissions: ['projects.publish'], feedBucket, feedPath,
     listProjects: async () => projects,
     assertActivationEnvironment: () => undefined,
+    promoteBoundPublicMedia: (manifest) => promoteBoundPublicMedia({
+      downloadObject: (bucket, path) => publication.downloadObject(bucket, path),
+      uploadNewObject: (bucket, path, content, contentType) =>
+        publication.uploadNewObject(bucket, path, content, contentType),
+    }, manifest),
     environment: {
       CAPSTONE_RUNTIME_ENV: 'local',
       CAPSTONE_LOCAL_PUBLIC_FEED_ROLLBACK_ENABLED: 'true',
     },
   };
+}
+
+function publicationDependencies(client: SupabaseClient, publicId: string) {
+  return createControlledPublicationDependencies({
+    supabase: client, supabaseUrl: runtimeApiUrl, publicId, adminId,
+    privateBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath, executionTarget: 'local',
+  });
+}
+
+/**
+ * Revokes an authorization after the operation has already reserved and while its candidate is
+ * being prepared, so the revocation lands between reservation and the durable write-intent gate.
+ */
+function revokeDuringPreparation(client: SupabaseClient, publicId: string, revoke: () => void) {
+  const dependencies = publicationDependencies(client, publicId);
+  return {
+    ...dependencies,
+    listProjectMedia: async () => {
+      const media = await dependencies.listProjectMedia();
+      revoke();
+      return media;
+    },
+  };
+}
+
+/** Rewrites the bound private source between binding and the pre-intent validation read. */
+function mutateSourceAfterBinding(client: SupabaseClient, publicId: string) {
+  const dependencies = publicationDependencies(client, publicId);
+  const bindingReads = new Set<string>();
+  return {
+    ...dependencies,
+    downloadObject: async (bucket: string, path: string) => {
+      const original = await dependencies.downloadObject(bucket, path);
+      if (bucket !== privateBucket || !original) return original;
+      if (!bindingReads.has(path)) {
+        bindingReads.add(path);
+        return original;
+      }
+      return Buffer.concat([original, Buffer.from([0x00])]);
+    },
+  };
+}
+
+/** Simulates a process failure after the first bound asset is already publicly readable. */
+function failSecondMediaUpload(client: SupabaseClient, publicId: string) {
+  const dependencies = publicationDependencies(client, publicId);
+  let uploads = 0;
+  return {
+    ...dependencies,
+    uploadNewObject: async (bucket: string, path: string, content: Buffer, contentType: string) => {
+      uploads += 1;
+      if (uploads > 1) throw new Error('SIMULATED_MEDIA_PROMOTION_CRASH');
+      return dependencies.uploadNewObject(bucket, path, content, contentType);
+    },
+  };
+}
+
+async function publicMediaCount(client: SupabaseClient, publicId: string): Promise<number> {
+  const result = await client.storage.from(publicAssetsBucket).list(`published/${publicId}`, { limit: 100 });
+  if (result.error) return 0;
+  let total = 0;
+  for (const entry of result.data ?? []) {
+    const nested = await client.storage.from(publicAssetsBucket)
+      .list(`published/${publicId}/${entry.name}`, { limit: 100 });
+    total += (nested.data ?? []).filter((item) => item.id !== null).length;
+  }
+  return total;
+}
+
+function targetEvidence(publicId: string): { operationId: string; snapshotId: string | null; auditRecordId: string | null } {
+  const row = psql(`SELECT operation_id::text || '|' || COALESCE(published_snapshot_id::text,'') || '|' || COALESCE(audit_record_id::text,'')
+    FROM public.public_feed_versions
+    WHERE operation='publication' AND affected_public_id=${sqlLiteral(publicId)}
+    ORDER BY version_number DESC LIMIT 1;`);
+  const [operationId, snapshotId, auditRecordId] = row.split('|');
+  assert.ok(operationId, `No publication version recorded for ${publicId}.`);
+  return {
+    operationId,
+    snapshotId: snapshotId === '' ? null : snapshotId,
+    auditRecordId: auditRecordId === '' ? null : auditRecordId,
+  };
+}
+
+/** Clears a durable operation left blocking by a deliberately failed authorization scenario. */
+async function releaseBlockingOperation(
+  client: SupabaseClient,
+  ledger: SupabasePublicFeedLedgerRepositoryCore,
+): Promise<void> {
+  const blocking = await ledger.getBlockingOperation();
+  if (!blocking) return;
+  psql(`UPDATE public.public_feed_operations
+    SET state='FAILED', failure_code='VERIFIER_RELEASE', failed_at=pg_catalog.now(),
+        lease_expires_at=pg_catalog.now()
+    WHERE id=${sqlLiteral(blocking.id)}::uuid AND state IN ('RESERVED','PREPARED');`);
+  void client;
 }
 
 async function assertCompleted(result: { resultCode: string }, label: string): Promise<void> {
@@ -191,7 +296,7 @@ async function reserveNoChangeRemoval(
   const baseline = verifyPublicFeedArtifact(head.currentVersion.artifactContent);
   const reserved = await ledger.reserve({
     operationKey: randomUUID(), kind: 'removal', mode: null, adminId, publicId,
-    ownerToken, archiveReason: 'Runtime crash-boundary verification',
+    ownerToken, archiveReason: CRASH_BOUNDARY_REASON,
     storageBucket: feedBucket, storagePath: feedPath, rollbackCapability: false,
   });
   assert.equal(reserved.resultCode, 'OPERATION_RESERVED');
@@ -257,7 +362,7 @@ async function stageCommittedRemovalResponseLoss(
   assert.notEqual(candidate.feedHash, baseline.feedHash, 'Committed-response-loss candidate must change bytes.');
   const reserved = await ledger.reserve({
     operationKey: randomUUID(), kind: 'removal', mode: null, adminId, publicId,
-    ownerToken, archiveReason: 'Committed response-loss verification',
+    ownerToken, archiveReason: RESPONSE_LOSS_REASON,
     storageBucket: feedBucket, storagePath: feedPath, rollbackCapability: false,
   });
   assert.equal(reserved.resultCode, 'OPERATION_RESERVED');
@@ -280,10 +385,14 @@ async function stageCommittedRemovalResponseLoss(
   return { operationId, candidate };
 }
 
-async function resumeRemoval(client: SupabaseClient, publicId: string) {
+async function resumeRemoval(
+  client: SupabaseClient,
+  publicId: string,
+  archiveReason = CRASH_BOUNDARY_REASON,
+) {
   return await executePublicFeedWriter({
     supabase: client, adminId, kind: 'removal', publicId,
-    archiveReason: 'Runtime crash-boundary verification', feedBucket, feedPath,
+    archiveReason, feedBucket, feedPath,
     prepareCandidate: async (baseline) => {
       assert.ok(baseline);
       return { artifact: composePublicFeedRemoval(baseline, publicId) };
@@ -354,7 +463,7 @@ async function main(): Promise<void> {
       getReadiness: async () => { throw new Error('UNEXPECTED_READINESS_CALL'); },
       listProjects: async () => [medical], listProjectMedia: async () => [],
       getPublicUrl: () => '', downloadObject: async () => null,
-      uploadNewObject: async () => false, removeObjects: async () => undefined,
+      uploadNewObject: async () => false,
     },
   });
   await assertCompleted(publication, 'deployment reconciliation');
@@ -401,7 +510,7 @@ async function main(): Promise<void> {
       getReadiness: async () => { throw new Error('UNEXPECTED_READINESS_CALL'); },
       listProjects: async () => [medical], listProjectMedia: async () => [],
       getPublicUrl: () => '', downloadObject: async () => null,
-      uploadNewObject: async () => false, removeObjects: async () => undefined,
+      uploadNewObject: async () => false,
     },
   });
   await assertCompleted(postRollback, 'post-rollback publication');
@@ -441,6 +550,146 @@ async function main(): Promise<void> {
   await assertCompleted(normalPublication, 'normal controlled publication');
   assert.equal(psql(`SELECT status FROM public.projects WHERE id=${sqlLiteral(normalProjectId)}::uuid;`), 'published');
   assert.equal(psql(`SELECT count(*) FROM public.approval_records WHERE project_id=${sqlLiteral(normalProjectId)}::uuid AND action_taken='publish';`), '1');
+  assert.equal(await publicMediaCount(client, normalPublicId), 2, 'Normal publication did not promote its bound media.');
+  const normalEvidence = targetEvidence(normalPublicId);
+
+  // Target A completes, an unrelated target B changes the head, and retrying A must still answer
+  // with A's own operation, snapshot and audit identifiers rather than the head's.
+  const laterPublicId = '186-later-publication';
+  await createReadyPublicationProject(client, laterPublicId);
+  await assertCompleted(await executeControlledPublication({
+    permissions: ['projects.publish'], publicId: laterPublicId,
+    privateBucket, publicAssetsBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath,
+    dependencies: createControlledPublicationDependencies({
+      supabase: client, supabaseUrl: runtimeApiUrl, publicId: laterPublicId, adminId,
+      privateBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath, executionTarget: 'local',
+    }),
+  }), 'later unrelated publication');
+  const laterEvidence = targetEvidence(laterPublicId);
+  assert.notEqual(normalEvidence.operationId, laterEvidence.operationId);
+  head = await ledger.getHead();
+  assert.ok(head);
+  assert.equal(head.currentVersion.operationId, laterEvidence.operationId, 'Head should belong to the later target.');
+
+  const retriedA = await executeControlledPublication({
+    permissions: ['projects.publish'], publicId: normalPublicId,
+    privateBucket, publicAssetsBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath,
+    dependencies: createControlledPublicationDependencies({
+      supabase: client, supabaseUrl: runtimeApiUrl, publicId: normalPublicId, adminId,
+      privateBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath, executionTarget: 'local',
+    }),
+  });
+  assert.equal(retriedA.resultCode, 'ALREADY_COMPLETED', JSON.stringify(retriedA));
+  if (retriedA.resultCode !== 'ALREADY_COMPLETED') throw new Error('TARGET_EVIDENCE_RETRY_FAILED');
+  assert.equal(retriedA.attemptId, normalEvidence.operationId, 'Retry borrowed the head operation identifier.');
+  assert.equal(retriedA.snapshotId, normalEvidence.snapshotId, 'Retry borrowed the head snapshot identifier.');
+  assert.equal(retriedA.auditRecordId, normalEvidence.auditRecordId, 'Retry borrowed the head audit identifier.');
+  assert.notEqual(retriedA.attemptId, laterEvidence.operationId);
+
+  // Media authorization boundary: readiness revoked after reservation but before write intent.
+  const revokedReadinessId = '186-readiness-revoked';
+  await createReadyPublicationProject(client, revokedReadinessId);
+  const revokedReadiness = await executeControlledPublication({
+    permissions: ['projects.publish'], publicId: revokedReadinessId,
+    privateBucket, publicAssetsBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath,
+    dependencies: revokeDuringPreparation(client, revokedReadinessId, () => {
+      // An unmarked revocation is refused outright: readiness inputs are frozen for the duration
+      // of an active operation. The marked form below simulates the revocation the write-intent
+      // gate exists to catch anyway.
+      expectPsqlFailure(
+        `UPDATE public.participant_previews SET status='revoked', revoked_at=pg_catalog.now(),
+           revoked_by=${sqlLiteral(adminId)}::uuid
+         WHERE project_id=(SELECT id FROM public.projects WHERE public_id=${sqlLiteral(revokedReadinessId)})
+           AND status='active';`,
+        'Unfenced readiness revocation during an active operation',
+      );
+      psql(`DO $$
+        DECLARE v_operation uuid;
+        BEGIN
+          SELECT id INTO v_operation FROM public.public_feed_operations
+           WHERE state IN ('RESERVED','PREPARED','WRITE_STARTED','CANDIDATE_OBSERVED','DB_FINALIZED','RECOVERY_REQUIRED')
+           LIMIT 1;
+          PERFORM pg_catalog.set_config('app.public_feed_operation_id', v_operation::text, true);
+          UPDATE public.participant_previews
+             SET status='revoked', revoked_at=pg_catalog.now(), revoked_by=${sqlLiteral(adminId)}::uuid
+           WHERE project_id=(SELECT id FROM public.projects WHERE public_id=${sqlLiteral(revokedReadinessId)})
+             AND status='active';
+        END $$;`);
+    }),
+  });
+  assert.equal(revokedReadiness.resultCode, 'NOT_READY', JSON.stringify(revokedReadiness));
+  assert.equal(await publicMediaCount(client, revokedReadinessId), 0, 'Revoked readiness still exposed public media.');
+
+  // Media authorization boundary: publication authority revoked before write intent.
+  const revokedPermissionId = '186-permission-revoked';
+  await createReadyPublicationProject(client, revokedPermissionId);
+  const revokedPermission = await executeControlledPublication({
+    permissions: ['projects.publish'], publicId: revokedPermissionId,
+    privateBucket, publicAssetsBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath,
+    dependencies: revokeDuringPreparation(client, revokedPermissionId, () => {
+      psql(`DELETE FROM public.user_roles WHERE user_id=${sqlLiteral(adminId)}::uuid AND role='admin';`);
+    }),
+  });
+  psql(`INSERT INTO public.user_roles(user_id,role) VALUES (${sqlLiteral(adminId)}::uuid,'admin')
+    ON CONFLICT (user_id,role) DO NOTHING;`);
+  assert.equal(revokedPermission.resultCode, 'PERMISSION_DENIED', JSON.stringify(revokedPermission));
+  assert.equal(await publicMediaCount(client, revokedPermissionId), 0, 'Revoked authority still exposed public media.');
+  await releaseBlockingOperation(client, ledger);
+
+  // Pre-intent failure: private source bytes changed between binding and the authorization gate.
+  const mutatedSourceId = '186-source-mutated';
+  await createReadyPublicationProject(client, mutatedSourceId);
+  const mutatedSource = await executeControlledPublication({
+    permissions: ['projects.publish'], publicId: mutatedSourceId,
+    privateBucket, publicAssetsBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath,
+    dependencies: mutateSourceAfterBinding(client, mutatedSourceId),
+  });
+  assert.deepEqual(mutatedSource, { resultCode: 'EXECUTION_FAILED', failureCode: 'PRIVATE_MEDIA_CHANGED' });
+  assert.equal(await publicMediaCount(client, mutatedSourceId), 0, 'A pre-intent failure created public media.');
+
+  // Crash during media promotion, after durable write intent: forward recovery completes the
+  // remaining media and the canonical feed, and nothing that predates the operation is deleted.
+  const crashPublicId = '186-media-crash';
+  await createReadyPublicationProject(client, crashPublicId);
+  const preservedPath = 'published/186-preserved/poster_image/poster.png';
+  const preserved = await client.storage.from(publicAssetsBucket)
+    .upload(preservedPath, PNG_BYTES, { contentType: 'image/png', upsert: true });
+  assert.equal(preserved.error, null, preserved.error?.message);
+  const feedBeforeCrash = (await exactStored(client)).feedHash;
+  const crashed = await executeControlledPublication({
+    permissions: ['projects.publish'], publicId: crashPublicId,
+    privateBucket, publicAssetsBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath,
+    dependencies: failSecondMediaUpload(client, crashPublicId),
+  });
+  assert.equal(crashed.resultCode, 'RECOVERY_REQUIRED', JSON.stringify(crashed));
+  assert.equal(await publicMediaCount(client, crashPublicId), 1, 'Expected exactly one promoted asset before the crash.');
+  assert.equal((await exactStored(client)).feedHash, feedBeforeCrash, 'A crashed promotion changed the canonical feed.');
+  assert.ok(await client.storage.from(publicAssetsBucket).download(preservedPath).then((result) => result.data !== null),
+    'Recovery deleted a public object that predated the operation.');
+  const crashRecovery = await recoverPublicFeedOperation(historyDependencies(client, [traffic, medical]));
+  assert.equal(crashRecovery.resultCode, 'COMPLETED', JSON.stringify(crashRecovery));
+  assert.equal(await publicMediaCount(client, crashPublicId), 2, 'Recovery did not complete the bound media manifest.');
+  assert.ok((await exactStored(client)).feed.some(({ publicId }) => publicId === crashPublicId));
+  assert.ok(await client.storage.from(publicAssetsBucket).download(preservedPath).then((result) => result.data !== null));
+
+  await assertCompleted(await executeControlledPublicRemoval({
+    permissions: ['projects.archive'], publicId: crashPublicId, archiveReason: 'Restore rollback baseline',
+    dependencies: {
+      supabase: client, adminId, feedBucket, feedPath,
+      assertDisposableLocalEnvironment: () => undefined,
+      listProjects: async () => [project(crashPublicId)],
+    },
+  }), 'remove media crash fixture');
+  for (const publicId of [normalPublicId, laterPublicId]) {
+    await assertCompleted(await executeControlledPublicRemoval({
+      permissions: ['projects.archive'], publicId, archiveReason: 'Restore rollback baseline',
+      dependencies: {
+        supabase: client, adminId, feedBucket, feedPath,
+        assertDisposableLocalEnvironment: () => undefined,
+        listProjects: async () => [project(publicId)],
+      },
+    }), `remove ${publicId}`);
+  }
 
   const zeroPreparation = await preparePublicFeedRollback(historyDependencies(client, []), emptyVersionNumber);
   assert.equal(zeroPreparation.resultCode, 'PREPARED', JSON.stringify(zeroPreparation));
@@ -464,18 +713,34 @@ async function main(): Promise<void> {
       getReadiness: async () => { throw new Error('UNEXPECTED_READINESS_CALL'); },
       listProjects: async () => [medical], listProjectMedia: async () => [],
       getPublicUrl: () => '', downloadObject: async () => null,
-      uploadNewObject: async () => false, removeObjects: async () => undefined,
+      uploadNewObject: async () => false,
     },
   });
   await assertCompleted(postZeroRollback, 'post-zero-rollback publication');
   assert.deepEqual((await exactStored(client)).feed.map(({ publicId }) => publicId), [medical.publicId]);
 
   const committedLoss = await stageCommittedRemovalResponseLoss(client, ledger, medical.publicId);
-  assert.equal((await resumeRemoval(client, medical.publicId)).resultCode, 'PUBLICATION_IN_PROGRESS');
+  assert.equal(
+    (await resumeRemoval(client, medical.publicId, RESPONSE_LOSS_REASON)).resultCode,
+    'PUBLICATION_IN_PROGRESS',
+  );
   psql(`UPDATE public.public_feed_operations
     SET lease_expires_at=pg_catalog.now()-interval '1 second', storage_uncertainty_until=pg_catalog.now()-interval '1 second'
     WHERE id=${sqlLiteral(committedLoss.operationId)}::uuid;`);
-  await assertCompleted(await resumeRemoval(client, medical.publicId), 'committed Storage response-loss reconciliation');
+  // An expired durable operation is only adoptable by a request carrying the identical immutable
+  // intent; a different archive reason is a different authorization and must stay fenced out.
+  assert.equal(
+    (await resumeRemoval(client, medical.publicId, 'Materially different archive reason')).resultCode,
+    'PUBLICATION_IN_PROGRESS',
+  );
+  assert.equal(
+    (await ledger.getOperation(committedLoss.operationId))?.archiveReason,
+    RESPONSE_LOSS_REASON,
+  );
+  await assertCompleted(
+    await resumeRemoval(client, medical.publicId, RESPONSE_LOSS_REASON),
+    'committed Storage response-loss reconciliation',
+  );
   assert.equal((await exactStored(client)).feedHash, committedLoss.candidate.feedHash);
 
   const crashIds = ['reserved', 'prepared', 'write-started', 'candidate-observed', 'db-finalized', 'explicit-recovery', 'same-a', 'same-b', 'different'];
@@ -562,7 +827,7 @@ async function main(): Promise<void> {
   const memberHash = psql(`SELECT record_hash FROM public.public_feed_version_members WHERE version_id=${sqlLiteral(firstVersionId)}::uuid ORDER BY ordinal LIMIT 1;`);
   assert.equal(memberHash, trafficArtifact.members[0].recordHash);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
-  console.log('Public feed ledger runtime verification passed: fresh schema, exact Storage/head, activation, normal publication, reconciliation, removal, no-change removal, rollback, rollback-to-empty, post-rollback publication, committed-response ambiguity, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
+  console.log('Public feed ledger runtime verification passed: fresh schema, exact Storage/head, activation, normal publication, reconciliation, removal, no-change removal, rollback, rollback-to-empty, post-rollback publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
 }
 
 main().catch((error: unknown) => {

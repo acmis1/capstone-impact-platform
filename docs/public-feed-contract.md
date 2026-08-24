@@ -159,6 +159,26 @@ Every later canonical write uses one globally exclusive operation slot, a short 
 
 Unexpected Storage bytes, a Storage/head mismatch, or an unresolved post-write state moves the operation to `RECOVERY_REQUIRED`. That durable state blocks all later canonical writers until an authorized operator explicitly claims that exact operation and reconciles its bound candidate. Recovery does not silently choose a different artifact.
 
+A durable operation may only be claimed or reused by a request whose complete immutable intent matches it: kind, publication mode, target `publicId`, rollback preparation handle, confirmed preview evidence and confirmation instant, private media bucket, archive reason, requested rollback capability, and canonical bucket/path. A `RECOVERY_REQUIRED` operation additionally requires the operator to name that exact operation. A request carrying materially different intent is refused rather than adopting the durable candidate or rebinding under stale metadata.
+
+### Public media authorization boundary
+
+Public media promotion is split across the durable forward-commit boundary, which is `WRITE_STARTED`:
+
+*   Before the boundary, the operation may still fail safely, so nothing may become publicly readable. The lease is renewed and its result checked, and the bound media manifest is re-read and re-validated — private source bytes must still hash to the value captured at binding, and any existing public destination must already hold identical bytes. A failure here fails the operation closed with zero task-created public objects.
+*   `mark_public_feed_write_started` re-validates current administrator permission, current publication readiness against the operation's own confirmed preview evidence, and the owner epoch/token. A stale owner, revoked permission, or stale readiness stops the operation before any public exposure.
+*   After the boundary, and only then, bound media is copied into the public assets bucket, followed by the canonical feed write. Promotion is idempotent and replayable, so a crash part-way through is completed forward by a later recovery owner from the same immutable manifest.
+*   No path deletes public media. Reverse compensation is deliberately absent: objects that predate an operation are never removed, and a partially promoted manifest converges forward rather than being rolled back.
+
+### Target-specific completion evidence
+
+Membership in the current head answers only whether a `publicId` is currently deployed. The operation, snapshot, and audit identifiers reported for an idempotent retry are resolved from that target's own immutable history:
+
+*   A publication retry reports the most recent publication version naming that target whose deployed record bytes are identical to the record currently at the head. That keeps a rollback honest, because a restored head only matches the publication that actually produced those bytes.
+*   A removal retry reports the most recent removal version naming that target, unless a later publication of the same target supersedes it. A removal that legitimately wrote no version — the target was already absent — is evidenced by the completed removal operation whose bound candidate is byte-identical to the current head.
+*   When no target-specific evidence explains the current state, no identifier is substituted from the head or from a rollback. Publication returns `NOT_READY` with readiness code `ALREADY_DEPLOYED_UNVERIFIED`; removal executes a genuine target-specific operation instead.
+*   `snapshotId` and `auditRecordId` are nullable by contract. Deployment reconciliation writes no approval record, and a no-change removal writes neither, so those results report `null` rather than an empty or borrowed identifier.
+
 ---
 
 ## 12. Rollback Semantics

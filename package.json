@@ -63,6 +63,7 @@
     "verify:controlled-publication-runtime": "npm run verify:controlled-publication-runtime --workspace=apps/admin-cms",
     "verify:controlled-public-removal-runtime": "npm run verify:controlled-public-removal-runtime --workspace=apps/admin-cms",
     "verify:public-feed-ledger-runtime": "npm run verify:public-feed-ledger-runtime --workspace=apps/admin-cms",
+    "verify:public-feed-ledger-runtime:disposable": "npm run verify:public-feed-ledger-runtime:disposable --workspace=apps/admin-cms",
     "verify:assistive-persistence-runtime": "npm run verify:assistive-persistence-runtime --workspace=apps/admin-cms",
     "verify:assistive-upgrade-runtime": "npm run verify:assistive-upgrade-runtime --workspace=apps/admin-cms",
     "verify:assistive-jobs-runtime": "npm run verify:assistive-jobs-runtime --workspace=apps/admin-cms",
