@@ -29,6 +29,39 @@ const VALID_ENV = {
   SUPABASE_PUBLIC_FEED_FILE: 'capstones-latest.json',
 };
 
+function syntheticJwt(payload: unknown) {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' }), 'utf8').toString(
+    'base64url',
+  );
+  const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  return `${header}.${encodedPayload}.synthetic-signature`;
+}
+
+function syntheticJwtWithPayloadSegment(payloadSegment: string) {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' }), 'utf8').toString(
+    'base64url',
+  );
+  return `${header}.${payloadSegment}.synthetic-signature`;
+}
+
+const LEGACY_ANON_JWT = syntheticJwt({ role: 'anon' });
+const LEGACY_SERVICE_ROLE_JWT = syntheticJwt({ role: 'service_role' });
+
+function legacyEnv(publicKey = LEGACY_ANON_JWT, databaseAdminKey = LEGACY_SERVICE_ROLE_JWT) {
+  return {
+    ...VALID_ENV,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publicKey,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: publicKey,
+    supabasePublicKey: publicKey,
+    publicKeyType: 'legacy_anon_jwt',
+    SUPABASE_SECRET_KEY: '',
+    SUPABASE_SERVICE_ROLE_KEY: databaseAdminKey,
+    supabaseDatabaseAdminKey: databaseAdminKey,
+    databaseAdminKeyType: 'legacy_service_role_jwt',
+    databaseAdminKeyMode: 'legacy_service_role_jwt_fallback',
+  };
+}
+
 function successfulFetch() {
   return vi.fn<typeof fetch>(async () => new Response(null, { status: 200 }));
 }
@@ -63,7 +96,32 @@ describe('GET/HEAD /api/readiness', () => {
     else process.env.CAPSTONE_EXPECTED_SUPABASE_HOST = originalExpectedHost;
   });
 
-  it('returns 200 with bounded readiness and repository migration evidence', async () => {
+  async function expectConfigurationNotReadyWithoutFetch(
+    env: Record<string, unknown>,
+    privateValues: string[] = [],
+  ) {
+    const fetchMock = successfulFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.getServerEnv.mockReturnValue(env);
+
+    const response = await GET();
+    const body = await json(response);
+    const serialized = JSON.stringify(body);
+
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({
+      readiness: 'not-ready',
+      classification: 'CONFIGURATION_NOT_READY',
+      configuration: 'not-ready',
+      dependency: 'not-checked',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    for (const privateValue of privateValues) {
+      expect(serialized).not.toContain(privateValue);
+    }
+  }
+
+  it('accepts modern publishable public and secret server credentials for the dependency probe', async () => {
     const fetchMock = successfulFetch();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -82,6 +140,107 @@ describe('GET/HEAD /api/readiness', () => {
         latest: '20260821140000_assistive_duplicate_shortlist',
       },
     });
+  });
+
+  it('rejects a modern secret key in the public slot before the dependency probe', async () => {
+    const misplacedSecret = 'sb_secret_misplaced-public-private-value';
+    await expectConfigurationNotReadyWithoutFetch(
+      {
+        ...VALID_ENV,
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: misplacedSecret,
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: misplacedSecret,
+        supabasePublicKey: misplacedSecret,
+      },
+      [misplacedSecret],
+    );
+  });
+
+  it('rejects a modern publishable key in the database-admin slot before the dependency probe', async () => {
+    const misplacedPublishable = 'sb_publishable_misplaced-server-private-value';
+    await expectConfigurationNotReadyWithoutFetch(
+      {
+        ...VALID_ENV,
+        SUPABASE_SECRET_KEY: misplacedPublishable,
+        supabaseDatabaseAdminKey: misplacedPublishable,
+      },
+      [misplacedPublishable],
+    );
+  });
+
+  it('accepts a structurally valid anon legacy JWT in the public slot', async () => {
+    const fetchMock = successfulFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.getServerEnv.mockReturnValue({
+      ...VALID_ENV,
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: LEGACY_ANON_JWT,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: LEGACY_ANON_JWT,
+      supabasePublicKey: LEGACY_ANON_JWT,
+      publicKeyType: 'legacy_anon_jwt',
+    });
+
+    expect((await GET()).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('accepts a structurally valid service_role legacy JWT in the database-admin slot', async () => {
+    const fetchMock = successfulFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.getServerEnv.mockReturnValue({
+      ...VALID_ENV,
+      SUPABASE_SECRET_KEY: '',
+      SUPABASE_SERVICE_ROLE_KEY: LEGACY_SERVICE_ROLE_JWT,
+      supabaseDatabaseAdminKey: LEGACY_SERVICE_ROLE_JWT,
+      databaseAdminKeyType: 'legacy_service_role_jwt',
+      databaseAdminKeyMode: 'legacy_service_role_jwt_fallback',
+    });
+
+    expect((await GET()).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('allows a correct anon and service_role legacy JWT pair to reach READY', async () => {
+    const fetchMock = successfulFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.getServerEnv.mockReturnValue(legacyEnv());
+
+    const response = await GET();
+    const body = await json(response);
+    const serialized = JSON.stringify(body);
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ classification: 'READY' });
+    expect(serialized).not.toContain(LEGACY_ANON_JWT);
+    expect(serialized).not.toContain(LEGACY_SERVICE_ROLE_JWT);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a service_role legacy JWT in the public slot without exposing it', async () => {
+    await expectConfigurationNotReadyWithoutFetch(
+      legacyEnv(LEGACY_SERVICE_ROLE_JWT),
+      [LEGACY_SERVICE_ROLE_JWT],
+    );
+  });
+
+  it('rejects an anon legacy JWT in the database-admin slot without exposing it', async () => {
+    await expectConfigurationNotReadyWithoutFetch(
+      legacyEnv(LEGACY_ANON_JWT, LEGACY_ANON_JWT),
+      [LEGACY_ANON_JWT],
+    );
+  });
+
+  it.each([
+    ['token without exactly three segments', 'only.two'],
+    ['malformed three-part structure', 'synthetic-header..synthetic-signature'],
+    ['invalid base64url payload', syntheticJwtWithPayloadSegment('%%%private-malformed%%%')],
+    [
+      'invalid JSON payload',
+      syntheticJwtWithPayloadSegment(Buffer.from('private-not-json', 'utf8').toString('base64url')),
+    ],
+    ['payload missing role', syntheticJwt({ synthetic_private_claim: 'missing-role' })],
+    ['unexpected role', syntheticJwt({ role: 'authenticated' })],
+    ['non-object payload', syntheticJwt('private-non-object-payload')],
+  ])('rejects a legacy JWT with %s before fetch and does not reflect it', async (_label, token) => {
+    await expectConfigurationNotReadyWithoutFetch(legacyEnv(token), [token]);
   });
 
   it('uses one zero-row dependency HEAD and never invokes an RPC or mutation', async () => {
