@@ -1,11 +1,28 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Project } from '../../domain/project';
 import type { ProjectMediaPreviewItem } from '../admin-media/mediaPreviewTypes';
 import { ProjectMediaSummary } from './ProjectMediaSummary';
+
+vi.mock('./SnapshotAltTextEditor', () => ({
+  SnapshotAltTextEditor: ({
+    mediaAssetId,
+    initialAltText,
+  }: {
+    mediaAssetId: string;
+    initialAltText: string;
+  }) => (
+    <div
+      data-testid="snapshot-alt-editor"
+      data-media-asset-id={mediaAssetId}
+    >
+      {initialAltText}
+    </div>
+  ),
+}));
 
 afterEach(() => {
   cleanup();
@@ -29,6 +46,7 @@ function media(
   return {
     id: 'snapshot-1',
     assetType: 'snapshot_image',
+    galleryPosition: null,
     fileName: 'snapshot.png',
     mimeType: 'image/png',
     previewSource: 'public',
@@ -127,6 +145,67 @@ describe('ProjectMediaSummary accessibility integration', () => {
     expect(screen.getByText('Media file is missing.')).toBeTruthy();
     expect(screen.getByText('Text alternative available')).toBeTruthy();
     expect(screen.getByText('Authoritative snapshot description.')).toBeTruthy();
+  });
+
+  it('renders snapshot alt-text editors in deterministic gallery order and binds each editor to the correct media asset', () => {
+    render(
+      <ProjectMediaSummary
+        project={project()}
+        mediaAvailable
+        mediaItems={[
+          media({
+            id: 'media-c',
+            galleryPosition: 3,
+            fileName: 'snapshot-3.png',
+            altText: 'Alt text for snapshot three.',
+          }),
+          media({
+            id: 'media-a',
+            galleryPosition: 1,
+            fileName: 'snapshot-1.png',
+            altText: 'Alt text for snapshot one.',
+          }),
+          media({
+            id: 'media-b',
+            galleryPosition: 2,
+            fileName: 'snapshot-2.png',
+            altText: 'Alt text for snapshot two.',
+          }),
+        ]}
+        snapshotAltText={{
+          canEdit: true,
+          expectedUpdatedAt: '2026-08-24T00:00:00.000Z',
+          saveAction: vi.fn(),
+        }}
+      />,
+    );
+
+    const labels = [
+      screen.getByText('Snapshot 1 alt text'),
+      screen.getByText('Snapshot 2 alt text'),
+      screen.getByText('Snapshot 3 alt text'),
+    ];
+
+    expect(
+      labels[0].compareDocumentPosition(labels[1]) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    expect(
+      labels[1].compareDocumentPosition(labels[2]) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    const editors = screen.getAllByTestId('snapshot-alt-editor');
+
+    expect(editors).toHaveLength(3);
+
+    expect(editors[0].getAttribute('data-media-asset-id')).toBe('media-a');
+    expect(editors[0].textContent).toContain('Alt text for snapshot one.');
+
+    expect(editors[1].getAttribute('data-media-asset-id')).toBe('media-b');
+    expect(editors[1].textContent).toContain('Alt text for snapshot two.');
+
+    expect(editors[2].getAttribute('data-media-asset-id')).toBe('media-c');
+    expect(editors[2].textContent).toContain('Alt text for snapshot three.');
   });
 
   it('preserves the empty media state', () => {

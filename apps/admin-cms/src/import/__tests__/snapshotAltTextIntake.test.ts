@@ -52,17 +52,38 @@ function packageOf(
   manifest: Partial<ImportPackageManifest>,
   snapshotPresent: boolean,
 ): ImportPackageParseResult<ImportPackageFileMetadata> {
+  const snapshot1 = snapshotPresent ? file : null;
   return {
     manifest: {
-      publicId: '2026-synthetic', title: 'T', summary: 'S', background: '', solution: '', year: '2026',
-      program: 'P', studyProgram: 'P', discipline: 'D', industry: '', industryPartner: '',
-      academicSupervisor: '', groupName: 'G', participantContactEmail: '', teamMembers: ['A'],
+      publicId: '2026-synthetic',
+      title: 'T',
+      summary: 'S',
+      background: '',
+      solution: '',
+      year: '2026',
+      program: 'P',
+      studyProgram: 'P',
+      discipline: 'D',
+      industry: '',
+      industryPartner: '',
+      academicSupervisor: '',
+      groupName: 'G',
+      participantContactEmail: '',
+      teamMembers: ['A'],
       layoutConfig: { templateId: 'poster_showcase' },
       ...manifest,
     },
     posterImage,
     posterPdf,
-    snapshot1: snapshotPresent ? file : null,
+    galleryImages: snapshot1
+      ? [
+          {
+            position: 1,
+            file: snapshot1,
+          },
+        ]
+      : [],
+    snapshot1,
   };
 }
 

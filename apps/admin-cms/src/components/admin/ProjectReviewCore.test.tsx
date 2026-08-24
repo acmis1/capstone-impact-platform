@@ -147,7 +147,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       render(<ProjectValidationSummary project={invalidProject} approvalMedia={{
         posterImage: { rowCount: 1, validPrivateCount: 1 },
         posterPdf: { rowCount: 1, validPrivateCount: 1 },
-        snapshotMedia: null,
+        snapshotMedia: [],
       }} />);
 
       expect(screen.getByText(/Blocking issues/i)).toBeTruthy();
@@ -164,7 +164,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       render(<ProjectValidationSummary project={readyProject} approvalMedia={{
         posterImage: { rowCount: 1, validPrivateCount: 1 },
         posterPdf: { rowCount: 1, validPrivateCount: 1 },
-        snapshotMedia: null,
+        snapshotMedia: [],
       }} />);
 
       expect(screen.getByText(/Validation passed/i)).toBeTruthy();

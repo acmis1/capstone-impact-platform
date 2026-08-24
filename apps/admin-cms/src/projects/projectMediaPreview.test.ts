@@ -9,7 +9,7 @@ import {
 } from './projectMediaPreview';
 
 const privateRow: ProjectMediaAssetPreviewRow = {
-  id: 'asset-private', asset_type: 'poster_image', file_name: 'poster.png',
+  id: 'asset-private', asset_type: 'poster_image', gallery_position: null, file_name: 'poster.png',
   storage_bucket: 'draft-media', storage_path: 'drafts/private/poster.png', public_url: null,
   public_storage_bucket: null, public_storage_path: null,
   mime_type: 'image/png', file_size_bytes: 2048, is_public_approved: false, alt_text_public: null,
@@ -92,7 +92,7 @@ describe('project media preview read model', () => {
     expect(result).toEqual({
       posterImage: { rowCount: 1, validPrivateCount: 1 },
       posterPdf: { rowCount: 1, validPrivateCount: 1 },
-      snapshotMedia: null,
+      snapshotMedia: [],
     });
     expect(JSON.stringify(result)).not.toContain('drafts/private');
     expect(JSON.stringify(result)).not.toContain('draft-media');

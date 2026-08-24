@@ -14,6 +14,7 @@ import { validateMediaAsset } from '../storage/mediaValidationCore';
 export interface ProjectMediaAssetPreviewRow {
   id: string;
   asset_type: string;
+  gallery_position: number | null;
   file_name: string;
   storage_bucket: string;
   storage_path: string;
@@ -97,14 +98,24 @@ export function deriveApprovalMediaInput(
 ): ApprovalMediaInput {
   const posterImage = mediaEvidence(rows, { ...params, assetType: 'poster_image' });
   const posterPdf = mediaEvidence(rows, { ...params, assetType: 'poster_pdf' });
-  const snapshots = rows.filter((row) => row.asset_type === 'snapshot_image');
-  const snapshotEvidence = mediaEvidence(rows, { ...params, assetType: 'snapshot_image' });
-  const snapshotMedia: ApprovalSnapshotMediaInput | null = snapshots.length === 0
-    ? null
-    : {
-        ...snapshotEvidence,
-        altText: snapshots.length === 1 ? snapshots[0].alt_text_public : null,
-      };
+  const snapshots = rows.filter(
+    (row) => row.asset_type === 'snapshot_image',
+  );
+
+  const snapshotMedia: ApprovalSnapshotMediaInput[] = snapshots
+    .map((row) => ({
+      galleryPosition: row.gallery_position,
+      validPrivate: isValidPrivateApprovalAsset(row, {
+        ...params,
+        assetType: 'snapshot_image',
+      }),
+      altText: row.alt_text_public,
+    }))
+    .sort(
+      (a, b) =>
+        (a.galleryPosition ?? Number.MAX_SAFE_INTEGER) -
+        (b.galleryPosition ?? Number.MAX_SAFE_INTEGER),
+    );
 
   return { posterImage, posterPdf, snapshotMedia };
 }
@@ -143,6 +154,7 @@ export async function toProjectMediaPreviewItem(
   const item: ProjectMediaPreviewItem = {
     id: row.id,
     assetType: row.asset_type,
+    galleryPosition: row.gallery_position,
     fileName: row.file_name || 'Unnamed media file',
     mimeType: row.mime_type || 'application/octet-stream',
     fileSize: fileSizeBytes(row.file_size_bytes),
@@ -200,7 +212,7 @@ export async function loadProjectMediaReviewData(params: {
   const privateBucket = params.privateBucket ?? getStagingBuckets().DRAFT_PRIVATE;
   const { data, error } = await params.supabase
     .from('media_assets')
-    .select('id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+    .select('id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
     .eq('project_id', params.projectId)
     .order('asset_type', { ascending: true })
     .order('created_at', { ascending: true })

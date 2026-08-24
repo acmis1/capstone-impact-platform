@@ -14,12 +14,14 @@ function media(
   overrides: Partial<ProjectMediaPreviewItem> = {},
 ): ProjectMediaPreviewItem {
   return {
-    id: 'media-1',
-    assetType: 'snapshot_image',
-    fileName: 'snapshot.png',
+    id: 'asset-1',
+    assetType: 'poster_image',
+    galleryPosition: null,
+    previewSource: 'private-signed',
+    url: 'https://example.com/media.png',
+    fileName: 'poster.png',
     mimeType: 'image/png',
-    previewSource: 'public',
-    url: 'https://example.com/snapshot.png',
+    fileSize: 2048,
     ...overrides,
   };
 }
@@ -28,7 +30,11 @@ describe('MediaAccessibilityReview', () => {
   it('reports an available text alternative without duplicating text shown by a valid image preview', () => {
     render(
       <MediaAccessibilityReview
-        media={media({ altText: 'Participants demonstrating the project prototype.' })}
+        media={media({
+          assetType: 'snapshot_image',
+          galleryPosition: 1,
+          altText: 'Participants demonstrating the project prototype.',
+        })}
       />,
     );
 
@@ -110,23 +116,47 @@ describe('MediaAccessibilityReview', () => {
   });
 
   it('associates each review with the correct media asset', () => {
-    render(
-      <>
-        <MediaAccessibilityReview
-          media={media({ id: 'poster', assetType: 'poster_image', fileName: 'poster.png', altText: 'Poster alt.' })}
-          fullText="Poster full text."
-        />
-        <MediaAccessibilityReview
-          media={media({ id: 'snapshot', fileName: 'snapshot.png', altText: undefined })}
-        />
-      </>,
-    );
+  render(
+    <>
+      <MediaAccessibilityReview
+        media={media({
+          id: 'poster',
+          assetType: 'poster_image',
+          galleryPosition: null,
+          fileName: 'poster.png',
+        })}
+        fullText="Poster full text."
+      />
 
-    const posterReview = screen.getByRole('region', { name: 'Accessibility review — Poster image: poster.png' });
-    const snapshotReview = screen.getByRole('region', { name: 'Accessibility review — Snapshot image: snapshot.png' });
+      <MediaAccessibilityReview
+        media={media({
+          id: 'snapshot',
+          assetType: 'snapshot_image',
+          galleryPosition: 1,
+          fileName: 'snapshot.png',
+        })}
+      />
+    </>,
+  );
 
-    expect(within(posterReview).getByText('Full text available')).toBeTruthy();
-    expect(within(snapshotReview).getByText('Accessibility information incomplete')).toBeTruthy();
-    expect(within(snapshotReview).queryByText('Poster full text.')).toBeNull();
+  const posterReview = screen.getByRole('region', {
+    name: 'Accessibility review — Poster image: poster.png',
   });
+
+  const snapshotReview = screen.getByRole('region', {
+    name: 'Accessibility review — Snapshot image: snapshot.png',
+  });
+
+  expect(
+    within(posterReview).getByText('Full text available'),
+  ).toBeTruthy();
+
+  expect(
+    within(snapshotReview).getByText('Accessibility information incomplete'),
+  ).toBeTruthy();
+
+  expect(
+    within(snapshotReview).queryByText('Poster full text.'),
+  ).toBeNull();
+});
 });

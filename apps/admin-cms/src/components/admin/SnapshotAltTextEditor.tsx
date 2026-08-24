@@ -11,6 +11,7 @@ import { CheckCircle2, AlertTriangle, Edit3, Plus } from 'lucide-react';
 
 interface SnapshotAltTextEditorProps {
   publicId: string;
+  mediaAssetId: string;
   /** The authoritative saved value, or empty when none is stored yet. */
   initialAltText: string;
   /** The project version this view was rendered from; shared with the metadata editor. */
@@ -32,6 +33,7 @@ interface SnapshotAltTextEditorProps {
  */
 export function SnapshotAltTextEditor({
   publicId,
+  mediaAssetId,
   initialAltText,
   initialExpectedUpdatedAt,
   canEdit,
@@ -60,7 +62,7 @@ export function SnapshotAltTextEditor({
     setErrorMessage(null);
     setStatusMessage(null);
     try {
-      const result = await saveAction({ publicId, snapshotAltText: draft, expectedUpdatedAt });
+      const result = await saveAction({ publicId, mediaAssetId, snapshotAltText: draft, expectedUpdatedAt });
       if (result.ok) {
         setSavedAltText(result.snapshot.snapshotAltText);
         setDraft(result.snapshot.snapshotAltText);

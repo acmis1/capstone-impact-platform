@@ -26,12 +26,17 @@ const VERIFIER_PUBLIC_IDS = [
   'ms4b-pkg-1',
   'ms5c-pkg-1',
   'ms6-pkg-1',
+  'ms7-pkg-1',
 ] as const;
-const VERIFIER_PRIVATE_PATHS = VERIFIER_PUBLIC_IDS.flatMap((publicId) => [
-  `drafts/${publicId}/poster_image/poster.png`,
-  `drafts/${publicId}/poster_pdf/poster.pdf`,
-  `drafts/${publicId}/snapshot_image/snapshot-1.png`,
-]);
+const VERIFIER_PRIVATE_PATHS = [
+  ...VERIFIER_PUBLIC_IDS.flatMap((publicId) => [
+    `drafts/${publicId}/poster_image/poster.png`,
+    `drafts/${publicId}/poster_pdf/poster.pdf`,
+    `drafts/${publicId}/snapshot_image/snapshot-1.png`,
+  ]),
+  'drafts/ms7-pkg-1/snapshot_image/snapshot-2.png',
+  'drafts/ms7-pkg-1/snapshot_image/snapshot-3.png',
+];
 
 function ensureLocalEnvironmentVariables(): void {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -226,6 +231,7 @@ function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
       fileName: 'poster.png',
       fileSizeBytes: PNG_BYTES.length,
       canonicalMimeType: 'image/png',
+      galleryPosition: null,
       // The poster's text alternative stays the project-level accessibility text.
       snapshotAltText: null,
       content: PNG_BYTES,
@@ -237,6 +243,7 @@ function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
       fileName: 'poster.pdf',
       fileSizeBytes: PDF_BYTES.length,
       canonicalMimeType: 'application/pdf',
+      galleryPosition: null,
       snapshotAltText: null,
       content: PDF_BYTES,
     });
@@ -247,6 +254,7 @@ function buildMediaFiles(packages: FixturePackageSpec[]): MediaFileToStage[] {
       fileName: 'snapshot-1.png',
       fileSizeBytes: PNG_BYTES.length,
       canonicalMimeType: 'image/png',
+      galleryPosition: 1,
       snapshotAltText: MEDIA_STAGE_SNAPSHOT_ALT_TEXT,
       content: PNG_BYTES,
     });
@@ -682,6 +690,207 @@ export async function verifyBrowserImportMediaStageRuntime(): Promise<void> {
     if (storageAfterRetry6.length !== 3) throw new Error(`[Scenario 6] Retry left an unexpected number of storage objects: ${storageAfterRetry6.length}`);
 
     process.stdout.write('  ✓ Scenario 6 PASSED!\n\n');
+
+    // -------------------------------------------------------------------------
+    // Scenario 7: Multi-Image Gallery Persistence + Idempotent Retry
+    // -------------------------------------------------------------------------
+
+    process.stdout.write(
+      '[Scenario 7] Testing multi-image gallery persistence, ordering, alt text, and idempotent retry...\n',
+    );
+
+    const pkg7: FixturePackageSpec = {
+      publicId: 'ms7-pkg-1',
+      packagePath: 'ms7-pkg-1',
+    };
+
+    const fixture7 = await stageFixtureMetadataBatch({
+      authContext,
+      rootName: 'ms7-pkg-1',
+      packages: [pkg7],
+      program: program.name,
+      discipline: discipline.name,
+      industry: industry.name,
+    });
+
+    createdBatchIds.push(fixture7.batchId);
+
+    // buildMediaFiles() already supplies:
+    // poster.png
+    // poster.pdf
+    // snapshot-1.png -> galleryPosition 1
+    const mediaFiles7 = buildMediaFiles([pkg7]);
+
+    mediaFiles7.push({
+      packagePath: pkg7.packagePath,
+      projectPublicId: pkg7.publicId,
+      assetType: 'snapshot_image',
+      fileName: 'snapshot-2.png',
+      fileSizeBytes: PNG_BYTES.length,
+      canonicalMimeType: 'image/png',
+      galleryPosition: 2,
+      snapshotAltText:
+        'Synthetic second gallery image used by the browser media staging runtime verifier.',
+      content: PNG_BYTES,
+    });
+
+    mediaFiles7.push({
+      packagePath: pkg7.packagePath,
+      projectPublicId: pkg7.publicId,
+      assetType: 'snapshot_image',
+      fileName: 'snapshot-3.png',
+      fileSizeBytes: PNG_BYTES.length,
+      canonicalMimeType: 'image/png',
+      galleryPosition: 3,
+      snapshotAltText:
+        'Synthetic third gallery image used by the browser media staging runtime verifier.',
+      content: PNG_BYTES,
+    });
+
+    // First staging attempt.
+    const res7a = await stageBrowserImportMedia({
+      authContext,
+      batchId: fixture7.batchId,
+      metadataIntentHash: fixture7.metadataIntentHash,
+      files: mediaFiles7,
+    });
+
+    if (
+      !res7a.success ||
+      res7a.result !== 'completed' ||
+      res7a.mediaAssetCount !== 5
+    ) {
+      throw new Error(
+        `[Scenario 7] Multi-image media completion failed: ${JSON.stringify(res7a)}`,
+      );
+    }
+
+    // Resolve the staged project.
+    const { data: projRow7 } = await supabase
+      .from('projects')
+      .select('id, status')
+      .eq('import_batch_id', fixture7.batchId)
+      .single();
+
+    if (!projRow7) {
+      throw new Error('[Scenario 7] Project row was not created.');
+    }
+
+    if (projRow7.status !== 'draft') {
+      throw new Error('[Scenario 7] Project did not remain draft.');
+    }
+
+    // Verify all media rows.
+    const { data: assetRows7 } = await supabase
+      .from('media_assets')
+      .select(
+        'asset_type, gallery_position, alt_text_public, storage_bucket, storage_path',
+      )
+      .eq('project_id', projRow7.id);
+
+    if (!assetRows7 || assetRows7.length !== 5) {
+      throw new Error(
+        `[Scenario 7] Expected exactly 5 media_assets rows, found ${assetRows7?.length}.`,
+      );
+    }
+
+    // Verify three independent snapshot rows.
+    const snapshotRows7 = assetRows7
+      .filter((row) => row.asset_type === 'snapshot_image')
+      .sort(
+        (a, b) =>
+          (a.gallery_position ?? 0) -
+          (b.gallery_position ?? 0),
+      );
+
+    if (snapshotRows7.length !== 3) {
+      throw new Error(
+        `[Scenario 7] Expected 3 snapshot rows, found ${snapshotRows7.length}.`,
+      );
+    }
+
+    const positions7 = snapshotRows7.map(
+      (row) => row.gallery_position,
+    );
+
+    if (JSON.stringify(positions7) !== JSON.stringify([1, 2, 3])) {
+      throw new Error(
+        `[Scenario 7] Gallery positions were not deterministic: ${JSON.stringify(positions7)}.`,
+      );
+    }
+
+    const expectedAltTexts7 = [
+      MEDIA_STAGE_SNAPSHOT_ALT_TEXT,
+      'Synthetic second gallery image used by the browser media staging runtime verifier.',
+      'Synthetic third gallery image used by the browser media staging runtime verifier.',
+    ];
+
+    const actualAltTexts7 = snapshotRows7.map(
+      (row) => row.alt_text_public,
+    );
+
+    if (
+      JSON.stringify(actualAltTexts7) !==
+      JSON.stringify(expectedAltTexts7)
+    ) {
+      throw new Error(
+        `[Scenario 7] Gallery alt texts were not persisted by position: ${JSON.stringify(actualAltTexts7)}.`,
+      );
+    }
+
+    // Verify deterministic storage paths.
+    const expectedSnapshotPaths7 = [
+      `drafts/${pkg7.publicId}/snapshot_image/snapshot-1.png`,
+      `drafts/${pkg7.publicId}/snapshot_image/snapshot-2.png`,
+      `drafts/${pkg7.publicId}/snapshot_image/snapshot-3.png`,
+    ];
+
+    const actualSnapshotPaths7 = snapshotRows7.map(
+      (row) => row.storage_path,
+    );
+
+    if (
+      JSON.stringify(actualSnapshotPaths7) !==
+      JSON.stringify(expectedSnapshotPaths7)
+    ) {
+      throw new Error(
+        `[Scenario 7] Snapshot storage paths were unexpected: ${JSON.stringify(actualSnapshotPaths7)}.`,
+      );
+    }
+
+    // Exact retry must converge to the completed ledger without creating rows.
+    const res7b = await stageBrowserImportMedia({
+      authContext,
+      batchId: fixture7.batchId,
+      metadataIntentHash: fixture7.metadataIntentHash,
+      files: mediaFiles7,
+    });
+
+    if (
+      !res7b.success ||
+      res7b.result !== 'already_completed' ||
+      res7b.mediaAssetCount !== 5
+    ) {
+      throw new Error(
+        `[Scenario 7] Idempotent retry failed: ${JSON.stringify(res7b)}`,
+      );
+    }
+
+    const { count: assetCountAfterRetry7 } = await supabase
+      .from('media_assets')
+      .select('*', {
+        count: 'exact',
+        head: true,
+      })
+      .eq('project_id', projRow7.id);
+
+    if (assetCountAfterRetry7 !== 5) {
+      throw new Error(
+        `[Scenario 7] Retry created duplicate media_assets rows: ${assetCountAfterRetry7}.`,
+      );
+    }
+
+    process.stdout.write('  ✓ Scenario 7 PASSED!\n\n');
 
   } finally {
     const storageCleanup = await supabase.storage.from(buckets.DRAFT_PRIVATE).remove(VERIFIER_PRIVATE_PATHS);

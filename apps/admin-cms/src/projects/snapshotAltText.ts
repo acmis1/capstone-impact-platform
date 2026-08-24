@@ -12,6 +12,13 @@ import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
  */
 export const snapshotAltTextInputSchema = z.object({
   publicId: z.string().trim().min(1),
+
+  /**
+   * Exact snapshot media row being edited.
+   * The database still verifies that it belongs to publicId and is a snapshot_image.
+   */
+  mediaAssetId: z.string().uuid(),
+
   snapshotAltText: z.string()
     .transform((value) => value.trim())
     .refine((value) => value.length > 0, 'Snapshot image alt text is required.')

@@ -42,9 +42,13 @@ function ExternalLink({ label, url }: { label: string; url: string }) {
 
 /** Uploaded-file media is authoritative; project URLs below remain external showcase links. */
 export function ProjectMediaSummary({ project, mediaItems, mediaAvailable, snapshotAltText }: ProjectMediaSummaryProps) {
-  // The media uniqueness contract allows at most one snapshot image per project today; the editor
-  // is rendered against that single asset rather than assuming a gallery.
-  const snapshotMedia = mediaItems.find((media) => media.assetType === 'snapshot_image');
+  const snapshotMediaItems = mediaItems
+    .filter((media) => media.assetType === 'snapshot_image')
+    .sort(
+      (a, b) =>
+        (a.galleryPosition ?? Number.MAX_SAFE_INTEGER) -
+        (b.galleryPosition ?? Number.MAX_SAFE_INTEGER),
+    );
 
   return (
     <div className="flex flex-col gap-5 text-sm">
@@ -69,16 +73,27 @@ export function ProjectMediaSummary({ project, mediaItems, mediaAvailable, snaps
         </div>
       )}
 
-      {mediaAvailable && snapshotMedia && snapshotAltText && (
+      {mediaAvailable && snapshotAltText && snapshotMediaItems.length > 0 && (
         <div className="border-t border-border pt-4">
-          <SnapshotAltTextEditor
-            publicId={project.publicId || ''}
-            initialAltText={snapshotMedia.altText ?? ''}
-            initialExpectedUpdatedAt={snapshotAltText.expectedUpdatedAt}
-            canEdit={snapshotAltText.canEdit}
-            projectStatus={project.status}
-            saveAction={snapshotAltText.saveAction}
-          />
+          <div className="flex flex-col gap-4">
+            {snapshotMediaItems.map((media) => (
+              <div key={media.id} className="rounded-lg border border-border p-3">
+                <p className="mb-2 text-sm font-semibold text-foreground">
+                  Snapshot {media.galleryPosition ?? 'order unavailable'} alt text
+                </p>
+
+                <SnapshotAltTextEditor
+                  publicId={project.publicId || ''}
+                  mediaAssetId={media.id}
+                  initialAltText={media.altText ?? ''}
+                  initialExpectedUpdatedAt={snapshotAltText.expectedUpdatedAt}
+                  canEdit={snapshotAltText.canEdit}
+                  projectStatus={project.status}
+                  saveAction={snapshotAltText.saveAction}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

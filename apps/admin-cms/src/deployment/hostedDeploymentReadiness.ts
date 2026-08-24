@@ -164,7 +164,7 @@ export const REQUIRED_RPC_SIGNATURES = [
   rpc('schedule_participant_preview_reminder', ['p_public_id', 'p_admin_id', 'p_scheduled_for'], ['text', 'uuid', 'timestamptz']),
   rpc('cancel_participant_preview_reminder', ['p_public_id', 'p_admin_id', 'p_reference'], ['text', 'uuid', 'uuid']),
   rpc('claim_due_participant_preview_reminders', ['p_batch_limit'], ['integer']),
-  rpc('update_snapshot_image_alt_text', ['p_public_id', 'p_alt_text', 'p_expected_updated_at', 'p_admin_id'], ['text', 'text', 'timestamptz', 'uuid']),
+  rpc('update_snapshot_image_alt_text', ['p_public_id', 'p_media_asset_id', 'p_alt_text', 'p_expected_updated_at', 'p_admin_id'], ['text', 'uuid', 'text', 'timestamptz', 'uuid']),
   rpc(
     'persist_assistive_validation_run',
     ['p_project_id', 'p_actor_admin_id', 'p_input_hash', 'p_pipeline_version', 'p_status', 'p_failure_code', 'p_findings'],

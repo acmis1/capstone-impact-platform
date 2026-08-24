@@ -8,7 +8,7 @@ import { validateProjectForApproval } from '../validation/projectValidation';
 const COMPLETE_PRIVATE_APPROVAL_MEDIA = {
   posterImage: { rowCount: 1, validPrivateCount: 1 },
   posterPdf: { rowCount: 1, validPrivateCount: 1 },
-  snapshotMedia: null,
+  snapshotMedia: [],
 };
 
 export const DEFAULT_SYNTHETIC_SEED = 0xD4072026;
