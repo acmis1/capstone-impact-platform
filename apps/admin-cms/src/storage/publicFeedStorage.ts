@@ -52,3 +52,87 @@ export async function uploadPublicFeedToStorage(params: {
     feedHash
   };
 }
+
+/**
+ * Reads the exact bytes currently stored as the canonical public feed.
+ *
+ * null means no canonical object currently exists.
+ */
+export async function downloadCanonicalPublicFeed():
+  Promise<Buffer | null> {
+  const env = getServerEnv();
+  const supabase =
+    createSupabaseAdminClientCore();
+
+  const { data, error } =
+    await supabase.storage
+      .from(
+        env.SUPABASE_PUBLIC_FEEDS_BUCKET,
+      )
+      .download(
+        env.SUPABASE_PUBLIC_FEED_FILE,
+      );
+
+  if (error) {
+    const message =
+      error.message?.toLowerCase() ?? '';
+
+    if (
+      message.includes('not found') ||
+      message.includes('does not exist')
+    ) {
+      return null;
+    }
+
+    throw new Error(
+      'Canonical public feed could not be read.',
+    );
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return Buffer.from(
+    await data.arrayBuffer(),
+  );
+}
+
+/**
+ * Restores already-serialized canonical feed bytes exactly as verified.
+ *
+ * Rollback must not rebuild or normalize the selected historical artifact
+ * at write time because exact-byte restoration is part of its integrity
+ * guarantee.
+ */
+export async function uploadExactCanonicalPublicFeed(
+  content: string,
+): Promise<void> {
+  const env = getServerEnv();
+  const supabase =
+    createSupabaseAdminClientCore();
+
+  const { error } =
+    await supabase.storage
+      .from(
+        env.SUPABASE_PUBLIC_FEEDS_BUCKET,
+      )
+      .upload(
+        env.SUPABASE_PUBLIC_FEED_FILE,
+
+        Buffer.from(content, 'utf8'),
+
+        {
+          contentType:
+            'application/json',
+
+          upsert: true,
+        },
+      );
+
+  if (error) {
+    throw new Error(
+      'Canonical public feed write failed.',
+    );
+  }
+}

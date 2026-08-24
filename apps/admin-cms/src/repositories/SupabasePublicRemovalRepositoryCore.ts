@@ -54,11 +54,67 @@ function toAttempt(row: Record<string, unknown>): PublicRemovalAttemptRecord {
   };
 }
 
-function rpc(data: unknown, error: { message?: string; code?: string } | null): PublicRemovalRpcResult {
-  if (error) throw new Error(`Public removal persistence failed: ${error.code || 'UNKNOWN'}`);
-  if (!data || typeof data !== 'object' || Array.isArray(data) || typeof (data as Record<string, unknown>).resultCode !== 'string') {
-    throw new Error('Public removal persistence returned an invalid response.');
+// function rpc(data: unknown, error: { message?: string; code?: string } | null): PublicRemovalRpcResult {
+//   if (error) throw new Error(`Public removal persistence failed: ${error.code || 'UNKNOWN'}`);
+//   if (!data || typeof data !== 'object' || Array.isArray(data) || typeof (data as Record<string, unknown>).resultCode !== 'string') {
+//     throw new Error('Public removal persistence returned an invalid response.');
+//   }
+//   return data as PublicRemovalRpcResult;
+// }
+
+function rpc(
+  data: unknown,
+  error: {
+    message?: string;
+    code?: string;
+  } | null,
+): PublicRemovalRpcResult {
+  if (error) {
+    const message =
+      error.message || '';
+
+    if (
+      message.includes(
+        'PUBLICATION_IN_PROGRESS',
+      )
+    ) {
+      return {
+        resultCode:
+          'PUBLICATION_IN_PROGRESS',
+      };
+    }
+
+    if (
+      message.includes(
+        'COMPENSATION_INCOMPLETE',
+      )
+    ) {
+      return {
+        resultCode:
+          'COMPENSATION_INCOMPLETE',
+      };
+    }
+
+    throw new Error(
+      `Public removal persistence failed: ${
+        error.code || 'UNKNOWN'
+      }`,
+    );
   }
+
+  if (
+    !data ||
+    typeof data !== 'object' ||
+    Array.isArray(data) ||
+    typeof (
+      data as Record<string, unknown>
+    ).resultCode !== 'string'
+  ) {
+    throw new Error(
+      'Public removal persistence returned an invalid response.',
+    );
+  }
+
   return data as PublicRemovalRpcResult;
 }
 

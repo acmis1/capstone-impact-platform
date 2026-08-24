@@ -12,6 +12,7 @@ export interface RouteDescriptor {
 export const NAVIGATION_ITEMS: NavigationItem[] = [
   { name: 'Projects', href: '/admin' },
   { name: 'Imports', href: '/admin/imports' },
+  { name: 'Feed history', href: '/admin/feed-history' },
 ];
 
 export const STAFF_NAVIGATION_ITEM: NavigationItem = { name: 'Staff access', href: '/admin/staff' };
@@ -68,6 +69,27 @@ export function getRouteDescriptor(pathname: string): RouteDescriptor {
       title: 'Imports',
       breadcrumbs: [{ label: 'Imports' }],
       activeHref: '/admin/imports',
+    };
+  }
+
+  // Check feed-history detail route: /admin/feed-history/{versionNumber}
+  if (cleanPath.startsWith('/admin/feed-history/')) {
+    return {
+      title: 'Feed version details',
+      breadcrumbs: [
+        { label: 'Feed history', href: '/admin/feed-history' },
+        { label: 'Feed version details' },
+      ],
+      activeHref: '/admin/feed-history',
+    };
+  }
+
+  // Check exact feed-history route: /admin/feed-history
+  if (cleanPath === '/admin/feed-history') {
+    return {
+      title: 'Feed history',
+      breadcrumbs: [{ label: 'Feed history' }],
+      activeHref: '/admin/feed-history',
     };
   }
 
