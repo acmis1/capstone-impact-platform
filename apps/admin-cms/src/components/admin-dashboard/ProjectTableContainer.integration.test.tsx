@@ -14,6 +14,7 @@ vi.mock('next/navigation', () => ({
 
 import { ProjectTableContainer } from './ProjectTableContainer';
 import { DashboardPreferencesProvider } from './useDashboardPreferences';
+import { BulkProjectReviewBusyProvider } from './BulkProjectReviewBusyContext';
 import { loadDashboardPreferences } from './dashboardPreferences';
 import { parseProjectListQuery } from '../../domain/projectQuery';
 import type { ProjectIndexResult, ProjectIndexRow } from './projectDashboardHelpers';
@@ -270,6 +271,55 @@ describe('ProjectTableContainer preference integration', () => {
 
     await waitFor(() => expect(screen.getAllByText('Not recorded').length).toBe(4));
   });
+
+  it('selects individual projects, exposes the selected count, and clears selection', async () => {
+    renderTable();
+    const rowSelectors = await screen.findAllByRole('checkbox', { name: 'Select Atlas' });
+    fireEvent.click(rowSelectors[0]);
+    expect(screen.getAllByText('1 selected').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('checkbox', { name: 'Select Atlas' }).some((checkbox) => (checkbox as HTMLInputElement).checked)).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+    await waitFor(() => expect(screen.queryByText('1 selected')).toBeNull());
+  });
+
+  it('selects every selectable row on the current page and leaves unsafe IDs disabled', async () => {
+    renderTable('', {
+      rows: [
+        baseRow,
+        { ...baseRow, id: 'unsafe', publicId: undefined, title: 'Unavailable project' },
+      ],
+      total: 2, page: 1, pageSize: 10, pageCount: 1,
+    });
+    const pageSelectors = await screen.findAllByRole('checkbox', { name: 'Select current page' });
+    fireEvent.click(pageSelectors[0]);
+    expect(screen.getAllByText('1 selected').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('checkbox', { name: 'Project cannot be selected' }).every((checkbox) => (checkbox as HTMLInputElement).disabled)).toBe(true);
+  });
+
+  it.each([
+    ['search', 'q=atlas'],
+    ['filter', 'status=approved'],
+    ['sort', 'sort=title&direction=asc'],
+    ['pagination', 'page=2'],
+    ['page size', 'pageSize=25'],
+  ])('clears selection when the %s query scope changes', async (_label, nextSearch) => {
+    const view = renderTable();
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select Atlas' }))[0]);
+    expect(screen.getAllByText('1 selected').length).toBeGreaterThan(0);
+
+    navigation.search = nextSearch;
+    view.rerender(
+      <DashboardPreferencesProvider>
+        <ProjectTableContainer
+          query={parseProjectListQuery(Object.fromEntries(new URLSearchParams(nextSearch)))}
+          result={result}
+        />
+      </DashboardPreferencesProvider>,
+    );
+
+    await waitFor(() => expect(screen.queryByText('1 selected')).toBeNull());
+  });
 });
 
 describe('ProjectTableContainer mobile card presentation', () => {
@@ -315,5 +365,34 @@ describe('ProjectTableContainer mobile card presentation', () => {
     expect(cardQueries.getByText('Engineering')).toBeTruthy();
     expect(cardQueries.getByText('2026')).toBeTruthy();
     expect(cardQueries.getByRole('link', { name: 'View project' })).toBeTruthy();
+  });
+
+  it('selects a project from the mobile card controls', async () => {
+    renderTable();
+    const card = (await screen.findByRole('heading', { name: 'Atlas', level: 4 })).closest('li');
+    fireEvent.click(within(card as HTMLElement).getByRole('checkbox', { name: 'Select project' }));
+    expect(screen.getAllByText('1 selected').length).toBeGreaterThan(0);
+  });
+
+  it('disables selection, sorting, pagination, and bulk actions while a preflight is in flight', async () => {
+    let resolveRequest: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => { resolveRequest = resolve; });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockReturnValueOnce(pending);
+    render(
+      <DashboardPreferencesProvider>
+        <BulkProjectReviewBusyProvider>
+          <ProjectTableContainer query={parseProjectListQuery({})} result={result} canReviewBulk />
+        </BulkProjectReviewBusyProvider>
+      </DashboardPreferencesProvider>,
+    );
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select Atlas' }))[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => {
+      expect(screen.getAllByRole('checkbox', { name: 'Select Atlas' }).every((input) => (input as HTMLInputElement).disabled)).toBe(true);
+      expect((screen.getByRole('button', { name: 'Clear selection' }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole('button', { name: 'Sort by Project ascending' }) as HTMLButtonElement).disabled).toBe(true);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    resolveRequest?.(new Response(JSON.stringify({ action: 'approve', summary: { total: 1, eligible: 0, blocked: 1, alreadyComplete: 0, invalidOrStale: 0 }, items: [] }), { status: 200 }));
   });
 });

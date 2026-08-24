@@ -17,7 +17,7 @@ describe('assistive duplicate shortlist Migration 0033 contract', () => {
   it('is the sole new Migration 0033 and preserves migrations 1-32 byte-for-byte', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(33);
+    expect(files).toHaveLength(34);
     expect(files[32]).toBe(filename);
     expect(() => execFileSync(
       'git',

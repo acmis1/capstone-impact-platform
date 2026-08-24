@@ -18,6 +18,7 @@ import { DashboardPreferencesProvider } from '../../components/admin-dashboard/u
 import { Button } from '../../components/ui/button';
 import { ErrorState } from '../../components/ui/error-state';
 import { EmptyState } from '../../components/ui/empty-state';
+import { BulkProjectReviewBusyProvider } from '../../components/admin-dashboard/BulkProjectReviewBusyContext';
 
 import {
   toProjectIndexRow,
@@ -39,10 +40,14 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   let filterOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [] };
   let loadError: boolean = false;
   let canImport = false;
+  let canSubmitBulk = false;
+  let canReviewBulk = false;
 
   try {
     const authContext = await requireAdmin();
     canImport = hasPermission(authContext.permissions, 'projects.edit');
+    canSubmitBulk = hasPermission(authContext.permissions, 'projects.edit');
+    canReviewBulk = hasPermission(authContext.permissions, 'projects.review');
   } catch {
     // The admin layout already guards this route; an unavailable permission context
     // only means the contextual import action stays hidden.
@@ -130,36 +135,43 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           <DashboardMetricsSummary metrics={metrics} />
 
           <DashboardPreferencesProvider>
-            <ProjectFilterBar
-              query={query}
-              availableYears={filterOptions.years}
-              availablePrograms={filterOptions.programs}
-              availableDisciplines={filterOptions.disciplines}
-            />
+            <BulkProjectReviewBusyProvider>
+              <ProjectFilterBar
+                query={query}
+                availableYears={filterOptions.years}
+                availablePrograms={filterOptions.programs}
+                availableDisciplines={filterOptions.disciplines}
+              />
 
-            {clientResult.total === 0 ? (
-              hasActiveFilters ? (
-                <NoMatchingProjectsState query={query} />
+              {clientResult.total === 0 ? (
+                hasActiveFilters ? (
+                  <NoMatchingProjectsState query={query} />
+                ) : (
+                  <EmptyState
+                    icon={FolderOpen}
+                    title="No project records available"
+                    description="There are currently no active capstone project records stored in the staging database repository."
+                    action={
+                      canImport ? (
+                        <Button asChild className="min-h-[44px]">
+                          <Link href="/admin/imports/new">
+                            <Plus aria-hidden="true" />
+                            New import
+                          </Link>
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                )
               ) : (
-                <EmptyState
-                  icon={FolderOpen}
-                  title="No project records available"
-                  description="There are currently no active capstone project records stored in the staging database repository."
-                  action={
-                    canImport ? (
-                      <Button asChild className="min-h-[44px]">
-                        <Link href="/admin/imports/new">
-                          <Plus aria-hidden="true" />
-                          New import
-                        </Link>
-                      </Button>
-                    ) : undefined
-                  }
+                <ProjectTableContainer
+                  query={query}
+                  result={clientResult}
+                  canSubmitBulk={canSubmitBulk}
+                  canReviewBulk={canReviewBulk}
                 />
-              )
-            ) : (
-              <ProjectTableContainer query={query} result={clientResult} />
-            )}
+              )}
+            </BulkProjectReviewBusyProvider>
           </DashboardPreferencesProvider>
         </>
       )}

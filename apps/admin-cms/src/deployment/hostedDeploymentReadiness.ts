@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 33;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 34;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -41,6 +41,7 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260820160000_assistive_validation_job_coordination.sql',
   '20260821090000_assistive_validation_staff_inspection.sql',
   '20260821140000_assistive_duplicate_shortlist.sql',
+  '20260824120000_bulk_project_review_concurrency.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [
@@ -115,11 +116,13 @@ function rpc(
   return { name, parameterNames, parameterTypes };
 }
 
-/** Final application RPC signatures granted to service_role by migrations 0001-0031. */
+/** Final application RPC signatures granted to service_role by migrations 0001-0034. */
 export const REQUIRED_RPC_SIGNATURES = [
   rpc('bootstrap_initial_admin', ['p_auth_user_id', 'p_email', 'p_full_name'], ['uuid', 'text', 'text']),
   rpc('register_password_recovery_session', ['p_session_id', 'p_auth_user_id'], ['uuid', 'uuid']),
   rpc('perform_project_review_action', ['p_public_id', 'p_action', 'p_comments', 'p_admin_id'], ['text', 'text', 'text', 'uuid']),
+  rpc('perform_project_workflow_action_if_current', ['p_public_id', 'p_action', 'p_comments', 'p_admin_id', 'p_expected_updated_at'], ['text', 'text', 'text', 'uuid', 'timestamptz']),
+  rpc('get_bulk_project_review_evidence', ['p_project_ids'], ['uuid[]']),
   rpc(
     'update_project_metadata',
     ['p_public_id', 'p_title', 'p_summary', 'p_background', 'p_solution', 'p_year', 'p_program_id', 'p_discipline_ids', 'p_industry_category_ids', 'p_expected_updated_at', 'p_admin_id', 'p_poster_text', 'p_accessibility_text'],

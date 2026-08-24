@@ -70,6 +70,7 @@
     "run:assistive-worker-once": "npm run run:assistive-worker-once --workspace=apps/admin-cms",
     "assistive-worker:health": "npm run assistive-worker:health --workspace=apps/admin-cms",
     "verify:scaling-runtime": "npm run verify:scaling-runtime --workspace=apps/admin-cms",
+    "verify:bulk-project-review-runtime": "npm run verify:bulk-project-review-runtime --workspace=apps/admin-cms",
     "benchmark:local-scaling": "npm run benchmark:local-scaling --workspace=apps/admin-cms --"
   },
   "devDependencies": {

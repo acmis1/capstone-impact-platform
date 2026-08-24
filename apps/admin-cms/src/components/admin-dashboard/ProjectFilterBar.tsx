@@ -16,6 +16,7 @@ import {
   CLEARED_FILTER_PREFERENCES,
 } from './filterQueryHelpers';
 import { useDashboardPreferences } from './useDashboardPreferences';
+import { useBulkProjectReviewBusy } from './BulkProjectReviewBusyContext';
 
 const STATUSES: readonly WorkflowStatus[] = [
   'draft',
@@ -97,6 +98,7 @@ export function ProjectFilterBar({
   const searchParams = useSearchParams();
   const { preferences, updatePreferences, resetPreferences, isLoaded } =
     useDashboardPreferences();
+  const { busy: bulkReviewBusy } = useBulkProjectReviewBusy();
   const rawSearchParams = searchParams?.toString() || '';
 
   const [searchInput, setSearchInput] = React.useState(query.search || '');
@@ -282,10 +284,11 @@ export function ProjectFilterBar({
                 placeholder="Search by title, public ID, partner, or group..."
                 aria-describedby="project-search-hint"
                 maxLength={100}
+                disabled={bulkReviewBusy}
                 className="min-h-[44px] w-full rounded-md border border-input bg-background py-2 pl-10 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               />
             </div>
-            <Button type="submit" variant="default" className="min-h-[44px] sm:w-32">
+            <Button type="submit" variant="default" disabled={bulkReviewBusy} className="min-h-[44px] sm:w-32">
               Search
             </Button>
           </div>
@@ -297,6 +300,7 @@ export function ProjectFilterBar({
         <div className="flex flex-col gap-3">
           <button
             type="button"
+            disabled={bulkReviewBusy}
             onClick={() => setFiltersExpanded((expanded) => !expanded)}
             aria-expanded={filtersExpanded}
             aria-controls="project-filter-controls"
@@ -330,6 +334,7 @@ export function ProjectFilterBar({
               label="Status"
               value={query.status || ''}
               onChange={(value) => handleFilterChange('status', value)}
+              disabled={bulkReviewBusy}
             >
               <option value="">All statuses</option>
               {STATUSES.map((status) => (
@@ -343,6 +348,7 @@ export function ProjectFilterBar({
               label="Year"
               value={query.year || ''}
               onChange={(value) => handleFilterChange('year', value)}
+              disabled={bulkReviewBusy}
             >
               <option value="">All years</option>
               {availableYears.map((year) => (
@@ -354,6 +360,7 @@ export function ProjectFilterBar({
               label="Program"
               value={query.program || ''}
               onChange={(value) => handleFilterChange('program', value)}
+              disabled={bulkReviewBusy}
             >
               <option value="">All programs</option>
               {availablePrograms.map((program) => (
@@ -365,6 +372,7 @@ export function ProjectFilterBar({
               label="Discipline"
               value={query.discipline || ''}
               onChange={(value) => handleFilterChange('discipline', value)}
+              disabled={bulkReviewBusy}
             >
               <option value="">All disciplines</option>
               {availableDisciplines.map((discipline) => (
@@ -385,6 +393,7 @@ export function ProjectFilterBar({
                   label="Search"
                   value={query.search}
                   onRemove={handleClearSearch}
+                  disabled={bulkReviewBusy}
                 />
               )}
               {activeFilters.map((filter) => (
@@ -393,11 +402,13 @@ export function ProjectFilterBar({
                   label={FILTER_LABELS[filter.key]}
                   value={filter.display}
                   onRemove={() => handleFilterChange(filter.key, '')}
+                  disabled={bulkReviewBusy}
                 />
               ))}
               <Button
                 type="button"
                 variant="outline"
+                disabled={bulkReviewBusy}
                 onClick={handleClearFilters}
                 className="min-h-[40px]"
               >
@@ -417,6 +428,7 @@ export function ProjectFilterBar({
             id="filter-pagesize"
             value={String(query.pageSize || 10)}
             onChange={(event) => handleFilterChange('pageSize', event.target.value)}
+            disabled={bulkReviewBusy}
             className="min-h-[40px] rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="10">10</option>
@@ -429,6 +441,7 @@ export function ProjectFilterBar({
           <Button
             type="button"
             variant="ghost"
+            disabled={bulkReviewBusy}
             onClick={handleResetPreferences}
             className="min-h-[40px] self-start sm:self-auto"
           >
@@ -448,10 +461,12 @@ function FilterToken({
   label,
   value,
   onRemove,
+  disabled,
 }: {
   label: string;
   value: string;
   onRemove(): void;
+  disabled?: boolean;
 }) {
   return (
     <span className="inline-flex min-h-[40px] max-w-full items-center gap-1.5 rounded-md border border-border bg-muted py-1 pl-2.5 pr-1 text-sm text-foreground">
@@ -460,6 +475,7 @@ function FilterToken({
       </span>
       <button
         type="button"
+        disabled={disabled}
         onClick={onRemove}
         aria-label={`Remove ${label} filter: ${value}`}
         className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -475,6 +491,7 @@ function FilterSelect({
   label,
   value,
   onChange,
+  disabled,
   className = '',
   children,
 }: {
@@ -482,6 +499,7 @@ function FilterSelect({
   label: string;
   value: string;
   onChange(value: string): void;
+  disabled?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -491,6 +509,7 @@ function FilterSelect({
       <select
         id={id}
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         className="min-h-[44px] rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >

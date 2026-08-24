@@ -66,6 +66,7 @@
     "run:assistive-worker-once": "tsx src/scripts/runAssistiveCoordinator.ts --once",
     "assistive-worker:health": "tsx src/scripts/runAssistiveCoordinator.ts --health",
     "verify:scaling-runtime": "tsx src/scripts/verifyLocalScalingRuntime.ts",
+    "verify:bulk-project-review-runtime": "node --conditions=react-server --import tsx src/scripts/verifyBulkProjectReviewRuntime.ts",
     "benchmark:local-scaling": "tsx src/scripts/benchmarkLocalScaling.ts",
     "verify:all": "tsx src/scripts/verifyAll.ts",
     "typecheck": "tsc --noEmit",

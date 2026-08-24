@@ -22,6 +22,8 @@ import { ProjectStatusBadge } from '../admin/ProjectStatusBadge';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
+import { isSafeBulkPublicId } from '../../projects/bulkProjectReview';
+import { BulkProjectReviewPanel } from './BulkProjectReviewPanel';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -37,6 +39,7 @@ import {
   ProjectIndexResult,
 } from './projectDashboardHelpers';
 import { useDashboardPreferences } from './useDashboardPreferences';
+import { useBulkProjectReviewBusy } from './BulkProjectReviewBusyContext';
 import {
   DASHBOARD_CONFIGURABLE_COLUMN_IDS,
   type DashboardColumnId,
@@ -45,6 +48,8 @@ import {
 export interface ProjectTableContainerProps {
   query: ProjectListQuery;
   result: ProjectIndexResult;
+  canSubmitBulk?: boolean;
+  canReviewBulk?: boolean;
 }
 
 const columnHelper = createColumnHelper<ProjectIndexRow>();
@@ -75,6 +80,34 @@ const COLUMN_WIDTH_CLASSES: Record<DashboardColumnId, string> = {
   actions: 'w-[10%]',
 };
 
+function PageSelectionCheckbox({
+  checked,
+  indeterminate,
+  disabled,
+  onChange,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const ref = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.checked)}
+      aria-label="Select current page"
+      className="size-4 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    />
+  );
+}
+
 function formatDate(dateStr?: string) {
   if (!dateStr) return 'Not recorded';
   try {
@@ -98,7 +131,7 @@ function supportingContext(row: ProjectIndexRow): string | null {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-export function ProjectTableContainer({ query, result }: ProjectTableContainerProps) {
+export function ProjectTableContainer({ query, result, canSubmitBulk = false, canReviewBulk = false }: ProjectTableContainerProps) {
   // Opt out of React Compiler memoization because useReactTable is an incompatible library boundary
   "use no memo";
 
@@ -106,9 +139,59 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { preferences, updatePreferences } = useDashboardPreferences();
+  const { busy: bulkReviewBusy, setBusy: setBulkReviewBusy } = useBulkProjectReviewBusy();
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(() => new Set());
+  const queryScope = React.useMemo(() => JSON.stringify(query), [query]);
+  const selectableRows = React.useMemo(
+    () => result.rows.filter((row) => typeof row.publicId === 'string' && isSafeBulkPublicId(row.publicId)),
+    [result.rows],
+  );
+  const selectableIds = React.useMemo(() => selectableRows.map((row) => row.publicId as string), [selectableRows]);
+  const selectedVisibleIds = React.useMemo(
+    () => new Set(selectableIds.filter((publicId) => selectedIds.has(publicId))),
+    [selectableIds, selectedIds],
+  );
+  const selectedProjects = React.useMemo(
+    () => result.rows.filter((row) => row.publicId && selectedVisibleIds.has(row.publicId)),
+    [result.rows, selectedVisibleIds],
+  );
+  const selectedOnPageCount = selectedVisibleIds.size;
+  const allCurrentPageSelected = selectableIds.length > 0 && selectedOnPageCount === selectableIds.length;
+  const someCurrentPageSelected = selectedOnPageCount > 0 && !allCurrentPageSelected;
+
+  React.useEffect(() => {
+    setSelectedIds(new Set());
+  }, [queryScope]);
+
+  const clearSelection = React.useCallback(() => setSelectedIds(new Set()), []);
+
+  const toggleSelection = React.useCallback((publicId: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(selectableIds.filter((id) => current.has(id)));
+      if (checked) {
+        if (next.size >= 50) return next;
+        next.add(publicId);
+      } else {
+        next.delete(publicId);
+      }
+      return next;
+    });
+  }, [selectableIds]);
+
+  const toggleCurrentPage = React.useCallback((checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(selectableIds.filter((id) => current.has(id)));
+      selectableIds.forEach((id) => {
+        if (checked && next.size < 50) next.add(id);
+        if (!checked) next.delete(id);
+      });
+      return next;
+    });
+  }, [selectableIds]);
 
   const handleSort = React.useCallback(
     (field: string) => {
+      if (bulkReviewBusy) return;
       // Validate sort field before updating the URL
       const sortableFields = [
         'created_at',
@@ -137,10 +220,11 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
 
       router.push(`${pathname}?${params.toString()}`);
     },
-    [query.sort, query.direction, searchParams, pathname, router, updatePreferences]
+    [bulkReviewBusy, query.sort, query.direction, searchParams, pathname, router, updatePreferences]
   );
 
   const handlePageChange = (newPage: number) => {
+    if (bulkReviewBusy) return;
     const params = new URLSearchParams(searchParams?.toString() || '');
     params.set('page', newPage.toString());
     router.push(`${pathname}?${params.toString()}`);
@@ -156,6 +240,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
           type="button"
           onClick={() => handleSort(field)}
           aria-label={`Sort by ${label} ${isSorted && isAsc ? 'descending' : 'ascending'}`}
+          disabled={bulkReviewBusy}
           className="inline-flex items-center gap-1.5 rounded-sm text-sm font-semibold text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <span>{label}</span>
@@ -171,7 +256,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
         </button>
       );
     },
-    [query.sort, query.direction, handleSort]
+    [bulkReviewBusy, query.sort, query.direction, handleSort]
   );
 
   const staticHeader = React.useCallback(
@@ -183,6 +268,31 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
 
   const columns = React.useMemo(
     () => [
+      columnHelper.display({
+        id: 'selection',
+        header: () => (
+          <PageSelectionCheckbox
+            checked={allCurrentPageSelected}
+            indeterminate={someCurrentPageSelected}
+            disabled={bulkReviewBusy || selectableIds.length === 0}
+            onChange={toggleCurrentPage}
+          />
+        ),
+        cell: (info) => {
+          const publicId = info.row.original.publicId;
+          const selectable = typeof publicId === 'string' && isSafeBulkPublicId(publicId);
+          return (
+            <input
+              type="checkbox"
+              checked={selectable ? selectedVisibleIds.has(publicId) : false}
+              disabled={bulkReviewBusy || !selectable}
+              onChange={(event) => selectable && toggleSelection(publicId, event.target.checked)}
+              aria-label={selectable ? `Select ${info.row.original.title}` : 'Project cannot be selected'}
+              className="mt-1 size-4 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            />
+          );
+        },
+      }),
       columnHelper.accessor('title', {
         header: () => renderSortHeader(COLUMN_LABELS.title, 'title'),
         cell: (info) => {
@@ -269,7 +379,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
         },
       }),
     ],
-    [renderSortHeader, staticHeader]
+    [allCurrentPageSelected, someCurrentPageSelected, selectableIds, selectedVisibleIds, toggleCurrentPage, toggleSelection, renderSortHeader, staticHeader, bulkReviewBusy]
   );
 
   // TanStack Table's useReactTable returns an API that React Compiler cannot safely memoize;
@@ -324,6 +434,27 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
           {total === 1 ? 'project' : 'projects'}
         </p>
 
+        {selectableIds.length > 0 && (
+          <label className="flex min-h-[40px] items-center gap-2 text-sm font-medium text-foreground md:hidden">
+            <PageSelectionCheckbox
+              checked={allCurrentPageSelected}
+              indeterminate={someCurrentPageSelected}
+              disabled={bulkReviewBusy}
+              onChange={toggleCurrentPage}
+            />
+            Select current page
+          </label>
+        )}
+
+        {selectedVisibleIds.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2" aria-live="polite">
+            <span className="text-sm font-semibold text-foreground">{selectedVisibleIds.size} selected</span>
+            <Button type="button" variant="ghost" disabled={bulkReviewBusy} onClick={clearSelection} className="min-h-[40px]">
+              Clear selection
+            </Button>
+          </div>
+        )}
+
         {/* Non-modal: the column menu is a secondary setting and must never hide the
             table from assistive technology or block interaction with the page behind it. */}
         <DropdownMenu modal={false}>
@@ -357,6 +488,13 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
         </DropdownMenu>
       </div>
 
+      <BulkProjectReviewPanel
+        selectedProjects={selectedProjects}
+        canSubmitBulk={canSubmitBulk}
+        canReviewBulk={canReviewBulk}
+        onBusyChange={setBulkReviewBusy}
+      />
+
       {/* Desktop/Tablet Table View */}
       <div className="hidden overflow-hidden rounded-xl border border-border-structural bg-card shadow-xs md:block">
         <div className="overflow-x-auto">
@@ -382,7 +520,9 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
                         aria-sort={ariaSort}
                         className={cn(
                           'px-4 py-3 align-bottom font-semibold',
-                          COLUMN_WIDTH_CLASSES[header.column.id as DashboardColumnId],
+                          header.column.id === 'selection'
+                            ? 'w-[3rem]'
+                            : COLUMN_WIDTH_CLASSES[header.column.id as DashboardColumnId],
                         )}
                       >
                         {header.isPlaceholder
@@ -395,15 +535,19 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
               ))}
             </thead>
             <tbody className="divide-y divide-border">
-              {table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="transition-colors hover:bg-muted/30">
+              {table.getRowModel().rows.map((row) => {
+                const publicId = row.original.publicId;
+                const isSelected = Boolean(publicId && selectedVisibleIds.has(publicId));
+                return (
+                <tr key={row.id} aria-selected={isSelected} className={cn('transition-colors hover:bg-muted/30', isSelected && 'bg-primary/5')}>
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className="px-4 py-3 align-top font-normal">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -416,8 +560,18 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
           const secondary = supportingContext(row);
 
           return (
-            <li key={row.id} className="rounded-lg border border-border bg-card p-4 shadow-xs">
+            <li key={row.id} className={cn('rounded-lg border border-border bg-card p-4 shadow-xs', row.publicId && selectedVisibleIds.has(row.publicId) && 'border-primary bg-primary/5')}>
               <div className="flex flex-col gap-3">
+                <label className="flex min-h-[36px] items-center gap-2 text-sm font-medium text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(row.publicId && selectedVisibleIds.has(row.publicId))}
+                    disabled={bulkReviewBusy || !row.publicId || !isSafeBulkPublicId(row.publicId)}
+                    onChange={(event) => row.publicId && isSafeBulkPublicId(row.publicId) && toggleSelection(row.publicId, event.target.checked)}
+                    className="size-4 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  />
+                  Select project
+                </label>
                 <div className="flex flex-col gap-1">
                   <h4 className="text-sm font-semibold leading-snug text-foreground">
                     {row.title}
@@ -488,7 +642,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
         <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
-            disabled={page <= 1}
+            disabled={bulkReviewBusy || page <= 1}
             onClick={() => handlePageChange(page - 1)}
             aria-label="Go to previous page"
             className="min-h-[40px] gap-1"
@@ -498,7 +652,7 @@ export function ProjectTableContainer({ query, result }: ProjectTableContainerPr
           </Button>
           <Button
             variant="outline"
-            disabled={page >= pageCount || pageCount === 0}
+            disabled={bulkReviewBusy || page >= pageCount || pageCount === 0}
             onClick={() => handlePageChange(page + 1)}
             aria-label="Go to next page"
             className="min-h-[40px] gap-1"

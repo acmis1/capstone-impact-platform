@@ -136,8 +136,8 @@ describe('GET/HEAD /api/readiness', () => {
       dependency: 'reachable',
       deploymentCommit: { state: 'missing' },
       expectedMigrations: {
-        count: 33,
-        latest: '20260821140000_assistive_duplicate_shortlist',
+        count: 34,
+        latest: '20260824120000_bulk_project_review_concurrency',
       },
     });
   });

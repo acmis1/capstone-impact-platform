@@ -32,7 +32,7 @@ describe('snapshot image alt text migration contract', () => {
   it('is exactly Migration 0026 and preserves all inherited migration bytes', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(33);
+    expect(files).toHaveLength(34);
     expect(files[25]).toBe(filename);
     for (const inherited of files.slice(0, 25)) {
       const local = fs.readFileSync(path.join(migrations, inherited), 'utf8').replace(/\r\n/g, '\n');

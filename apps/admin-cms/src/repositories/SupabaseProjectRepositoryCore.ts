@@ -118,7 +118,8 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
 export class SupabaseProjectRepositoryCore implements ProjectRepository {
   constructor(protected readonly supabase: SupabaseClient) {}
 
-  protected mapDbToDomain(row: DatabaseProjectRow): Project {
+  /** Shared read-only mapper for bounded server-side workflow queries. */
+  public mapDbToDomain(row: DatabaseProjectRow): Project {
     const joinedDisciplines = row.project_disciplines?.map((pd) => pd.disciplines?.name).filter(Boolean) as string[] || [];
     const finalDisciplines = joinedDisciplines.length > 0 
       ? joinedDisciplines 
