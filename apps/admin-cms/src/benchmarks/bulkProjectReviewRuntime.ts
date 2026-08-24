@@ -7,6 +7,12 @@ import { BulkReviewAction, BulkReviewActor, BulkReviewPreflightResponse, BulkRev
 import { BulkReviewService } from '../projects/bulkProjectReviewService';
 import { SupabaseBulkProjectReviewGateway } from '../projects/SupabaseBulkProjectReviewGateway';
 import { isLoopbackUrl } from '../local-development/localEnvironmentFile';
+import {
+  acquireBulkReviewReferenceFixtures,
+  cleanupBulkReviewReferenceFixtures,
+  referenceFixtureCleanupIsClean,
+  type BulkReviewReferenceOwnership,
+} from './bulkProjectReviewReferenceFixtures';
 
 export interface BulkRuntimePreflightSummary {
   total: number;
@@ -48,6 +54,9 @@ export interface BulkRuntimeCleanupResidue {
   participantPreviews: number;
   correctionRequests: number;
   confirmations: number;
+  referencePrograms: number;
+  referenceDisciplines: number;
+  referenceIndustryCategories: number;
 }
 
 export interface BulkProjectReviewRuntimeReport {
@@ -77,6 +86,7 @@ export interface BulkProjectReviewRuntimeReport {
     deadlocks: number;
   };
   stages: BulkRuntimeStageReport[];
+  referenceFixtures: { created: BulkReviewReferenceOwnership };
   cleanup: { clean: boolean; residue: BulkRuntimeCleanupResidue };
 }
 
@@ -180,21 +190,14 @@ function cleanupIsClean(residue: BulkRuntimeCleanupResidue): boolean {
   return Object.values(residue).every((count) => count === 0);
 }
 
-async function references(supabase: SupabaseClient): Promise<ReferenceIds> {
-  const [programs, disciplines, industries, admins] = await Promise.all([
-    supabase.from('programs').select('id').limit(5),
-    supabase.from('disciplines').select('id').limit(5),
-    supabase.from('industry_categories').select('id').limit(5),
-    supabase.from('user_roles').select('user_id').eq('role', 'admin').limit(1),
-  ]);
-  const programIds = (requireData(programs.data, programs.error, 'Seeded program references are unavailable.') as Array<{ id: string }>).map((row) => row.id);
-  const disciplineIds = (requireData(disciplines.data, disciplines.error, 'Seeded discipline references are unavailable.') as Array<{ id: string }>).map((row) => row.id);
-  const industryIds = (requireData(industries.data, industries.error, 'Seeded industry references are unavailable.') as Array<{ id: string }>).map((row) => row.id);
+async function references(supabase: SupabaseClient, fixtureIdentity: string): Promise<ReferenceIds & { ownership: BulkReviewReferenceOwnership }> {
+  const admins = await supabase.from('user_roles').select('user_id').eq('role', 'admin').limit(1);
   const adminRows = requireData(admins.data, admins.error, 'A local admin identity is required for runtime verification.') as Array<{ user_id: string }>;
-  if (programIds.length === 0 || disciplineIds.length === 0 || industryIds.length === 0 || !adminRows[0]?.user_id) {
-    throw new Error('Local reference rows are incomplete for bulk runtime verification.');
+  if (!adminRows[0]?.user_id) {
+    throw new Error('A local admin identity is required for runtime verification.');
   }
-  return { programIds, disciplineIds, industryIds, adminId: adminRows[0].user_id };
+  const fixtures = await acquireBulkReviewReferenceFixtures(supabase, fixtureIdentity);
+  return { ...fixtures, adminId: adminRows[0].user_id };
 }
 
 async function projectStatus(supabase: SupabaseClient, publicId: string): Promise<{ id: string; status: string; updated_at: string }> {
@@ -274,6 +277,7 @@ async function cleanupResidue(
   prefix: string,
   batchNamePrefix: string,
   projectIds: string[],
+  referenceResidue: { programs: number; disciplines: number; industryCategories: number },
 ): Promise<BulkRuntimeCleanupResidue> {
   const projectResult = await supabase.from('projects').select('id', { count: 'exact', head: true }).like('public_id', `${prefix}-%`);
   const batchResult = await supabase.from('import_batches').select('id', { count: 'exact', head: true }).like('batch_name', `${batchNamePrefix}-%`);
@@ -294,6 +298,9 @@ async function cleanupResidue(
     participantPreviews: previewResult.error ? -1 : previewIds.length,
     correctionRequests: correctionResult.error ? -1 : correctionResult.count ?? 0,
     confirmations: confirmationResult.error ? -1 : confirmationResult.count ?? 0,
+    referencePrograms: referenceResidue.programs,
+    referenceDisciplines: referenceResidue.disciplines,
+    referenceIndustryCategories: referenceResidue.industryCategories,
   };
 }
 
@@ -313,10 +320,12 @@ export async function runBulkProjectReviewRuntime(options: BulkProjectReviewRunt
   const batchNamePrefix = `${prefix}-batch`;
   const reports: BulkRuntimeStageReport[] = [];
   const createdProjectIds: string[] = [];
+  const createdBatchIds: string[] = [];
+  let referenceOwnership: BulkReviewReferenceOwnership = { programIds: [], disciplineIds: [], industryIds: [] };
   let cleanup = { clean: false, residue: {
     projects: -1, batches: -1, projectDisciplines: -1, projectIndustryCategories: -1,
     mediaAssets: -1, validationFlags: -1, approvalRecords: -1, participantPreviews: -1,
-    correctionRequests: -1, confirmations: -1,
+    correctionRequests: -1, confirmations: -1, referencePrograms: -1, referenceDisciplines: -1, referenceIndustryCategories: -1,
   } };
   let submitPreflightSummary: BulkRuntimePreflightSummary = { total: 0, eligible: 0, blocked: 0, alreadyComplete: 0, invalidOrStale: 0 };
   let submitExecutionSummary: BulkRuntimeExecutionSummary = { total: 0, successful: 0, blocked: 0, alreadyComplete: 0, invalidOrStale: 0, failed: 0 };
@@ -329,13 +338,15 @@ export async function runBulkProjectReviewRuntime(options: BulkProjectReviewRunt
   let report: BulkProjectReviewRuntimeReport | null = null;
 
   try {
-    const refs = await references(supabase);
+    const refs = await references(supabase, prefix);
+    referenceOwnership = refs.ownership;
     const synthetic = generateSyntheticProjects({ count: 100, seed });
     assert.equal(synthetic.length, 100);
     const batchRows = [0, 1].map((index) => ({ batch_name: `${batchNamePrefix}-${index + 1}`, source_folder: prefix, mode: 'batch', status: 'completed', total_projects: 50, warning_count: 0, error_count: 0 }));
     const batchInsert = await supabase.from('import_batches').insert(batchRows).select('id,batch_name');
     const batches = requireData(batchInsert.data, batchInsert.error, 'Could not create verifier import batches.') as Array<{ id: string; batch_name: string }>;
     assert.equal(batches.length, 2);
+    createdBatchIds.push(...batches.map((batch) => batch.id));
 
     const projectRows = synthetic.map((project, index) => {
       const profile = index % 10;
@@ -537,14 +548,23 @@ export async function runBulkProjectReviewRuntime(options: BulkProjectReviewRunt
       workflowTransitions, uniqueProjectsTransitioned, auditCount, duplicateAudits, staleProjectIds, batchCount: 2,
       concurrency: { duplicateExecution: true, sameActionOverlap: true, conflictingOverlap: true, stalePreflight: true, deadlocks: 0 },
       stages: reports, cleanup,
+      referenceFixtures: { created: referenceOwnership },
     };
   } finally {
-    const projectDelete = await supabase.from('projects').delete().like('public_id', `${prefix}-%`).select('id');
-    const batchDelete = await supabase.from('import_batches').delete().like('batch_name', `${batchNamePrefix}-%`).select('id');
+    const projectDelete = createdProjectIds.length === 0
+      ? { error: null }
+      : await supabase.from('projects').delete().in('id', createdProjectIds).select('id');
+    const batchDelete = createdBatchIds.length === 0
+      ? { error: null }
+      : await supabase.from('import_batches').delete().in('id', createdBatchIds).select('id');
     if (projectDelete.error || batchDelete.error) {
       cleanup = { clean: false, residue: { ...cleanup.residue, projects: -1, batches: -1 } };
     } else {
-      const residue = await cleanupResidue(supabase, prefix, batchNamePrefix, createdProjectIds);
+      const referenceResidue = await cleanupBulkReviewReferenceFixtures(supabase, referenceOwnership);
+      const residue = await cleanupResidue(supabase, prefix, batchNamePrefix, createdProjectIds, referenceResidue);
+      if (!referenceFixtureCleanupIsClean(referenceResidue)) {
+        throw new Error(`Bulk runtime reference cleanup left verifier-owned residue: ${JSON.stringify(referenceResidue)}`);
+      }
       cleanup = { clean: cleanupIsClean(residue), residue };
     }
   }

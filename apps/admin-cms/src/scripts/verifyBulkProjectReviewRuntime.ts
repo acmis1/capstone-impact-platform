@@ -34,6 +34,7 @@ function printReport(report: Awaited<ReturnType<typeof runBulkProjectReviewRunti
   console.log(`workflowTransitions=${report.workflowTransitions} uniqueProjectsTransitioned=${report.uniqueProjectsTransitioned} auditCount=${report.auditCount} duplicateAudits=${report.duplicateAudits}`);
   console.log(`staleProjectIds=${report.staleProjectIds.join(',')}`);
   console.log(`concurrency duplicate=${report.concurrency.duplicateExecution} sameActionOverlap=${report.concurrency.sameActionOverlap} conflictingOverlap=${report.concurrency.conflictingOverlap} stalePreflight=${report.concurrency.stalePreflight} deadlocks=${report.concurrency.deadlocks}`);
+  console.log(`referenceFixtures createdPrograms=${report.referenceFixtures.created.programIds.length} createdDisciplines=${report.referenceFixtures.created.disciplineIds.length} createdIndustryCategories=${report.referenceFixtures.created.industryIds.length}`);
   for (const stage of report.stages) console.log(`${stage.stage}: selected=${stage.selected} eligible=${stage.eligible} blocked=${stage.blocked} alreadyComplete=${stage.alreadyComplete} invalidOrStale=${stage.invalidOrStale} successful=${stage.successful} failed=${stage.failed} durationMs=${stage.durationMs}`);
   console.log(`cleanup=${report.cleanup.clean ? 'clean' : 'residue'} ${Object.entries(report.cleanup.residue).map(([key, value]) => `residual${key[0].toUpperCase()}${key.slice(1)}=${value}`).join(' ')}`);
 }

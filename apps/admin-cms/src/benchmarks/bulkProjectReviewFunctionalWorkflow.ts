@@ -13,6 +13,12 @@ import {
 } from '../projects/bulkProjectReview';
 import { BulkReviewService } from '../projects/bulkProjectReviewService';
 import { SupabaseBulkProjectReviewGateway } from '../projects/SupabaseBulkProjectReviewGateway';
+import {
+  acquireBulkReviewReferenceFixtures,
+  cleanupBulkReviewReferenceFixtures,
+  referenceFixtureCleanupIsClean,
+  type BulkReviewReferenceOwnership,
+} from './bulkProjectReviewReferenceFixtures';
 
 /**
  * End-to-end functional evidence for the governed bulk review workflow at the assignment's
@@ -85,7 +91,16 @@ export interface FunctionalWorkflowReport {
   silentlyLostProjects: string[];
   reconciliation: FunctionalWorkflowReconciliation;
   workflowElapsedMs: number;
-  cleanup: { clean: boolean; residualProjects: number; residualBatches: number; residualAudits: number };
+  referenceFixtures: { created: BulkReviewReferenceOwnership };
+  cleanup: {
+    clean: boolean;
+    residualProjects: number;
+    residualBatches: number;
+    residualAudits: number;
+    residualReferencePrograms: number;
+    residualReferenceDisciplines: number;
+    residualReferenceIndustryCategories: number;
+  };
 }
 
 export interface FunctionalWorkflowOptions {
@@ -142,21 +157,14 @@ function chunk(values: string[], size: number): string[][] {
   return chunks;
 }
 
-async function references(supabase: SupabaseClient): Promise<ReferenceIds> {
-  const [programs, disciplines, industries, admins] = await Promise.all([
-    supabase.from('programs').select('id').limit(5),
-    supabase.from('disciplines').select('id').limit(5),
-    supabase.from('industry_categories').select('id').limit(5),
-    supabase.from('user_roles').select('user_id').eq('role', 'admin').limit(1),
-  ]);
-  const programIds = (requireData(programs.data, programs.error, 'Seeded program references are unavailable.') as Array<{ id: string }>).map((row) => row.id);
-  const disciplineIds = (requireData(disciplines.data, disciplines.error, 'Seeded discipline references are unavailable.') as Array<{ id: string }>).map((row) => row.id);
-  const industryIds = (requireData(industries.data, industries.error, 'Seeded industry references are unavailable.') as Array<{ id: string }>).map((row) => row.id);
+async function references(supabase: SupabaseClient, fixtureIdentity: string): Promise<ReferenceIds & { ownership: BulkReviewReferenceOwnership }> {
+  const admins = await supabase.from('user_roles').select('user_id').eq('role', 'admin').limit(1);
   const adminRows = requireData(admins.data, admins.error, 'A local admin identity is required for functional verification.') as Array<{ user_id: string }>;
-  if (programIds.length === 0 || disciplineIds.length === 0 || industryIds.length === 0 || !adminRows[0]?.user_id) {
-    throw new Error('Local reference rows are incomplete for the functional bulk workflow.');
+  if (!adminRows[0]?.user_id) {
+    throw new Error('A local admin identity is required for functional verification.');
   }
-  return { programIds, disciplineIds, industryIds, adminId: adminRows[0].user_id };
+  const fixtures = await acquireBulkReviewReferenceFixtures(supabase, fixtureIdentity);
+  return { ...fixtures, adminId: adminRows[0].user_id };
 }
 
 /**
@@ -286,9 +294,11 @@ export async function runBulkProjectReviewFunctionalWorkflow(
   const searchMarker = prefix;
   const createdProjectIds: string[] = [];
   const createdBatchIds: string[] = [];
+  let referenceOwnership: BulkReviewReferenceOwnership = { programIds: [], disciplineIds: [], industryIds: [] };
 
   try {
-    const refs = await references(supabase);
+    const refs = await references(supabase, prefix);
+    referenceOwnership = refs.ownership;
     const synthetic = generateSyntheticProjects({ count: 500, seed }).slice(
       0,
       FUNCTIONAL_WORKFLOW_PROJECT_COUNT,
@@ -557,13 +567,23 @@ export async function runBulkProjectReviewFunctionalWorkflow(
         unmutatedStaleProjects,
       },
       workflowElapsedMs: Number(workflowElapsedMs.toFixed(2)),
-      cleanup: { clean: false, residualProjects: -1, residualBatches: -1, residualAudits: -1 },
+      referenceFixtures: { created: referenceOwnership },
+      cleanup: {
+        clean: false,
+        residualProjects: -1,
+        residualBatches: -1,
+        residualAudits: -1,
+        residualReferencePrograms: -1,
+        residualReferenceDisciplines: -1,
+        residualReferenceIndustryCategories: -1,
+      },
     };
 
-    report.cleanup = await cleanupFixture(supabase, prefix, batchNamePrefix, createdProjectIds, createdBatchIds);
+    report.cleanup = await cleanupFixture(supabase, prefix, batchNamePrefix, createdProjectIds, createdBatchIds, referenceOwnership);
+    assert.equal(report.cleanup.clean, true, `Functional workflow cleanup left verifier-owned residue: ${JSON.stringify(report.cleanup)}`);
     return report;
   } catch (error) {
-    await cleanupFixture(supabase, prefix, batchNamePrefix, createdProjectIds, createdBatchIds);
+    await cleanupFixture(supabase, prefix, batchNamePrefix, createdProjectIds, createdBatchIds, referenceOwnership);
     throw error;
   }
 }
@@ -578,6 +598,7 @@ async function cleanupFixture(
   batchNamePrefix: string,
   projectIds: string[],
   batchIds: string[],
+  referenceOwnership: BulkReviewReferenceOwnership,
 ): Promise<FunctionalWorkflowReport['cleanup']> {
   if (projectIds.length > 0) {
     for (const table of [
@@ -587,13 +608,18 @@ async function cleanupFixture(
       'project_industry_categories',
       'project_disciplines',
     ]) {
-      await supabase.from(table).delete().in('project_id', projectIds);
+      const result = await supabase.from(table).delete().in('project_id', projectIds);
+      if (result.error) throw new Error(`Could not delete functional verifier ${table} rows.`);
     }
-    await supabase.from('projects').delete().in('id', projectIds);
+    const projectDeletion = await supabase.from('projects').delete().in('id', projectIds);
+    if (projectDeletion.error) throw new Error('Could not delete functional verifier projects.');
   }
   if (batchIds.length > 0) {
-    await supabase.from('import_batches').delete().in('id', batchIds);
+    const batchDeletion = await supabase.from('import_batches').delete().in('id', batchIds);
+    if (batchDeletion.error) throw new Error('Could not delete functional verifier import batches.');
   }
+
+  const referenceResidue = await cleanupBulkReviewReferenceFixtures(supabase, referenceOwnership);
 
   const projectResidue = await supabase.from('projects').select('id', { count: 'exact', head: true }).like('public_id', `${prefix}-%`);
   const batchResidue = await supabase.from('import_batches').select('id', { count: 'exact', head: true }).like('batch_name', `${batchNamePrefix}-%`);
@@ -606,9 +632,12 @@ async function cleanupFixture(
   const residualAudits = auditResidue.error ? -1 : auditResidue.count ?? 0;
 
   return {
-    clean: residualProjects === 0 && residualBatches === 0 && residualAudits === 0,
+    clean: residualProjects === 0 && residualBatches === 0 && residualAudits === 0 && referenceFixtureCleanupIsClean(referenceResidue),
     residualProjects,
     residualBatches,
     residualAudits,
+    residualReferencePrograms: referenceResidue.programs,
+    residualReferenceDisciplines: referenceResidue.disciplines,
+    residualReferenceIndustryCategories: referenceResidue.industryCategories,
   };
 }

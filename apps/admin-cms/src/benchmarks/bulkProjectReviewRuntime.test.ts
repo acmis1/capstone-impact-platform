@@ -21,8 +21,12 @@ describe('bulk project review runtime verifier', () => {
       participantPreviews: 0,
       correctionRequests: 0,
       confirmations: 0,
+      referencePrograms: 0,
+      referenceDisciplines: 0,
+      referenceIndustryCategories: 0,
     };
     expect(cleanupIsClean(clean)).toBe(true);
     expect(cleanupIsClean({ ...clean, approvalRecords: 1 })).toBe(false);
+    expect(cleanupIsClean({ ...clean, referenceIndustryCategories: 1 })).toBe(false);
   });
 });

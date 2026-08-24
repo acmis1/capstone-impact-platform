@@ -77,9 +77,13 @@ function printReport(report: FunctionalWorkflowReport): void {
       `unmutatedStale=${report.reconciliation.unmutatedStaleProjects}`,
   );
   console.log(`WORKFLOW_ELAPSED_MS = ${report.workflowElapsedMs} (Local target ${LOCAL_WORKFLOW_TARGET_MS} ms)`);
+  console.log(`referenceFixtures createdPrograms=${report.referenceFixtures.created.programIds.length} createdDisciplines=${report.referenceFixtures.created.disciplineIds.length} createdIndustryCategories=${report.referenceFixtures.created.industryIds.length}`);
   console.log(
     `cleanup=${report.cleanup.clean ? 'clean' : 'residue'} residualProjects=${report.cleanup.residualProjects} ` +
-      `residualBatches=${report.cleanup.residualBatches} residualAudits=${report.cleanup.residualAudits}`,
+      `residualBatches=${report.cleanup.residualBatches} residualAudits=${report.cleanup.residualAudits} ` +
+      `residualReferencePrograms=${report.cleanup.residualReferencePrograms} ` +
+      `residualReferenceDisciplines=${report.cleanup.residualReferenceDisciplines} ` +
+      `residualReferenceIndustryCategories=${report.cleanup.residualReferenceIndustryCategories}`,
   );
 }
 
