@@ -1,10 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   assertSafeDatabaseProbeSchema,
   assertSafeStorageObjectPath,
   assertSafeStorageProbeBucket,
   listStorageObjectPaths,
+  resolveLocalRecoverySupabaseWorkdir,
   runDatabaseRecoveryProbeWithCommands,
   runStorageRecoveryProbe,
   sha256,
@@ -18,6 +20,21 @@ const PAYLOAD = 'synthetic-local-recovery-payload';
 const CHECKSUM = sha256(Buffer.from(PAYLOAD, 'utf8'));
 
 describe('Local recovery readiness safety contract', () => {
+  it('uses the canonical Supabase workdir by default', () => {
+    const repoRoot = path.resolve('synthetic-repository-root');
+
+    expect(resolveLocalRecoverySupabaseWorkdir(repoRoot)).toBe(path.join(repoRoot, 'infra'));
+  });
+
+  it('uses an explicitly provided disposable Supabase workdir', () => {
+    const repoRoot = path.resolve('synthetic-repository-root');
+    const disposableWorkdir = path.join(repoRoot, '.tmp', 'disposable-recovery', 'infra');
+
+    expect(resolveLocalRecoverySupabaseWorkdir(repoRoot, disposableWorkdir)).toBe(
+      disposableWorkdir,
+    );
+  });
+
   it('accepts only verifier-owned database schemas and Storage buckets', () => {
     expect(() => assertSafeDatabaseProbeSchema(SCHEMA)).not.toThrow();
     expect(() => assertSafeStorageProbeBucket(BUCKET)).not.toThrow();

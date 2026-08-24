@@ -64,6 +64,17 @@ Run the recovery verifier directly through the existing workspace `tsx` dependen
 npm exec --workspace=apps/admin-cms -- tsx src/scripts/verifyLocalRecoveryReadiness.ts
 ```
 
+For an operator-owned disposable copy of `infra/`, pass its parent Supabase workdir explicitly. The
+default remains the canonical repository `infra/` workdir:
+
+```bash
+npm exec --workspace=apps/admin-cms -- tsx src/scripts/verifyLocalRecoveryReadiness.ts --supabase-workdir <disposable-infra-workdir>
+```
+
+The disposable workdir must use a unique Local `project_id`, fresh identity-matched Docker resources,
+the repository-pinned PostgreSQL major version, and loopback-only ports. Remove only resources proven
+to carry that disposable identity after the drill; never delete or repurpose the canonical Local volumes.
+
 Required evidence:
 
 ```text

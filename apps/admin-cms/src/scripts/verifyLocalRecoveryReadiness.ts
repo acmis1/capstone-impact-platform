@@ -1,10 +1,16 @@
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { EXPECTED_BUCKETS } from '../local-development/localSupabaseFixtures';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
-import { configuredProjectId, observeLocalStack } from '../local-development/localStackState';
+import {
+  classifyLocalStack,
+  expectedLocalContainerNames,
+  observeDockerProject,
+  type LocalStackState,
+} from '../local-development/localStackState';
 
 const DATABASE_PAYLOAD = 'synthetic-local-recovery-payload';
 const DATABASE_SCHEMA_PREFIX = 'capstone_recovery_probe_';
@@ -34,6 +40,11 @@ export interface StorageProbeResult {
 export interface LocalRecoveryReadinessResult {
   database: DatabaseProbeResult;
   storage: StorageProbeResult;
+}
+
+export interface LocalRecoveryReadinessOptions {
+  repoRoot?: string;
+  supabaseWorkdir?: string;
 }
 
 interface StorageBackupEntry {
@@ -85,7 +96,7 @@ export function assertSafeStorageObjectPath(objectPath: string): void {
 }
 
 export function validateRecoveryPreflight(input: {
-  stackState: ReturnType<typeof observeLocalStack>;
+  stackState: LocalStackState;
   apiUrl: string;
   serviceRoleKey: string;
   projectId: string | null;
@@ -97,6 +108,24 @@ export function validateRecoveryPreflight(input: {
     throw new Error('LOCAL_PROJECT_ID_INVALID');
   }
   return { databaseContainer: `supabase_db_${input.projectId}` };
+}
+
+export function resolveLocalRecoverySupabaseWorkdir(
+  repoRoot: string,
+  requestedWorkdir?: string,
+): string {
+  return requestedWorkdir
+    ? path.resolve(repoRoot, requestedWorkdir)
+    : path.join(repoRoot, 'infra');
+}
+
+function configuredRecoveryProjectId(supabaseWorkdir: string): string | null {
+  try {
+    const config = fs.readFileSync(path.join(supabaseWorkdir, 'supabase/config.toml'), 'utf8');
+    return config.match(/^project_id\s*=\s*"([a-z0-9-]+)"\s*$/m)?.[1] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function quotedIdentifier(identifier: string): string {
@@ -421,14 +450,16 @@ function localDatabaseCommands(repoRoot: string, databaseContainer: string): Dat
 }
 
 export async function runLocalRecoveryReadiness(
-  repoRoot = path.resolve(__dirname, '../../../../'),
+  options: LocalRecoveryReadinessOptions = {},
 ): Promise<LocalRecoveryReadinessResult> {
-  const projectId = configuredProjectId(repoRoot);
+  const repoRoot = options.repoRoot ?? path.resolve(__dirname, '../../../../');
+  const supabaseWorkdir = resolveLocalRecoverySupabaseWorkdir(repoRoot, options.supabaseWorkdir);
+  const projectId = configuredRecoveryProjectId(supabaseWorkdir);
   const cliShim = path.join(repoRoot, 'node_modules', 'supabase', 'dist', 'supabase.js');
   let rawEnvironment = '';
   try {
     rawEnvironment = execFileSync(process.execPath, [
-      cliShim, 'status', '--workdir', path.join(repoRoot, 'infra'), '-o', 'env',
+      cliShim, 'status', '--workdir', supabaseWorkdir, '-o', 'env',
     ], {
       cwd: repoRoot,
       encoding: 'utf8',
@@ -440,7 +471,9 @@ export async function runLocalRecoveryReadiness(
 
   const local = parseSupabaseCliEnv(rawEnvironment);
   const preflight = validateRecoveryPreflight({
-    stackState: observeLocalStack(repoRoot),
+    stackState: projectId
+      ? classifyLocalStack(observeDockerProject(projectId), expectedLocalContainerNames(projectId))
+      : 'UNKNOWN',
     apiUrl: local.API_URL ?? '',
     serviceRoleKey: local.SERVICE_ROLE_KEY ?? '',
     projectId,
@@ -462,7 +495,15 @@ export async function runLocalRecoveryReadiness(
 
 async function main(): Promise<void> {
   try {
-    const result = await runLocalRecoveryReadiness();
+    const args = process.argv.slice(2);
+    let supabaseWorkdir: string | undefined;
+    if (args.length > 0) {
+      if (args.length !== 2 || args[0] !== '--supabase-workdir' || !args[1]) {
+        throw new Error('LOCAL_RECOVERY_ARGUMENTS_INVALID');
+      }
+      supabaseWorkdir = args[1];
+    }
+    const result = await runLocalRecoveryReadiness({ supabaseWorkdir });
     console.log('LOCAL_RECOVERY_CLASSIFICATION = VERIFIED');
     console.log(`DATABASE_BACKUP_RESTORE = PASS (${result.database.restoredRows} synthetic row)`);
     console.log(`DATABASE_BACKUP_BYTES = ${result.database.dumpBytes}`);
