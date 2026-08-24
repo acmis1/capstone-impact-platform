@@ -274,7 +274,8 @@ There is no implemented participant project-confirmation workflow or route, publ
 
 | Method | Route | Authorization | Purpose | Mutation |
 | --- | --- | --- | --- | --- |
-| `GET` | `/api/health` | Public | Returns safe configuration status classifications only. | No |
+| `GET`, `HEAD` | `/api/health` | Public | Minimal application liveness only; does not inspect configuration or dependencies. | No |
+| `GET`, `HEAD` | `/api/readiness` | Public | Fail-closed hosted staging configuration, target-identity, and bounded Supabase reachability evidence. | No |
 | `GET` | `/api/projects` | `requireAdmin` plus `projects.read` | Returns the protected project collection. | No |
 | `POST` | `/api/projects/[publicId]/review-action` | Same-origin check, `requireAdmin`, then review/archive permission | Validates and applies `request_changes`, `approve` or `archive`. | Yes |
 | `POST` | `/api/staff/invitations` | Same-origin check, `requireAdmin`, then `staff.manage` | Creates a controlled staff provisioning invitation. Accepts only the target name, email and roles; all actor attribution is server-derived. | Yes |
