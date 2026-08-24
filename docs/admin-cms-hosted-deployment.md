@@ -56,6 +56,29 @@ Every readiness body includes the repository's expected migration count and late
 
 Both endpoints support `HEAD` with the same status contract and no response body. All liveness and readiness responses use `Cache-Control: no-store` and `Pragma: no-cache` so a prior response is not durable evidence of current state. Configure Render to use `/api/readiness`, not `/api/health`, for the service health-check path.
 
+### D. Read-Only Hosted UAT Smoke Verifier
+
+Run the hosted smoke verifier after a staging deployment or relevant hosted configuration change, and immediately before beginning a supervised UAT session. Supply the service base URL explicitly; the repository does not contain or assume a live Render URL:
+
+```bash
+git fetch origin main
+npm run check:admin-hosted-smoke -- --base-url=https://admin-cms-staging.example --expected-commit=<full-40-character-origin-main-sha>
+```
+
+`--expected-commit` is optional, but when supplied it must be a full 40-character hexadecimal commit and must exactly match the valid deployment commit returned by `/api/readiness`. The base URL must use HTTPS, except for explicit localhost/loopback test fixtures, and cannot contain credentials, a query, or a fragment. The verifier accepts no passwords, cookies, tokens, API keys, or service-role credentials.
+
+The command performs only these bounded, unauthenticated requests:
+
+- `GET` and `HEAD` `/api/health`;
+- `GET` and `HEAD` `/api/readiness`;
+- `GET` `/login`.
+
+It proves that the exact liveness contract is available, the readiness response is internally consistent and currently `READY`, the login route returns HTML, deployment commit evidence is valid, and the readiness bundle's expected migration count/latest identifier matches the migration files currently checked out in the repository. It also records observed request duration without imposing or inventing a production SLA. Redirects cannot leave the supplied origin or move a request to a different route.
+
+It does **not** authenticate, create a session, submit a login form, inspect private project/media routes, prove that migrations are applied, validate schema or RLS, exercise workflow UAT, publish a feed, mutate Supabase or Duda, send email, deploy the application, or replace independent CI and review. In particular, readiness migration evidence describes what the deployed bundle expects; it is not hosted database migration-history evidence.
+
+The final line is deterministic. `HOSTED_SMOKE_CLASSIFICATION = READY_FOR_SUPERVISED_UAT` means only that the supervised UAT session may begin. Any other classification fails closed and requires investigation. One green smoke run must never be represented as production readiness or as a substitute for the governed schema/RLS and stakeholder UAT checks.
+
 ---
 
 ## 3. Environment Variable Specification
@@ -224,13 +247,13 @@ With both automated object detection and governed activation evidence complete, 
 
 ### C. Safe Deployment SHA Verification and Acceptance Boundary
 
-Before relying on a staging deployment, fetch the repository and record the exact approved main commit locally:
+Before relying on a staging deployment, fetch the repository and run the read-only smoke verifier against the exact approved main commit:
 
 ```bash
 git fetch origin main
-git rev-parse origin/main
+npm run check:admin-hosted-smoke -- --base-url=https://admin-cms-staging.example --expected-commit=$(git rev-parse origin/main)
 ```
 
-Probe `GET /api/readiness` with cache bypassed and compare `deploymentCommit.value` to that exact 40-character SHA. A `missing` or `invalid` commit state means readiness may prove configuration and dependency reachability, but deployment-SHA verification is unavailable and must be completed through separately trusted Render deployment evidence. Do not place a branch name, user-supplied value, or shortened/fabricated SHA in the comparison.
+The verifier compares `deploymentCommit.value` to that exact 40-character SHA and reports missing, invalid, and mismatched commit evidence as distinct fail-closed classifications. Do not place a branch name, shortened/fabricated SHA, or untrusted value in the comparison. The command remains GET/HEAD-only and performs no deployment or hosted mutation.
 
-A successful `/api/readiness` response is only an application/configuration/dependency gate. It does not replace the broader read-only CLI checker, governed migration/schema evidence, authenticated smoke tests, stakeholder UAT, publication checks, independent CI review, or a production acceptance decision.
+A green hosted smoke result is only an application/configuration/dependency and public-login-surface gate. It does not replace the broader read-only schema-object checker, governed migration/schema/RLS evidence, authenticated smoke tests, stakeholder UAT, publication checks, independent CI review, or a production acceptance decision.

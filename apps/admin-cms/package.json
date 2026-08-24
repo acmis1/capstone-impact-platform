@@ -25,6 +25,7 @@
     "check:staging-media": "tsx src/scripts/checkMediaAssets.ts",
     "check:staging-auth": "tsx src/scripts/checkStagingAuth.ts",
     "check:deployment-readiness": "tsx src/scripts/checkHostedDeploymentReadiness.ts",
+    "check:hosted-smoke": "tsx src/scripts/checkHostedDeploymentSmoke.ts",
     "check:staging-readiness": "tsx src/scripts/checkHostedDeploymentReadiness.ts",
     "link:staging-admin": "tsx src/scripts/linkExistingStagingAdmin.ts",
     "publish:staging-feed": "tsx src/scripts/publishStagingFeed.ts",
