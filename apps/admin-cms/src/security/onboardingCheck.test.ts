@@ -46,6 +46,8 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     '20260820160000_assistive_validation_job_coordination.sql',
     '20260821090000_assistive_validation_staff_inspection.sql',
     '20260821140000_assistive_duplicate_shortlist.sql',
+    '20260824180000_public_feed_deployment_ledger.sql',
+    '20260824183000_public_feed_writer_protocol.sql',
   ];
 
   const defaultMockExec = (cmd: string): string => {
@@ -242,7 +244,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
     const shuffled = [...validMigrations].reverse();
     const result = validateMigrationsList(shuffled);
     expect(result.passed).toBe(true);
-    expect(result.message).toContain('33 timestamped migrations');
+    expect(result.message).toContain('35 timestamped migrations');
   });
 
   it('10. Duplicate migration timestamps fail', () => {
@@ -280,6 +282,8 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260820160000_assistive_validation_job_coordination.sql',
       '20260821090000_assistive_validation_staff_inspection.sql',
       '20260821140000_assistive_duplicate_shortlist.sql',
+      '20260824180000_public_feed_deployment_ledger.sql',
+      '20260824183000_public_feed_writer_protocol.sql',
     ];
     const result = validateMigrationsList(duplicateMigrations);
     expect(result.passed).toBe(false);
@@ -321,6 +325,8 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260820160000_assistive_validation_job_coordination.sql',
       '20260821090000_assistive_validation_staff_inspection.sql',
       '20260821140000_assistive_duplicate_shortlist.sql',
+      '20260824180000_public_feed_deployment_ledger.sql',
+      '20260824183000_public_feed_writer_protocol.sql',
     ];
     const result = validateMigrationsList(missing0008);
     expect(result.passed).toBe(false);
@@ -587,6 +593,8 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
       '20260820160000_assistive_validation_job_coordination.sql',
       '20260821090000_assistive_validation_staff_inspection.sql',
       '20260821140000_assistive_duplicate_shortlist.sql',
+      '20260824180000_public_feed_deployment_ledger.sql',
+      '20260824183000_public_feed_writer_protocol.sql',
     ];
     const result = validateMigrationsList(invalidMigrationNames);
     expect(result.passed).toBe(false);

@@ -49,6 +49,7 @@
     "verify:publication-preparation-runtime": "tsx src/scripts/verifyPublicationPreparationRuntime.ts",
     "verify:controlled-publication-runtime": "tsx src/scripts/verifyControlledPublicationRuntime.ts",
     "verify:controlled-public-removal-runtime": "tsx src/scripts/verifyControlledPublicRemovalRuntime.ts",
+    "verify:public-feed-ledger-runtime": "tsx src/scripts/verifyPublicFeedLedgerRuntime.ts",
     "verify:approval-edit-gate-runtime": "tsx src/scripts/verifyApprovalEditGateRuntime.ts",
     "verify:staff-provisioning-runtime": "tsx src/scripts/verifyStaffProvisioningRuntime.ts",
     "verify:password-recovery-runtime": "node --conditions=react-server --import tsx src/scripts/verifyPasswordRecoveryRuntime.ts",

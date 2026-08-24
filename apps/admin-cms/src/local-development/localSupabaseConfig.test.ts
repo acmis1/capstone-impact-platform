@@ -9,9 +9,9 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
   const seedPath = path.resolve(repoRoot, 'infra/supabase/seed.sql');
   const adminPackagePath = path.resolve(repoRoot, 'apps/admin-cms/package.json');
 
-  it('1. Exactly 33 timestamped migration files exist in explicitly sorted ascending order', () => {
+  it('1. Exactly 35 timestamped migration files exist in explicitly sorted ascending order', () => {
     const rawFiles = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'));
-    expect(rawFiles.length).toBe(33);
+    expect(rawFiles.length).toBe(35);
 
     // Sort explicitly to not rely on OS directory enumeration order
     const files = [...rawFiles].sort((a, b) => a.localeCompare(b));
@@ -62,6 +62,12 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
       'published_snapshots',
       'publication_attempts',
       'public_removal_attempts',
+      'public_feed_operations',
+      'public_feed_versions',
+      'public_feed_version_members',
+      'public_feed_head',
+      'feed_rollback_preparations',
+      'public_feed_operation_events',
       'staff_provisioning_requests',
     ];
 

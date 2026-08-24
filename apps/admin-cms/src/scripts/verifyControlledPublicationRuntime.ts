@@ -613,17 +613,11 @@ export async function runControlledPublicationRuntimeVerification(): Promise<boo
       assert((await db.from('projects').select('status').eq('id', newer.id).single()).data?.status === 'approved', 'Failed publication changed project state.');
     });
 
-    // Intentionally last: this scenario leaves the global publication slot blocked.
-    await scenario(38, 'compensation failure is reported separately and fails closed', async () => {
-      const target = await makeReady('compensation-failure');
-      const result = await execute(target, 'admin', 'during_compensation');
-      assert(result.resultCode === 'EXECUTION_FAILED' && result.compensationFailureCode === 'COMPENSATION_FAILED' && (await db.from('projects').select('status').eq('id', target.id).single()).data?.status === 'approved' && (await attemptFor(target)).state === 'compensation_failed', 'Compensation failure was masked or published DB state.');
-    });
   } catch (error) {
     primaryFailure = error;
     console.error('PRIMARY FAILURE:', error instanceof Error ? error.message : String(error));
   } finally {
-    console.log('Scenario 39: independent cleanup restores DB and storage baselines');
+    console.log('Scenario 38: independent cleanup restores DB and storage baselines');
     try {
       const ids = fixtures.map((fixture) => fixture.id);
       if (ids.length) {

@@ -98,7 +98,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         { status: 409, headers: NO_STORE },
       );
     }
-    if (result.resultCode === 'COMPENSATION_INCOMPLETE' || result.resultCode === 'ATTEMPT_OWNER_MISMATCH') {
+    if (result.resultCode === 'RECOVERY_REQUIRED') {
       return NextResponse.json(
         { success: false, code: result.resultCode, error: 'Publication recovery is incomplete and requires attention.' },
         { status: 409, headers: NO_STORE },
@@ -112,12 +112,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (result.resultCode === 'EXECUTION_FAILED' && result.failureCode === 'EXECUTION_POLICY_DENIED') {
       return unavailable();
-    }
-    if (result.resultCode === 'EXECUTION_FAILED' && result.compensationFailureCode) {
-      return NextResponse.json(
-        { success: false, code: 'COMPENSATION_INCOMPLETE', error: 'Publication recovery is incomplete and requires attention.' },
-        { status: 409, headers: NO_STORE },
-      );
     }
     return NextResponse.json(
       { success: false, error: 'Local publication could not be completed.' },

@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 33;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 35;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -41,6 +41,8 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260820160000_assistive_validation_job_coordination.sql',
   '20260821090000_assistive_validation_staff_inspection.sql',
   '20260821140000_assistive_duplicate_shortlist.sql',
+  '20260824180000_public_feed_deployment_ledger.sql',
+  '20260824183000_public_feed_writer_protocol.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [
@@ -73,6 +75,12 @@ export const REQUIRED_PREVIEW_TABLES = [
 export const REQUIRED_PUBLICATION_TABLES = [
   'publication_attempts',
   'public_removal_attempts',
+  'public_feed_operations',
+  'public_feed_versions',
+  'public_feed_version_members',
+  'public_feed_head',
+  'feed_rollback_preparations',
+  'public_feed_operation_events',
 ] as const;
 
 export const REQUIRED_STAFF_TABLES = ['staff_provisioning_requests'] as const;
@@ -183,6 +191,17 @@ export const REQUIRED_RPC_SIGNATURES = [
   rpc('supersede_assistive_validation_job', ['p_job_id', 'p_claim_token'], ['uuid', 'uuid']),
   rpc('record_assistive_validation_job_failure', ['p_job_id', 'p_claim_token', 'p_failure_code'], ['uuid', 'uuid', 'text']),
   rpc('finalize_assistive_validation_job', ['p_job_id', 'p_claim_token', 'p_input_hash', 'p_status', 'p_completion_code', 'p_findings'], ['uuid', 'uuid', 'text', 'text', 'text', 'jsonb']),
+  rpc('reserve_public_feed_operation', ['p_operation_key', 'p_kind', 'p_publication_mode', 'p_admin_id', 'p_public_id', 'p_owner_token', 'p_confirmed_preview_id', 'p_confirmed_at', 'p_private_bucket', 'p_archive_reason', 'p_rollback_preparation_handle', 'p_rollback_acknowledgement', 'p_storage_bucket', 'p_storage_path', 'p_rollback_capability'], ['uuid', 'text', 'text', 'uuid', 'text', 'text', 'uuid', 'timestamptz', 'text', 'text', 'uuid', 'text', 'text', 'text', 'boolean']),
+  rpc('bind_public_feed_operation', ['p_operation_id', 'p_owner_epoch', 'p_owner_token', 'p_actor_id', 'p_baseline_version_id', 'p_baseline_storage_existed', 'p_baseline_feed_hash', 'p_baseline_record_count', 'p_baseline_feed_content', 'p_candidate_feed_hash', 'p_candidate_record_count', 'p_candidate_feed_content', 'p_candidate_members', 'p_feed_public_url', 'p_media_manifest'], ['uuid', 'bigint', 'text', 'uuid', 'uuid', 'boolean', 'text', 'integer', 'text', 'text', 'integer', 'text', 'jsonb', 'text', 'jsonb']),
+  rpc('renew_public_feed_operation_lease', ['p_operation_id', 'p_owner_epoch', 'p_owner_token', 'p_actor_id'], ['uuid', 'bigint', 'text', 'uuid']),
+  rpc('mark_public_feed_write_started', ['p_operation_id', 'p_owner_epoch', 'p_owner_token', 'p_actor_id'], ['uuid', 'bigint', 'text', 'uuid']),
+  rpc('mark_public_feed_candidate_observed', ['p_operation_id', 'p_owner_epoch', 'p_owner_token', 'p_actor_id', 'p_observed_hash', 'p_observed_record_count'], ['uuid', 'bigint', 'text', 'uuid', 'text', 'integer']),
+  rpc('claim_public_feed_operation', ['p_operation_id', 'p_admin_id', 'p_new_owner_token'], ['uuid', 'uuid', 'text']),
+  rpc('finalize_public_feed_operation', ['p_operation_id', 'p_owner_epoch', 'p_owner_token', 'p_completion_actor_id'], ['uuid', 'bigint', 'text', 'uuid']),
+  rpc('complete_public_feed_operation', ['p_operation_id', 'p_owner_epoch', 'p_owner_token', 'p_actor_id', 'p_observed_hash', 'p_observed_record_count'], ['uuid', 'bigint', 'text', 'uuid', 'text', 'integer']),
+  rpc('fail_public_feed_operation', ['p_operation_id', 'p_owner_epoch', 'p_owner_token', 'p_actor_id', 'p_failure_code'], ['uuid', 'bigint', 'text', 'uuid', 'text']),
+  rpc('require_public_feed_recovery', ['p_operation_id', 'p_owner_epoch', 'p_owner_token', 'p_actor_id', 'p_failure_code', 'p_observed_hash', 'p_observed_record_count'], ['uuid', 'bigint', 'text', 'uuid', 'text', 'text', 'integer']),
+  rpc('prepare_public_feed_rollback', ['p_admin_id', 'p_target_version_number', 'p_observed_storage_hash', 'p_observed_storage_record_count', 'p_lifecycle_drift'], ['uuid', 'bigint', 'text', 'integer', 'jsonb']),
 ] as const satisfies readonly RequiredRpcSignature[];
 
 export const REQUIRED_RPC_NAMES = [...new Set(REQUIRED_RPC_SIGNATURES.map(({ name }) => name))] as readonly string[];

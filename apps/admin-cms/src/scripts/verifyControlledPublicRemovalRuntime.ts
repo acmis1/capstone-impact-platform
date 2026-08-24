@@ -378,33 +378,8 @@ async function main(): Promise<void> {
     });
 
     const ready = await makeReady('ready-publication');
-    const compFailure = await createProject('compensation-failure');
-    await syncFeed();
-    const compResult = await execute(compFailure, adminId, 'admin', 'during_compensation');
-    await scenario(32, 'compensation failure enters compensation_failed', async () => {
-      assert('compensationFailureCode' in compResult);
-      assert.equal(compResult.compensationFailureCode, 'COMPENSATION_FAILED');
-      assert.equal((await attemptFor(compFailure)).state, 'compensation_failed');
-    });
     const readiness = await previews.getPublicationReadiness({ publicId: ready.fixture.publicId, adminId, privateBucket: PRIVATE_BUCKET });
     assert(readiness.ready && readiness.confirmedPreviewId && readiness.confirmedAt);
-    await scenario(33, 'compensation_failed removal blocks publication', async () => {
-      const result = await publication.reserveAttempt({ publicId: ready.fixture.publicId, adminId, privateBucket: PRIVATE_BUCKET, confirmedPreviewId: readiness.confirmedPreviewId!, confirmedAt: readiness.confirmedAt! });
-      assert.equal(result.resultCode, 'COMPENSATION_INCOMPLETE');
-    });
-    psql(`DELETE FROM public.public_removal_attempts WHERE project_id = '${compFailure.id}'::uuid;`);
-    await syncFeed();
-
-    const publicationBlocked = await publication.reserveAttempt({ publicId: ready.fixture.publicId, adminId, privateBucket: PRIVATE_BUCKET, confirmedPreviewId: readiness.confirmedPreviewId!, confirmedAt: readiness.confirmedAt! });
-    assert.equal(publicationBlocked.resultCode, 'ATTEMPT_RESERVED');
-    const publicationFailed = await publication.failAttempt(String(publicationBlocked.attemptId), String(publicationBlocked.executionToken), 'RUNTIME_FAILURE', 'COMPENSATION_FAILED');
-    assert.equal(publicationFailed.resultCode, 'COMPENSATION_INCOMPLETE');
-    const blockedRemoval = await createProject('blocked-by-publication');
-    await syncFeed();
-    await scenario(34, 'compensation_failed publication blocks removal', async () => {
-      assert.equal((await removal.reserveAttempt(blockedRemoval.publicId, adminId, `Archive ${blockedRemoval.publicId}`)).resultCode, 'COMPENSATION_INCOMPLETE');
-    });
-    psql(`DELETE FROM public.publication_attempts WHERE project_id = '${ready.fixture.id}'::uuid;`);
 
     const raceRemoval = await createProject('publication-removal-race');
     publicPaths.add(`published/${ready.fixture.publicId}/poster_image/poster.png`);

@@ -198,7 +198,7 @@ describe('POST /api/projects/[publicId]/staging-publication', () => {
     });
   });
 
-  it('maps publication-in-progress and incomplete compensation to bounded HTTP 409 results', async () => {
+  it('maps publication-in-progress and required recovery to bounded HTTP 409 results', async () => {
     mocks.executeControlledPublication.mockResolvedValue({ resultCode: 'PUBLICATION_IN_PROGRESS' });
     let response = await post('project_2026');
     expect(response.status).toBe(409);
@@ -208,12 +208,12 @@ describe('POST /api/projects/[publicId]/staging-publication', () => {
       error: 'Another publication is already in progress.',
     });
 
-    mocks.executeControlledPublication.mockResolvedValue({ resultCode: 'COMPENSATION_INCOMPLETE' });
+    mocks.executeControlledPublication.mockResolvedValue({ resultCode: 'RECOVERY_REQUIRED' });
     response = await post('project_2026');
     expect(response.status).toBe(409);
     expect(await read(response)).toEqual({
       success: false,
-      code: 'COMPENSATION_INCOMPLETE',
+      code: 'RECOVERY_REQUIRED',
       error: 'Publication recovery is incomplete and requires attention.',
     });
   });

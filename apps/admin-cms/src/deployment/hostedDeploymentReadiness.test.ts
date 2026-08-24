@@ -151,14 +151,14 @@ function completeEvidence(overrides: Partial<HostedReadinessEvidence> = {}): Hos
 
 describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () => {
   describe('authoritative migration, table, and RPC inventory', () => {
-    it('matches the exact 33 migration files and keeps every historical file byte-identical to origin/main', () => {
+    it('matches the exact 35 migration files and keeps every historical file byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(33);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(35);
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
       expect(() => execFileSync(
         'git',
-        ['diff', '--exit-code', 'origin/main', '--', ...EXPECTED_REPOSITORY_MIGRATIONS.slice(0, -1).map(
+        ['diff', '--exit-code', 'origin/main', '--', ...EXPECTED_REPOSITORY_MIGRATIONS.slice(0, -2).map(
           (historical) => `infra/supabase/migrations/${historical}`,
         )],
         { cwd: repoRoot, stdio: 'pipe' },
@@ -173,7 +173,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       );
 
       expect([...ALL_REQUIRED_TABLES].sort()).toEqual([...new Set(createdTables)].sort());
-      expect(ALL_REQUIRED_TABLES).toHaveLength(27);
+      expect(ALL_REQUIRED_TABLES).toHaveLength(33);
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_runs');
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_findings');
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_jobs');
@@ -186,7 +186,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches every final service-role application RPC signature and isolates the one internal helper', () => {
       const contracts = migrationServiceRoleContracts();
       expect(contracts.application.map(contractKey).sort()).toEqual(REQUIRED_RPC_SIGNATURES.map(contractKey).sort());
-      expect(contracts.application).toHaveLength(58);
+      expect(contracts.application).toHaveLength(69);
       expect(REQUIRED_RPC_NAMES).toContain('persist_assistive_validation_run');
       expect(REQUIRED_RPC_NAMES).toContain('record_assistive_finding_disposition');
       expect(REQUIRED_RPC_NAMES).toContain('claim_next_assistive_validation_job');
@@ -236,7 +236,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const missingMigration = evaluateHostedDeploymentReadiness(
         completeEvidence({ recordedMigrationVersions: [], manualEvidence: undefined })
       );
-      expect(missingMigration.missingMigrations).toHaveLength(33);
+      expect(missingMigration.missingMigrations).toHaveLength(35);
       expect(missingMigration.deploymentClassification).toBe('RECONCILIATION_REQUIRED');
     });
 
@@ -312,7 +312,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const inspected = inspectPostgrestOpenApi(openApiDocument());
       expect(inspected?.publicRelations).toEqual([...ALL_REQUIRED_TABLES].sort());
       expect(inspected?.rpcNames).toEqual([...REQUIRED_RPC_NAMES].sort());
-      expect(inspected?.rpcSignatures).toHaveLength(57);
+      expect(inspected?.rpcSignatures).toHaveLength(68);
       expect(inspected?.rpcSignatures.some((signature) => signature.name === 'execute_controlled_publication')).toBe(false);
     });
 

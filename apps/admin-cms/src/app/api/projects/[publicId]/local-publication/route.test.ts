@@ -214,24 +214,11 @@ describe('POST /api/projects/[publicId]/local-publication', () => {
     expect(await read(response)).toEqual({ success: false, code: 'PUBLICATION_IN_PROGRESS', error: 'Another publication is already in progress.' });
   });
 
-  it('maps COMPENSATION_INCOMPLETE to a bounded intervention response', async () => {
-    mocks.executeControlledPublication.mockResolvedValue({ resultCode: 'COMPENSATION_INCOMPLETE' });
+  it('maps RECOVERY_REQUIRED to a bounded intervention response', async () => {
+    mocks.executeControlledPublication.mockResolvedValue({ resultCode: 'RECOVERY_REQUIRED' });
     const response = await post('project_2026');
     expect(response.status).toBe(409);
-    expect(await read(response)).toEqual({ success: false, code: 'COMPENSATION_INCOMPLETE', error: 'Publication recovery is incomplete and requires attention.' });
-  });
-
-  it('maps a newly failed compensation to the same bounded intervention response', async () => {
-    mocks.executeControlledPublication.mockResolvedValue({
-      resultCode: 'EXECUTION_FAILED',
-      failureCode: 'FEED_UPLOAD_FAILED',
-      compensationFailureCode: 'raw-internal-compensation-code',
-    });
-    const response = await post('project_2026');
-    expect(response.status).toBe(409);
-    const json = await read(response);
-    expect(json).toEqual({ success: false, code: 'COMPENSATION_INCOMPLETE', error: 'Publication recovery is incomplete and requires attention.' });
-    expect(JSON.stringify(json)).not.toContain('raw-internal-compensation-code');
+    expect(await read(response)).toEqual({ success: false, code: 'RECOVERY_REQUIRED', error: 'Publication recovery is incomplete and requires attention.' });
   });
 
   it('maps coordinator PERMISSION_DENIED to HTTP 403', async () => {
