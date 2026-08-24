@@ -1,4 +1,5 @@
 import type { ServerEnv } from '../lib/env';
+import { classifySupabaseCredential } from '../lib/supabaseCredential';
 import {
   isVerifiedStagingRuntime,
   type StagingRuntimeEnvironment,
@@ -51,60 +52,24 @@ function commitEvidence(value: string | undefined): CommitEvidence {
     : { state: 'invalid' };
 }
 
-function hasModernKeyForm(key: string, prefix: 'sb_publishable_' | 'sb_secret_'): boolean {
-  return key.startsWith(prefix) && key.length > prefix.length;
-}
-
-// This only classifies configured JWT payload semantics; it does not authenticate the signature.
-function legacyJwtHasRole(token: string, expectedRole: 'anon' | 'service_role'): boolean {
-  const segments = token.split('.');
-  if (
-    segments.length !== 3 ||
-    segments.some(
-      (segment) =>
-        !segment || !/^[A-Za-z0-9_-]+$/.test(segment) || segment.length % 4 === 1,
-    )
-  ) {
-    return false;
-  }
-
-  const payloadSegment = segments[1];
-  try {
-    const payloadBytes = Buffer.from(payloadSegment, 'base64url');
-    if (
-      payloadBytes.length === 0 ||
-      payloadBytes.toString('base64url') !== payloadSegment
-    ) {
-      return false;
-    }
-
-    const payload: unknown = JSON.parse(
-      new TextDecoder('utf-8', { fatal: true }).decode(payloadBytes),
-    );
-    return (
-      typeof payload === 'object' &&
-      payload !== null &&
-      !Array.isArray(payload) &&
-      'role' in payload &&
-      payload.role === expectedRole
-    );
-  } catch {
-    return false;
-  }
-}
-
 function hasValidCredentialSemantics(env: ServerEnv): boolean {
+  const classifiedPublicCredential = classifySupabaseCredential(
+    env.supabasePublicKey,
+    false,
+  );
   const publicCredentialIsValid =
-    (env.publicKeyType === 'publishable' &&
-      hasModernKeyForm(env.supabasePublicKey, 'sb_publishable_')) ||
-    (env.publicKeyType === 'legacy_anon_jwt' &&
-      legacyJwtHasRole(env.supabasePublicKey, 'anon'));
+    (classifiedPublicCredential === 'publishable' ||
+      classifiedPublicCredential === 'legacy_anon_jwt') &&
+    classifiedPublicCredential === env.publicKeyType;
 
+  const classifiedDatabaseAdminCredential = classifySupabaseCredential(
+    env.supabaseDatabaseAdminKey,
+    true,
+  );
   const databaseAdminCredentialIsValid =
-    (env.databaseAdminKeyType === 'secret' &&
-      hasModernKeyForm(env.supabaseDatabaseAdminKey, 'sb_secret_')) ||
-    (env.databaseAdminKeyType === 'legacy_service_role_jwt' &&
-      legacyJwtHasRole(env.supabaseDatabaseAdminKey, 'service_role'));
+    (classifiedDatabaseAdminCredential === 'secret' ||
+      classifiedDatabaseAdminCredential === 'legacy_service_role_jwt') &&
+    classifiedDatabaseAdminCredential === env.databaseAdminKeyType;
 
   return publicCredentialIsValid && databaseAdminCredentialIsValid;
 }
