@@ -13,9 +13,11 @@ Supabase key management has evolved from legacy JWT-based keys to named API key 
 
 1. **Browser Client Keys**:
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` takes precedence over `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+   - Every populated browser-key variable must independently contain either `sb_publishable_` with a non-empty suffix or a structurally valid legacy JWT whose payload role is exactly `anon`; build configuration fails before bundling if either value is unsafe.
    - Browser keys are restricted by Row Level Security (RLS) and Data API table grants.
 2. **Server Admin Keys**:
    - `SUPABASE_SECRET_KEY` takes precedence over `SUPABASE_SERVICE_ROLE_KEY`.
+   - The selected server credential must contain either `sb_secret_` with a non-empty suffix or a structurally valid legacy JWT whose payload role is exactly `service_role`. A present preferred key is never bypassed in favor of the fallback; an unused malformed fallback does not block a valid preferred secret because it remains server-only and unselected.
    - Legacy `SUPABASE_SERVICE_ROLE_KEY` is maintained as a temporary backwards-compatibility fallback (`legacy_service_role_jwt_fallback`).
    - Server keys bypass Row Level Security and must **NEVER** be exposed to browser runtimes, client bundles, or public code.
 
