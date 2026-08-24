@@ -35,7 +35,26 @@ The Capstone platform enforces strict architectural and operational isolation be
 - **Install Command**: `npm ci`
 - **Build Command**: `npm run build:admin` (or `npm run build --workspace=apps/admin-cms`)
 - **Start Command**: `npm run start --workspace=apps/admin-cms` (or `next start` inside `apps/admin-cms`)
-- **Health Check Endpoint**: `/api/health` (Returns HTTP 200 with sanitized configuration classifications)
+- **Liveness Endpoint**: `/api/health` (always returns a minimal HTTP 200 while the application route handler is running)
+- **Render Health Check Endpoint**: `/api/readiness` (returns HTTP 200 only when hosted configuration, staging target identity, and the bounded dependency probe are ready)
+
+### C. HTTP Liveness and Deployment-Readiness Contracts
+
+`/api/health` and `/api/readiness` are deliberately separate signals:
+
+| Endpoint | Success contract | What it proves | What it does not prove |
+| :--- | :--- | :--- | :--- |
+| `GET /api/health` | HTTP 200 with `{ "app": "admin-cms", "status": "ok" }` | The deployed application can execute a route handler. | Valid environment variables, Supabase reachability, schema state, authentication, publication, UAT, or production acceptance. |
+| `GET /api/readiness` | HTTP 200 with `readiness: "ready"`, `classification: "READY"`, `configuration: "configured"`, and `dependency: "reachable"` | Critical server configuration parses, the runtime is verified as the expected HTTPS staging target, and a two-second zero-row Supabase `HEAD` read succeeds. | Applied migration history, exact schema/grants/RPC signatures, Auth or Storage readiness, workflow behavior, full UAT, publication readiness, or production acceptance. |
+
+Readiness failures return HTTP 503 with one of two bounded classifications:
+
+- `CONFIGURATION_NOT_READY`: critical environment configuration or expected staging target identity is missing, malformed, or mismatched; the dependency is reported as `not-checked`.
+- `DEPENDENCY_NOT_READY`: configuration is valid but the bounded read-only dependency probe fails, returns a non-success status, or times out; the dependency is reported as `not-ready`.
+
+Every readiness body includes the repository's expected migration count and latest expected migration identifier. This is version evidence from the deployed application bundle, not proof that those migrations are applied to the hosted database. `RENDER_GIT_COMMIT` is returned only when it is exactly a valid 40-character hexadecimal commit identifier; otherwise `deploymentCommit.state` is truthfully `missing` or `invalid` and no untrusted value is echoed.
+
+Both endpoints support `HEAD` with the same status contract and no response body. All liveness and readiness responses use `Cache-Control: no-store` and `Pragma: no-cache` so a prior response is not durable evidence of current state. Configure Render to use `/api/readiness`, not `/api/health`, for the service health-check path.
 
 ---
 
@@ -62,7 +81,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 | `SUPABASE_PUBLIC_FEED_FILE` | Optional | `capstones-latest.json` | Public JSON showcase feed object name. |
 
 ### C. Staging Target Identity Guards
-*Required by CLI staging operations and diagnostic checkers to prevent accidental target execution.*
+*Required by CLI staging operations, diagnostic checkers, and `/api/readiness` to prevent accidental target execution.*
 
 | Variable | Value | Description |
 | :--- | :--- | :--- |
@@ -145,7 +164,7 @@ The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpc
 - **Administrator Identity**: Initial staging administrator bootstrap completed; single Auth identity linked to `admin_users` profile with verified `admin` role in `user_roles` (`check:admin-auth` classification: `READY_FOR_MANUAL_LOGIN_TEST`).
 - **Next Lifecycle Action**: Standalone Admin/CMS hosted web service deployment and manual authenticated login verification.
 
-Migration `0027` is newer than the 26-migration hosted evidence above and remains repository/local-only. The staging-only direct UAT account control must remain unavailable until a separately authorized hosted migration and application deployment is completed and independently reviewed.
+The repository now expects 33 migrations, ending at `20260821140000_assistive_duplicate_shortlist`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that migrations `0027`–`0033` are hosted. Any hosted reconciliation remains a separately authorized operation followed by independent review.
 
 Operators should **NOT** run `supabase migration repair` or replay migrations against this clean v2 environment.
 
@@ -157,7 +176,7 @@ The procedures detailed in the [staging reconciliation runbook](../infra/supabas
 ## 6. Pre-Deployment Readiness Verification
 
 ### A. Automated Readiness Inspection Contract
-The read-only deployment readiness checker inspects the target endpoint without performing mutations:
+The read-only deployment readiness CLI performs broader schema-object inspection without mutations:
 
 ```bash
 npm run check:admin-deployment-readiness
@@ -174,8 +193,8 @@ Expected automated inspection output on the clean v2 staging target:
 - `TARGET_IDENTITY_MATCH = YES`
 - `MIGRATION_HISTORY_READABLE = NO`
 - `SCHEMA_BASELINE = UNVERIFIED`
-- `REQUIRED_TABLE_SET = PRESENT` (All 23 public application tables detected)
-- `REQUIRED_RPC_NAMES = PRESENT` (All 41 application RPC names detected)
+- `REQUIRED_TABLE_SET = PRESENT` (All 27 public application tables detected)
+- `REQUIRED_RPC_NAMES = PRESENT` (All 57 application RPC names detected)
 - `REQUIRED_STORAGE_BUCKETS = PRESENT` (All 3 buckets detected)
 - `AUTH_FOUNDATION = READY`
 - `MANUAL_EVIDENCE_REQUIRED = YES`
@@ -202,3 +221,16 @@ Expected output:
 - `error_codes = NONE`
 
 With both automated object detection and governed activation evidence complete, the clean v2 environment is verified and cleared for standalone Admin/CMS web service deployment.
+
+### C. Safe Deployment SHA Verification and Acceptance Boundary
+
+Before relying on a staging deployment, fetch the repository and record the exact approved main commit locally:
+
+```bash
+git fetch origin main
+git rev-parse origin/main
+```
+
+Probe `GET /api/readiness` with cache bypassed and compare `deploymentCommit.value` to that exact 40-character SHA. A `missing` or `invalid` commit state means readiness may prove configuration and dependency reachability, but deployment-SHA verification is unavailable and must be completed through separately trusted Render deployment evidence. Do not place a branch name, user-supplied value, or shortened/fabricated SHA in the comparison.
+
+A successful `/api/readiness` response is only an application/configuration/dependency gate. It does not replace the broader read-only CLI checker, governed migration/schema evidence, authenticated smoke tests, stakeholder UAT, publication checks, independent CI review, or a production acceptance decision.
