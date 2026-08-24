@@ -130,4 +130,4 @@ This bounded verifier is recovery-mechanics evidence, not a production backup sy
 - a real hosted post-restore application smoke test; and
 - named institutional owners with credentials and incident-response authority.
 
-All hosted actions above require separate operator authorization and credentials. Public-feed history and rollback remain a separate teammate-owned feature and are not part of system/database/Storage disaster recovery.
+All hosted actions above require separate operator authorization and credentials. The public deployment ledger and disposable-Local artifact rollback are a separate publication feature; they do not back up or restore PostgreSQL, Storage buckets, provider configuration, or infrastructure and are not system/database/Storage disaster recovery evidence.
