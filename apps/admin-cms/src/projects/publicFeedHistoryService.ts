@@ -6,6 +6,7 @@ import { compilePublicFeed, toPublicFeedRecord } from '../feed/compilePublicFeed
 import { createPublicFeedArtifact, verifyPublicFeedArtifact } from '../feed/publicFeedArtifact';
 import { SupabasePublicFeedLedgerRepositoryCore } from '../repositories/SupabasePublicFeedLedgerRepositoryCore';
 import { isLocalPublicFeedRollbackAvailable } from './localPublicationExecution';
+import type { PublicationMediaBinding } from './publicationArtifact';
 import { executePublicFeedWriter, inspectPublicFeedHead } from './publicFeedWriterCoordinator';
 
 export interface PublicFeedHistoryServiceDependencies {
@@ -18,6 +19,11 @@ export interface PublicFeedHistoryServiceDependencies {
   listProjects(): Promise<Project[]>;
   assertActivationEnvironment(): void;
   environment?: Record<string, string | undefined>;
+  /**
+   * Forward completion of a durable operation's bound media manifest. Recovery of a publication
+   * that crossed write intent cannot converge without it.
+   */
+  promoteBoundPublicMedia?(manifest: PublicationMediaBinding[]): Promise<void>;
 }
 
 export type PublicFeedRecoveryResult =
@@ -53,11 +59,17 @@ export async function recoverPublicFeedOperation(
       supabase: dependencies.supabase, adminId: dependencies.adminId,
       kind: operation.kind, publicationMode: operation.publicationMode,
       publicId: operation.publicId, rollbackPreparationHandle: operation.rollbackPreparationId,
+      // Recovery replays the durable operation's own immutable intent, so the coordinator's
+      // intent equality holds by construction and nothing new can be smuggled in here.
+      confirmedPreviewId: operation.confirmedPreviewId, confirmedAt: operation.confirmedAt,
+      privateBucket: operation.privateMediaBucket, archiveReason: operation.archiveReason,
+      rollbackCapability: operation.rollbackCapabilityRequested,
       feedBucket: dependencies.feedBucket, feedPath: dependencies.feedPath,
       recoveryOperationId: operation.id,
       prepareCandidate: async () => {
         throw new Error('RECOVERY_ARTIFACT_MUST_BE_DURABLE');
       },
+      afterWriteIntent: dependencies.promoteBoundPublicMedia,
     });
     if (writer.resultCode === 'COMPLETED' || writer.resultCode === 'ALREADY_COMPLETED') {
       return {

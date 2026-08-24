@@ -42,6 +42,5 @@ export function createControlledPublicationDependencies(params: {
     getPublicUrl: (bucket, path) => publication.getPublicUrl(bucket, path),
     downloadObject: (bucket, path) => publication.downloadObject(bucket, path),
     uploadNewObject: (bucket, path, content, contentType) => publication.uploadNewObject(bucket, path, content, contentType),
-    removeObjects: (bucket, paths) => publication.removeObjects(bucket, paths),
   };
 }

@@ -3,6 +3,7 @@ import type { AdminPermission } from '../auth/authTypes';
 import { hasPermission } from '../auth/permissions';
 import type { Project } from '../domain/project';
 import { composePublicFeedRemoval } from '../feed/publicFeedArtifact';
+import { findRemovalCompletionEvidence } from './publicFeedTargetEvidence';
 import { executePublicFeedWriter, inspectPublicFeedHead } from './publicFeedWriterCoordinator';
 
 export interface PublicRemovalArtifact {
@@ -12,7 +13,12 @@ export interface PublicRemovalArtifact {
 }
 
 export type ControlledPublicRemovalResult =
-  | ({ resultCode: 'COMPLETED' | 'ALREADY_COMPLETED'; attemptId: string; auditRecordId: string } & PublicRemovalArtifact)
+  /**
+   * `auditRecordId` is null when the removal changed no lifecycle state — a target that was
+   * already archived and already absent writes no approval record. It is never populated from an
+   * unrelated operation to avoid a null.
+   */
+  | ({ resultCode: 'COMPLETED' | 'ALREADY_COMPLETED'; attemptId: string; auditRecordId: string | null } & PublicRemovalArtifact)
   | { resultCode: 'PERMISSION_DENIED' | 'PUBLICATION_IN_PROGRESS' | 'RECOVERY_REQUIRED' | 'NOT_PUBLISHED' }
   | { resultCode: 'EXECUTION_FAILED'; failureCode: string };
 
@@ -53,12 +59,21 @@ export async function executeControlledPublicRemoval(params: {
       );
       if (inspected.head && inspected.artifact
           && !inspected.artifact.members.some((member) => member.publicId === publicId)) {
-        return {
-          resultCode: 'ALREADY_COMPLETED', attemptId: inspected.head.currentVersion.operationId,
-          auditRecordId: inspected.head.currentVersion.auditRecordId ?? '',
-          content: inspected.artifact.content, feedHash: inspected.artifact.feedHash,
-          recordCount: inspected.artifact.recordCount,
-        };
+        // Absence from the current head only says the target is not deployed. Completion evidence
+        // must come from this target's own removal history; when none explains the current absence
+        // — a rollback, typically — no identifiers are invented and a genuine target-specific
+        // removal operation is executed below instead.
+        const evidence = await findRemovalCompletionEvidence(
+          dependencies.supabase, publicId, inspected.head,
+        );
+        if (evidence) {
+          return {
+            resultCode: 'ALREADY_COMPLETED', attemptId: evidence.operationId,
+            auditRecordId: evidence.auditRecordId,
+            content: inspected.artifact.content, feedHash: inspected.artifact.feedHash,
+            recordCount: inspected.artifact.recordCount,
+          };
+        }
       }
     }
 
@@ -74,7 +89,7 @@ export async function executeControlledPublicRemoval(params: {
     if (writer.resultCode === 'COMPLETED' || writer.resultCode === 'ALREADY_COMPLETED') {
       return {
         resultCode: writer.resultCode, attemptId: writer.operationId,
-        auditRecordId: writer.auditRecordId ?? '', content: '',
+        auditRecordId: writer.auditRecordId, content: '',
         feedHash: writer.feedHash, recordCount: writer.recordCount,
       };
     }

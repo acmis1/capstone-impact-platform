@@ -53,7 +53,17 @@ export interface PublicFeedWriterParameters {
   /** Explicit operator authorization to claim one blocking RECOVERY_REQUIRED operation. */
   recoveryOperationId?: string;
   prepareCandidate(baseline: VerifiedPublicFeedArtifact | null): Promise<PreparedPublicFeedCandidate>;
-  beforeCanonicalWrite?(manifest: PublicationMediaBinding[]): Promise<void>;
+  /**
+   * Read-only re-validation of the bound media manifest. Invoked immediately before write intent,
+   * while failure is still free: throwing here fails the operation with zero external side effects.
+   */
+  validateBeforeWriteIntent?(manifest: PublicationMediaBinding[]): Promise<void>;
+  /**
+   * The only hook permitted to create externally visible side effects. Invoked only once
+   * WRITE_STARTED is durable, so everything it does is already described by the immutable manifest
+   * and can be replayed forward by any later recovery owner. It must be idempotent.
+   */
+  afterWriteIntent?(manifest: PublicationMediaBinding[]): Promise<void>;
 }
 
 function token(): string {
@@ -118,6 +128,51 @@ function artifactFromOperation(operation: PublicFeedOperationRecord): VerifiedPu
   return artifact;
 }
 
+function trimmedOrNull(value: string | null | undefined): string | null {
+  const trimmed = (value ?? '').trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+function sameInstant(durable: string | null, requested: string | null | undefined): boolean {
+  const incoming = requested ?? null;
+  if (durable === null || incoming === null) return durable === incoming;
+  const left = Date.parse(durable);
+  const right = Date.parse(incoming);
+  return Number.isFinite(left) && Number.isFinite(right) && left === right;
+}
+
+/**
+ * Complete immutable-intent equality, evaluated before any claim or reuse of a durable operation.
+ *
+ * Comparing only kind/publicId/rollback handle is not enough: a normal publication and a
+ * deployment reconciliation, two archives with different reasons, or two requests carrying
+ * different participant confirmation evidence are materially different authorizations. Allowing
+ * any of them to adopt another's durable operation would either reuse a candidate bound under
+ * different authority or bind a fresh candidate under stale durable metadata.
+ *
+ * `explicitRecovery` relaxes only the authorizing-actor check, so a second administrator may drive
+ * the operator recovery path for an operation another administrator authorized; every semantic
+ * field still has to match exactly.
+ */
+function bindsSameIntent(
+  blocking: PublicFeedOperationRecord,
+  params: PublicFeedWriterParameters,
+  explicitRecovery: boolean,
+): boolean {
+  const semanticMatch = blocking.kind === params.kind
+    && blocking.publicationMode === (params.publicationMode ?? null)
+    && blocking.publicId === (params.publicId ?? null)
+    && blocking.rollbackPreparationId === (params.rollbackPreparationHandle ?? null)
+    && blocking.confirmedPreviewId === (params.confirmedPreviewId ?? null)
+    && sameInstant(blocking.confirmedAt, params.confirmedAt)
+    && blocking.privateMediaBucket === trimmedOrNull(params.privateBucket)
+    && blocking.archiveReason === trimmedOrNull(params.archiveReason)
+    && blocking.rollbackCapabilityRequested === (params.kind === 'activation' && params.rollbackCapability === true)
+    && blocking.storageBucket === params.feedBucket
+    && blocking.storagePath === params.feedPath;
+  return explicitRecovery ? semanticMatch : semanticMatch && blocking.authorizingActorId === params.adminId;
+}
+
 function baselineFromOperation(operation: PublicFeedOperationRecord): VerifiedPublicFeedArtifact | null {
   if (!operation.baselineStorageExisted) return null;
   if (operation.baselineFeedContent === null || operation.baselineFeedHash === null
@@ -141,20 +196,41 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
   const ownerToken = token();
   let operation: PublicFeedOperationRecord | null = null;
   let epoch = 1;
+  let mediaPromoted = false;
+
+  /**
+   * Runs strictly after WRITE_STARTED is durable. A failure here may have already exposed part of
+   * the manifest, so the operation is parked in RECOVERY_REQUIRED — which durably describes every
+   * object the manifest permits — instead of deleting anything back out.
+   */
+  const promoteMedia = async (
+    operationId: string,
+    manifest: PublicationMediaBinding[],
+  ): Promise<PublicFeedWriterResult | null> => {
+    if (mediaPromoted || manifest.length === 0 || !params.afterWriteIntent) return null;
+    try {
+      await params.afterWriteIntent(manifest);
+      mediaPromoted = true;
+      return null;
+    } catch (error) {
+      await ledger.requireRecovery(
+        operationId, epoch, ownerToken, params.adminId,
+        safeFailure(error, 'PUBLIC_MEDIA_PROMOTION_FAILED'), null, null,
+      );
+      return { resultCode: 'RECOVERY_REQUIRED' };
+    }
+  };
 
   try {
     const blocking = await ledger.getBlockingOperation();
     if (blocking) {
-      const sameIntent = blocking.kind === params.kind
-        && blocking.publicId === (params.publicId ?? null)
-        && blocking.rollbackPreparationId === (params.rollbackPreparationHandle ?? null);
-      if (!sameIntent) {
+      const explicitRecovery = params.recoveryOperationId === blocking.id;
+      if (blocking.state === 'RECOVERY_REQUIRED' && !explicitRecovery) {
+        return { resultCode: 'RECOVERY_REQUIRED' };
+      }
+      if (!bindsSameIntent(blocking, params, explicitRecovery)) {
         return { resultCode: blocking.state === 'RECOVERY_REQUIRED'
           ? 'RECOVERY_REQUIRED' : 'PUBLICATION_IN_PROGRESS' };
-      }
-      if (blocking.state === 'RECOVERY_REQUIRED'
-          && params.recoveryOperationId !== blocking.id) {
-        return { resultCode: 'RECOVERY_REQUIRED' };
       }
       if (Date.parse(blocking.leaseExpiresAt) > Date.now()) return { resultCode: 'PUBLICATION_IN_PROGRESS' };
       const claim = await ledger.claim(blocking.id, params.adminId, ownerToken);
@@ -249,6 +325,13 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
       mediaManifest = operation.mediaManifest ?? [];
     }
 
+    // A bound manifest is part of the operation's durable intent. Refusing to advance without a
+    // promotion capability keeps a recovery owner from writing a canonical feed whose public media
+    // URLs were never made readable.
+    if (mediaManifest.length > 0 && !params.afterWriteIntent) {
+      throw new Error('MEDIA_PROMOTION_UNAVAILABLE');
+    }
+
     if (operation.state === 'RECOVERY_REQUIRED') {
       if (!params.recoveryOperationId || params.recoveryOperationId !== operation.id
           || operation.candidateFeedContent === null) {
@@ -267,6 +350,8 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
         if (!baselineMatches) return { resultCode: 'RECOVERY_REQUIRED' };
         const started = await ledger.markWriteStarted(operation.id, epoch, ownerToken, params.adminId);
         if (started.resultCode !== 'WRITE_STARTED') return { resultCode: 'PUBLICATION_IN_PROGRESS' };
+        const promotionFailure = await promoteMedia(operation.id, mediaManifest);
+        if (promotionFailure) return promotionFailure;
         try {
           await deadline(storage.writeExact(params.feedBucket, params.feedPath, candidate.bytes));
         } catch {
@@ -290,11 +375,17 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
     }
 
     if (operation.state === 'PREPARED') {
-      await ledger.renew(operation.id, epoch, ownerToken, params.adminId);
-      if (params.beforeCanonicalWrite) await params.beforeCanonicalWrite(mediaManifest);
+      // Ownership is confirmed before anything external is attempted. A worker that lost its lease
+      // to a later claim must produce zero external side effects.
+      const renewal = await ledger.renew(operation.id, epoch, ownerToken, params.adminId);
+      if (rpcCode(renewal) !== 'LEASE_RENEWED') {
+        return rpcCode(renewal) === 'STALE_OWNER'
+          ? { resultCode: 'PUBLICATION_IN_PROGRESS' }
+          : { resultCode: 'EXECUTION_FAILED', failureCode: 'LEASE_RENEWAL_REJECTED' };
+      }
 
       const currentStored = await verifyStorage(storage, params.feedBucket, params.feedPath);
-      if (currentStored?.content === candidate.content) {
+      if (currentStored?.content === candidate.content && mediaManifest.length === 0) {
         try {
           const observed = await ledger.observeCandidate(
             operation.id, epoch, ownerToken, params.adminId, candidate.feedHash, candidate.recordCount,
@@ -310,6 +401,12 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
           await ledger.requireRecovery(operation.id, epoch, ownerToken, params.adminId, 'UNEXPECTED_STORAGE_STATE', currentStored?.feedHash ?? null, currentStored?.recordCount ?? null);
           return { resultCode: 'RECOVERY_REQUIRED' };
         }
+
+        // Last pre-intent gate. Everything that this operation is about to expose is re-read and
+        // re-checked while failure is still free; a throw here reaches the PREPARED failure path
+        // below with zero task-created public objects in existence.
+        if (params.validateBeforeWriteIntent) await params.validateBeforeWriteIntent(mediaManifest);
+
         let started: Record<string, unknown>;
         try {
           started = await ledger.markWriteStarted(operation.id, epoch, ownerToken, params.adminId);
@@ -329,7 +426,13 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
           return startedFailure;
         }
         if (started.resultCode !== 'WRITE_STARTED') throw new Error('WRITE_INTENT_REJECTED');
+
+        // Durable forward-commit boundary crossed: current permission, publication readiness and
+        // owner epoch/token were all revalidated inside mark_public_feed_write_started. Only now
+        // may media become publicly readable, and only forward convergence follows.
         operation = { ...operation, state: 'WRITE_STARTED' };
+        const promotionFailure = await promoteMedia(operation.id, mediaManifest);
+        if (promotionFailure) return promotionFailure;
         try {
           await deadline(storage.writeExact(params.feedBucket, params.feedPath, candidate.bytes));
         } catch {
@@ -345,6 +448,10 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
     if (operation.state === 'WRITE_STARTED') {
       const stored = await verifyStorage(storage, params.feedBucket, params.feedPath);
       if (stored?.content === candidate.content) {
+        // The canonical feed is already exact, but a crash mid-promotion can still leave part of
+        // the bound manifest unpublished. Replaying it is idempotent and completes the operation.
+        const promotionFailure = await promoteMedia(operation.id, mediaManifest);
+        if (promotionFailure) return promotionFailure;
         try {
           const observed = await ledger.observeCandidate(operation.id, epoch, ownerToken, params.adminId, candidate.feedHash, candidate.recordCount);
           if (observed.resultCode !== 'CANDIDATE_OBSERVED') throw new Error('CANDIDATE_OBSERVATION_REJECTED');
@@ -367,6 +474,8 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
           started = { resultCode: 'WRITE_STARTED' };
         }
         if (started.resultCode !== 'WRITE_STARTED') return { resultCode: 'PUBLICATION_IN_PROGRESS' };
+        const promotionFailure = await promoteMedia(operation.id, mediaManifest);
+        if (promotionFailure) return promotionFailure;
         try {
           await deadline(storage.writeExact(params.feedBucket, params.feedPath, candidate.bytes));
         } catch {

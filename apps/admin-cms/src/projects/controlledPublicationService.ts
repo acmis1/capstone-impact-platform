@@ -7,17 +7,24 @@ import type { Project } from '../domain/project';
 import { toPublicFeedRecord } from '../feed/compilePublicFeed';
 import { composePublicFeedPublication, createPublicFeedArtifact } from '../feed/publicFeedArtifact';
 import { validateMediaAssetBytes } from '../storage/mediaValidationCore';
+import { promoteBoundPublicMedia, validateBoundPublicMedia } from './boundPublicMediaPromotion';
 import {
   planPublicationArtifact,
   type PublicationMediaBinding,
   type PublicationMediaSource,
 } from './publicationArtifact';
+import { findPublicationCompletionEvidence } from './publicFeedTargetEvidence';
 import { executePublicFeedWriter, inspectPublicFeedHead } from './publicFeedWriterCoordinator';
 
 export type ControlledPublicationResult =
   | {
       resultCode: 'COMPLETED' | 'ALREADY_COMPLETED'; attemptId: string;
-      snapshotId: string; auditRecordId: string; recordCount: number;
+      /**
+       * Target-specific completion evidence. `auditRecordId` is null for deployment
+       * reconciliation, which changes no project lifecycle state and therefore writes no approval
+       * record. Neither identifier is ever borrowed from an unrelated operation.
+       */
+      snapshotId: string | null; auditRecordId: string | null; recordCount: number;
       feedHash: string; feedPublicUrl: string;
     }
   | { resultCode: 'PERMISSION_DENIED' | 'PUBLICATION_IN_PROGRESS' | 'RECOVERY_REQUIRED' }
@@ -34,7 +41,6 @@ export interface ControlledPublicationDependencies {
   getPublicUrl(bucket: string, path: string): string;
   downloadObject(bucket: string, path: string): Promise<Buffer | null>;
   uploadNewObject(bucket: string, path: string, content: Buffer, contentType: string): Promise<boolean>;
-  removeObjects(bucket: string, paths: string[]): Promise<void>;
 }
 
 export type ControlledPublicationFailurePoint =
@@ -67,35 +73,6 @@ async function captureMediaBindings(
   return bindings;
 }
 
-async function promoteBoundMedia(
-  dependencies: ControlledPublicationDependencies,
-  manifest: PublicationMediaBinding[],
-): Promise<void> {
-  const created = new Map<string, string[]>();
-  try {
-    for (const media of manifest) {
-      const source = await dependencies.downloadObject(media.sourceBucket, media.sourcePath);
-      if (!source || sha256(source) !== media.sourceSha256) throw new Error('PRIVATE_MEDIA_CHANGED');
-      const valid = validateMediaAssetBytes({
-        fileName: media.fileName, content: source, expectedMimeType: media.mimeType,
-        expectedFileSizeBytes: media.fileSizeBytes,
-      });
-      if (!valid.valid) throw new Error('PRIVATE_MEDIA_INVALID');
-      const wasCreated = await dependencies.uploadNewObject(
-        media.publicBucket, media.publicPath, source, media.mimeType,
-      );
-      if (wasCreated && !media.preExisting) {
-        created.set(media.publicBucket, [...(created.get(media.publicBucket) ?? []), media.publicPath]);
-      }
-      const verified = await dependencies.downloadObject(media.publicBucket, media.publicPath);
-      if (!verified || !verified.equals(source)) throw new Error('PUBLIC_MEDIA_VERIFICATION_FAILED');
-    }
-  } catch (error) {
-    for (const [bucket, paths] of created) await dependencies.removeObjects(bucket, paths);
-    throw error;
-  }
-}
-
 export async function executeControlledPublication(params: {
   permissions: AdminPermission[];
   publicId: string;
@@ -125,10 +102,21 @@ export async function executeControlledPublication(params: {
     if (target.status === 'published') {
       const inspected = await inspectPublicFeedHead(dependencies.supabase, publicFeedBucket, publicFeedPath);
       if (inspected.head && inspected.artifact?.members.some((member) => member.publicId === publicId)) {
+        // Membership in the current head answers only "is this target deployed". The operation,
+        // snapshot and audit identifiers that belong to this target come from its own immutable
+        // history, never from whichever operation happens to own the head right now.
+        const evidence = await findPublicationCompletionEvidence(
+          dependencies.supabase, publicId, inspected.head,
+        );
+        if (!evidence) {
+          return {
+            resultCode: 'NOT_READY', readinessCode: 'ALREADY_DEPLOYED_UNVERIFIED',
+            blockers: ['The project is already deployed in the current public feed, but no publication operation in its own history explains the deployed record.'],
+          };
+        }
         return {
-          resultCode: 'ALREADY_COMPLETED', attemptId: inspected.head.currentVersion.operationId,
-          snapshotId: inspected.head.currentVersion.publishedSnapshotId ?? '',
-          auditRecordId: inspected.head.currentVersion.auditRecordId ?? '',
+          resultCode: 'ALREADY_COMPLETED', attemptId: evidence.operationId,
+          snapshotId: evidence.publishedSnapshotId, auditRecordId: evidence.auditRecordId,
           recordCount: inspected.artifact.recordCount, feedHash: inspected.artifact.feedHash,
           feedPublicUrl: inspected.publicUrl,
         };
@@ -171,13 +159,14 @@ export async function executeControlledPublication(params: {
         const manifest = await captureMediaBindings(dependencies, plan.mediaPromotions);
         return { artifact: composePublicFeedPublication(baseline, plan.feed[0]), mediaManifest: manifest };
       },
-      beforeCanonicalWrite: (manifest) => promoteBoundMedia(dependencies, manifest),
+      validateBeforeWriteIntent: (manifest) => validateBoundPublicMedia(dependencies, manifest),
+      afterWriteIntent: (manifest) => promoteBoundPublicMedia(dependencies, manifest),
     });
 
     if (writer.resultCode === 'COMPLETED' || writer.resultCode === 'ALREADY_COMPLETED') {
       return {
         resultCode: writer.resultCode, attemptId: writer.operationId,
-        snapshotId: writer.snapshotId ?? '', auditRecordId: writer.auditRecordId ?? '',
+        snapshotId: writer.snapshotId, auditRecordId: writer.auditRecordId,
         recordCount: writer.recordCount, feedHash: writer.feedHash,
         feedPublicUrl: writer.feedPublicUrl,
       };

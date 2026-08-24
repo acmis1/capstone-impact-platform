@@ -45,6 +45,16 @@ export interface PublicFeedOperationRecord {
   projectId: string | null;
   publicId: string | null;
   rollbackPreparationId: string | null;
+  /**
+   * Immutable authorization intent captured at reservation. Every field below participates in the
+   * intent equality that gates any later claim or reuse of this durable operation, so a request
+   * carrying materially different intent can never adopt it.
+   */
+  confirmedPreviewId: string | null;
+  confirmedAt: string | null;
+  privateMediaBucket: string | null;
+  archiveReason: string | null;
+  rollbackCapabilityRequested: boolean;
   baselineVersionId: string | null;
   baselineStorageExisted: boolean | null;
   baselineFeedHash: string | null;
@@ -114,6 +124,11 @@ function operation(row: Record<string, unknown>): PublicFeedOperationRecord {
     projectId: row.project_id === null ? null : String(row.project_id),
     publicId: row.public_id === null ? null : String(row.public_id),
     rollbackPreparationId: row.rollback_preparation_id === null ? null : String(row.rollback_preparation_id),
+    confirmedPreviewId: row.confirmed_preview_id === null ? null : String(row.confirmed_preview_id),
+    confirmedAt: row.confirmed_at === null ? null : String(row.confirmed_at),
+    privateMediaBucket: row.private_media_bucket === null ? null : String(row.private_media_bucket),
+    archiveReason: row.archive_reason === null ? null : String(row.archive_reason),
+    rollbackCapabilityRequested: row.rollback_capability_requested === true,
     baselineVersionId: row.baseline_version_id === null ? null : String(row.baseline_version_id),
     baselineStorageExisted: row.baseline_storage_existed === null ? null : row.baseline_storage_existed === true,
     baselineFeedHash: row.baseline_feed_hash === null ? null : String(row.baseline_feed_hash),
