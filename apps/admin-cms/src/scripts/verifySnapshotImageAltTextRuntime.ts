@@ -1902,7 +1902,198 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
         }
       },
     );
-    await scenario(70, 'The verifier created no public media and no published rows', () => {
+    await scenario(70, 'Review submission blocks a snapshot whose authoritative media is no longer private',
+      async () => {
+        const target = seedProject(
+          prefix,
+          'submit-invalid-snapshot-private-state',
+          fixture!,
+          {
+            inBatch: true,
+            snapshotAlt: 'Description for snapshot one.',
+          },
+        );
+
+        const before = projectState(target);
+
+        // Keep the snapshot otherwise structurally valid, but deliberately
+        // contradict the authoritative private-media state.
+        executeLocalSql(`
+          UPDATE public.media_assets
+              SET storage_bucket = 'project-public-assets'
+            WHERE project_id = (
+              SELECT id
+                FROM public.projects
+              WHERE public_id = ${sqlText(target)}
+            )
+              AND asset_type = 'snapshot_image'
+              AND gallery_position = 1;
+        `);
+
+        const { data } = await serviceClient.rpc(
+          'submit_import_projects_for_review',
+          {
+            p_batch_id: fixture!.batchId,
+            p_project_public_ids: [target],
+            p_admin_id: fixture!.admin.id,
+            p_comments: null,
+          },
+        ) as RpcResult;
+
+        assert(
+          data?.resultCode === 'READINESS_BLOCKED',
+          `Expected READINESS_BLOCKED, got ${JSON.stringify(data)}`,
+        );
+
+        assert(
+          JSON.stringify(data?.blockingReasons ?? []).includes(
+            'MISSING_OR_INCONSISTENT_SNAPSHOT_MEDIA',
+          ),
+          `Expected MISSING_OR_INCONSISTENT_SNAPSHOT_MEDIA, got ${JSON.stringify(
+            data?.blockingReasons,
+          )}`,
+        );
+
+        assert(
+          projectState(target).status === 'draft',
+          'A project with malformed snapshot private state entered review.',
+        );
+
+        assert(
+          projectState(target).audits === before.audits,
+          'A blocked malformed-gallery submission created an audit row.',
+        );
+
+        // Restore the synthetic fixture so later verifier checks are isolated.
+        executeLocalSql(`
+          UPDATE public.media_assets
+              SET storage_bucket = ${sqlText(PRIVATE_BUCKET)}
+            WHERE project_id = (
+              SELECT id
+                FROM public.projects
+              WHERE public_id = ${sqlText(target)}
+            )
+              AND asset_type = 'snapshot_image'
+              AND gallery_position = 1;
+        `);
+      },
+    );
+    await scenario(71, 'Publication readiness rejects malformed current snapshot private state before stale comparison',
+      async () => {
+        const target = seedProject(
+          prefix,
+          'readiness-invalid-snapshot-private-state',
+          fixture!,
+          {
+            status: 'approved',
+            snapshotAlt: SNAPSHOT_ALT,
+          },
+        );
+
+        const token = tokenPair();
+
+        const { data: preview } = await serviceClient.rpc(
+          'generate_participant_preview',
+          {
+            p_public_id: target,
+            p_admin_id: fixture!.admin.id,
+            p_token_hash: token.hash,
+            p_expires_in_seconds: 604800,
+            p_private_bucket: PRIVATE_BUCKET,
+            p_is_correction_reissue: false,
+          },
+        ) as RpcResult;
+
+        assert(
+          preview?.resultCode === 'SUCCESS',
+          `Could not generate baseline preview: ${JSON.stringify(preview)}`,
+        );
+
+        const { data: confirmation } = await serviceClient.rpc(
+          'confirm_participant_preview',
+          {
+            p_token_hash: token.hash,
+          },
+        ) as RpcResult;
+
+        assert(
+          confirmation?.resultCode === 'SUCCESS',
+          `Could not confirm baseline preview: ${JSON.stringify(confirmation)}`,
+        );
+
+        const { data: before } = await serviceClient.rpc(
+          'get_project_publication_readiness',
+          {
+            p_public_id: target,
+            p_admin_id: fixture!.admin.id,
+            p_private_bucket: PRIVATE_BUCKET,
+          },
+        ) as RpcResult;
+
+        assert(
+          before?.ready === true && before?.resultCode === 'READY',
+          `Baseline project was not READY: ${JSON.stringify(before)}`,
+        );
+
+        // Mutate only the current authoritative private/public state after
+        // confirmation. Identity, position, alt, MIME, size and filename
+        // remain unchanged.
+        executeLocalSql(`
+          UPDATE public.media_assets
+              SET storage_bucket = 'project-public-assets'
+            WHERE project_id = (
+              SELECT id
+                FROM public.projects
+              WHERE public_id = ${sqlText(target)}
+            )
+              AND asset_type = 'snapshot_image'
+              AND gallery_position = 1;
+        `);
+
+        const { data: after } = await serviceClient.rpc(
+          'get_project_publication_readiness',
+          {
+            p_public_id: target,
+            p_admin_id: fixture!.admin.id,
+            p_private_bucket: PRIVATE_BUCKET,
+          },
+        ) as RpcResult;
+
+        assert(
+          after?.ready === false &&
+            after?.resultCode === 'READINESS_UNAVAILABLE',
+          `Malformed current gallery did not fail closed: ${JSON.stringify(after)}`,
+        );
+
+        assert(
+          JSON.stringify(after?.blockers ?? []).includes(
+            'Current snapshot media state is malformed',
+          ),
+          `Expected malformed snapshot media blocker, got ${JSON.stringify(
+            after?.blockers,
+          )}`,
+        );
+
+        assert(
+          projectState(target).status === 'approved',
+          'Publication readiness mutated the project workflow status.',
+        );
+
+        // Restore the synthetic fixture after the assertion.
+        executeLocalSql(`
+          UPDATE public.media_assets
+              SET storage_bucket = ${sqlText(PRIVATE_BUCKET)}
+            WHERE project_id = (
+              SELECT id
+                FROM public.projects
+              WHERE public_id = ${sqlText(target)}
+            )
+              AND asset_type = 'snapshot_image'
+              AND gallery_position = 1;
+        `);
+      },
+    );
+    await scenario(72, 'The verifier created no public media and no published rows', () => {
       const leakage = queryLocalJson<{ publicMedia: number; published: number; snapshots: number }>(`
         SELECT pg_catalog.jsonb_build_object(
           'publicMedia', (SELECT pg_catalog.count(*) FROM public.media_assets ma JOIN public.projects p ON p.id = ma.project_id

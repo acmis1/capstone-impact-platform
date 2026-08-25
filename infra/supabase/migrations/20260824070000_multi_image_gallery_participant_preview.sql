@@ -30,6 +30,9 @@ DECLARE
   v_preview_id uuid;
   v_snapshot jsonb;
   v_media_snapshot jsonb;
+  v_snapshot_count integer;
+  v_valid_snapshot_count integer;
+  v_distinct_snapshot_positions integer;
   v_has_edit boolean;
   v_has_review boolean;
 BEGIN
@@ -255,10 +258,71 @@ BEGIN
   END IF;
 
   ---------------------------------------------------------------------------
+  -- 6a. Task 3 authoritative snapshot-gallery integrity gate.
+  --
+  -- Zero snapshots is valid. If snapshots exist, every authoritative
+  -- snapshot row must be usable private staged media. No contradictory row
+  -- may be silently filtered out of the immutable participant preview.
+  ---------------------------------------------------------------------------
+
+  SELECT
+    pg_catalog.count(*),
+
+    pg_catalog.count(*) FILTER (
+      WHERE
+        ma.storage_bucket = v_private_bucket
+        AND ma.storage_path = pg_catalog.btrim(ma.storage_path)
+        AND pg_catalog.left(
+              ma.storage_path,
+              pg_catalog.length(
+                'drafts/' || v_public_id || '/snapshot_image/'
+              )
+            ) =
+            'drafts/' || v_public_id || '/snapshot_image/'
+        AND pg_catalog.right(
+              ma.storage_path,
+              pg_catalog.length(ma.file_name)
+            ) = ma.file_name
+        AND pg_catalog.strpos(ma.storage_path, '..') = 0
+        AND pg_catalog.strpos(ma.storage_path, E'\\') = 0
+        AND ma.file_name = pg_catalog.btrim(ma.file_name)
+        AND ma.file_name <> ''
+        AND pg_catalog.strpos(ma.file_name, '..') = 0
+        AND pg_catalog.strpos(ma.file_name, '/') = 0
+        AND pg_catalog.strpos(ma.file_name, E'\\') = 0
+        AND ma.mime_type IN ('image/png', 'image/jpeg', 'image/webp')
+        AND ma.file_size_bytes BETWEEN 1 AND 5242880
+        AND ma.is_public_approved = false
+        AND ma.public_url IS NULL
+        AND ma.public_storage_bucket IS NULL
+        AND ma.public_storage_path IS NULL
+        AND ma.gallery_position BETWEEN 1 AND 10
+    ),
+
+    pg_catalog.count(DISTINCT ma.gallery_position)
+
+    INTO
+      v_snapshot_count,
+      v_valid_snapshot_count,
+      v_distinct_snapshot_positions
+
+    FROM public.media_assets ma
+   WHERE ma.project_id = v_project_id
+     AND ma.asset_type = 'snapshot_image';
+
+  IF v_snapshot_count > 10
+     OR v_valid_snapshot_count <> v_snapshot_count
+     OR v_distinct_snapshot_positions <> v_snapshot_count
+  THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'resultCode',
+      'INVALID_SELECTION'
+    );
+  END IF;
   -- 6b. Task 3 multi-image accessibility gate.
   --
-  -- Fail closed if ANY private snapshot that would be captured by this
-  -- preview lacks usable authoritative alt text.
+  -- Fail closed if ANY authoritative snapshot row lacks usable
+  -- authoritative alt text.
   ---------------------------------------------------------------------------
 
   IF EXISTS (
@@ -266,9 +330,6 @@ BEGIN
       FROM public.media_assets ma
      WHERE ma.project_id = v_project_id
        AND ma.asset_type = 'snapshot_image'
-       AND ma.storage_bucket = v_private_bucket
-       AND ma.is_public_approved = false
-       AND ma.public_url IS NULL
        AND (
          pg_catalog.btrim(
            COALESCE(ma.alt_text_public, '')

@@ -266,11 +266,25 @@ ON CONFLICT (id) DO NOTHING;
 --
 -- Poster rows deliberately keep a NULL alt_text_public: the poster's text alternative is the
 -- project-level accessibility_text_public and is never duplicated onto the media asset.
-INSERT INTO public.media_assets (id, project_id, asset_type, file_name, storage_bucket, storage_path, public_url, mime_type, file_size_bytes, is_public_approved, alt_text_public) VALUES
+INSERT INTO public.media_assets (
+  id,
+  project_id,
+  asset_type,
+  gallery_position,
+  file_name,
+  storage_bucket,
+  storage_path,
+  public_url,
+  mime_type,
+  file_size_bytes,
+  is_public_approved,
+  alt_text_public
+) VALUES
   (
     'f0000000-0000-0000-0000-000000000003',
     'e0000000-0000-0000-0000-000000000001',
     'snapshot_image',
+    1,
     'snapshot1.png',
     'project-public-assets',
     '2026/traffic-engine/snapshot1.png',
