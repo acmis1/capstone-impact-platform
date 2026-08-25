@@ -65,7 +65,7 @@ async function main(): Promise<void> {
 
   try {
     assertCliSuccess(
-      runLocalSupabaseCli('reset', root, { resetVersion: MIGRATION_30_VERSION }),
+      runLocalSupabaseCli('reset', root, { resetVersion: MIGRATION_30_VERSION, skipSeed: true }),
       'reset through Migration 0030',
     );
     scenario('database is exactly at Migration 0030 before fixture insertion', () => {
@@ -88,6 +88,23 @@ async function main(): Promise<void> {
         'Synthetic Upgrade Project', 'Disposable Migration 0030 fixture.', 'draft', 2026,
         'Synthetic Software Engineering', 'Software Engineering', 'Synthetic Upgrade Group',
         ARRAY['Synthetic Member']::text[]
+      );
+      -- Legacy pre-gallery media. At Migration 0030 the gallery_position column
+      -- does not exist yet, so this is exactly the shape a real database holds
+      -- before the multi-image gallery upgrade.
+      INSERT INTO public.media_assets (
+        project_id, asset_type, file_name, storage_bucket, storage_path,
+        mime_type, file_size_bytes, is_public_approved
+      ) VALUES (
+        ${sqlLiteral(projectId)}::uuid, 'snapshot_image', 'snapshot-1.png',
+        'project-drafts-private',
+        ${sqlLiteral(`drafts/2026-${prefix}/snapshot_image/snapshot-1.png`)},
+        'image/png', 524288, false
+      ), (
+        ${sqlLiteral(projectId)}::uuid, 'poster_image', 'poster.png',
+        'project-drafts-private',
+        ${sqlLiteral(`drafts/2026-${prefix}/poster_image/poster.png`)},
+        'image/png', 1048576, false
       );
     `);
 
@@ -131,10 +148,52 @@ async function main(): Promise<void> {
       assert.equal(JSON.parse(findingsBefore).length, 1);
     });
 
-    assertCliSuccess(runLocalSupabaseCli('migration-up', root), 'apply pending Migrations 0031 through 0035');
-    scenario('Migrations 0031 through 0035 apply as the only pending migrations', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '35');
+    assertCliSuccess(runLocalSupabaseCli('migration-up', root), 'apply pending Migrations 0031 through 0042');
+    scenario('Migrations 0031 through 0042 apply as the only pending migrations', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '42');
       assert.equal(psql("SELECT to_regclass('public.assistive_validation_jobs') IS NOT NULL;"), 't');
+    });
+
+    scenario('the legacy pre-gallery snapshot is backfilled to gallery position 1', () => {
+      // Migration 0034 must give every pre-existing snapshot an authoritative
+      // position BEFORE it installs the gallery-position constraint. If the
+      // backfill were dropped or reordered, adding the constraint would fail
+      // validation against this row and the upgrade would abort here.
+      assert.equal(
+        psql(`
+          SELECT ma.gallery_position
+          FROM public.media_assets AS ma
+          WHERE ma.project_id = ${sqlLiteral(projectId)}::uuid
+            AND ma.asset_type = 'snapshot_image';
+        `),
+        '1',
+      );
+
+      // Fixed single-role media must stay position-free across the upgrade.
+      assert.equal(
+        psql(`
+          SELECT COALESCE(ma.gallery_position::text, 'null')
+          FROM public.media_assets AS ma
+          WHERE ma.project_id = ${sqlLiteral(projectId)}::uuid
+            AND ma.asset_type = 'poster_image';
+        `),
+        'null',
+      );
+    });
+
+    scenario('the upgraded schema refuses a snapshot with no gallery position', () => {
+      // A CHECK constraint accepts NULL as well as TRUE, so the bound alone was
+      // not enough: an unpositioned snapshot made the expression NULL and was
+      // accepted. Prove the upgraded database now rejects it outright.
+      const rejected = psql(`
+        SELECT CASE WHEN EXISTS (
+          SELECT 1 FROM pg_catalog.pg_constraint AS c
+          WHERE c.conname = 'media_assets_gallery_position_check'
+            AND pg_catalog.pg_get_constraintdef(c.oid) LIKE '%gallery_position IS NOT NULL%'
+        ) THEN 't' ELSE 'f' END;
+      `);
+
+      assert.equal(rejected, 't');
     });
 
     const job = (runId: string) => JSON.parse(psql(`

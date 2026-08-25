@@ -11,7 +11,7 @@ describe('projectValidation', () => {
   const completePrivateMedia: ApprovalMediaInput = {
     posterImage: { rowCount: 1, validPrivateCount: 1 },
     posterPdf: { rowCount: 1, validPrivateCount: 1 },
-    snapshotMedia: null,
+    snapshotMedia: [],
   };
 
   describe('validateProjectForReview', () => {
@@ -99,7 +99,7 @@ describe('projectValidation', () => {
       const result = validateProjectForApproval(createMockProject(), {
         posterImage: { rowCount: 0, validPrivateCount: 0 },
         posterPdf: { rowCount: 0, validPrivateCount: 0 },
-        snapshotMedia: null,
+        snapshotMedia: [],
       });
       expect(result.valid).toBe(false);
       expect(result.errors.join(' ')).toContain('Poster image is missing');
@@ -110,7 +110,7 @@ describe('projectValidation', () => {
       const result = validateProjectForApproval(createMockProject(), {
         posterImage: { rowCount: 2, validPrivateCount: 1 },
         posterPdf: { rowCount: 1, validPrivateCount: 0 },
-        snapshotMedia: null,
+        snapshotMedia: [],
       });
       expect(result.valid).toBe(false);
       expect(result.errors.join(' ')).toContain('Poster image in staged project media is invalid');
@@ -180,12 +180,24 @@ describe('projectValidation', () => {
     it('enforces snapshot alt text only when a valid private snapshot row exists', () => {
       expect(validateProjectForApproval(createMockProject(), {
         ...completePrivateMedia,
-        snapshotMedia: { rowCount: 1, validPrivateCount: 1, altText: 'A described snapshot.' },
+        snapshotMedia: [
+          {
+            galleryPosition: 1,
+            validPrivate: true,
+            altText: 'A described snapshot.',
+          },
+        ],
       }).valid).toBe(true);
 
       const blank = validateProjectForApproval(createMockProject(), {
         ...completePrivateMedia,
-        snapshotMedia: { rowCount: 1, validPrivateCount: 1, altText: '   ' },
+        snapshotMedia: [
+          {
+            galleryPosition: 1,
+            validPrivate: true,
+            altText: '   ',
+          },
+        ]
       });
       expect(blank.valid).toBe(false);
       expect(blank.errors.join(' ')).toContain('Snapshot image alt text is missing');

@@ -9,6 +9,7 @@ import {
   ProjectFilterOptions,
 } from '../../domain/projectQuery';
 import { requireAdmin } from '../../auth/requireAdmin';
+import type { AuthenticatedAdminContext } from '../../auth/authTypes';
 import { hasPermission } from '../../auth/permissions';
 import { DashboardMetricsSummary } from '../../components/admin-dashboard/DashboardMetricsSummary';
 import { ProjectFilterBar } from '../../components/admin-dashboard/ProjectFilterBar';
@@ -18,6 +19,7 @@ import { DashboardPreferencesProvider } from '../../components/admin-dashboard/u
 import { Button } from '../../components/ui/button';
 import { ErrorState } from '../../components/ui/error-state';
 import { EmptyState } from '../../components/ui/empty-state';
+import { BulkProjectReviewBusyProvider } from '../../components/admin-dashboard/BulkProjectReviewBusyContext';
 
 import {
   toProjectIndexRow,
@@ -38,15 +40,29 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   let metrics: ProjectDashboardMetrics | null = null;
   let filterOptions: ProjectFilterOptions = { years: [], programs: [], disciplines: [] };
   let loadError: boolean = false;
-  let canImport = false;
 
+  // Authorization is the first gate, and it is authoritative for this page. The admin layout
+  // renders the canonical auth screen, but the page must never rely on that: a failure here
+  // returns immediately so no service-role repository is ever constructed or queried for an
+  // unverified session.
+  let authContext: AuthenticatedAdminContext;
   try {
-    const authContext = await requireAdmin();
-    canImport = hasPermission(authContext.permissions, 'projects.edit');
+    authContext = await requireAdmin();
   } catch {
-    // The admin layout already guards this route; an unavailable permission context
-    // only means the contextual import action stays hidden.
+    return (
+      <div className="flex w-full flex-col gap-6">
+        <ErrorState
+          title="Projects are unavailable"
+          description="Your administrative session could not be verified. Sign in again to view project records."
+          headingLevel="h1"
+        />
+      </div>
+    );
   }
+
+  const canImport = hasPermission(authContext.permissions, 'projects.edit');
+  const canSubmitBulk = hasPermission(authContext.permissions, 'projects.edit');
+  const canReviewBulk = hasPermission(authContext.permissions, 'projects.review');
 
   try {
     const repository = new SupabaseProjectRepository();
@@ -130,36 +146,43 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
           <DashboardMetricsSummary metrics={metrics} />
 
           <DashboardPreferencesProvider>
-            <ProjectFilterBar
-              query={query}
-              availableYears={filterOptions.years}
-              availablePrograms={filterOptions.programs}
-              availableDisciplines={filterOptions.disciplines}
-            />
+            <BulkProjectReviewBusyProvider>
+              <ProjectFilterBar
+                query={query}
+                availableYears={filterOptions.years}
+                availablePrograms={filterOptions.programs}
+                availableDisciplines={filterOptions.disciplines}
+              />
 
-            {clientResult.total === 0 ? (
-              hasActiveFilters ? (
-                <NoMatchingProjectsState query={query} />
+              {clientResult.total === 0 ? (
+                hasActiveFilters ? (
+                  <NoMatchingProjectsState query={query} />
+                ) : (
+                  <EmptyState
+                    icon={FolderOpen}
+                    title="No project records available"
+                    description="There are currently no active capstone project records stored in the staging database repository."
+                    action={
+                      canImport ? (
+                        <Button asChild className="min-h-[44px]">
+                          <Link href="/admin/imports/new">
+                            <Plus aria-hidden="true" />
+                            New import
+                          </Link>
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                )
               ) : (
-                <EmptyState
-                  icon={FolderOpen}
-                  title="No project records available"
-                  description="There are currently no active capstone project records stored in the staging database repository."
-                  action={
-                    canImport ? (
-                      <Button asChild className="min-h-[44px]">
-                        <Link href="/admin/imports/new">
-                          <Plus aria-hidden="true" />
-                          New import
-                        </Link>
-                      </Button>
-                    ) : undefined
-                  }
+                <ProjectTableContainer
+                  query={query}
+                  result={clientResult}
+                  canSubmitBulk={canSubmitBulk}
+                  canReviewBulk={canReviewBulk}
                 />
-              )
-            ) : (
-              <ProjectTableContainer query={query} result={clientResult} />
-            )}
+              )}
+            </BulkProjectReviewBusyProvider>
           </DashboardPreferencesProvider>
         </>
       )}

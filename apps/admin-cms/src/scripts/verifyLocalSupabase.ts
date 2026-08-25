@@ -108,23 +108,79 @@ function hashStringToNumber(str: string): number {
   return Math.abs(hash);
 }
 
-function mapSnapshotMedia(row: Record<string, unknown>): Project['snapshotMedia'] {
-  const snapshots = Array.isArray(row.snapshots) ? (row.snapshots as string[]) : [];
-  const assets = Array.isArray(row.media_assets) ? (row.media_assets as Array<Record<string, unknown>>) : [];
-  if (snapshots.length === 0 || assets.length === 0) return [];
+function mapSnapshotMedia(
+  row: Record<string, unknown>,
+): Project['snapshotMedia'] {
+  const snapshots =
+    Array.isArray(row.snapshots)
+      ? (row.snapshots as string[])
+      : [];
 
-  const altByUrl = new Map<string, string>();
+  const assets =
+    Array.isArray(row.media_assets)
+      ? (row.media_assets as Array<Record<string, unknown>>)
+      : [];
+
+  if (snapshots.length === 0 || assets.length === 0) {
+    return [];
+  }
+
+  const mediaByUrl = new Map<
+    string,
+    {
+      altText: string;
+      galleryPosition: number;
+    }
+  >();
+
   for (const asset of assets) {
-    if (asset.asset_type !== 'snapshot_image' || asset.is_public_approved !== true) continue;
-    const url = typeof asset.public_url === 'string' ? asset.public_url : '';
-    const altText = typeof asset.alt_text_public === 'string' ? asset.alt_text_public.trim() : '';
-    if (url === '' || altText === '') continue;
-    altByUrl.set(url, altText);
+    if (
+      asset.asset_type !== 'snapshot_image' ||
+      asset.is_public_approved !== true
+    ) {
+      continue;
+    }
+
+    const url =
+      typeof asset.public_url === 'string'
+        ? asset.public_url
+        : '';
+
+    const altText =
+      typeof asset.alt_text_public === 'string'
+        ? asset.alt_text_public.trim()
+        : '';
+
+    const galleryPosition = asset.gallery_position;
+
+    if (
+      url === '' ||
+      altText === '' ||
+      typeof galleryPosition !== 'number' ||
+      !Number.isInteger(galleryPosition) ||
+      galleryPosition < 1 ||
+      galleryPosition > 10
+    ) {
+      continue;
+    }
+
+    mediaByUrl.set(url, {
+      altText,
+      galleryPosition,
+    });
   }
 
   return snapshots
-    .filter((url) => altByUrl.has(url))
-    .map((url) => ({ url, altText: altByUrl.get(url) as string }));
+    .filter((url) => mediaByUrl.has(url))
+    .map((url) => {
+      const media = mediaByUrl.get(url)!;
+
+      return {
+        url,
+        altText: media.altText,
+        galleryPosition: media.galleryPosition,
+      };
+    });
 }
 
 function mapDbRowToProject(row: Record<string, unknown>): Project {
@@ -670,7 +726,9 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
   // 5. Synthetic project seed & Feed verification
   const { data: dbProjects, error: projErr } = await adminClient
     .from('projects')
-    .select('*, media_assets(asset_type,public_url,alt_text_public,is_public_approved)');
+    .select(
+      '*, media_assets(asset_type,gallery_position,public_url,alt_text_public,is_public_approved)',
+    );
   if (projErr || !dbProjects || dbProjects.length === 0) {
     console.error('❌ Synthetic project verification failed: No project rows found.');
     return false;

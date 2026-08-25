@@ -924,6 +924,7 @@ describe('Browser Import Preview Suite', () => {
         },
         posterImage: { fileName: 'poster.png', fileSizeBytes: 1000, mimeType: 'image/png', content: Buffer.from('img') },
         posterPdf: { fileName: 'poster.pdf', fileSizeBytes: 2000, mimeType: 'application/pdf', content: Buffer.from('pdf') },
+        galleryImages: [],
         snapshot1: null,
       };
 

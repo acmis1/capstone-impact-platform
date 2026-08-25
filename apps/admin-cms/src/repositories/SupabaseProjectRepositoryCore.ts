@@ -19,7 +19,7 @@ import {
  * bucket or draft path is ever read into a project the feed is compiled from.
  */
 const PROJECT_WITH_RELATIONS_SELECT =
-  '*, project_disciplines(disciplines(name)), media_assets(asset_type,public_url,alt_text_public,is_public_approved)';
+  '*, project_disciplines(disciplines(name)), media_assets(asset_type,gallery_position,public_url,alt_text_public,is_public_approved)';
 
 /** Maximum number of lightweight filter-option rows fetched per database round-trip. */
 const PROJECT_FILTER_OPTION_CHUNK_SIZE = 500;
@@ -81,6 +81,7 @@ export interface DatabaseProjectRow {
    */
   media_assets?: Array<{
     asset_type?: string;
+    gallery_position: number | null;
     public_url?: string | null;
     alt_text_public?: string | null;
     is_public_approved?: boolean | null;
@@ -98,27 +99,70 @@ export interface DatabaseProjectRow {
  */
 function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
   const snapshots = row.snapshots || [];
-  if (snapshots.length === 0 || !Array.isArray(row.media_assets)) return [];
 
-  const altByUrl = new Map<string, string>();
+  if (snapshots.length === 0 || !Array.isArray(row.media_assets)) {
+    return [];
+  }
+
+  const mediaByUrl = new Map<
+    string,
+    {
+      altText: string;
+      galleryPosition: number;
+    }
+  >();
+
   for (const asset of row.media_assets) {
     if (asset.asset_type !== 'snapshot_image') continue;
     if (asset.is_public_approved !== true) continue;
-    const url = typeof asset.public_url === 'string' ? asset.public_url : '';
-    const altText = typeof asset.alt_text_public === 'string' ? asset.alt_text_public.trim() : '';
-    if (url === '' || altText === '') continue;
-    altByUrl.set(url, altText);
+
+    const url =
+      typeof asset.public_url === 'string'
+        ? asset.public_url
+        : '';
+
+    const altText =
+      typeof asset.alt_text_public === 'string'
+        ? asset.alt_text_public.trim()
+        : '';
+
+    const galleryPosition = asset.gallery_position;
+
+    if (
+      url === '' ||
+      altText === '' ||
+      typeof galleryPosition !== 'number' ||
+      !Number.isInteger(galleryPosition) ||
+      galleryPosition < 1 ||
+      galleryPosition > 10
+    ) {
+      continue;
+    }
+
+    mediaByUrl.set(url, {
+      altText,
+      galleryPosition,
+    });
   }
 
   return snapshots
-    .filter((url) => altByUrl.has(url))
-    .map((url) => ({ url, altText: altByUrl.get(url) as string }));
+    .filter((url) => mediaByUrl.has(url))
+    .map((url) => {
+      const media = mediaByUrl.get(url)!;
+
+      return {
+        url,
+        altText: media.altText,
+        galleryPosition: media.galleryPosition,
+      };
+    });
 }
 
 export class SupabaseProjectRepositoryCore implements ProjectRepository {
   constructor(protected readonly supabase: SupabaseClient) {}
 
-  protected mapDbToDomain(row: DatabaseProjectRow): Project {
+  /** Shared read-only mapper for bounded server-side workflow queries. */
+  public mapDbToDomain(row: DatabaseProjectRow): Project {
     const joinedDisciplines = row.project_disciplines?.map((pd) => pd.disciplines?.name).filter(Boolean) as string[] || [];
     const finalDisciplines = joinedDisciplines.length > 0 
       ? joinedDisciplines 

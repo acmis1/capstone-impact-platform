@@ -151,18 +151,40 @@ function completeEvidence(overrides: Partial<HostedReadinessEvidence> = {}): Hos
 
 describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () => {
   describe('authoritative migration, table, and RPC inventory', () => {
-    it('matches the exact 35 migration files and keeps every historical file byte-identical to origin/main', () => {
+    it('matches the exact repository migration inventory and keeps every historical migration byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(35);
+
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(42);
+
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
-      expect(() => execFileSync(
-        'git',
-        ['diff', '--exit-code', 'origin/main', '--', ...EXPECTED_REPOSITORY_MIGRATIONS.slice(0, -2).map(
-          (historical) => `infra/supabase/migrations/${historical}`,
-        )],
-        { cwd: repoRoot, stdio: 'pipe' },
-      )).not.toThrow();
+      // Only this branch's own two unmerged Stream K migrations are new relative
+      // to origin/main. Every other file - including the merged Tan gallery and
+      // Binh bulk-review migrations - must stay byte-identical to main.
+      const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.filter(
+        (migration) =>
+          migration !== '20260824180000_public_feed_deployment_ledger.sql' &&
+          migration !== '20260824183000_public_feed_writer_protocol.sql',
+      );
+
+      expect(historicalMigrations).toHaveLength(40);
+
+      expect(() =>
+        execFileSync(
+          'git',
+          [
+            'diff',
+            '--exit-code',
+            'origin/main',
+            '--',
+            ...historicalMigrations.map(
+              (historical) =>
+                `infra/supabase/migrations/${historical}`,
+            ),
+          ],
+          { cwd: repoRoot, stdio: 'pipe' },
+        ),
+      ).not.toThrow();
     });
 
     it('matches exact application CREATE TABLE definitions rather than a count alone', () => {
@@ -186,7 +208,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches every final service-role application RPC signature and isolates the one internal helper', () => {
       const contracts = migrationServiceRoleContracts();
       expect(contracts.application.map(contractKey).sort()).toEqual(REQUIRED_RPC_SIGNATURES.map(contractKey).sort());
-      expect(contracts.application).toHaveLength(69);
+      expect(contracts.application).toHaveLength(71);
       expect(REQUIRED_RPC_NAMES).toContain('persist_assistive_validation_run');
       expect(REQUIRED_RPC_NAMES).toContain('record_assistive_finding_disposition');
       expect(REQUIRED_RPC_NAMES).toContain('claim_next_assistive_validation_job');
@@ -236,7 +258,9 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const missingMigration = evaluateHostedDeploymentReadiness(
         completeEvidence({ recordedMigrationVersions: [], manualEvidence: undefined })
       );
-      expect(missingMigration.missingMigrations).toHaveLength(35);
+      expect(missingMigration.missingMigrations).toHaveLength(
+        EXPECTED_REPOSITORY_MIGRATION_COUNT,
+      );
       expect(missingMigration.deploymentClassification).toBe('RECONCILIATION_REQUIRED');
     });
 
@@ -312,7 +336,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const inspected = inspectPostgrestOpenApi(openApiDocument());
       expect(inspected?.publicRelations).toEqual([...ALL_REQUIRED_TABLES].sort());
       expect(inspected?.rpcNames).toEqual([...REQUIRED_RPC_NAMES].sort());
-      expect(inspected?.rpcSignatures).toHaveLength(68);
+      expect(inspected?.rpcSignatures).toHaveLength(70);
       expect(inspected?.rpcSignatures.some((signature) => signature.name === 'execute_controlled_publication')).toBe(false);
     });
 

@@ -104,6 +104,7 @@ export class SupabaseSnapshotAltTextGateway implements SnapshotAltTextGateway {
   async updateSnapshotAltTextAtomically(input: SnapshotAltTextInput, actorAdminUserId: string): Promise<unknown> {
     const { data, error } = await this.supabase.rpc('update_snapshot_image_alt_text', {
       p_public_id: input.publicId,
+      p_media_asset_id: input.mediaAssetId,
       p_alt_text: input.snapshotAltText,
       p_expected_updated_at: input.expectedUpdatedAt,
       p_admin_id: actorAdminUserId,

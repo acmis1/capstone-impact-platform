@@ -254,8 +254,8 @@ async function main(): Promise<void> {
     // ---------------------------------------------------------------------
     // Schema, constraints, RLS and privileges
     // ---------------------------------------------------------------------
-    await scenario(1, 'Local Supabase applied exactly 35 migrations from zero', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '35');
+    await scenario(1, 'Local Supabase applied exactly 42 migrations from zero', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '42');
     });
 
     await scenario(2, 'both assistive tables exist and a finding cannot restate run identity', () => {

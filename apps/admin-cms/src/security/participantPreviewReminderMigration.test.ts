@@ -15,7 +15,7 @@ describe('participant preview reminder migration contract', () => {
   it('is exactly Migration 0024 and preserves all inherited migration bytes', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(35);
+    expect(files).toHaveLength(EXPECTED_MIGRATION_FILENAMES.length);
     expect(files[23]).toBe(filename);
     for (const inherited of files.slice(0, 23)) {
       const local = fs.readFileSync(path.join(migrations, inherited), 'utf8').replace(/\r\n/g, '\n');

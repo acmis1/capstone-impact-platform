@@ -43,7 +43,7 @@ const candidate = composePublicFeedPublication(
 
 function mediaBinding(overrides: Partial<PublicationMediaBinding> = {}): PublicationMediaBinding {
   return {
-    mediaAssetId: '33333333-3333-4333-8333-333333333333', assetType: 'poster_image',
+    mediaAssetId: '33333333-3333-4333-8333-333333333333', assetType: 'poster_image', galleryPosition: null,
     fileName: 'poster.png', mimeType: 'image/png', fileSizeBytes: 12,
     sourceBucket: 'private', sourcePath: 'drafts/target/poster.png',
     publicBucket: 'assets', publicPath: 'published/target/poster.png',

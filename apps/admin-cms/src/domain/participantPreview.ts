@@ -38,6 +38,7 @@ export interface ParticipantPreviewSnapshot {
 export interface ParticipantPreviewMediaRef {
   mediaAssetId: string;
   assetType: string;
+  galleryPosition: number | null;
   fileName: string;
   storageBucket: string;
   storagePath: string;
@@ -56,6 +57,7 @@ export interface ParticipantPreviewMediaRef {
 export interface ParticipantPreviewMediaViewRef {
   mediaAssetId: string;
   assetType: string;
+  galleryPosition: number | null;
   fileName: string;
   mimeType: string | null;
   /** Carried through from the immutable snapshot; never re-read from current media state. */

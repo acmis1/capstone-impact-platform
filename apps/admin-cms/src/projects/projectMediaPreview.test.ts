@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  compareProjectMediaDisplayOrder,
   deriveApprovalMediaInput,
+  validateSubmissionSnapshotGallery,
   loadProjectMediaPreviewItems,
   ProjectMediaPreviewReadError,
   toProjectMediaPreviewItem,
@@ -9,7 +11,7 @@ import {
 } from './projectMediaPreview';
 
 const privateRow: ProjectMediaAssetPreviewRow = {
-  id: 'asset-private', asset_type: 'poster_image', file_name: 'poster.png',
+  id: 'asset-private', asset_type: 'poster_image', gallery_position: null, file_name: 'poster.png',
   storage_bucket: 'draft-media', storage_path: 'drafts/private/poster.png', public_url: null,
   public_storage_bucket: null, public_storage_path: null,
   mime_type: 'image/png', file_size_bytes: 2048, is_public_approved: false, alt_text_public: null,
@@ -52,26 +54,63 @@ describe('project media preview read model', () => {
     expect(result.previewSource).toBe('unavailable');
   });
 
-  it('queries the exact project UUID with deterministic ordering', async () => {
+  it('queries the exact project UUID and applies the Admin display ordering centrally', async () => {
     const chain: Record<string, unknown> = {};
     const order = vi.fn();
     Object.assign(chain, { select: vi.fn(() => chain), eq: vi.fn(() => chain), order });
-    order.mockReturnValueOnce(chain).mockReturnValueOnce(chain).mockResolvedValueOnce({ data: [privateRow], error: null });
+    order.mockResolvedValueOnce({ data: [privateRow], error: null });
     const supabase = { from: vi.fn(() => chain) } as never;
 
     const result = await loadProjectMediaPreviewItems({ supabase, projectId: 'project-uuid', projectPublicId: 'private', projectTitle: 'Synthetic Project', privateBucket: 'draft-media', signDraftMediaUrl: vi.fn().mockResolvedValue(null) });
     expect(result).toHaveLength(1);
     expect((chain.eq as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith('project_id', 'project-uuid');
-    expect(order).toHaveBeenNthCalledWith(1, 'asset_type', { ascending: true });
-    expect(order).toHaveBeenNthCalledWith(2, 'created_at', { ascending: true });
-    expect(order).toHaveBeenNthCalledWith(3, 'id', { ascending: true });
+    expect(order).toHaveBeenCalledWith('id', { ascending: true });
+  });
+
+  it('orders the preview read model by fixed media role then numeric gallery position, not input order', async () => {
+    const rows: ProjectMediaAssetPreviewRow[] = [
+      { ...privateRow, id: 'snapshot-c', asset_type: 'snapshot_image', gallery_position: 3, file_name: 'snapshot-3.png', storage_path: 'drafts/private/snapshot_image/snapshot-3.png', alt_text_public: 'Snapshot three.' },
+      { ...privateRow, id: 'poster-image', asset_type: 'poster_image', gallery_position: null, storage_path: 'drafts/private/poster_image/poster.png' },
+      { ...privateRow, id: 'poster-pdf', asset_type: 'poster_pdf', gallery_position: null, file_name: 'poster.pdf', storage_path: 'drafts/private/poster_pdf/poster.pdf', mime_type: 'application/pdf' },
+      { ...privateRow, id: 'snapshot-a', asset_type: 'snapshot_image', gallery_position: 1, file_name: 'snapshot-1.png', storage_path: 'drafts/private/snapshot_image/snapshot-1.png', alt_text_public: 'Snapshot one.' },
+      { ...privateRow, id: 'snapshot-b', asset_type: 'snapshot_image', gallery_position: 2, file_name: 'snapshot-2.png', storage_path: 'drafts/private/snapshot_image/snapshot-2.png', alt_text_public: 'Snapshot two.' },
+    ];
+    const chain: Record<string, unknown> = {};
+    const order = vi.fn();
+    Object.assign(chain, { select: vi.fn(() => chain), eq: vi.fn(() => chain), order });
+    order.mockResolvedValueOnce({ data: rows, error: null });
+
+    const result = await loadProjectMediaPreviewItems({
+      supabase: { from: vi.fn(() => chain) } as never,
+      projectId: 'project-uuid',
+      projectPublicId: 'private',
+      projectTitle: 'Synthetic Project',
+      privateBucket: 'draft-media',
+      signDraftMediaUrl: vi.fn().mockResolvedValue(null),
+    });
+
+    expect(result.map((item) => item.id)).toEqual([
+      'poster-image', 'poster-pdf', 'snapshot-a', 'snapshot-b', 'snapshot-c',
+    ]);
+  });
+
+  it('places malformed snapshot positions after valid positions with an ID tie-breaker', () => {
+    const rows = [
+      { id: 'snapshot-null', asset_type: 'snapshot_image', gallery_position: null },
+      { id: 'snapshot-three', asset_type: 'snapshot_image', gallery_position: 3 },
+      { id: 'snapshot-one', asset_type: 'snapshot_image', gallery_position: 1 },
+    ];
+
+    expect([...rows].sort(compareProjectMediaDisplayOrder).map((row) => row.id)).toEqual([
+      'snapshot-one', 'snapshot-three', 'snapshot-null',
+    ]);
   });
 
   it('reports a media read failure without producing an empty-media result', async () => {
     const chain: Record<string, unknown> = {};
     const order = vi.fn();
     Object.assign(chain, { select: vi.fn(() => chain), eq: vi.fn(() => chain), order });
-    order.mockReturnValueOnce(chain).mockReturnValueOnce(chain).mockResolvedValueOnce({ data: null, error: { message: 'unavailable' } });
+    order.mockResolvedValueOnce({ data: null, error: { message: 'unavailable' } });
     await expect(loadProjectMediaPreviewItems({ supabase: { from: vi.fn(() => chain) } as never, projectId: 'project-uuid', projectPublicId: 'private', projectTitle: 'Synthetic Project', privateBucket: 'draft-media' })).rejects.toBeInstanceOf(ProjectMediaPreviewReadError);
   });
 
@@ -92,7 +131,7 @@ describe('project media preview read model', () => {
     expect(result).toEqual({
       posterImage: { rowCount: 1, validPrivateCount: 1 },
       posterPdf: { rowCount: 1, validPrivateCount: 1 },
-      snapshotMedia: null,
+      snapshotMedia: [],
     });
     expect(JSON.stringify(result)).not.toContain('drafts/private');
     expect(JSON.stringify(result)).not.toContain('draft-media');
@@ -117,5 +156,93 @@ describe('project media preview read model', () => {
 
     expect(result.posterImage).toEqual({ rowCount: 1, validPrivateCount: 0 });
     expect(result.posterPdf).toEqual({ rowCount: 1, validPrivateCount: 0 });
+  });
+
+  it('accepts a valid positioned snapshot gallery for submission and approval preflight', () => {
+    const snapshots = [1, 2, 3].map((gallery_position) => ({
+      ...privateRow,
+      id: `snapshot-${gallery_position}`,
+      asset_type: 'snapshot_image',
+      gallery_position,
+      file_name: `snapshot-${gallery_position}.png`,
+      storage_path: `drafts/private/snapshot_image/snapshot-${gallery_position}.png`,
+      alt_text_public: `Accessible snapshot ${gallery_position}.`,
+    }));
+
+    expect(validateSubmissionSnapshotGallery(snapshots, { projectPublicId: 'private', privateBucket: 'draft-media' })).toEqual([]);
+    expect(deriveApprovalMediaInput(snapshots, { projectPublicId: 'private', privateBucket: 'draft-media' }).snapshotMedia).toHaveLength(3);
+  });
+
+  it('requires persisted private media identity values to already be canonical', () => {
+    const params = { projectPublicId: 'private', privateBucket: 'draft-media' };
+    const posterImage = {
+      ...privateRow,
+      storage_path: 'drafts/private/poster_image/poster.png',
+    };
+    const posterPdf = {
+      ...privateRow,
+      id: 'poster-pdf',
+      asset_type: 'poster_pdf',
+      file_name: 'poster.pdf',
+      storage_path: 'drafts/private/poster_pdf/poster.pdf',
+      mime_type: 'application/pdf',
+    };
+    const snapshot = {
+      ...privateRow,
+      id: 'snapshot-1',
+      asset_type: 'snapshot_image',
+      gallery_position: 1,
+      file_name: 'snapshot-1.png',
+      storage_path: 'drafts/private/snapshot_image/snapshot-1.png',
+      alt_text_public: 'Accessible snapshot.',
+    };
+
+    expect(deriveApprovalMediaInput([posterImage, posterPdf, snapshot], params)).toEqual({
+      posterImage: { rowCount: 1, validPrivateCount: 1 },
+      posterPdf: { rowCount: 1, validPrivateCount: 1 },
+      snapshotMedia: [{ galleryPosition: 1, validPrivate: true, altText: 'Accessible snapshot.' }],
+    });
+    expect(validateSubmissionSnapshotGallery([snapshot], params)).toEqual([]);
+
+    for (const malformed of [
+      { ...snapshot, file_name: ' snapshot-1.png ' },
+      { ...snapshot, storage_path: ' drafts/private/snapshot_image/snapshot-1.png ' },
+      { ...snapshot, mime_type: ' image/png ' },
+    ]) {
+      expect(deriveApprovalMediaInput([malformed], params).snapshotMedia[0]).toMatchObject({ validPrivate: false });
+      expect(validateSubmissionSnapshotGallery([malformed], params)).toEqual([
+        'Snapshot gallery staged media is invalid.',
+      ]);
+    }
+
+    for (const malformed of [
+      { ...posterImage, file_name: ' poster.png ' },
+      { ...posterImage, storage_path: ' drafts/private/poster_image/poster.png ' },
+      { ...posterImage, mime_type: ' image/png ' },
+      { ...posterPdf, mime_type: ' application/pdf ' },
+    ]) {
+      const evidence = deriveApprovalMediaInput([malformed], params);
+      expect(evidence.posterImage.validPrivateCount + evidence.posterPdf.validPrivateCount).toBe(0);
+    }
+  });
+
+  it('blocks a visible malformed snapshot gallery without fabricating positions', () => {
+    const malformed = {
+      ...privateRow,
+      asset_type: 'snapshot_image',
+      gallery_position: 1,
+      file_name: 'snapshot-1.png',
+      storage_path: 'drafts/private/snapshot_image/snapshot-1.png',
+      mime_type: 'application/pdf',
+      alt_text_public: 'Accessible snapshot.',
+    };
+
+    expect(validateSubmissionSnapshotGallery([malformed], { projectPublicId: 'private', privateBucket: 'draft-media' })).toEqual([
+      'Snapshot gallery staged media is invalid.',
+    ]);
+    expect(deriveApprovalMediaInput([malformed], { projectPublicId: 'private', privateBucket: 'draft-media' }).snapshotMedia[0]).toMatchObject({
+      galleryPosition: 1,
+      validPrivate: false,
+    });
   });
 });

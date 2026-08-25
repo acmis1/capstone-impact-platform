@@ -75,19 +75,16 @@ export interface ApprovalMediaAssetEvidence {
   validPrivateCount: number;
 }
 
-export interface ApprovalSnapshotMediaInput extends ApprovalMediaAssetEvidence {
+export interface ApprovalSnapshotMediaInput {
+  galleryPosition: number | null;
+  validPrivate: boolean;
   altText: string | null;
 }
 
-/**
- * Server-derived evidence for the authoritative media rows used by approval. Counts are retained
- * instead of flattened booleans so duplicate or contradictory rows fail closed as invalid rather
- * than being mistaken for one usable asset.
- */
 export interface ApprovalMediaInput {
   posterImage: ApprovalMediaAssetEvidence;
   posterPdf: ApprovalMediaAssetEvidence;
-  snapshotMedia: ApprovalSnapshotMediaInput | null;
+  snapshotMedia: ApprovalSnapshotMediaInput[];
 }
 
 export function validateProjectForApproval(
@@ -146,13 +143,45 @@ export function validateProjectForApproval(
 
   // Snapshot media accessibility. Only evaluated when a snapshot image actually exists, because
   // the image itself is optional and nobody should be asked to describe one that is not there.
-  if (media?.snapshotMedia) {
-    if (media.snapshotMedia.rowCount !== 1 || media.snapshotMedia.validPrivateCount !== 1) {
-      errors.push(`${prefix} Snapshot image in staged project media is invalid. Approval blocked.`);
+  if (media && media.snapshotMedia.length > 0) {
+    const seenPositions = new Set<number>();
+    let snapshotMediaInvalid = media.snapshotMedia.length > 10;
+
+    for (const snapshot of media.snapshotMedia) {
+      const position = snapshot.galleryPosition;
+
+      if (
+        position === null ||
+        !Number.isInteger(position) ||
+        position < 1 ||
+        position > 10 ||
+        seenPositions.has(position) ||
+        !snapshot.validPrivate
+      ) {
+        snapshotMediaInvalid = true;
+      } else {
+        seenPositions.add(position);
+      }
+
+      const problem = getSnapshotAltTextProblem(
+        snapshot.altText,
+        { snapshotPresent: true },
+      );
+
+      if (problem) {
+        const message =
+          `${prefix} ${describeAccessibleContentProblem(problem, 'snapshotAltText')} Approval blocked.`;
+
+        if (!errors.includes(message)) {
+          errors.push(message);
+        }
+      }
     }
-    const problem = getSnapshotAltTextProblem(media.snapshotMedia.altText, { snapshotPresent: true });
-    if (problem) {
-      errors.push(`${prefix} ${describeAccessibleContentProblem(problem, 'snapshotAltText')} Approval blocked.`);
+
+    if (snapshotMediaInvalid) {
+      errors.push(
+        `${prefix} Snapshot gallery in staged project media is invalid. Approval blocked.`,
+      );
     }
   }
 

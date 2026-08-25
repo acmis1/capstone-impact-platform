@@ -187,7 +187,7 @@ The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpc
 - **Administrator Identity**: Initial staging administrator bootstrap completed; single Auth identity linked to `admin_users` profile with verified `admin` role in `user_roles` (`check:admin-auth` classification: `READY_FOR_MANUAL_LOGIN_TEST`).
 - **Next Lifecycle Action**: Standalone Admin/CMS hosted web service deployment and manual authenticated login verification.
 
-The repository now expects 35 migrations, ending at `20260824183000_public_feed_writer_protocol`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that any newer repository migration is hosted. In particular, the public deployment ledger/head, unified writer protocol, and rollback capability are not established by the historical hosted evidence. Any hosted reconciliation remains a separately authorized operation followed by independent review.
+The repository now expects 42 migrations, ending at `20260825025000_multi_image_gallery_review_submission`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that any newer repository migration is hosted. In particular, the multi-image gallery schema, the bulk-review concurrency gate, the public deployment ledger/head, the unified writer protocol, and rollback capability are not established by the historical hosted evidence. Any hosted reconciliation remains a separately authorized operation followed by independent review.
 
 Operators should **NOT** run `supabase migration repair` or replay migrations against this clean v2 environment.
 
@@ -217,7 +217,7 @@ Expected automated inspection output on the clean v2 staging target:
 - `MIGRATION_HISTORY_READABLE = NO`
 - `SCHEMA_BASELINE = UNVERIFIED`
 - `REQUIRED_TABLE_SET = PRESENT` (All 33 public application tables detected)
-- `REQUIRED_RPC_NAMES = PRESENT` (All 68 application RPC names detected; 69 exact signatures including the expected overload)
+- `REQUIRED_RPC_NAMES = PRESENT` (All 70 application RPC names detected; 71 exact signatures including the expected overload)
 - `REQUIRED_STORAGE_BUCKETS = PRESENT` (All 3 buckets detected)
 - `AUTH_FOUNDATION = READY`
 - `MANUAL_EVIDENCE_REQUIRED = YES`

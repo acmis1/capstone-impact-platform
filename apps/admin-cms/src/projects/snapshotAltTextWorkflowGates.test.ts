@@ -80,6 +80,145 @@ describe('review readiness snapshot alt gate', () => {
     });
     expect(readiness.blockingReasons).toContain('Poster full text is missing.');
   });
+
+  it('is ready when every snapshot in a multi-image gallery carries valid alt text', () => {
+    const readiness = computeProjectReviewReadiness({
+      ...readinessInput(null),
+      snapshots: [
+        'https://example.invalid/snapshot-1.png',
+        'https://example.invalid/snapshot-2.png',
+        'https://example.invalid/snapshot-3.png',
+      ],
+      mediaAssets: [
+        {
+          assetType: 'poster_image',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: null,
+        },
+        {
+          assetType: 'poster_pdf',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: null,
+        },
+        {
+          assetType: 'snapshot_image',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: 'Description for snapshot one.',
+        },
+        {
+          assetType: 'snapshot_image',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: 'Description for snapshot two.',
+        },
+        {
+          assetType: 'snapshot_image',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: 'Description for snapshot three.',
+        },
+      ],
+    });
+
+    expect(readiness.ready).toBe(true);
+    expect(readiness.blockingReasons).toHaveLength(0);
+  });
+
+  it('blocks when any snapshot in a multi-image gallery is missing alt text', () => {
+    const readiness = computeProjectReviewReadiness({
+      ...readinessInput(null),
+      snapshots: [
+        'https://example.invalid/snapshot-1.png',
+        'https://example.invalid/snapshot-2.png',
+        'https://example.invalid/snapshot-3.png',
+      ],
+      mediaAssets: [
+        {
+          assetType: 'poster_image',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: null,
+        },
+        {
+          assetType: 'poster_pdf',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: null,
+        },
+        {
+          assetType: 'snapshot_image',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: 'Description for snapshot one.',
+        },
+        {
+          assetType: 'snapshot_image',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: null,
+        },
+        {
+          assetType: 'snapshot_image',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: 'Description for snapshot three.',
+        },
+      ],
+    });
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.blockingReasons).toContain(MISSING_MESSAGE);
+    expect(readiness.warnings).not.toContain(MISSING_MESSAGE);
+  });
+
+  it('blocks when any snapshot in a multi-image gallery has oversized alt text', () => {
+    const readiness = computeProjectReviewReadiness({
+      ...readinessInput(null),
+      snapshots: [
+        'https://example.invalid/snapshot-1.png',
+        'https://example.invalid/snapshot-2.png',
+        'https://example.invalid/snapshot-3.png',
+      ],
+      mediaAssets: [
+        {
+          assetType: 'poster_image',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: null,
+        },
+        {
+          assetType: 'poster_pdf',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: null,
+        },
+        {
+          assetType: 'snapshot_image',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: VALID_ALT,
+        },
+        {
+          assetType: 'snapshot_image',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: 'a'.repeat(MAX + 1),
+        },
+        {
+          assetType: 'snapshot_image',
+          isPublicApproved: false,
+          publicUrl: null,
+          altText: 'Description for snapshot three.',
+        },
+      ],
+    });
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.blockingReasons).toContain(TOO_LONG_MESSAGE);
+  });
 });
 
 describe('approval validation snapshot alt gate', () => {
@@ -87,7 +226,7 @@ describe('approval validation snapshot alt gate', () => {
   const media = {
     posterImage: { rowCount: 1, validPrivateCount: 1 },
     posterPdf: { rowCount: 1, validPrivateCount: 1 },
-    snapshotMedia: null,
+    snapshotMedia: [],
   };
 
   it('permits approval when the project has no snapshot media', () => {
@@ -96,21 +235,41 @@ describe('approval validation snapshot alt gate', () => {
 
   it('permits approval when the snapshot media carries alt text', () => {
     expect(validateProjectForApproval(approvable, {
-      ...media, snapshotMedia: { rowCount: 1, validPrivateCount: 1, altText: VALID_ALT },
+      ...media, snapshotMedia: [
+          {
+            galleryPosition: 1,
+            validPrivate: true,
+            altText: VALID_ALT,
+          },
+        ]
     }).valid).toBe(true);
   });
 
   it('blocks approval when the snapshot media has no alt text', () => {
     const result = validateProjectForApproval(approvable, {
-      ...media, snapshotMedia: { rowCount: 1, validPrivateCount: 1, altText: null },
+      ...media,
+      snapshotMedia: [
+        {
+          galleryPosition: 1,
+          validPrivate: true,
+          altText: null,
+        },
+      ],
     });
+
     expect(result.valid).toBe(false);
     expect(result.errors.join(' ')).toContain(MISSING_MESSAGE);
   });
 
   it('blocks approval when the snapshot alt exceeds the safety limit', () => {
     const result = validateProjectForApproval(approvable, {
-      ...media, snapshotMedia: { rowCount: 1, validPrivateCount: 1, altText: 'a'.repeat(MAX + 1) },
+      ...media, snapshotMedia: [
+          {
+            galleryPosition: 1,
+            validPrivate: true,
+            altText: 'a'.repeat(MAX + 1),
+          },
+        ]
     });
     expect(result.valid).toBe(false);
     expect(result.errors.join(' ')).toContain(TOO_LONG_MESSAGE);
@@ -119,25 +278,87 @@ describe('approval validation snapshot alt gate', () => {
   it('keeps the inherited poster full-text requirement', () => {
     const result = validateProjectForApproval(
       createMockProject({ status: 'in_review', posterText: '' }),
-      { ...media, snapshotMedia: { rowCount: 1, validPrivateCount: 1, altText: VALID_ALT } },
-    );
+      { ...media, snapshotMedia: [
+        {
+          galleryPosition: 1,
+          validPrivate: true,
+          altText: VALID_ALT,
+        },
+      ]
+    });
     expect(result.valid).toBe(false);
     expect(result.errors.join(' ')).toContain('Poster full text is missing.');
+  });
+
+  it('permits approval when every image in a multi-image gallery is valid and described', () => {
+    const result = validateProjectForApproval(approvable, {
+      ...media,
+      snapshotMedia: [
+        { galleryPosition: 1, validPrivate: true, altText: 'Snapshot one.' },
+        { galleryPosition: 2, validPrivate: true, altText: 'Snapshot two.' },
+        { galleryPosition: 3, validPrivate: true, altText: 'Snapshot three.' },
+      ],
+    });
+
+    expect(result.valid).toBe(true);
+  });
+
+  it('blocks approval when any image in a multi-image gallery is missing alt text', () => {
+    const result = validateProjectForApproval(approvable, {
+      ...media,
+      snapshotMedia: [
+        { galleryPosition: 1, validPrivate: true, altText: 'Snapshot one.' },
+        { galleryPosition: 2, validPrivate: true, altText: null },
+        { galleryPosition: 3, validPrivate: true, altText: 'Snapshot three.' },
+      ],
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain(MISSING_MESSAGE);
+  });
+
+  it('blocks approval when gallery positions are duplicated', () => {
+    const result = validateProjectForApproval(approvable, {
+      ...media,
+      snapshotMedia: [
+        { galleryPosition: 1, validPrivate: true, altText: 'Snapshot one.' },
+        { galleryPosition: 1, validPrivate: true, altText: 'Snapshot two.' },
+      ],
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain(
+      'Snapshot gallery in staged project media is invalid.',
+    );
   });
 });
 
 describe('public feed snapshotMedia contract', () => {
-  const published = (overrides: Parameters<typeof createMockProject>[0] = {}) => createMockProject({
+  const published = (
+    overrides: Parameters<typeof createMockProject>[0] = {},
+  ) => createMockProject({
     status: 'published',
     snapshots: ['https://cdn.invalid/a.png'],
-    snapshotMedia: [{ url: 'https://cdn.invalid/a.png', altText: VALID_ALT }],
+    snapshotMedia: [
+      {
+        url: 'https://cdn.invalid/a.png',
+        altText: VALID_ALT,
+        galleryPosition: 1,
+      },
+    ],
     ...overrides,
   });
 
   it('emits both the compatible URL array and the structured pairing', () => {
     const [record] = compilePublicFeed([published()]);
     expect(record.snapshots).toEqual(['https://cdn.invalid/a.png']);
-    expect(record.snapshotMedia).toEqual([{ url: 'https://cdn.invalid/a.png', altText: VALID_ALT }]);
+    expect(record.snapshotMedia).toEqual([
+      {
+        url: 'https://cdn.invalid/a.png',
+        altText: VALID_ALT,
+        galleryPosition: 1,
+      },
+    ]);
     expect(validatePublicFeed([record]).valid).toBe(true);
   });
 
@@ -157,7 +378,13 @@ describe('public feed snapshotMedia contract', () => {
 
   it('rejects a pairing whose URL does not match the published snapshot', () => {
     const [record] = compilePublicFeed([published({
-      snapshotMedia: [{ url: 'https://cdn.invalid/other.png', altText: VALID_ALT }],
+      snapshotMedia: [
+        {
+          url: 'https://cdn.invalid/other.png',
+          altText: VALID_ALT,
+          galleryPosition: 1,
+        },
+      ],
     })]);
     const result = validatePublicFeed([record]);
     expect(result.valid).toBe(false);
@@ -168,8 +395,16 @@ describe('public feed snapshotMedia contract', () => {
     const [record] = compilePublicFeed([published({
       snapshots: ['https://cdn.invalid/a.png', 'https://cdn.invalid/b.png'],
       snapshotMedia: [
-        { url: 'https://cdn.invalid/a.png', altText: VALID_ALT },
-        { url: 'https://cdn.invalid/a.png', altText: VALID_ALT },
+        {
+          url: 'https://cdn.invalid/a.png',
+          altText: VALID_ALT,
+          galleryPosition: 1,
+        },
+        {
+          url: 'https://cdn.invalid/a.png',
+          altText: VALID_ALT,
+          galleryPosition: 2,
+        },
       ],
     })]);
     const result = validatePublicFeed([record]);
@@ -177,10 +412,95 @@ describe('public feed snapshotMedia contract', () => {
     expect(result.errors.join(' ')).toContain('published without a text alternative');
   });
 
+  it('rejects snapshotMedia whose URL order diverges from snapshots', () => {
+    const [record] = compilePublicFeed([
+      published({
+        snapshots: [
+          'https://cdn.invalid/a.png',
+          'https://cdn.invalid/b.png',
+        ],
+        snapshotMedia: [
+          {
+            url: 'https://cdn.invalid/b.png',
+            altText: 'Snapshot B.',
+            galleryPosition: 1,
+          },
+          {
+            url: 'https://cdn.invalid/a.png',
+            altText: 'Snapshot A.',
+            galleryPosition: 2,
+          },
+        ],
+      }),
+    ]);
+
+    const result = validatePublicFeed([record]);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain(
+      'does not match "snapshots" at the same gallery index',
+    );
+  });
+  it('rejects duplicate gallery positions', () => {
+    const [record] = compilePublicFeed([
+      published({
+        snapshots: [
+          'https://cdn.invalid/a.png',
+          'https://cdn.invalid/b.png',
+        ],
+        snapshotMedia: [
+          {
+            url: 'https://cdn.invalid/a.png',
+            altText: 'Snapshot A.',
+            galleryPosition: 1,
+          },
+          {
+            url: 'https://cdn.invalid/b.png',
+            altText: 'Snapshot B.',
+            galleryPosition: 1,
+          },
+        ],
+      }),
+    ]);
+
+    const result = validatePublicFeed([record]);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain(
+      'duplicate galleryPosition',
+    );
+  });
+
+  it('rejects galleries containing more than 10 snapshots', () => {
+    const snapshots = Array.from(
+      { length: 11 },
+      (_, index) => `https://cdn.invalid/snapshot-${index + 1}.png`,
+    );
+
+    const snapshotMedia = snapshots.map((url, index) => ({
+      url,
+      altText: `Snapshot ${index + 1}.`,
+      galleryPosition: index + 1,
+    }));
+
+    const [record] = compilePublicFeed([
+      published({
+        snapshots,
+        snapshotMedia,
+      }),
+    ]);
+
+    const result = validatePublicFeed([record]);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toContain(
+      'exceeds the maximum of 10 images',
+    );
+  });
   it('rejects a blank or oversized alt text', () => {
     for (const altText of ['', '   ', 'a'.repeat(MAX + 1)]) {
       const [record] = compilePublicFeed([published({
-        snapshotMedia: [{ url: 'https://cdn.invalid/a.png', altText }],
+        snapshotMedia: [{ url: 'https://cdn.invalid/a.png', altText,galleryPosition: 1, }],
       })]);
       expect(validatePublicFeed([record]).valid).toBe(false);
     }
@@ -190,7 +510,14 @@ describe('public feed snapshotMedia contract', () => {
     const [record] = compilePublicFeed([published()]);
     const tampered = {
       ...record,
-      snapshotMedia: [{ url: 'https://cdn.invalid/a.png', altText: VALID_ALT, mediaAssetId: 'internal' }],
+      snapshotMedia: [
+        {
+          url: 'https://cdn.invalid/a.png',
+          altText: VALID_ALT,
+          galleryPosition: 1,
+          mediaAssetId: 'internal',
+        },
+      ],
     };
     const result = validatePublicFeed([tampered]);
     expect(result.valid).toBe(false);
@@ -211,11 +538,30 @@ describe('publication artifact snapshot alt pairing', () => {
     publicId: 'target', status: 'approved', snapshots: [], snapshotMedia: [],
   });
 
-  const source = (id: string, assetType: string, fileName: string, mimeType: string, altTextPublic: string | null): PublicationMediaSource => ({
-    id, projectId: 'db-id', assetType, fileName,
-    storageBucket: PRIVATE_BUCKET, storagePath: `drafts/target/${assetType}/${fileName}`,
-    publicUrl: null, publicStorageBucket: null, publicStoragePath: null,
-    mimeType, fileSizeBytes: 100, isPublicApproved: false, altTextPublic,
+  const source = (
+    id: string,
+    assetType: string,
+    fileName: string,
+    mimeType: string,
+    altTextPublic: string | null,
+  ): PublicationMediaSource => ({
+    id,
+    projectId: 'db-id',
+    assetType,
+    galleryPosition:
+      assetType === 'snapshot_image'
+        ? 1
+        : null,
+    fileName,
+    storageBucket: PRIVATE_BUCKET,
+    storagePath: `drafts/target/${assetType}/${fileName}`,
+    publicUrl: null,
+    publicStorageBucket: null,
+    publicStoragePath: null,
+    mimeType,
+    fileSizeBytes: 100,
+    isPublicApproved: false,
+    altTextPublic,
   });
 
   const plan = (snapshotAlt: string | null) => planPublicationArtifact({
@@ -238,7 +584,13 @@ describe('publication artifact snapshot alt pairing', () => {
 
     const record = artifact.feed.find((item) => item.publicId === 'target');
     expect(record?.snapshots).toEqual([promotion?.publicUrl]);
-    expect(record?.snapshotMedia).toEqual([{ url: promotion?.publicUrl, altText: VALID_ALT }]);
+    expect(record?.snapshotMedia).toEqual([
+      {
+        url: promotion?.publicUrl,
+        altText: VALID_ALT,
+        galleryPosition: 1,
+      },
+    ]);
   });
 
   it('refuses to plan an artifact around an undescribed snapshot', () => {

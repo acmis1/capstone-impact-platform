@@ -297,6 +297,8 @@ There is no settings route. The metadata editor, participant confirmation workfl
 | `GET` | `/api/projects` | `requireAdmin` plus `projects.read` | Returns the protected project collection. | No |
 | `POST` | `/api/projects/[publicId]/review-action` | Same-origin check, `requireAdmin`, then review/archive permission | Validates and applies `request_changes`, `approve` or `archive`. | Yes |
 | `POST` | `/api/projects/[publicId]/deployment-reconciliation` | Same-origin check, `requireAdmin`, publication authority, and Local or explicitly enabled staging execution policy | Adds one lifecycle-`published` but currently undeployed project to the exact deployment head without replaying the lifecycle transition. | Yes |
+| `POST` | `/api/projects/bulk-review/preflight` | Same-origin check, `requireAdmin`, then action permission | Reads and classifies up to 50 selected projects without workflow mutation. | No |
+| `POST` | `/api/projects/bulk-review/execute` | Same-origin check, `requireAdmin`, then action permission | Executes bounded Submit for Review, Approve or Request Changes outcomes with version fencing. | Yes |
 | `POST` | `/api/public-feed/activation` | Same-origin check, `requireAdmin`, publication authority, and governed execution policy | Verifies or creates the exact baseline and establishes immutable deployment history/head. | Yes |
 | `POST` | `/api/public-feed/recovery` | Same-origin check, `requireAdmin`, publication authority, and governed execution policy | Explicitly claims and forward-reconciles the one durable `RECOVERY_REQUIRED` operation. | Yes |
 | `POST` | `/api/public-feed/rollback/prepare` | Same-origin check, `requireAdmin`, publication authority, and disposable-Local rollback capability | Creates an expiring actor-bound preparation with target and drift evidence. | Yes |
@@ -351,6 +353,28 @@ This supplies required accessibility content. It is **not** a WCAG conformance c
 ## Project dashboard and index
 
 The dashboard uses count-only metrics for total, public-eligible, in-review and archived records. Its project index parses bounded search input, supports server-side status/year/program/discipline filters, whitelisted sorting, exact-count pagination with page sizes of 10, 25 or 50, and deterministic `public_id` secondary ordering. The UI has separate loading, empty and failure states and maintains a client-safe row boundary for interactive index controls.
+
+### Bulk project review
+
+Staff can select projects on the current visible page, up to 50 at a time. Selection is keyed by safe `publicId`, never persists across query or page changes, and never means every project in the database. The desktop table and mobile cards share the same selection state; missing or unsafe IDs remain unavailable for selection.
+
+Bulk Submit for Review, Approve and Request Changes first call the authenticated server preflight routes. Preflight reads current project, import-batch, validation, media and participant-correction evidence without changing status or audit records. Each selected item is classified as eligible, blocked, already complete or invalid/stale with bounded public reasons. Execution performs one bounded set-based revalidation for the selection, sorts IDs deterministically, then invokes one version-fenced database wrapper per eligible project. The wrapper locks the project, returns already-complete for a matching target, returns stale when `updated_at` changed, and delegates all readiness, workflow, permission and audit rules to the existing project RPCs. Outcomes are partial and explicit: successful, blocked, already complete, invalid/stale or failed.
+
+Request Changes requires one trimmed shared comment of up to 4,000 characters and applies it to each successful audit. The Local-only acceptance harness reuses `generateSyntheticProjects()` to process 100 synthetic records across two completed import batches, verifies exact preflight/execution distributions, audit attribution, stale and concurrent outcomes, records observational timings, and removes only its unique verifier prefix in `finally`:
+
+```bash
+npm run verify:bulk-project-review-runtime
+```
+
+The harness refuses non-loopback Supabase targets and does not use hosted services, real participant data or storage objects.
+
+A second Local-only harness proves the same contract at the assignment's stated scale. It seeds 120 synthetic projects across three completed import batches, builds the selection by walking the real filtered, paginated project index across pages, then submits that selection through bounded preflight/execute cohorts and reconciles every reported outcome against the stored status and audit rows:
+
+```bash
+npm run verify:bulk-project-review-functional-workflow
+```
+
+Each phase must return exactly one deterministic result row per requested project, with no dropped or duplicated row, no duplicate audit record, no foreign actor attribution, and a bounded stale result for any project changed between preflight and execution. Note the boundary this proves: the server contract accepts a 120-project selection accumulated across pages, while the current interface still scopes one bulk operation to the visible page.
 
 ## Import workflow
 

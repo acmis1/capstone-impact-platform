@@ -1,6 +1,7 @@
 import { ImportPackageFileMetadata, ImportPackageParseResult, ImportPackageValidationResult } from './importTypes';
 import { validateMediaAsset } from '../storage/mediaValidationCore';
-import { ACCESSIBLE_CONTENT_LIMITS, getSnapshotAltTextProblem } from '../domain/accessibleContent';
+import {ACCESSIBLE_CONTENT_LIMITS,} from '../domain/accessibleContent';
+import { MAX_GALLERY_IMAGES } from './galleryConvention';
 
 export interface ValidateImportPackageOptions {
   /**
@@ -109,49 +110,237 @@ export function validateImportPackage(
     vResult.warnings.forEach(w => warnings.push({ ruleCode: 'FILE_WARNING_POSTER_PDF', message: `poster.pdf warning: ${w}` }));
   }
 
-  // Recommended snapshot verification
-  if (!parsed.snapshot1) {
+  // Gallery image verification.
+  //
+  // Gallery images are optional, but every supplied image must have:
+  // - a unique deterministic position
+  // - a position within the supported gallery bound
+  // - a valid media type/size under the existing media validation rules
+
+  const galleryImages = parsed.galleryImages;
+
+  if (galleryImages.length === 0) {
     warnings.push({
       ruleCode: 'FILE_MISSING_RECOMMENDED',
-      message: 'Asset recommendation: snapshot-1.png is missing from the package.'
+      message: 'Asset recommendation: no snapshot gallery images were supplied.',
     });
-  } else {
-    const vResult = validateMediaAsset({
-      fileName: parsed.snapshot1.fileName,
-      fileSizeBytes: parsed.snapshot1.fileSizeBytes,
-      mimeType: parsed.snapshot1.mimeType
-    });
-    vResult.errors.forEach(e => errors.push({ ruleCode: 'FILE_INVALID_SNAPSHOT', message: `snapshot-1.png error: ${e}` }));
-    vResult.warnings.forEach(w => warnings.push({ ruleCode: 'FILE_WARNING_SNAPSHOT', message: `snapshot-1.png warning: ${w}` }));
   }
 
-  // 4. Snapshot image alt text. This is the package-aware boundary: unlike the individual metadata
-  // parsers, it can see both the manifest and whether snapshot-1.png is actually in the package.
-  //
-  // A snapshot image stays optional. When one IS present, the standard xlsx contract must carry a
-  // usable text alternative for it, because an image published with no accessible equivalent is the
-  // exact gap this rule exists to close. Legacy project.json packages predate the field, so a
-  // missing value there is not an import error — such a package can still be staged into private
-  // draft media, and the downstream review/approval/preview/publication gates hold it until staff
-  // supply the text. An oversized value is always rejected, from either source.
-  const snapshotAltProblem = getSnapshotAltTextProblem(parsed.manifest.snapshotAltText, {
-    snapshotPresent: parsed.snapshot1 !== null && options.metadataSource === 'xlsx',
-  });
-  if (snapshotAltProblem === 'MISSING') {
+  if (galleryImages.length > MAX_GALLERY_IMAGES) {
     errors.push({
-      ruleCode: 'METADATA_MISSING_SNAPSHOT_ALT_TEXT',
-      message:
-        'Required manifest field "snapshotAltText" is missing or empty. A package that includes snapshot-1.png must describe it.',
-      fieldName: 'snapshotAltText',
+      ruleCode: 'FILE_GALLERY_TOO_MANY_IMAGES',
+      message: `Snapshot gallery contains ${galleryImages.length} images, exceeding the maximum of ${MAX_GALLERY_IMAGES}.`,
     });
-  } else if (snapshotAltProblem === 'TOO_LONG') {
+  }
+
+  const seenGalleryPositions = new Set<number>();
+
+  for (const galleryImage of galleryImages) {
+    const { position, file } = galleryImage;
+
+    if (position < 1 || position > MAX_GALLERY_IMAGES) {
+      errors.push({
+        ruleCode: 'FILE_GALLERY_POSITION_OUT_OF_RANGE',
+        message: `Gallery image "${file.fileName}" uses position ${position}. Supported positions are 1-${MAX_GALLERY_IMAGES}.`,
+        fieldName: 'galleryImages',
+      });
+    }
+
+    if (seenGalleryPositions.has(position)) {
+      errors.push({
+        ruleCode: 'FILE_GALLERY_DUPLICATE_POSITION',
+        message: `Multiple gallery images use position ${position}. Each gallery position must identify exactly one image.`,
+        fieldName: 'galleryImages',
+      });
+    } else {
+      seenGalleryPositions.add(position);
+    }
+
+    const vResult = validateMediaAsset({
+      fileName: file.fileName,
+      fileSizeBytes: file.fileSizeBytes,
+      mimeType: file.mimeType,
+    });
+
+    vResult.errors.forEach((error) =>
+      errors.push({
+        ruleCode: 'FILE_INVALID_GALLERY_IMAGE',
+        message: `${file.fileName} error: ${error}`,
+        fieldName: 'galleryImages',
+      }),
+    );
+
+    vResult.warnings.forEach((warning) =>
+      warnings.push({
+        ruleCode: 'FILE_WARNING_GALLERY_IMAGE',
+        message: `${file.fileName} warning: ${warning}`,
+        fieldName: 'galleryImages',
+      }),
+    );
+  }
+
+  // 4. Gallery image alt text.
+  //
+  // project-details.xlsx is authoritative for gallery accessibility metadata.
+  // Every supplied gallery image must match exactly one alt-text position.
+  //
+  // Backwards compatibility:
+  // - snapshotAltText remains the legacy position-1 representation.
+  // - When galleryAltTexts does not explicitly contain position 1, a usable
+  //   snapshotAltText may satisfy position 1.
+  // - Existing Task 2 rule codes remain in use for position 1.
+  // - Positions 2+ use the new gallery-specific rule codes.
+
+  const explicitGalleryAltTexts = Array.isArray(manifest.galleryAltTexts)
+    ? manifest.galleryAltTexts
+    : [];
+
+  const legacySnapshotAltText =
+    typeof manifest.snapshotAltText === 'string'
+      ? manifest.snapshotAltText
+      : null;
+
+  const hasGalleryImageAtPositionOne = parsed.galleryImages.some(
+    (item) => item.position === 1,
+  );
+
+  const hasExplicitPositionOne = explicitGalleryAltTexts.some(
+    (item) => item.position === 1,
+  );
+
+  const useLegacyPositionOneFallback =
+    !hasExplicitPositionOne &&
+    hasGalleryImageAtPositionOne &&
+    legacySnapshotAltText !== null &&
+    legacySnapshotAltText.trim() !== '';
+
+  const galleryAltTexts = [
+    ...explicitGalleryAltTexts,
+    ...(useLegacyPositionOneFallback
+      ? [
+          {
+            position: 1,
+            altText: legacySnapshotAltText,
+          },
+        ]
+      : []),
+  ];
+
+  const galleryImagePositions = new Set(
+    parsed.galleryImages.map((item) => item.position),
+  );
+
+  const seenAltPositions = new Set<number>();
+
+  for (const item of galleryAltTexts) {
+    const position = item.position;
+
+    if (
+      !Number.isInteger(position) ||
+      position < 1 ||
+      position > MAX_GALLERY_IMAGES
+    ) {
+      errors.push({
+        ruleCode: 'METADATA_GALLERY_ALT_POSITION_OUT_OF_RANGE',
+        message: `Gallery alt text position ${position} is outside the supported range 1-${MAX_GALLERY_IMAGES}.`,
+        fieldName: 'galleryAltTexts',
+      });
+
+      continue;
+    }
+
+    if (seenAltPositions.has(position)) {
+      errors.push({
+        ruleCode: 'METADATA_DUPLICATE_GALLERY_ALT_POSITION',
+        message: `Multiple gallery alt text entries use position ${position}. Each gallery position must have exactly one alt text.`,
+        fieldName: 'galleryAltTexts',
+      });
+    } else {
+      seenAltPositions.add(position);
+    }
+
+    const altText =
+      typeof item.altText === 'string'
+        ? item.altText.trim()
+        : '';
+
+    if (altText === '') {
+      errors.push({
+        ruleCode: 'METADATA_EMPTY_GALLERY_ALT_TEXT',
+        message: `Gallery image alt text at position ${position} is empty.`,
+        fieldName: 'galleryAltTexts',
+      });
+    } else if (
+      altText.length >
+      ACCESSIBLE_CONTENT_LIMITS.snapshotAltText
+    ) {
+      if (position === 1) {
+        // Preserve the existing Task 2 contract/rule code for snapshot 1.
+        errors.push({
+          ruleCode: 'METADATA_SNAPSHOT_ALT_TEXT_TOO_LONG',
+          message: `Manifest field "snapshotAltText" exceeds the maximum of ${ACCESSIBLE_CONTENT_LIMITS.snapshotAltText} characters.`,
+          fieldName: 'snapshotAltText',
+        });
+      } else {
+        errors.push({
+          ruleCode: 'METADATA_GALLERY_ALT_TEXT_TOO_LONG',
+          message: `Gallery alt text at position ${position} exceeds the maximum of ${ACCESSIBLE_CONTENT_LIMITS.snapshotAltText} characters.`,
+          fieldName: 'galleryAltTexts',
+        });
+      }
+    }
+
+    if (!galleryImagePositions.has(position)) {
+      errors.push({
+        ruleCode: 'METADATA_UNMATCHED_GALLERY_ALT_TEXT',
+        message: `Gallery alt text exists for position ${position}, but no gallery image exists at that position.`,
+        fieldName: 'galleryAltTexts',
+      });
+    }
+  }
+
+  // XLSX packages require one authoritative alt entry for every supplied image.
+  if (options.metadataSource === 'xlsx') {
+    for (const galleryImage of parsed.galleryImages) {
+      const matchingAltTexts = galleryAltTexts.filter(
+        (item) => item.position === galleryImage.position,
+      );
+
+      if (matchingAltTexts.length === 0) {
+        if (galleryImage.position === 1) {
+          // Preserve Task 2 compatibility.
+          errors.push({
+            ruleCode: 'METADATA_MISSING_SNAPSHOT_ALT_TEXT',
+            message:
+              'Required manifest field "snapshotAltText" is missing or empty. A package that includes snapshot-1.png must describe it.',
+            fieldName: 'snapshotAltText',
+          });
+        } else {
+          errors.push({
+            ruleCode: 'METADATA_MISSING_GALLERY_ALT_TEXT',
+            message: `Gallery image "${galleryImage.file.fileName}" at position ${galleryImage.position} is missing its required alt text.`,
+            fieldName: 'galleryAltTexts',
+          });
+        }
+      }
+    }
+  }
+
+  // Legacy snapshotAltText was historically bounded regardless of whether
+  // snapshot-1 existed. Preserve that behavior. If position 1 used the legacy
+  // fallback above, the same value was already checked in the gallery loop.
+  if (
+    !useLegacyPositionOneFallback &&
+    legacySnapshotAltText !== null &&
+    legacySnapshotAltText.length >
+      ACCESSIBLE_CONTENT_LIMITS.snapshotAltText
+  ) {
     errors.push({
       ruleCode: 'METADATA_SNAPSHOT_ALT_TEXT_TOO_LONG',
       message: `Manifest field "snapshotAltText" exceeds the maximum of ${ACCESSIBLE_CONTENT_LIMITS.snapshotAltText} characters.`,
       fieldName: 'snapshotAltText',
     });
   }
-
   return {
     valid: errors.length === 0,
     errors,

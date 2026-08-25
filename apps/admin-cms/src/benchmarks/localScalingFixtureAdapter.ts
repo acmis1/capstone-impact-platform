@@ -93,6 +93,8 @@ export function adaptSyntheticProjectForDb(
   if (hasSnapshot) {
     mediaRows.push({
       asset_type: 'snapshot_image',
+      // Single-snapshot fixture: authoritative gallery identity is position 1.
+      gallery_position: 1,
       file_name: 'snapshot-1.png',
       mime_type: 'image/png',
       file_size_bytes: 524288,

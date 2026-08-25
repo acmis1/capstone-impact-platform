@@ -16,7 +16,7 @@ function sha256(content: Buffer): string {
 
 function binding(index: number, overrides: Partial<PublicationMediaBinding> = {}): PublicationMediaBinding {
   return {
-    mediaAssetId: `3333333${index}-3333-4333-8333-333333333333`, assetType: 'poster_image',
+    mediaAssetId: `3333333${index}-3333-4333-8333-333333333333`, assetType: 'poster_image', galleryPosition: null,
     fileName: 'poster.png', mimeType: 'image/png', fileSizeBytes: PNG.length,
     sourceBucket: 'private', sourcePath: `drafts/target/${index}/poster.png`,
     publicBucket: 'assets', publicPath: `published/target/${index}/poster.png`,

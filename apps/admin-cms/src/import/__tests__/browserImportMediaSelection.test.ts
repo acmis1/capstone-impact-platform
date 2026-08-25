@@ -69,6 +69,79 @@ describe('resolveExpectedBrowserImportMedia', () => {
     expect(result.files.every((f) => f.projectPublicId === 'pkg-a')).toBe(true);
   });
 
+  it('resolves multiple snapshot images in deterministic gallery position order', () => {
+    const pkg = serverPackage({
+      packagePath: 'root/pkg-gallery',
+      proposedPublicId: 'pkg-gallery',
+      filePresence: {
+        xlsxPresent: false,
+        jsonPresent: true,
+        posterImagePresent: false,
+        posterPdfPresent: false,
+        snapshotPresent: true,
+      },
+    });
+
+    const packagesMap = new Map<string, ServerDerivedDescriptor[]>([
+      [
+        'root/pkg-gallery',
+        [
+          descriptor({
+            packagePath: 'root/pkg-gallery',
+            fileName: 'snapshot-3.png',
+            fileSizeBytes: 700,
+          }),
+          descriptor({
+            packagePath: 'root/pkg-gallery',
+            fileName: 'snapshot-1.png',
+            fileSizeBytes: 500,
+          }),
+          descriptor({
+            packagePath: 'root/pkg-gallery',
+            fileName: 'snapshot-2.png',
+            fileSizeBytes: 600,
+          }),
+        ],
+      ],
+    ]);
+
+    const result = resolveExpectedBrowserImportMedia({
+      preflight: { packagesMap },
+      packages: [pkg],
+      selectedPackagePaths: ['root/pkg-gallery'],
+    });
+
+    expect(result.success).toBe(true);
+
+    if (!result.success) return;
+
+    expect(result.files).toHaveLength(3);
+
+    expect(
+      result.files.map((file) => ({
+        fileName: file.fileName,
+        assetType: file.assetType,
+        galleryPosition: file.galleryPosition,
+      })),
+    ).toEqual([
+      {
+        fileName: 'snapshot-1.png',
+        assetType: 'snapshot_image',
+        galleryPosition: 1,
+      },
+      {
+        fileName: 'snapshot-2.png',
+        assetType: 'snapshot_image',
+        galleryPosition: 2,
+      },
+      {
+        fileName: 'snapshot-3.png',
+        assetType: 'snapshot_image',
+        galleryPosition: 3,
+      },
+    ]);
+  });
+
   it('only resolves the media files actually marked present, even if a stray file exists in the manifest', () => {
     const pkg = serverPackage({
       packagePath: 'root/pkg-b',

@@ -30,6 +30,12 @@ export interface ValidationFlagRecord {
 export interface PublicSnapshotMedia {
   url: string;
   altText: string;
+
+  /**
+   * Authoritative deterministic gallery position.
+   * Must be a unique integer from 1 through 10.
+   */
+  galleryPosition: number;
 }
 
 export interface Project {

@@ -10,6 +10,7 @@ export type LocalSupabaseCommand = 'start' | 'stop' | 'reset' | 'status' | 'migr
 
 export interface LocalSupabaseCommandOptions {
   resetVersion?: string;
+  skipSeed?: boolean;
 }
 
 export interface LocalSupabaseResult {
@@ -62,10 +63,14 @@ export function supabaseCommandArguments(
   if (command !== 'reset' && options.resetVersion !== undefined) {
     throw new Error('RESET_VERSION_REQUIRES_RESET');
   }
+  if (command !== 'reset' && options.skipSeed !== undefined) {
+    throw new Error('SKIP_SEED_REQUIRES_RESET');
+  }
   if (command === 'reset') {
     return [
       'db', 'reset', '--local',
       ...(options.resetVersion ? ['--version', options.resetVersion] : []),
+      ...(options.skipSeed ? ['--no-seed'] : []),
       ...globalArguments,
     ];
   }
