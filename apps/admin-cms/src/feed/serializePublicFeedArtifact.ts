@@ -1,4 +1,5 @@
-import { createHash } from 'crypto';
+import type { PublicFeedRecord } from '../domain/publicFeed';
+import { createPublicFeedArtifact } from './publicFeedArtifact';
 
 /** Canonical bytes shared by dry-run preparation and the guarded storage uploader. */
 export function serializePublicFeedArtifact(feed: unknown[]): {
@@ -6,10 +7,10 @@ export function serializePublicFeedArtifact(feed: unknown[]): {
   feedHash: string;
   recordCount: number;
 } {
-  const content = JSON.stringify(feed, null, 2);
+  const artifact = createPublicFeedArtifact(feed as PublicFeedRecord[]);
   return {
-    content,
-    feedHash: createHash('sha256').update(content).digest('hex'),
-    recordCount: feed.length,
+    content: artifact.content,
+    feedHash: artifact.feedHash,
+    recordCount: artifact.recordCount,
   };
 }

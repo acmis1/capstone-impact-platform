@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createMockProject } from '../test/projectFixtures';
-import { buildDeterministicPublicMediaPath, planPublicationArtifact, PublicationMediaSource } from './publicationArtifact';
+import {
+  buildDeterministicPublicMediaPath,
+  planPublicationArtifact,
+  type PublicationMediaAssetType,
+  PublicationMediaSource,
+} from './publicationArtifact';
 
 const UUIDS = [
   '11111111-1111-4111-8111-111111111111',
@@ -195,5 +200,119 @@ describe('publication artifact and media promotion planning', () => {
       projects: [createMockProject({ publicId: 'target', status: 'approved', poster: 'http://local/project-drafts-private/drafts/poster.png' })],
       targetPublicId: 'target', mediaAssets: [], privateBucket: 'project-drafts-private', publicBucket: 'project-public-assets', getPublicUrl: publicUrl,
     })).toThrow();
+  });
+});
+
+describe('deployment reconciliation planning', () => {
+  // The state a completed publication genuinely leaves behind: the public mapping is written, and
+  // the private source row is preserved untouched.
+  function promoted(base: PublicationMediaSource): PublicationMediaSource {
+    const publicPath = buildDeterministicPublicMediaPath('target', base.assetType as PublicationMediaAssetType, base.fileName);
+    return {
+      ...base,
+      isPublicApproved: true,
+      publicStorageBucket: 'project-public-assets',
+      publicStoragePath: publicPath,
+      publicUrl: publicUrl('project-public-assets', publicPath),
+    };
+  }
+
+  function plan(overrides: Record<string, unknown> = {}) {
+    return planPublicationArtifact({
+      projects: [
+        createMockProject({ publicId: 'other', status: 'published' }),
+        createMockProject({ publicId: 'target', status: 'published', poster: '', posterPdf: '', snapshots: [], snapshotMedia: [] }),
+      ],
+      targetPublicId: 'target',
+      mediaAssets: [
+        promoted(source(0, 'poster_image', 'poster.png', 'image/png')),
+        promoted(source(1, 'poster_pdf', 'poster.pdf', 'application/pdf')),
+        promoted(source(2, 'snapshot_image', 'snapshot-1.png', 'image/png', 'Snapshot one.', 1)),
+        promoted(source(3, 'snapshot_image', 'snapshot-2.png', 'image/png', 'Snapshot two.', 2)),
+      ],
+      privateBucket: 'project-drafts-private',
+      publicBucket: 'project-public-assets',
+      getPublicUrl: publicUrl,
+      mode: 'deployment_reconciliation',
+      ...overrides,
+    });
+  }
+
+  it('plans a lifecycle-published target whose media is already promoted', () => {
+    const result = plan();
+
+    expect(result.recordCount).toBe(2);
+    expect(result.mediaPromotions).toHaveLength(4);
+    // Every binding still names the private source, so promotion and recovery keep working from
+    // authoritative bytes rather than from a public URL.
+    for (const promotion of result.mediaPromotions) {
+      expect(promotion.sourceBucket).toBe('project-drafts-private');
+      expect(promotion.publicBucket).toBe('project-public-assets');
+    }
+    expect(result.content).not.toContain('project-drafts-private');
+  });
+
+  it('binds gallery position and per-image alt text into the reconciliation media manifest', () => {
+    const snapshots = plan().mediaPromotions.filter((item) => item.assetType === 'snapshot_image');
+
+    expect(snapshots.map((item) => item.galleryPosition)).toEqual([1, 2]);
+    expect(snapshots.map((item) => item.altTextPublic)).toEqual(['Snapshot one.', 'Snapshot two.']);
+    expect(snapshots.map((item) => item.publicPath)).toEqual([
+      'published/target/snapshot_image/snapshot-1.png',
+      'published/target/snapshot_image/snapshot-2.png',
+    ]);
+  });
+
+  it('refuses to retarget an asset whose recorded destination is not the deterministic one', () => {
+    const conflicting = promoted(source(0, 'poster_image', 'poster.png', 'image/png'));
+    const requiredPdf = promoted(source(1, 'poster_pdf', 'poster.pdf', 'application/pdf'));
+    for (const retargeted of [
+      { ...conflicting, publicStoragePath: 'published/other/poster_image/poster.png' },
+      { ...conflicting, publicStorageBucket: 'some-other-bucket' },
+      { ...conflicting, publicUrl: 'https://cdn.example.com/elsewhere/poster.png' },
+    ]) {
+      expect(() => plan({ mediaAssets: [retargeted, requiredPdf] }))
+        .toThrow('Publication media destination is inconsistent.');
+    }
+  });
+
+  it('refuses a half-written public mapping in either direction', () => {
+    const base = promoted(source(0, 'poster_image', 'poster.png', 'image/png'));
+    const requiredPdf = promoted(source(1, 'poster_pdf', 'poster.pdf', 'application/pdf'));
+    for (const broken of [
+      { ...base, isPublicApproved: false },
+      { ...base, publicUrl: null },
+      { ...base, publicStoragePath: null },
+      { ...base, publicStorageBucket: null },
+    ]) {
+      expect(() => plan({ mediaAssets: [broken, requiredPdf] }))
+        .toThrow('Publication media source is contradictory.');
+    }
+  });
+
+  it('keeps normal publication approved-only, and reconciliation published-only', () => {
+    // A lifecycle-published target may never be replayed through the normal approved-only path.
+    expect(() => plan({ mode: 'normal' })).toThrow();
+    expect(() => plan({ mode: undefined })).toThrow();
+
+    // And reconciliation may never be pointed at a target that was never published.
+    expect(() => plan({
+      projects: [createMockProject({ publicId: 'target', status: 'approved', poster: '', posterPdf: '', snapshots: [], snapshotMedia: [] })],
+      mediaAssets: [],
+    })).toThrow();
+  });
+
+  it('still accepts a published target whose expected public object was never written', () => {
+    // Reconciliation exists precisely because the deployed state can be incomplete; an unmapped
+    // private source is a legitimate reconciliation input, not drift.
+    const result = plan({
+      mediaAssets: [
+        source(0, 'poster_image', 'poster.png', 'image/png'),
+        promoted(source(1, 'poster_pdf', 'poster.pdf', 'application/pdf')),
+      ],
+    });
+
+    expect(result.mediaPromotions).toHaveLength(2);
+    expect(result.mediaPromotions[0].publicPath).toBe('published/target/poster_image/poster.png');
   });
 });

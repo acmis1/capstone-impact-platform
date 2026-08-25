@@ -1,106 +1,13 @@
-import { loadEnvConfig } from '@next/env';
-loadEnvConfig(process.cwd());
-
-import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
-import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
-import { compilePublicFeed } from '../feed/compilePublicFeed';
-import { validatePublicFeed } from '../feed/validatePublicFeed';
-import { uploadPublicFeedToStorage } from '../storage/publicFeedStorage';
-import { getServerEnv } from '../lib/env';
-import { Project } from '../domain/project';
-import { validateStagingGuard } from '../security/stagingExecutionGuard';
-
-export async function runPublishStagingFeed(args?: string[]): Promise<boolean> {
-  const guard = validateStagingGuard({ operationId: 'publish-staging-feed', args });
-
-  if (!guard.isAuthorized) {
-    console.log(`[DRY-RUN] ${guard.dryRunReason}`);
-    console.log('[DRY-RUN] Planned operation: Compile public feed and upload JSON artifact to Storage public-feeds bucket.');
-    return false;
-  }
-
-  const env = getServerEnv();
-  const supabase = createSupabaseAdminClientCore();
-  const repository = new SupabaseProjectRepositoryCore(supabase);
-
-  console.log('Fetching projects from staging database...');
-  let projects: Project[];
-  try {
-    projects = await repository.listProjects();
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Unknown query error';
-    console.error('❌ Failed to fetch projects from database:', message);
-    return false;
-  }
-
-  console.log(`Loaded ${projects.length} projects from database.`);
-
-  // 1. Compile Published projects only
-  console.log('Sanitizing and compiling published-only public feed...');
-  const feed = compilePublicFeed(projects);
-  console.log(`Compiled feed contains ${feed.length} public records.`);
-
-  // 2. Validate feed against schema allow-list
-  console.log('Validating feed against staging public feed contract...');
-  const validation = validatePublicFeed(feed);
-
-  if (!validation.valid) {
-    console.error('❌ Staging Feed Contract Validation FAILED:');
-    validation.errors.forEach((err) => console.error(` - Error: ${err}`));
-    return false;
-  }
-
-  console.log('✅ Staging Feed Contract Validation PASSED!');
-  if (validation.warnings.length > 0) {
-    console.log(`⚠️ Warnings detected (${validation.warnings.length}):`);
-    validation.warnings.forEach((warn) => console.log(` - Warning: ${warn}`));
-  }
-
-  // 3. Upload compiled JSON feed to Supabase Storage
-  console.log('Uploading compiled JSON feed to storage...');
-  let uploadResult;
-  try {
-    uploadResult = await uploadPublicFeedToStorage({ feed });
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Unknown upload error';
-    console.error('❌ Storage upload failed:', message);
-    return false;
-  }
-
-  // 4. Record published snapshot inside DB audit log
-  console.log('Recording audit log snapshot in database...');
-  const { error: snapshotError } = await supabase.from('published_snapshots').insert({
-    feed_file_name: env.SUPABASE_PUBLIC_FEED_FILE,
-    storage_bucket: env.SUPABASE_PUBLIC_FEEDS_BUCKET,
-    storage_path: uploadResult.storagePath,
-    public_url: uploadResult.publicUrl,
-    record_count: uploadResult.recordCount,
-    feed_hash: uploadResult.feedHash,
-  });
-
-  if (snapshotError) {
-    console.error('❌ Failed to insert published snapshot log:', snapshotError.message);
-    return false;
-  }
-
-  console.log('\n====================================================');
-  console.log('✅ FEED PUBLICATION SUCCESSFUL!');
-  console.log('====================================================');
-  console.log(`Total DB Projects Loaded:    ${projects.length}`);
-  console.log(`Public Feed Record Count:    ${uploadResult.recordCount}`);
-  console.log(`Validation Warnings:         ${validation.warnings.length}`);
-  console.log(`Uploaded Storage Path:       ${uploadResult.storagePath}`);
-  console.log(`Public Showcase Feed URL:    ${uploadResult.publicUrl}`);
-  console.log(`Feed SHA-256 Checksum:       ${uploadResult.feedHash}`);
-  console.log('====================================================\n');
-  return true;
+/**
+ * Retained command name for operator compatibility. Direct canonical Storage mutation is no
+ * longer available: activation and project publication must use the ledger-backed Admin flow.
+ */
+export async function runPublishStagingFeed(_args?: string[]): Promise<boolean> {
+  console.error('LEGACY_CANONICAL_WRITER_DISABLED');
+  console.error('Use governed public-feed activation and controlled project publication in the Admin/CMS.');
+  return false;
 }
 
 if (require.main === module) {
-  runPublishStagingFeed().then((success) => {
-    if (!success) process.exit(1);
-  }).catch((err) => {
-    console.error('❌ Fatal error:', err instanceof Error ? err.message : String(err));
-    process.exit(1);
-  });
+  runPublishStagingFeed().then(() => process.exit(1)).catch(() => process.exit(1));
 }

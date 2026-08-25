@@ -768,6 +768,62 @@ export class SupabaseParticipantPreviewRepositoryCore {
   }
 
   /**
+   * Strict shared interpretation of a readiness RPC payload.
+   *
+   * Both readiness authorities fail closed on any unexpected response and differ only in which
+   * result codes they accept, so the acceptance rules live in exactly one place: a READY verdict
+   * must carry exact confirmation evidence, and a truthy `ready` flag must agree with the code.
+   */
+  private interpretReadinessResponse<TCode extends string>(
+    data: unknown,
+    error: unknown,
+    validCodes: ReadonlySet<TCode>,
+  ): {
+    ready: boolean;
+    resultCode: TCode;
+    blockers: string[];
+    confirmedPreviewId?: string;
+    confirmedAt?: string;
+  } {
+    const unavailable = {
+      ready: false,
+      resultCode: 'READINESS_UNAVAILABLE' as TCode,
+      blockers: ['Publication readiness unavailable'],
+    };
+
+    if (error || !data || typeof data !== 'object') return unavailable;
+
+    const res = data as Record<string, unknown>;
+    if (
+      typeof res.ready !== 'boolean' ||
+      typeof res.resultCode !== 'string' ||
+      !validCodes.has(res.resultCode as TCode) ||
+      !Array.isArray(res.blockers) ||
+      !res.blockers.every((blocker) => typeof blocker === 'string')
+    ) {
+      return unavailable;
+    }
+
+    const resultCode = res.resultCode as TCode;
+    const confirmedPreviewId = isNonEmptyString(res.confirmedPreviewId) ? res.confirmedPreviewId : undefined;
+    const confirmedAt = normalizeParticipantPreviewTimestamp(res.confirmedAt) ?? undefined;
+    if (
+      (res.ready && resultCode !== ('READY' as TCode)) ||
+      (resultCode === ('READY' as TCode) && (!confirmedPreviewId || !confirmedAt))
+    ) {
+      return unavailable;
+    }
+
+    return {
+      ready: res.ready,
+      resultCode,
+      blockers: res.blockers as string[],
+      confirmedPreviewId,
+      confirmedAt,
+    };
+  }
+
+  /**
    * Invokes the service-role-only get_project_publication_readiness RPC to derive
    * authoritative publication readiness. Fails closed on any unexpected response.
    */
@@ -792,47 +848,57 @@ export class SupabaseParticipantPreviewRepositoryCore {
       p_private_bucket: privateBucket,
     });
 
-    if (error || !data || typeof data !== 'object') {
+    return this.interpretReadinessResponse<import('../domain/publicationReadiness').PublicationReadinessCode>(
+      data,
+      error,
+      new Set<import('../domain/publicationReadiness').PublicationReadinessCode>([
+        'READY', 'PROJECT_NOT_FOUND', 'READINESS_PERMISSION_DENIED', 'INVALID_PROJECT_STATE',
+        'INVALID_SELECTION', 'INVALID_PRIVATE_BUCKET', 'NO_ACTIVE_PREVIEW', 'PREVIEW_NOT_CONFIRMED',
+        'CORRECTION_UNRESOLVED', 'CORRECTED_PREVIEW_AWAITING_CONFIRMATION', 'PROJECT_SNAPSHOT_STALE',
+        'MEDIA_SNAPSHOT_STALE', 'READINESS_UNAVAILABLE',
+      ]),
+    );
+  }
+
+  /**
+   * Invokes the service-role-only get_project_reconciliation_readiness RPC.
+   *
+   * This is a SEPARATE authority from publication readiness, not a relaxed one: it evaluates a
+   * project that is already lifecycle `published` and proves its CURRENT participant-facing
+   * content -- including gallery position and per-image alt text -- is still backed by the exact
+   * participant confirmation. Fails closed on any unexpected response.
+   */
+  async getReconciliationReadiness(params: {
+    publicId: string;
+    adminId: string;
+    privateBucket: string;
+  }): Promise<import('../domain/publicationReadiness').ReconciliationReadinessResult> {
+    const { publicId, adminId, privateBucket } = params;
+
+    if (!isNonEmptyString(publicId) || !isNonEmptyString(adminId) || !isNonEmptyString(privateBucket)) {
       return {
         ready: false,
         resultCode: 'READINESS_UNAVAILABLE',
-        blockers: ['Publication readiness unavailable'],
+        blockers: ['Deployment reconciliation readiness unavailable'],
       };
     }
 
-    const res = data as Record<string, unknown>;
-    const validCodes = new Set<import('../domain/publicationReadiness').PublicationReadinessCode>([
-      'READY', 'PROJECT_NOT_FOUND', 'READINESS_PERMISSION_DENIED', 'INVALID_PROJECT_STATE',
-      'INVALID_SELECTION', 'INVALID_PRIVATE_BUCKET', 'NO_ACTIVE_PREVIEW', 'PREVIEW_NOT_CONFIRMED',
-      'CORRECTION_UNRESOLVED', 'CORRECTED_PREVIEW_AWAITING_CONFIRMATION', 'PROJECT_SNAPSHOT_STALE',
-      'MEDIA_SNAPSHOT_STALE', 'READINESS_UNAVAILABLE',
-    ]);
-    if (
-      typeof res.ready !== 'boolean' ||
-      typeof res.resultCode !== 'string' ||
-      !validCodes.has(res.resultCode as import('../domain/publicationReadiness').PublicationReadinessCode) ||
-      !Array.isArray(res.blockers) ||
-      !res.blockers.every((blocker) => typeof blocker === 'string')
-    ) {
-      return { ready: false, resultCode: 'READINESS_UNAVAILABLE', blockers: ['Publication readiness unavailable'] };
-    }
+    const { data, error } = await this.supabase.rpc('get_project_reconciliation_readiness', {
+      p_public_id: publicId,
+      p_admin_id: adminId,
+      p_private_bucket: privateBucket,
+    });
 
-    const resultCode = res.resultCode as import('../domain/publicationReadiness').PublicationReadinessCode;
-    const confirmedPreviewId = isNonEmptyString(res.confirmedPreviewId) ? res.confirmedPreviewId : undefined;
-    const confirmedAt = normalizeParticipantPreviewTimestamp(res.confirmedAt) ?? undefined;
-    if (
-      (res.ready && resultCode !== 'READY') ||
-      (resultCode === 'READY' && (!confirmedPreviewId || !confirmedAt))
-    ) {
-      return { ready: false, resultCode: 'READINESS_UNAVAILABLE', blockers: ['Publication readiness unavailable'] };
-    }
-
-    return {
-      ready: res.ready,
-      resultCode,
-      blockers: res.blockers,
-      confirmedPreviewId,
-      confirmedAt,
-    };
+    return this.interpretReadinessResponse<import('../domain/publicationReadiness').ReconciliationReadinessCode>(
+      data,
+      error,
+      new Set<import('../domain/publicationReadiness').ReconciliationReadinessCode>([
+        'READY', 'PROJECT_NOT_FOUND', 'READINESS_PERMISSION_DENIED', 'INVALID_PROJECT_STATE',
+        'INVALID_SELECTION', 'INVALID_PRIVATE_BUCKET', 'NO_ACTIVE_PREVIEW', 'PREVIEW_NOT_CONFIRMED',
+        'CORRECTION_UNRESOLVED', 'CORRECTED_PREVIEW_AWAITING_CONFIRMATION', 'PROJECT_SNAPSHOT_STALE',
+        'MEDIA_SNAPSHOT_STALE', 'READINESS_UNAVAILABLE', 'ACCESSIBILITY_CONTENT_REQUIRED',
+        'PUBLISHED_MEDIA_MAPPING_INVALID',
+      ]),
+    );
   }
 }

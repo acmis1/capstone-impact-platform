@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { EXPECTED_MIGRATION_FILENAMES } from '../scripts/onboardingCheck';
+
 describe('snapshot image alt text migration contract', () => {
   const root = path.resolve(__dirname, '../../../..');
   const migrations = path.join(root, 'infra/supabase/migrations');
@@ -34,6 +36,7 @@ describe('snapshot image alt text migration contract', () => {
       .filter((file) => file.endsWith('.sql'))
       .sort();
 
+    expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
     expect(files[25]).toBe(filename);
 
     for (const inherited of files.slice(0, 25)) {

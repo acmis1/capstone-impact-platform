@@ -68,6 +68,12 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
       'published_snapshots',
       'publication_attempts',
       'public_removal_attempts',
+      'public_feed_operations',
+      'public_feed_versions',
+      'public_feed_version_members',
+      'public_feed_head',
+      'feed_rollback_preparations',
+      'public_feed_operation_events',
       'staff_provisioning_requests',
     ];
 

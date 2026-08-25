@@ -6,9 +6,18 @@ describe('navigation module', () => {
     expect(NAVIGATION_ITEMS).toEqual([
       { name: 'Projects', href: '/admin' },
       { name: 'Imports', href: '/admin/imports' },
+      { name: 'Public feed', href: '/admin/public-feed' },
     ]);
     const hrefs = NAVIGATION_ITEMS.map((item) => item.href);
     expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+
+  it('maps the public deployment history route to Public feed navigation', () => {
+    expect(getRouteDescriptor('/admin/public-feed')).toEqual({
+      title: 'Public deployment history',
+      breadcrumbs: [{ label: 'Public feed' }],
+      activeHref: '/admin/public-feed',
+    });
   });
 
   it('maps exact /admin to Projects descriptor and activeHref', () => {

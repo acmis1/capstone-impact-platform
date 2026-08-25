@@ -12,6 +12,7 @@ export interface RouteDescriptor {
 export const NAVIGATION_ITEMS: NavigationItem[] = [
   { name: 'Projects', href: '/admin' },
   { name: 'Imports', href: '/admin/imports' },
+  { name: 'Public feed', href: '/admin/public-feed' },
 ];
 
 export const STAFF_NAVIGATION_ITEM: NavigationItem = { name: 'Staff access', href: '/admin/staff' };
@@ -28,6 +29,14 @@ export function getNavigationItems(canManageStaff: boolean): NavigationItem[] {
 export function getRouteDescriptor(pathname: string): RouteDescriptor {
   // Normalize pathname
   const cleanPath = pathname.replace(/\/$/, '') || '/admin';
+
+  if (cleanPath === '/admin/public-feed') {
+    return {
+      title: 'Public deployment history',
+      breadcrumbs: [{ label: 'Public feed' }],
+      activeHref: '/admin/public-feed',
+    };
+  }
 
   // Check exact staff route: /admin/staff
   if (cleanPath === '/admin/staff') {

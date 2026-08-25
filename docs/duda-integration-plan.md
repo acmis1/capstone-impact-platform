@@ -2,15 +2,16 @@
 
 ## 1. Scope and capability states
 
-The Admin/CMS is the source of truth. Duda is a presentation client that reads one approved-only JSON artifact; it never receives a Supabase secret and never queries private project tables.
+The Admin/CMS project lifecycle is the editorial/business source of truth. The public deployment ledger and its explicit head are the intended public deployment truth, and the stable Storage object is the externally served exact copy of that head. Duda is a presentation client that reads that public-only JSON artifact; it never receives a Supabase secret and never queries private project tables.
 
 | Capability | Target proof | Admin/CMS action | Duda effect |
 | --- | --- | --- | --- |
 | Disposable Local publication | Loopback Supabase URL | `POST /api/projects/[publicId]/local-publication` after a fresh plan and Local acknowledgement | Writes Local storage only; no Duda site can consume localhost. |
+| Disposable Local rollback | Loopback Supabase URL, `CAPSTONE_RUNTIME_ENV=local`, explicit rollback enablement, and a rollback-capable activated head | Prepare and execute from `/admin/public-feed` with the exact acknowledgement | Restores an exact historical Local artifact as a new ledger version; it cannot affect Duda. |
 | PP1 staging/test-showcase publication | Exact staging runtime identity, exact configured Supabase host match, and `CAPSTONE_STAGING_PUBLICATION_ENABLED=true` | `POST /api/projects/[publicId]/staging-publication` after a fresh plan and explicit staging acknowledgement | Replaces the stable non-production feed that the separately configured Duda TEST showcase can fetch. |
 | Live production publication | Unavailable | No route or UI control exists. | The live Impact site is not published or changed. |
 
-The staging route reuses the same controlled publication coordinator as Local execution. Fresh readiness, permission checks, global exclusivity, artifact binding, deterministic media promotion, prior-feed restoration, uploaded-byte/contract verification, audit, snapshot, finalization, recovery, and compensation remain authoritative. There is no unrestricted execution mode.
+The staging route reuses the same controlled publication coordinator as Local execution. Fresh readiness, permission checks, global exclusivity, exact artifact binding, deterministic media promotion, uploaded-byte/head verification, audit, snapshot, finalization, fencing, and forward recovery remain authoritative. After `WRITE_STARTED`, the coordinator never restores the old baseline; it converges on the one durably bound candidate. There is no unrestricted execution mode, and rollback remains unavailable outside disposable Local.
 
 ## 2. Stable feed contract
 
@@ -18,6 +19,7 @@ The staging route reuses the same controlled publication coordinator as Local ex
 - **Object**: server-derived `SUPABASE_PUBLIC_FEED_FILE` (default and canonical value `capstones-latest.json`).
 - **URL shape**: `https://<staging-project>.supabase.co/storage/v1/object/public/public-feeds/capstones-latest.json` when the defaults are used.
 - **Stable URL principle**: Duda configuration stays fixed. Publication overwrites the verified object bytes at the same path.
+- **Head agreement**: A completed operation requires the Storage bytes, SHA-256, and record count to match the immutable version selected by `public_feed_head`.
 - **Caching**: `Prototype/duda/bodyend.html` appends a timestamp query parameter and requests the feed with `cache: "no-store"`.
 
 A successful Admin/CMS response displays the project public ID, `COMPLETED` or `ALREADY_COMPLETED`, record count, SHA-256, publication snapshot ID, and the server-derived public feed URL. It never returns a service key, private/signed URL, or client-selected bucket/path.
@@ -40,13 +42,13 @@ The staging demonstration must configure the latter Admin/CMS staging path; lega
 
 The Admin/CMS feed also includes `publicId` and the additive `snapshotMedia: [{ url, altText }]` contract. The current Duda script still renders the unchanged `snapshots: string[]` shape and does not yet consume `snapshotMedia` alt text. That is a non-blocking media/accessibility follow-up owned outside this integration slice; no Duda template or teammate media work is absorbed here.
 
-Only `published` projects compile into the ordinary feed. An approved candidate appears in the candidate artifact only inside controlled publication, and becomes part of the ordinary feed only after atomic finalization changes it to `published`. Archived or removed records are excluded by the compiler; hosted public-removal execution remains a separate future capability.
+Only lifecycle-`published` projects compile into the ordinary lifecycle projection. Once deployment history is active, controlled publication composes the exact current deployment head plus one approved target, and removal removes only the requested member from that head. This prevents a prior rollback from being silently undone by recompiling every lifecycle-`published` row. Atomic finalization changes a normal publication target to `published`; deployment reconciliation may add an already-`published` but undeployed project without replaying its lifecycle transition. Hosted public-removal and rollback execution remain separately unavailable.
 
 ## 5. Separately authorised staging demonstration
 
 The implementation and CI must not execute these external-write steps. After review, an operator with separate authorisation for the specific hosted staging publication should:
 
-1. Verify the deployed Admin/CMS revision and that hosted staging has the required publication schema/RPC/storage baseline.
+1. Verify the deployed Admin/CMS revision and that hosted staging has the required publication-ledger schema/RPC/storage baseline. Governed baseline activation must have established exact Storage/head agreement before publication.
 2. Verify the web service has the exact staging runtime identity and expected Supabase hostname, then explicitly set `CAPSTONE_STAGING_PUBLICATION_ENABLED=true`. Keep all database administrative credentials server-only.
 3. Confirm `SUPABASE_PUBLIC_FEEDS_BUCKET` and `SUPABASE_PUBLIC_FEED_FILE` resolve to the intended public staging feed and canonical `capstones-latest.json` object. Do not accept a destination from the browser.
 4. Confirm the Duda TEST showcase—not the live site—already points `window.CAPSTONE_FEED_URL` at that exact stable public URL. Any Duda TEST configuration change requires its own authorisation.
@@ -57,4 +59,4 @@ The implementation and CI must not execute these external-write steps. After rev
 9. Refresh the Duda TEST listing and reusable detail page and confirm the project appears/updates correctly. Do not publish or modify the live Duda site.
 10. Disable `CAPSTONE_STAGING_PUBLICATION_ENABLED` after the demonstration if that is the agreed operational posture.
 
-The legacy Prototype `/api/publish-cloud-feed` path and the standalone simplified staging feed publisher are not the Admin/CMS publication architecture and must not be invoked for this demonstration.
+The legacy Prototype `/api/publish-cloud-feed` path is not the Admin/CMS publication architecture and must not be invoked for this demonstration. The former standalone staging feed publisher fails closed; all canonical writes must pass through the unified ledger writer.

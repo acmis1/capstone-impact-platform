@@ -103,6 +103,50 @@ jobs:
       - name: Onboarding Contributor Workflow Rehearsal
         run: npm run verify:onboarding-workflow
 
+  public-feed-ledger:
+    name: Disposable Public Deployment Ledger Runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 24.14.1
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+
+      - name: Install npm 11.11.0 (pinned)
+        run: npm install -g npm@11.11.0
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Each step owns a throwaway project id, port block, Docker network and workdir. Activating
+      # the ledger head is irreversible and its history refuses fixture deletion, so these runtimes
+      # can never share the canonical Local stack.
+      - name: Verify main-to-integrated deployment ledger migration upgrade
+        run: npm run verify:public-feed-ledger-runtime:disposable -- upgrade
+        env:
+          SUPABASE_START_TIMEOUT_MS: '900000'
+
+      - name: Verify public deployment ledger runtime behavior
+        run: npm run verify:public-feed-ledger-runtime:disposable -- ledger
+        env:
+          SUPABASE_START_TIMEOUT_MS: '900000'
+
+      - name: Verify controlled publication runtime behavior
+        run: npm run verify:public-feed-ledger-runtime:disposable -- publication
+        env:
+          SUPABASE_START_TIMEOUT_MS: '900000'
+
+      - name: Verify controlled public removal runtime behavior
+        run: npm run verify:public-feed-ledger-runtime:disposable -- removal
+        env:
+          SUPABASE_START_TIMEOUT_MS: '900000'
+
   local-integration:
     name: Disposable Local Supabase Integration
     runs-on: ubuntu-latest
@@ -149,10 +193,10 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify forty migrations and local integrity
+      - name: Verify forty-three migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 40
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 43
 
       - name: Verify multi-image gallery position invariant against the real schema
         run: npm run verify:gallery-constraint-runtime --workspace=apps/admin-cms
@@ -216,11 +260,9 @@ jobs:
       - name: Verify publication preparation runtime behavior
         run: npm run verify:publication-preparation-runtime --workspace=apps/admin-cms
 
-      - name: Verify controlled publication runtime behavior
-        run: npm run verify:controlled-publication-runtime --workspace=apps/admin-cms
-
-      - name: Verify controlled public removal runtime behavior
-        run: npm run verify:controlled-public-removal-runtime --workspace=apps/admin-cms
+      # The controlled publication and public removal runtimes moved to the disposable
+      # "Public Deployment Ledger Runtime" job: they activate the governed singleton ledger head,
+      # which is irreversible and cannot be undone on this shared stack.
 
       - name: Verify approval edit gate runtime behavior
         run: npm run verify:approval-edit-gate-runtime --workspace=apps/admin-cms

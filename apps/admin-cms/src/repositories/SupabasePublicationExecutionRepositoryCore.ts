@@ -299,11 +299,6 @@ export class SupabasePublicationExecutionRepositoryCore {
     return false;
   }
 
-  async overwriteObject(bucket: string, storagePath: string, content: Buffer, contentType: string): Promise<void> {
-    const { error } = await this.supabase.storage.from(bucket).upload(storagePath, content, { contentType, upsert: true });
-    if (error) throw new Error('Publication feed upload failed.');
-  }
-
   async removeObjects(bucket: string, storagePaths: string[]): Promise<void> {
     if (storagePaths.length === 0) return;
     const { error } = await this.supabase.storage.from(bucket).remove(storagePaths);
