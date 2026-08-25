@@ -452,21 +452,18 @@ async function main(): Promise<void> {
   assert.equal(head.currentVersion.operation, 'baseline');
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
 
-  psql("UPDATE public.projects SET status='published' WHERE public_id='2026-medical-drone';");
-  const medical = project('2026-medical-drone');
+  const medical = project('186-rollback-publication');
+  await createReadyPublicationProject(client, medical.publicId);
   const publication = await executeControlledPublication({
     permissions: ['projects.publish'], publicId: medical.publicId,
     privateBucket: 'project-drafts-private', publicAssetsBucket: 'project-public-assets',
-    publicFeedBucket: feedBucket, publicFeedPath: feedPath, publicationMode: 'deployment_reconciliation',
-    dependencies: {
-      supabase: client, adminId, assertExecutionEnvironment: () => undefined,
-      getReadiness: async () => { throw new Error('UNEXPECTED_READINESS_CALL'); },
-      listProjects: async () => [medical], listProjectMedia: async () => [],
-      getPublicUrl: () => '', downloadObject: async () => null,
-      uploadNewObject: async () => false,
-    },
+    publicFeedBucket: feedBucket, publicFeedPath: feedPath,
+    dependencies: createControlledPublicationDependencies({
+      supabase: client, supabaseUrl: runtimeApiUrl, publicId: medical.publicId, adminId,
+      privateBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath, executionTarget: 'local',
+    }),
   });
-  await assertCompleted(publication, 'deployment reconciliation');
+  await assertCompleted(publication, 'rollback-fixture normal publication');
   assert.deepEqual((await exactStored(client)).feed.map(({ publicId }) => publicId), [traffic.publicId, medical.publicId]);
 
   const removal = await executeControlledPublicRemoval({
@@ -501,6 +498,18 @@ async function main(): Promise<void> {
   assert.equal(rollback.resultCode, 'COMPLETED', JSON.stringify(rollback));
   assert.deepEqual((await exactStored(client)).feed.map(({ publicId }) => publicId), [traffic.publicId]);
 
+  const feedBeforeReconciliation = await exactStored(client);
+  const reconciliationEvidenceBefore = {
+    operations: psql('SELECT count(*) FROM public.public_feed_operations;'),
+    writeStarted: psql("SELECT count(*) FROM public.public_feed_operations WHERE state='WRITE_STARTED';"),
+    events: psql('SELECT count(*) FROM public.public_feed_operation_events;'),
+    versions: psql('SELECT count(*) FROM public.public_feed_versions;'),
+    snapshots: psql('SELECT count(*) FROM public.published_snapshots;'),
+    audits: psql(`SELECT count(*) FROM public.approval_records WHERE project_id=(SELECT id FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)});`),
+    generation: psql('SELECT generation FROM public.public_feed_head WHERE singleton=true;'),
+    lifecycle: psql(`SELECT status FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)};`),
+    publicMedia: await publicMediaCount(client, medical.publicId),
+  };
   const postRollback = await executeControlledPublication({
     permissions: ['projects.publish'], publicId: medical.publicId,
     privateBucket: 'project-drafts-private', publicAssetsBucket: 'project-public-assets',
@@ -508,13 +517,36 @@ async function main(): Promise<void> {
     dependencies: {
       supabase: client, adminId, assertExecutionEnvironment: () => undefined,
       getReadiness: async () => { throw new Error('UNEXPECTED_READINESS_CALL'); },
-      listProjects: async () => [medical], listProjectMedia: async () => [],
-      getPublicUrl: () => '', downloadObject: async () => null,
-      uploadNewObject: async () => false,
+      listProjects: async () => [medical],
+      listProjectMedia: async () => { throw new Error('UNEXPECTED_MEDIA_LIST'); },
+      getPublicUrl: () => { throw new Error('UNEXPECTED_PUBLIC_URL'); },
+      downloadObject: async () => { throw new Error('UNEXPECTED_STORAGE_READ'); },
+      uploadNewObject: async () => { throw new Error('UNEXPECTED_STORAGE_WRITE'); },
     },
   });
-  await assertCompleted(postRollback, 'post-rollback publication');
-  assert.deepEqual((await exactStored(client)).feed.map(({ publicId }) => publicId), [traffic.publicId, medical.publicId]);
+  assert.deepEqual(postRollback, {
+    resultCode: 'NOT_READY', readinessCode: 'RECONCILIATION_READINESS_REQUIRED',
+    blockers: ['Deployment reconciliation requires the final integrated publication-readiness proof.'],
+  });
+  assert.equal((await exactStored(client)).content, feedBeforeReconciliation.content);
+  assert.deepEqual({
+    operations: psql('SELECT count(*) FROM public.public_feed_operations;'),
+    writeStarted: psql("SELECT count(*) FROM public.public_feed_operations WHERE state='WRITE_STARTED';"),
+    events: psql('SELECT count(*) FROM public.public_feed_operation_events;'),
+    versions: psql('SELECT count(*) FROM public.public_feed_versions;'),
+    snapshots: psql('SELECT count(*) FROM public.published_snapshots;'),
+    audits: psql(`SELECT count(*) FROM public.approval_records WHERE project_id=(SELECT id FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)});`),
+    generation: psql('SELECT generation FROM public.public_feed_head WHERE singleton=true;'),
+    lifecycle: psql(`SELECT status FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)};`),
+    publicMedia: await publicMediaCount(client, medical.publicId),
+  }, reconciliationEvidenceBefore);
+  const directReconciliation = await ledger.reserve({
+    operationKey: randomUUID(), kind: 'publication', mode: 'deployment_reconciliation',
+    adminId, publicId: medical.publicId, ownerToken: token(), storageBucket: feedBucket,
+    storagePath: feedPath, rollbackCapability: false,
+  });
+  assert.equal(directReconciliation.resultCode, 'RECONCILIATION_READINESS_REQUIRED');
+  assert.equal(psql('SELECT count(*) FROM public.public_feed_operations;'), reconciliationEvidenceBefore.operations);
 
   await assertCompleted(await executeControlledPublicRemoval({
     permissions: ['projects.archive'], publicId: traffic.publicId, archiveReason: 'Create empty rollback target',
@@ -701,27 +733,22 @@ async function main(): Promise<void> {
   assert.equal(zeroRollback.resultCode, 'COMPLETED', JSON.stringify(zeroRollback));
   assert.deepEqual((await exactStored(client)).feed, []);
 
-  psql(`UPDATE public.projects SET status='published', archived_at=NULL, archived_from_status=NULL,
-    archive_reason=NULL, pending_removal_from_public=false
-    WHERE public_id=${sqlLiteral(medical.publicId)};`);
+  const responseLossPublicId = '186-response-loss-target';
+  await createReadyPublicationProject(client, responseLossPublicId);
   const postZeroRollback = await executeControlledPublication({
-    permissions: ['projects.publish'], publicId: medical.publicId,
+    permissions: ['projects.publish'], publicId: responseLossPublicId,
     privateBucket, publicAssetsBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath,
-    publicationMode: 'deployment_reconciliation',
-    dependencies: {
-      supabase: client, adminId, assertExecutionEnvironment: () => undefined,
-      getReadiness: async () => { throw new Error('UNEXPECTED_READINESS_CALL'); },
-      listProjects: async () => [medical], listProjectMedia: async () => [],
-      getPublicUrl: () => '', downloadObject: async () => null,
-      uploadNewObject: async () => false,
-    },
+    dependencies: createControlledPublicationDependencies({
+      supabase: client, supabaseUrl: runtimeApiUrl, publicId: responseLossPublicId, adminId,
+      privateBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath, executionTarget: 'local',
+    }),
   });
-  await assertCompleted(postZeroRollback, 'post-zero-rollback publication');
-  assert.deepEqual((await exactStored(client)).feed.map(({ publicId }) => publicId), [medical.publicId]);
+  await assertCompleted(postZeroRollback, 'post-zero-rollback normal publication');
+  assert.deepEqual((await exactStored(client)).feed.map(({ publicId }) => publicId), [responseLossPublicId]);
 
-  const committedLoss = await stageCommittedRemovalResponseLoss(client, ledger, medical.publicId);
+  const committedLoss = await stageCommittedRemovalResponseLoss(client, ledger, responseLossPublicId);
   assert.equal(
-    (await resumeRemoval(client, medical.publicId, RESPONSE_LOSS_REASON)).resultCode,
+    (await resumeRemoval(client, responseLossPublicId, RESPONSE_LOSS_REASON)).resultCode,
     'PUBLICATION_IN_PROGRESS',
   );
   psql(`UPDATE public.public_feed_operations
@@ -730,7 +757,7 @@ async function main(): Promise<void> {
   // An expired durable operation is only adoptable by a request carrying the identical immutable
   // intent; a different archive reason is a different authorization and must stay fenced out.
   assert.equal(
-    (await resumeRemoval(client, medical.publicId, 'Materially different archive reason')).resultCode,
+    (await resumeRemoval(client, responseLossPublicId, 'Materially different archive reason')).resultCode,
     'PUBLICATION_IN_PROGRESS',
   );
   assert.equal(
@@ -738,7 +765,7 @@ async function main(): Promise<void> {
     RESPONSE_LOSS_REASON,
   );
   await assertCompleted(
-    await resumeRemoval(client, medical.publicId, RESPONSE_LOSS_REASON),
+    await resumeRemoval(client, responseLossPublicId, RESPONSE_LOSS_REASON),
     'committed Storage response-loss reconciliation',
   );
   assert.equal((await exactStored(client)).feedHash, committedLoss.candidate.feedHash);
@@ -827,7 +854,7 @@ async function main(): Promise<void> {
   const memberHash = psql(`SELECT record_hash FROM public.public_feed_version_members WHERE version_id=${sqlLiteral(firstVersionId)}::uuid ORDER BY ordinal LIMIT 1;`);
   assert.equal(memberHash, trafficArtifact.members[0].recordHash);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
-  console.log('Public feed ledger runtime verification passed: fresh schema, exact Storage/head, activation, normal publication, reconciliation, removal, no-change removal, rollback, rollback-to-empty, post-rollback publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
+  console.log('Public feed ledger runtime verification passed: fresh schema, exact Storage/head, activation, normal publication, fail-closed deployment reconciliation with zero durable/external/lifecycle effects and direct database reservation enforcement, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
 }
 
 main().catch((error: unknown) => {

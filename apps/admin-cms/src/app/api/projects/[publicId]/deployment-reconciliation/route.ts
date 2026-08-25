@@ -51,7 +51,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     const status = result.resultCode === 'PERMISSION_DENIED' ? 403
       : ['PUBLICATION_IN_PROGRESS', 'RECOVERY_REQUIRED', 'NOT_READY'].includes(result.resultCode) ? 409 : 500;
-    return NextResponse.json({ success: false, code: result.resultCode, error: 'Deployment reconciliation could not be completed.' }, { status, headers: NO_STORE });
+    const code = result.resultCode === 'NOT_READY' ? result.readinessCode : result.resultCode;
+    return NextResponse.json({ success: false, code, error: 'Deployment reconciliation could not be completed.' }, { status, headers: NO_STORE });
   } catch {
     console.error('[Deployment reconciliation]: EXECUTION_UNAVAILABLE');
     return NextResponse.json({ success: false, error: 'Deployment reconciliation could not be completed.' }, { status: 500, headers: NO_STORE });

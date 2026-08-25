@@ -128,6 +128,11 @@ BEGIN
   IF NOT public.public_feed_owner_valid(p_operation_id, p_owner_epoch, p_owner_token, p_actor_id) THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'STALE_OWNER');
   END IF;
+  -- Temporary fail-closed integration gate: final Tan/Binh integration must supply the
+  -- authoritative gallery-aware reconciliation-readiness proof before this mode may write.
+  IF v_operation.kind = 'publication' AND v_operation.publication_mode = 'deployment_reconciliation' THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'RECONCILIATION_READINESS_REQUIRED');
+  END IF;
   IF v_operation.state = 'WRITE_STARTED' THEN
     IF v_operation.storage_uncertainty_until IS NOT NULL
        AND v_operation.storage_uncertainty_until > pg_catalog.now()
@@ -359,6 +364,12 @@ BEGIN
        v_public_id IS NULL OR pg_catalog.length(v_public_id) > 100 OR v_public_id !~ '^[A-Za-z0-9_-]+$'
      ))
   THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_INPUT'); END IF;
+
+  -- Temporary fail-closed integration gate: do not reserve forward-only work until final
+  -- Tan/Binh integration supplies the authoritative gallery-aware readiness proof.
+  IF v_kind = 'publication' AND v_mode = 'deployment_reconciliation' THEN
+    RETURN pg_catalog.jsonb_build_object('resultCode', 'RECONCILIATION_READINESS_REQUIRED');
+  END IF;
 
   v_token_hash := pg_catalog.encode(
     extensions.digest(pg_catalog.convert_to(p_owner_token, 'UTF8'), 'sha256'), 'hex'

@@ -60,6 +60,25 @@ describe('public deployment ledger migration security contract', () => {
     expect(protocol).toContain("COALESCE(v_marker, '') <> v_operation_id::text");
   });
 
+  it('fails deployment reconciliation closed before reservation and durable write intent', () => {
+    const reservation = protocol.slice(
+      protocol.indexOf('CREATE OR REPLACE FUNCTION public.reserve_public_feed_operation('),
+      protocol.indexOf('CREATE OR REPLACE FUNCTION public.bind_public_feed_operation('),
+    );
+    const writeIntent = protocol.slice(
+      protocol.indexOf('CREATE OR REPLACE FUNCTION public.mark_public_feed_write_started('),
+      protocol.indexOf('CREATE OR REPLACE FUNCTION public.mark_public_feed_candidate_observed('),
+    );
+    for (const boundary of [reservation, writeIntent]) {
+      expect(boundary).toContain('fail-closed integration gate');
+      expect(boundary).toContain("'RECONCILIATION_READINESS_REQUIRED'");
+    }
+    expect(reservation.indexOf("'RECONCILIATION_READINESS_REQUIRED'"))
+      .toBeLessThan(reservation.indexOf('INSERT INTO public.public_feed_operations'));
+    expect(writeIntent.indexOf("'RECONCILIATION_READINESS_REQUIRED'"))
+      .toBeLessThan(writeIntent.indexOf("SET state = 'WRITE_STARTED'"));
+  });
+
   it('keeps every application RPC service-role-only with pinned search paths', () => {
     const functions = [...protocol.matchAll(/CREATE OR REPLACE FUNCTION public\.([a-z0-9_]+)\([\s\S]*?\$\$;/g)];
     expect(functions.length).toBeGreaterThanOrEqual(16);

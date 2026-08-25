@@ -124,6 +124,28 @@ function writerParameters(overrides: Record<string, unknown> = {}) {
 describe('canonical public feed writer boundary', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('holds deployment reconciliation before reservation or external work', async () => {
+    harness.ledger = createLedger('RESERVED');
+    harness.storage = createStorage(baseline);
+    const prepareCandidate = vi.fn(async () => ({ artifact: candidate }));
+    const validateBeforeWriteIntent = vi.fn(async () => undefined);
+    const afterWriteIntent = vi.fn(async () => undefined);
+
+    await expect(executePublicFeedWriter(writerParameters({
+      publicationMode: 'deployment_reconciliation',
+      confirmedPreviewId: null, confirmedAt: null,
+      prepareCandidate, validateBeforeWriteIntent, afterWriteIntent,
+    }) as never)).resolves.toEqual({ resultCode: 'RECONCILIATION_READINESS_REQUIRED' });
+    expect(harness.ledger.getBlockingOperation).not.toHaveBeenCalled();
+    expect(harness.ledger.reserve).not.toHaveBeenCalled();
+    expect(harness.ledger.markWriteStarted).not.toHaveBeenCalled();
+    expect(prepareCandidate).not.toHaveBeenCalled();
+    expect(validateBeforeWriteIntent).not.toHaveBeenCalled();
+    expect(afterWriteIntent).not.toHaveBeenCalled();
+    expect(harness.storage.readExact).not.toHaveBeenCalled();
+    expect(harness.storage.writeExact).not.toHaveBeenCalled();
+  });
+
   it('exposes no public media until write intent is durable, then writes the feed after it', async () => {
     harness.ledger = createLedger('RESERVED');
     harness.storage = createStorage(baseline);

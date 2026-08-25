@@ -147,15 +147,18 @@ describe('ledger-backed controlled publication', () => {
     await expect(publish(dependencies())).resolves.toEqual({ resultCode: 'RECOVERY_REQUIRED' });
   });
 
-  it('reports a reconciliation publication with a null audit identifier instead of an empty string', async () => {
+  it('holds deployment reconciliation before the canonical writer with zero side effects', async () => {
+    const deps = deployedDependencies();
     mocks.inspect.mockResolvedValue({ head: null, artifact: null, publicUrl: 'https://example.com/feed.json' });
-    mocks.execute.mockResolvedValue({
-      resultCode: 'COMPLETED', operationId: 'operation', versionNumber: 2,
-      snapshotId: 'snapshot', auditRecordId: null, feedHash: 'hash', recordCount: 1,
-      feedPublicUrl: 'https://example.com/feed.json',
+    await expect(publish(deps, { publicationMode: 'deployment_reconciliation' })).resolves.toEqual({
+      resultCode: 'NOT_READY', readinessCode: 'RECONCILIATION_READINESS_REQUIRED',
+      blockers: ['Deployment reconciliation requires the final integrated publication-readiness proof.'],
     });
-    await expect(publish(deployedDependencies(), { publicationMode: 'deployment_reconciliation' }))
-      .resolves.toMatchObject({ resultCode: 'COMPLETED', snapshotId: 'snapshot', auditRecordId: null });
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(deps.getReadiness).not.toHaveBeenCalled();
+    expect(deps.listProjectMedia).not.toHaveBeenCalled();
+    expect(deps.downloadObject).not.toHaveBeenCalled();
+    expect(deps.uploadNewObject).not.toHaveBeenCalled();
   });
 
   it('reports readiness loss without reaching the canonical writer', async () => {

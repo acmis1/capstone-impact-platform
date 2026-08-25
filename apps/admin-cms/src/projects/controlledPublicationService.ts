@@ -4,8 +4,7 @@ import type { AdminPermission } from '../auth/authTypes';
 import { canPreparePublication } from '../auth/permissions';
 import type { PublicationReadinessResult } from '../domain/publicationReadiness';
 import type { Project } from '../domain/project';
-import { toPublicFeedRecord } from '../feed/compilePublicFeed';
-import { composePublicFeedPublication, createPublicFeedArtifact } from '../feed/publicFeedArtifact';
+import { composePublicFeedPublication } from '../feed/publicFeedArtifact';
 import { validateMediaAssetBytes } from '../storage/mediaValidationCore';
 import { promoteBoundPublicMedia, validateBoundPublicMedia } from './boundPublicMediaPromotion';
 import {
@@ -123,32 +122,31 @@ export async function executeControlledPublication(params: {
       }
     }
 
-    let readiness: PublicationReadinessResult | null = null;
-    if (mode === 'normal') {
-      readiness = await dependencies.getReadiness();
-      if (!readiness.ready || readiness.resultCode !== 'READY'
-          || !readiness.confirmedPreviewId || !readiness.confirmedAt) {
-        return { resultCode: 'NOT_READY', readinessCode: readiness.resultCode, blockers: readiness.blockers };
-      }
-    } else if (target.status !== 'published') {
-      return { resultCode: 'NOT_READY', readinessCode: 'INVALID_PROJECT_STATE', blockers: ['Project is not lifecycle published'] };
+    // Final Tan/Binh integration will replace this hold with the authoritative gallery-aware
+    // reconciliation-readiness proof. Lifecycle publication alone is not deployment authority.
+    if (mode === 'deployment_reconciliation') {
+      return {
+        resultCode: 'NOT_READY', readinessCode: 'RECONCILIATION_READINESS_REQUIRED',
+        blockers: ['Deployment reconciliation requires the final integrated publication-readiness proof.'],
+      };
+    }
+
+    const readiness = await dependencies.getReadiness();
+    if (!readiness.ready || readiness.resultCode !== 'READY'
+        || !readiness.confirmedPreviewId || !readiness.confirmedAt) {
+      return { resultCode: 'NOT_READY', readinessCode: readiness.resultCode, blockers: readiness.blockers };
     }
 
     const writer = await executePublicFeedWriter({
       supabase: dependencies.supabase, adminId: dependencies.adminId, kind: 'publication',
       publicationMode: mode, publicId,
-      confirmedPreviewId: readiness?.confirmedPreviewId ?? null,
-      confirmedAt: readiness?.confirmedAt ?? null, privateBucket,
+      confirmedPreviewId: readiness.confirmedPreviewId,
+      confirmedAt: readiness.confirmedAt, privateBucket,
       feedBucket: publicFeedBucket, feedPath: publicFeedPath,
       prepareCandidate: async (baseline) => {
         if (!baseline) throw new Error('HISTORY_NOT_ACTIVE');
         if (baseline.members.some((member) => member.publicId === publicId)) {
           throw new Error('PUBLIC_ID_ALREADY_DEPLOYED');
-        }
-        if (mode === 'deployment_reconciliation') {
-          const record = toPublicFeedRecord(target);
-          const single = createPublicFeedArtifact([record]);
-          return { artifact: composePublicFeedPublication(baseline, single.feed[0]), mediaManifest: [] };
         }
         const media = await dependencies.listProjectMedia();
         const plan = planPublicationArtifact({
@@ -174,6 +172,12 @@ export async function executeControlledPublication(params: {
     if (writer.resultCode === 'PERMISSION_DENIED') return { resultCode: 'PERMISSION_DENIED' };
     if (writer.resultCode === 'PUBLICATION_IN_PROGRESS') return { resultCode: 'PUBLICATION_IN_PROGRESS' };
     if (writer.resultCode === 'RECOVERY_REQUIRED') return { resultCode: 'RECOVERY_REQUIRED' };
+    if (writer.resultCode === 'RECONCILIATION_READINESS_REQUIRED') {
+      return {
+        resultCode: 'NOT_READY', readinessCode: writer.resultCode,
+        blockers: ['Deployment reconciliation requires the final integrated publication-readiness proof.'],
+      };
+    }
     if (writer.resultCode === 'NOT_READY' || writer.resultCode === 'HISTORY_NOT_ACTIVE'
         || writer.resultCode === 'ALREADY_DEPLOYED') {
       return { resultCode: 'NOT_READY', readinessCode: writer.resultCode, blockers: ['Public deployment state changed'] };
