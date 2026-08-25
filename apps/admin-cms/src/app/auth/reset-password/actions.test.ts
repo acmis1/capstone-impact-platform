@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuthWeakPasswordError } from '@supabase/supabase-js';
 
 const mocks = vi.hoisted(() => ({
   verifyAccess: vi.fn(),
@@ -134,6 +135,24 @@ describe('dedicated recovery password update action', () => {
       error: 'PASSWORD_UPDATE_FAILED',
     });
     expect(mocks.updateUser).toHaveBeenCalledOnce();
+    expect(mocks.signOut).not.toHaveBeenCalled();
+    expect(mocks.clearContext).not.toHaveBeenCalled();
+  });
+
+  it('translates a pwned weak-password rejection after durable verification without cleanup', async () => {
+    mocks.updateUser.mockResolvedValueOnce({
+      data: { user: null },
+      error: new AuthWeakPasswordError('redacted provider message', 422, ['pwned']),
+    });
+    const password = 'ValidPassword1';
+    await expect(resetPasswordAction({ password, confirmation: password })).resolves.toEqual({
+      error: 'PASSWORD_COMPROMISED',
+    });
+    expect(mocks.verifyAccess).toHaveBeenCalledOnce();
+    expect(mocks.updateUser).toHaveBeenCalledOnce();
+    expect(mocks.verifyAccess.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.updateUser.mock.invocationCallOrder[0],
+    );
     expect(mocks.signOut).not.toHaveBeenCalled();
     expect(mocks.clearContext).not.toHaveBeenCalled();
   });

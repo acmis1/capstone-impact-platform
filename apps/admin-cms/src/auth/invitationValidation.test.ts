@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { AuthWeakPasswordError } from '@supabase/supabase-js';
 
 // Mock server-only to prevent Next.js import checks during vitest runs
 vi.mock('server-only', () => ({}));
@@ -432,6 +433,32 @@ describe('Password Setup Regression Safety', () => {
 
     const res = await setPasswordAction({ password: 'validpassword123', confirmation: 'validpassword123' });
     expect(res.error).toBe('PASSWORD_UPDATE_FAILED');
+    expect(mockActivationRpc).not.toHaveBeenCalled();
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it('should translate only a pwned weak-password rejection without activation or sign-out', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } }, error: null });
+    mockUpdateUser.mockResolvedValue({
+      error: new AuthWeakPasswordError('redacted provider message', 422, ['pwned']),
+    });
+
+    const res = await setPasswordAction({ password: 'validpassword123', confirmation: 'validpassword123' });
+    expect(res.error).toBe('PASSWORD_COMPROMISED');
+    expect(mockUpdateUser).toHaveBeenCalledOnce();
+    expect(mockActivationRpc).not.toHaveBeenCalled();
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it('should keep a non-pwned weak-password rejection generic', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } }, error: null });
+    mockUpdateUser.mockResolvedValue({
+      error: new AuthWeakPasswordError('redacted provider message', 422, ['characters']),
+    });
+
+    const res = await setPasswordAction({ password: 'validpassword123', confirmation: 'validpassword123' });
+    expect(res.error).toBe('PASSWORD_UPDATE_FAILED');
+    expect(mockActivationRpc).not.toHaveBeenCalled();
     expect(mockSignOut).not.toHaveBeenCalled();
   });
 
