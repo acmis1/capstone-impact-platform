@@ -30,6 +30,7 @@ When verifying system behavior or planning extensions, information must be refer
 ## Infrastructure & Operational Runbooks
 
 *   **[Local Supabase Development Guide](../infra/supabase/local-development.md)**: Reproducible local Supabase setup via Docker and CLI 2.109.1 (Windows with Docker Desktop verified; macOS, Linux, and independent human onboarding pending).
+*   **[System Recovery Readiness Runbook](system-recovery-readiness.md)**: Non-destructive disposable-Local database and Storage backup/restore drill, post-recovery smoke checks, state-preservation rules, and hosted recovery boundaries.
 *   **[Staging Migration Reconciliation Runbook](../infra/supabase/staging-reconciliation-runbook.md)**: 7-gate runbook for verifying, backing up, reconciling, and auditing hosted Supabase database migrations.
 *   **[Key Migration Governance](../infra/supabase/key-migration-governance.md)**: Standards for modern server secret key preference (`SUPABASE_SECRET_KEY`) and secret rotation policies.
 *   **[Staff Lifecycle Design](../infra/supabase/staff-lifecycle-design.md)**: Staff account provisioning, role updates, offboarding procedures, and audit attribution.

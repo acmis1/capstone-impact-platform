@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  assertPublicSupabaseCredentialsAreSafe,
+  classifySupabaseCredential,
+} from './supabaseCredential';
 
 // Public browser-safe environment variables validation schema
 const publicEnvSchema = z.object({
@@ -66,13 +70,9 @@ export type GeminiEnv = z.infer<typeof geminiEnvSchema>;
  * Classifies an API key safely without exposing its content.
  */
 export function classifyKey(key: string | undefined, isServerKey: boolean): "publishable" | "secret" | "legacy_anon_jwt" | "legacy_service_role_jwt" | "missing" | "unknown" {
-  if (!key) return "missing";
-  if (key.startsWith("sb_publishable_")) return "publishable";
-  if (key.startsWith("sb_secret_")) return "secret";
-  if (key.startsWith("eyJhbGci")) {
-    return isServerKey ? "legacy_service_role_jwt" : "legacy_anon_jwt";
-  }
-  return "unknown";
+  return isServerKey
+    ? classifySupabaseCredential(key, true)
+    : classifySupabaseCredential(key, false);
 }
 
 /**
@@ -97,6 +97,7 @@ export function getPublicEnv(): PublicEnv {
   }
 
   const data = parsed.data;
+  assertPublicSupabaseCredentialsAreSafe(data);
   const rawPublicKey = data.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || data.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
   const keyType = classifyKey(rawPublicKey, false) as PublicEnv["publicKeyType"];
 
@@ -140,9 +141,15 @@ export function getServerEnv(): ServerEnv {
 
   const data = parsed.data;
 
-  // 🔑 DB ADMIN SELECTION: Prefer modern SUPABASE_SECRET_KEY for database admin access, with legacy fallback to SUPABASE_SERVICE_ROLE_KEY
+  // Validate only the selected server-only credential. An unused fallback cannot be bundled or
+  // used while the preferred secret is present, so it does not override a valid preferred key.
   const rawDatabaseAdminKey = data.SUPABASE_SECRET_KEY || data.SUPABASE_SERVICE_ROLE_KEY || '';
   const keyType = classifyKey(rawDatabaseAdminKey, true) as ServerEnv["databaseAdminKeyType"];
+  if (keyType !== 'secret' && keyType !== 'legacy_service_role_jwt') {
+    throw new Error(
+      'Staging Configuration Error: Supabase database administrator credential configuration is unsafe.'
+    );
+  }
 
   const keyMode = data.SUPABASE_SECRET_KEY
     ? ("secret_key_preferred" as const)

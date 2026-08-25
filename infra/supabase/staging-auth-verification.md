@@ -119,7 +119,8 @@ Testing is divided between automated unauthenticated HTTP checks and manual auth
    * `GET /admin/imports`: Returns HTTP 307 redirect to `/login?redirectTo=/admin`.
    * `GET /admin/projects/{publicId}`: Returns HTTP 307 redirect to `/login?redirectTo=/admin`. (Note: Protected project detail routes use `/admin/projects/{publicId}`; no standalone `/admin/projects` index route exists).
    * `GET /api/projects`: Returns HTTP 401 Unauthorized with sanitized response `{"success":false,"error":"Authentication required."}` (no stack traces or SQL details).
-   * `GET /api/health`: Returns HTTP 200 exposing safe configuration status classifications only.
+   * `GET /api/health`: Returns the minimal HTTP 200 application-liveness body only.
+   * `GET /api/readiness`: Returns HTTP 200 only when hosted configuration, expected staging target identity, and the bounded read-only Supabase probe are ready.
 
 2. **Manual Authenticated Edge Session Test**:
    * Log in via Microsoft Edge at `/login`.

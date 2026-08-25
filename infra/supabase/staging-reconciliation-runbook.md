@@ -200,11 +200,12 @@ supabase db push --workdir infra
    ```
    *Required result: `classification=READY_FOR_MANUAL_LOGIN_TEST`.*
 
-3. Verify application health route:
+3. Verify the distinct application liveness and deployment-readiness routes:
    ```bash
    curl -s https://<staging-domain>/api/health
+   curl -s https://<staging-domain>/api/readiness
    ```
-   *Required result: `status: "ok"`, `stagingOnly: true`.*
+   *Required results: liveness returns HTTP 200 with `status: "ok"`; readiness returns HTTP 200 with `classification: "READY"`. Readiness does not replace the migration/schema evidence above.*
 
 ---
 

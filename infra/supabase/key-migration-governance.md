@@ -13,9 +13,11 @@ Supabase key management has evolved from legacy JWT-based keys to named API key 
 
 1. **Browser Client Keys**:
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` takes precedence over `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+   - Every populated browser-key variable must independently contain either `sb_publishable_` with a non-empty suffix or a structurally valid legacy JWT whose payload role is exactly `anon`; build configuration fails before bundling if either value is unsafe.
    - Browser keys are restricted by Row Level Security (RLS) and Data API table grants.
 2. **Server Admin Keys**:
    - `SUPABASE_SECRET_KEY` takes precedence over `SUPABASE_SERVICE_ROLE_KEY`.
+   - The selected server credential must contain either `sb_secret_` with a non-empty suffix or a structurally valid legacy JWT whose payload role is exactly `service_role`. A present preferred key is never bypassed in favor of the fallback; an unused malformed fallback does not block a valid preferred secret because it remains server-only and unselected.
    - Legacy `SUPABASE_SERVICE_ROLE_KEY` is maintained as a temporary backwards-compatibility fallback (`legacy_service_role_jwt_fallback`).
    - Server keys bypass Row Level Security and must **NEVER** be exposed to browser runtimes, client bundles, or public code.
 
@@ -47,20 +49,21 @@ Inspect environment variables across server hosting platforms (e.g. Render, Verc
 2. Configure `SUPABASE_SECRET_KEY` in the server deployment environment while keeping `SUPABASE_SERVICE_ROLE_KEY` as a fallback.
 3. Redeploy the server application (`apps/admin-cms`).
 
-### Step 3: Health Verification
-Invoke the application health endpoint to verify active key selection mode:
+### Step 3: Deployment Readiness Verification
+Invoke the application readiness endpoint after the environment update:
 ```bash
-curl -s https://<application-domain>/api/health
+curl -s https://<application-domain>/api/readiness
 ```
-Confirm the JSON output reports:
+Confirm the response is HTTP 200 and reports only the bounded public contract:
 ```json
 {
-  "publicKeyType": "publishable",
-  "databaseAdminKeyType": "secret",
-  "databaseAdminKeyMode": "secret_key_preferred"
+  "readiness": "ready",
+  "classification": "READY",
+  "configuration": "configured",
+  "dependency": "reachable"
 }
 ```
-Verify that no secret values, key lengths, or key prefixes are returned in health checks or logs.
+This proves that the server accepted a recognized administrative key type and completed the read-only dependency probe; it deliberately does not disclose which key variable or selection mode was used. Confirm the intended `SUPABASE_SECRET_KEY` configuration through the hosting platform's private environment controls. Verify that neither `/api/health` nor `/api/readiness` returns secret values, key lengths, key prefixes, or raw provider errors.
 
 ### Step 4: Fallback & Rollback Procedure
 If issues are observed after injecting `SUPABASE_SECRET_KEY`:
