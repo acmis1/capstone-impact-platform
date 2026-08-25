@@ -10,6 +10,10 @@ import type {
   ApprovalSnapshotMediaInput,
 } from '../validation/projectValidation';
 import { validateMediaAsset } from '../storage/mediaValidationCore';
+import {
+  describeAccessibleContentProblem,
+  getSnapshotAltTextProblem,
+} from '../domain/accessibleContent';
 
 export interface ProjectMediaAssetPreviewRow {
   id: string;
@@ -106,6 +110,9 @@ function isValidPrivateApprovalAsset(
     !mimeType ||
     size === undefined ||
     !storagePath ||
+    row.file_name !== fileName ||
+    row.storage_path !== storagePath ||
+    row.mime_type !== mimeType ||
     !storagePath.startsWith(expectedPrefix) ||
     !storagePath.endsWith(fileName) ||
     storagePath.includes('..') ||
@@ -159,6 +166,48 @@ export function deriveApprovalMediaInput(
     );
 
   return { posterImage, posterPdf, snapshotMedia };
+}
+
+/**
+ * Read-only submission preflight for Tan's final snapshot-gallery gate. The
+ * submission RPC remains authoritative; this deliberately shares the same
+ * staged-media identity checks as the approval preview instead of inventing a
+ * second browser-only interpretation of a gallery row.
+ */
+export function validateSubmissionSnapshotGallery(
+  rows: ProjectMediaAssetPreviewRow[],
+  params: { projectPublicId: string; privateBucket: string },
+): string[] {
+  const snapshots = rows.filter((row) => row.asset_type === 'snapshot_image');
+  if (snapshots.length === 0) return [];
+
+  const positions = new Set<number>();
+  const structurallyInvalid = snapshots.length > 10 || snapshots.some((snapshot) => {
+    const position = snapshot.gallery_position;
+    if (
+      position === null ||
+      !Number.isInteger(position) ||
+      position < 1 ||
+      position > 10 ||
+      positions.has(position) ||
+      !isValidPrivateApprovalAsset(snapshot, { ...params, assetType: 'snapshot_image' })
+    ) {
+      return true;
+    }
+    positions.add(position);
+    return false;
+  });
+
+  const reasons: string[] = [];
+  if (structurallyInvalid) reasons.push('Snapshot gallery staged media is invalid.');
+
+  for (const snapshot of snapshots) {
+    const problem = getSnapshotAltTextProblem(snapshot.alt_text_public, { snapshotPresent: true });
+    if (!problem) continue;
+    const message = describeAccessibleContentProblem(problem, 'snapshotAltText');
+    if (!reasons.includes(message)) reasons.push(message);
+  }
+  return reasons;
 }
 
 /**

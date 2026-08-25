@@ -187,7 +187,7 @@ The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpc
 - **Administrator Identity**: Initial staging administrator bootstrap completed; single Auth identity linked to `admin_users` profile with verified `admin` role in `user_roles` (`check:admin-auth` classification: `READY_FOR_MANUAL_LOGIN_TEST`).
 - **Next Lifecycle Action**: Standalone Admin/CMS hosted web service deployment and manual authenticated login verification.
 
-The repository now expects 33 migrations, ending at `20260821140000_assistive_duplicate_shortlist`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that migrations `0027`–`0033` are hosted. Any hosted reconciliation remains a separately authorized operation followed by independent review.
+The repository now expects 34 migrations, ending at `20260824120000_bulk_project_review_concurrency`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that migrations `0027`–`0034` are hosted. Any hosted reconciliation remains a separately authorized operation followed by independent review.
 
 Operators should **NOT** run `supabase migration repair` or replay migrations against this clean v2 environment.
 
@@ -217,7 +217,7 @@ Expected automated inspection output on the clean v2 staging target:
 - `MIGRATION_HISTORY_READABLE = NO`
 - `SCHEMA_BASELINE = UNVERIFIED`
 - `REQUIRED_TABLE_SET = PRESENT` (All 27 public application tables detected)
-- `REQUIRED_RPC_NAMES = PRESENT` (All 57 application RPC names detected)
+- `REQUIRED_RPC_NAMES = PRESENT` (All 59 application RPC names detected)
 - `REQUIRED_STORAGE_BUCKETS = PRESENT` (All 3 buckets detected)
 - `AUTH_FOUNDATION = READY`
 - `MANUAL_EVIDENCE_REQUIRED = YES`

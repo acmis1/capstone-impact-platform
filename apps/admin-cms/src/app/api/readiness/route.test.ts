@@ -136,7 +136,7 @@ describe('GET/HEAD /api/readiness', () => {
       dependency: 'reachable',
       deploymentCommit: { state: 'missing' },
       expectedMigrations: {
-        count: 39,
+        count: 40,
         latest: '20260825025000_multi_image_gallery_review_submission',
       },
     });
