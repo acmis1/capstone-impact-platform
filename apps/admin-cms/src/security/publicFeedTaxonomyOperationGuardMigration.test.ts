@@ -1,10 +1,11 @@
-import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = path.resolve(__dirname, '../../../..');
 const migrations = path.join(root, 'infra/supabase/migrations');
+const auditedStreamKHead = 'eaefc2417880646baacb6581ddee02fca4fb7d22';
 const read = (name: string) => fs.readFileSync(path.join(migrations, name), 'utf8').replace(/\r\n/g, '\n');
 const guard = read('20260825030000_public_feed_taxonomy_operation_guard.sql');
 const protocol = read('20260824183000_public_feed_writer_protocol.sql');
@@ -21,12 +22,21 @@ describe('public-feed taxonomy operation guard migration', () => {
     expect(files.at(-1)).toBe('20260825030000_public_feed_taxonomy_operation_guard.sql');
     expect(files).toHaveLength(43);
 
-    const expectedHashes = new Map([
-      ['20260824180000_public_feed_deployment_ledger.sql', 'dd007a3208bf1b2540e04ae9d4ae5bb2e44bd6cc61089ac580ca997063cac3ce'],
-      ['20260824183000_public_feed_writer_protocol.sql', '632dca6704f24c5ce7ae7afbd01331b7af51952bb2b31223fb17de8497bc93a2'],
-    ]);
-    for (const [file, expected] of expectedHashes) {
-      expect(createHash('sha256').update(fs.readFileSync(path.join(migrations, file))).digest('hex')).toBe(expected);
+    const historicalMigrations = [
+      '20260824180000_public_feed_deployment_ledger.sql',
+      '20260824183000_public_feed_writer_protocol.sql',
+    ];
+    for (const file of historicalMigrations) {
+      const migrationPath = `infra/supabase/migrations/${file}`;
+      const currentBlob = execFileSync('git', ['rev-parse', `HEAD:${migrationPath}`], {
+        cwd: root,
+        encoding: 'utf8',
+      }).trim();
+      const auditedBlob = execFileSync('git', ['rev-parse', `${auditedStreamKHead}:${migrationPath}`], {
+        cwd: root,
+        encoding: 'utf8',
+      }).trim();
+      expect(currentBlob).toBe(auditedBlob);
     }
   });
 
