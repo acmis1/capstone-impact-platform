@@ -7,19 +7,18 @@ import type { Project } from '../../domain/project';
 import type { ProjectMediaPreviewItem } from '../admin-media/mediaPreviewTypes';
 import { ProjectMediaSummary } from './ProjectMediaSummary';
 
-vi.mock('./SnapshotAltTextEditor', () => ({
-  SnapshotAltTextEditor: ({
-    mediaAssetId,
-    initialAltText,
+vi.mock('./SnapshotAltTextGalleryEditor', () => ({
+  SnapshotAltTextGalleryEditor: ({
+    mediaItems,
   }: {
-    mediaAssetId: string;
-    initialAltText: string;
+    mediaItems: ProjectMediaPreviewItem[];
   }) => (
-    <div
-      data-testid="snapshot-alt-editor"
-      data-media-asset-id={mediaAssetId}
-    >
-      {initialAltText}
+    <div data-testid="snapshot-alt-editor-gallery">
+      {mediaItems.map((media) => (
+        <div key={media.id} data-testid="snapshot-alt-editor" data-media-asset-id={media.id}>
+          {media.altText}
+        </div>
+      ))}
     </div>
   ),
 }));
@@ -180,23 +179,17 @@ describe('ProjectMediaSummary accessibility integration', () => {
       />,
     );
 
-    const labels = [
-      screen.getByText('Snapshot 1 alt text'),
-      screen.getByText('Snapshot 2 alt text'),
-      screen.getByText('Snapshot 3 alt text'),
-    ];
-
-    expect(
-      labels[0].compareDocumentPosition(labels[1]) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-
-    expect(
-      labels[1].compareDocumentPosition(labels[2]) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-
     const editors = screen.getAllByTestId('snapshot-alt-editor');
 
     expect(editors).toHaveLength(3);
+
+    expect(
+      editors[0].compareDocumentPosition(editors[1]) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    expect(
+      editors[1].compareDocumentPosition(editors[2]) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     expect(editors[0].getAttribute('data-media-asset-id')).toBe('media-a');
     expect(editors[0].textContent).toContain('Alt text for snapshot one.');
@@ -206,6 +199,34 @@ describe('ProjectMediaSummary accessibility integration', () => {
 
     expect(editors[2].getAttribute('data-media-asset-id')).toBe('media-c');
     expect(editors[2].textContent).toContain('Alt text for snapshot three.');
+  });
+
+  it('renders visible media preview tiles in authoritative gallery order', () => {
+    render(
+      <ProjectMediaSummary
+        project={project()}
+        mediaAvailable
+        mediaItems={[
+          media({ id: 'poster-image', assetType: 'poster_image', fileName: 'poster.png', altText: 'Poster description.' }),
+          media({ id: 'poster-pdf', assetType: 'poster_pdf', fileName: 'poster.pdf', mimeType: 'application/pdf' }),
+          media({ id: 'media-a', galleryPosition: 1, fileName: 'snapshot-1.png', altText: 'Snapshot one description.' }),
+          media({ id: 'media-b', galleryPosition: 2, fileName: 'snapshot-2.png', altText: 'Snapshot two description.' }),
+          media({ id: 'media-c', galleryPosition: 3, fileName: 'snapshot-3.png', altText: 'Snapshot three description.' }),
+        ]}
+      />,
+    );
+
+    const tiles = [
+      screen.getByAltText('Poster description.'),
+      screen.getByTitle('PDF preview of poster.pdf'),
+      screen.getByAltText('Snapshot one description.'),
+      screen.getByAltText('Snapshot two description.'),
+      screen.getByAltText('Snapshot three description.'),
+    ];
+
+    tiles.slice(0, -1).forEach((tile, index) => {
+      expect(tile.compareDocumentPosition(tiles[index + 1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
   });
 
   it('preserves the empty media state', () => {

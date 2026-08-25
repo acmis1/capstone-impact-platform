@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  compareProjectMediaDisplayOrder,
   deriveApprovalMediaInput,
   loadProjectMediaPreviewItems,
   ProjectMediaPreviewReadError,
@@ -52,26 +53,63 @@ describe('project media preview read model', () => {
     expect(result.previewSource).toBe('unavailable');
   });
 
-  it('queries the exact project UUID with deterministic ordering', async () => {
+  it('queries the exact project UUID and applies the Admin display ordering centrally', async () => {
     const chain: Record<string, unknown> = {};
     const order = vi.fn();
     Object.assign(chain, { select: vi.fn(() => chain), eq: vi.fn(() => chain), order });
-    order.mockReturnValueOnce(chain).mockReturnValueOnce(chain).mockResolvedValueOnce({ data: [privateRow], error: null });
+    order.mockResolvedValueOnce({ data: [privateRow], error: null });
     const supabase = { from: vi.fn(() => chain) } as never;
 
     const result = await loadProjectMediaPreviewItems({ supabase, projectId: 'project-uuid', projectPublicId: 'private', projectTitle: 'Synthetic Project', privateBucket: 'draft-media', signDraftMediaUrl: vi.fn().mockResolvedValue(null) });
     expect(result).toHaveLength(1);
     expect((chain.eq as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith('project_id', 'project-uuid');
-    expect(order).toHaveBeenNthCalledWith(1, 'asset_type', { ascending: true });
-    expect(order).toHaveBeenNthCalledWith(2, 'created_at', { ascending: true });
-    expect(order).toHaveBeenNthCalledWith(3, 'id', { ascending: true });
+    expect(order).toHaveBeenCalledWith('id', { ascending: true });
+  });
+
+  it('orders the preview read model by fixed media role then numeric gallery position, not input order', async () => {
+    const rows: ProjectMediaAssetPreviewRow[] = [
+      { ...privateRow, id: 'snapshot-c', asset_type: 'snapshot_image', gallery_position: 3, file_name: 'snapshot-3.png', storage_path: 'drafts/private/snapshot_image/snapshot-3.png', alt_text_public: 'Snapshot three.' },
+      { ...privateRow, id: 'poster-image', asset_type: 'poster_image', gallery_position: null, storage_path: 'drafts/private/poster_image/poster.png' },
+      { ...privateRow, id: 'poster-pdf', asset_type: 'poster_pdf', gallery_position: null, file_name: 'poster.pdf', storage_path: 'drafts/private/poster_pdf/poster.pdf', mime_type: 'application/pdf' },
+      { ...privateRow, id: 'snapshot-a', asset_type: 'snapshot_image', gallery_position: 1, file_name: 'snapshot-1.png', storage_path: 'drafts/private/snapshot_image/snapshot-1.png', alt_text_public: 'Snapshot one.' },
+      { ...privateRow, id: 'snapshot-b', asset_type: 'snapshot_image', gallery_position: 2, file_name: 'snapshot-2.png', storage_path: 'drafts/private/snapshot_image/snapshot-2.png', alt_text_public: 'Snapshot two.' },
+    ];
+    const chain: Record<string, unknown> = {};
+    const order = vi.fn();
+    Object.assign(chain, { select: vi.fn(() => chain), eq: vi.fn(() => chain), order });
+    order.mockResolvedValueOnce({ data: rows, error: null });
+
+    const result = await loadProjectMediaPreviewItems({
+      supabase: { from: vi.fn(() => chain) } as never,
+      projectId: 'project-uuid',
+      projectPublicId: 'private',
+      projectTitle: 'Synthetic Project',
+      privateBucket: 'draft-media',
+      signDraftMediaUrl: vi.fn().mockResolvedValue(null),
+    });
+
+    expect(result.map((item) => item.id)).toEqual([
+      'poster-image', 'poster-pdf', 'snapshot-a', 'snapshot-b', 'snapshot-c',
+    ]);
+  });
+
+  it('places malformed snapshot positions after valid positions with an ID tie-breaker', () => {
+    const rows = [
+      { id: 'snapshot-null', asset_type: 'snapshot_image', gallery_position: null },
+      { id: 'snapshot-three', asset_type: 'snapshot_image', gallery_position: 3 },
+      { id: 'snapshot-one', asset_type: 'snapshot_image', gallery_position: 1 },
+    ];
+
+    expect([...rows].sort(compareProjectMediaDisplayOrder).map((row) => row.id)).toEqual([
+      'snapshot-one', 'snapshot-three', 'snapshot-null',
+    ]);
   });
 
   it('reports a media read failure without producing an empty-media result', async () => {
     const chain: Record<string, unknown> = {};
     const order = vi.fn();
     Object.assign(chain, { select: vi.fn(() => chain), eq: vi.fn(() => chain), order });
-    order.mockReturnValueOnce(chain).mockReturnValueOnce(chain).mockResolvedValueOnce({ data: null, error: { message: 'unavailable' } });
+    order.mockResolvedValueOnce({ data: null, error: { message: 'unavailable' } });
     await expect(loadProjectMediaPreviewItems({ supabase: { from: vi.fn(() => chain) } as never, projectId: 'project-uuid', projectPublicId: 'private', projectTitle: 'Synthetic Project', privateBucket: 'draft-media' })).rejects.toBeInstanceOf(ProjectMediaPreviewReadError);
   });
 
