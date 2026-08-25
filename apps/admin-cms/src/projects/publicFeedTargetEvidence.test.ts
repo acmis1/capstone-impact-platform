@@ -10,8 +10,26 @@ function createSupabaseStub(tables: Record<string, Row[]>): SupabaseClient {
   const from = (table: string) => {
     let rows = [...(tables[table] ?? [])];
     const api = {
-      select: () => api,
-      eq: (column: string, value: unknown) => { rows = rows.filter((row) => row[column] === value); return api; },
+      select: (columns?: string) => {
+        if (table === 'public_feed_versions' && columns?.includes('public_feed_version_members!inner')) {
+          rows = rows.map((row) => ({
+            ...row,
+            public_feed_version_members: (tables.public_feed_version_members ?? [])
+              .filter((member) => member.version_id === row.id),
+          })).filter((row) => (row.public_feed_version_members as Row[]).length > 0);
+        }
+        return api;
+      },
+      eq: (column: string, value: unknown) => {
+        if (column.startsWith('public_feed_version_members.')) {
+          const memberColumn = column.slice('public_feed_version_members.'.length);
+          rows = rows.filter((row) => (row.public_feed_version_members as Row[] | undefined)
+            ?.some((member) => member[memberColumn] === value));
+        } else {
+          rows = rows.filter((row) => row[column] === value);
+        }
+        return api;
+      },
       lte: (column: string, value: number) => { rows = rows.filter((row) => Number(row[column]) <= value); return api; },
       gt: (column: string, value: number) => { rows = rows.filter((row) => Number(row[column]) > value); return api; },
       in: (column: string, values: unknown[]) => { rows = rows.filter((row) => values.includes(row[column])); return api; },
@@ -85,6 +103,36 @@ describe('target-specific publication completion evidence', () => {
       supabase, 'A', head('v4', 4, { operation: 'rollback', publicationMode: null, operationId: 'op-rollback', publishedSnapshotId: null, auditRecordId: null }),
     );
     expect(evidence).toEqual({ operationId: 'op-A', versionNumber: 2, publishedSnapshotId: 'snap-A', auditRecordId: 'audit-A' });
+  });
+
+  it('finds exact restored evidence older than the former 50-publication window', async () => {
+    const laterVersions = Array.from({ length: 55 }, (_, index) => ({
+      id: `v${index + 3}`, version_number: index + 3, operation: 'publication',
+      affected_public_id: 'A', operation_id: `op-A-${index + 3}`,
+      published_snapshot_id: `snap-A-${index + 3}`, audit_record_id: null,
+    }));
+    const laterMembers = laterVersions.map((version) => ({
+      version_id: version.id, public_id: 'A', record_hash: HASH_A_CHANGED,
+    }));
+    const supabase = createSupabaseStub({
+      public_feed_versions: [
+        { id: 'v2', version_number: 2, operation: 'publication', affected_public_id: 'A', operation_id: 'op-A-original', published_snapshot_id: 'snap-A-original', audit_record_id: 'audit-A-original' },
+        ...laterVersions,
+        { id: 'v60', version_number: 60, operation: 'rollback', affected_public_id: null, operation_id: 'op-rollback', published_snapshot_id: null, audit_record_id: null },
+      ],
+      public_feed_version_members: [
+        { version_id: 'v2', public_id: 'A', record_hash: HASH_A },
+        ...laterMembers,
+        { version_id: 'v60', public_id: 'A', record_hash: HASH_A },
+      ],
+    });
+
+    await expect(findPublicationCompletionEvidence(
+      supabase, 'A', head('v60', 60, { operation: 'rollback', operationId: 'op-rollback' }),
+    )).resolves.toEqual({
+      operationId: 'op-A-original', versionNumber: 2,
+      publishedSnapshotId: 'snap-A-original', auditRecordId: 'audit-A-original',
+    });
   });
 
   it('refuses to invent evidence when no publication explains the deployed record bytes', async () => {

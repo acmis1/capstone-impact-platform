@@ -12,8 +12,6 @@ import type { PublicFeedHeadRecord } from '../repositories/SupabasePublicFeedLed
  * Every lookup here is bounded and scoped to a single publicId.
  */
 
-const TARGET_HISTORY_SCAN_LIMIT = 50;
-
 export interface PublicFeedTargetEvidence {
   operationId: string;
   versionNumber: number | null;
@@ -68,16 +66,24 @@ async function readMemberRecordHash(
   return result.data ? String(result.data.record_hash) : null;
 }
 
-async function readMemberRecordHashes(
+async function readMatchingPublication(
   supabase: SupabaseClient,
-  versionIds: string[],
   publicId: string,
-): Promise<Map<string, string>> {
-  if (versionIds.length === 0) return new Map();
-  const result = await supabase.from('public_feed_version_members')
-    .select('version_id,record_hash').eq('public_id', publicId).in('version_id', versionIds);
-  if (result.error) throw new Error('PUBLIC_FEED_TARGET_MEMBER_READ_FAILED');
-  return new Map((result.data ?? []).map((row) => [String(row.version_id), String(row.record_hash)]));
+  deployedRecordHash: string,
+  headVersionNumber: number,
+): Promise<VersionRow | null> {
+  const result = await supabase.from('public_feed_versions')
+    .select('id,version_number,operation_id,published_snapshot_id,audit_record_id,public_feed_version_members!inner(record_hash)')
+    .eq('operation', 'publication')
+    .eq('affected_public_id', publicId)
+    .eq('public_feed_version_members.public_id', publicId)
+    .eq('public_feed_version_members.record_hash', deployedRecordHash)
+    .lte('version_number', headVersionNumber)
+    .order('version_number', { ascending: false })
+    .limit(1);
+  if (result.error) throw new Error('PUBLIC_FEED_TARGET_HISTORY_READ_FAILED');
+  const rows = versionRows((result.data ?? []) as Record<string, unknown>[]);
+  return rows[0] ?? null;
 }
 
 /**
@@ -96,12 +102,9 @@ export async function findPublicationCompletionEvidence(
 ): Promise<PublicFeedTargetEvidence | null> {
   const deployedRecordHash = await readMemberRecordHash(supabase, head.currentVersion.id, publicId);
   if (deployedRecordHash === null) return null;
-  const versions = await readTargetVersions(
-    supabase, 'publication', publicId, head.currentVersion.versionNumber, TARGET_HISTORY_SCAN_LIMIT,
+  const match = await readMatchingPublication(
+    supabase, publicId, deployedRecordHash, head.currentVersion.versionNumber,
   );
-  if (versions.length === 0) return null;
-  const hashes = await readMemberRecordHashes(supabase, versions.map((version) => version.id), publicId);
-  const match = versions.find((version) => hashes.get(version.id) === deployedRecordHash);
   if (!match) return null;
   return {
     operationId: match.operationId, versionNumber: match.versionNumber,

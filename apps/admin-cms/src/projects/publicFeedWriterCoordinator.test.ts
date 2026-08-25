@@ -95,6 +95,14 @@ function createLedger(initialState: PublicFeedOperationState, overrides: Partial
         publishedSnapshotId: null, auditRecordId: null, createdAt: CONFIRMED_AT,
       },
     })),
+    getVersionByOperationId: vi.fn(async () => ({
+      id: 'version-2', versionNumber: 2, operation: 'publication' as const, publicationMode: 'normal' as const,
+      operationId: record.id, previousVersionId: 'version-1', restoredFromVersionId: null,
+      projectId: null, affectedPublicId: 'target', authorizingActorId: ADMIN, completionActorId: OTHER_ADMIN,
+      artifactContent: candidate.content, byteCount: candidate.bytes.byteLength,
+      feedHash: candidate.feedHash, recordCount: candidate.recordCount,
+      publishedSnapshotId: 'snapshot-A', auditRecordId: 'audit-A', createdAt: CONFIRMED_AT,
+    })),
     reserve: vi.fn(async () => ({ resultCode: 'OPERATION_RESERVED', operationId: record.id, ownerEpoch: 1 })),
     claim: vi.fn(async () => ({ resultCode: 'OPERATION_CLAIMED', ownerEpoch: 2 })),
     bind: vi.fn(async () => { advance('PREPARED'); return { resultCode: 'ARTIFACT_BOUND' }; }),
@@ -204,7 +212,25 @@ describe('canonical public feed writer boundary', () => {
     await expect(executePublicFeedWriter(writerParameters({ afterWriteIntent, validateBeforeWriteIntent }) as never))
       .resolves.toEqual({ resultCode: 'PERMISSION_DENIED' });
     expect(validateBeforeWriteIntent).toHaveBeenCalledOnce();
+    expect(harness.ledger.fail).toHaveBeenCalledWith(
+      'operation-1', 1, expect.any(String), ADMIN, 'PERMISSION_DENIED',
+    );
     expect(afterWriteIntent).not.toHaveBeenCalled();
+    expect(harness.storage.writeExact).not.toHaveBeenCalled();
+  });
+
+  it('returns permission denial when the fenced failure committed but its response was lost', async () => {
+    harness.ledger = createLedger('PREPARED');
+    harness.ledger.markWriteStarted = vi.fn(async () => ({ resultCode: 'PERMISSION_DENIED' }));
+    harness.ledger.fail = vi.fn(async () => { throw new Error('PERSISTENCE_RESPONSE_LOST'); });
+    harness.ledger.getOperation
+      .mockResolvedValueOnce(operationRecord('PREPARED'))
+      .mockResolvedValueOnce(operationRecord('FAILED', { failureCode: 'PERMISSION_DENIED' }));
+    harness.storage = createStorage(baseline);
+
+    await expect(executePublicFeedWriter(writerParameters({
+      afterWriteIntent: async () => undefined,
+    }) as never)).resolves.toEqual({ resultCode: 'PERMISSION_DENIED' });
     expect(harness.storage.writeExact).not.toHaveBeenCalled();
   });
 
@@ -329,6 +355,85 @@ describe('durable operation intent binding', () => {
     }) as never);
     expect(result).toMatchObject({ resultCode: 'COMPLETED' });
     expect(harness.ledger.claim).toHaveBeenCalledOnce();
+  });
+
+  it('allows an explicit current-admin takeover while preserving the original authorization intent', async () => {
+    harness.ledger = createLedger('PREPARED');
+    harness.ledger.getBlockingOperation = vi.fn(async () => expiredBlocking());
+    harness.storage = createStorage(baseline);
+
+    const result = await executePublicFeedWriter(writerParameters({
+      adminId: OTHER_ADMIN, recoveryOperationId: 'operation-1',
+      afterWriteIntent: async () => undefined,
+    }) as never);
+
+    expect(result).toMatchObject({ resultCode: 'COMPLETED' });
+    expect(harness.ledger.claim).toHaveBeenCalledWith('operation-1', OTHER_ADMIN, expect.any(String));
+    expect(harness.ledger.finalize).toHaveBeenCalledWith(
+      'operation-1', 2, expect.any(String), OTHER_ADMIN,
+    );
+    expect(expiredBlocking().authorizingActorId).toBe(ADMIN);
+  });
+
+  it.each(['WRITE_STARTED', 'CANDIDATE_OBSERVED', 'DB_FINALIZED'] as const)(
+    'converges an expired %s operation under an explicit second-admin takeover',
+    async (state) => {
+      harness.ledger = createLedger(state);
+      harness.ledger.getBlockingOperation = vi.fn(async () => operationRecord(state, {
+        leaseExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+      }));
+      harness.storage = createStorage(state === 'WRITE_STARTED' ? baseline : candidate);
+
+      const result = await executePublicFeedWriter(writerParameters({
+        adminId: OTHER_ADMIN, recoveryOperationId: 'operation-1',
+        afterWriteIntent: async () => undefined,
+        prepareCandidate: async () => { throw new Error('RECOVERY_ARTIFACT_MUST_BE_DURABLE'); },
+      }) as never);
+
+      expect(result).toMatchObject({ resultCode: 'COMPLETED', versionNumber: 2 });
+      expect(harness.ledger.claim).toHaveBeenCalledWith('operation-1', OTHER_ADMIN, expect.any(String));
+      expect(harness.ledger.complete).toHaveBeenCalledWith(
+        'operation-1', 2, expect.any(String), OTHER_ADMIN, candidate.feedHash, candidate.recordCount,
+      );
+    },
+  );
+
+  it('does not steal a non-expired explicitly named operation', async () => {
+    harness.ledger = createLedger('PREPARED');
+    harness.ledger.getBlockingOperation = vi.fn(async () => operationRecord('PREPARED'));
+    harness.storage = createStorage(baseline);
+
+    await expect(executePublicFeedWriter(writerParameters({
+      adminId: OTHER_ADMIN, recoveryOperationId: 'operation-1', afterWriteIntent: async () => undefined,
+    }) as never)).resolves.toEqual({ resultCode: 'PUBLICATION_IN_PROGRESS' });
+    expect(harness.ledger.claim).not.toHaveBeenCalled();
+  });
+
+  it('denies an explicit takeover when the claim actor is not a current admin', async () => {
+    harness.ledger = createLedger('PREPARED');
+    harness.ledger.getBlockingOperation = vi.fn(async () => expiredBlocking());
+    harness.ledger.claim = vi.fn(async () => ({ resultCode: 'PERMISSION_DENIED' }));
+    harness.storage = createStorage(baseline);
+
+    await expect(executePublicFeedWriter(writerParameters({
+      adminId: OTHER_ADMIN, recoveryOperationId: 'operation-1', afterWriteIntent: async () => undefined,
+    }) as never)).resolves.toEqual({ resultCode: 'PERMISSION_DENIED' });
+    expect(harness.storage.writeExact).not.toHaveBeenCalled();
+  });
+
+  it('respects the Storage uncertainty fence during explicit takeover', async () => {
+    harness.ledger = createLedger('WRITE_STARTED');
+    harness.ledger.getBlockingOperation = vi.fn(async () => operationRecord('WRITE_STARTED', {
+      leaseExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+      storageUncertaintyUntil: new Date(Date.now() + 60_000).toISOString(),
+    }));
+    harness.ledger.claim = vi.fn(async () => ({ resultCode: 'UNCERTAINTY_FENCE_ACTIVE' }));
+    harness.storage = createStorage(baseline);
+
+    await expect(executePublicFeedWriter(writerParameters({
+      adminId: OTHER_ADMIN, recoveryOperationId: 'operation-1', afterWriteIntent: async () => undefined,
+    }) as never)).resolves.toEqual({ resultCode: 'PUBLICATION_IN_PROGRESS' });
+    expect(harness.storage.writeExact).not.toHaveBeenCalled();
   });
 
   it('holds a recovery-required operation until the operator names it explicitly', async () => {

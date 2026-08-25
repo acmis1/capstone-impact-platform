@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
       feedBucket: env.SUPABASE_PUBLIC_FEEDS_BUCKET, feedPath: env.SUPABASE_PUBLIC_FEED_FILE,
       environment: process.env,
     }));
-    if (result.resultCode === 'COMPLETED' || result.resultCode === 'NO_RECOVERY_REQUIRED') {
+    if (result.resultCode === 'COMPLETED' || result.resultCode === 'RELEASED'
+        || result.resultCode === 'NO_RECOVERY_REQUIRED') {
       return NextResponse.json({ success: true, result }, { headers: NO_STORE });
     }
     const status = result.resultCode === 'PERMISSION_DENIED' ? 403

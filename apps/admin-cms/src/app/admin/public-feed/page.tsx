@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from '../../../lib/supabase/admin';
 import { isLocalPublicFeedRollbackAvailable } from '../../../projects/localPublicationExecution';
 import { readPublicFeedHistory, type PublicFeedHistoryView } from '../../../projects/publicFeedHistoryRepository';
 import { PublicFeedHistoryControls } from '../../../components/admin/PublicFeedHistoryControls';
+import { PublicFeedHistoryPagination } from '../../../components/admin/PublicFeedHistoryPagination';
 import { DeploymentReconciliationButton } from '../../../components/admin/DeploymentReconciliationButton';
 import { Badge } from '../../../components/ui/badge';
 import { ErrorState } from '../../../components/ui/error-state';
@@ -19,14 +20,17 @@ function formatTimestamp(value: string): string {
 export default async function PublicFeedHistoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ version?: string }>;
+  searchParams: Promise<{ version?: string; page?: string }>;
 }) {
   const admin = await requireAdmin();
-  const requested = Number((await searchParams).version);
+  const query = await searchParams;
+  const requested = Number(query.version);
   const selectedVersion = Number.isSafeInteger(requested) && requested > 0 ? requested : undefined;
+  const requestedPage = Number(query.page);
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   let view: PublicFeedHistoryView | null = null;
   try {
-    view = await readPublicFeedHistory(createSupabaseAdminClient(), selectedVersion);
+    view = await readPublicFeedHistory(createSupabaseAdminClient(), selectedVersion, page);
   } catch {
     console.error('[Public feed history]: HISTORY_READ_FAILED');
   }
@@ -70,7 +74,7 @@ export default async function PublicFeedHistoryPage({
       <PublicFeedHistoryControls
         canPublish={canPublish} historyActive={view.active} rollbackAvailable={rollbackAvailable}
         targetVersionNumber={view.detail?.versionNumber ?? null} targetIsCurrent={view.detail?.current ?? false}
-        recoveryRequired={view.blockingOperation?.state === 'RECOVERY_REQUIRED'}
+        recoveryAvailable={Boolean(view.blockingOperation)}
       />
 
       <section aria-labelledby="feed-versions-heading" className="space-y-3">
@@ -86,7 +90,7 @@ export default async function PublicFeedHistoryPage({
               <tbody className="divide-y divide-border/80">
                 {view.versions.map((item) => (
                   <tr key={item.versionNumber}>
-                    <td className="px-4 py-3 font-semibold"><Link className="text-primary underline-offset-4 hover:underline" href={`/admin/public-feed?version=${item.versionNumber}`}>v{item.versionNumber}</Link>{item.current && <Badge variant="success" className="ml-2">Current</Badge>}</td>
+                    <td className="px-4 py-3 font-semibold"><Link className="text-primary underline-offset-4 hover:underline" href={`/admin/public-feed?page=${view.page}&version=${item.versionNumber}`}>v{item.versionNumber}</Link>{item.current && <Badge variant="success" className="ml-2">Current</Badge>}</td>
                     <td className="px-4 py-3 capitalize">{item.operation}{item.publicationMode ? ` · ${item.publicationMode.replaceAll('_', ' ')}` : ''}</td>
                     <td className="px-4 py-3 whitespace-nowrap">{formatTimestamp(item.createdAt)}</td>
                     <td className="px-4 py-3">{item.actorDisplay}</td>
@@ -98,6 +102,7 @@ export default async function PublicFeedHistoryPage({
             </table>
           </div>
         )}
+        <PublicFeedHistoryPagination page={view.page} hasNewer={view.hasNewer} hasOlder={view.hasOlder} />
       </section>
 
       {view.detail && (

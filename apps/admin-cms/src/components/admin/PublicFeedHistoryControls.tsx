@@ -33,7 +33,7 @@ export function PublicFeedHistoryControls(props: {
   rollbackAvailable: boolean;
   targetVersionNumber: number | null;
   targetIsCurrent: boolean;
-  recoveryRequired: boolean;
+  recoveryAvailable: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
@@ -117,7 +117,7 @@ export function PublicFeedHistoryControls(props: {
       const response = await fetch('/api/public-feed/recovery', { method: 'POST' });
       const body = await response.json() as { success?: boolean; code?: string };
       setMessage(body.success
-        ? 'The exact durable candidate was recovered and the feed operation completed.'
+        ? 'The expired feed operation was safely released or recovered from its exact durable intent.'
         : `Recovery remains blocked: ${body.code || 'RECOVERY_FAILED'}.`);
       if (body.success) router.refresh();
     } catch {
@@ -130,13 +130,13 @@ export function PublicFeedHistoryControls(props: {
   return (
     <section aria-labelledby="public-feed-controls-heading" className="rounded-xl border border-border-structural bg-card p-5 shadow-xs">
       <h2 id="public-feed-controls-heading" className="text-lg font-semibold text-foreground">Governed controls</h2>
-      {props.recoveryRequired && (
+      {props.recoveryAvailable && (
         <div className="mt-3 space-y-3 rounded-lg border border-warning/40 bg-warning/5 p-4">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Recovery performs exact Storage reads and can only retry the candidate already bound to the durable operation.
+            Takeover is available only after the current lease and any Storage uncertainty fence expire. Bound operations replay their exact durable intent; unbound reservations are safely released.
           </p>
           <Button type="button" variant="outline" onClick={recover} disabled={pending}>
-            {pending ? 'Recovering…' : 'Retry exact feed recovery'}
+            {pending ? 'Recovering…' : 'Take over expired operation'}
           </Button>
         </div>
       )}

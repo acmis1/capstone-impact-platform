@@ -39,11 +39,19 @@ export interface PublicFeedHistoryView {
   rollbackEnabled: boolean;
   currentVersionNumber: number | null;
   generation: number | null;
+  page: number;
+  pageSize: number;
+  hasNewer: boolean;
+  hasOlder: boolean;
   versions: PublicFeedHistoryListItem[];
   detail: PublicFeedHistoryDetail | null;
   deploymentStatuses: PublicFeedDeploymentStatus[];
   blockingOperation: { kind: string; state: string; failureCode: string | null; updatedAt: string } | null;
 }
+
+export const PUBLIC_FEED_HISTORY_PAGE_SIZE = 50;
+
+type VersionRow = Record<string, unknown>;
 
 function actorDisplay(actor: { full_name?: unknown; email?: unknown } | undefined): string {
   const name = typeof actor?.full_name === 'string' ? actor.full_name.trim() : '';
@@ -54,33 +62,63 @@ function actorDisplay(actor: { full_name?: unknown; email?: unknown } | undefine
 export async function readPublicFeedHistory(
   supabase: SupabaseClient,
   selectedVersionNumber?: number,
+  requestedPage = 1,
 ): Promise<PublicFeedHistoryView> {
-  const [headResult, versionsResult, projectsResult, blockingResult] = await Promise.all([
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const offset = (page - 1) * PUBLIC_FEED_HISTORY_PAGE_SIZE;
+  const selection = selectedVersionNumber && Number.isSafeInteger(selectedVersionNumber)
+    && selectedVersionNumber > 0
+    ? supabase.from('public_feed_versions').select(
+      'id,version_number,operation,publication_mode,previous_version_id,restored_from_version_id,affected_public_id,authorizing_actor_id,completion_actor_id,byte_count,feed_hash,record_count,created_at',
+    ).eq('version_number', selectedVersionNumber).maybeSingle()
+    : Promise.resolve({ data: null, error: null });
+  const [headResult, versionsResult, selectedResult, projectsResult, blockingResult] = await Promise.all([
     supabase.from('public_feed_head').select('current_version_id,generation,rollback_enabled').eq('singleton', true).maybeSingle(),
     supabase.from('public_feed_versions').select(
       'id,version_number,operation,publication_mode,previous_version_id,restored_from_version_id,affected_public_id,authorizing_actor_id,completion_actor_id,byte_count,feed_hash,record_count,created_at',
-    ).order('version_number', { ascending: false }).limit(100),
+    ).order('version_number', { ascending: false })
+      .range(offset, offset + PUBLIC_FEED_HISTORY_PAGE_SIZE),
+    selection,
     supabase.from('projects').select('public_id,title,status,deleted_at').is('deleted_at', null),
     supabase.from('public_feed_operations').select('kind,state,failure_code,updated_at')
       .in('state', ['RESERVED', 'PREPARED', 'WRITE_STARTED', 'CANDIDATE_OBSERVED', 'DB_FINALIZED', 'RECOVERY_REQUIRED'])
       .limit(1).maybeSingle(),
   ]);
-  if (headResult.error || versionsResult.error || projectsResult.error || blockingResult.error) {
+  if (headResult.error || versionsResult.error || selectedResult.error
+      || projectsResult.error || blockingResult.error) {
     throw new Error('PUBLIC_FEED_HISTORY_READ_FAILED');
   }
 
-  const rows = versionsResult.data ?? [];
-  const actorIds = [...new Set(rows.flatMap((row) => [row.authorizing_actor_id, row.completion_actor_id]).filter(Boolean).map(String))];
+  const pageRows = (versionsResult.data ?? []) as VersionRow[];
+  const rows = pageRows.slice(0, PUBLIC_FEED_HISTORY_PAGE_SIZE);
+  const selectedRow = selectedResult.data as VersionRow | null;
+  const displayRows = [...new Map(
+    [...rows, ...(selectedRow ? [selectedRow] : [])].map((row) => [String(row.id), row]),
+  ).values()];
+  const currentVersionId = headResult.data?.current_version_id ? String(headResult.data.current_version_id) : null;
+  const referencedVersionIds = [...new Set(displayRows.flatMap((row) => [
+    row.previous_version_id, row.restored_from_version_id,
+  ]).filter(Boolean).map(String).concat(currentVersionId ? [currentVersionId] : []))];
+  const referenceResult = referencedVersionIds.length === 0
+    ? { data: [], error: null }
+    : await supabase.from('public_feed_versions').select('id,version_number').in('id', referencedVersionIds);
+  if (referenceResult.error) throw new Error('PUBLIC_FEED_HISTORY_REFERENCE_READ_FAILED');
+
+  const actorIds = [...new Set(displayRows.flatMap((row) => [
+    row.authorizing_actor_id, row.completion_actor_id,
+  ]).filter(Boolean).map(String))];
   const actorResult = actorIds.length === 0
     ? { data: [], error: null }
     : await supabase.from('admin_users').select('id,full_name,email').in('id', actorIds);
   if (actorResult.error) throw new Error('PUBLIC_FEED_HISTORY_ACTOR_READ_FAILED');
   const actors = new Map((actorResult.data ?? []).map((row) => [String(row.id), row]));
   const projects = new Map((projectsResult.data ?? []).map((row) => [String(row.public_id), row]));
-  const versionNumberById = new Map(rows.map((row) => [String(row.id), Number(row.version_number)]));
-  const currentVersionId = headResult.data?.current_version_id ? String(headResult.data.current_version_id) : null;
+  const versionNumberById = new Map(
+    [...displayRows, ...(referenceResult.data ?? [])]
+      .map((row) => [String(row.id), Number(row.version_number)]),
+  );
 
-  const versions: PublicFeedHistoryListItem[] = rows.map((row) => {
+  const toListItem = (row: VersionRow): PublicFeedHistoryListItem => {
     const publicId = row.affected_public_id === null ? null : String(row.affected_public_id);
     return {
       versionNumber: Number(row.version_number),
@@ -94,31 +132,30 @@ export async function readPublicFeedHistory(
       previousVersionNumber: row.previous_version_id === null ? null : versionNumberById.get(String(row.previous_version_id)) ?? null,
       restoredFromVersionNumber: row.restored_from_version_id === null ? null : versionNumberById.get(String(row.restored_from_version_id)) ?? null,
     };
-  });
+  };
+  const versions = rows.map(toListItem);
 
   const selected = selectedVersionNumber
-    ? rows.find((row) => Number(row.version_number) === selectedVersionNumber)
+    ? selectedRow
     : rows.find((row) => String(row.id) === currentVersionId) ?? rows[0];
   let detail: PublicFeedHistoryDetail | null = null;
   if (selected) {
     const memberResult = await supabase.from('public_feed_version_members')
       .select('ordinal,public_id').eq('version_id', selected.id).order('ordinal', { ascending: true });
     if (memberResult.error) throw new Error('PUBLIC_FEED_HISTORY_MEMBER_READ_FAILED');
-    const item = versions.find((candidate) => candidate.versionNumber === Number(selected.version_number));
-    if (item) {
-      detail = {
-        ...item,
-        members: (memberResult.data ?? []).map((member) => {
-          const project = projects.get(String(member.public_id));
-          return {
-            ordinal: Number(member.ordinal), publicId: String(member.public_id),
-            title: project ? String(project.title) : null,
-            lifecycleStatus: project ? String(project.status) : 'missing',
-            currentlyDeployed: String(selected.id) === currentVersionId,
-          };
-        }),
-      };
-    }
+    const item = toListItem(selected);
+    detail = {
+      ...item,
+      members: (memberResult.data ?? []).map((member) => {
+        const project = projects.get(String(member.public_id));
+        return {
+          ordinal: Number(member.ordinal), publicId: String(member.public_id),
+          title: project ? String(project.title) : null,
+          lifecycleStatus: project ? String(project.status) : 'missing',
+          currentlyDeployed: String(selected.id) === currentVersionId,
+        };
+      }),
+    };
   }
 
   const currentMembersResult = currentVersionId
@@ -145,8 +182,10 @@ export async function readPublicFeedHistory(
 
   return {
     active: Boolean(headResult.data), rollbackEnabled: headResult.data?.rollback_enabled === true,
-    currentVersionNumber: versions.find((item) => item.current)?.versionNumber ?? null,
+    currentVersionNumber: currentVersionId ? versionNumberById.get(currentVersionId) ?? null : null,
     generation: headResult.data ? Number(headResult.data.generation) : null,
+    page, pageSize: PUBLIC_FEED_HISTORY_PAGE_SIZE, hasNewer: page > 1,
+    hasOlder: pageRows.length > PUBLIC_FEED_HISTORY_PAGE_SIZE,
     versions, detail, deploymentStatuses,
     blockingOperation: blockingResult.data ? {
       kind: String(blockingResult.data.kind), state: String(blockingResult.data.state),

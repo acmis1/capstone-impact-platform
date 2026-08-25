@@ -31,6 +31,31 @@ describe('public deployment ledger migration security contract', () => {
     expect(protocol).toContain("interval '120 seconds'");
   });
 
+  it('supports governed expired-owner takeover and fenced pre-write release without rewriting authorization', () => {
+    const claim = protocol.slice(
+      protocol.indexOf('CREATE OR REPLACE FUNCTION public.claim_public_feed_operation('),
+      protocol.indexOf('CREATE OR REPLACE FUNCTION public.reserve_public_feed_operation('),
+    );
+    const fail = protocol.slice(
+      protocol.indexOf('CREATE OR REPLACE FUNCTION public.fail_public_feed_operation('),
+      protocol.indexOf('CREATE OR REPLACE FUNCTION public.require_public_feed_recovery('),
+    );
+
+    expect(claim).toContain('public.public_feed_actor_is_admin(p_admin_id)');
+    expect(claim).toContain("v_operation.lease_expires_at > pg_catalog.now()");
+    expect(claim).toContain("v_operation.state = 'WRITE_STARTED'");
+    expect(claim).toContain('v_operation.storage_uncertainty_until > pg_catalog.now()');
+    expect(claim).toContain('owner_epoch = owner_epoch + 1');
+    expect(claim).toContain('completion_actor_id = p_admin_id');
+    expect(claim).not.toMatch(/SET[\s\S]*authorizing_actor_id\s*=/);
+
+    // Revocation can make mark-write-started deny the original actor. The fenced failure RPC does
+    // not repeat the admin-role gate, and it can terminalize only states with no external write.
+    expect(fail).toContain('public.public_feed_owner_valid(');
+    expect(fail).not.toContain('public.public_feed_actor_is_admin(');
+    expect(fail).toContain("v_operation.state NOT IN ('RESERVED', 'PREPARED')");
+  });
+
   it('makes versions, members, and events immutable and table mutation RPC-only', () => {
     for (const table of ['public_feed_versions', 'public_feed_version_members', 'public_feed_operation_events']) {
       expect(ledger).toMatch(new RegExp(`CREATE TRIGGER reject_public_feed_[\\s\\S]*?ON public\\.${table}`));

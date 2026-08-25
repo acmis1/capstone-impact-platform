@@ -9,6 +9,7 @@ import {
   startDockerLoopbackProxy,
   stopDockerLoopbackProxy,
 } from '../local-development/safeSupabaseCli';
+import { cleanupDisposableLedgerRuntime } from './disposableLedgerCleanup';
 
 /**
  * Provisions a throwaway Supabase stack that the public deployment ledger runtime owns outright,
@@ -283,14 +284,16 @@ function main(): void {
   // install. Provisioning one stack per invocation keeps both baselines exact.
   const workdir = createWorkdir(upgradeRequested ? STREAM_K_MIGRATIONS : []);
   let networkId = '';
-  let started = false;
+  let networkCreateAttempted = false;
+  let startAttempted = false;
   let exitCode = 1;
   try {
+    networkCreateAttempted = true;
     networkId = docker([
       'network', 'create', '--opt', 'com.docker.network.bridge.host_binding_ipv4=127.0.0.1', networkName,
     ]);
+    startAttempted = true;
     runSupabase('start', workdir, networkId);
-    started = true;
     exitCode = 0;
     if (upgradeRequested) verifyMainUpgrade(workdir);
     for (const name of scriptModes) {
@@ -317,13 +320,22 @@ function main(): void {
     console.error(error instanceof Error ? error.message : 'Disposable ledger runtime provisioning failed.');
     exitCode = 1;
   } finally {
-    if (started && networkId) {
-      try { runSupabase('stop', workdir, networkId); } catch { /* cleanup is best effort */ }
+    const cleanup = cleanupDisposableLedgerRuntime({
+      projectId, networkName, startAttempted, networkCreateAttempted, docker,
+      stopSupabase: () => runSupabase('stop', workdir, networkId),
+      removeWorkdir: () => fs.rmSync(workdir, { recursive: true, force: true }),
+      workdirExists: () => fs.existsSync(workdir),
+    });
+    for (const error of cleanup.errors) console.error(`Cleanup failure: ${error}`);
+    if (cleanup.residue.containers.length > 0) {
+      console.error(`Cleanup residue: ${cleanup.residue.containers.length} verifier container(s).`);
     }
-    if (networkId) {
-      try { docker(['network', 'rm', networkName]); } catch { /* the network may already be gone */ }
+    if (cleanup.residue.volumes.length > 0) {
+      console.error(`Cleanup residue: ${cleanup.residue.volumes.length} verifier volume(s).`);
     }
-    fs.rmSync(workdir, { recursive: true, force: true });
+    if (cleanup.residue.networkPresent) console.error('Cleanup residue: verifier network remains.');
+    if (cleanup.residue.workdirPresent) console.error('Cleanup residue: verifier workdir remains.');
+    if (!cleanup.clean) exitCode = 1;
   }
   process.exitCode = exitCode;
 }

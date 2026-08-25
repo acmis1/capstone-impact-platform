@@ -81,8 +81,10 @@ export interface FeedRollbackPreparationRecord {
   actorId: string;
   targetVersionId: string;
   baselineVersionId: string;
+  acknowledgementDigest: string;
   expiresAt: string;
   consumedAt: string | null;
+  operationId: string | null;
 }
 
 export type PublicFeedRpcResult = Record<string, unknown> & { resultCode: string };
@@ -174,9 +176,16 @@ export class SupabasePublicFeedLedgerRepositoryCore {
     return result.data ? version(result.data) : null;
   }
 
+  async getVersionByOperationId(operationId: string): Promise<PublicFeedVersionRecord | null> {
+    const result = await this.supabase.from('public_feed_versions').select('*')
+      .eq('operation_id', operationId).maybeSingle();
+    if (result.error) throw new Error('PUBLIC_FEED_VERSION_READ_FAILED');
+    return result.data ? version(result.data) : null;
+  }
+
   async getRollbackPreparation(handle: string): Promise<FeedRollbackPreparationRecord | null> {
     const result = await this.supabase.from('feed_rollback_preparations')
-      .select('handle,actor_id,target_version_id,baseline_version_id,expires_at,consumed_at')
+      .select('handle,actor_id,target_version_id,baseline_version_id,acknowledgement_digest,expires_at,consumed_at,operation_id')
       .eq('handle', handle).maybeSingle();
     if (result.error) throw new Error('ROLLBACK_PREPARATION_READ_FAILED');
     if (!result.data) return null;
@@ -184,8 +193,10 @@ export class SupabasePublicFeedLedgerRepositoryCore {
       handle: String(result.data.handle), actorId: String(result.data.actor_id),
       targetVersionId: String(result.data.target_version_id),
       baselineVersionId: String(result.data.baseline_version_id),
+      acknowledgementDigest: String(result.data.acknowledgement_digest),
       expiresAt: String(result.data.expires_at),
       consumedAt: result.data.consumed_at === null ? null : String(result.data.consumed_at),
+      operationId: result.data.operation_id === null ? null : String(result.data.operation_id),
     };
   }
 

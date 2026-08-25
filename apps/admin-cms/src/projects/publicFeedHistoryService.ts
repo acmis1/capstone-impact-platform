@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createHash, randomBytes } from 'node:crypto';
 import type { AdminPermission } from '../auth/authTypes';
 import { canPreparePublication } from '../auth/permissions';
 import type { Project } from '../domain/project';
@@ -28,10 +29,10 @@ export interface PublicFeedHistoryServiceDependencies {
 
 export type PublicFeedRecoveryResult =
   | { resultCode: 'COMPLETED'; versionNumber: number | null; feedHash: string; recordCount: number }
-  | { resultCode: 'PERMISSION_DENIED' | 'RECOVERY_REQUIRED' | 'PUBLICATION_IN_PROGRESS' | 'NO_RECOVERY_REQUIRED' }
+  | { resultCode: 'RELEASED' | 'PERMISSION_DENIED' | 'RECOVERY_REQUIRED' | 'PUBLICATION_IN_PROGRESS' | 'NO_RECOVERY_REQUIRED' }
   | { resultCode: 'EXECUTION_FAILED'; failureCode: string };
 
-/** Explicit operator retry for the one durable RECOVERY_REQUIRED slot. */
+/** Explicit operator takeover for the one expired durable writer slot. */
 export async function recoverPublicFeedOperation(
   dependencies: PublicFeedHistoryServiceDependencies,
 ): Promise<PublicFeedRecoveryResult> {
@@ -42,19 +43,40 @@ export async function recoverPublicFeedOperation(
   try {
     const ledger = new SupabasePublicFeedLedgerRepositoryCore(dependencies.supabase);
     const operation = await ledger.getBlockingOperation();
-    if (!operation || operation.state !== 'RECOVERY_REQUIRED') {
-      return { resultCode: 'NO_RECOVERY_REQUIRED' };
-    }
+    if (!operation) return { resultCode: 'NO_RECOVERY_REQUIRED' };
     if (operation.kind === 'rollback' && !isLocalPublicFeedRollbackAvailable(
       dependencies.supabaseUrl, dependencies.environment,
     )) {
       return { resultCode: 'RECOVERY_REQUIRED' };
     }
     if (operation.storageBucket !== dependencies.feedBucket
-        || operation.storagePath !== dependencies.feedPath
-        || operation.candidateFeedContent === null) {
+        || operation.storagePath !== dependencies.feedPath) {
       return { resultCode: 'RECOVERY_REQUIRED' };
     }
+
+    // RESERVED has no bound candidate and no external side effect to converge. A current admin may
+    // claim only after the lease expires, then close that exact fenced reservation so a fresh,
+    // newly authorized request can build its own candidate.
+    if (operation.state === 'RESERVED') {
+      const ownerToken = randomBytes(32).toString('base64url');
+      const claim = await ledger.claim(operation.id, dependencies.adminId, ownerToken);
+      if (claim.resultCode === 'PERMISSION_DENIED') return { resultCode: 'PERMISSION_DENIED' };
+      if (claim.resultCode === 'PUBLICATION_IN_PROGRESS'
+          || claim.resultCode === 'UNCERTAINTY_FENCE_ACTIVE') {
+        return { resultCode: 'PUBLICATION_IN_PROGRESS' };
+      }
+      if (claim.resultCode !== 'OPERATION_CLAIMED') return { resultCode: 'RECOVERY_REQUIRED' };
+      const claimed = await ledger.getOperation(operation.id);
+      if (!claimed || claimed.state !== 'RESERVED') return { resultCode: 'RECOVERY_REQUIRED' };
+      const failed = await ledger.fail(
+        operation.id, Number(claim.ownerEpoch), ownerToken, dependencies.adminId,
+        'ABANDONED_PRE_WRITE_OPERATION',
+      );
+      return failed.resultCode === 'FAILED'
+        ? { resultCode: 'RELEASED' }
+        : { resultCode: 'RECOVERY_REQUIRED' };
+    }
+    if (operation.candidateFeedContent === null) return { resultCode: 'RECOVERY_REQUIRED' };
     const writer = await executePublicFeedWriter({
       supabase: dependencies.supabase, adminId: dependencies.adminId,
       kind: operation.kind, publicationMode: operation.publicationMode,
@@ -232,20 +254,66 @@ export async function executePublicFeedRollback(
   try {
     const ledger = new SupabasePublicFeedLedgerRepositoryCore(dependencies.supabase);
     const preparation = await ledger.getRollbackPreparation(preparationHandle);
+    const acknowledgementDigest = createHash('sha256').update(acknowledgement, 'utf8').digest('hex');
     if (!preparation || preparation.actorId !== dependencies.adminId
-        || preparation.consumedAt !== null || Date.parse(preparation.expiresAt) <= Date.now()) {
+        || preparation.acknowledgementDigest !== acknowledgementDigest) {
       return { resultCode: 'STALE_PREPARATION' };
     }
+    const consumed = preparation.consumedAt !== null;
+    if (!consumed && Date.parse(preparation.expiresAt) <= Date.now()) {
+      return { resultCode: 'STALE_PREPARATION' };
+    }
+
+    const boundOperation = consumed && preparation.operationId
+      ? await ledger.getOperation(preparation.operationId)
+      : null;
+    if (consumed && (!preparation.operationId || !boundOperation
+        || boundOperation.id !== preparation.operationId
+        || boundOperation.kind !== 'rollback'
+        || boundOperation.authorizingActorId !== preparation.actorId
+        || boundOperation.rollbackPreparationId !== preparation.handle
+        || boundOperation.storageBucket !== dependencies.feedBucket
+        || boundOperation.storagePath !== dependencies.feedPath
+        || (!['RESERVED', 'FAILED'].includes(boundOperation.state)
+          && boundOperation.baselineVersionId !== preparation.baselineVersionId))) {
+      return { resultCode: 'STALE_PREPARATION' };
+    }
+    if (boundOperation?.state === 'FAILED') return { resultCode: 'STALE_PREPARATION' };
+
     const targetVersion = await ledger.getVersionById(preparation.targetVersionId);
     if (!targetVersion) return { resultCode: 'STALE_PREPARATION' };
     const target = verifyPublicFeedArtifact(targetVersion.artifactContent);
     if (target.feedHash !== targetVersion.feedHash || target.recordCount !== targetVersion.recordCount) {
       throw new Error('HISTORICAL_ARTIFACT_CORRUPT');
     }
+    if (boundOperation?.candidateFeedContent !== null
+        && boundOperation?.candidateFeedContent !== undefined
+        && (boundOperation.candidateFeedContent !== target.content
+          || boundOperation.candidateFeedHash !== target.feedHash
+          || boundOperation.candidateRecordCount !== target.recordCount)) {
+      return { resultCode: 'STALE_PREPARATION' };
+    }
+    const completedEvidence = async (operationId: string): Promise<PublicFeedRollbackResult> => {
+      const completedVersion = await ledger.getVersionByOperationId(operationId);
+      if (!completedVersion
+          || completedVersion.operation !== 'rollback'
+          || completedVersion.restoredFromVersionId !== preparation.targetVersionId
+          || completedVersion.artifactContent !== target.content
+          || completedVersion.feedHash !== target.feedHash
+          || completedVersion.recordCount !== target.recordCount) {
+        throw new Error('ROLLBACK_COMPLETION_EVIDENCE_INVALID');
+      }
+      return {
+        resultCode: 'COMPLETED', versionNumber: completedVersion.versionNumber,
+        feedHash: completedVersion.feedHash, recordCount: completedVersion.recordCount,
+      };
+    };
+    if (boundOperation?.state === 'COMPLETED') return completedEvidence(boundOperation.id);
     const writer = await executePublicFeedWriter({
       supabase: dependencies.supabase, adminId: dependencies.adminId, kind: 'rollback',
       rollbackPreparationHandle: preparationHandle, rollbackAcknowledgement: acknowledgement,
       feedBucket: dependencies.feedBucket, feedPath: dependencies.feedPath,
+      recoveryOperationId: boundOperation?.id,
       prepareCandidate: async () => ({ artifact: target }),
     });
     if (writer.resultCode === 'COMPLETED' || writer.resultCode === 'ALREADY_COMPLETED') {
@@ -253,6 +321,10 @@ export async function executePublicFeedRollback(
         resultCode: 'COMPLETED', versionNumber: writer.versionNumber,
         feedHash: writer.feedHash, recordCount: writer.recordCount,
       };
+    }
+    if (boundOperation) {
+      const reloaded = await ledger.getOperation(boundOperation.id);
+      if (reloaded?.state === 'COMPLETED') return completedEvidence(boundOperation.id);
     }
     if (writer.resultCode === 'PERMISSION_DENIED') return { resultCode: 'PERMISSION_DENIED' };
     if (writer.resultCode === 'STALE_PREPARATION') return { resultCode: 'STALE_PREPARATION' };

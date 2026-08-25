@@ -417,11 +417,21 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
         }
         const startedFailure = mapReservationFailure(rpcCode(started));
         if (startedFailure) {
-          if (startedFailure.resultCode === 'NOT_READY') {
-            const failed = await ledger.fail(
-              operation.id, epoch, ownerToken, params.adminId, startedFailure.resultCode,
-            );
-            if (failed.resultCode !== 'FAILED') return { resultCode: 'RECOVERY_REQUIRED' };
+          if (startedFailure.resultCode === 'NOT_READY'
+              || startedFailure.resultCode === 'PERMISSION_DENIED') {
+            let terminalized = false;
+            try {
+              const failed = await ledger.fail(
+                operation.id, epoch, ownerToken, params.adminId, startedFailure.resultCode,
+              );
+              terminalized = failed.resultCode === 'FAILED';
+            } catch { /* the response may be lost after the fenced transition commits */ }
+            if (!terminalized) {
+              const reloaded = await ledger.getOperation(operation.id);
+              terminalized = reloaded?.state === 'FAILED'
+                && reloaded.failureCode === startedFailure.resultCode;
+            }
+            if (!terminalized) return { resultCode: 'RECOVERY_REQUIRED' };
           }
           return startedFailure;
         }
@@ -537,13 +547,18 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
       throw new Error('OPERATION_STATE_INVALID');
     }
 
+    const durableVersion = finalization.versionNumber === undefined || finalization.versionNumber === null
+      ? await ledger.getVersionByOperationId(operation.id)
+      : null;
     const versionNumber = finalization.versionNumber === undefined || finalization.versionNumber === null
-      ? null : Number(finalization.versionNumber);
+      ? durableVersion?.versionNumber ?? null : Number(finalization.versionNumber);
     return {
       resultCode: operation.state === 'COMPLETED' ? 'ALREADY_COMPLETED' : 'COMPLETED',
       operationId: operation.id, versionNumber,
-      snapshotId: finalization.snapshotId ? String(finalization.snapshotId) : null,
-      auditRecordId: finalization.auditRecordId ? String(finalization.auditRecordId) : null,
+      snapshotId: finalization.snapshotId ? String(finalization.snapshotId)
+        : durableVersion?.publishedSnapshotId ?? null,
+      auditRecordId: finalization.auditRecordId ? String(finalization.auditRecordId)
+        : durableVersion?.auditRecordId ?? null,
       feedHash: candidate.feedHash, recordCount: candidate.recordCount,
       feedPublicUrl: storage.getPublicUrl(params.feedBucket, params.feedPath),
     };
