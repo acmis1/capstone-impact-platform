@@ -176,6 +176,7 @@ describe('PR2A Guided Import Workflow Components', () => {
       expect(screen.getByText('project-details.xlsx')).toBeTruthy();
       expect(screen.getByText('poster.png')).toBeTruthy();
       expect(screen.getByText('poster.pdf')).toBeTruthy();
+      expect(screen.getByText(/snapshot-1\s*…\s*snapshot-10/i)).toBeTruthy();
 
       // Click again to collapse
       fireEvent.click(toggleButton);
@@ -195,7 +196,7 @@ describe('PR2A Guided Import Workflow Components', () => {
       // Verify exact PNG description
       expect(screen.getByText(/Required poster image \(PNG; maximum 5 MB\)\./i)).toBeTruthy();
 
-      // Verify JPEG and WEBP are not advertised for poster.png or anywhere in the guide
+      // Verify JPEG and WEBP are not advertised for poster.png or anywhere in the poster details
       const posterLabel = screen.getByText('poster.png');
       const posterDetails = posterLabel.parentElement;
 
@@ -203,6 +204,39 @@ describe('PR2A Guided Import Workflow Components', () => {
       expect(posterDetails?.textContent).toContain('maximum 5 MB');
       expect(posterDetails?.textContent).not.toContain('JPEG');
       expect(posterDetails?.textContent).not.toContain('WEBP');
+      expect(posterDetails?.textContent).not.toContain('WebP');
+    });
+
+    it('advertises snapshot-1 through snapshot-10 gallery contract with PNG, JPEG, WebP support, 10 max, and required alt text per position', () => {
+      render(<ImportWorkflowGuide currentStep={1} />);
+
+      // Expand guide
+      const toggleButton = screen.getByRole('button', {
+        name: /show.*guide/i,
+      });
+      fireEvent.click(toggleButton);
+
+      // Verify snapshot gallery entry exists and communicates the bounded gallery contract
+      const snapshotHeading = screen.getByText(/snapshot-1\s*…\s*snapshot-10/i);
+      expect(snapshotHeading).toBeTruthy();
+
+      const snapshotContainer = snapshotHeading.closest('div');
+      expect(snapshotContainer).not.toBeNull();
+
+      const snapshotText = snapshotContainer?.textContent ?? '';
+      expect(snapshotText).toMatch(/snapshot-1\s*…\s*snapshot-10/i);
+      expect(snapshotText).toMatch(/optional/i);
+      expect(snapshotText).toMatch(/up to 10 total/i);
+      expect(snapshotText).toMatch(/PNG\/JPEG\/WebP/i);
+      expect(snapshotText).toMatch(/maximum 5 MB each/i);
+      expect(snapshotText).toMatch(/Every included snapshot must have matching alt text for its numeric gallery position in the metadata spreadsheet/i);
+
+      // Distinguish from poster contract (poster is PNG-only, snapshot gallery supports PNG/JPEG/WebP)
+      const posterContainer = screen.getByText('poster.png').closest('div');
+      expect(posterContainer?.textContent).toContain('PNG');
+      expect(posterContainer?.textContent).not.toContain('JPEG');
+      expect(posterContainer?.textContent).not.toContain('WebP');
+      expect(posterContainer?.textContent).not.toContain('WEBP');
     });
   });
 
