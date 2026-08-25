@@ -121,8 +121,12 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
                 <div className="flex items-start gap-2.5 p-2.5">
                   <FileSpreadsheet className="h-4 w-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
-                    <strong className="text-foreground block font-mono text-xs">project-details.xlsx</strong>
-                    <span>Required metadata spreadsheet containing title, summary, year, program, discipline, group name, and team roster.</span>
+                    <strong className="text-foreground block font-mono text-xs">
+                      project-details.xlsx
+                    </strong>
+                    <span>
+                      Required metadata spreadsheet containing title, summary, year, program, discipline, group name, and team roster.
+                    </span>
                   </div>
                 </div>
 
@@ -145,8 +149,16 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
                 <div className="flex items-start gap-2.5 p-2.5">
                   <ImageIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
-                    <strong className="text-foreground block font-mono text-xs">snapshot-1.png <span className="font-normal text-muted-foreground font-sans">(optional)</span></strong>
-                    <span>Optional showcase image (PNG; maximum 5 MB). When included, image alt text must be provided in the metadata spreadsheet.</span>
+                    <strong className="text-foreground block font-mono text-xs">
+                      snapshot-1 … snapshot-10{' '}
+                      <span className="font-normal text-muted-foreground font-sans">
+                        (optional)
+                      </span>
+                    </strong>
+                    <span>
+                      Optional ordered gallery images, up to 10 total (PNG/JPEG/WebP; maximum 5 MB each).
+                      Every included snapshot must have matching alt text for its numeric gallery position in the metadata spreadsheet.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -169,7 +181,9 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
   ├── project-details.xlsx
   ├── poster.png
   ├── poster.pdf
-  └── snapshot-1.png`}
+  ├── snapshot-1.png
+  ├── snapshot-2.png
+  └── snapshot-N.png`}
                   </pre>
                 </div>
 
@@ -184,7 +198,9 @@ export function ImportWorkflowGuide({ currentStep = 1, isComplete = false }: Imp
   ├── project-alpha/
   │   ├── project-details.xlsx
   │   ├── poster.png
-  │   └── poster.pdf
+  │   ├── poster.pdf
+  │   ├── snapshot-1.png
+  │   └── snapshot-2.png
   └── project-beta/
       ├── project-details.xlsx
       ├── poster.png

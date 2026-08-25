@@ -877,7 +877,7 @@ export default function BrowserImportPreviewClient() {
                           ) : (
                             <span className="text-muted-foreground">○</span>
                           )}
-                          snapshot-1.png {pkg.filePresence.snapshotPresent ? '' : '(optional)'}
+                          gallery snapshots (1–10) {pkg.filePresence.snapshotPresent ? '' : '(optional)'}
                         </span>
                       </div>
 
