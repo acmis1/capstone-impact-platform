@@ -41,7 +41,7 @@ function formatDiagnosticLogTail(label: string, capturedLog: string): string | u
     .replace(/(authorization\s*[=:]\s*(?:Bearer|Basic)\s+)[^\s,;]+/gi, '$1[REDACTED]')
     .replace(/(Bearer\s+)[^\s,;]+/gi, '$1[REDACTED]')
     .replace(
-      /((?:[a-z0-9_]*?(?:key|secret|token|password|credential|authorization)[a-z0-9_]*)["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
+      /((?:[a-z0-9_]*?(?:key|secret|token|password|credential|authorization)[a-z0-9_]*)["']?\s*[=:]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;]+)/gi,
       '$1[REDACTED]',
     )
     .slice(-MAX_DIAGNOSTIC_LOG_TAIL_LENGTH);

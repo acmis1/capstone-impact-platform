@@ -55,7 +55,7 @@ describe('runAdminAppSmokeTest Lifecycle & Readiness Unit Tests', () => {
           for (let index = 0; index < 60; index++) {
             mockProc.stderr?.emit('data', Buffer.from(`older-${index}-${'x'.repeat(80)}\n`));
           }
-          mockProc.stderr?.emit('data', Buffer.from('LATEST_EARLY_EXIT API_TOKEN=early-exit-token Authorization: Bearer early-exit-bearer {"API_TOKEN":"json-token-secret","CACHE_KEY":"json-key-secret","SESSION_SECRET":"json-secret","password":"json-password","credential":"json-credential","Authorization":"Bearer json-authorization"}'));
+          mockProc.stderr?.emit('data', Buffer.from(String.raw`LATEST_EARLY_EXIT API_TOKEN=early-exit-token QUOTED_TOKEN="quoted-prefix\"QUOTED_SECRET_SUFFIX" CREDENTIAL='single-prefix\'SINGLE_SECRET_SUFFIX' Authorization: Bearer early-exit-bearer {"API_TOKEN":"token-prefix\"TOKEN_SECRET_SUFFIX","CACHE_KEY":"cache-prefix\\CACHE_SECRET_SUFFIX","SESSION_SECRET":"json-secret","password":"password-prefix\"PASSWORD_SECRET_SUFFIX","credential":"json-credential","Authorization":"Bearer json-authorization"}`));
           mockProc.emit('exit', 1);
         });
         return mockProc;
@@ -67,6 +67,8 @@ describe('runAdminAppSmokeTest Lifecycle & Readiness Unit Tests', () => {
     expect(result.errorDetail).toContain('Next.js server exited early with code 1');
     expect(result.errorDetail).toContain('LATEST_EARLY_EXIT');
     expect(result.errorDetail).toContain('API_TOKEN=[REDACTED]');
+    expect(result.errorDetail).toContain('QUOTED_TOKEN=[REDACTED]');
+    expect(result.errorDetail).toContain('CREDENTIAL=[REDACTED]');
     expect(result.errorDetail).toContain('"API_TOKEN":[REDACTED]');
     expect(result.errorDetail).toContain('"CACHE_KEY":[REDACTED]');
     expect(result.errorDetail).toContain('"SESSION_SECRET":[REDACTED]');
@@ -74,11 +76,18 @@ describe('runAdminAppSmokeTest Lifecycle & Readiness Unit Tests', () => {
     expect(result.errorDetail).toContain('"credential":[REDACTED]');
     expect(result.errorDetail).toContain('"Authorization":[REDACTED]');
     expect(result.errorDetail).not.toContain('early-exit-token');
+    expect(result.errorDetail).not.toContain('quoted-prefix');
+    expect(result.errorDetail).not.toContain('QUOTED_SECRET_SUFFIX');
+    expect(result.errorDetail).not.toContain('single-prefix');
+    expect(result.errorDetail).not.toContain('SINGLE_SECRET_SUFFIX');
     expect(result.errorDetail).not.toContain('early-exit-bearer');
-    expect(result.errorDetail).not.toContain('json-token-secret');
-    expect(result.errorDetail).not.toContain('json-key-secret');
+    expect(result.errorDetail).not.toContain('token-prefix');
+    expect(result.errorDetail).not.toContain('TOKEN_SECRET_SUFFIX');
+    expect(result.errorDetail).not.toContain('cache-prefix');
+    expect(result.errorDetail).not.toContain('CACHE_SECRET_SUFFIX');
     expect(result.errorDetail).not.toContain('json-secret');
-    expect(result.errorDetail).not.toContain('json-password');
+    expect(result.errorDetail).not.toContain('password-prefix');
+    expect(result.errorDetail).not.toContain('PASSWORD_SECRET_SUFFIX');
     expect(result.errorDetail).not.toContain('json-credential');
     expect(result.errorDetail).not.toContain('json-authorization');
   });
