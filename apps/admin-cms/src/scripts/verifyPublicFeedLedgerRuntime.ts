@@ -83,6 +83,20 @@ function expectPsqlFailure(sql: string, marker: string): void {
   }
 }
 
+/**
+ * Requires the operation guard specifically. `expectPsqlFailure` deliberately accepts several
+ * refusal families; a mapping-race claim is only disproved by the guard itself firing.
+ */
+function expectOperationGuardRejection(sql: string, marker: string): void {
+  try {
+    psql(sql);
+    assert.fail(`${marker} unexpectedly succeeded.`);
+  } catch (error) {
+    const stderr = String((error as { stderr?: unknown }).stderr ?? '');
+    assert.match(stderr, /PUBLIC_FEED_OPERATION_IN_PROGRESS/, `${marker}: ${stderr}`);
+  }
+}
+
 function assertLoopbackBindings(): void {
   const containerNames = execFileSync('docker', [
     'ps', '--filter', `label=com.supabase.cli.project=${projectId}`, '--format', '{{.Names}}',
@@ -650,6 +664,85 @@ async function main(): Promise<void> {
     lifecycle: reconciliationEvidenceBefore.lifecycle,
     publicMedia: reconciliationEvidenceBefore.publicMedia,
   });
+
+  // Sol review finding 2 alleged that, after PREPARED, a concurrent mutation of the target media
+  // row's public_storage_bucket and/or public_url could still pass mark_public_feed_write_started
+  // and strand finalization. guard_active_public_feed_operation makes that mutation unreachable for
+  // any session that is not already this exact operation, so the claimed ordinary application race
+  // is not demonstrated. This scenario is permanent evidence for that, and would fail loudly if the
+  // guard were ever narrowed.
+  const mappingGuardToken = token();
+  const mappingGuardReadiness = await new SupabaseParticipantPreviewRepositoryCore(client)
+    .getReconciliationReadiness({ publicId: medical.publicId, adminId, privateBucket });
+  assert.equal(mappingGuardReadiness.resultCode, 'READY');
+  const mappingGuardReservation = await ledger.reserve({
+    operationKey: randomUUID(), kind: 'publication', mode: 'deployment_reconciliation',
+    adminId, publicId: medical.publicId, ownerToken: mappingGuardToken,
+    confirmedPreviewId: mappingGuardReadiness.confirmedPreviewId,
+    confirmedAt: mappingGuardReadiness.confirmedAt, privateBucket,
+    storageBucket: feedBucket, storagePath: feedPath, rollbackCapability: false,
+  });
+  assert.equal(mappingGuardReservation.resultCode, 'OPERATION_RESERVED', JSON.stringify(mappingGuardReservation));
+  const mappingGuardOperationId = String(mappingGuardReservation.operationId);
+  const mappingGuardEpoch = Number(mappingGuardReservation.ownerEpoch);
+  assert.equal(
+    psql(`SELECT state FROM public.public_feed_operations WHERE id=${sqlLiteral(mappingGuardOperationId)}::uuid;`),
+    'RESERVED',
+  );
+
+  // The target already carries a complete public mapping, so neither mutation below can be refused
+  // by the all-or-nothing mapping constraint. Only the operation guard can reject them.
+  const mappingScope = `WHERE project_id=${sqlLiteral(medicalProjectId)}::uuid AND asset_type='poster_image'`;
+  const mappingSelect = `SELECT COALESCE(public_storage_bucket,'') || '|' || COALESCE(public_storage_path,'')
+    || '|' || COALESCE(public_url,'') || '|' || is_public_approved::text
+    FROM public.media_assets ${mappingScope};`;
+  const mappingBefore = psql(mappingSelect);
+  assert.ok(mappingBefore.startsWith(`${publicAssetsBucket}|`), `Expected an existing public mapping, got ${mappingBefore}`);
+  const feedBeforeMappingGuard = await exactStored(client);
+  const headGenerationBeforeMappingGuard = psql('SELECT generation FROM public.public_feed_head WHERE singleton=true;');
+  const publicMediaBeforeMappingGuard = await publicMediaCount(client, medical.publicId);
+
+  // Service-role SQL path, without the operation's internal app.public_feed_operation_id marker.
+  expectOperationGuardRejection(
+    `UPDATE public.media_assets SET public_storage_bucket='verifier-remapped-bucket' ${mappingScope};`,
+    'post-reservation public_storage_bucket mutation',
+  );
+  expectOperationGuardRejection(
+    `UPDATE public.media_assets SET public_url='https://remapped.invalid/poster.png' ${mappingScope};`,
+    'post-reservation public_url mutation',
+  );
+
+  // Service-role PostgREST path -- the normal application/verifier route, not just raw SQL.
+  const restBucketMutation = await client.from('media_assets')
+    .update({ public_storage_bucket: 'verifier-remapped-bucket' })
+    .eq('project_id', medicalProjectId).eq('asset_type', 'poster_image');
+  assert.ok(restBucketMutation.error, 'Service-role public_storage_bucket mutation unexpectedly succeeded.');
+  assert.match(String(restBucketMutation.error?.message ?? ''), /PUBLIC_FEED_OPERATION_IN_PROGRESS/);
+  const restUrlMutation = await client.from('media_assets')
+    .update({ public_url: 'https://remapped.invalid/poster.png' })
+    .eq('project_id', medicalProjectId).eq('asset_type', 'poster_image');
+  assert.ok(restUrlMutation.error, 'Service-role public_url mutation unexpectedly succeeded.');
+  assert.match(String(restUrlMutation.error?.message ?? ''), /PUBLIC_FEED_OPERATION_IN_PROGRESS/);
+
+  // The media row is unchanged, the operation is still valid, and the rejected mutations produced
+  // no public media object and no canonical feed write.
+  assert.equal(psql(mappingSelect), mappingBefore);
+  assert.equal(
+    psql(`SELECT state || '|' || COALESCE(failure_code,'') || '|' || owner_epoch::text
+      FROM public.public_feed_operations WHERE id=${sqlLiteral(mappingGuardOperationId)}::uuid;`),
+    `RESERVED||${mappingGuardEpoch}`,
+  );
+  assert.equal(await publicMediaCount(client, medical.publicId), publicMediaBeforeMappingGuard);
+  assert.equal((await exactStored(client)).content, feedBeforeMappingGuard.content);
+  assert.equal(psql('SELECT generation FROM public.public_feed_head WHERE singleton=true;'), headGenerationBeforeMappingGuard);
+
+  // Released through the real owner-authenticated RPC, which also re-proves the operation was still
+  // owned and valid rather than collaterally damaged by the rejected mutations.
+  const mappingGuardRelease = await ledger.fail(
+    mappingGuardOperationId, mappingGuardEpoch, mappingGuardToken, adminId, 'VERIFIER_MAPPING_GUARD_PROBE',
+  );
+  assert.equal(mappingGuardRelease.resultCode, 'FAILED', JSON.stringify(mappingGuardRelease));
+  assert.equal(await publicMediaCount(client, medical.publicId), publicMediaBeforeMappingGuard);
 
   // The legitimate case: lifecycle-published, absent from the current head after a rollback, and
   // still backed by the exact participant confirmation it was published under.

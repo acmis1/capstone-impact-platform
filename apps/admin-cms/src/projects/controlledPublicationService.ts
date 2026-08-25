@@ -107,8 +107,12 @@ export async function executeControlledPublication(params: {
     if (targets.length !== 1) {
       return { resultCode: 'NOT_READY', readinessCode: 'PROJECT_NOT_FOUND', blockers: ['Project not found'] };
     }
-    const target = targets[0];
-    if (target.status === 'published') {
+    // Early inspection only. This read answers "does the publicId exist" and "is it already
+    // deployed"; it is deliberately NOT candidate authority, because readiness and reservation
+    // both happen after it and a legitimate concurrent workflow may replace the participant-facing
+    // representation in between.
+    const inspectedTarget = targets[0];
+    if (inspectedTarget.status === 'published') {
       const inspected = await inspectPublicFeedHead(dependencies.supabase, publicFeedBucket, publicFeedPath);
       if (inspected.head && inspected.artifact?.members.some((member) => member.publicId === publicId)) {
         // Membership in the current head answers only "is this target deployed". The operation,
@@ -156,6 +160,17 @@ export async function executeControlledPublication(params: {
         if (baseline.members.some((member) => member.publicId === publicId)) {
           throw new Error('PUBLIC_ID_ALREADY_DEPLOYED');
         }
+        // Candidate authority is the authoritative target re-read AFTER the ledger reservation
+        // succeeded, inside the window guard_active_public_feed_operation protects. The pre-
+        // readiness read is stale by construction: reserve_public_feed_operation independently
+        // re-proved the CURRENT project's confirmation evidence and froze it on the durable
+        // operation, so building the artifact from the earlier object could bind content that the
+        // frozen authority does not describe. Re-reading here keeps artifact and authority the
+        // same target in both normal and reconciliation modes.
+        const reservedTargets = (await dependencies.listProjects())
+          .filter((project) => project.publicId === publicId);
+        if (reservedTargets.length !== 1) throw new Error('PROJECT_NOT_FOUND');
+        const target = reservedTargets[0];
         const media = await dependencies.listProjectMedia();
         const plan = planPublicationArtifact({
           projects: [target], targetPublicId: publicId, mediaAssets: media,

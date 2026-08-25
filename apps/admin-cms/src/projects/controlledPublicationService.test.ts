@@ -208,6 +208,116 @@ describe('ledger-backed controlled publication', () => {
     expect(deps.uploadNewObject).not.toHaveBeenCalled();
   });
 
+  it('binds the authoritative post-reservation target, never the stale pre-readiness target', async () => {
+    const staleA = createMockProject({
+      publicId: 'target', status: 'approved',
+      title: 'Superseded Representation A', summary: 'Superseded participant summary A.',
+    });
+    const authoritativeB = createMockProject({
+      publicId: 'target', status: 'approved',
+      title: 'Authoritative Representation B', summary: 'Current confirmed participant summary B.',
+    });
+
+    const deps = dependencies();
+    // The pre-readiness read sees A. Before readiness and reservation, a legitimate concurrent
+    // workflow replaces the participant-facing representation with B and establishes fresh valid
+    // participant confirmation for B.
+    deps.listProjects = vi.fn()
+      .mockResolvedValueOnce([staleA])
+      .mockResolvedValue([authoritativeB]);
+    // Readiness therefore returns B's exact confirmation evidence, which is what
+    // reserve_public_feed_operation independently re-proves and freezes on the durable operation.
+    deps.getReadiness = vi.fn().mockResolvedValue({
+      resultCode: 'READY', ready: true, blockers: [], warnings: [],
+      confirmedPreviewId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      confirmedAt: '2026-08-25T01:02:03.000Z',
+    });
+
+    const baseline = createPublicFeedArtifact([
+      toPublicFeedRecord(createMockProject({ publicId: 'deployed', status: 'published' })),
+    ]);
+    let bound: { feed: { publicId: string; title: string; summary: string }[]; content: string } | null = null;
+    mocks.execute.mockImplementation(async (params) => {
+      // The authority the reservation freezes belongs to B.
+      expect(params.confirmedPreviewId).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+      expect(params.confirmedAt).toBe('2026-08-25T01:02:03.000Z');
+      const prepared = await params.prepareCandidate(baseline);
+      bound = prepared.artifact;
+      return {
+        resultCode: 'COMPLETED', operationId: 'operation', versionNumber: 2,
+        snapshotId: 'snapshot', auditRecordId: 'audit', feedHash: prepared.artifact.feedHash,
+        recordCount: prepared.artifact.recordCount, feedPublicUrl: 'https://example.com/feed.json',
+      };
+    });
+
+    await expect(publish(deps)).resolves.toMatchObject({ resultCode: 'COMPLETED' });
+
+    const artifact = bound!;
+    const target = artifact.feed.find((record) => record.publicId === 'target')!;
+    // The bound artifact itself must carry B.
+    expect(target.title).toBe('Authoritative Representation B');
+    expect(target.summary).toBe('Current confirmed participant summary B.');
+    expect(target.title).not.toBe('Superseded Representation A');
+    expect(artifact.content).not.toContain('Superseded Representation A');
+    expect(artifact.content).not.toContain('Superseded participant summary A.');
+    // Still composed from the existing deployment baseline plus the exact target.
+    expect(artifact.feed.map((record) => record.publicId)).toEqual(['deployed', 'target']);
+  });
+
+  it('binds the authoritative post-reservation target for deployment reconciliation', async () => {
+    const staleA = createMockProject({
+      publicId: 'target', status: 'published',
+      title: 'Superseded Published Representation A', summary: 'Superseded published summary A.',
+    });
+    const authoritativeB = createMockProject({
+      publicId: 'target', status: 'published',
+      title: 'Authoritative Published Representation B', summary: 'Current published summary B.',
+    });
+
+    const deps = dependencies();
+    deps.listProjects = vi.fn()
+      .mockResolvedValueOnce([staleA])
+      .mockResolvedValue([authoritativeB]);
+    deps.getReconciliationReadiness = vi.fn().mockResolvedValue({
+      resultCode: 'READY', ready: true, blockers: [],
+      confirmedPreviewId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      confirmedAt: '2026-08-25T04:05:06.000Z',
+    });
+    mocks.inspect.mockResolvedValue({ head: null, artifact: null, publicUrl: 'https://example.com/feed.json' });
+
+    const baseline = createPublicFeedArtifact([
+      toPublicFeedRecord(createMockProject({ publicId: 'deployed', status: 'published' })),
+    ]);
+    let bound: { feed: { publicId: string; title: string; summary: string }[]; content: string } | null = null;
+    mocks.execute.mockImplementation(async (params) => {
+      expect(params.publicationMode).toBe('deployment_reconciliation');
+      expect(params.confirmedPreviewId).toBe('cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+      expect(params.confirmedAt).toBe('2026-08-25T04:05:06.000Z');
+      const prepared = await params.prepareCandidate(baseline);
+      bound = prepared.artifact;
+      return {
+        resultCode: 'COMPLETED', operationId: 'operation', versionNumber: 4,
+        snapshotId: 'snapshot', auditRecordId: null, feedHash: prepared.artifact.feedHash,
+        recordCount: prepared.artifact.recordCount, feedPublicUrl: 'https://example.com/feed.json',
+      };
+    });
+
+    // Reconciliation changes no lifecycle state, so it still writes no approval record.
+    await expect(publish(deps, { publicationMode: 'deployment_reconciliation' }))
+      .resolves.toMatchObject({ resultCode: 'COMPLETED', auditRecordId: null });
+
+    const artifact = bound!;
+    const target = artifact.feed.find((record) => record.publicId === 'target')!;
+    expect(target.title).toBe('Authoritative Published Representation B');
+    expect(target.summary).toBe('Current published summary B.');
+    expect(target.title).not.toBe('Superseded Published Representation A');
+    expect(artifact.content).not.toContain('Superseded Published Representation A');
+    expect(artifact.feed.map((record) => record.publicId)).toEqual(['deployed', 'target']);
+    // The approved-only pre-publication gate is never consulted for a published target.
+    expect(deps.getReadiness).not.toHaveBeenCalled();
+    expect(deps.getReconciliationReadiness).toHaveBeenCalledTimes(1);
+  });
+
   it('reports readiness loss without reaching the canonical writer', async () => {
     const deps = dependencies();
     deps.getReadiness = vi.fn().mockResolvedValue({
