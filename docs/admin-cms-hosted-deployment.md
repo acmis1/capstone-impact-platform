@@ -35,7 +35,49 @@ The Capstone platform enforces strict architectural and operational isolation be
 - **Install Command**: `npm ci`
 - **Build Command**: `npm run build:admin` (or `npm run build --workspace=apps/admin-cms`)
 - **Start Command**: `npm run start --workspace=apps/admin-cms` (or `next start` inside `apps/admin-cms`)
-- **Health Check Endpoint**: `/api/health` (Returns HTTP 200 with sanitized configuration classifications)
+- **Liveness Endpoint**: `/api/health` (always returns a minimal HTTP 200 while the application route handler is running)
+- **Render Health Check Endpoint**: `/api/readiness` (returns HTTP 200 only when hosted configuration, staging target identity, and the bounded dependency probe are ready)
+
+### C. HTTP Liveness and Deployment-Readiness Contracts
+
+`/api/health` and `/api/readiness` are deliberately separate signals:
+
+| Endpoint | Success contract | What it proves | What it does not prove |
+| :--- | :--- | :--- | :--- |
+| `GET /api/health` | HTTP 200 with `{ "app": "admin-cms", "status": "ok" }` | The deployed application can execute a route handler. | Valid environment variables, Supabase reachability, schema state, authentication, publication, UAT, or production acceptance. |
+| `GET /api/readiness` | HTTP 200 with `readiness: "ready"`, `classification: "READY"`, `configuration: "configured"`, and `dependency: "reachable"` | Critical server configuration parses, the runtime is verified as the expected HTTPS staging target, and a two-second zero-row Supabase `HEAD` read succeeds. | Applied migration history, exact schema/grants/RPC signatures, Auth or Storage readiness, workflow behavior, full UAT, publication readiness, or production acceptance. |
+
+Readiness failures return HTTP 503 with one of two bounded classifications:
+
+- `CONFIGURATION_NOT_READY`: critical environment configuration or expected staging target identity is missing, malformed, or mismatched; the dependency is reported as `not-checked`.
+- `DEPENDENCY_NOT_READY`: configuration is valid but the bounded read-only dependency probe fails, returns a non-success status, or times out; the dependency is reported as `not-ready`.
+
+Every readiness body includes the repository's expected migration count and latest expected migration identifier. This is version evidence from the deployed application bundle, not proof that those migrations are applied to the hosted database. `RENDER_GIT_COMMIT` is returned only when it is exactly a valid 40-character hexadecimal commit identifier; otherwise `deploymentCommit.state` is truthfully `missing` or `invalid` and no untrusted value is echoed.
+
+Both endpoints support `HEAD` with the same status contract and no response body. All liveness and readiness responses use `Cache-Control: no-store` and `Pragma: no-cache` so a prior response is not durable evidence of current state. Configure Render to use `/api/readiness`, not `/api/health`, for the service health-check path.
+
+### D. Read-Only Hosted UAT Smoke Verifier
+
+Run the hosted smoke verifier after a staging deployment or relevant hosted configuration change, and immediately before beginning a supervised UAT session. Supply the service base URL explicitly; the repository does not contain or assume a live Render URL:
+
+```bash
+git fetch origin main
+npm run check:admin-hosted-smoke -- --base-url=https://admin-cms-staging.example --expected-commit=<full-40-character-origin-main-sha>
+```
+
+`--expected-commit` is optional, but when supplied it must be a full 40-character hexadecimal commit and must exactly match the valid deployment commit returned by `/api/readiness`. The base URL must use HTTPS, except for explicit localhost/loopback test fixtures, and cannot contain credentials, a query, or a fragment. The verifier accepts no passwords, cookies, tokens, API keys, or service-role credentials.
+
+The command performs only these bounded, unauthenticated requests:
+
+- `GET` and `HEAD` `/api/health`;
+- `GET` and `HEAD` `/api/readiness`;
+- `GET` `/login`.
+
+It proves that the exact liveness contract is available, the readiness response is internally consistent and currently `READY`, the login route returns HTML, deployment commit evidence is valid, and the readiness bundle's expected migration count/latest identifier matches the migration files currently checked out in the repository. It also records observed request duration without imposing or inventing a production SLA. Redirects cannot leave the supplied origin or move a request to a different route.
+
+It does **not** authenticate, create a session, submit a login form, inspect private project/media routes, prove that migrations are applied, validate schema or RLS, exercise workflow UAT, publish a feed, mutate Supabase or Duda, send email, deploy the application, or replace independent CI and review. In particular, readiness migration evidence describes what the deployed bundle expects; it is not hosted database migration-history evidence.
+
+The final line is deterministic. `HOSTED_SMOKE_CLASSIFICATION = READY_FOR_SUPERVISED_UAT` means only that the supervised UAT session may begin. Any other classification fails closed and requires investigation. One green smoke run must never be represented as production readiness or as a substitute for the governed schema/RLS and stakeholder UAT checks.
 
 ---
 
@@ -62,7 +104,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 | `SUPABASE_PUBLIC_FEED_FILE` | Optional | `capstones-latest.json` | Public JSON showcase feed object name. |
 
 ### C. Staging Target Identity Guards
-*Required by CLI staging operations and diagnostic checkers to prevent accidental target execution.*
+*Required by CLI staging operations, diagnostic checkers, and `/api/readiness` to prevent accidental target execution.*
 
 | Variable | Value | Description |
 | :--- | :--- | :--- |
@@ -145,7 +187,7 @@ The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpc
 - **Administrator Identity**: Initial staging administrator bootstrap completed; single Auth identity linked to `admin_users` profile with verified `admin` role in `user_roles` (`check:admin-auth` classification: `READY_FOR_MANUAL_LOGIN_TEST`).
 - **Next Lifecycle Action**: Standalone Admin/CMS hosted web service deployment and manual authenticated login verification.
 
-Migration `0027` is newer than the 26-migration hosted evidence above and remains repository/local-only. The staging-only direct UAT account control must remain unavailable until a separately authorized hosted migration and application deployment is completed and independently reviewed.
+The repository now expects 33 migrations, ending at `20260821140000_assistive_duplicate_shortlist`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that migrations `0027`–`0033` are hosted. Any hosted reconciliation remains a separately authorized operation followed by independent review.
 
 Operators should **NOT** run `supabase migration repair` or replay migrations against this clean v2 environment.
 
@@ -157,7 +199,7 @@ The procedures detailed in the [staging reconciliation runbook](../infra/supabas
 ## 6. Pre-Deployment Readiness Verification
 
 ### A. Automated Readiness Inspection Contract
-The read-only deployment readiness checker inspects the target endpoint without performing mutations:
+The read-only deployment readiness CLI performs broader schema-object inspection without mutations:
 
 ```bash
 npm run check:admin-deployment-readiness
@@ -174,8 +216,8 @@ Expected automated inspection output on the clean v2 staging target:
 - `TARGET_IDENTITY_MATCH = YES`
 - `MIGRATION_HISTORY_READABLE = NO`
 - `SCHEMA_BASELINE = UNVERIFIED`
-- `REQUIRED_TABLE_SET = PRESENT` (All 23 public application tables detected)
-- `REQUIRED_RPC_NAMES = PRESENT` (All 41 application RPC names detected)
+- `REQUIRED_TABLE_SET = PRESENT` (All 27 public application tables detected)
+- `REQUIRED_RPC_NAMES = PRESENT` (All 57 application RPC names detected)
 - `REQUIRED_STORAGE_BUCKETS = PRESENT` (All 3 buckets detected)
 - `AUTH_FOUNDATION = READY`
 - `MANUAL_EVIDENCE_REQUIRED = YES`
@@ -202,3 +244,16 @@ Expected output:
 - `error_codes = NONE`
 
 With both automated object detection and governed activation evidence complete, the clean v2 environment is verified and cleared for standalone Admin/CMS web service deployment.
+
+### C. Safe Deployment SHA Verification and Acceptance Boundary
+
+Before relying on a staging deployment, fetch the repository and run the read-only smoke verifier against the exact approved main commit:
+
+```bash
+git fetch origin main
+npm run check:admin-hosted-smoke -- --base-url=https://admin-cms-staging.example --expected-commit=$(git rev-parse origin/main)
+```
+
+The verifier compares `deploymentCommit.value` to that exact 40-character SHA and reports missing, invalid, and mismatched commit evidence as distinct fail-closed classifications. Do not place a branch name, shortened/fabricated SHA, or untrusted value in the comparison. The command remains GET/HEAD-only and performs no deployment or hosted mutation.
+
+A green hosted smoke result is only an application/configuration/dependency and public-login-surface gate. It does not replace the broader read-only schema-object checker, governed migration/schema/RLS evidence, authenticated smoke tests, stakeholder UAT, publication checks, independent CI review, or a production acceptance decision.

@@ -414,24 +414,22 @@ describe.sequential('authenticated Docker loopback proxy', () => {
     expect(recordedUpgrades.at(-1)?.headers[DOCKER_PROXY_AUTH_HEADER]).toBeUndefined();
   });
 
-  it('accepts pinned-CLI status and stop traffic only through the injected custom header', async () => {
-    for (const command of ['status', 'stop'] as const) {
-      if (proxy && fs.existsSync(proxy.auditPath)) fs.unlinkSync(proxy.auditPath);
-      const upstreamCount = recordedRequests.length;
-      const result = await runPinnedSupabaseCli([
-        command,
-        '--workdir',
-        'infra',
-        '--network-id',
-        LOCAL_DOCKER_NETWORK_NAME,
-      ]);
-      const acceptedRequests = recordedRequests.slice(upstreamCount);
+  it.each(['status', 'stop'] as const)('accepts pinned-CLI %s traffic only through the injected custom header', async (command) => {
+    if (proxy && fs.existsSync(proxy.auditPath)) fs.unlinkSync(proxy.auditPath);
+    const upstreamCount = recordedRequests.length;
+    const result = await runPinnedSupabaseCli([
+      command,
+      '--workdir',
+      'infra',
+      '--network-id',
+      LOCAL_DOCKER_NETWORK_NAME,
+    ]);
+    const acceptedRequests = recordedRequests.slice(upstreamCount);
 
-      expect(result.signal).toBeNull();
-      expect(fs.existsSync(proxy?.auditPath ?? '') ? fs.readFileSync(proxy?.auditPath ?? '', 'utf8') : 'NONE').toBe('NONE');
-      expect(acceptedRequests.length).toBeGreaterThan(0);
-      expect(acceptedRequests.every((request) => request.headers[DOCKER_PROXY_AUTH_HEADER] === undefined)).toBe(true);
-    }
+    expect(result.signal).toBeNull();
+    expect(fs.existsSync(proxy?.auditPath ?? '') ? fs.readFileSync(proxy?.auditPath ?? '', 'utf8') : 'NONE').toBe('NONE');
+    expect(acceptedRequests.length).toBeGreaterThan(0);
+    expect(acceptedRequests.every((request) => request.headers[DOCKER_PROXY_AUTH_HEADER] === undefined)).toBe(true);
   });
 
   it('parses the pinned reset command without contacting Docker when help is requested', async () => {
