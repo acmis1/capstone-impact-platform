@@ -145,6 +145,9 @@ jobs:
           npm run supabase:verify:local
           test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 39
 
+      - name: Verify multi-image gallery position invariant against the real schema
+        run: npm run verify:gallery-constraint-runtime --workspace=apps/admin-cms
+
       - name: Verify read-only hosted readiness inspection against Local Supabase
         run: npm run verify:hosted-readiness-inspection-runtime
 

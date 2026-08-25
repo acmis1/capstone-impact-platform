@@ -22,10 +22,60 @@ describe('multi-image gallery integration contract', () => {
       .filter((line) => !line.trim().startsWith('--'))
       .join('\n');
 
+  const FOUNDATION = '20260824050000_multi_image_gallery.sql';
   const APPROVAL = '20260824060000_multi_image_gallery_approval_gate.sql';
   const REVIEW_SUBMISSION = '20260825025000_multi_image_gallery_review_submission.sql';
   const PREVIEW = '20260824070000_multi_image_gallery_participant_preview.sql';
   const READINESS = '20260824080000_multi_image_gallery_publication_readiness.sql';
+
+  describe('gallery position is a non-null database invariant', () => {
+    const executable = stripComments(read(FOUNDATION));
+
+    const constraint = executable
+      .slice(executable.indexOf('ADD CONSTRAINT media_assets_gallery_position_check'))
+      .split(';')[0];
+
+    it('rejects a snapshot that carries no gallery position', () => {
+      // A CHECK constraint only rejects FALSE, not NULL. Without an explicit
+      // IS NOT NULL test, `gallery_position BETWEEN 1 AND 10` evaluates to NULL
+      // for a snapshot with no position, the whole expression evaluates to NULL,
+      // and PostgreSQL ACCEPTS the row. That let a snapshot persist with no
+      // authoritative gallery identity.
+      expect(constraint).toContain('gallery_position IS NOT NULL');
+
+      const snapshotBranch = constraint.slice(
+        constraint.indexOf("asset_type = 'snapshot_image'"),
+        constraint.indexOf('OR'),
+      );
+
+      expect(snapshotBranch).toContain('gallery_position IS NOT NULL');
+      expect(snapshotBranch).toContain('gallery_position BETWEEN 1 AND 10');
+    });
+
+    it('keeps every non-snapshot asset position-free', () => {
+      const nonSnapshotBranch = constraint.slice(constraint.indexOf('OR'));
+
+      expect(nonSnapshotBranch).toContain("asset_type <> 'snapshot_image'");
+      expect(nonSnapshotBranch).toContain('gallery_position IS NULL');
+    });
+
+    it('backfills legacy snapshots before enforcing the constraint', () => {
+      // Migration 0034 upgrades databases that already hold pre-gallery
+      // snapshot_image rows. The backfill must run first, or adding the
+      // stricter constraint would fail validation against those rows.
+      const backfillAt = executable.indexOf('SET gallery_position = 1');
+      const constraintAt = executable.indexOf('ADD CONSTRAINT media_assets_gallery_position_check');
+
+      expect(backfillAt).toBeGreaterThan(-1);
+      expect(backfillAt).toBeLessThan(constraintAt);
+    });
+
+    it('identifies a snapshot by project and gallery position', () => {
+      expect(executable).toContain('media_assets_project_gallery_position_unique');
+      expect(executable).toContain('ON public.media_assets (project_id, gallery_position)');
+      expect(executable).toContain("WHERE asset_type = 'snapshot_image'");
+    });
+  });
 
   describe('approval gate is all-gallery authoritative', () => {
     const executable = stripComments(read(APPROVAL));

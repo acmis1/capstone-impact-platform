@@ -44,11 +44,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS media_assets_project_gallery_position_unique
 ALTER TABLE public.media_assets
   DROP CONSTRAINT IF EXISTS media_assets_gallery_position_check;
 
+-- A CHECK constraint only rejects FALSE; it accepts both TRUE and NULL.
+-- `gallery_position BETWEEN 1 AND 10` evaluates to NULL when the column is
+-- NULL, so an `asset_type = 'snapshot_image'` row carrying no position made
+-- the whole expression NULL and was accepted. That let a snapshot persist with
+-- no authoritative gallery identity. The explicit IS NOT NULL test forces that
+-- branch to FALSE so the row is rejected at write time.
 ALTER TABLE public.media_assets
   ADD CONSTRAINT media_assets_gallery_position_check
   CHECK (
     (
       asset_type = 'snapshot_image'
+      AND gallery_position IS NOT NULL
       AND gallery_position BETWEEN 1 AND 10
     )
     OR
@@ -57,7 +64,8 @@ ALTER TABLE public.media_assets
       AND gallery_position IS NULL
     )
   );
-  -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
 -- 4. Replace browser media finalization with gallery-aware persistence.
 -- ---------------------------------------------------------------------------
 
