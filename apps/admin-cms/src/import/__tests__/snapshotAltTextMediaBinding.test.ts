@@ -68,6 +68,7 @@ describe('server-authoritative snapshot alt derivation', () => {
   it('takes the alt text from the reparsed package manifest', () => {
     const snapshot = resolve({ snapshotAltText: VALID_ALT }).find((f) => f.assetType === 'snapshot_image');
     expect(snapshot?.snapshotAltText).toBe(VALID_ALT);
+    expect(snapshot?.galleryPosition).toBe(1);
   });
 
   it('trims the derived value so what is staged is what gets persisted', () => {
@@ -86,8 +87,16 @@ describe('server-authoritative snapshot alt derivation', () => {
 
   it('leaves poster image and poster PDF alt null', () => {
     const files = resolve({ snapshotAltText: VALID_ALT });
-    expect(files.find((f) => f.assetType === 'poster_image')?.snapshotAltText).toBeNull();
-    expect(files.find((f) => f.assetType === 'poster_pdf')?.snapshotAltText).toBeNull();
+    const posterImage = files.find(
+      (f) => f.assetType === 'poster_image',
+    );
+    const posterPdf = files.find(
+      (f) => f.assetType === 'poster_pdf',
+    );
+    expect(posterImage?.snapshotAltText).toBeNull();
+    expect(posterPdf?.snapshotAltText).toBeNull();
+    expect(posterImage?.galleryPosition).toBeNull();
+    expect(posterPdf?.galleryPosition).toBeNull();
   });
 });
 
@@ -97,8 +106,24 @@ describe('canonical media intent binding', () => {
     metadataIntentHash: 'a'.repeat(64),
   };
   const files = (snapshotAltText: string | null) => [
-    { packagePath: PACKAGE_PATH, projectPublicId: '2026-synthetic', assetType: 'poster_image', fileName: 'poster.png', fileSizeBytes: 2048, snapshotAltText: null },
-    { packagePath: PACKAGE_PATH, projectPublicId: '2026-synthetic', assetType: 'snapshot_image', fileName: 'snapshot-1.png', fileSizeBytes: 2048, snapshotAltText },
+    {
+      packagePath: PACKAGE_PATH,
+      projectPublicId: '2026-synthetic',
+      assetType: 'poster_image',
+      fileName: 'poster.png',
+      fileSizeBytes: 2048,
+      galleryPosition: null,
+      snapshotAltText: null,
+    },
+    {
+      packagePath: PACKAGE_PATH,
+      projectPublicId: '2026-synthetic',
+      assetType: 'snapshot_image',
+      fileName: 'snapshot-1.png',
+      fileSizeBytes: 2048,
+      galleryPosition: 1,
+      snapshotAltText,
+    },
   ];
 
   it('is stable for an identical resubmission', () => {

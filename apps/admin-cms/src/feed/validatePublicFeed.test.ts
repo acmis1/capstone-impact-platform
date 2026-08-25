@@ -224,12 +224,22 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
   });
 
   it('validates one public snapshot with one correct pairing', () => {
-    const url = 'https://cdn.example.com/project-public-assets/2026/proj/snap.png';
+    const url =
+      'https://cdn.example.com/project-public-assets/2026/proj/snap.png';
+
     const rec = publishedRecord({
       snapshots: [url],
-      snapshotMedia: [{ url, altText: 'Diagram showing architecture layout.' }],
+      snapshotMedia: [
+        {
+          url,
+          altText: 'Diagram showing architecture layout.',
+          galleryPosition: 1,
+        },
+      ],
     });
+
     const res = validatePublicFeed([rec]);
+
     expect(res.valid).toBe(true);
     expect(res.errors).toHaveLength(0);
   });
@@ -238,26 +248,47 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
     const url = 'https://cdn.example.com/project-public-assets/2026/proj/snap.png';
     const rec = publishedRecord({
       snapshots: [url],
-      snapshotMedia: [{ url, altText: 'a'.repeat(2000) }],
+      snapshotMedia: [
+        {
+          url,
+          altText: 'a'.repeat(2000),
+          galleryPosition: 1,
+        },
+      ],
     });
     const res = validatePublicFeed([rec]);
     expect(res.valid).toBe(true);
     expect(res.errors).toHaveLength(0);
   });
 
-  it('validates reordered unique pairings order-independently', () => {
-    const url1 = 'https://cdn.example.com/project-public-assets/2026/proj/snap1.png';
-    const url2 = 'https://cdn.example.com/project-public-assets/2026/proj/snap2.png';
+  it('rejects reordered pairings that diverge from snapshots order', () => {
+    const url1 =
+      'https://cdn.example.com/project-public-assets/2026/proj/snap1.png';
+    const url2 =
+      'https://cdn.example.com/project-public-assets/2026/proj/snap2.png';
+
     const rec = publishedRecord({
       snapshots: [url1, url2],
       snapshotMedia: [
-        { url: url2, altText: 'Snapshot 2 description.' },
-        { url: url1, altText: 'Snapshot 1 description.' },
+        {
+          url: url2,
+          altText: 'Snapshot 2 description.',
+          galleryPosition: 1,
+        },
+        {
+          url: url1,
+          altText: 'Snapshot 1 description.',
+          galleryPosition: 2,
+        },
       ],
     });
+
     const res = validatePublicFeed([rec]);
-    expect(res.valid).toBe(true);
-    expect(res.errors).toHaveLength(0);
+
+    expect(res.valid).toBe(false);
+    expect(res.errors.join(' ')).toContain(
+      'does not match "snapshots" at the same gallery index',
+    );
   });
 
   it('rejects missing snapshots array', () => {
@@ -293,7 +324,13 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
   it('rejects non-string element in snapshots', () => {
     const rec = publishedRecord({
       snapshots: [12345],
-      snapshotMedia: [{ url: '12345', altText: 'Valid description.' }],
+      snapshotMedia: [
+        {
+          url: '12345',
+          altText: 'Valid description.',
+          galleryPosition: 1,
+        },
+      ],
     });
     const res = validatePublicFeed([rec]);
     expect(res.valid).toBe(false);
@@ -312,40 +349,83 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
   ])('rejects unsafe snapshot URL: %s', (_, unsafeUrl) => {
     const rec = publishedRecord({
       snapshots: [unsafeUrl],
-      snapshotMedia: [{ url: unsafeUrl, altText: 'Description of media.' }],
+      snapshotMedia: [
+        {
+          url: unsafeUrl,
+          altText: 'Description of media.',
+          galleryPosition: 1,
+        },
+      ],
     });
     const res = validatePublicFeed([rec]);
     expect(res.valid).toBe(false);
     expect(res.errors.some((e) => e.includes('is not public-safe'))).toBe(true);
   });
 
-  it('rejects duplicate URLs in snapshots', () => {
-    const url = 'https://cdn.example.com/project-public-assets/2026/proj/snap.png';
-    const rec = publishedRecord({
-      snapshots: [url, url],
-      snapshotMedia: [
-        { url, altText: 'First description.' },
-        { url, altText: 'Second description.' },
-      ],
-    });
-    const res = validatePublicFeed([rec]);
-    expect(res.valid).toBe(false);
-    expect(res.errors.some((e) => e.includes('Duplicate snapshot URL detected in "snapshots"'))).toBe(true);
-  });
-
   it('rejects duplicate URLs in snapshotMedia', () => {
-    const url1 = 'https://cdn.example.com/project-public-assets/2026/proj/snap1.png';
-    const url2 = 'https://cdn.example.com/project-public-assets/2026/proj/snap2.png';
+    const url1 =
+      'https://cdn.example.com/project-public-assets/2026/proj/snap1.png';
+
+    const url2 =
+      'https://cdn.example.com/project-public-assets/2026/proj/snap2.png';
+
     const rec = publishedRecord({
       snapshots: [url1, url2],
       snapshotMedia: [
-        { url: url1, altText: 'First description.' },
-        { url: url1, altText: 'Duplicate description.' },
+        {
+          url: url1,
+          altText: 'First description.',
+          galleryPosition: 1,
+        },
+        {
+          url: url1,
+          altText: 'Duplicate description.',
+          galleryPosition: 2,
+        },
       ],
     });
+
     const res = validatePublicFeed([rec]);
+
     expect(res.valid).toBe(false);
-    expect(res.errors.some((e) => e.includes('Duplicate URL detected in "snapshotMedia"'))).toBe(true);
+    expect(
+      res.errors.some((e) =>
+        e.includes('Duplicate URL detected in "snapshotMedia"'),
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects duplicate URLs in snapshotMedia', () => {
+    const url1 =
+      'https://cdn.example.com/project-public-assets/2026/proj/snap1.png';
+
+    const url2 =
+      'https://cdn.example.com/project-public-assets/2026/proj/snap2.png';
+
+    const rec = publishedRecord({
+      snapshots: [url1, url2],
+      snapshotMedia: [
+        {
+          url: url1,
+          altText: 'First description.',
+          galleryPosition: 1,
+        },
+        {
+          url: url1,
+          altText: 'Duplicate description.',
+          galleryPosition: 2,
+        },
+      ],
+    });
+
+    const res = validatePublicFeed([rec]);
+
+    expect(res.valid).toBe(false);
+    expect(
+      res.errors.some((e) =>
+        e.includes('Duplicate URL detected in "snapshotMedia"'),
+      ),
+    ).toBe(true);
   });
 
   it('rejects mismatched URL in snapshotMedia', () => {
@@ -353,7 +433,13 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
     const wrongUrl = 'https://cdn.example.com/project-public-assets/2026/proj/snap-unmatched.png';
     const rec = publishedRecord({
       snapshots: [url1],
-      snapshotMedia: [{ url: wrongUrl, altText: 'Description.' }],
+      snapshotMedia: [
+        {
+          url: wrongUrl,
+          altText: 'Description.',
+          galleryPosition: 1,
+        },
+      ],
     });
     const res = validatePublicFeed([rec]);
     expect(res.valid).toBe(false);
@@ -365,7 +451,13 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
     const url2 = 'https://cdn.example.com/project-public-assets/2026/proj/snap2.png';
     const rec = publishedRecord({
       snapshots: [url1, url2],
-      snapshotMedia: [{ url: url1, altText: 'Only one described.' }],
+      snapshotMedia: [
+        {
+          url: url1,
+          altText: 'Only one described.',
+          galleryPosition: 1,
+        },
+      ],
     });
     const res = validatePublicFeed([rec]);
     expect(res.valid).toBe(false);
@@ -378,8 +470,8 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
     const rec = publishedRecord({
       snapshots: [url1],
       snapshotMedia: [
-        { url: url1, altText: 'First.' },
-        { url: url2, altText: 'Extra.' },
+        { url: url1, altText: 'First.', galleryPosition: 1,},
+        { url: url2, altText: 'Extra.', galleryPosition: 2,},
       ],
     });
     const res = validatePublicFeed([rec]);
@@ -391,7 +483,13 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
     const url = 'https://cdn.example.com/project-public-assets/2026/proj/snap.png';
     const rec = publishedRecord({
       snapshots: [url],
-      snapshotMedia: [{ url, altText: '' }],
+      snapshotMedia: [
+        {
+          url,
+          altText: '',
+          galleryPosition: 1,
+        },
+      ],
     });
     const res = validatePublicFeed([rec]);
     expect(res.valid).toBe(false);
@@ -402,7 +500,13 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
     const url = 'https://cdn.example.com/project-public-assets/2026/proj/snap.png';
     const rec = publishedRecord({
       snapshots: [url],
-      snapshotMedia: [{ url, altText: '   \n\t  ' }],
+      snapshotMedia: [
+        {
+          url,
+          altText: '   \n\t  ',
+          galleryPosition: 1,
+        },
+      ],
     });
     const res = validatePublicFeed([rec]);
     expect(res.valid).toBe(false);
@@ -413,7 +517,13 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
     const url = 'https://cdn.example.com/project-public-assets/2026/proj/snap.png';
     const rec = publishedRecord({
       snapshots: [url],
-      snapshotMedia: [{ url, altText: 'a'.repeat(2001) }],
+      snapshotMedia: [
+        {
+          url,
+          altText: 'a'.repeat(2001),
+          galleryPosition: 1,
+        },
+      ],
     });
     const res = validatePublicFeed([rec]);
     expect(res.valid).toBe(false);
@@ -424,7 +534,14 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
     const url = 'https://cdn.example.com/project-public-assets/2026/proj/snap.png';
     const rec = publishedRecord({
       snapshots: [url],
-      snapshotMedia: [{ url, altText: 'Valid alt.', internalTrackingId: 'secret-id' }],
+      snapshotMedia: [
+        {
+          url,
+          altText: 'Valid alt.',
+          galleryPosition: 1,
+          internalTrackingId: 'secret-id',
+        },
+      ],
     });
     const res = validatePublicFeed([rec]);
     expect(res.valid).toBe(false);

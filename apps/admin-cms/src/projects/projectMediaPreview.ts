@@ -14,6 +14,7 @@ import { validateMediaAsset } from '../storage/mediaValidationCore';
 export interface ProjectMediaAssetPreviewRow {
   id: string;
   asset_type: string;
+  gallery_position: number | null;
   file_name: string;
   storage_bucket: string;
   storage_path: string;
@@ -41,6 +42,47 @@ function fileSizeBytes(value: ProjectMediaAssetPreviewRow['file_size_bytes']): n
   if (value === null || value === undefined) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function mediaDisplayRank(assetType: string): number {
+  switch (assetType) {
+    case 'poster_image':
+      return 0;
+    case 'poster_pdf':
+      return 1;
+    case 'snapshot_image':
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function validGalleryPosition(position: number | null): number | undefined {
+  return typeof position === 'number' && Number.isInteger(position) && position > 0
+    ? position
+    : undefined;
+}
+
+/** Authoritative Admin media display order, including the numeric snapshot gallery sequence. */
+export function compareProjectMediaDisplayOrder(
+  left: Pick<ProjectMediaAssetPreviewRow, 'id' | 'asset_type' | 'gallery_position'>,
+  right: Pick<ProjectMediaAssetPreviewRow, 'id' | 'asset_type' | 'gallery_position'>,
+): number {
+  const rankDifference = mediaDisplayRank(left.asset_type) - mediaDisplayRank(right.asset_type);
+  if (rankDifference !== 0) return rankDifference;
+
+  if (left.asset_type === 'snapshot_image' && right.asset_type === 'snapshot_image') {
+    const leftPosition = validGalleryPosition(left.gallery_position);
+    const rightPosition = validGalleryPosition(right.gallery_position);
+    if (leftPosition !== undefined || rightPosition !== undefined) {
+      if (leftPosition === undefined) return 1;
+      if (rightPosition === undefined) return -1;
+      if (leftPosition !== rightPosition) return leftPosition - rightPosition;
+    }
+  }
+
+  if (left.asset_type !== right.asset_type) return left.asset_type.localeCompare(right.asset_type);
+  return left.id.localeCompare(right.id);
 }
 
 function isValidPrivateApprovalAsset(
@@ -97,14 +139,24 @@ export function deriveApprovalMediaInput(
 ): ApprovalMediaInput {
   const posterImage = mediaEvidence(rows, { ...params, assetType: 'poster_image' });
   const posterPdf = mediaEvidence(rows, { ...params, assetType: 'poster_pdf' });
-  const snapshots = rows.filter((row) => row.asset_type === 'snapshot_image');
-  const snapshotEvidence = mediaEvidence(rows, { ...params, assetType: 'snapshot_image' });
-  const snapshotMedia: ApprovalSnapshotMediaInput | null = snapshots.length === 0
-    ? null
-    : {
-        ...snapshotEvidence,
-        altText: snapshots.length === 1 ? snapshots[0].alt_text_public : null,
-      };
+  const snapshots = rows.filter(
+    (row) => row.asset_type === 'snapshot_image',
+  );
+
+  const snapshotMedia: ApprovalSnapshotMediaInput[] = snapshots
+    .map((row) => ({
+      galleryPosition: row.gallery_position,
+      validPrivate: isValidPrivateApprovalAsset(row, {
+        ...params,
+        assetType: 'snapshot_image',
+      }),
+      altText: row.alt_text_public,
+    }))
+    .sort(
+      (a, b) =>
+        (a.galleryPosition ?? Number.MAX_SAFE_INTEGER) -
+        (b.galleryPosition ?? Number.MAX_SAFE_INTEGER),
+    );
 
   return { posterImage, posterPdf, snapshotMedia };
 }
@@ -143,6 +195,7 @@ export async function toProjectMediaPreviewItem(
   const item: ProjectMediaPreviewItem = {
     id: row.id,
     assetType: row.asset_type,
+    galleryPosition: row.gallery_position,
     fileName: row.file_name || 'Unnamed media file',
     mimeType: row.mime_type || 'application/octet-stream',
     fileSize: fileSizeBytes(row.file_size_bytes),
@@ -200,15 +253,13 @@ export async function loadProjectMediaReviewData(params: {
   const privateBucket = params.privateBucket ?? getStagingBuckets().DRAFT_PRIVATE;
   const { data, error } = await params.supabase
     .from('media_assets')
-    .select('id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+    .select('id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
     .eq('project_id', params.projectId)
-    .order('asset_type', { ascending: true })
-    .order('created_at', { ascending: true })
     .order('id', { ascending: true });
 
   if (error) throw new ProjectMediaPreviewReadError();
 
-  const rows = (data ?? []) as ProjectMediaAssetPreviewRow[];
+  const rows = [...((data ?? []) as ProjectMediaAssetPreviewRow[])].sort(compareProjectMediaDisplayOrder);
   const items = await Promise.all(rows.map((row) => toProjectMediaPreviewItem(row, {
     projectTitle: params.projectTitle,
     accessibilityText: params.accessibilityText,

@@ -26,11 +26,11 @@ export async function saveProjectMetadataAction(rawInput: unknown): Promise<Proj
 }
 
 /**
- * Saves the authoritative text alternative for the project's snapshot image.
- *
- * Actor identity and permissions come from `requireAdmin()` on the server; the browser supplies
- * only the project public id, the text, and the project version it was editing. It can never send
- * an admin id, a role, or a media asset id.
+ * Saves the authoritative text alternative for one snapshot image.
+ * Actor identity and permissions come from requireAdmin() on the server.
+ * The browser supplies the project public id, target media asset id, text,
+ * and project version. The database independently verifies that the media
+ * asset belongs to that project and is a snapshot_image.
  */
 export async function saveSnapshotAltTextAction(rawInput: unknown): Promise<SnapshotAltTextActionResult> {
   try {

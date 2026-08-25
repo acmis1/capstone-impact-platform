@@ -132,7 +132,7 @@ describe('invalid synthetic project fixtures', () => {
     const approvalMedia = {
       posterImage: { rowCount: 1, validPrivateCount: 1 },
       posterPdf: { rowCount: 1, validPrivateCount: 1 },
-      snapshotMedia: null,
+      snapshotMedia: [],
     };
     expect(validateProjectForApproval(fixtures['missing-title'].payload as never, approvalMedia).errors.join(' ')).toContain('title');
     expect((fixtures['missing-year'].payload as { year: string }).year).toBe('');

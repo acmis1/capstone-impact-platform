@@ -134,10 +134,28 @@ export function computeProjectReviewReadiness(input: ImportBatchReviewProjectInp
   // optional, so its absence adds no blocker and the existing empty-gallery warning below is
   // unchanged. Once the image exists it is bound for a public page, so a usable text alternative is
   // a blocker rather than an acknowledgeable warning.
-  const snapshotAsset = input.mediaAssets.find((asset) => asset.assetType === 'snapshot_image');
-  if (snapshotAsset) {
-    const problem = getSnapshotAltTextProblem(snapshotAsset.altText, { snapshotPresent: true });
-    if (problem) blockingReasons.push(describeAccessibleContentProblem(problem, 'snapshotAltText'));
+  const snapshotAssets = input.mediaAssets.filter(
+    (asset) => asset.assetType === 'snapshot_image',
+  );
+
+  for (const snapshotAsset of snapshotAssets) {
+    const problem = getSnapshotAltTextProblem(
+      snapshotAsset.altText,
+      { snapshotPresent: true },
+    );
+
+    if (!problem) continue;
+
+    const reason = describeAccessibleContentProblem(
+      problem,
+      'snapshotAltText',
+    );
+
+    // Every snapshot is checked, but repeated failures of the same kind do not
+    // need to duplicate the same UI blocker text.
+    if (!blockingReasons.includes(reason)) {
+      blockingReasons.push(reason);
+    }
   }
 
   if (!input.snapshots || input.snapshots.length === 0) {

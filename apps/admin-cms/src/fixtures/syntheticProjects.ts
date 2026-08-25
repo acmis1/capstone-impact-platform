@@ -8,7 +8,7 @@ import { validateProjectForApproval } from '../validation/projectValidation';
 const COMPLETE_PRIVATE_APPROVAL_MEDIA = {
   posterImage: { rowCount: 1, validPrivateCount: 1 },
   posterPdf: { rowCount: 1, validPrivateCount: 1 },
-  snapshotMedia: null,
+  snapshotMedia: [],
 };
 
 export const DEFAULT_SYNTHETIC_SEED = 0xD4072026;
@@ -135,9 +135,10 @@ export function createValidationFlags(index: number): ValidationFlagRecord {
 
 /** Deterministic synthetic description, paired with its URL so the two can never drift apart. */
 function createSyntheticSnapshotMedia(publicId: string, urls: string[]): Project['snapshotMedia'] {
-  return urls.map((url, position) => ({
+  return urls.map((url, index) => ({
     url,
-    altText: `Synthetic snapshot ${position + 1} for ${publicId}: a generated placeholder image used for repeatable local checks.`,
+    altText: `Synthetic snapshot description for ${publicId}`,
+    galleryPosition: index + 1,
   }));
 }
 

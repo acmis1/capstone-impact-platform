@@ -236,7 +236,7 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
       }
       if (media.snapshotAltText !== undefined) {
         mediaRows.push({
-          project_id: data.id, asset_type: 'snapshot_image', file_name: 'snapshot-1.png',
+          project_id: data.id, asset_type: 'snapshot_image', gallery_position: 1, file_name: 'snapshot-1.png',
           storage_bucket: 'project-drafts-private', storage_path: `drafts/${publicId}/snapshot_image/snapshot-1.png`,
           public_url: null, public_storage_bucket: null, public_storage_path: null,
           mime_type: 'image/png', file_size_bytes: SYNTHETIC_PNG.length, is_public_approved: false,
@@ -565,7 +565,7 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
     const t8Proj = await createFixture('t8', 'submitted', { snapshotAltText: 'Synthetic accessible snapshot.' });
     const { data: t8MediaBefore } = await adminClient
       .from('media_assets')
-      .select('id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+      .select('id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
       .eq('project_id', t8Proj.id)
       .order('asset_type');
     const t8Rows = t8MediaBefore ?? [];
@@ -606,14 +606,33 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
           )).length,
         };
       };
-      const snapshotRows = t8Rows.filter((row) => row.asset_type === 'snapshot_image');
+      const snapshotRows = t8Rows.filter(
+        (row) => row.asset_type === 'snapshot_image',
+      );
+
       const applicationMedia = {
         posterImage: evidence('poster_image'),
         posterPdf: evidence('poster_pdf'),
-        snapshotMedia: snapshotRows.length === 0 ? null : {
-          ...evidence('snapshot_image'),
-          altText: snapshotRows.length === 1 ? snapshotRows[0].alt_text_public : null,
-        },
+
+        snapshotMedia: snapshotRows
+          .map((row) => ({
+            galleryPosition: row.gallery_position,
+            validPrivate:
+              row.storage_bucket === 'project-drafts-private' &&
+              row.storage_path.startsWith(
+                `drafts/${String(t8Proj.public_id)}/snapshot_image/`,
+              ) &&
+              row.is_public_approved === false &&
+              row.public_url === null &&
+              row.public_storage_bucket === null &&
+              row.public_storage_path === null,
+            altText: row.alt_text_public,
+          }))
+          .sort(
+            (a, b) =>
+              (a.galleryPosition ?? Number.MAX_SAFE_INTEGER) -
+              (b.galleryPosition ?? Number.MAX_SAFE_INTEGER),
+          ),
       };
       const applicationPreflightPassed = Boolean(
         applicationProject && validateProjectForApproval(applicationProject, applicationMedia).valid,
@@ -664,7 +683,7 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
       const { data: t8After } = await adminClient.from('projects').select('status,poster_url,poster_pdf_url').eq('id', t8Proj.id).single();
       const { data: t8MediaAfter } = await adminClient
         .from('media_assets')
-        .select('id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+        .select('id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
         .eq('project_id', t8Proj.id)
         .order('asset_type');
       const { data: t8Audits } = await adminClient.from('approval_records').select('id,action_taken').eq('project_id', t8Proj.id);

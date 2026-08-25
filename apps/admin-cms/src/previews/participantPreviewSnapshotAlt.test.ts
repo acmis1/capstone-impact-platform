@@ -28,7 +28,7 @@ const snapshot = (overrides: Partial<ParticipantPreviewSnapshot> = {}): Particip
 });
 
 const media = (overrides: Partial<ParticipantPreviewMediaViewRef> = {}): ParticipantPreviewMediaViewRef => ({
-  mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', mimeType: 'image/png',
+  mediaAssetId: 'm1', assetType: 'poster_image', galleryPosition: null, fileName: 'poster.png', mimeType: 'image/png',
   altText: null, signedUrl: 'https://signed.invalid/poster.png',
   ...overrides,
 });

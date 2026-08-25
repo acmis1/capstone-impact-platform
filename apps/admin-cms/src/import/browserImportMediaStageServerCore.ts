@@ -8,13 +8,20 @@ export function computeCanonicalMediaIntentHash(params: {
   files: CanonicalExpectedMediaFile[];
 }): string {
   const sortedFiles = [...params.files]
-    .sort((a, b) => a.packagePath.localeCompare(b.packagePath) || a.assetType.localeCompare(b.assetType))
+    .sort(
+      (a, b) =>
+        a.packagePath.localeCompare(b.packagePath) ||
+        a.assetType.localeCompare(b.assetType) ||
+        (a.galleryPosition ?? 0) - (b.galleryPosition ?? 0) ||
+        a.fileName.localeCompare(b.fileName)
+    )
     .map((file) => ({
       packagePath: file.packagePath,
       projectPublicId: file.projectPublicId,
       assetType: file.assetType,
       fileName: file.fileName,
       fileSizeBytes: file.fileSizeBytes,
+      galleryPosition: file.galleryPosition,
       snapshotAltText: file.snapshotAltText ?? null,
     }));
 

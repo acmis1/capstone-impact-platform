@@ -195,15 +195,15 @@ describe('participant preview semantic review layout', () => {
 
   const media = [
     {
-      mediaAssetId: 'poster', assetType: 'poster_image', fileName: 'poster.png', mimeType: 'image/png',
+      mediaAssetId: 'poster', assetType: 'poster_image', galleryPosition: null, fileName: 'poster.png', mimeType: 'image/png',
       altText: null, signedUrl: 'https://signed.invalid/poster.png',
     },
     {
-      mediaAssetId: 'snapshot', assetType: 'snapshot_image', fileName: 'snapshot.png', mimeType: 'image/png',
+      mediaAssetId: 'snapshot', assetType: 'snapshot_image', galleryPosition: 1, fileName: 'snapshot.png', mimeType: 'image/png',
       altText: 'Synthetic workspace screenshot.', signedUrl: 'https://signed.invalid/snapshot.png',
     },
     {
-      mediaAssetId: 'pdf', assetType: 'poster_pdf', fileName: 'poster.pdf', mimeType: 'application/pdf',
+      mediaAssetId: 'pdf', assetType: 'poster_pdf', galleryPosition: 1, fileName: 'poster.pdf', mimeType: 'application/pdf',
       altText: null, signedUrl: 'https://signed.invalid/poster.pdf',
     },
   ];
@@ -514,7 +514,7 @@ describe('Public participant-preview route', () => {
         industryCategories: [],
       },
       mediaSnapshot: [
-        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png', altText: null },
+        { mediaAssetId: 'm1', assetType: 'poster_image', galleryPosition: null, fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png', altText: null },
       ],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });
@@ -565,11 +565,11 @@ describe('Public participant-preview route', () => {
         industryCategories: [],
       },
       mediaSnapshot: [
-        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png', altText: null },
+        { mediaAssetId: 'm1', assetType: 'poster_image', galleryPosition: null, fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png', altText: null },
         // Anomalous reference pointing at the public bucket — createSignedDraftMediaUrl's own
         // bucket check refuses to sign it, and the route must fail closed rather than silently
         // omit it and still return 200.
-        { mediaAssetId: 'm2', assetType: 'poster_image', fileName: 'other-project-poster.png', storageBucket: 'project-public-assets', storagePath: 'approved/other-project/poster_image/poster.png', mimeType: 'image/png', altText: null },
+        { mediaAssetId: 'm2', assetType: 'poster_image', galleryPosition: null, fileName: 'other-project-poster.png', storageBucket: 'project-public-assets', storagePath: 'approved/other-project/poster_image/poster.png', mimeType: 'image/png', altText: null },
       ],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });
@@ -615,7 +615,7 @@ describe('Public participant-preview route', () => {
         industryCategories: [],
       },
       mediaSnapshot: [
-        { mediaAssetId: 'm1', assetType: 'poster_image', fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png', altText: null },
+        { mediaAssetId: 'm1', assetType: 'poster_image', galleryPosition: null, fileName: 'poster.png', storageBucket: 'project-drafts-private', storagePath: 'drafts/2026-x/poster_image/poster.png', mimeType: 'image/png', altText: null },
       ],
       expiresAt: '2026-08-17T00:00:00.000Z',
     });

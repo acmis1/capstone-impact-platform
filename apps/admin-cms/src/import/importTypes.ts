@@ -1,3 +1,14 @@
+export interface ImportPackageGalleryAltText {
+  position: number;
+  altText: string;
+}
+
+export interface ImportPackageGalleryImage<
+  TFile extends ImportPackageFileMetadata = ImportPackageFileMetadata,
+> {
+  position: number;
+  file: TFile;
+}
 export interface ImportPackageManifest {
   publicId: string;
   title: string;
@@ -18,6 +29,10 @@ export interface ImportPackageManifest {
   posterText?: string;
   accessibilityText?: string;
   /**
+   * Authoritative accessibility metadata for ordered gallery images.
+   */
+  galleryAltTexts?: ImportPackageGalleryAltText[];
+  /**
    * Staff-authored text alternative for the package's snapshot image. Absent when the source did
    * not supply one. Required only when the package actually contains a snapshot image, which is
    * enforced at the package-aware boundary (`validateImportPackage`) rather than by the individual
@@ -37,10 +52,25 @@ export interface ImportPackageFile extends ImportPackageFileMetadata {
   content: Buffer;
 }
 
-export interface ImportPackageParseResult<TFile extends ImportPackageFileMetadata = ImportPackageFile> {
+export interface ImportPackageParseResult<
+  TFile extends ImportPackageFileMetadata = ImportPackageFile,
+> {
   manifest: ImportPackageManifest;
   posterImage: TFile | null;
   posterPdf: TFile | null;
+
+  /**
+   * Authoritative ordered gallery representation.
+   * Empty array means the project contains no optional gallery images.
+   */
+  galleryImages: ImportPackageGalleryImage<TFile>[];
+
+  /**
+   * Temporary single-snapshot compatibility alias.
+   *
+   * Parsers must derive this from galleryImages[position === 1];
+   * it must never become an independent source of truth.
+   */
   snapshot1: TFile | null;
 }
 

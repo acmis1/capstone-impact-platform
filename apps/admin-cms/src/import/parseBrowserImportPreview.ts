@@ -17,6 +17,7 @@ import {
   parseProjectDetailsJson,
   ProjectDetailsJsonError,
 } from './parseProjectDetailsJson';
+
 import { validateImportPackage } from './validateImportPackage';
 import { generateBrowserPreviewFingerprint } from './prepareBrowserImportCommitIntentCore';
 import {
@@ -24,6 +25,11 @@ import {
   ImportPackageManifest,
   ImportPackageParseResult,
 } from './importTypes';
+
+import {
+  parseGalleryFilePosition,
+  sortGalleryByPosition,
+} from './galleryConvention';
 
 import {
   AdminReferenceMappingConfig,
@@ -251,12 +257,16 @@ export async function analyzeBrowserImportServer(
         const relativeDepth = parts.length - (mode === 'single' ? 1 : 2);
         const fileName = desc.fileName;
         const lowerName = fileName.toLowerCase();
+        const galleryPosition = parseGalleryFilePosition(fileName);
+        const isRecognizedPackageFile =
+          lowerName === 'project-details.xlsx' ||
+          lowerName === 'project.json' ||
+          lowerName === 'poster.png' ||
+          lowerName === 'poster.pdf' ||
+          galleryPosition !== null;
 
         // Structural check: recognized files at depth > 1 inside package emit structure error
-        if (
-          relativeDepth > 1 &&
-          ['project-details.xlsx', 'project.json', 'poster.png', 'poster.pdf', 'snapshot-1.png'].includes(lowerName)
-        ) {
+        if (relativeDepth > 1 && isRecognizedPackageFile) {
           errors.push({
             code: 'PACKAGE_STRUCTURE_INVALID',
             message: 'Recognized package files must be placed directly in the project package folder.',
@@ -290,9 +300,7 @@ export async function analyzeBrowserImportServer(
         }
         canonicalNamesMap.set(lowerName, fileName);
 
-        if (
-          ['project-details.xlsx', 'project.json', 'poster.png', 'poster.pdf', 'snapshot-1.png'].includes(lowerName)
-        ) {
+        if (isRecognizedPackageFile) {
           recognizedFiles.set(lowerName, desc);
         } else {
           warnings.push({
@@ -304,10 +312,12 @@ export async function analyzeBrowserImportServer(
           });
         }
       }
-
       filePresence.posterImagePresent = recognizedFiles.has('poster.png');
       filePresence.posterPdfPresent = recognizedFiles.has('poster.pdf');
-      filePresence.snapshotPresent = recognizedFiles.has('snapshot-1.png');
+
+      filePresence.snapshotPresent = [...recognizedFiles.keys()].some(
+        (fileName) => parseGalleryFilePosition(fileName) !== null,
+      );
 
       const xlsxPresent = recognizedFiles.has('project-details.xlsx');
       const jsonPresent = recognizedFiles.has('project.json');
@@ -327,8 +337,9 @@ export async function analyzeBrowserImportServer(
         }
 
         const lowerName = desc.fileName.toLowerCase();
+        const galleryPosition = parseGalleryFilePosition(lowerName);
         if (
-          (lowerName === 'poster.png' || lowerName === 'snapshot-1.png') &&
+          (lowerName === 'poster.png' || galleryPosition !== null) &&
           desc.fileSizeBytes > BROWSER_IMPORT_LIMITS.MAX_IMAGE_SIZE_BYTES
         ) {
           errors.push({
@@ -476,12 +487,41 @@ export async function analyzeBrowserImportServer(
           packagePath: pkgPath,
         });
       }
-
       if (currentManifest) {
         const posterImgDesc = recognizedFiles.get('poster.png');
         const posterPdfDesc = recognizedFiles.get('poster.pdf');
-        const snapshotDesc = recognizedFiles.get('snapshot-1.png');
-
+        const galleryImages = sortGalleryByPosition(
+          [...recognizedFiles.values()]
+            .map((desc) => {
+              const position = parseGalleryFilePosition(desc.fileName);
+              if (position === null) {
+                return null;
+              }
+              return {
+                position,
+                file: {
+                  fileName: desc.fileName,
+                  fileSizeBytes: desc.fileSizeBytes,
+                  mimeType: desc.canonicalMimeType,
+                },
+              };
+            })
+            .filter(
+              (
+                item,
+              ): item is {
+                position: number;
+                file: ImportPackageFileMetadata;
+              } => item !== null,
+            ),
+        );
+        const positionOneImages = galleryImages.filter(
+          (item) => item.position === 1,
+        );
+        const snapshotFile =
+          positionOneImages.length === 1
+            ? positionOneImages[0].file
+            : null;
         const descriptorParseResult: ImportPackageParseResult<ImportPackageFileMetadata> = {
           manifest: currentManifest,
           posterImage: posterImgDesc
@@ -498,13 +538,8 @@ export async function analyzeBrowserImportServer(
                 mimeType: posterPdfDesc.canonicalMimeType,
               }
             : null,
-          snapshot1: snapshotDesc
-            ? {
-                fileName: snapshotDesc.fileName,
-                fileSizeBytes: snapshotDesc.fileSizeBytes,
-                mimeType: snapshotDesc.canonicalMimeType,
-              }
-            : null,
+          galleryImages,
+          snapshot1: snapshotFile,
         };
 
         const valResult = validateImportPackage(descriptorParseResult, { metadataSource });

@@ -6,6 +6,21 @@ export interface ProjectDetailsWorkbookIssue {
   columnName?: string;
   rowNumber?: number;
 }
+export interface ProjectDetailsGalleryAltText {
+  position: number;
+  altText: string;
+}
+
+export type GalleryAltTextInternalField =
+  | 'snapshot2AltText'
+  | 'snapshot3AltText'
+  | 'snapshot4AltText'
+  | 'snapshot5AltText'
+  | 'snapshot6AltText'
+  | 'snapshot7AltText'
+  | 'snapshot8AltText'
+  | 'snapshot9AltText'
+  | 'snapshot10AltText';
 
 export interface ProjectDetailsWorkbookMetadata {
   title: string;
@@ -45,6 +60,7 @@ export interface ProjectDetailsWorkbookMetadata {
    * the project title, the poster accessibility text, OCR, or AI.
    */
   snapshotAltText: string;
+  galleryAltTexts: ProjectDetailsGalleryAltText[];
   layoutConfig: {
     templateId: string;
     featuredMedia: string;
@@ -127,7 +143,11 @@ export function normalizeFeaturedMedia(input: string): string | null {
 
 export interface ColumnDefinition {
   canonicalName: string;
-  internalField: keyof ProjectDetailsWorkbookMetadata | 'templateId' | 'featuredMedia';
+  internalField:
+    | keyof ProjectDetailsWorkbookMetadata
+    | GalleryAltTextInternalField
+    | 'templateId'
+    | 'featuredMedia';
   required: boolean;
   aliases: string[];
 }
@@ -254,8 +274,64 @@ export const COLUMN_DEFINITIONS: ColumnDefinition[] = [
       'snapshot alt text',
       'snapshot accessibility text',
       'snapshotimagealttext',
-      'snapshotalttext'
+      'snapshotalttext',
+      'snapshot 1 alt text',
+      'snapshot1alttext'
     ]
+  },
+  {
+    canonicalName: 'Snapshot 2 alt text',
+    internalField: 'snapshot2AltText',
+    required: false,
+    aliases: ['snapshot 2 alt text', 'snapshot2 alt text', 'snapshot2alttext']
+  },
+  {
+    canonicalName: 'Snapshot 3 alt text',
+    internalField: 'snapshot3AltText',
+    required: false,
+    aliases: ['snapshot 3 alt text', 'snapshot3 alt text', 'snapshot3alttext']
+  },
+  {
+    canonicalName: 'Snapshot 4 alt text',
+    internalField: 'snapshot4AltText',
+    required: false,
+    aliases: ['snapshot 4 alt text', 'snapshot4 alt text', 'snapshot4alttext']
+  },
+  {
+    canonicalName: 'Snapshot 5 alt text',
+    internalField: 'snapshot5AltText',
+    required: false,
+    aliases: ['snapshot 5 alt text', 'snapshot5 alt text', 'snapshot5alttext']
+  },
+  {
+    canonicalName: 'Snapshot 6 alt text',
+    internalField: 'snapshot6AltText',
+    required: false,
+    aliases: ['snapshot 6 alt text', 'snapshot6 alt text', 'snapshot6alttext']
+  },
+  {
+    canonicalName: 'Snapshot 7 alt text',
+    internalField: 'snapshot7AltText',
+    required: false,
+    aliases: ['snapshot 7 alt text', 'snapshot7 alt text', 'snapshot7alttext']
+  },
+  {
+    canonicalName: 'Snapshot 8 alt text',
+    internalField: 'snapshot8AltText',
+    required: false,
+    aliases: ['snapshot 8 alt text', 'snapshot8 alt text', 'snapshot8alttext']
+  },
+  {
+    canonicalName: 'Snapshot 9 alt text',
+    internalField: 'snapshot9AltText',
+    required: false,
+    aliases: ['snapshot 9 alt text', 'snapshot9 alt text', 'snapshot9alttext']
+  },
+  {
+    canonicalName: 'Snapshot 10 alt text',
+    internalField: 'snapshot10AltText',
+    required: false,
+    aliases: ['snapshot 10 alt text', 'snapshot10 alt text', 'snapshot10alttext']
   }
 ];
 

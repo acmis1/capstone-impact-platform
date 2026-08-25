@@ -231,6 +231,13 @@ describe('Supabase Docker API compatibility boundary', () => {
       'db', 'reset', '--local', '--version', '20260820120000',
       '--workdir', 'infra', '--network-id', LOCAL_DOCKER_NETWORK_NAME,
     ]);
+    expect(supabaseCommandArguments('reset', LOCAL_DOCKER_NETWORK_NAME, {
+      resetVersion: '20260820120000',
+      skipSeed: true,
+    })).toEqual([
+      'db', 'reset', '--local', '--version', '20260820120000', '--no-seed',
+      '--workdir', 'infra', '--network-id', LOCAL_DOCKER_NETWORK_NAME,
+    ]);
     expect(supabaseCommandArguments('migration-up')).toEqual([
       'migration', 'up', '--local', '--workdir', 'infra', '--network-id', LOCAL_DOCKER_NETWORK_NAME,
     ]);
@@ -238,6 +245,10 @@ describe('Supabase Docker API compatibility boundary', () => {
       .toThrow('INVALID_LOCAL_MIGRATION_VERSION');
     expect(() => supabaseCommandArguments('status', LOCAL_DOCKER_NETWORK_NAME, { resetVersion: '20260820120000' }))
       .toThrow('RESET_VERSION_REQUIRES_RESET');
+    for (const command of ['start', 'stop', 'status', 'migration-up'] as const) {
+      expect(() => supabaseCommandArguments(command, LOCAL_DOCKER_NETWORK_NAME, { skipSeed: true }))
+        .toThrow('SKIP_SEED_REQUIRES_RESET');
+    }
     expect(supabaseCommandArguments('start', expectedNetworkId)).toEqual([
       'start', '--exclude', 'vector', '--workdir', 'infra', '--network-id', expectedNetworkId,
     ]);

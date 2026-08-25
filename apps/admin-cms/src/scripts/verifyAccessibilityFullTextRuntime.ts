@@ -571,7 +571,7 @@ export async function verifyAccessibilityFullTextRuntime(): Promise<void> {
         {
           posterImage: { rowCount: 1, validPrivateCount: 1 },
           posterPdf: { rowCount: 1, validPrivateCount: 1 },
-          snapshotMedia: null,
+          snapshotMedia: [],
         },
       );
       assert(!result.valid, 'Approval validation accepted a project with no accessible content.');

@@ -1,6 +1,9 @@
 import { ManifestPreflightSuccess, ServerDerivedDescriptor } from './browserImportPreviewContract';
 import { BrowserImportServerPackage } from './parseBrowserImportPreview';
-
+import {
+  parseGalleryFilePosition,
+  sortGalleryByPosition,
+} from './galleryConvention';
 export type BrowserImportMediaAssetType = 'poster_image' | 'poster_pdf' | 'snapshot_image';
 
 export interface ExpectedBrowserImportMediaFile {
@@ -11,6 +14,7 @@ export interface ExpectedBrowserImportMediaFile {
   fileName: string;
   fileSizeBytes: number;
   canonicalMimeType: string;
+  galleryPosition: number | null;
   /**
    * Text alternative for a `snapshot_image`, derived here from the server-reparsed package manifest
    * and never from anything the browser sends. `null` for every other asset type, and for a legacy
@@ -26,7 +30,6 @@ export interface ExpectedBrowserImportMediaFile {
 const RECOGNIZED_MEDIA_FILENAMES: Record<string, BrowserImportMediaAssetType> = {
   'poster.png': 'poster_image',
   'poster.pdf': 'poster_pdf',
-  'snapshot-1.png': 'snapshot_image',
 };
 
 /**
@@ -35,11 +38,41 @@ const RECOGNIZED_MEDIA_FILENAMES: Record<string, BrowserImportMediaAssetType> = 
  * project title, or the poster accessibility text would all be fabricated accessibility evidence,
  * so a genuinely absent value stays absent and the workflow gates hold the project instead.
  */
-function resolveSnapshotAltText(pkg: BrowserImportServerPackage): string | null {
-  const raw = pkg.manifest?.snapshotAltText;
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  return trimmed === '' ? null : trimmed;
+function resolveSnapshotAltText(
+  pkg: BrowserImportServerPackage,
+  position: number,
+): string | null {
+  const galleryAltTexts = pkg.manifest?.galleryAltTexts;
+
+  if (Array.isArray(galleryAltTexts)) {
+    const matched = galleryAltTexts.find(
+      (item) => item.position === position,
+    );
+
+    if (matched && typeof matched.altText === 'string') {
+      const trimmed = matched.altText.trim();
+
+      if (trimmed !== '') {
+        return trimmed;
+      }
+    }
+  }
+
+  // Compatibility with the original single-snapshot contract.
+  // Only gallery position 1 may fall back to snapshotAltText.
+  if (position === 1) {
+    const raw = pkg.manifest?.snapshotAltText;
+
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+
+      if (trimmed !== '') {
+        return trimmed;
+      }
+    }
+  }
+
+  return null;
 }
 
 export type ResolveExpectedMediaResult =
@@ -93,8 +126,7 @@ export function resolveExpectedBrowserImportMedia(params: {
     for (const [lowerName, assetType] of Object.entries(RECOGNIZED_MEDIA_FILENAMES)) {
       const isPresent =
         (assetType === 'poster_image' && pkg.filePresence.posterImagePresent) ||
-        (assetType === 'poster_pdf' && pkg.filePresence.posterPdfPresent) ||
-        (assetType === 'snapshot_image' && pkg.filePresence.snapshotPresent);
+        (assetType === 'poster_pdf' && pkg.filePresence.posterPdfPresent);
 
       if (!isPresent) continue;
 
@@ -109,8 +141,51 @@ export function resolveExpectedBrowserImportMedia(params: {
         fileName: desc.fileName,
         fileSizeBytes: desc.fileSizeBytes,
         canonicalMimeType: desc.canonicalMimeType,
-        snapshotAltText: assetType === 'snapshot_image' ? resolveSnapshotAltText(pkg) : null,
+        galleryPosition: null,
+        snapshotAltText: null,
       });
+    }
+
+    if (pkg.filePresence.snapshotPresent) {
+      const galleryDescriptors = sortGalleryByPosition(
+        descriptors
+          .map((desc) => {
+            const position = parseGalleryFilePosition(desc.fileName);
+
+            if (position === null) {
+              return null;
+            }
+
+            return {
+              position,
+              desc,
+            };
+          })
+          .filter(
+            (
+              item,
+            ): item is {
+              position: number;
+              desc: ServerDerivedDescriptor;
+            } => item !== null,
+          ),
+      );
+
+      for (const galleryItem of galleryDescriptors) {
+        const { position, desc } = galleryItem;
+
+        files.push({
+          uploadKey: desc.uploadKey,
+          packagePath,
+          projectPublicId: pkg.proposedPublicId,
+          assetType: 'snapshot_image',
+          fileName: desc.fileName,
+          fileSizeBytes: desc.fileSizeBytes,
+          canonicalMimeType: desc.canonicalMimeType,
+          galleryPosition: position,
+          snapshotAltText: resolveSnapshotAltText(pkg, position),
+        });
+      }
     }
   }
 

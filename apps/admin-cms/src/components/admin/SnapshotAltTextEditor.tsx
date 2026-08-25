@@ -11,13 +11,15 @@ import { CheckCircle2, AlertTriangle, Edit3, Plus } from 'lucide-react';
 
 interface SnapshotAltTextEditorProps {
   publicId: string;
+  mediaAssetId: string;
   /** The authoritative saved value, or empty when none is stored yet. */
   initialAltText: string;
-  /** The project version this view was rendered from; shared with the metadata editor. */
-  initialExpectedUpdatedAt: string;
+  /** The current shared project version for this snapshot gallery editing surface. */
+  expectedUpdatedAt: string;
   canEdit: boolean;
   projectStatus: string;
   saveAction: (rawInput: unknown) => Promise<SnapshotAltTextActionResult>;
+  onSavedExpectedUpdatedAt: (expectedUpdatedAt: string) => void;
 }
 
 /**
@@ -32,15 +34,16 @@ interface SnapshotAltTextEditorProps {
  */
 export function SnapshotAltTextEditor({
   publicId,
+  mediaAssetId,
   initialAltText,
-  initialExpectedUpdatedAt,
+  expectedUpdatedAt,
   canEdit,
   projectStatus,
   saveAction,
+  onSavedExpectedUpdatedAt,
 }: SnapshotAltTextEditorProps) {
   const fieldId = useId();
   const [savedAltText, setSavedAltText] = useState(initialAltText);
-  const [expectedUpdatedAt, setExpectedUpdatedAt] = useState(initialExpectedUpdatedAt);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(initialAltText);
   const [isSaving, setIsSaving] = useState(false);
@@ -60,11 +63,11 @@ export function SnapshotAltTextEditor({
     setErrorMessage(null);
     setStatusMessage(null);
     try {
-      const result = await saveAction({ publicId, snapshotAltText: draft, expectedUpdatedAt });
+      const result = await saveAction({ publicId, mediaAssetId, snapshotAltText: draft, expectedUpdatedAt });
       if (result.ok) {
         setSavedAltText(result.snapshot.snapshotAltText);
         setDraft(result.snapshot.snapshotAltText);
-        setExpectedUpdatedAt(result.snapshot.expectedUpdatedAt);
+        onSavedExpectedUpdatedAt(result.snapshot.expectedUpdatedAt);
         setIsEditing(false);
         setStatusMessage('Snapshot image alt text saved.');
       } else {

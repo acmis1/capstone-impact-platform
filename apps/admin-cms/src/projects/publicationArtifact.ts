@@ -11,6 +11,7 @@ export interface PublicationMediaSource {
   id: string;
   projectId: string;
   assetType: string;
+  galleryPosition: number | null;
   fileName: string;
   storageBucket: string;
   storagePath: string;
@@ -27,6 +28,7 @@ export interface PublicationMediaSource {
 export interface PublicationMediaPromotion {
   mediaAssetId: string;
   assetType: PublicationMediaAssetType;
+  galleryPosition: number | null;
   fileName: string;
   mimeType: string;
   fileSizeBytes: number;
@@ -108,13 +110,48 @@ export function planPublicationArtifact(params: {
 
   const target = targets[0];
   const mediaPromotions: PublicationMediaPromotion[] = [];
-  const seenTypes = new Set<string>();
+  const seenSingletonTypes = new Set<string>();
+  const seenGalleryPositions = new Set<number>();
 
   for (const asset of mediaAssets) {
-    if (!UUID.test(asset.id) || seenTypes.has(asset.assetType) || !SUPPORTED_TYPES.has(asset.assetType as PublicationMediaAssetType)) {
-      throw new Error('Publication media selection is invalid.');
+    if (
+      !UUID.test(asset.id) ||
+      !SUPPORTED_TYPES.has(
+        asset.assetType as PublicationMediaAssetType
+      )
+    ) {
+      throw new Error('Publication media source is invalid.');
     }
-    seenTypes.add(asset.assetType);
+
+    const assetType =
+      asset.assetType as PublicationMediaAssetType;
+
+    if (assetType === 'snapshot_image') {
+      if (
+        asset.galleryPosition === null ||
+        !Number.isInteger(asset.galleryPosition) ||
+        asset.galleryPosition < 1 ||
+        asset.galleryPosition > 10 ||
+        seenGalleryPositions.has(asset.galleryPosition)
+      ) {
+        throw new Error(
+          'Publication snapshot gallery position is invalid.',
+        );
+      }
+
+      seenGalleryPositions.add(asset.galleryPosition);
+    } else {
+      if (
+        asset.galleryPosition !== null ||
+        seenSingletonTypes.has(assetType)
+      ) {
+        throw new Error(
+          'Publication media source is invalid.',
+        );
+      }
+
+      seenSingletonTypes.add(assetType);
+    }
     if (
       asset.storageBucket !== privateBucket || !asset.storagePath || asset.storagePath.includes('..') ||
       asset.isPublicApproved || asset.publicUrl !== null || asset.publicStorageBucket !== null ||
@@ -126,7 +163,6 @@ export function planPublicationArtifact(params: {
     if (!validation.valid || !/^[A-Za-z0-9_.-]+$/.test(asset.fileName)) {
       throw new Error('Publication media source is invalid.');
     }
-    const assetType = asset.assetType as PublicationMediaAssetType;
     // A snapshot image must not reach a public artifact undescribed. The workflow gates already
     // block this well before publication; failing here too means a caller that somehow assembled a
     // plan around an undescribed snapshot gets no artifact at all rather than a silently
@@ -141,6 +177,7 @@ export function planPublicationArtifact(params: {
     mediaPromotions.push({
       mediaAssetId: asset.id,
       assetType,
+      galleryPosition: asset.galleryPosition,
       fileName: asset.fileName,
       mimeType: asset.mimeType,
       fileSizeBytes: asset.fileSizeBytes,
@@ -153,7 +190,32 @@ export function planPublicationArtifact(params: {
     });
   }
 
-  mediaPromotions.sort((a, b) => a.assetType.localeCompare(b.assetType) || a.publicPath.localeCompare(b.publicPath));
+  const mediaTypeRank: Record<PublicationMediaAssetType, number> = {
+    poster_image: 1,
+    poster_pdf: 2,
+    snapshot_image: 3,
+  };
+
+  mediaPromotions.sort((a, b) => {
+    const typeDifference =
+      mediaTypeRank[a.assetType] - mediaTypeRank[b.assetType];
+
+    if (typeDifference !== 0) {
+      return typeDifference;
+    }
+
+    if (
+      a.assetType === 'snapshot_image' &&
+      b.assetType === 'snapshot_image'
+    ) {
+      return (
+        (a.galleryPosition ?? Number.MAX_SAFE_INTEGER) -
+        (b.galleryPosition ?? Number.MAX_SAFE_INTEGER)
+      );
+    }
+
+    return a.publicPath.localeCompare(b.publicPath);
+  });
 
   let projectedTarget = target;
   if (mediaPromotions.length > 0) {
@@ -171,6 +233,7 @@ export function planPublicationArtifact(params: {
       snapshotMedia: snapshotPromotions.map((item) => ({
         url: item.publicUrl,
         altText: item.altTextPublic ?? '',
+        galleryPosition: item.galleryPosition!,
       })),
     };
   } else {

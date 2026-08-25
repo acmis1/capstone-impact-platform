@@ -8,7 +8,11 @@ export interface FeedValidationResult {
   warnings: string[];
 }
 
-const SNAPSHOT_MEDIA_KEYS = new Set(['url', 'altText']);
+const SNAPSHOT_MEDIA_KEYS = new Set([
+  'url',
+  'altText',
+  'galleryPosition',
+]);
 
 /**
  * Validates that a public snapshot URL is a legitimate, public-safe, absolute HTTP(S) URL.
@@ -47,11 +51,13 @@ function isPublicSafeUrl(urlStr: string): { valid: boolean; reason?: string } {
 /**
  * Enforces the exact additive `snapshotMedia` contract:
  * 1. snapshots is an array of public-safe string URLs without duplicates.
- * 2. snapshotMedia is an array of exact { url, altText } objects without duplicates.
- * 3. snapshotMedia length equals snapshots length.
- * 4. Every snapshotMedia URL corresponds to exactly one snapshots URL (order-independent).
- * 5. Every snapshots URL is claimed by exactly one snapshotMedia entry.
- * 6. Every altText is a string, non-blank after trim, <= 2,000 characters.
+ * 2. snapshotMedia contains exact { url, altText, galleryPosition } objects.
+ * 3. Both arrays contain at most 10 entries and have identical lengths.
+ * 4. galleryPosition is a unique integer from 1 through 10.
+ * 5. snapshotMedia is ordered by strictly increasing galleryPosition.
+ * 6. snapshotMedia[i].url must equal snapshots[i].
+ * 7. Every snapshot URL is claimed by exactly one snapshotMedia entry.
+ * 8. Every altText is non-blank and within the accessibility safety limit.
  */
 function validateSnapshotMedia(record: Record<string, unknown>, prefix: string, errors: string[]): void {
   const snapshotMedia = record.snapshotMedia;
@@ -61,8 +67,16 @@ function validateSnapshotMedia(record: Record<string, unknown>, prefix: string, 
     return;
   }
 
+  if (snapshots.length > 10 || snapshotMedia.length > 10) {
+    errors.push(
+      `${prefix} Snapshot gallery exceeds the maximum of 10 images.`,
+    );
+  }
+
   // 1. Validate each snapshots element: must be string, valid public-safe URL, and unique across snapshots
   const seenSnapshotUrls = new Set<string>();
+  const seenGalleryPositions = new Set<number>();
+  let previousGalleryPosition = 0;
   snapshots.forEach((url, i) => {
     if (typeof url !== 'string') {
       errors.push(`${prefix} Snapshot URL at index [${i}] must be a string.`);
@@ -104,6 +118,32 @@ function validateSnapshotMedia(record: Record<string, unknown>, prefix: string, 
       }
     });
 
+    if (
+      typeof item.galleryPosition !== 'number' ||
+      !Number.isInteger(item.galleryPosition) ||
+      item.galleryPosition < 1 ||
+      item.galleryPosition > 10
+    ) {
+      errors.push(
+        `${itemPrefix} is missing a valid "galleryPosition" from 1 through 10.`,
+      );
+    } else {
+      if (seenGalleryPositions.has(item.galleryPosition)) {
+        errors.push(
+          `${itemPrefix} has duplicate galleryPosition ${item.galleryPosition}.`,
+        );
+      }
+
+      if (item.galleryPosition <= previousGalleryPosition) {
+        errors.push(
+          `${itemPrefix} is not in deterministic gallery order.`,
+        );
+      }
+
+      seenGalleryPositions.add(item.galleryPosition);
+      previousGalleryPosition = item.galleryPosition;
+    }
+
     if (typeof item.url !== 'string' || item.url.trim() === '') {
       errors.push(`${itemPrefix} is missing a valid "url".`);
     } else {
@@ -116,8 +156,21 @@ function validateSnapshotMedia(record: Record<string, unknown>, prefix: string, 
       }
       seenMediaUrls.add(item.url);
 
+      const expectedSnapshotUrl = snapshots[itemIndex];
+
+      if (
+        typeof expectedSnapshotUrl === 'string' &&
+        item.url !== expectedSnapshotUrl
+      ) {
+        errors.push(
+          `${itemPrefix} URL does not match "snapshots" at the same gallery index.`,
+        );
+      }
+
       if (!seenSnapshotUrls.has(item.url)) {
-        errors.push(`${itemPrefix} URL does not match any remaining entry in "snapshots": "${item.url}".`);
+        errors.push(
+          `${itemPrefix} URL does not match any remaining entry in "snapshots": "${item.url}".`,
+        );
       } else {
         unclaimedSnapshotUrls.delete(item.url);
       }

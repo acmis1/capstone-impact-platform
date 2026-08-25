@@ -14,6 +14,13 @@ export type ParticipantPreviewExecutionErrorCode =
    * issued. Applies identically to an ordinary preview and a correction reissue.
    */
   | 'MEDIA_ACCESSIBILITY_REQUIRED'
+  /**
+   * Authoritative project media state is self-contradictory (wrong bucket, unexpectedly public,
+   * malformed identity, or a duplicate/out-of-range gallery position), so no confirmable preview
+   * may be issued. The preview fails closed rather than omitting the anomalous row from the
+   * immutable evidence the participant is asked to confirm.
+   */
+  | 'PROJECT_MEDIA_INVALID'
   | 'PUBLICATION_IN_PROGRESS'
   | 'READINESS_UNAVAILABLE'
   | 'INPUT_INVALID'

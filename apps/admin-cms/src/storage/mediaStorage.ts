@@ -53,8 +53,16 @@ export async function uploadDraftMediaAsset(params: {
   fileName: string;
   content: Buffer;
   mimeType: string;
+  /**
+   * Authoritative gallery position for a `snapshot_image`, from 1 through 10.
+   *
+   * Required for snapshots and rejected for every other asset type, mirroring the
+   * media_assets gallery-position constraint. Without it a snapshot would carry no
+   * gallery identity.
+   */
+  galleryPosition?: number;
 }): Promise<MediaAsset> {
-  const { projectPublicId, projectDbId, assetType, fileName, content, mimeType } = params;
+  const { projectPublicId, projectDbId, assetType, fileName, content, mimeType, galleryPosition } = params;
 
   // 1. Local Validation
   const validation = validateMediaAsset({
@@ -65,6 +73,21 @@ export async function uploadDraftMediaAsset(params: {
 
   if (!validation.valid) {
     throw new Error(`Media Asset Validation Failed: ${validation.errors.join('; ')}`);
+  }
+
+  const isSnapshot = assetType === 'snapshot_image';
+
+  if (isSnapshot) {
+    if (
+      typeof galleryPosition !== 'number'
+      || !Number.isInteger(galleryPosition)
+      || galleryPosition < 1
+      || galleryPosition > 10
+    ) {
+      throw new Error('Media Asset Validation Failed: snapshot_image requires an integer galleryPosition from 1 through 10');
+    }
+  } else if (galleryPosition !== undefined) {
+    throw new Error(`Media Asset Validation Failed: galleryPosition is not valid for asset type [${assetType}]`);
   }
 
   const supabase = createSupabaseAdminClientCore();
@@ -110,6 +133,7 @@ export async function uploadDraftMediaAsset(params: {
     .insert({
       project_id: resolvedProjectDbId,
       asset_type: assetType,
+      gallery_position: isSnapshot ? galleryPosition : null,
       file_name: fileName,
       storage_bucket: bucket,
       storage_path: storagePath,

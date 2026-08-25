@@ -301,8 +301,8 @@ async function main(): Promise<void> {
     });
     assert.ifError((await freshPasswordClient.auth.signOut({ scope: 'local' })).error);
 
-    await scenario(10, 'Local Supabase applied exactly 33 migrations', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '33');
+    await scenario(10, 'Local Supabase applied exactly 39 migrations', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '39');
     });
 
     const registrations = await Promise.all([

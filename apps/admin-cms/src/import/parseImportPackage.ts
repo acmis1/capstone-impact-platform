@@ -1,6 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ImportPackageParseResult, ImportPackageManifest, ImportPackageFile } from './importTypes';
+
+import {
+  ImportPackageParseResult,
+  ImportPackageManifest,
+  ImportPackageFile,
+} from './importTypes';
+import { parseGalleryFilePosition } from './galleryConvention';
 
 function getMimeType(fileName: string): string {
   const ext = path.extname(fileName).toLowerCase();
@@ -64,15 +70,62 @@ export async function parseLocalImportPackage(packagePath: string): Promise<Impo
     };
   };
 
-  // 2. Read expected media files
+    // 2. Read fixed-role media files.
   const posterImage = loadPackageFile('poster.png');
   const posterPdf = loadPackageFile('poster.pdf');
-  const snapshot1 = loadPackageFile('snapshot-1.png');
+
+  // 3. Discover deterministic snapshot-N gallery images.
+  const galleryImages = fs
+    .readdirSync(resolvedPath, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => {
+      const position = parseGalleryFilePosition(entry.name);
+
+      if (position === null) {
+        return null;
+      }
+
+      const file = loadPackageFile(entry.name);
+
+      if (!file) {
+        return null;
+      }
+
+      return {
+        position,
+        file,
+      };
+    })
+    .filter(
+      (
+        item,
+      ): item is {
+        position: number;
+        file: ImportPackageFile;
+      } => item !== null,
+    )
+    .sort(
+      (a, b) =>
+        a.position - b.position ||
+        a.file.fileName.localeCompare(b.file.fileName),
+    );
+
+  // Compatibility alias for existing single-snapshot code.
+  // Do not choose arbitrarily if position 1 is duplicated.
+  const positionOneImages = galleryImages.filter(
+    (item) => item.position === 1,
+  );
+
+  const snapshot1 =
+    positionOneImages.length === 1
+      ? positionOneImages[0].file
+      : null;
 
   return {
     manifest,
     posterImage,
     posterPdf,
-    snapshot1
+    galleryImages,
+    snapshot1,
   };
 }
