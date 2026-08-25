@@ -29,6 +29,9 @@ DECLARE
   v_industry_count integer;
   v_poster_ok boolean;
   v_poster_pdf_ok boolean;
+  v_snapshot_count integer;
+  v_valid_snapshot_count integer;
+  v_distinct_snapshot_positions integer;
   v_unresolved_error_flag_count integer;
   v_blocking_reasons text[];
   v_to_submit uuid[] := ARRAY[]::uuid[];
@@ -241,6 +244,56 @@ BEGIN
      WHERE ma.project_id = v_project.id AND ma.asset_type = 'poster_pdf';
     IF NOT COALESCE(v_poster_pdf_ok, false) THEN
       v_blocking_reasons := pg_catalog.array_append(v_blocking_reasons, 'MISSING_OR_INCONSISTENT_POSTER_PDF_MEDIA');
+    END IF;
+
+    -- Structural gallery validation. Review submission is the authoritative
+    -- server-side gate, so it must prove every snapshot is a valid staged
+    -- gallery element before any status mutation -- not merely that alt text
+    -- is present. gallery_position, not asset_type, is snapshot identity, so a
+    -- NULL/out-of-range/duplicate position is a structural defect even when the
+    -- underlying file is otherwise well-formed.
+    SELECT
+      pg_catalog.count(*),
+      pg_catalog.count(*) FILTER (
+        WHERE ma.storage_bucket = 'project-drafts-private'
+          AND ma.storage_path = pg_catalog.btrim(ma.storage_path)
+          AND pg_catalog.left(
+                ma.storage_path,
+                pg_catalog.length('drafts/' || v_project.public_id || '/snapshot_image/')
+              ) = 'drafts/' || v_project.public_id || '/snapshot_image/'
+          AND pg_catalog.right(ma.storage_path, pg_catalog.length(ma.file_name)) = ma.file_name
+          AND pg_catalog.strpos(ma.storage_path, '..') = 0
+          AND pg_catalog.strpos(ma.storage_path, E'\\') = 0
+          AND ma.file_name = pg_catalog.btrim(ma.file_name)
+          AND ma.file_name <> ''
+          AND pg_catalog.strpos(ma.file_name, '..') = 0
+          AND pg_catalog.strpos(ma.file_name, '/') = 0
+          AND pg_catalog.strpos(ma.file_name, E'\\') = 0
+          AND ma.mime_type IN ('image/png', 'image/jpeg', 'image/webp')
+          AND ma.file_size_bytes BETWEEN 1 AND 5242880
+          AND ma.is_public_approved = false
+          AND ma.public_url IS NULL
+          AND ma.public_storage_bucket IS NULL
+          AND ma.public_storage_path IS NULL
+          AND ma.gallery_position BETWEEN 1 AND 10
+      ),
+      pg_catalog.count(DISTINCT ma.gallery_position)
+      INTO v_snapshot_count, v_valid_snapshot_count, v_distinct_snapshot_positions
+      FROM public.media_assets AS ma
+     WHERE ma.project_id = v_project.id
+       AND ma.asset_type = 'snapshot_image';
+
+    -- Zero snapshots remains valid; a populated gallery must be wholly valid.
+    IF v_snapshot_count > 0
+       AND (
+         v_snapshot_count > 10
+         OR v_valid_snapshot_count <> v_snapshot_count
+         OR v_distinct_snapshot_positions <> v_snapshot_count
+       ) THEN
+      v_blocking_reasons := pg_catalog.array_append(
+        v_blocking_reasons,
+        'INVALID_SNAPSHOT_GALLERY_STRUCTURE'
+      );
     END IF;
 
     -- Snapshot gallery accessibility is conditional by design.

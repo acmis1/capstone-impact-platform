@@ -211,16 +211,6 @@ BEGIN
         END IF;
 
     END IF;
-
-    SELECT ma.alt_text_public INTO v_snapshot
-      FROM public.media_assets ma
-     WHERE ma.project_id = v_project_id AND ma.asset_type = 'snapshot_image';
-    IF FOUND AND pg_catalog.btrim(COALESCE(v_snapshot.alt_text_public, '')) = '' THEN
-      RETURN pg_catalog.jsonb_build_object('resultCode', 'MEDIA_ACCESSIBILITY_REQUIRED');
-    END IF;
-    IF FOUND AND pg_catalog.length(pg_catalog.btrim(v_snapshot.alt_text_public)) > 2000 THEN
-      RETURN pg_catalog.jsonb_build_object('resultCode', 'MEDIA_ACCESSIBILITY_INVALID');
-    END IF;
   END IF;
   v_now := pg_catalog.now();
   IF p_action = 'archive' THEN
