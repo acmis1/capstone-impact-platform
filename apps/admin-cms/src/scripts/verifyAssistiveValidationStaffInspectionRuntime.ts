@@ -110,9 +110,9 @@ async function main(): Promise<void> {
     const projectBefore = psql(`SELECT to_jsonb(p)::text FROM public.projects p WHERE p.id = '${projectIdA}'::uuid;`);
 
     // Scenario 1: Exactly 33 migrations are applied
-    await scenario(1, 'exactly 33 migrations are applied', () => {
+    await scenario(1, 'exactly 39 migrations are applied', () => {
       const count = Number(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'));
-      assert.equal(count, 33, `Expected exactly 33 applied migrations, got ${count}`);
+      assert.equal(count, 39, `Expected exactly 39 applied migrations, got ${count}`);
     });
 
     // Scenario 2: Migration 32 function exists with SECURITY DEFINER, search_path='', exact signature
