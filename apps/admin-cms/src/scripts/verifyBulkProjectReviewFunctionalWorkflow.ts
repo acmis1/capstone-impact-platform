@@ -67,6 +67,9 @@ function printReport(report: FunctionalWorkflowReport): void {
   console.log(`AGGREGATE_RESULT_ROWS = ${report.resultRows}`);
   console.log(`NO_SILENT_LOSS = ${report.silentlyLostProjects.length === 0 ? 'YES' : 'NO'}`);
   console.log(`NO_DUPLICATE_RESULTS = ${report.duplicateResultRows === 0 ? 'YES' : 'NO'}`);
+  console.log(`PREEXISTING_ADMIN_BEFORE = ${report.sharedAdmin.presentBefore ? 'PRESENT' : 'MISSING'}`);
+  console.log(`PREEXISTING_ADMIN_AFTER = ${report.sharedAdmin.presentAfter ? 'PRESENT' : 'MISSING'}`);
+  console.log(`PREEXISTING_ADMIN_ROLE_AFTER = ${report.sharedAdmin.roleAfter ?? 'MISSING'}`);
   console.log(
     `reconciliation: reportedSuccessful=${report.reconciliation.reportedSuccessful} ` +
       `databaseTransitioned=${report.reconciliation.databaseTransitioned} ` +
@@ -113,6 +116,9 @@ export async function verifyBulkProjectReviewFunctionalWorkflow(): Promise<void>
   if (report.reconciliation.foreignActorAuditRecords !== 0) failures.push('audit actor attribution');
   if (report.workflowElapsedMs >= LOCAL_WORKFLOW_TARGET_MS) failures.push('Local workflow duration target');
   if (!report.cleanup.clean) failures.push('fixture cleanup');
+  if (!report.sharedAdmin.presentBefore || !report.sharedAdmin.presentAfter || report.sharedAdmin.roleAfter !== 'admin') {
+    failures.push('pre-existing Admin preservation');
+  }
 
   if (failures.length > 0) {
     throw new Error(`Bulk project review functional workflow verification failed: ${failures.join('; ')}.`);

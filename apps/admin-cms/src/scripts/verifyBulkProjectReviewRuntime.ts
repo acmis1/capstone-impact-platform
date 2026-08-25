@@ -34,6 +34,9 @@ function printReport(report: Awaited<ReturnType<typeof runBulkProjectReviewRunti
   console.log(`workflowTransitions=${report.workflowTransitions} uniqueProjectsTransitioned=${report.uniqueProjectsTransitioned} auditCount=${report.auditCount} duplicateAudits=${report.duplicateAudits}`);
   console.log(`staleProjectIds=${report.staleProjectIds.join(',')}`);
   console.log(`concurrency duplicate=${report.concurrency.duplicateExecution} sameActionOverlap=${report.concurrency.sameActionOverlap} conflictingOverlap=${report.concurrency.conflictingOverlap} stalePreflight=${report.concurrency.stalePreflight} deadlocks=${report.concurrency.deadlocks}`);
+  console.log(`PREEXISTING_ADMIN_BEFORE = ${report.sharedAdmin.presentBefore ? 'PRESENT' : 'MISSING'}`);
+  console.log(`PREEXISTING_ADMIN_AFTER = ${report.sharedAdmin.presentAfter ? 'PRESENT' : 'MISSING'}`);
+  console.log(`PREEXISTING_ADMIN_ROLE_AFTER = ${report.sharedAdmin.roleAfter ?? 'MISSING'}`);
   console.log(`referenceFixtures createdPrograms=${report.referenceFixtures.created.programIds.length} createdDisciplines=${report.referenceFixtures.created.disciplineIds.length} createdIndustryCategories=${report.referenceFixtures.created.industryIds.length}`);
   for (const stage of report.stages) console.log(`${stage.stage}: selected=${stage.selected} eligible=${stage.eligible} blocked=${stage.blocked} alreadyComplete=${stage.alreadyComplete} invalidOrStale=${stage.invalidOrStale} successful=${stage.successful} failed=${stage.failed} durationMs=${stage.durationMs}`);
   console.log(`cleanup=${report.cleanup.clean ? 'clean' : 'residue'} ${Object.entries(report.cleanup.residue).map(([key, value]) => `residual${key[0].toUpperCase()}${key.slice(1)}=${value}`).join(' ')}`);
@@ -43,7 +46,7 @@ export async function verifyBulkProjectReviewRuntime(): Promise<void> {
   const env = localEnv();
   const report = await runBulkProjectReviewRuntime({ apiUrl: env.apiUrl, serviceRoleKey: env.serviceRoleKey, evidenceMode: process.argv.includes('--evidence') });
   printReport(report);
-  if (!report.cleanup.clean || report.total !== 100 || report.selected !== 100 || report.submit.execution.successful !== 40 || report.approval.execution.successful !== 46 || report.approval.execution.invalidOrStale !== 4 || report.requestChanges.execution.successful !== 1 || report.workflowTransitions !== 89 || report.uniqueProjectsTransitioned !== 52 || report.duplicateAudits !== 0 || report.failed !== 0 || report.auditCount !== 89 || report.concurrency.deadlocks !== 0) {
+  if (!report.cleanup.clean || !report.sharedAdmin.presentBefore || !report.sharedAdmin.presentAfter || report.sharedAdmin.roleAfter !== 'admin' || report.total !== 100 || report.selected !== 100 || report.submit.execution.successful !== 40 || report.approval.execution.successful !== 46 || report.approval.execution.invalidOrStale !== 4 || report.requestChanges.execution.successful !== 1 || report.workflowTransitions !== 89 || report.uniqueProjectsTransitioned !== 52 || report.duplicateAudits !== 0 || report.failed !== 0 || report.auditCount !== 89 || report.concurrency.deadlocks !== 0) {
     throw new Error('Bulk project review Local Supabase runtime verification failed.');
   }
 }

@@ -90,6 +90,11 @@ export interface FunctionalWorkflowReport {
   duplicateResultRows: number;
   silentlyLostProjects: string[];
   reconciliation: FunctionalWorkflowReconciliation;
+  sharedAdmin: {
+    presentBefore: boolean;
+    presentAfter: boolean;
+    roleAfter: 'admin' | null;
+  };
   workflowElapsedMs: number;
   referenceFixtures: { created: BulkReviewReferenceOwnership };
   cleanup: {
@@ -566,6 +571,7 @@ export async function runBulkProjectReviewFunctionalWorkflow(
         unmutatedBlockedProjects,
         unmutatedStaleProjects,
       },
+      sharedAdmin: { presentBefore: true, presentAfter: false, roleAfter: null },
       workflowElapsedMs: Number(workflowElapsedMs.toFixed(2)),
       referenceFixtures: { created: referenceOwnership },
       cleanup: {
@@ -581,6 +587,14 @@ export async function runBulkProjectReviewFunctionalWorkflow(
 
     report.cleanup = await cleanupFixture(supabase, prefix, batchNamePrefix, createdProjectIds, createdBatchIds, referenceOwnership);
     assert.equal(report.cleanup.clean, true, `Functional workflow cleanup left verifier-owned residue: ${JSON.stringify(report.cleanup)}`);
+    const retainedAdmin = await supabase.from('user_roles').select('role').eq('user_id', refs.adminId).eq('role', 'admin').maybeSingle();
+    if (retainedAdmin.error) throw new Error('Could not verify preservation of the pre-existing Local Admin role.');
+    report.sharedAdmin = {
+      presentBefore: true,
+      presentAfter: retainedAdmin.data !== null,
+      roleAfter: retainedAdmin.data?.role === 'admin' ? 'admin' : null,
+    };
+    assert.equal(report.sharedAdmin.presentAfter, true, 'Functional workflow cleanup removed the pre-existing Local Admin.');
     return report;
   } catch (error) {
     await cleanupFixture(supabase, prefix, batchNamePrefix, createdProjectIds, createdBatchIds, referenceOwnership);

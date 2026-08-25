@@ -85,6 +85,11 @@ export interface BulkProjectReviewRuntimeReport {
     stalePreflight: boolean;
     deadlocks: number;
   };
+  sharedAdmin: {
+    presentBefore: boolean;
+    presentAfter: boolean;
+    roleAfter: 'admin' | null;
+  };
   stages: BulkRuntimeStageReport[];
   referenceFixtures: { created: BulkReviewReferenceOwnership };
   cleanup: { clean: boolean; residue: BulkRuntimeCleanupResidue };
@@ -335,10 +340,12 @@ export async function runBulkProjectReviewRuntime(options: BulkProjectReviewRunt
   let staleProjectIds: string[] = [];
   let auditCount = 0;
   let duplicateAudits = 0;
+  let sharedAdminId: string | null = null;
   let report: BulkProjectReviewRuntimeReport | null = null;
 
   try {
     const refs = await references(supabase, prefix);
+    sharedAdminId = refs.adminId;
     referenceOwnership = refs.ownership;
     const synthetic = generateSyntheticProjects({ count: 100, seed });
     assert.equal(synthetic.length, 100);
@@ -547,6 +554,7 @@ export async function runBulkProjectReviewRuntime(options: BulkProjectReviewRunt
       requestChanges: { execution: requestChangesExecutionSummary, comment: requestChangesComment },
       workflowTransitions, uniqueProjectsTransitioned, auditCount, duplicateAudits, staleProjectIds, batchCount: 2,
       concurrency: { duplicateExecution: true, sameActionOverlap: true, conflictingOverlap: true, stalePreflight: true, deadlocks: 0 },
+      sharedAdmin: { presentBefore: true, presentAfter: false, roleAfter: null },
       stages: reports, cleanup,
       referenceFixtures: { created: referenceOwnership },
     };
@@ -572,6 +580,14 @@ export async function runBulkProjectReviewRuntime(options: BulkProjectReviewRunt
   if (!report) throw new Error('Bulk project review runtime did not produce a report.');
   report.cleanup = cleanup;
   assert.equal(cleanup.clean, true, `Bulk runtime cleanup left verifier-owned residue: ${JSON.stringify(cleanup.residue)}`);
+  const retainedAdmin = await supabase.from('user_roles').select('role').eq('user_id', sharedAdminId!).eq('role', 'admin').maybeSingle();
+  if (retainedAdmin.error) throw new Error('Could not verify preservation of the pre-existing Local Admin role.');
+  report.sharedAdmin = {
+    presentBefore: true,
+    presentAfter: retainedAdmin.data !== null,
+    roleAfter: retainedAdmin.data?.role === 'admin' ? 'admin' : null,
+  };
+  assert.equal(report.sharedAdmin.presentAfter, true, 'Bulk runtime cleanup removed the pre-existing Local Admin.');
   return report;
 }
 
