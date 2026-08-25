@@ -108,6 +108,8 @@ export async function runSeedFakeMediaAssets(args?: string[]): Promise<boolean> 
     projectPublicId: publishedProject.public_id,
     projectDbId: publishedProject.id,
     assetType: 'snapshot_image',
+    // Single seeded snapshot: authoritative gallery identity is position 1.
+    galleryPosition: 1,
     fileName: 'staging-snapshot-one.png',
     content: fakePng,
     mimeType: 'image/png',

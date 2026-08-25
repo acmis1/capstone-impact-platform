@@ -208,6 +208,8 @@ describe('Local Scaling Fixture Adapter & Storage Payloads', () => {
       expect(snapshot?.file_size_bytes).toBe(524288);
       expect(typeof snapshot?.alt_text_public).toBe('string');
       expect((snapshot?.alt_text_public as string).length).toBeGreaterThan(0);
+      // A snapshot with no gallery position is rejected by media_assets_gallery_position_check.
+      expect(snapshot?.gallery_position).toBe(1);
     }
   });
 

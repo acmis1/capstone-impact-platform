@@ -84,7 +84,7 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
       projectId: string,
       assetType: string,
       suffix: string,
-      overrides?: { bucket?: string; isPublicApproved?: boolean; publicUrl?: string | null }
+      overrides?: { bucket?: string; isPublicApproved?: boolean; publicUrl?: string | null; galleryPosition?: number }
     ) => {
       const bucket = overrides?.bucket ?? PRIVATE_DRAFT_BUCKET;
       const isPosterImage = assetType === 'poster_image';
@@ -100,6 +100,9 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
         .insert({
           project_id: projectId,
           asset_type: assetType,
+          // snapshot_image carries authoritative gallery identity; every other asset
+          // type must persist a NULL position.
+          gallery_position: assetType === 'snapshot_image' ? overrides?.galleryPosition ?? 1 : null,
           file_name: fileName,
           storage_bucket: bucket,
           storage_path: storagePath,
@@ -331,8 +334,8 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     await createMediaAsset(String(t8ProjA.id), 'poster_pdf', 't8a');
     await createMediaAsset(String(t8ProjB.id), 'poster_image', 't8b');
     // Anomalous rows for the SAME target project (t8a) that must NOT enter the snapshot.
-    // media_assets has a UNIQUE(project_id, asset_type) constraint, so each fixture (including
-    // the two legitimate ones above) needs its own distinct asset_type.
+    // Non-snapshot media are unique per (project_id, asset_type), and snapshots are unique per
+    // (project_id, gallery_position), so each fixture below needs its own distinct identity.
     const t8PublicApproved = await createMediaAsset(String(t8ProjA.id), 'snapshot_image', 't8a-public-approved', {
       isPublicApproved: true,
       publicUrl: 'https://example.test/public/t8a-already-approved.png',

@@ -193,6 +193,8 @@ export async function runImportStagingPackage(args?: string[]): Promise<boolean>
         projectPublicId: manifest.publicId,
         projectDbId: projectId,
         assetType: 'snapshot_image',
+        // The staging package carries a single snapshot, so it is gallery position 1.
+        galleryPosition: 1,
         fileName: parsed.snapshot1.fileName,
         content: parsed.snapshot1.content,
         mimeType: parsed.snapshot1.mimeType,
