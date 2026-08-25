@@ -24,6 +24,11 @@ function dependencies(): ControlledPublicationDependencies {
       confirmedPreviewId: '22222222-2222-4222-8222-222222222222',
       confirmedAt: '2026-08-24T00:00:00.000Z',
     }),
+    getReconciliationReadiness: vi.fn().mockResolvedValue({
+      resultCode: 'READY', ready: true, blockers: [],
+      confirmedPreviewId: '22222222-2222-4222-8222-222222222222',
+      confirmedAt: '2026-08-24T00:00:00.000Z',
+    }),
     listProjects: vi.fn().mockResolvedValue([
       createMockProject({ publicId: 'lifecycle-only', status: 'published' }),
       createMockProject({ publicId: 'target', status: 'approved' }),
@@ -147,17 +152,59 @@ describe('ledger-backed controlled publication', () => {
     await expect(publish(dependencies())).resolves.toEqual({ resultCode: 'RECOVERY_REQUIRED' });
   });
 
-  it('holds deployment reconciliation before the canonical writer with zero side effects', async () => {
+  it('proves deployment reconciliation against its own authority, never the pre-publication gate', async () => {
     const deps = deployedDependencies();
     mocks.inspect.mockResolvedValue({ head: null, artifact: null, publicUrl: 'https://example.com/feed.json' });
+    mocks.execute.mockImplementation(async (params) => {
+      expect(params.publicationMode).toBe('deployment_reconciliation');
+      expect(params.confirmedPreviewId).toBe('22222222-2222-4222-8222-222222222222');
+      expect(params.confirmedAt).toBe('2026-08-24T00:00:00.000Z');
+      return {
+        resultCode: 'COMPLETED', operationId: 'operation', versionNumber: 4,
+        snapshotId: 'snapshot', auditRecordId: null, feedHash: 'hash',
+        recordCount: 1, feedPublicUrl: 'https://example.com/feed.json',
+      };
+    });
+
+    await expect(publish(deps, { publicationMode: 'deployment_reconciliation' }))
+      .resolves.toMatchObject({ resultCode: 'COMPLETED', auditRecordId: null });
+
+    // The approved-only pre-publication gate must never be consulted for a published target.
+    expect(deps.getReadiness).not.toHaveBeenCalled();
+    expect(deps.getReconciliationReadiness).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses reconciliation on its own readiness verdict without reaching the canonical writer', async () => {
+    const deps = deployedDependencies();
+    mocks.inspect.mockResolvedValue({ head: null, artifact: null, publicUrl: 'https://example.com/feed.json' });
+    deps.getReconciliationReadiness = vi.fn().mockResolvedValue({
+      resultCode: 'MEDIA_SNAPSHOT_STALE', ready: false,
+      blockers: ['Project media changed after participant confirmation'],
+      confirmedPreviewId: null, confirmedAt: null,
+    });
+
     await expect(publish(deps, { publicationMode: 'deployment_reconciliation' })).resolves.toEqual({
-      resultCode: 'NOT_READY', readinessCode: 'RECONCILIATION_READINESS_REQUIRED',
-      blockers: ['Deployment reconciliation requires the final integrated publication-readiness proof.'],
+      resultCode: 'NOT_READY', readinessCode: 'MEDIA_SNAPSHOT_STALE',
+      blockers: ['Project media changed after participant confirmation'],
     });
     expect(mocks.execute).not.toHaveBeenCalled();
-    expect(deps.getReadiness).not.toHaveBeenCalled();
     expect(deps.listProjectMedia).not.toHaveBeenCalled();
     expect(deps.downloadObject).not.toHaveBeenCalled();
+    expect(deps.uploadNewObject).not.toHaveBeenCalled();
+  });
+
+  it('refuses reconciliation whose readiness returns no exact confirmation evidence', async () => {
+    const deps = deployedDependencies();
+    mocks.inspect.mockResolvedValue({ head: null, artifact: null, publicUrl: 'https://example.com/feed.json' });
+    deps.getReconciliationReadiness = vi.fn().mockResolvedValue({
+      resultCode: 'READY', ready: true, blockers: [],
+      confirmedPreviewId: null, confirmedAt: null,
+    });
+
+    await expect(publish(deps, { publicationMode: 'deployment_reconciliation' })).resolves.toMatchObject({
+      resultCode: 'NOT_READY', readinessCode: 'READY',
+    });
+    expect(mocks.execute).not.toHaveBeenCalled();
     expect(deps.uploadNewObject).not.toHaveBeenCalled();
   });
 

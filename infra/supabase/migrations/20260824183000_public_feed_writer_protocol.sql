@@ -103,6 +103,617 @@ BEGIN
 END;
 $$;
 
+-- Deployment-reconciliation readiness.
+--
+-- This is a SEPARATE authority from public.get_project_publication_readiness, which is a
+-- PRE-publication gate and correctly demands `approved` status plus pre-publication private-media
+-- state. A reconciliation target is already lifecycle `published`, so reusing the normal gate would
+-- require weakening it. Nothing here relaxes normal readiness; normal-mode semantics are untouched.
+--
+-- What this proves, entirely from authoritative persisted state:
+--   * the project exists, is not deleted, and is lifecycle `published`;
+--   * exactly one active participant preview exists and carries a confirmation;
+--   * no unresolved or contradictory correction state exists;
+--   * the stored preview evidence is well-formed under the current gallery contract;
+--   * the CURRENT participant-facing scalar/taxonomy content still equals the confirmed snapshot;
+--   * the CURRENT media identity -- including gallery position and per-image alt text -- still
+--     equals the confirmed media snapshot;
+--   * every public media mapping produced by the earlier publication is coherent and points at the
+--     deterministic destination for that exact asset.
+--
+-- The public feed, current public URLs, and project.status alone are never treated as proof.
+CREATE OR REPLACE FUNCTION public.get_project_reconciliation_readiness(
+  p_public_id text,
+  p_admin_id uuid,
+  p_private_bucket text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_public_id text;
+  v_private_bucket text;
+  v_roles text[];
+  v_has_review boolean;
+  v_project RECORD;
+  v_active_preview RECORD;
+  v_active_preview_count integer;
+  v_confirmation RECORD;
+  v_active_corr_count integer;
+  v_unresolved_corr_count integer;
+  v_replacement_count integer;
+  v_snapshot_total_count integer;
+  v_snapshot_valid_count integer;
+  v_snapshot_position_count integer;
+  v_snapshot_missing_alt_count integer;
+  v_snapshot_long_alt_count integer;
+  v_incoherent_mapping_count integer;
+  v_unexpected_destination_count integer;
+  v_invalid_media_element_count integer;
+  v_current_snapshot jsonb;
+  v_current_media_snapshot jsonb;
+  v_stored_media_snapshot jsonb;
+  v_canonical_current_media jsonb;
+  v_canonical_stored_media jsonb;
+  v_accessibility_blockers text[];
+  v_blockers text[];
+BEGIN
+  v_blockers := '{}'::text[];
+
+  -- 1. Input validation, identical in strictness to the normal gate.
+  IF p_public_id IS NULL THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'PROJECT_NOT_FOUND',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Project not found'])
+    );
+  END IF;
+
+  v_public_id := pg_catalog.btrim(p_public_id);
+  IF v_public_id = '' OR pg_catalog.length(v_public_id) > 100 OR v_public_id !~ '^[A-Za-z0-9_-]+$' THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'INVALID_SELECTION',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Invalid project identifier'])
+    );
+  END IF;
+
+  IF p_admin_id IS NULL THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_PERMISSION_DENIED',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Permission denied'])
+    );
+  END IF;
+
+  IF p_private_bucket IS NULL OR pg_catalog.btrim(p_private_bucket) = '' THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'INVALID_PRIVATE_BUCKET',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Invalid private bucket configuration'])
+    );
+  END IF;
+  v_private_bucket := pg_catalog.btrim(p_private_bucket);
+
+  -- 2. Same serialization key as the normal gate, so reconciliation and preview mutation cannot
+  -- interleave for one project.
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('participant_preview:' || v_public_id));
+
+  -- 3. Authorization.
+  SELECT pg_catalog.array_agg(r.role)
+    INTO v_roles
+    FROM public.user_roles r
+   WHERE r.user_id = p_admin_id;
+
+  IF v_roles IS NULL OR pg_catalog.cardinality(v_roles) = 0 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_PERMISSION_DENIED',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Permission denied'])
+    );
+  END IF;
+
+  v_has_review := ('admin' = ANY(v_roles) OR 'reviewer' = ANY(v_roles));
+
+  IF NOT v_has_review THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_PERMISSION_DENIED',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Permission denied'])
+    );
+  END IF;
+
+  -- 4. Lock and inspect the authoritative project row.
+  SELECT p.*
+    INTO v_project
+    FROM public.projects p
+   WHERE p.public_id = v_public_id
+     AND p.deleted_at IS NULL
+     FOR UPDATE;
+
+  IF v_project.id IS NULL THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'PROJECT_NOT_FOUND',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Project not found'])
+    );
+  END IF;
+
+  -- Contradictory persisted state first: a confirmed active preview that also carries a correction.
+  SELECT pg_catalog.count(*)
+    INTO v_active_corr_count
+    FROM public.participant_preview_correction_requests r
+    JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
+    JOIN public.participant_preview_confirmations c ON c.participant_preview_id = pp.id
+   WHERE pp.project_id = v_project.id
+     AND pp.status = 'active';
+
+  IF v_active_corr_count > 0 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Active preview has contradictory participant responses'])
+    );
+  END IF;
+
+  SELECT pg_catalog.count(*)
+    INTO v_unresolved_corr_count
+    FROM public.participant_preview_correction_requests r
+    JOIN public.participant_previews pp ON pp.id = r.participant_preview_id
+   WHERE pp.project_id = v_project.id
+     AND r.status IN ('open', 'in_progress');
+
+  IF v_unresolved_corr_count > 0 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'CORRECTION_UNRESOLVED',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Participant correction must be resolved']),
+      'confirmedPreviewId', null,
+      'confirmedAt', null
+    );
+  END IF;
+
+  -- 5. Reconciliation targets a project that is ALREADY published. Any other status is refused
+  -- here rather than by relaxing the normal approved-only gate.
+  IF v_project.status <> 'published' THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'INVALID_PROJECT_STATE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Project status must be published to evaluate deployment reconciliation readiness'])
+    );
+  END IF;
+
+  -- 6. Accessible content, evaluated against the CURRENT project row.
+  v_accessibility_blockers := '{}'::text[];
+  IF pg_catalog.btrim(COALESCE(v_project.poster_text_public, '')) = '' THEN
+    v_accessibility_blockers := pg_catalog.array_append(v_accessibility_blockers, 'Poster full text is missing');
+  ELSIF pg_catalog.length(pg_catalog.btrim(v_project.poster_text_public)) > 20000 THEN
+    v_accessibility_blockers := pg_catalog.array_append(v_accessibility_blockers, 'Poster full text exceeds the 20,000 character safety limit');
+  END IF;
+  IF pg_catalog.btrim(COALESCE(v_project.accessibility_text_public, '')) = '' THEN
+    v_accessibility_blockers := pg_catalog.array_append(v_accessibility_blockers, 'Accessibility text is missing');
+  ELSIF pg_catalog.length(pg_catalog.btrim(v_project.accessibility_text_public)) > 2000 THEN
+    v_accessibility_blockers := pg_catalog.array_append(v_accessibility_blockers, 'Accessibility text exceeds the 2,000 character safety limit');
+  END IF;
+
+  -- 7. Gallery structural validity against CURRENT snapshot rows.
+  --
+  -- The normal gate additionally requires each row to be UNPROMOTED (is_public_approved = false,
+  -- public_url IS NULL, ...). A published project legitimately carries those publication mappings,
+  -- so requiring their absence here would report expected publication state as participant-content
+  -- drift. Instead the PRIVATE SOURCE identity is validated exactly as strictly as the normal gate
+  -- validates it, and the public mapping is validated separately in step 8.
+  SELECT
+    pg_catalog.count(*),
+    pg_catalog.count(*) FILTER (
+      WHERE ma.storage_bucket = v_private_bucket
+        AND ma.storage_path = pg_catalog.btrim(ma.storage_path)
+        AND pg_catalog.strpos(ma.storage_path, '..') = 0
+        AND pg_catalog.strpos(ma.storage_path, E'\\') = 0
+        AND ma.file_name = pg_catalog.btrim(ma.file_name)
+        AND ma.file_name <> ''
+        AND pg_catalog.strpos(ma.file_name, '..') = 0
+        AND pg_catalog.strpos(ma.file_name, '/') = 0
+        AND pg_catalog.strpos(ma.file_name, E'\\') = 0
+        AND pg_catalog.right(ma.storage_path, pg_catalog.length(ma.file_name)) = ma.file_name
+        AND pg_catalog.left(
+              ma.storage_path,
+              pg_catalog.length('drafts/' || v_project.public_id || '/snapshot_image/')
+            ) = 'drafts/' || v_project.public_id || '/snapshot_image/'
+        AND ma.mime_type IN ('image/png', 'image/jpeg', 'image/webp')
+        AND ma.file_size_bytes BETWEEN 1 AND 5242880
+        AND ma.gallery_position BETWEEN 1 AND 10
+    ),
+    pg_catalog.count(DISTINCT ma.gallery_position),
+    pg_catalog.count(*) FILTER (
+      WHERE pg_catalog.btrim(COALESCE(ma.alt_text_public, '')) = ''
+    ),
+    pg_catalog.count(*) FILTER (
+      WHERE ma.alt_text_public IS NOT NULL
+        AND pg_catalog.length(pg_catalog.btrim(ma.alt_text_public)) > 2000
+    )
+    INTO
+      v_snapshot_total_count,
+      v_snapshot_valid_count,
+      v_snapshot_position_count,
+      v_snapshot_missing_alt_count,
+      v_snapshot_long_alt_count
+    FROM public.media_assets ma
+   WHERE ma.project_id = v_project.id
+     AND ma.asset_type = 'snapshot_image';
+
+  IF v_snapshot_total_count > 0 THEN
+    IF v_snapshot_total_count > 10
+       OR v_snapshot_valid_count <> v_snapshot_total_count
+       OR v_snapshot_position_count <> v_snapshot_total_count THEN
+      v_accessibility_blockers := pg_catalog.array_append(
+        v_accessibility_blockers,
+        'Snapshot gallery media state is invalid'
+      );
+    END IF;
+
+    IF v_snapshot_missing_alt_count > 0 THEN
+      v_accessibility_blockers := pg_catalog.array_append(
+        v_accessibility_blockers,
+        'Snapshot image alt text is missing'
+      );
+    END IF;
+
+    IF v_snapshot_long_alt_count > 0 THEN
+      v_accessibility_blockers := pg_catalog.array_append(
+        v_accessibility_blockers,
+        'Snapshot image alt text exceeds the 2,000 character safety limit'
+      );
+    END IF;
+  END IF;
+
+  IF pg_catalog.cardinality(v_accessibility_blockers) > 0 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'ACCESSIBILITY_CONTENT_REQUIRED',
+      'blockers', pg_catalog.to_jsonb(v_accessibility_blockers)
+    );
+  END IF;
+
+  -- 8. Published media mapping must be coherent, and where present must name the deterministic
+  -- destination for that exact asset. A half-written mapping, or one pointing somewhere other than
+  -- published/<publicId>/<assetType>/<fileName>, is refused instead of being re-derived.
+  SELECT
+    pg_catalog.count(*) FILTER (
+      WHERE NOT (
+        (
+          ma.public_url IS NULL
+          AND ma.public_storage_bucket IS NULL
+          AND ma.public_storage_path IS NULL
+          AND ma.is_public_approved = false
+        )
+        OR (
+          ma.public_url IS NOT NULL
+          AND ma.public_storage_bucket IS NOT NULL
+          AND ma.public_storage_path IS NOT NULL
+          AND ma.is_public_approved = true
+        )
+      )
+    ),
+    pg_catalog.count(*) FILTER (
+      WHERE ma.public_storage_path IS NOT NULL
+        AND ma.public_storage_path IS DISTINCT FROM
+            'published/' || v_project.public_id || '/' || ma.asset_type || '/' || ma.file_name
+    )
+    INTO v_incoherent_mapping_count, v_unexpected_destination_count
+    FROM public.media_assets ma
+   WHERE ma.project_id = v_project.id
+     AND ma.storage_bucket = v_private_bucket;
+
+  IF v_incoherent_mapping_count > 0 OR v_unexpected_destination_count > 0 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'PUBLISHED_MEDIA_MAPPING_INVALID',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Published media mapping does not match its authoritative source asset'])
+    );
+  END IF;
+
+  -- 9. Exactly one active participant preview, carrying a confirmation.
+  SELECT pg_catalog.count(*)
+    INTO v_active_preview_count
+    FROM public.participant_previews pp
+   WHERE pp.project_id = v_project.id
+     AND pp.status = 'active';
+
+  IF v_active_preview_count = 0 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'NO_ACTIVE_PREVIEW',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Participant preview required'])
+    );
+  END IF;
+
+  IF v_active_preview_count <> 1 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Participant preview state is ambiguous'])
+    );
+  END IF;
+
+  SELECT pp.*
+    INTO v_active_preview
+    FROM public.participant_previews pp
+   WHERE pp.project_id = v_project.id
+     AND pp.status = 'active'
+     FOR UPDATE;
+
+  SELECT c.*
+    INTO v_confirmation
+    FROM public.participant_preview_confirmations c
+   WHERE c.participant_preview_id = v_active_preview.id;
+
+  SELECT pg_catalog.count(*)
+    INTO v_active_corr_count
+    FROM public.participant_preview_correction_requests r
+   WHERE r.participant_preview_id = v_active_preview.id;
+
+  IF v_confirmation.id IS NOT NULL AND v_active_corr_count > 0 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Active preview has contradictory participant responses'])
+    );
+  END IF;
+
+  SELECT pg_catalog.count(*)
+    INTO v_replacement_count
+    FROM public.participant_preview_correction_requests r
+   WHERE r.status = 'resolved'
+     AND r.replacement_preview_id = v_active_preview.id;
+
+  IF v_confirmation.id IS NULL THEN
+    v_blockers := pg_catalog.array_append(v_blockers, 'Waiting for participant confirmation');
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', CASE WHEN v_replacement_count = 1
+        THEN 'CORRECTED_PREVIEW_AWAITING_CONFIRMATION'
+        WHEN v_replacement_count = 0 THEN 'PREVIEW_NOT_CONFIRMED'
+        ELSE 'READINESS_UNAVAILABLE'
+      END,
+      'blockers', pg_catalog.to_jsonb(v_blockers),
+      'confirmedPreviewId', null,
+      'confirmedAt', null
+    );
+  END IF;
+
+  IF v_replacement_count > 1 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Correction replacement state is ambiguous'])
+    );
+  END IF;
+
+  IF pg_catalog.jsonb_typeof(v_active_preview.snapshot) <> 'object'
+     OR pg_catalog.jsonb_typeof(v_active_preview.media_snapshot) <> 'array' THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Stored preview state is malformed'])
+    );
+  END IF;
+
+  -- 10. Current participant-facing scalar and taxonomy content, projected exactly as the normal
+  -- gate projects it so one confirmed snapshot serves both authorities.
+  SELECT pg_catalog.jsonb_build_object(
+      'title', p.title,
+      'summary', p.summary,
+      'background', p.background,
+      'solution', p.solution,
+      'year', p.year,
+      'program', p.program_name,
+      'studyProgram', p.study_program,
+      'discipline', p.discipline,
+      'industry', p.industry,
+      'industryPartner', p.industry_partner,
+      'academicSupervisor', p.academic_supervisor,
+      'groupName', p.group_name,
+      'teamMembers', pg_catalog.to_jsonb(COALESCE(p.team_members, '{}'::text[])),
+      'posterText', p.poster_text_public,
+      'accessibilityText', p.accessibility_text_public,
+      'citations', pg_catalog.to_jsonb(COALESCE(p.citations, '{}'::text[])),
+      'externalLinks', COALESCE(p.external_links, '[]'::jsonb),
+      'disciplines', COALESCE((
+        SELECT pg_catalog.jsonb_agg(d.name ORDER BY d.name)
+          FROM public.project_disciplines pd
+          JOIN public.disciplines d ON d.id = pd.discipline_id
+         WHERE pd.project_id = p.id
+      ), '[]'::jsonb),
+      'industryCategories', COALESCE((
+        SELECT pg_catalog.jsonb_agg(ic.name ORDER BY ic.name)
+          FROM public.project_industry_categories pic
+          JOIN public.industry_categories ic ON ic.id = pic.industry_category_id
+         WHERE pic.project_id = p.id
+      ), '[]'::jsonb)
+    )
+    INTO v_current_snapshot
+    FROM public.projects p
+   WHERE p.id = v_project.id;
+
+  IF v_current_snapshot IS DISTINCT FROM v_active_preview.snapshot THEN
+    v_blockers := pg_catalog.array_append(v_blockers, 'Project information changed after participant confirmation');
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'PROJECT_SNAPSHOT_STALE',
+      'blockers', pg_catalog.to_jsonb(v_blockers),
+      'confirmedPreviewId', v_active_preview.id,
+      'confirmedAt', v_confirmation.confirmed_at::text
+    );
+  END IF;
+
+  -- 11. Current media identity, projected with the SAME keys and semantics as the normal gate --
+  -- including galleryPosition and altText -- so an add, a removal, a reorder, a replacement or an
+  -- alt-text edit all change the compared object. The only difference is the row filter: the
+  -- publication mapping columns are deliberately not part of the participant-content comparison,
+  -- because publication is expected to have populated them. They were proved coherent in step 8.
+  SELECT COALESCE(
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'mediaAssetId', ma.id,
+        'assetType', ma.asset_type,
+        'galleryPosition',
+          CASE
+            WHEN ma.asset_type = 'snapshot_image'
+              THEN ma.gallery_position
+            ELSE NULL
+          END,
+        'fileName', ma.file_name,
+        'storageBucket', ma.storage_bucket,
+        'storagePath', ma.storage_path,
+        'mimeType', ma.mime_type,
+        'altText', ma.alt_text_public
+      )
+      ORDER BY
+        CASE ma.asset_type
+          WHEN 'poster_image' THEN 1
+          WHEN 'poster_pdf' THEN 2
+          WHEN 'snapshot_image' THEN 3
+          ELSE 4
+        END,
+        CASE
+          WHEN ma.asset_type = 'snapshot_image'
+            THEN ma.gallery_position
+          ELSE NULL
+        END,
+        ma.id
+    ),
+    '[]'::jsonb
+  )
+  INTO v_current_media_snapshot
+  FROM public.media_assets ma
+  WHERE ma.project_id = v_project.id
+    AND ma.storage_bucket = v_private_bucket;
+
+  SELECT COALESCE(
+    pg_catalog.jsonb_agg(
+      elem
+      ORDER BY (elem->>'mediaAssetId')
+    ),
+    '[]'::jsonb
+  )
+  INTO v_canonical_current_media
+  FROM pg_catalog.jsonb_array_elements(v_current_media_snapshot) elem;
+
+  v_stored_media_snapshot := COALESCE(v_active_preview.media_snapshot, '[]'::jsonb);
+
+  -- Stored evidence must use the current immutable gallery contract.
+  SELECT pg_catalog.count(*)
+    INTO v_invalid_media_element_count
+    FROM pg_catalog.jsonb_array_elements(v_stored_media_snapshot) elem
+   WHERE
+      pg_catalog.jsonb_typeof(elem) <> 'object'
+      OR pg_catalog.jsonb_typeof(elem->'mediaAssetId') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'assetType') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'fileName') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'storageBucket') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'storagePath') <> 'string'
+      OR pg_catalog.jsonb_typeof(elem->'mimeType') <> 'string'
+      OR NOT (elem ? 'galleryPosition')
+      OR NOT (elem ? 'altText')
+      OR (
+        elem->>'assetType' = 'snapshot_image'
+        AND (
+          pg_catalog.jsonb_typeof(elem->'galleryPosition') <> 'number'
+          OR (
+            CASE
+              WHEN pg_catalog.jsonb_typeof(elem->'galleryPosition') = 'number'
+              THEN (
+                (elem->>'galleryPosition')::numeric
+                <> pg_catalog.trunc((elem->>'galleryPosition')::numeric)
+              )
+              ELSE false
+            END
+          )
+          OR (
+            CASE
+              WHEN pg_catalog.jsonb_typeof(elem->'galleryPosition') = 'number'
+              THEN (
+                (elem->>'galleryPosition')::numeric < 1
+                OR (elem->>'galleryPosition')::numeric > 10
+              )
+              ELSE false
+            END
+          )
+          OR pg_catalog.jsonb_typeof(elem->'altText') <> 'string'
+          OR pg_catalog.btrim(COALESCE(elem->>'altText', '')) = ''
+          OR pg_catalog.length(pg_catalog.btrim(elem->>'altText')) > 2000
+        )
+      )
+      OR (
+        elem->>'assetType' <> 'snapshot_image'
+        AND (
+          pg_catalog.jsonb_typeof(elem->'galleryPosition') <> 'null'
+          OR pg_catalog.jsonb_typeof(elem->'altText') <> 'null'
+        )
+      );
+
+  IF v_invalid_media_element_count > 0 THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Stored preview media state is malformed'])
+    );
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+      FROM (
+        SELECT
+          elem->>'galleryPosition' AS gallery_position,
+          pg_catalog.count(*) AS position_count
+        FROM pg_catalog.jsonb_array_elements(v_stored_media_snapshot) elem
+        WHERE elem->>'assetType' = 'snapshot_image'
+        GROUP BY elem->>'galleryPosition'
+        HAVING pg_catalog.count(*) > 1
+      ) duplicate_positions
+  ) THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'READINESS_UNAVAILABLE',
+      'blockers', pg_catalog.to_jsonb(ARRAY['Stored preview media state is malformed'])
+    );
+  END IF;
+
+  SELECT COALESCE(
+    pg_catalog.jsonb_agg(
+      elem
+      ORDER BY (elem->>'mediaAssetId')
+    ),
+    '[]'::jsonb
+  )
+  INTO v_canonical_stored_media
+  FROM pg_catalog.jsonb_array_elements(v_stored_media_snapshot) elem;
+
+  IF v_canonical_current_media IS DISTINCT FROM v_canonical_stored_media THEN
+    v_blockers := pg_catalog.array_append(v_blockers, 'Project media changed after participant confirmation');
+    RETURN pg_catalog.jsonb_build_object(
+      'ready', false,
+      'resultCode', 'MEDIA_SNAPSHOT_STALE',
+      'blockers', pg_catalog.to_jsonb(v_blockers),
+      'confirmedPreviewId', v_active_preview.id,
+      'confirmedAt', v_confirmation.confirmed_at::text
+    );
+  END IF;
+
+  -- 12. Every relevant fact is established from authoritative persisted state.
+  RETURN pg_catalog.jsonb_build_object(
+    'ready', true,
+    'resultCode', 'READY',
+    'blockers', '[]'::jsonb,
+    'confirmedPreviewId', v_active_preview.id,
+    'confirmedAt', v_confirmation.confirmed_at::text
+  );
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.mark_public_feed_write_started(
   p_operation_id uuid,
   p_owner_epoch bigint,
@@ -117,6 +728,7 @@ AS $$
 DECLARE
   v_operation public.public_feed_operations%ROWTYPE;
   v_readiness jsonb;
+  v_head public.public_feed_head%ROWTYPE;
   v_from_state text;
 BEGIN
   IF NOT public.public_feed_actor_is_admin(p_actor_id) THEN
@@ -127,11 +739,6 @@ BEGIN
   IF v_operation.id IS NULL THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'OPERATION_NOT_FOUND'); END IF;
   IF NOT public.public_feed_owner_valid(p_operation_id, p_owner_epoch, p_owner_token, p_actor_id) THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'STALE_OWNER');
-  END IF;
-  -- Temporary fail-closed integration gate: final Tan/Binh integration must supply the
-  -- authoritative gallery-aware reconciliation-readiness proof before this mode may write.
-  IF v_operation.kind = 'publication' AND v_operation.publication_mode = 'deployment_reconciliation' THEN
-    RETURN pg_catalog.jsonb_build_object('resultCode', 'RECONCILIATION_READINESS_REQUIRED');
   END IF;
   IF v_operation.state = 'WRITE_STARTED' THEN
     IF v_operation.storage_uncertainty_until IS NOT NULL
@@ -163,6 +770,40 @@ BEGIN
   END IF;
   IF v_operation.state NOT IN ('PREPARED', 'RECOVERY_REQUIRED') THEN
     RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_OPERATION_STATE');
+  END IF;
+
+  -- Final pre-side-effect authority for deployment reconciliation.
+  --
+  -- Application-level preparation is never sufficient and the TypeScript preflight is never
+  -- trusted here: every fact is re-established from authoritative persisted state inside the same
+  -- transaction that moves the operation into WRITE_STARTED, so no public object can be created on
+  -- stale authority. The actor was already proved to be an administrator and the owner epoch/token
+  -- were already proved current above.
+  --
+  -- storage_request_generation = 0 means this operation has never legitimately entered
+  -- WRITE_STARTED. Once it has, the operation converges forward on the same immutable candidate
+  -- and this mutable drift gate deliberately does not run again.
+  IF v_operation.kind = 'publication'
+     AND v_operation.publication_mode = 'deployment_reconciliation'
+     AND v_operation.storage_request_generation = 0 THEN
+    SELECT * INTO v_head FROM public.public_feed_head WHERE singleton = true FOR UPDATE;
+    IF v_head.singleton IS NULL THEN
+      RETURN pg_catalog.jsonb_build_object('resultCode', 'HISTORY_NOT_ACTIVE');
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM public.public_feed_version_members m
+       WHERE m.version_id = v_head.current_version_id
+         AND m.public_id = v_operation.public_id
+    ) THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'ALREADY_DEPLOYED'); END IF;
+
+    v_readiness := public.get_project_reconciliation_readiness(
+      v_operation.public_id, p_actor_id, v_operation.private_media_bucket
+    );
+    IF v_readiness->>'resultCode' <> 'READY'
+       OR COALESCE((v_readiness->>'ready')::boolean, false) = false
+       OR v_readiness->>'confirmedPreviewId' <> v_operation.confirmed_preview_id::text
+       OR (v_readiness->>'confirmedAt')::timestamptz IS DISTINCT FROM v_operation.confirmed_at
+    THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'NOT_READY'); END IF;
   END IF;
 
   -- Permission/readiness freshness is rechecked at the last durable boundary before a request
@@ -365,12 +1006,6 @@ BEGIN
      ))
   THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'INVALID_INPUT'); END IF;
 
-  -- Temporary fail-closed integration gate: do not reserve forward-only work until final
-  -- Tan/Binh integration supplies the authoritative gallery-aware readiness proof.
-  IF v_kind = 'publication' AND v_mode = 'deployment_reconciliation' THEN
-    RETURN pg_catalog.jsonb_build_object('resultCode', 'RECONCILIATION_READINESS_REQUIRED');
-  END IF;
-
   v_token_hash := pg_catalog.encode(
     extensions.digest(pg_catalog.convert_to(p_owner_token, 'UTF8'), 'sha256'), 'hex'
   );
@@ -455,8 +1090,22 @@ BEGIN
          OR v_readiness->>'confirmedPreviewId' <> p_confirmed_preview_id::text
          OR (v_readiness->>'confirmedAt')::timestamptz IS DISTINCT FROM p_confirmed_at
       THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'NOT_READY'); END IF;
-    ELSIF v_project.status <> 'published' THEN
-      RETURN pg_catalog.jsonb_build_object('resultCode', 'NOT_READY');
+    ELSE
+      -- Deployment reconciliation. Lifecycle `published` alone is never deployment authority:
+      -- the same exact participant confirmation evidence that normal publication binds must still
+      -- be authoritative for the CURRENT content, and it is bound into the immutable operation
+      -- intent below exactly as normal publication binds it.
+      IF v_project.status <> 'published'
+         OR p_confirmed_preview_id IS NULL
+         OR p_confirmed_at IS NULL
+         OR pg_catalog.btrim(COALESCE(p_private_bucket, '')) = ''
+      THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'NOT_READY'); END IF;
+      v_readiness := public.get_project_reconciliation_readiness(v_public_id, p_admin_id, p_private_bucket);
+      IF v_readiness->>'resultCode' <> 'READY'
+         OR COALESCE((v_readiness->>'ready')::boolean, false) = false
+         OR v_readiness->>'confirmedPreviewId' <> p_confirmed_preview_id::text
+         OR (v_readiness->>'confirmedAt')::timestamptz IS DISTINCT FROM p_confirmed_at
+      THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'NOT_READY'); END IF;
     END IF;
     IF EXISTS (
       SELECT 1 FROM public.public_feed_version_members m
@@ -764,7 +1413,19 @@ BEGIN
        WHERE id = (v_manifest_item->>'mediaAssetId')::uuid
          AND project_id = v_project.id
          AND storage_bucket = v_operation.private_media_bucket
-         AND is_public_approved = false;
+         AND (
+           is_public_approved = false
+           OR (
+             -- Deployment reconciliation republishes a project whose media was already promoted by
+             -- its original publication. Re-asserting the SAME bound destination is idempotent; a
+             -- row pointing anywhere else is refused as stale rather than overwritten.
+             v_operation.publication_mode = 'deployment_reconciliation'
+             AND is_public_approved = true
+             AND public_storage_bucket IS NOT DISTINCT FROM v_manifest_item->>'publicBucket'
+             AND public_storage_path IS NOT DISTINCT FROM v_manifest_item->>'publicPath'
+             AND public_url IS NOT DISTINCT FROM v_manifest_item->>'publicUrl'
+           )
+         );
       IF NOT FOUND THEN RETURN pg_catalog.jsonb_build_object('resultCode', 'MEDIA_MANIFEST_STALE'); END IF;
     END LOOP;
 
@@ -1313,6 +1974,11 @@ REVOKE ALL ON FUNCTION public.public_feed_actor_is_admin(uuid) FROM PUBLIC, anon
 REVOKE ALL ON FUNCTION public.public_feed_owner_valid(uuid,bigint,text,uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.append_public_feed_operation_event(uuid,text,text,uuid,bigint,text,integer,text) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.guard_active_public_feed_operation() FROM PUBLIC, anon, authenticated, service_role;
+
+REVOKE EXECUTE ON FUNCTION public.get_project_reconciliation_readiness(text, uuid, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.get_project_reconciliation_readiness(text, uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_project_reconciliation_readiness(text, uuid, text) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.get_project_reconciliation_readiness(text, uuid, text) TO service_role;
 
 REVOKE ALL ON FUNCTION public.reserve_public_feed_operation(uuid,text,text,uuid,text,text,uuid,timestamptz,text,text,uuid,text,text,text,boolean) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.bind_public_feed_operation(uuid,bigint,text,uuid,uuid,boolean,text,integer,text,text,integer,text,jsonb,text,jsonb) FROM PUBLIC, anon, authenticated;

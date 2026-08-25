@@ -1,5 +1,8 @@
 import { Project } from '../domain/project';
-import { compilePublicationCandidateFeed } from '../feed/compilePublicFeed';
+import {
+  compilePublicationCandidateFeed,
+  compilePublicReconciliationCandidateFeed,
+} from '../feed/compilePublicFeed';
 import { serializePublicFeedArtifact } from '../feed/serializePublicFeedArtifact';
 import { validatePublicFeed } from '../feed/validatePublicFeed';
 import { validateMediaAsset } from '../storage/mediaValidationCore';
@@ -55,6 +58,8 @@ export interface PublicationMediaBinding extends PublicationMediaPromotion {
   sourceSha256: string;
 }
 
+export type PublicationPlanMode = 'normal' | 'deployment_reconciliation';
+
 export interface PublicationArtifactPlan {
   feed: ReturnType<typeof compilePublicationCandidateFeed>;
   content: string;
@@ -101,10 +106,19 @@ export function planPublicationArtifact(params: {
   privateBucket: string;
   publicBucket: string;
   getPublicUrl(bucket: string, path: string): string;
+  /**
+   * `normal` publishes an approved target. `deployment_reconciliation` re-adds a target that is
+   * already lifecycle `published` to the current deployment head. The separation exists so normal
+   * publication keeps its approved-only guarantee instead of being weakened to accept a published
+   * project.
+   */
+  mode?: PublicationPlanMode;
 }): PublicationArtifactPlan {
   const { projects, targetPublicId, mediaAssets, privateBucket, publicBucket, getPublicUrl } = params;
+  const mode: PublicationPlanMode = params.mode ?? 'normal';
+  const requiredStatus = mode === 'normal' ? 'approved' : 'published';
   const targets = projects.filter((project) => project.publicId === targetPublicId);
-  if (targets.length !== 1 || targets[0].status !== 'approved') {
+  if (targets.length !== 1 || targets[0].status !== requiredStatus) {
     throw new Error('Publication candidate target is unavailable.');
   }
 
@@ -152,10 +166,18 @@ export function planPublicationArtifact(params: {
 
       seenSingletonTypes.add(assetType);
     }
+    // A published project legitimately carries the public mapping its original publication wrote,
+    // while its private source row is preserved. Normal publication still demands a pristine,
+    // unmapped private source; reconciliation additionally accepts a WHOLLY coherent mapping. A
+    // half-written mapping is contradictory in either mode.
+    const mappingAbsent = !asset.isPublicApproved && asset.publicUrl === null
+      && asset.publicStorageBucket === null && asset.publicStoragePath === null;
+    const mappingPresent = asset.isPublicApproved && asset.publicUrl !== null
+      && asset.publicStorageBucket !== null && asset.publicStoragePath !== null;
     if (
       asset.storageBucket !== privateBucket || !asset.storagePath || asset.storagePath.includes('..') ||
-      asset.isPublicApproved || asset.publicUrl !== null || asset.publicStorageBucket !== null ||
-      asset.publicStoragePath !== null || !Number.isInteger(asset.fileSizeBytes) || asset.fileSizeBytes <= 0
+      !Number.isInteger(asset.fileSizeBytes) || asset.fileSizeBytes <= 0 ||
+      (mode === 'normal' ? !mappingAbsent : !(mappingAbsent || mappingPresent))
     ) {
       throw new Error('Publication media source is contradictory.');
     }
@@ -174,6 +196,17 @@ export function planPublicationArtifact(params: {
     const publicPath = buildDeterministicPublicMediaPath(targetPublicId, assetType, asset.fileName);
     const publicUrl = getPublicUrl(publicBucket, publicPath);
     assertPublicUrl(publicUrl, privateBucket);
+    // An existing mapping must name exactly the destination this plan would bind, so reconciliation
+    // can never silently retarget an asset at a different public object.
+    if (
+      mappingPresent && (
+        asset.publicStorageBucket !== publicBucket
+        || asset.publicStoragePath !== publicPath
+        || asset.publicUrl !== publicUrl
+      )
+    ) {
+      throw new Error('Publication media destination is inconsistent.');
+    }
     mediaPromotions.push({
       mediaAssetId: asset.id,
       assetType,
@@ -244,7 +277,9 @@ export function planPublicationArtifact(params: {
   }
 
   const projectedProjects = projects.map((project) => project.publicId === targetPublicId ? projectedTarget : project);
-  const feed = compilePublicationCandidateFeed(projectedProjects, targetPublicId);
+  const feed = mode === 'normal'
+    ? compilePublicationCandidateFeed(projectedProjects, targetPublicId)
+    : compilePublicReconciliationCandidateFeed(projectedProjects, targetPublicId);
   const validation = validatePublicFeed(feed);
   if (!validation.valid) throw new Error('Publication feed validation failed.');
   const artifact = serializePublicFeedArtifact(feed);

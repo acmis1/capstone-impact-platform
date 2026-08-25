@@ -56,6 +56,16 @@ During controlled publication, the candidate is composed from the exact current 
 
 Removal similarly starts from the exact current head and removes only the requested `publicId`. If that identifier is already absent, removal may complete without writing a new artifact version. Deployment reconciliation republishes an exact current lifecycle record for a `published` project that is not deployed, without replaying a lifecycle transition or its publication audit.
 
+### Deployment reconciliation authority
+
+Lifecycle `published` status alone is never sufficient authority to deploy. Normal publication proves `get_project_publication_readiness`, which is a strictly pre-publication authority: it requires `approved` status and pristine, unpromoted private media. That gate is not reused, relaxed, or reinterpreted for reconciliation.
+
+Reconciliation instead proves a separate, dedicated database authority, `get_project_reconciliation_readiness`, which requires the target to be lifecycle `published` and re-derives participant authority from stored preview evidence rather than from project status, the previously served feed, or current public URLs. It fails closed when there is no qualifying preview, no confirmation, ambiguous preview or confirmation state, an unresolved correction request, a malformed stored snapshot, scalar metadata drift, taxonomy or relationship drift, media identity drift, an added or removed snapshot, a gallery reorder, or per-image alt-text drift. Gallery position and per-image alt text are part of the compared evidence, so reordering a gallery or editing one description is drift, not a cosmetic change.
+
+Publication legitimately leaves a target's media rows carrying `public_url`, `public_storage_bucket`, `public_storage_path` and `is_public_approved` while the private source row is preserved. That expected mapping is not classified as drift; it is instead proved coherent, and a mapping that names anything other than the deterministic destination the plan would bind is refused as `PUBLISHED_MEDIA_MAPPING_INVALID`.
+
+That authority is proved twice: once when the operation is reserved and its confirmation evidence (`confirmed_preview_id`, `confirmed_at`) is frozen into immutable operation intent, and again inside `mark_public_feed_write_started` at the final durable boundary immediately before any public side effect. The final check re-establishes admin authority, owner epoch and token currency, that the target is still `published`, that it is still absent from the deployment head, and that the frozen confirmation evidence still matches, rather than trusting an earlier application-side preflight. Once write intent is durable, the mutable drift gate deliberately does not run again, so a later lifecycle edit cannot make recovery converge on a different candidate.
+
 The following statuses are strictly **excluded** from compilation:
 *   `draft`
 *   `submitted`

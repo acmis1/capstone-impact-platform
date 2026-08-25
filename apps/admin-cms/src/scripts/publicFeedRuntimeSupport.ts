@@ -44,7 +44,7 @@ export interface PublicFeedRuntimeHarness {
   psql(sql: string): string;
   quoted(value: string): string;
   createProject(publicId: string, status?: string): Promise<RuntimeFixture>;
-  makeReady(publicId: string, prefix: string): Promise<RuntimeFixture>;
+  makeReady(publicId: string): Promise<RuntimeFixture>;
   ensureActiveHead(): Promise<void>;
   storedFeed(): Promise<Buffer | null>;
   count(table: string, column: string, value: string): Promise<number>;
@@ -127,13 +127,15 @@ export async function createPublicFeedRuntimeHarness(): Promise<PublicFeedRuntim
     return { id: String(result.data!.id), publicId: String(result.data!.public_id) };
   };
 
-  const makeReady = async (publicId: string, prefix: string): Promise<RuntimeFixture> => {
+  const makeReady = async (publicId: string): Promise<RuntimeFixture> => {
     const fixture = await createProject(publicId);
     for (const asset of [
       { type: 'poster_image', name: 'poster.png', mime: 'image/png', bytes: PNG_BYTES },
       { type: 'poster_pdf', name: 'poster.pdf', mime: 'application/pdf', bytes: PDF_BYTES },
     ]) {
-      const storagePath = `${prefix}/${publicId}/${asset.type}/${asset.name}`;
+      // The merged private-media gate requires every asset to live under the exact
+      // drafts/<publicId>/<assetType>/ prefix, so the fixture uses the real contract.
+      const storagePath = `drafts/${publicId}/${asset.type}/${asset.name}`;
       const uploaded = await db.storage.from(PRIVATE_BUCKET).upload(storagePath, asset.bytes, {
         contentType: asset.mime, upsert: false,
       });

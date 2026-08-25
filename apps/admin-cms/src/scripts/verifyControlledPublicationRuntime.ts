@@ -54,13 +54,13 @@ async function main(): Promise<void> {
 
   await harness.ensureActiveHead();
 
-  const reviewerTarget = await harness.makeReady(`${prefix}-reviewer-denied`, prefix);
+  const reviewerTarget = await harness.makeReady(`${prefix}-reviewer-denied`);
   await scenario(2, 'a reviewer cannot create any public deployment state', async () => {
     assert.equal((await execute(reviewerTarget, 'reviewer')).resultCode, 'PERMISSION_DENIED');
     assert.equal(await count('public_feed_operations', 'project_id', reviewerTarget.id), 0);
   });
 
-  const editorTarget = await harness.makeReady(`${prefix}-editor-denied`, prefix);
+  const editorTarget = await harness.makeReady(`${prefix}-editor-denied`);
   await scenario(3, 'an editor cannot create any public deployment state', async () => {
     assert.equal((await execute(editorTarget, 'editor')).resultCode, 'PERMISSION_DENIED');
     assert.equal(await count('public_feed_operations', 'project_id', editorTarget.id), 0);
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
     assert.ok((await storedFeed())?.equals(before!), 'A NOT_READY execution changed the canonical feed.');
   });
 
-  const target = await harness.makeReady(`${prefix}-completed`, prefix);
+  const target = await harness.makeReady(`${prefix}-completed`);
   await scenario(5, 'a ready target publishes with exact Storage, head and lifecycle agreement', async () => {
     const result = await execute(target);
     assert.equal(result.resultCode, 'COMPLETED', JSON.stringify(result));
@@ -104,7 +104,7 @@ async function main(): Promise<void> {
     assert.ok((await storedFeed())?.equals(before!), 'An idempotent retry changed the canonical feed.');
   });
 
-  const laterTarget = await harness.makeReady(`${prefix}-later-head-owner`, prefix);
+  const laterTarget = await harness.makeReady(`${prefix}-later-head-owner`);
   await scenario(7, 'a later unrelated publication does not rewrite the first target evidence', async () => {
     assert.equal((await execute(laterTarget)).resultCode, 'COMPLETED');
     const headOperation = psql(`SELECT o.id::text FROM public.public_feed_head h
@@ -116,8 +116,8 @@ async function main(): Promise<void> {
     assert.notEqual(retry.attemptId, headOperation, 'The retry borrowed the current head operation.');
   });
 
-  const raceA = await harness.makeReady(`${prefix}-race-a`, prefix);
-  const raceB = await harness.makeReady(`${prefix}-race-b`, prefix);
+  const raceA = await harness.makeReady(`${prefix}-race-a`);
+  const raceB = await harness.makeReady(`${prefix}-race-b`);
   await scenario(8, 'one global canonical writer serializes concurrent publications', async () => {
     const results = await Promise.all([execute(raceA), execute(raceB)]);
     assert.equal(results.filter((result) => result.resultCode === 'COMPLETED').length, 1, JSON.stringify(results));

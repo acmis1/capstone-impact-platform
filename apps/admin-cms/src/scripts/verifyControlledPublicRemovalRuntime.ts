@@ -68,7 +68,7 @@ async function main(): Promise<void> {
 
   await harness.ensureActiveHead();
 
-  const target = await harness.makeReady(`${prefix}-target`, prefix);
+  const target = await harness.makeReady(`${prefix}-target`);
   assert.equal((await publish(target)).resultCode, 'COMPLETED');
 
   await scenario(2, 'an editor cannot remove a deployed project', async () => {
@@ -94,7 +94,7 @@ async function main(): Promise<void> {
     assert.equal(inspected.artifact!.content, inspected.head!.currentVersion.artifactContent);
   });
 
-  const laterTarget = await harness.makeReady(`${prefix}-later`, prefix);
+  const laterTarget = await harness.makeReady(`${prefix}-later`);
   await scenario(5, 'a later unrelated feed change does not become the removed target evidence', async () => {
     assert.equal((await publish(laterTarget)).resultCode, 'COMPLETED');
     const headOperation = psql(`SELECT o.id::text FROM public.public_feed_head h
@@ -122,7 +122,7 @@ async function main(): Promise<void> {
   });
 
   await scenario(7, 'publication and removal share one global canonical writer', async () => {
-    const contender = await harness.makeReady(`${prefix}-contender`, prefix);
+    const contender = await harness.makeReady(`${prefix}-contender`);
     const [publication, removal] = await Promise.all([publish(contender), remove(laterTarget)]);
     const completed = [publication, removal].filter((result) => result.resultCode === 'COMPLETED');
     assert.equal(completed.length, 1, JSON.stringify([publication, removal]));

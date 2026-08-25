@@ -60,7 +60,7 @@ describe('public deployment ledger migration security contract', () => {
     expect(protocol).toContain("COALESCE(v_marker, '') <> v_operation_id::text");
   });
 
-  it('fails deployment reconciliation closed before reservation and durable write intent', () => {
+  it('proves deployment reconciliation at both the reservation and the durable write-intent boundary', () => {
     const reservation = protocol.slice(
       protocol.indexOf('CREATE OR REPLACE FUNCTION public.reserve_public_feed_operation('),
       protocol.indexOf('CREATE OR REPLACE FUNCTION public.bind_public_feed_operation('),
@@ -69,14 +69,99 @@ describe('public deployment ledger migration security contract', () => {
       protocol.indexOf('CREATE OR REPLACE FUNCTION public.mark_public_feed_write_started('),
       protocol.indexOf('CREATE OR REPLACE FUNCTION public.mark_public_feed_candidate_observed('),
     );
+
+    // The temporary integration hold is gone, and nothing may reintroduce it.
+    expect(protocol).not.toContain('RECONCILIATION_READINESS_REQUIRED');
+    expect(protocol).not.toContain('fail-closed integration gate');
+
+    // Both boundaries derive authority from the dedicated reconciliation gate, and each does so
+    // strictly before the state it guards.
     for (const boundary of [reservation, writeIntent]) {
-      expect(boundary).toContain('fail-closed integration gate');
-      expect(boundary).toContain("'RECONCILIATION_READINESS_REQUIRED'");
+      expect(boundary).toContain('public.get_project_reconciliation_readiness(');
+      expect(boundary).toContain("v_readiness->>'confirmedPreviewId'");
+      expect(boundary).toContain("(v_readiness->>'confirmedAt')::timestamptz");
     }
-    expect(reservation.indexOf("'RECONCILIATION_READINESS_REQUIRED'"))
+    expect(reservation.indexOf('public.get_project_reconciliation_readiness('))
       .toBeLessThan(reservation.indexOf('INSERT INTO public.public_feed_operations'));
-    expect(writeIntent.indexOf("'RECONCILIATION_READINESS_REQUIRED'"))
+    expect(writeIntent.indexOf('public.get_project_reconciliation_readiness('))
       .toBeLessThan(writeIntent.indexOf("SET state = 'WRITE_STARTED'"));
+
+    // Reservation binds the exact confirmation evidence into the immutable operation intent, the
+    // same way normal publication binds it.
+    expect(reservation).toContain("v_project.status <> 'published'");
+    expect(reservation).toContain('p_confirmed_preview_id IS NULL');
+    expect(reservation).toContain('p_confirmed_at IS NULL');
+
+    // The final boundary independently re-establishes deployment absence and actor authority
+    // rather than trusting an earlier TypeScript preflight.
+    expect(writeIntent).toContain('public.public_feed_actor_is_admin(p_actor_id)');
+    expect(writeIntent).toContain('public.public_feed_owner_valid(');
+    expect(writeIntent).toContain('FROM public.public_feed_version_members m');
+    expect(writeIntent).toContain("'ALREADY_DEPLOYED'");
+    // Once write intent is durable, the mutable drift gate deliberately does not run again.
+    expect(writeIntent).toContain('v_operation.storage_request_generation = 0');
+  });
+
+  it('keeps normal publication readiness strictly approved-only and separate from reconciliation', () => {
+    const reconciliation = protocol.slice(
+      protocol.indexOf('CREATE OR REPLACE FUNCTION public.get_project_reconciliation_readiness('),
+      protocol.indexOf('CREATE OR REPLACE FUNCTION public.mark_public_feed_write_started('),
+    );
+
+    // A separate authority, not a relaxed one: the normal gate is never redefined here.
+    expect(protocol).not.toContain('CREATE OR REPLACE FUNCTION public.get_project_publication_readiness(');
+    expect(reconciliation).toContain("v_project.status <> 'published'");
+    expect(reconciliation).toContain("SET search_path = ''");
+    expect(reconciliation).toContain('SECURITY DEFINER');
+
+    // Participant confirmation is proved from stored preview evidence, never from project.status,
+    // the old public feed, or current public URLs.
+    expect(reconciliation).toContain('public.participant_preview_confirmations');
+    expect(reconciliation).toContain("pp.status = 'active'");
+    expect(reconciliation).toContain("r.status IN ('open', 'in_progress')");
+    expect(reconciliation).toContain('v_active_preview.snapshot');
+    expect(reconciliation).toContain('v_active_preview.media_snapshot');
+    expect(reconciliation).toContain("'PROJECT_SNAPSHOT_STALE'");
+    expect(reconciliation).toContain("'MEDIA_SNAPSHOT_STALE'");
+
+    // Gallery identity is authoritative: position and per-image alt text are part of the compared
+    // immutable evidence, so add, remove, reorder and alt-text drift are all visible.
+    expect(reconciliation).toContain("'galleryPosition',");
+    expect(reconciliation).toContain("'altText', ma.alt_text_public");
+    expect(reconciliation).toContain('ma.gallery_position BETWEEN 1 AND 10');
+    expect(reconciliation).toContain('v_snapshot_total_count > 10');
+
+    // Expected publication mappings are proved coherent rather than treated as content drift.
+    expect(reconciliation).toContain("'PUBLISHED_MEDIA_MAPPING_INVALID'");
+    expect(reconciliation).toContain("'published/' || v_project.public_id || '/' || ma.asset_type || '/' || ma.file_name");
+
+    expect(protocol).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.get_project_reconciliation_readiness\(text, uuid, text\) TO service_role;/,
+    );
+    for (const role of ['PUBLIC', 'anon', 'authenticated']) {
+      expect(protocol).toContain(
+        `REVOKE EXECUTE ON FUNCTION public.get_project_reconciliation_readiness(text, uuid, text) FROM ${role};`,
+      );
+    }
+  });
+
+  it('re-asserts an already-promoted reconciliation media mapping idempotently and never overwrites a different one', () => {
+    const finalizer = protocol.slice(
+      protocol.indexOf('CREATE OR REPLACE FUNCTION public.finalize_public_feed_operation('),
+      protocol.indexOf('CREATE OR REPLACE FUNCTION public.complete_public_feed_operation('),
+    );
+    expect(finalizer).toContain("v_operation.publication_mode = 'deployment_reconciliation'");
+    expect(finalizer).toContain("public_storage_bucket IS NOT DISTINCT FROM v_manifest_item->>'publicBucket'");
+    expect(finalizer).toContain("public_storage_path IS NOT DISTINCT FROM v_manifest_item->>'publicPath'");
+    expect(finalizer).toContain("public_url IS NOT DISTINCT FROM v_manifest_item->>'publicUrl'");
+    expect(finalizer).toContain("'MEDIA_MANIFEST_STALE'");
+
+    // Reconciliation changes no lifecycle state and writes no publish audit.
+    expect(finalizer).toContain("IF v_operation.publication_mode = 'normal' THEN");
+    expect(finalizer.indexOf("IF v_operation.publication_mode = 'normal' THEN"))
+      .toBeLessThan(finalizer.indexOf("UPDATE public.projects SET status = 'published'"));
+    expect(finalizer.indexOf("IF v_operation.publication_mode = 'normal' THEN"))
+      .toBeLessThan(finalizer.indexOf('INSERT INTO public.approval_records'));
   });
 
   it('keeps every application RPC service-role-only with pinned search paths', () => {

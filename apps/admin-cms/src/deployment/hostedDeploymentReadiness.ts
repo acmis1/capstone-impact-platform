@@ -153,6 +153,7 @@ export const REQUIRED_RPC_SIGNATURES = [
   rpc('request_participant_preview_correction', ['p_token_hash', 'p_comment'], ['text', 'text']),
   rpc('start_participant_preview_correction_resolution', ['p_public_id', 'p_admin_id'], ['text', 'uuid']),
   rpc('get_project_publication_readiness', ['p_public_id', 'p_admin_id', 'p_private_bucket'], ['text', 'uuid', 'text']),
+  rpc('get_project_reconciliation_readiness', ['p_public_id', 'p_admin_id', 'p_private_bucket'], ['text', 'uuid', 'text']),
   rpc('reserve_publication_attempt', ['p_public_id', 'p_admin_id', 'p_private_bucket', 'p_confirmed_preview_id', 'p_confirmed_at'], ['text', 'uuid', 'text', 'uuid', 'timestamptz']),
   rpc('prepare_publication_attempt', ['p_attempt_id', 'p_execution_token', 'p_private_bucket', 'p_candidate_record_count', 'p_candidate_feed_hash', 'p_candidate_feed_content', 'p_feed_storage_bucket', 'p_feed_storage_path', 'p_feed_public_url', 'p_previous_feed_existed', 'p_previous_feed_content', 'p_media_manifest'], ['uuid', 'uuid', 'text', 'integer', 'text', 'text', 'text', 'text', 'text', 'boolean', 'text', 'jsonb']),
   rpc('claim_publication_attempt', ['p_public_id', 'p_admin_id'], ['text', 'uuid']),

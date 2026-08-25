@@ -124,25 +124,44 @@ function writerParameters(overrides: Record<string, unknown> = {}) {
 describe('canonical public feed writer boundary', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('holds deployment reconciliation before reservation or external work', async () => {
-    harness.ledger = createLedger('RESERVED');
+  it('carries deployment reconciliation intent, including exact confirmation evidence, into reservation', async () => {
+    harness.ledger = createLedger('RESERVED', { publicationMode: 'deployment_reconciliation' });
     harness.storage = createStorage(baseline);
-    const prepareCandidate = vi.fn(async () => ({ artifact: candidate }));
+
+    const result = await executePublicFeedWriter(writerParameters({
+      publicationMode: 'deployment_reconciliation',
+      afterWriteIntent: async () => undefined,
+    }) as never);
+
+    expect(result.resultCode).toBe('COMPLETED');
+    expect(harness.ledger.reserve).toHaveBeenCalledTimes(1);
+    expect(harness.ledger.reserve.mock.calls[0][0]).toMatchObject({
+      kind: 'publication',
+      mode: 'deployment_reconciliation',
+      publicId: 'target',
+      confirmedPreviewId: PREVIEW,
+      confirmedAt: CONFIRMED_AT,
+    });
+  });
+
+  it('creates zero public media and writes no feed when the database refuses reconciliation write intent', async () => {
+    harness.ledger = createLedger('PREPARED', { publicationMode: 'deployment_reconciliation' });
+    harness.ledger.markWriteStarted = vi.fn(async () => ({ resultCode: 'NOT_READY' }));
+    harness.storage = createStorage(baseline);
     const validateBeforeWriteIntent = vi.fn(async () => undefined);
     const afterWriteIntent = vi.fn(async () => undefined);
 
-    await expect(executePublicFeedWriter(writerParameters({
+    const result = await executePublicFeedWriter(writerParameters({
       publicationMode: 'deployment_reconciliation',
-      confirmedPreviewId: null, confirmedAt: null,
-      prepareCandidate, validateBeforeWriteIntent, afterWriteIntent,
-    }) as never)).resolves.toEqual({ resultCode: 'RECONCILIATION_READINESS_REQUIRED' });
-    expect(harness.ledger.getBlockingOperation).not.toHaveBeenCalled();
-    expect(harness.ledger.reserve).not.toHaveBeenCalled();
-    expect(harness.ledger.markWriteStarted).not.toHaveBeenCalled();
-    expect(prepareCandidate).not.toHaveBeenCalled();
-    expect(validateBeforeWriteIntent).not.toHaveBeenCalled();
+      validateBeforeWriteIntent, afterWriteIntent,
+    }) as never);
+
+    expect(result).toEqual({ resultCode: 'NOT_READY' });
+    // The pre-write revalidation is the last boundary: nothing public may exist after it refuses,
+    // and the refused operation is closed out rather than left holding the writer.
+    expect(validateBeforeWriteIntent).toHaveBeenCalledTimes(1);
+    expect(harness.ledger.fail).toHaveBeenCalledTimes(1);
     expect(afterWriteIntent).not.toHaveBeenCalled();
-    expect(harness.storage.readExact).not.toHaveBeenCalled();
     expect(harness.storage.writeExact).not.toHaveBeenCalled();
   });
 

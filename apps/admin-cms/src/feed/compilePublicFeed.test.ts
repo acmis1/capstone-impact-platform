@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { compilePublicFeed, compilePublicRemovalCandidateFeed } from './compilePublicFeed';
+import {
+  compilePublicFeed,
+  compilePublicReconciliationCandidateFeed,
+  compilePublicRemovalCandidateFeed,
+} from './compilePublicFeed';
 import { createMockProject } from '../test/projectFixtures';
 import { Project } from '../domain/project';
 
@@ -147,5 +151,63 @@ describe('compilePublicRemovalCandidateFeed', () => {
     [[createMockProject({ publicId: 'target', status: 'published' }), createMockProject({ publicId: 'target', status: 'published' })], 'target'],
   ])('rejects missing, non-published, or duplicate targets', (projects, target) => {
     expect(() => compilePublicRemovalCandidateFeed(projects as Project[], target)).toThrow('Public-removal candidate target is unavailable.');
+  });
+});
+
+describe('compilePublicReconciliationCandidateFeed', () => {
+  it('re-deploys the exact current representation of an already-published target', () => {
+    const projects: Project[] = [
+      createMockProject({ publicId: 'other', status: 'published' }),
+      createMockProject({ publicId: 'target', status: 'published' }),
+      createMockProject({ publicId: 'approved-only', status: 'approved' }),
+    ];
+
+    const candidate = compilePublicReconciliationCandidateFeed(projects, 'target');
+
+    // Reconciliation is a redeployment, never a re-publication: the candidate is exactly what the
+    // normal compiler produces for the same current lifecycle state.
+    expect(candidate).toEqual(compilePublicFeed(projects));
+    expect(candidate.map((record) => record.publicId).sort()).toEqual(['other', 'target']);
+  });
+
+  it('carries the target gallery through unchanged, in authoritative position order', () => {
+    const target = createMockProject({
+      publicId: 'target',
+      status: 'published',
+      snapshots: ['https://cdn.example.com/a.png', 'https://cdn.example.com/b.png'],
+      snapshotMedia: [
+        { url: 'https://cdn.example.com/a.png', altText: 'First image.', galleryPosition: 1 },
+        { url: 'https://cdn.example.com/b.png', altText: 'Second image.', galleryPosition: 2 },
+      ],
+    });
+
+    const record = compilePublicReconciliationCandidateFeed([target], 'target')[0];
+
+    expect(record.snapshots).toEqual(['https://cdn.example.com/a.png', 'https://cdn.example.com/b.png']);
+    expect(record.snapshotMedia).toEqual([
+      { url: 'https://cdn.example.com/a.png', altText: 'First image.', galleryPosition: 1 },
+      { url: 'https://cdn.example.com/b.png', altText: 'Second image.', galleryPosition: 2 },
+    ]);
+  });
+
+  it('does not mutate the supplied projects', () => {
+    const projects: Project[] = [
+      createMockProject({ publicId: 'target', status: 'published' }),
+      createMockProject({ publicId: 'other', status: 'published' }),
+    ];
+    const before = JSON.stringify(projects);
+    compilePublicReconciliationCandidateFeed(projects, 'target');
+    expect(JSON.stringify(projects)).toBe(before);
+  });
+
+  it.each([
+    [[], 'target'],
+    [[createMockProject({ publicId: 'target', status: 'approved' })], 'target'],
+    [[createMockProject({ publicId: 'target', status: 'archived' })], 'target'],
+    [[createMockProject({ publicId: 'other', status: 'published' })], 'target'],
+    [[createMockProject({ publicId: 'target', status: 'published' }), createMockProject({ publicId: 'target', status: 'published' })], 'target'],
+  ])('refuses a target that is missing, ambiguous, or not lifecycle published', (projects, target) => {
+    expect(() => compilePublicReconciliationCandidateFeed(projects as Project[], target))
+      .toThrow('Deployment reconciliation candidate target is unavailable.');
   });
 });

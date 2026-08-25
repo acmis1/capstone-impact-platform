@@ -106,7 +106,7 @@ jobs:
   public-feed-ledger:
     name: Disposable Public Deployment Ledger Runtime
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout repository (full history)
         uses: actions/checkout@v4
@@ -127,6 +127,11 @@ jobs:
       # Each step owns a throwaway project id, port block, Docker network and workdir. Activating
       # the ledger head is irreversible and its history refuses fixture deletion, so these runtimes
       # can never share the canonical Local stack.
+      - name: Verify main-to-integrated deployment ledger migration upgrade
+        run: npm run verify:public-feed-ledger-runtime:disposable -- upgrade
+        env:
+          SUPABASE_START_TIMEOUT_MS: '900000'
+
       - name: Verify public deployment ledger runtime behavior
         run: npm run verify:public-feed-ledger-runtime:disposable -- ledger
         env:

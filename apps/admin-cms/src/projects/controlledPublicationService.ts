@@ -2,7 +2,10 @@ import { createHash } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AdminPermission } from '../auth/authTypes';
 import { canPreparePublication } from '../auth/permissions';
-import type { PublicationReadinessResult } from '../domain/publicationReadiness';
+import type {
+  PublicationReadinessResult,
+  ReconciliationReadinessResult,
+} from '../domain/publicationReadiness';
 import type { Project } from '../domain/project';
 import { composePublicFeedPublication } from '../feed/publicFeedArtifact';
 import { validateMediaAssetBytes } from '../storage/mediaValidationCore';
@@ -35,6 +38,13 @@ export interface ControlledPublicationDependencies {
   adminId: string;
   assertExecutionEnvironment(): void;
   getReadiness(): Promise<PublicationReadinessResult>;
+  /**
+   * Deployment-reconciliation readiness. A SEPARATE authority from getReadiness, which is a
+   * pre-publication gate demanding an approved target. Reconciliation targets are already
+   * lifecycle `published`, so this proves the current published content is still backed by the
+   * exact participant confirmation instead of weakening the normal gate.
+   */
+  getReconciliationReadiness(): Promise<ReconciliationReadinessResult>;
   listProjects(): Promise<Project[]>;
   listProjectMedia(): Promise<PublicationMediaSource[]>;
   getPublicUrl(bucket: string, path: string): string;
@@ -122,16 +132,14 @@ export async function executeControlledPublication(params: {
       }
     }
 
-    // Final Tan/Binh integration will replace this hold with the authoritative gallery-aware
-    // reconciliation-readiness proof. Lifecycle publication alone is not deployment authority.
-    if (mode === 'deployment_reconciliation') {
-      return {
-        resultCode: 'NOT_READY', readinessCode: 'RECONCILIATION_READINESS_REQUIRED',
-        blockers: ['Deployment reconciliation requires the final integrated publication-readiness proof.'],
-      };
-    }
-
-    const readiness = await dependencies.getReadiness();
+    // Lifecycle 'published' alone is never deployment authority. Reconciliation proves, from
+    // authoritative persisted state, that the CURRENT published content is still backed by the
+    // exact participant confirmation it was published under. The database repeats every one of
+    // these checks at the final pre-side-effect boundary; this preflight only avoids reserving
+    // work that cannot succeed.
+    const readiness = mode === 'deployment_reconciliation'
+      ? await dependencies.getReconciliationReadiness()
+      : await dependencies.getReadiness();
     if (!readiness.ready || readiness.resultCode !== 'READY'
         || !readiness.confirmedPreviewId || !readiness.confirmedAt) {
       return { resultCode: 'NOT_READY', readinessCode: readiness.resultCode, blockers: readiness.blockers };
@@ -152,7 +160,7 @@ export async function executeControlledPublication(params: {
         const plan = planPublicationArtifact({
           projects: [target], targetPublicId: publicId, mediaAssets: media,
           privateBucket, publicBucket: publicAssetsBucket,
-          getPublicUrl: dependencies.getPublicUrl,
+          getPublicUrl: dependencies.getPublicUrl, mode,
         });
         const manifest = await captureMediaBindings(dependencies, plan.mediaPromotions);
         return { artifact: composePublicFeedPublication(baseline, plan.feed[0]), mediaManifest: manifest };
@@ -172,12 +180,6 @@ export async function executeControlledPublication(params: {
     if (writer.resultCode === 'PERMISSION_DENIED') return { resultCode: 'PERMISSION_DENIED' };
     if (writer.resultCode === 'PUBLICATION_IN_PROGRESS') return { resultCode: 'PUBLICATION_IN_PROGRESS' };
     if (writer.resultCode === 'RECOVERY_REQUIRED') return { resultCode: 'RECOVERY_REQUIRED' };
-    if (writer.resultCode === 'RECONCILIATION_READINESS_REQUIRED') {
-      return {
-        resultCode: 'NOT_READY', readinessCode: writer.resultCode,
-        blockers: ['Deployment reconciliation requires the final integrated publication-readiness proof.'],
-      };
-    }
     if (writer.resultCode === 'NOT_READY' || writer.resultCode === 'HISTORY_NOT_ACTIVE'
         || writer.resultCode === 'ALREADY_DEPLOYED') {
       return { resultCode: 'NOT_READY', readinessCode: writer.resultCode, blockers: ['Public deployment state changed'] };

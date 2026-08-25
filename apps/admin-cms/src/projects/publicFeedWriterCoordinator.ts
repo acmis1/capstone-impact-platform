@@ -27,7 +27,7 @@ export type PublicFeedWriterResult =
       recordCount: number;
       feedPublicUrl: string;
     }
-  | { resultCode: 'PERMISSION_DENIED' | 'PUBLICATION_IN_PROGRESS' | 'RECOVERY_REQUIRED' | 'HISTORY_NOT_ACTIVE' | 'ALREADY_ACTIVE' | 'STALE_PREPARATION' | 'NOT_READY' | 'RECONCILIATION_READINESS_REQUIRED' | 'NOT_PUBLISHED' | 'ALREADY_DEPLOYED' }
+  | { resultCode: 'PERMISSION_DENIED' | 'PUBLICATION_IN_PROGRESS' | 'RECOVERY_REQUIRED' | 'HISTORY_NOT_ACTIVE' | 'ALREADY_ACTIVE' | 'STALE_PREPARATION' | 'NOT_READY' | 'NOT_PUBLISHED' | 'ALREADY_DEPLOYED' }
   | { resultCode: 'EXECUTION_FAILED'; failureCode: string };
 
 export interface PreparedPublicFeedCandidate {
@@ -102,7 +102,6 @@ function mapReservationFailure(code: string): PublicFeedWriterResult | null {
   if (code === 'ALREADY_ACTIVE') return { resultCode: 'ALREADY_ACTIVE' };
   if (code === 'STALE_PREPARATION') return { resultCode: 'STALE_PREPARATION' };
   if (code === 'NOT_READY') return { resultCode: 'NOT_READY' };
-  if (code === 'RECONCILIATION_READINESS_REQUIRED') return { resultCode: 'RECONCILIATION_READINESS_REQUIRED' };
   if (code === 'NOT_PUBLISHED') return { resultCode: 'NOT_PUBLISHED' };
   if (code === 'ALREADY_DEPLOYED') return { resultCode: 'ALREADY_DEPLOYED' };
   return null;
@@ -192,11 +191,6 @@ function baselineFromOperation(operation: PublicFeedOperationRecord): VerifiedPu
  * durable, every retry is the same immutable candidate and no baseline compensation is issued.
  */
 export async function executePublicFeedWriter(params: PublicFeedWriterParameters): Promise<PublicFeedWriterResult> {
-  // This explicit proof boundary is intentionally closed until final Tan/Binh integration supplies
-  // the authoritative gallery-aware reconciliation-readiness contract.
-  if (params.publicationMode === 'deployment_reconciliation') {
-    return { resultCode: 'RECONCILIATION_READINESS_REQUIRED' };
-  }
   const ledger = new SupabasePublicFeedLedgerRepositoryCore(params.supabase);
   const storage = new PublicFeedStorageBoundary(params.supabase);
   const ownerToken = token();

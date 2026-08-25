@@ -122,7 +122,11 @@ async function exactStored(client: SupabaseClient): Promise<VerifiedPublicFeedAr
   return verifyPublicFeedArtifact(Buffer.from(await result.data.arrayBuffer()));
 }
 
-async function createReadyPublicationProject(client: SupabaseClient, publicId: string): Promise<string> {
+async function createReadyPublicationProject(
+  client: SupabaseClient,
+  publicId: string,
+  snapshotCount = 0,
+): Promise<string> {
   const inserted = await client.from('projects').insert({
     public_id: publicId, title: `Runtime ${publicId}`, slug: publicId,
     summary: 'Synthetic public summary.', background: 'Synthetic public background.',
@@ -140,7 +144,7 @@ async function createReadyPublicationProject(client: SupabaseClient, publicId: s
     { type: 'poster_image', name: 'poster.png', mime: 'image/png', bytes: PNG_BYTES },
     { type: 'poster_pdf', name: 'poster.pdf', mime: 'application/pdf', bytes: PDF_BYTES },
   ]) {
-    const storagePath = `runtime/${publicId}/${asset.type}/${asset.name}`;
+    const storagePath = `drafts/${publicId}/${asset.type}/${asset.name}`;
     const uploaded = await client.storage.from(privateBucket).upload(storagePath, asset.bytes, {
       contentType: asset.mime, upsert: false,
     });
@@ -149,6 +153,27 @@ async function createReadyPublicationProject(client: SupabaseClient, publicId: s
       project_id: projectId, asset_type: asset.type, file_name: asset.name,
       storage_bucket: privateBucket, storage_path: storagePath, public_url: null,
       mime_type: asset.mime, file_size_bytes: asset.bytes.length, is_public_approved: false,
+    });
+    assert.equal(media.error, null, media.error?.message);
+  }
+
+  // Gallery snapshots. The readiness authorities require every snapshot to be privately staged
+  // under drafts/<publicId>/snapshot_image/, to hold a distinct gallery position from 1 through 10,
+  // and to carry usable alt text -- so the fixture has to satisfy the real contract, not a
+  // convenient approximation of it.
+  for (let position = 1; position <= snapshotCount; position += 1) {
+    const name = `snapshot-${position}.png`;
+    const storagePath = `drafts/${publicId}/snapshot_image/${name}`;
+    const uploaded = await client.storage.from(privateBucket).upload(storagePath, PNG_BYTES, {
+      contentType: 'image/png', upsert: false,
+    });
+    assert.equal(uploaded.error, null, uploaded.error?.message);
+    const media = await client.from('media_assets').insert({
+      project_id: projectId, asset_type: 'snapshot_image', file_name: name,
+      storage_bucket: privateBucket, storage_path: storagePath, public_url: null,
+      mime_type: 'image/png', file_size_bytes: PNG_BYTES.length, is_public_approved: false,
+      gallery_position: position,
+      alt_text_public: `Synthetic gallery image ${position}.`,
     });
     assert.equal(media.error, null, media.error?.message);
   }
@@ -453,7 +478,7 @@ async function main(): Promise<void> {
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
 
   const medical = project('186-rollback-publication');
-  await createReadyPublicationProject(client, medical.publicId);
+  await createReadyPublicationProject(client, medical.publicId, 3);
   const publication = await executeControlledPublication({
     permissions: ['projects.publish'], publicId: medical.publicId,
     privateBucket: 'project-drafts-private', publicAssetsBucket: 'project-public-assets',
@@ -499,6 +524,7 @@ async function main(): Promise<void> {
   assert.deepEqual((await exactStored(client)).feed.map(({ publicId }) => publicId), [traffic.publicId]);
 
   const feedBeforeReconciliation = await exactStored(client);
+  const medicalProjectId = psql(`SELECT id FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)};`);
   const reconciliationEvidenceBefore = {
     operations: psql('SELECT count(*) FROM public.public_feed_operations;'),
     writeStarted: psql("SELECT count(*) FROM public.public_feed_operations WHERE state='WRITE_STARTED';"),
@@ -510,43 +536,186 @@ async function main(): Promise<void> {
     lifecycle: psql(`SELECT status FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)};`),
     publicMedia: await publicMediaCount(client, medical.publicId),
   };
-  const postRollback = await executeControlledPublication({
+  // A direct reservation that supplies no confirmation evidence must be refused by the database
+  // itself, before any operation row exists. Lifecycle 'published' alone is never authority.
+  const evidencelessReconciliation = await ledger.reserve({
+    operationKey: randomUUID(), kind: 'publication', mode: 'deployment_reconciliation',
+    adminId, publicId: medical.publicId, ownerToken: token(), storageBucket: feedBucket,
+    storagePath: feedPath, rollbackCapability: false,
+  });
+  assert.equal(evidencelessReconciliation.resultCode, 'NOT_READY');
+  assert.equal(psql('SELECT count(*) FROM public.public_feed_operations;'), reconciliationEvidenceBefore.operations);
+
+  // Metadata drift since the participant confirmation must be refused with zero side effects, and
+  // must be refused by the database gate rather than only by the TypeScript preflight.
+  const confirmedTitle = psql(`SELECT title FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)};`);
+  psql(`UPDATE public.projects SET title='Drifted after confirmation' WHERE public_id=${sqlLiteral(medical.publicId)};`);
+  const driftedReadiness = await new SupabaseParticipantPreviewRepositoryCore(client)
+    .getReconciliationReadiness({ publicId: medical.publicId, adminId, privateBucket });
+  assert.equal(driftedReadiness.resultCode, 'PROJECT_SNAPSHOT_STALE');
+  assert.equal(driftedReadiness.ready, false);
+  const driftedReconciliation = await executeControlledPublication({
     permissions: ['projects.publish'], publicId: medical.publicId,
-    privateBucket: 'project-drafts-private', publicAssetsBucket: 'project-public-assets',
-    publicFeedBucket: feedBucket, publicFeedPath: feedPath, publicationMode: 'deployment_reconciliation',
-    dependencies: {
-      supabase: client, adminId, assertExecutionEnvironment: () => undefined,
-      getReadiness: async () => { throw new Error('UNEXPECTED_READINESS_CALL'); },
-      listProjects: async () => [medical],
-      listProjectMedia: async () => { throw new Error('UNEXPECTED_MEDIA_LIST'); },
-      getPublicUrl: () => { throw new Error('UNEXPECTED_PUBLIC_URL'); },
-      downloadObject: async () => { throw new Error('UNEXPECTED_STORAGE_READ'); },
-      uploadNewObject: async () => { throw new Error('UNEXPECTED_STORAGE_WRITE'); },
-    },
+    privateBucket, publicAssetsBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath,
+    publicationMode: 'deployment_reconciliation',
+    dependencies: publicationDependencies(client, medical.publicId),
   });
-  assert.deepEqual(postRollback, {
-    resultCode: 'NOT_READY', readinessCode: 'RECONCILIATION_READINESS_REQUIRED',
-    blockers: ['Deployment reconciliation requires the final integrated publication-readiness proof.'],
+  assert.equal(driftedReconciliation.resultCode, 'NOT_READY');
+  assert.equal((await exactStored(client)).content, feedBeforeReconciliation.content);
+  psql(`UPDATE public.projects SET title=${sqlLiteral(confirmedTitle)} WHERE public_id=${sqlLiteral(medical.publicId)};`);
+
+  // Gallery alt-text drift is participant-content drift: position and alt travel with the image.
+  const confirmedAlt = psql(`SELECT alt_text_public FROM public.media_assets
+    WHERE project_id=(SELECT id FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)})
+      AND asset_type='snapshot_image' AND gallery_position=2;`);
+  psql(`UPDATE public.media_assets SET alt_text_public='Drifted alt text.'
+    WHERE project_id=(SELECT id FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)})
+      AND asset_type='snapshot_image' AND gallery_position=2;`);
+  const altDrift = await new SupabaseParticipantPreviewRepositoryCore(client)
+    .getReconciliationReadiness({ publicId: medical.publicId, adminId, privateBucket });
+  assert.equal(altDrift.resultCode, 'MEDIA_SNAPSHOT_STALE');
+  psql(`UPDATE public.media_assets SET alt_text_public=${sqlLiteral(confirmedAlt)}
+    WHERE project_id=(SELECT id FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)})
+      AND asset_type='snapshot_image' AND gallery_position=2;`);
+
+  // A gallery reorder changes snapshot identity even though every file is unchanged. The merged
+  // uniqueness constraint is not deferrable, so even a synthetic swap has to move through a free
+  // position -- which is itself evidence that position is real identity rather than presentation.
+  const swapGalleryPositions = (first: number, second: number) => {
+    const scope = `WHERE project_id=(SELECT id FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)})
+      AND asset_type='snapshot_image'`;
+    psql(`UPDATE public.media_assets SET gallery_position=10 ${scope} AND gallery_position=${first};`);
+    psql(`UPDATE public.media_assets SET gallery_position=${first} ${scope} AND gallery_position=${second};`);
+    psql(`UPDATE public.media_assets SET gallery_position=${second} ${scope} AND gallery_position=10;`);
+  };
+  swapGalleryPositions(1, 3);
+  const reorderDrift = await new SupabaseParticipantPreviewRepositoryCore(client)
+    .getReconciliationReadiness({ publicId: medical.publicId, adminId, privateBucket });
+  assert.equal(reorderDrift.resultCode, 'MEDIA_SNAPSHOT_STALE');
+  swapGalleryPositions(1, 3);
+
+  // Adding a fully valid fourth image is still drift: the participant confirmed a three-image
+  // gallery, and the confirmed set is what may be redeployed.
+  const addedSnapshotPath = `drafts/${medical.publicId}/snapshot_image/snapshot-4.png`;
+  const addedUpload = await client.storage.from(privateBucket).upload(addedSnapshotPath, PNG_BYTES, {
+    contentType: 'image/png', upsert: false,
   });
+  assert.equal(addedUpload.error, null, addedUpload.error?.message);
+  const addedSnapshot = await client.from('media_assets').insert({
+    project_id: medicalProjectId, asset_type: 'snapshot_image', file_name: 'snapshot-4.png',
+    storage_bucket: privateBucket, storage_path: addedSnapshotPath, public_url: null,
+    mime_type: 'image/png', file_size_bytes: PNG_BYTES.length, is_public_approved: false,
+    gallery_position: 4, alt_text_public: 'Synthetic gallery image 4.',
+  }).select('id').single();
+  assert.equal(addedSnapshot.error, null, addedSnapshot.error?.message);
+  const addDrift = await new SupabaseParticipantPreviewRepositoryCore(client)
+    .getReconciliationReadiness({ publicId: medical.publicId, adminId, privateBucket });
+  assert.equal(addDrift.resultCode, 'MEDIA_SNAPSHOT_STALE');
+  psql(`DELETE FROM public.media_assets WHERE id=${sqlLiteral(String(addedSnapshot.data?.id))}::uuid;`);
+  await client.storage.from(privateBucket).remove([addedSnapshotPath]);
+
+  // Removing a confirmed image is drift as well, and the exact row is restored afterwards so the
+  // authoritative media identity the participant confirmed is unchanged.
+  const removedSnapshot = psql(`SELECT pg_catalog.to_jsonb(ma.*)::text FROM public.media_assets ma
+    WHERE ma.project_id=${sqlLiteral(medicalProjectId)}::uuid
+      AND ma.asset_type='snapshot_image' AND ma.gallery_position=3;`);
+  psql(`DELETE FROM public.media_assets
+    WHERE project_id=${sqlLiteral(medicalProjectId)}::uuid
+      AND asset_type='snapshot_image' AND gallery_position=3;`);
+  const removeDrift = await new SupabaseParticipantPreviewRepositoryCore(client)
+    .getReconciliationReadiness({ publicId: medical.publicId, adminId, privateBucket });
+  assert.equal(removeDrift.resultCode, 'MEDIA_SNAPSHOT_STALE');
+  psql(`INSERT INTO public.media_assets SELECT * FROM pg_catalog.jsonb_populate_record(
+    null::public.media_assets, ${sqlLiteral(removedSnapshot)}::jsonb);`);
+  const restored = await new SupabaseParticipantPreviewRepositoryCore(client)
+    .getReconciliationReadiness({ publicId: medical.publicId, adminId, privateBucket });
+  assert.equal(restored.resultCode, 'READY');
+
+  // Nothing above may have touched the deployed artifact or the ledger.
   assert.equal((await exactStored(client)).content, feedBeforeReconciliation.content);
   assert.deepEqual({
-    operations: psql('SELECT count(*) FROM public.public_feed_operations;'),
     writeStarted: psql("SELECT count(*) FROM public.public_feed_operations WHERE state='WRITE_STARTED';"),
-    events: psql('SELECT count(*) FROM public.public_feed_operation_events;'),
     versions: psql('SELECT count(*) FROM public.public_feed_versions;'),
     snapshots: psql('SELECT count(*) FROM public.published_snapshots;'),
     audits: psql(`SELECT count(*) FROM public.approval_records WHERE project_id=(SELECT id FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)});`),
     generation: psql('SELECT generation FROM public.public_feed_head WHERE singleton=true;'),
     lifecycle: psql(`SELECT status FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)};`),
     publicMedia: await publicMediaCount(client, medical.publicId),
-  }, reconciliationEvidenceBefore);
-  const directReconciliation = await ledger.reserve({
-    operationKey: randomUUID(), kind: 'publication', mode: 'deployment_reconciliation',
-    adminId, publicId: medical.publicId, ownerToken: token(), storageBucket: feedBucket,
-    storagePath: feedPath, rollbackCapability: false,
+  }, {
+    writeStarted: reconciliationEvidenceBefore.writeStarted,
+    versions: reconciliationEvidenceBefore.versions,
+    snapshots: reconciliationEvidenceBefore.snapshots,
+    audits: reconciliationEvidenceBefore.audits,
+    generation: reconciliationEvidenceBefore.generation,
+    lifecycle: reconciliationEvidenceBefore.lifecycle,
+    publicMedia: reconciliationEvidenceBefore.publicMedia,
   });
-  assert.equal(directReconciliation.resultCode, 'RECONCILIATION_READINESS_REQUIRED');
-  assert.equal(psql('SELECT count(*) FROM public.public_feed_operations;'), reconciliationEvidenceBefore.operations);
+
+  // The legitimate case: lifecycle-published, absent from the current head after a rollback, and
+  // still backed by the exact participant confirmation it was published under.
+  const postRollback = await executeControlledPublication({
+    permissions: ['projects.publish'], publicId: medical.publicId,
+    privateBucket, publicAssetsBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath,
+    publicationMode: 'deployment_reconciliation',
+    dependencies: publicationDependencies(client, medical.publicId),
+  });
+  await assertCompleted(postRollback, 'deployment reconciliation after rollback');
+
+  // The head changed and the target is deployed again.
+  head = await ledger.getHead();
+  assert.ok(head);
+  assert.equal(head.currentVersion.operation, 'publication');
+  assert.equal(head.currentVersion.publicationMode, 'deployment_reconciliation');
+  assert.equal(head.currentVersion.affectedPublicId, medical.publicId);
+  const reconciledFeed = await exactStored(client);
+  assert.equal(reconciledFeed.content, head.currentVersion.artifactContent);
+  assert.deepEqual(reconciledFeed.feed.map(({ publicId }) => publicId), [traffic.publicId, medical.publicId]);
+  assert.equal(
+    psql(`SELECT count(*) FROM public.public_feed_version_members WHERE version_id=(SELECT current_version_id FROM public.public_feed_head WHERE singleton=true) AND public_id=${sqlLiteral(medical.publicId)};`),
+    '1',
+  );
+
+  // The reconciled record carries the exact multi-image representation, in deterministic gallery
+  // order, with each URL and its text alternative travelling as one unit.
+  const reconciledRecord = reconciledFeed.feed.find((record) => record.publicId === medical.publicId);
+  assert.ok(reconciledRecord, 'Reconciled target missing from the deployed feed.');
+  const expectedSnapshotUrls = [1, 2, 3].map((position) =>
+    `${runtimeApiUrl}/storage/v1/object/public/${publicAssetsBucket}/published/${medical.publicId}/snapshot_image/snapshot-${position}.png`);
+  assert.deepEqual(reconciledRecord.snapshots, expectedSnapshotUrls);
+  assert.deepEqual(reconciledRecord.snapshotMedia, [1, 2, 3].map((position) => ({
+    url: expectedSnapshotUrls[position - 1],
+    altText: `Synthetic gallery image ${position}.`,
+    galleryPosition: position,
+  })));
+
+  // Reconciliation is deployment-only: no lifecycle transition and no fabricated publish audit.
+  assert.equal(psql(`SELECT status FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)};`), 'published');
+  assert.equal(
+    psql(`SELECT count(*) FROM public.approval_records WHERE project_id=(SELECT id FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)});`),
+    reconciliationEvidenceBefore.audits,
+  );
+  assert.equal(
+    psql("SELECT count(*) FROM public.public_feed_versions WHERE operation='publication' AND publication_mode='deployment_reconciliation';"),
+    '1',
+  );
+  // The already-promoted public objects were re-asserted, never duplicated or overwritten.
+  assert.equal(await publicMediaCount(client, medical.publicId), 5);
+
+  // A retry answers with the target's OWN completion evidence rather than whichever operation
+  // happens to own the head.
+  const reconciliationEvidence = targetEvidence(medical.publicId);
+  const retriedReconciliation = await executeControlledPublication({
+    permissions: ['projects.publish'], publicId: medical.publicId,
+    privateBucket, publicAssetsBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath,
+    publicationMode: 'deployment_reconciliation',
+    dependencies: publicationDependencies(client, medical.publicId),
+  });
+  assert.equal(retriedReconciliation.resultCode, 'ALREADY_COMPLETED');
+  assert.equal(
+    retriedReconciliation.resultCode === 'ALREADY_COMPLETED' ? retriedReconciliation.attemptId : null,
+    reconciliationEvidence.operationId,
+  );
+  assert.equal((await exactStored(client)).content, reconciledFeed.content);
 
   await assertCompleted(await executeControlledPublicRemoval({
     permissions: ['projects.archive'], publicId: traffic.publicId, archiveReason: 'Create empty rollback target',
@@ -854,7 +1023,7 @@ async function main(): Promise<void> {
   const memberHash = psql(`SELECT record_hash FROM public.public_feed_version_members WHERE version_id=${sqlLiteral(firstVersionId)}::uuid ORDER BY ordinal LIMIT 1;`);
   assert.equal(memberHash, trafficArtifact.members[0].recordHash);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
-  console.log('Public feed ledger runtime verification passed: fresh schema, exact Storage/head, activation, normal publication, fail-closed deployment reconciliation with zero durable/external/lifecycle effects and direct database reservation enforcement, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
+  console.log('Public feed ledger runtime verification passed: fresh schema, exact Storage/head, activation, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
 }
 
 main().catch((error: unknown) => {
