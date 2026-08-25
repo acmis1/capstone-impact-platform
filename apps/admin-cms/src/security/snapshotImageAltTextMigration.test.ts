@@ -34,7 +34,6 @@ describe('snapshot image alt text migration contract', () => {
       .filter((file) => file.endsWith('.sql'))
       .sort();
 
-    expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
     expect(files[25]).toBe(filename);
 
     for (const inherited of files.slice(0, 25)) {

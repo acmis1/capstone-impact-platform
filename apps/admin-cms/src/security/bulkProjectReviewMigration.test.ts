@@ -71,6 +71,24 @@ describe('bulk project review concurrency migration contract', () => {
     expect(migration).toContain('public.submit_import_projects_for_review(');
   });
 
+  it('keeps the wrapper before Tan\'s final gallery submission authority in the fresh-install sequence', () => {
+    const migrations = fs.readdirSync(path.join(root, 'infra/supabase/migrations'))
+      .filter((file) => file.endsWith('.sql'))
+      .sort();
+    const wrapperIndex = migrations.indexOf('20260824120000_bulk_project_review_concurrency.sql');
+    const finalSubmissionIndex = migrations.indexOf('20260825025000_multi_image_gallery_review_submission.sql');
+    const finalSubmission = fs.readFileSync(
+      path.join(root, 'infra/supabase/migrations/20260825025000_multi_image_gallery_review_submission.sql'),
+      'utf8',
+    );
+
+    expect(migrations).toHaveLength(40);
+    expect(wrapperIndex).toBeGreaterThan(-1);
+    expect(finalSubmissionIndex).toBe(wrapperIndex + 1);
+    expect(finalSubmission).toContain('CREATE OR REPLACE FUNCTION public.submit_import_projects_for_review');
+    expect(finalSubmission).toContain('INVALID_SNAPSHOT_GALLERY_STRUCTURE');
+  });
+
   it('does not add a competing audit write or production media/publication behavior', () => {
     expect(migration).not.toContain('INSERT INTO public.approval_records');
     expect(migration).not.toContain('UPDATE public.media_assets');

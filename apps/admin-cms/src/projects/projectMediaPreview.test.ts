@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   compareProjectMediaDisplayOrder,
   deriveApprovalMediaInput,
+  validateSubmissionSnapshotGallery,
   loadProjectMediaPreviewItems,
   ProjectMediaPreviewReadError,
   toProjectMediaPreviewItem,
@@ -155,5 +156,40 @@ describe('project media preview read model', () => {
 
     expect(result.posterImage).toEqual({ rowCount: 1, validPrivateCount: 0 });
     expect(result.posterPdf).toEqual({ rowCount: 1, validPrivateCount: 0 });
+  });
+
+  it('accepts a valid positioned snapshot gallery for submission and approval preflight', () => {
+    const snapshots = [1, 2, 3].map((gallery_position) => ({
+      ...privateRow,
+      id: `snapshot-${gallery_position}`,
+      asset_type: 'snapshot_image',
+      gallery_position,
+      file_name: `snapshot-${gallery_position}.png`,
+      storage_path: `drafts/private/snapshot_image/snapshot-${gallery_position}.png`,
+      alt_text_public: `Accessible snapshot ${gallery_position}.`,
+    }));
+
+    expect(validateSubmissionSnapshotGallery(snapshots, { projectPublicId: 'private', privateBucket: 'draft-media' })).toEqual([]);
+    expect(deriveApprovalMediaInput(snapshots, { projectPublicId: 'private', privateBucket: 'draft-media' }).snapshotMedia).toHaveLength(3);
+  });
+
+  it('blocks a visible malformed snapshot gallery without fabricating positions', () => {
+    const malformed = {
+      ...privateRow,
+      asset_type: 'snapshot_image',
+      gallery_position: 1,
+      file_name: 'snapshot-1.png',
+      storage_path: 'drafts/private/snapshot_image/snapshot-1.png',
+      mime_type: 'application/pdf',
+      alt_text_public: 'Accessible snapshot.',
+    };
+
+    expect(validateSubmissionSnapshotGallery([malformed], { projectPublicId: 'private', privateBucket: 'draft-media' })).toEqual([
+      'Snapshot gallery staged media is invalid.',
+    ]);
+    expect(deriveApprovalMediaInput([malformed], { projectPublicId: 'private', privateBucket: 'draft-media' }).snapshotMedia[0]).toMatchObject({
+      galleryPosition: 1,
+      validPrivate: false,
+    });
   });
 });

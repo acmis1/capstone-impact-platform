@@ -5,7 +5,11 @@ import { getStagingBuckets } from '../lib/supabase/buckets';
 import { DatabaseProjectRow, SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
 import { computeReadinessForImportBatchRow } from '../import/importBatchReviewReadiness';
 import type { ImportBatchReviewProjectRow } from '../repositories/ImportBatchRepositoryCore';
-import { deriveApprovalMediaInput, ProjectMediaAssetPreviewRow } from './projectMediaPreview';
+import {
+  deriveApprovalMediaInput,
+  ProjectMediaAssetPreviewRow,
+  validateSubmissionSnapshotGallery,
+} from './projectMediaPreview';
 import { validateProjectForApproval } from '../validation/projectValidation';
 import { getAllowedReviewActions } from '../workflow/projectWorkflow';
 import {
@@ -101,6 +105,7 @@ function mediaRows(rows: BulkMediaRow[]): ProjectMediaAssetPreviewRow[] {
   return rows.map((asset, index) => ({
     id: typeof asset.id === 'string' ? asset.id : `bulk-media-${index}`,
     asset_type: asset.asset_type || '',
+    gallery_position: asset.gallery_position ?? null,
     file_name: asset.file_name || '',
     storage_bucket: asset.storage_bucket || '',
     storage_path: asset.storage_path || '',
@@ -154,7 +159,7 @@ export class SupabaseBulkProjectReviewGateway implements BulkProjectReviewGatewa
         this.supabase.rpc('get_bulk_project_review_evidence', { p_project_ids: projectIds }),
         this.supabase
           .from('media_assets')
-          .select('project_id,id,asset_type,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
+          .select('project_id,id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
           .in('project_id', projectIds)
           .in('asset_type', ['poster_image', 'poster_pdf', 'snapshot_image']),
       ]);
@@ -185,7 +190,13 @@ export class SupabaseBulkProjectReviewGateway implements BulkProjectReviewGatewa
       } as unknown as ImportBatchReviewProjectRow;
       const readiness = computeReadinessForImportBatchRow(reviewData);
       const batchStatus = row.import_batch_id ? batchStatuses.get(row.import_batch_id) : undefined;
-      const submissionReasons = readinessReasons(readiness);
+      const submissionReasons = [
+        ...readinessReasons(readiness),
+        ...validateSubmissionSnapshotGallery(mediaRows(mediaByProject.get(row.id) || []), {
+          projectPublicId: project.publicId || row.public_id,
+          privateBucket: this.privateBucket,
+        }).map((message) => reason('READINESS_BLOCKED', message)),
+      ];
       if (row.import_batch_id && batchStatus !== 'completed') {
         submissionReasons.unshift(reason('IMPORT_BATCH_NOT_COMPLETED', 'The project import batch is not complete.'));
       }
@@ -226,7 +237,7 @@ export class SupabaseBulkProjectReviewGateway implements BulkProjectReviewGatewa
         updatedAt: row.updated_at || null,
         exists: true,
         submission: {
-          eligible: readiness.ready && batchStatus === 'completed' && Boolean(row.import_batch_id),
+          eligible: submissionReasons.length === 0 && batchStatus === 'completed' && Boolean(row.import_batch_id),
           alreadyComplete: readiness.eligibility === 'already_submitted',
           reasons: submissionReasons,
         },
