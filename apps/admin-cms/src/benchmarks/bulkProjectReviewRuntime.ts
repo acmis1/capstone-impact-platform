@@ -396,7 +396,7 @@ export async function runBulkProjectReviewRuntime(options: BulkProjectReviewRunt
       const base = { project_id: projectId, storage_bucket: 'project-drafts-private', is_public_approved: false, public_url: null, public_storage_bucket: null, public_storage_path: null };
       const image = { ...base, asset_type: 'poster_image', file_name: 'poster.png', storage_path: `drafts/${row.public_id}/poster_image/poster.png`, mime_type: 'image/png', file_size_bytes: 1024 };
       const pdf = { ...base, asset_type: 'poster_pdf', file_name: 'poster.pdf', storage_path: `drafts/${row.public_id}/poster_pdf/poster.pdf`, mime_type: 'application/pdf', file_size_bytes: 2048 };
-      const snapshot = { ...base, asset_type: 'snapshot_image', file_name: 'snapshot-1.png', storage_path: `drafts/${row.public_id}/snapshot_image/snapshot-1.png`, mime_type: 'image/png', file_size_bytes: 1024, alt_text_public: 'Synthetic snapshot description.' };
+      const snapshot = { ...base, asset_type: 'snapshot_image', gallery_position: 1, file_name: 'snapshot-1.png', storage_path: `drafts/${row.public_id}/snapshot_image/snapshot-1.png`, mime_type: 'image/png', file_size_bytes: 1024, alt_text_public: 'Synthetic snapshot description.' };
       return index % 10 === 8 ? [image] : [image, pdf, snapshot];
     });
     const mediaInsert = await supabase.from('media_assets').insert(mediaRows);

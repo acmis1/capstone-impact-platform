@@ -173,6 +173,59 @@ describe('project media preview read model', () => {
     expect(deriveApprovalMediaInput(snapshots, { projectPublicId: 'private', privateBucket: 'draft-media' }).snapshotMedia).toHaveLength(3);
   });
 
+  it('requires persisted private media identity values to already be canonical', () => {
+    const params = { projectPublicId: 'private', privateBucket: 'draft-media' };
+    const posterImage = {
+      ...privateRow,
+      storage_path: 'drafts/private/poster_image/poster.png',
+    };
+    const posterPdf = {
+      ...privateRow,
+      id: 'poster-pdf',
+      asset_type: 'poster_pdf',
+      file_name: 'poster.pdf',
+      storage_path: 'drafts/private/poster_pdf/poster.pdf',
+      mime_type: 'application/pdf',
+    };
+    const snapshot = {
+      ...privateRow,
+      id: 'snapshot-1',
+      asset_type: 'snapshot_image',
+      gallery_position: 1,
+      file_name: 'snapshot-1.png',
+      storage_path: 'drafts/private/snapshot_image/snapshot-1.png',
+      alt_text_public: 'Accessible snapshot.',
+    };
+
+    expect(deriveApprovalMediaInput([posterImage, posterPdf, snapshot], params)).toEqual({
+      posterImage: { rowCount: 1, validPrivateCount: 1 },
+      posterPdf: { rowCount: 1, validPrivateCount: 1 },
+      snapshotMedia: [{ galleryPosition: 1, validPrivate: true, altText: 'Accessible snapshot.' }],
+    });
+    expect(validateSubmissionSnapshotGallery([snapshot], params)).toEqual([]);
+
+    for (const malformed of [
+      { ...snapshot, file_name: ' snapshot-1.png ' },
+      { ...snapshot, storage_path: ' drafts/private/snapshot_image/snapshot-1.png ' },
+      { ...snapshot, mime_type: ' image/png ' },
+    ]) {
+      expect(deriveApprovalMediaInput([malformed], params).snapshotMedia[0]).toMatchObject({ validPrivate: false });
+      expect(validateSubmissionSnapshotGallery([malformed], params)).toEqual([
+        'Snapshot gallery staged media is invalid.',
+      ]);
+    }
+
+    for (const malformed of [
+      { ...posterImage, file_name: ' poster.png ' },
+      { ...posterImage, storage_path: ' drafts/private/poster_image/poster.png ' },
+      { ...posterImage, mime_type: ' image/png ' },
+      { ...posterPdf, mime_type: ' application/pdf ' },
+    ]) {
+      const evidence = deriveApprovalMediaInput([malformed], params);
+      expect(evidence.posterImage.validPrivateCount + evidence.posterPdf.validPrivateCount).toBe(0);
+    }
+  });
+
   it('blocks a visible malformed snapshot gallery without fabricating positions', () => {
     const malformed = {
       ...privateRow,

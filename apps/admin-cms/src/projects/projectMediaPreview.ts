@@ -110,6 +110,9 @@ function isValidPrivateApprovalAsset(
     !mimeType ||
     size === undefined ||
     !storagePath ||
+    row.file_name !== fileName ||
+    row.storage_path !== storagePath ||
+    row.mime_type !== mimeType ||
     !storagePath.startsWith(expectedPrefix) ||
     !storagePath.endsWith(fileName) ||
     storagePath.includes('..') ||

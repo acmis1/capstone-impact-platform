@@ -391,7 +391,7 @@ export async function runBulkProjectReviewFunctionalWorkflow(
       return [
         { ...base, asset_type: 'poster_image', file_name: 'poster.png', storage_path: `drafts/${row.public_id}/poster_image/poster.png`, mime_type: 'image/png', file_size_bytes: 1024 },
         { ...base, asset_type: 'poster_pdf', file_name: 'poster.pdf', storage_path: `drafts/${row.public_id}/poster_pdf/poster.pdf`, mime_type: 'application/pdf', file_size_bytes: 2048 },
-        { ...base, asset_type: 'snapshot_image', file_name: 'snapshot-1.png', storage_path: `drafts/${row.public_id}/snapshot_image/snapshot-1.png`, mime_type: 'image/png', file_size_bytes: 1024, alt_text_public: 'Synthetic snapshot description.' },
+        { ...base, asset_type: 'snapshot_image', gallery_position: 1, file_name: 'snapshot-1.png', storage_path: `drafts/${row.public_id}/snapshot_image/snapshot-1.png`, mime_type: 'image/png', file_size_bytes: 1024, alt_text_public: 'Synthetic snapshot description.' },
       ];
     });
     const mediaInsert = await supabase.from('media_assets').insert(mediaRows);
