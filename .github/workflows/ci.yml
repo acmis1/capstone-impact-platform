@@ -132,6 +132,15 @@ jobs:
       - name: Onboarding Toolchain Precheck
         run: npm run onboarding:check
 
+      # This destructive migration-upgrade verifier must run before normal Local setup establishes shared staff and storage fixtures.
+      - name: Start Local Supabase specifically for migration-upgrade verification
+        run: npm run supabase:start
+        env:
+          SUPABASE_START_TIMEOUT_MS: '600000'
+
+      - name: Verify Migration 0030 to 0031 assistive upgrade behavior
+        run: npm run verify:assistive-upgrade-runtime --workspace=apps/admin-cms
+
       - name: Run local developer setup
         run: npm run setup:local
         env:
@@ -218,9 +227,6 @@ jobs:
 
       - name: Verify assistive validation persistence runtime behavior
         run: npm run verify:assistive-persistence-runtime --workspace=apps/admin-cms
-
-      - name: Verify Migration 0030 to 0031 assistive upgrade behavior
-        run: npm run verify:assistive-upgrade-runtime --workspace=apps/admin-cms
 
       - name: Verify assistive validation job coordination runtime behavior
         run: npm run verify:assistive-jobs-runtime --workspace=apps/admin-cms

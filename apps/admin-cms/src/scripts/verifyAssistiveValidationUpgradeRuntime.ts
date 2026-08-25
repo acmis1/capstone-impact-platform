@@ -65,7 +65,7 @@ async function main(): Promise<void> {
 
   try {
     assertCliSuccess(
-      runLocalSupabaseCli('reset', root, { resetVersion: MIGRATION_30_VERSION }),
+      runLocalSupabaseCli('reset', root, { resetVersion: MIGRATION_30_VERSION, skipSeed: true }),
       'reset through Migration 0030',
     );
     scenario('database is exactly at Migration 0030 before fixture insertion', () => {
