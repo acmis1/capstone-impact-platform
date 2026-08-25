@@ -2,6 +2,9 @@ import { spawn, execSync, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { deadlineFetch } from './verifyLocalSupabase';
 
+const MAX_DIAGNOSTIC_LOG_TAIL_LENGTH = 1_000;
+const MAX_CAPTURED_LOG_LENGTH = 4_000;
+
 export interface AppSmokeResult {
   success: boolean;
   healthOk: boolean;
@@ -18,6 +21,34 @@ export interface AppSmokeOptions {
   spawnRunner?: (cmd: string, args: string[], opts: Record<string, unknown>) => ChildProcess;
 }
 
+function appendCapturedLog(log: string, chunk: Buffer): string {
+  const combined = log + chunk.toString('utf8');
+  if (combined.length <= MAX_CAPTURED_LOG_LENGTH) return combined;
+
+  const boundedTail = combined.slice(-MAX_CAPTURED_LOG_LENGTH);
+  const firstLineBreak = boundedTail.match(/\r?\n/);
+
+  // Do not retain a partial leading line: it could contain only the value portion of a secret.
+  return firstLineBreak
+    ? boundedTail.slice((firstLineBreak.index ?? 0) + firstLineBreak[0].length)
+    : '';
+}
+
+function formatDiagnosticLogTail(label: string, capturedLog: string): string | undefined {
+  if (!capturedLog) return undefined;
+
+  const redacted = capturedLog
+    .replace(/(authorization\s*[=:]\s*(?:Bearer|Basic)\s+)[^\s,;]+/gi, '$1[REDACTED]')
+    .replace(/(Bearer\s+)[^\s,;]+/gi, '$1[REDACTED]')
+    .replace(
+      /((?:[a-z0-9_]*?(?:key|secret|token|password|credential|authorization)[a-z0-9_]*)["']?\s*[=:]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;]+)/gi,
+      '$1[REDACTED]',
+    )
+    .slice(-MAX_DIAGNOSTIC_LOG_TAIL_LENGTH);
+
+  return redacted ? `${label} tail: ${redacted}` : undefined;
+}
+
 export async function runAdminAppSmokeTest(options?: AppSmokeOptions): Promise<AppSmokeResult> {
   const startTime = Date.now();
   const repoRoot = options?.repoRoot || path.resolve(__dirname, '../../../../');
@@ -31,8 +62,8 @@ export async function runAdminAppSmokeTest(options?: AppSmokeOptions): Promise<A
   let exitCode: number | null = null;
   let processError: Error | undefined;
 
-  const stdoutLogs: string[] = [];
-  const stderrLogs: string[] = [];
+  let stdoutLog = '';
+  let stderrLog = '';
 
   try {
     const isWin = process.platform === 'win32';
@@ -50,15 +81,11 @@ export async function runAdminAppSmokeTest(options?: AppSmokeOptions): Promise<A
 
     // Safely drain stdout/stderr streams to prevent buffer backpressure deadlocks
     childProc.stdout?.on('data', (chunk: Buffer) => {
-      if (stdoutLogs.length < 50) {
-        stdoutLogs.push(chunk.toString('utf8'));
-      }
+      stdoutLog = appendCapturedLog(stdoutLog, chunk);
     });
 
     childProc.stderr?.on('data', (chunk: Buffer) => {
-      if (stderrLogs.length < 50) {
-        stderrLogs.push(chunk.toString('utf8'));
-      }
+      stderrLog = appendCapturedLog(stderrLog, chunk);
     });
 
     childProc.on('error', (err) => {
@@ -86,12 +113,15 @@ export async function runAdminAppSmokeTest(options?: AppSmokeOptions): Promise<A
       }
 
       if (processExited) {
-        const errContext = stderrLogs.join('').slice(-300);
+        const errContext = formatDiagnosticLogTail('stderr', stderrLog);
         return {
           success: false,
           healthOk: false,
           loginOk: false,
-          errorDetail: `Next.js server exited early with code ${exitCode}. ${errContext}`,
+          errorDetail: [
+            `Next.js server exited early with code ${exitCode}`,
+            errContext,
+          ].filter((detail): detail is string => Boolean(detail)).join('. '),
           durationMs: Date.now() - startTime,
         };
       }
@@ -127,11 +157,19 @@ export async function runAdminAppSmokeTest(options?: AppSmokeOptions): Promise<A
     }
 
     if (!healthOk || !loginOk) {
+      const diagnosticLogTails = [
+        formatDiagnosticLogTail('stdout', stdoutLog),
+        formatDiagnosticLogTail('stderr', stderrLog),
+      ].filter((tail): tail is string => Boolean(tail));
+
       return {
         success: false,
         healthOk,
         loginOk,
-        errorDetail: `Application readiness timeout (healthOk=${healthOk}, loginOk=${loginOk})`,
+        errorDetail: [
+          `Application readiness timeout (healthOk=${healthOk}, loginOk=${loginOk})`,
+          ...diagnosticLogTails,
+        ].join('. '),
         durationMs: Date.now() - startTime,
       };
     }
