@@ -151,18 +151,35 @@ function completeEvidence(overrides: Partial<HostedReadinessEvidence> = {}): Hos
 
 describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () => {
   describe('authoritative migration, table, and RPC inventory', () => {
-    it('matches the exact 34 migration files and keeps every historical file byte-identical to origin/main', () => {
+    it('matches the exact repository migration inventory and keeps every historical migration byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(34);
+
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(40);
+
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
-      expect(() => execFileSync(
-        'git',
-        ['diff', '--exit-code', 'origin/main', '--', ...EXPECTED_REPOSITORY_MIGRATIONS.slice(0, -1).map(
-          (historical) => `infra/supabase/migrations/${historical}`,
-        )],
-        { cwd: repoRoot, stdio: 'pipe' },
-      )).not.toThrow();
+      const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.filter(
+        (migration) => migration !== '20260824120000_bulk_project_review_concurrency.sql',
+      );
+
+      expect(historicalMigrations).toHaveLength(39);
+
+      expect(() =>
+        execFileSync(
+          'git',
+          [
+            'diff',
+            '--exit-code',
+            'origin/main',
+            '--',
+            ...historicalMigrations.map(
+              (historical) =>
+                `infra/supabase/migrations/${historical}`,
+            ),
+          ],
+          { cwd: repoRoot, stdio: 'pipe' },
+        ),
+      ).not.toThrow();
     });
 
     it('matches exact application CREATE TABLE definitions rather than a count alone', () => {
@@ -236,7 +253,9 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const missingMigration = evaluateHostedDeploymentReadiness(
         completeEvidence({ recordedMigrationVersions: [], manualEvidence: undefined })
       );
-      expect(missingMigration.missingMigrations).toHaveLength(34);
+      expect(missingMigration.missingMigrations).toHaveLength(
+        EXPECTED_REPOSITORY_MIGRATION_COUNT,
+      );
       expect(missingMigration.deploymentClassification).toBe('RECONCILIATION_REQUIRED');
     });
 

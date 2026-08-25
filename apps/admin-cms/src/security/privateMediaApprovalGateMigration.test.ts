@@ -19,7 +19,7 @@ describe('private media approval gate migration contract', () => {
   it('is exactly migration 0028 and leaves every origin/main migration byte-identical', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(34);
+    expect(files).toHaveLength(EXPECTED_MIGRATION_FILENAMES.length);
     expect(files[27]).toBe(filename);
 
     for (const inherited of files.slice(0, 27)) {

@@ -3,12 +3,13 @@ import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
 import { getStagingBuckets } from '../lib/supabase/buckets';
 import { AuthenticatedAdminContext } from '../auth/authTypes';
 import {
+  BROWSER_IMPORT_MEDIA_LIMITS,
   BrowserImportMediaStageErrorCode,
   BrowserImportMediaStageResponse,
 } from './browserImportMediaStageContract';
 import { computeCanonicalMediaIntentHash } from './browserImportMediaStageServerCore';
 import { BrowserImportMediaAssetType } from './browserImportMediaSelection';
-
+import { MAX_GALLERY_IMAGES } from './galleryConvention';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface MediaFileToStage {
@@ -18,6 +19,11 @@ export interface MediaFileToStage {
   fileName: string;
   fileSizeBytes: number;
   canonicalMimeType: string;
+  /**
+   * Authoritative deterministic gallery order.
+   * Required for snapshot_image; null for poster_image and poster_pdf.
+   */
+  galleryPosition: number | null;
   /**
    * Server-derived text alternative for a `snapshot_image`; null for all other asset types and for
    * a legacy snapshot with no supplied alt text. The caller must take this from the reparsed
@@ -87,12 +93,37 @@ export async function stageBrowserImportMedia(params: {
     return { success: false, code: 'INVALID_BATCH_ID', error: 'The import batch identifier is invalid.' };
   }
 
-  if (files.length === 0 || files.length > 75) {
+  if (
+    files.length === 0 ||
+    files.length > BROWSER_IMPORT_MEDIA_LIMITS.MAX_MEDIA_FILES
+  ) {
     return {
       success: false,
       code: 'INVALID_SELECTION',
       error: 'No expected media files were resolved for the selected packages.',
     };
+  }
+  for (const file of files) {
+  if (file.assetType === 'snapshot_image') {
+    if (
+      !Number.isInteger(file.galleryPosition) ||
+      file.galleryPosition === null ||
+      file.galleryPosition < 1 ||
+      file.galleryPosition > MAX_GALLERY_IMAGES
+    ) {
+      return {
+        success: false,
+        code: 'INVALID_SELECTION',
+        error: 'A snapshot image has an invalid gallery position.',
+      };
+    }
+  } else if (file.galleryPosition !== null) {
+    return {
+      success: false,
+      code: 'INVALID_SELECTION',
+      error: 'Only snapshot images may have a gallery position.',
+    };
+  }
   }
 
   const supabase = createSupabaseAdminClientCore();
@@ -161,6 +192,7 @@ export async function stageBrowserImportMedia(params: {
       assetType: f.assetType,
       fileName: f.fileName,
       fileSizeBytes: f.fileSizeBytes,
+      galleryPosition: f.galleryPosition,
       snapshotAltText: f.snapshotAltText,
     })),
   });
@@ -224,6 +256,7 @@ export async function stageBrowserImportMedia(params: {
     projectPublicId: f.projectPublicId,
     packagePath: f.packagePath,
     assetType: f.assetType,
+    galleryPosition: f.galleryPosition,
     fileName: f.fileName,
     storageBucket: bucket,
     storagePath: buildStoragePath(f.projectPublicId, f.assetType, f.fileName),

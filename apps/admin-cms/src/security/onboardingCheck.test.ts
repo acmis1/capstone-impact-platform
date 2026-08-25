@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
 import {
+  EXPECTED_MIGRATION_FILENAMES,
   performOnboardingCheck,
   isVersionInNode24Range,
   isVersionInNpm11Range,
@@ -13,40 +14,7 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
   const realRepoRoot = path.resolve(__dirname, '../../../..');
 
   const validMigrations = [
-    '20260601035138_staging_schema.sql',
-    '20260601035139_staging_rls_policies.sql',
-    '20260715102956_admin_auth_identity.sql',
-    '20260719003407_explicit_data_api_grants.sql',
-    '20260719165118_initial_admin_bootstrap.sql',
-    '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
-    '20260803174000_harden_function_execute_defaults.sql',
-    '20260803180000_transactional_review_actions.sql',
-    '20260808170000_transactional_project_metadata_update.sql',
-    '20260810090000_atomic_browser_import_metadata_stage.sql',
-    '20260810120000_atomic_browser_import_media_stage.sql',
-    '20260810150000_atomic_import_batch_review_submit.sql',
-    '20260810180000_participant_preview_links.sql',
-    '20260811090000_participant_preview_confirmations.sql',
-    '20260811120000_participant_preview_correction_requests.sql',
-    '20260811130000_participant_preview_correction_resolution.sql',
-    '20260811150000_publication_readiness_gate.sql',
-    '20260811160000_approval_edit_gate.sql',
-    '20260812120000_controlled_publication_execution.sql',
-    '20260812150000_controlled_public_removal.sql',
-    '20260813002154_project_metadata_audit_history.sql',
-    '20260813120000_staff_identity_provisioning.sql',
-    '20260813180000_participant_preview_email_notifications.sql',
-    '20260813190000_participant_preview_reminder_schedules.sql',
-    '20260814090000_accessible_full_text_gate.sql',
-    '20260814140000_snapshot_image_alt_text.sql',
-    '20260816144917_staging_uat_direct_account_finalization.sql',
-    '20260817090000_private_media_approval_gate.sql',
-    '20260819214431_password_recovery_session_provenance.sql',
-    '20260820120000_assistive_validation_persistence.sql',
-    '20260820160000_assistive_validation_job_coordination.sql',
-    '20260821090000_assistive_validation_staff_inspection.sql',
-    '20260821140000_assistive_duplicate_shortlist.sql',
-    '20260824120000_bulk_project_review_concurrency.sql',
+    ...EXPECTED_MIGRATION_FILENAMES,
   ];
 
   const defaultMockExec = (cmd: string): string => {
@@ -241,93 +209,47 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
 
   it('9. Valid migrations pass even when mocked directory enumeration is shuffled', () => {
     const shuffled = [...validMigrations].reverse();
+
     const result = validateMigrationsList(shuffled);
+
     expect(result.passed).toBe(true);
-    expect(result.message).toContain('34 timestamped migrations');
+    expect(result.message).toContain(
+      `${EXPECTED_MIGRATION_FILENAMES.length} timestamped migrations`,
+    );
   });
 
   it('10. Duplicate migration timestamps fail', () => {
-    const duplicateMigrations = [
-      '20260601035138_staging_schema.sql',
-      '20260601035138_duplicate_timestamp.sql',
-      '20260715102956_admin_auth_identity.sql',
-      '20260719003407_explicit_data_api_grants.sql',
-      '20260719165118_initial_admin_bootstrap.sql',
-      '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
-      '20260803174000_harden_function_execute_defaults.sql',
-      '20260803180000_transactional_review_actions.sql',
-      '20260808170000_transactional_project_metadata_update.sql',
-      '20260810090000_atomic_browser_import_metadata_stage.sql',
-      '20260810120000_atomic_browser_import_media_stage.sql',
-      '20260810150000_atomic_import_batch_review_submit.sql',
-      '20260810180000_participant_preview_links.sql',
-      '20260811090000_participant_preview_confirmations.sql',
-      '20260811120000_participant_preview_correction_requests.sql',
-      '20260811130000_participant_preview_correction_resolution.sql',
-      '20260811150000_publication_readiness_gate.sql',
-      '20260811160000_approval_edit_gate.sql',
-      '20260812120000_controlled_publication_execution.sql',
-      '20260812150000_controlled_public_removal.sql',
-      '20260813002154_project_metadata_audit_history.sql',
-      '20260813120000_staff_identity_provisioning.sql',
-      '20260813180000_participant_preview_email_notifications.sql',
-      '20260813190000_participant_preview_reminder_schedules.sql',
-      '20260814090000_accessible_full_text_gate.sql',
-      '20260814140000_snapshot_image_alt_text.sql',
-      '20260816144917_staging_uat_direct_account_finalization.sql',
-      '20260817090000_private_media_approval_gate.sql',
-      '20260819214431_password_recovery_session_provenance.sql',
-      '20260820120000_assistive_validation_persistence.sql',
-      '20260820160000_assistive_validation_job_coordination.sql',
-      '20260821090000_assistive_validation_staff_inspection.sql',
-      '20260821140000_assistive_duplicate_shortlist.sql',
-      '20260824120000_bulk_project_review_concurrency.sql',
+    const duplicateMigrations: string[] = [
+      ...EXPECTED_MIGRATION_FILENAMES,
     ];
+
+    duplicateMigrations[8] =
+      '20260803180000_duplicate_timestamp.sql';
+
     const result = validateMigrationsList(duplicateMigrations);
+
     expect(result.passed).toBe(false);
-    expect(result.message).toContain('Duplicate migration timestamps detected');
+    expect(result.message).toContain(
+      'Duplicate migration timestamps detected',
+    );
   });
 
   it('11. Missing migration 0008 fails', () => {
-    const missing0008 = [
-      '20260601035138_staging_schema.sql',
-      '20260601035139_staging_rls_policies.sql',
-      '20260715102956_admin_auth_identity.sql',
-      '20260719003407_explicit_data_api_grants.sql',
-      '20260719165118_initial_admin_bootstrap.sql',
-      '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
-      '20260803174000_harden_function_execute_defaults.sql',
-      '20260803180000_wrong_name.sql',
-      '20260808170000_transactional_project_metadata_update.sql',
-      '20260810090000_atomic_browser_import_metadata_stage.sql',
-      '20260810120000_atomic_browser_import_media_stage.sql',
-      '20260810150000_atomic_import_batch_review_submit.sql',
-      '20260810180000_participant_preview_links.sql',
-      '20260811090000_participant_preview_confirmations.sql',
-      '20260811120000_participant_preview_correction_requests.sql',
-      '20260811130000_participant_preview_correction_resolution.sql',
-      '20260811150000_publication_readiness_gate.sql',
-      '20260811160000_approval_edit_gate.sql',
-      '20260812120000_controlled_publication_execution.sql',
-      '20260812150000_controlled_public_removal.sql',
-      '20260813002154_project_metadata_audit_history.sql',
-      '20260813120000_staff_identity_provisioning.sql',
-      '20260813180000_participant_preview_email_notifications.sql',
-      '20260813190000_participant_preview_reminder_schedules.sql',
-      '20260814090000_accessible_full_text_gate.sql',
-      '20260814140000_snapshot_image_alt_text.sql',
-      '20260816144917_staging_uat_direct_account_finalization.sql',
-      '20260817090000_private_media_approval_gate.sql',
-      '20260819214431_password_recovery_session_provenance.sql',
-      '20260820120000_assistive_validation_persistence.sql',
-      '20260820160000_assistive_validation_job_coordination.sql',
-      '20260821090000_assistive_validation_staff_inspection.sql',
-      '20260821140000_assistive_duplicate_shortlist.sql',
-      '20260824120000_bulk_project_review_concurrency.sql',
+    const missing0008: string[] = [
+      ...EXPECTED_MIGRATION_FILENAMES,
     ];
+
+    missing0008.splice(7, 1);
+    missing0008.push(
+      '99999999999999_placeholder_migration.sql',
+    );
+
     const result = validateMigrationsList(missing0008);
+
     expect(result.passed).toBe(false);
-    expect(result.message).toContain('Migration file at index 7 does not match expected identity');
+    expect(result.message).toContain(
+      'Migration file at index 7 does not match expected identity',
+    );
   });
 
   it('12. Installed Supabase package missing fails', () => {
@@ -556,45 +478,19 @@ describe('Harden Second-Developer Onboarding Precheck Unit Tests', () => {
   });
 
   it('21. Exact expected migration filenames are required', () => {
-    const invalidMigrationNames = [
-      '20260601035138_staging_schema.sql',
-      '20260601035139_staging_rls_policies.sql',
-      '20260715102956_admin_auth_identity.sql',
-      '20260719003407_explicit_data_api_grants.sql',
-      '20260719165118_initial_admin_bootstrap.sql',
-      '20260719165119_fix_initial_admin_bootstrap_runtime.sql',
-      '20260803174000_harden_function_execute_defaults.sql',
-      '20260803180000_different_migration_name.sql',
-      '20260808170000_transactional_project_metadata_update.sql',
-      '20260810090000_atomic_browser_import_metadata_stage.sql',
-      '20260810120000_atomic_browser_import_media_stage.sql',
-      '20260810150000_atomic_import_batch_review_submit.sql',
-      '20260810180000_participant_preview_links.sql',
-      '20260811090000_participant_preview_confirmations.sql',
-      '20260811120000_participant_preview_correction_requests.sql',
-      '20260811130000_participant_preview_correction_resolution.sql',
-      '20260811150000_publication_readiness_gate.sql',
-      '20260811160000_approval_edit_gate.sql',
-      '20260812120000_controlled_publication_execution.sql',
-      '20260812150000_controlled_public_removal.sql',
-      '20260813002154_project_metadata_audit_history.sql',
-      '20260813120000_staff_identity_provisioning.sql',
-      '20260813180000_participant_preview_email_notifications.sql',
-      '20260813190000_participant_preview_reminder_schedules.sql',
-      '20260814090000_accessible_full_text_gate.sql',
-      '20260814140000_snapshot_image_alt_text.sql',
-      '20260816144917_staging_uat_direct_account_finalization.sql',
-      '20260817090000_private_media_approval_gate.sql',
-      '20260819214431_password_recovery_session_provenance.sql',
-      '20260820120000_assistive_validation_persistence.sql',
-      '20260820160000_assistive_validation_job_coordination.sql',
-      '20260821090000_assistive_validation_staff_inspection.sql',
-      '20260821140000_assistive_duplicate_shortlist.sql',
-      '20260824120000_bulk_project_review_concurrency.sql',
+    const invalidMigrationNames: string[] = [
+      ...EXPECTED_MIGRATION_FILENAMES,
     ];
+
+    invalidMigrationNames[7] =
+      '20260803180000_different_migration_name.sql';
+
     const result = validateMigrationsList(invalidMigrationNames);
+
     expect(result.passed).toBe(false);
-    expect(result.message).toContain('Migration file at index 7 does not match expected identity');
+    expect(result.message).toContain(
+      'Migration file at index 7 does not match expected identity',
+    );
   });
 
   it('22. Windows path with spaces is sanitized', () => {

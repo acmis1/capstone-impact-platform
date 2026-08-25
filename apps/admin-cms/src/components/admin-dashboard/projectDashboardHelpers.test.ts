@@ -102,7 +102,7 @@ describe('projectDashboardHelpers', () => {
         posterText: 'Secret poster text',
         accessibilityText: 'Secret accessibility text',
         snapshots: ['https://secret.com/snap1.jpg'],
-        snapshotMedia: [{ url: 'https://secret.com/snap1.jpg', altText: 'Mock snapshot description.' }],
+        snapshotMedia: [{ url: 'https://secret.com/snap1.jpg', altText: 'Mock snapshot description.',galleryPosition: 1, }],
         videoUrl: 'https://youtube.com/watch?v=secret',
         demoUrl: 'https://demo.com',
         repositoryUrl: 'https://github.com/secret',

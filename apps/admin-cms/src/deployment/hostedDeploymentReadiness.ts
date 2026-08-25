@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 34;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 40;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -41,7 +41,13 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260820160000_assistive_validation_job_coordination.sql',
   '20260821090000_assistive_validation_staff_inspection.sql',
   '20260821140000_assistive_duplicate_shortlist.sql',
+  '20260824050000_multi_image_gallery.sql',
+  '20260824055000_snapshot_alt_text_media_identity.sql',
+  '20260824060000_multi_image_gallery_approval_gate.sql',
+  '20260824070000_multi_image_gallery_participant_preview.sql',
+  '20260824080000_multi_image_gallery_publication_readiness.sql',
   '20260824120000_bulk_project_review_concurrency.sql',
+  '20260825025000_multi_image_gallery_review_submission.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [
@@ -167,7 +173,7 @@ export const REQUIRED_RPC_SIGNATURES = [
   rpc('schedule_participant_preview_reminder', ['p_public_id', 'p_admin_id', 'p_scheduled_for'], ['text', 'uuid', 'timestamptz']),
   rpc('cancel_participant_preview_reminder', ['p_public_id', 'p_admin_id', 'p_reference'], ['text', 'uuid', 'uuid']),
   rpc('claim_due_participant_preview_reminders', ['p_batch_limit'], ['integer']),
-  rpc('update_snapshot_image_alt_text', ['p_public_id', 'p_alt_text', 'p_expected_updated_at', 'p_admin_id'], ['text', 'text', 'timestamptz', 'uuid']),
+  rpc('update_snapshot_image_alt_text', ['p_public_id', 'p_media_asset_id', 'p_alt_text', 'p_expected_updated_at', 'p_admin_id'], ['text', 'uuid', 'text', 'timestamptz', 'uuid']),
   rpc(
     'persist_assistive_validation_run',
     ['p_project_id', 'p_actor_admin_id', 'p_input_hash', 'p_pipeline_version', 'p_status', 'p_failure_code', 'p_findings'],

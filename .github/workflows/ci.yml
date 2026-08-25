@@ -132,9 +132,8 @@ jobs:
       - name: Onboarding Toolchain Precheck
         run: npm run onboarding:check
 
-      # This verifier resets migrations to validate the 0030 -> 0034 upgrade. Run it before
-      # normal Local setup creates shared staff and storage fixtures.
-      - name: Start isolated Local Supabase stack for migration upgrade verification
+      # This destructive migration-upgrade verifier must run before normal Local setup establishes shared staff and storage fixtures.
+      - name: Start Local Supabase specifically for migration-upgrade verification
         run: npm run supabase:start
         env:
           SUPABASE_START_TIMEOUT_MS: '600000'
@@ -150,10 +149,13 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify thirty-four migrations and local integrity
+      - name: Verify forty migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 34
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 40
+
+      - name: Verify multi-image gallery position invariant against the real schema
+        run: npm run verify:gallery-constraint-runtime --workspace=apps/admin-cms
 
       - name: Verify read-only hosted readiness inspection against Local Supabase
         run: npm run verify:hosted-readiness-inspection-runtime

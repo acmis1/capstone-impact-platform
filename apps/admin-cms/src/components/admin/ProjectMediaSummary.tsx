@@ -5,7 +5,7 @@ import { MediaAccessibilityReview } from '../admin-media/MediaAccessibilityRevie
 import { MediaPreview } from '../admin-media/MediaPreview';
 import type { ProjectMediaPreviewItem } from '../admin-media/mediaPreviewTypes';
 import { isValidMediaUrl } from '../admin-media/mediaPreviewUtils';
-import { SnapshotAltTextEditor } from './SnapshotAltTextEditor';
+import { SnapshotAltTextGalleryEditor } from './SnapshotAltTextGalleryEditor';
 import type { SnapshotAltTextActionResult } from '../../projects/snapshotAltText';
 import { ExternalLink as ExternalLinkIcon, Video, Globe, Code2 } from 'lucide-react';
 
@@ -42,9 +42,13 @@ function ExternalLink({ label, url }: { label: string; url: string }) {
 
 /** Uploaded-file media is authoritative; project URLs below remain external showcase links. */
 export function ProjectMediaSummary({ project, mediaItems, mediaAvailable, snapshotAltText }: ProjectMediaSummaryProps) {
-  // The media uniqueness contract allows at most one snapshot image per project today; the editor
-  // is rendered against that single asset rather than assuming a gallery.
-  const snapshotMedia = mediaItems.find((media) => media.assetType === 'snapshot_image');
+  const snapshotMediaItems = mediaItems
+    .filter((media) => media.assetType === 'snapshot_image')
+    .sort(
+      (a, b) =>
+        (a.galleryPosition ?? Number.MAX_SAFE_INTEGER) -
+        (b.galleryPosition ?? Number.MAX_SAFE_INTEGER),
+    );
 
   return (
     <div className="flex flex-col gap-5 text-sm">
@@ -69,17 +73,15 @@ export function ProjectMediaSummary({ project, mediaItems, mediaAvailable, snaps
         </div>
       )}
 
-      {mediaAvailable && snapshotMedia && snapshotAltText && (
-        <div className="border-t border-border pt-4">
-          <SnapshotAltTextEditor
-            publicId={project.publicId || ''}
-            initialAltText={snapshotMedia.altText ?? ''}
-            initialExpectedUpdatedAt={snapshotAltText.expectedUpdatedAt}
-            canEdit={snapshotAltText.canEdit}
-            projectStatus={project.status}
-            saveAction={snapshotAltText.saveAction}
-          />
-        </div>
+      {mediaAvailable && snapshotAltText && snapshotMediaItems.length > 0 && (
+        <SnapshotAltTextGalleryEditor
+          publicId={project.publicId || ''}
+          mediaItems={snapshotMediaItems}
+          canEdit={snapshotAltText.canEdit}
+          initialExpectedUpdatedAt={snapshotAltText.expectedUpdatedAt}
+          projectStatus={project.status}
+          saveAction={snapshotAltText.saveAction}
+        />
       )}
 
       {/* External Showcase Links */}

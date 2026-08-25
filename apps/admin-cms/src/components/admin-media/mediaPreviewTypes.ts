@@ -17,5 +17,12 @@ export interface MediaPreviewItem {
 export interface ProjectMediaPreviewItem extends MediaPreviewItem {
   id: string;
   assetType: string;
+
+  /**
+   * Deterministic order for snapshot_image.
+   * Null for non-gallery media such as poster image/PDF.
+   */
+  galleryPosition: number | null;
+
   previewSource: 'private-signed' | 'public' | 'unavailable';
 }

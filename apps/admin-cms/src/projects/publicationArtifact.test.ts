@@ -6,6 +6,8 @@ const UUIDS = [
   '11111111-1111-4111-8111-111111111111',
   '22222222-2222-4222-8222-222222222222',
   '33333333-3333-4333-8333-333333333333',
+  '44444444-4444-4444-8444-444444444444',
+  '55555555-5555-4555-8555-555555555555',
 ];
 
 function source(
@@ -13,13 +15,30 @@ function source(
   assetType: string,
   fileName: string,
   mimeType: string,
-  altTextPublic: string | null = assetType === 'snapshot_image' ? 'Mock snapshot description.' : null,
+  altTextPublic: string | null =
+    assetType === 'snapshot_image'
+      ? 'Mock snapshot description.'
+      : null,
+  galleryPosition: number | null =
+    assetType === 'snapshot_image'
+      ? 1
+      : null,
 ): PublicationMediaSource {
   return {
-    id: UUIDS[index], projectId: 'project-db-id', assetType, fileName,
-    storageBucket: 'project-drafts-private', storagePath: `drafts/target/${assetType}/${fileName}`,
-    publicUrl: null, publicStorageBucket: null, publicStoragePath: null,
-    mimeType, fileSizeBytes: 100, isPublicApproved: false, altTextPublic,
+    id: UUIDS[index],
+    projectId: 'project-db-id',
+    assetType,
+    galleryPosition,
+    fileName,
+    storageBucket: 'project-drafts-private',
+    storagePath: `drafts/target/${assetType}/${fileName}`,
+    publicUrl: null,
+    publicStorageBucket: null,
+    publicStoragePath: null,
+    mimeType,
+    fileSizeBytes: 100,
+    isPublicApproved: false,
+    altTextPublic,
   };
 }
 
@@ -54,6 +73,99 @@ describe('publication artifact and media promotion planning', () => {
     expect(plan.content).toContain('/project-public-assets/published/target/poster_image/poster.png');
     expect(plan.content).not.toContain('project-drafts-private');
     expect(plan.content).not.toContain('/drafts/');
+  });
+
+  it('publishes a multi-image gallery in authoritative numeric position order', () => {
+    const plan = planPublicationArtifact({
+      projects: [
+        createMockProject({
+          publicId: 'target',
+          status: 'approved',
+          poster: '',
+          posterPdf: '',
+          snapshots: [],
+          snapshotMedia: [],
+        }),
+      ],
+      targetPublicId: 'target',
+      mediaAssets: [
+        source(
+          0,
+          'poster_image',
+          'poster.png',
+          'image/png',
+        ),
+        source(
+          1,
+          'poster_pdf',
+          'poster.pdf',
+          'application/pdf',
+        ),
+
+        // Deliberately supplied out of order: 3, 1, 2.
+        source(
+          4,
+          'snapshot_image',
+          'snapshot-3.png',
+          'image/png',
+          'Snapshot three.',
+          3,
+        ),
+        source(
+          2,
+          'snapshot_image',
+          'snapshot-1.png',
+          'image/png',
+          'Snapshot one.',
+          1,
+        ),
+        source(
+          3,
+          'snapshot_image',
+          'snapshot-2.png',
+          'image/png',
+          'Snapshot two.',
+          2,
+        ),
+      ],
+      privateBucket: 'project-drafts-private',
+      publicBucket: 'project-public-assets',
+      getPublicUrl: publicUrl,
+    });
+
+    const snapshotPromotions = plan.mediaPromotions.filter(
+      (item) => item.assetType === 'snapshot_image',
+    );
+
+    expect(
+      snapshotPromotions.map((item) => item.galleryPosition),
+    ).toEqual([1, 2, 3]);
+
+    const record = plan.feed.find(
+      (item) => item.publicId === 'target',
+    );
+
+    expect(record?.snapshotMedia).toEqual([
+      {
+        url: snapshotPromotions[0].publicUrl,
+        altText: 'Snapshot one.',
+        galleryPosition: 1,
+      },
+      {
+        url: snapshotPromotions[1].publicUrl,
+        altText: 'Snapshot two.',
+        galleryPosition: 2,
+      },
+      {
+        url: snapshotPromotions[2].publicUrl,
+        altText: 'Snapshot three.',
+        galleryPosition: 3,
+      },
+    ]);
+
+    expect(record?.snapshots).toEqual(
+      snapshotPromotions.map((item) => item.publicUrl),
+    );
   });
 
   it('supports legitimate legacy public URLs when no private promotion is needed', () => {

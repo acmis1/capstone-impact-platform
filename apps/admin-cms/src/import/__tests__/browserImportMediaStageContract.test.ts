@@ -9,8 +9,8 @@ describe('computeCanonicalMediaIntentHash', () => {
     batchId: '11111111-1111-1111-1111-111111111111',
     metadataIntentHash: 'a'.repeat(64),
     files: [
-      { packagePath: 'root/pkg-a', projectPublicId: 'pkg-a', assetType: 'poster_image', fileName: 'poster.png', fileSizeBytes: 300 },
-      { packagePath: 'root/pkg-a', projectPublicId: 'pkg-a', assetType: 'poster_pdf', fileName: 'poster.pdf', fileSizeBytes: 500 },
+      { packagePath: 'root/pkg-a', projectPublicId: 'pkg-a', assetType: 'poster_image', fileName: 'poster.png', fileSizeBytes: 300, galleryPosition: null },
+      { packagePath: 'root/pkg-a', projectPublicId: 'pkg-a', assetType: 'poster_pdf', fileName: 'poster.pdf', fileSizeBytes: 500, galleryPosition: null },
     ],
   };
 
@@ -47,6 +47,41 @@ describe('computeCanonicalMediaIntentHash', () => {
       files: baseParams.files.map((f, i) => (i === 0 ? { ...f, fileSizeBytes: f.fileSizeBytes + 1 } : f)),
     };
     expect(computeCanonicalMediaIntentHash(baseParams)).not.toBe(computeCanonicalMediaIntentHash(tampered));
+  });
+  it('changes when a snapshot gallery position changes', () => {
+    const withSnapshot = {
+      ...baseParams,
+      files: [
+        ...baseParams.files,
+        {
+          packagePath: 'root/pkg-a',
+          projectPublicId: 'pkg-a',
+          assetType: 'snapshot_image',
+          fileName: 'snapshot-1.png',
+          fileSizeBytes: 700,
+          galleryPosition: 1,
+          snapshotAltText: 'Overview of the project interface.',
+        },
+      ],
+    };
+
+    const reorderedPosition = {
+      ...withSnapshot,
+      files: withSnapshot.files.map((file) =>
+        file.assetType === 'snapshot_image'
+          ? {
+              ...file,
+              galleryPosition: 2,
+            }
+          : file,
+      ),
+    };
+
+    expect(
+      computeCanonicalMediaIntentHash(withSnapshot),
+    ).not.toBe(
+      computeCanonicalMediaIntentHash(reorderedPosition),
+    );
   });
 });
 

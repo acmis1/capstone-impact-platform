@@ -14,6 +14,8 @@ import {
 } from './projectDetailsWorkbookContract';
 import { validateParticipantContactEmail } from '../domain/participantContactEmail';
 import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
+type WorkbookInternalField =
+  (typeof COLUMN_DEFINITIONS)[number]['internalField'];
 
 interface CellExtractionResult {
   rawString: string;
@@ -222,7 +224,7 @@ export async function parseProjectDetailsWorkbook(
 
   // 3. Process Header Row
   const columnMap = new Map<
-    keyof ProjectDetailsWorkbookMetadata | 'templateId' | 'featuredMedia',
+    WorkbookInternalField,
     { colNumber: number; colDef: ColumnDefinition; rawHeader: string }
   >();
   const mappedFieldNames = new Set<string>();
@@ -282,7 +284,7 @@ export async function parseProjectDetailsWorkbook(
 
   // 4. Extract Project Data Row Cells
   const extractFieldValue = (
-    field: keyof ProjectDetailsWorkbookMetadata | 'templateId' | 'featuredMedia'
+    field: WorkbookInternalField
   ): CellExtractionResult => {
     const colInfo = columnMap.get(field);
     if (!colInfo) {
@@ -403,28 +405,70 @@ export async function parseProjectDetailsWorkbook(
   // the value is required only when snapshot-1.png actually exists. What the parser can decide is
   // enforced here and is unconditional: a formula cell with no usable cached result is unreadable
   // rather than blank, and an oversized value is rejected instead of being silently truncated.
-  const snapshotAltCell = extractFieldValue('snapshotAltText');
+  const galleryAltFields = [
+    { position: 1, fieldName: 'snapshotAltText' },
+    { position: 2, fieldName: 'snapshot2AltText' },
+    { position: 3, fieldName: 'snapshot3AltText' },
+    { position: 4, fieldName: 'snapshot4AltText' },
+    { position: 5, fieldName: 'snapshot5AltText' },
+    { position: 6, fieldName: 'snapshot6AltText' },
+    { position: 7, fieldName: 'snapshot7AltText' },
+    { position: 8, fieldName: 'snapshot8AltText' },
+    { position: 9, fieldName: 'snapshot9AltText' },
+    { position: 10, fieldName: 'snapshot10AltText' },
+  ] as const;
+
   let snapshotAltText = '';
-  if (snapshotAltCell.isFormula && !snapshotAltCell.hasUsableResult) {
-    errors.push({
-      code: 'WORKBOOK_UNUSABLE_FORMULA',
-      message: 'Formula cell does not contain a usable cached result.',
-      severity: 'error',
-      fieldName: 'snapshotAltText',
-      columnName: snapshotAltCell.colInfo?.rawHeader,
-      rowNumber: projectRowObj.rowNumber
-    });
-  } else if (snapshotAltCell.rawString.length > ACCESSIBLE_CONTENT_LIMITS.snapshotAltText) {
-    errors.push({
-      code: 'WORKBOOK_VALUE_TOO_LONG',
-      message: `Required field exceeds the maximum of ${ACCESSIBLE_CONTENT_LIMITS.snapshotAltText} characters.`,
-      severity: 'error',
-      fieldName: 'snapshotAltText',
-      columnName: snapshotAltCell.colInfo?.rawHeader,
-      rowNumber: projectRowObj.rowNumber
-    });
-  } else {
-    snapshotAltText = snapshotAltCell.rawString;
+
+  const galleryAltTexts: {
+    position: number;
+    altText: string;
+  }[] = [];
+
+  for (const { position, fieldName } of galleryAltFields) {
+    const altCell = extractFieldValue(fieldName);
+
+    if (altCell.isFormula && !altCell.hasUsableResult) {
+      errors.push({
+        code: 'WORKBOOK_UNUSABLE_FORMULA',
+        message: 'Formula cell does not contain a usable cached result.',
+        severity: 'error',
+        fieldName,
+        columnName: altCell.colInfo?.rawHeader,
+        rowNumber: projectRowObj.rowNumber,
+      });
+
+      continue;
+    }
+
+    if (
+      altCell.rawString.length >
+      ACCESSIBLE_CONTENT_LIMITS.snapshotAltText
+    ) {
+      errors.push({
+        code: 'WORKBOOK_VALUE_TOO_LONG',
+        message: `Required field exceeds the maximum of ${ACCESSIBLE_CONTENT_LIMITS.snapshotAltText} characters.`,
+        severity: 'error',
+        fieldName,
+        columnName: altCell.colInfo?.rawHeader,
+        rowNumber: projectRowObj.rowNumber,
+      });
+
+      continue;
+    }
+
+    const altText = altCell.rawString.trim();
+
+    if (position === 1) {
+      snapshotAltText = altText;
+    }
+
+    if (altText !== '') {
+      galleryAltTexts.push({
+        position,
+        altText,
+      });
+    }
   }
 
   // Year validation
@@ -604,6 +648,7 @@ export async function parseProjectDetailsWorkbook(
     posterText,
     accessibilityText,
     snapshotAltText,
+    galleryAltTexts,
     layoutConfig: {
       templateId,
       featuredMedia,

@@ -2,9 +2,10 @@
  * Media-stage-specific limits. Metadata (xlsx/json) limits continue to live in
  * BROWSER_IMPORT_LIMITS; these bound the additional binary media payload.
  */
+import { MAX_GALLERY_IMAGES } from './galleryConvention';
 export const BROWSER_IMPORT_MEDIA_LIMITS = {
-  MAX_MEDIA_FILES: 75, // 25 packages * 3 recognized media files per package
-  MAX_MEDIA_MULTIPART_REQUEST_BYTES: 150 * 1024 * 1024, // 150 MB ceiling for a single media-stage request
+  MAX_MEDIA_FILES: 25 * (2 + MAX_GALLERY_IMAGES),
+  MAX_MEDIA_MULTIPART_REQUEST_BYTES: 150 * 1024 * 1024,
 } as const;
 
 export type BrowserImportMediaStageErrorCode =
@@ -153,6 +154,11 @@ export interface CanonicalExpectedMediaFile {
   assetType: string;
   fileName: string;
   fileSizeBytes: number;
+  /**
+   * Deterministic gallery order for snapshot_image.
+   * Null for poster_image and poster_pdf.
+   */
+  galleryPosition: number | null;
   /**
    * Authoritative snapshot alt text for this file, or null when it has none. Part of the canonical
    * intent, not display metadata — see the binding note on `computeCanonicalMediaIntentHash`.

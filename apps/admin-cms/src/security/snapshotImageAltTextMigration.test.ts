@@ -3,7 +3,6 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { EXPECTED_MIGRATION_FILENAMES } from '../scripts/onboardingCheck';
 
 describe('snapshot image alt text migration contract', () => {
   const root = path.resolve(__dirname, '../../../..');
@@ -30,17 +29,28 @@ describe('snapshot image alt text migration contract', () => {
   };
 
   it('is exactly Migration 0026 and preserves all inherited migration bytes', () => {
-    const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
+    const files = fs
+      .readdirSync(migrations)
+      .filter((file) => file.endsWith('.sql'))
+      .sort();
+
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(34);
     expect(files[25]).toBe(filename);
+
     for (const inherited of files.slice(0, 25)) {
-      const local = fs.readFileSync(path.join(migrations, inherited), 'utf8').replace(/\r\n/g, '\n');
+      const local = fs
+        .readFileSync(path.join(migrations, inherited), 'utf8')
+        .replace(/\r\n/g, '\n');
+
       const base = execFileSync(
-        'git', ['show', `origin/main:infra/supabase/migrations/${inherited}`],
+        'git',
+        ['show', `origin/main:infra/supabase/migrations/${inherited}`],
         { cwd: root, encoding: 'utf8' },
       ).replace(/\r\n/g, '\n');
-      expect(crypto.createHash('sha256').update(local).digest('hex')).toBe(
+
+      expect(
+        crypto.createHash('sha256').update(local).digest('hex'),
+      ).toBe(
         crypto.createHash('sha256').update(base).digest('hex'),
       );
     }

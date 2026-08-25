@@ -43,6 +43,14 @@ export function buildImportPackageManifestFromWorkbook(
     ...(resolvedPosterText ? { posterText: resolvedPosterText } : {}),
     ...(metadata.accessibilityText ? { accessibilityText: metadata.accessibilityText } : {}),
     ...(metadata.snapshotAltText ? { snapshotAltText: metadata.snapshotAltText } : {}),
+    ...(metadata.galleryAltTexts.length > 0
+    ? {
+        galleryAltTexts: metadata.galleryAltTexts.map((item) => ({
+          position: item.position,
+          altText: item.altText,
+        })),
+      }
+    : {}),
     layoutConfig: {
       templateId: metadata.layoutConfig.templateId,
       featuredMedia: metadata.layoutConfig.featuredMedia,

@@ -112,6 +112,71 @@ describe('parseProjectDetailsWorkbook', () => {
     expect(result.metadata.layoutConfig.featuredMedia).toBe('poster');
     expect(result.warnings).toHaveLength(0);
   });
+  it('1b. parses multiple gallery alt text columns and preserves deterministic positions', async () => {
+    const headers = [
+      ...defaultCanonicalHeaders,
+      'Snapshot image alt text',
+      'Snapshot 2 alt text',
+      'Snapshot 3 alt text',
+    ];
+
+    const data = [
+      ...defaultCanonicalData,
+      'Overview of the project interface.',
+      'Dashboard showing project results.',
+      'Mobile view of the participant workflow.',
+    ];
+
+    const buf = await createWorkbookBuffer({
+      headers,
+      dataRows: [data],
+    });
+
+    const result = await parseProjectDetailsWorkbook(buf);
+
+    expect(result.metadata.snapshotAltText).toBe(
+      'Overview of the project interface.',
+    );
+
+    expect(result.metadata.galleryAltTexts).toEqual([
+      {
+        position: 1,
+        altText: 'Overview of the project interface.',
+      },
+      {
+        position: 2,
+        altText: 'Dashboard showing project results.',
+      },
+      {
+        position: 3,
+        altText: 'Mobile view of the participant workflow.',
+      },
+    ]);
+
+    const manifest = buildImportPackageManifestFromWorkbook({
+      parsedWorkbook: result,
+      publicId: '2026-gallery-test',
+    });
+
+    expect(manifest.snapshotAltText).toBe(
+      'Overview of the project interface.',
+    );
+
+    expect(manifest.galleryAltTexts).toEqual([
+      {
+        position: 1,
+        altText: 'Overview of the project interface.',
+      },
+      {
+        position: 2,
+        altText: 'Dashboard showing project results.',
+      },
+      {
+        position: 3,
+        altText: 'Mobile view of the participant workflow.',
+      },
+    ]);
+  });
 
   // 2. Valid workbook using technical aliases
   it('2. parses a valid workbook using technical aliases', async () => {
