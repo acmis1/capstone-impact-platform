@@ -51,7 +51,13 @@ describe('runAdminAppSmokeTest Lifecycle & Readiness Unit Tests', () => {
       gracefulShutdownTimeoutMs: 200,
       fetcher: mockFetcher,
       spawnRunner: () => {
-        setImmediate(() => mockProc.emit('exit', 1));
+        setImmediate(() => {
+          for (let index = 0; index < 60; index++) {
+            mockProc.stderr?.emit('data', Buffer.from(`older-${index}-${'x'.repeat(80)}\n`));
+          }
+          mockProc.stderr?.emit('data', Buffer.from('LATEST_EARLY_EXIT API_TOKEN=early-exit-token Authorization: Bearer early-exit-bearer'));
+          mockProc.emit('exit', 1);
+        });
         return mockProc;
       },
     });
@@ -59,6 +65,10 @@ describe('runAdminAppSmokeTest Lifecycle & Readiness Unit Tests', () => {
     const result = await promise;
     expect(result.success).toBe(false);
     expect(result.errorDetail).toContain('Next.js server exited early with code 1');
+    expect(result.errorDetail).toContain('LATEST_EARLY_EXIT');
+    expect(result.errorDetail).toContain('API_TOKEN=[REDACTED]');
+    expect(result.errorDetail).not.toContain('early-exit-token');
+    expect(result.errorDetail).not.toContain('early-exit-bearer');
   });
 
   it('3. Returns failure when login page body lacks stable application marker', async () => {
@@ -104,5 +114,41 @@ describe('runAdminAppSmokeTest Lifecycle & Readiness Unit Tests', () => {
     expect(result.healthOk).toBe(false);
     expect(result.loginOk).toBe(false);
     expect(result.errorDetail).toContain('Application readiness timeout');
+  });
+
+  it('5. Includes bounded, sanitized child-process output when readiness polling times out', async () => {
+    const mockProc = createMockChildProcess();
+    const mockFetcher = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const result = await runAdminAppSmokeTest({
+      readinessTimeoutMs: 1_200,
+      gracefulShutdownTimeoutMs: 200,
+      fetcher: mockFetcher,
+      spawnRunner: () => {
+        setImmediate(() => {
+          mockProc.stdout?.emit('data', Buffer.from(`${'x'.repeat(1_100)} SENSITIVE_TOKEN=top-secret-token CACHE_KEY=cache-key-secret SESSION_SECRET=session-secret password=password-secret credential=credential-secret Bearer bearer-secret Authorization: Bearer authorization-secret`));
+          mockProc.stderr?.emit('data', Buffer.from('Supabase service_role_key=service-role-secret failed to connect'));
+        });
+        return mockProc;
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.errorDetail).toContain('stdout tail:');
+    expect(result.errorDetail).toContain('stderr tail:');
+    expect(result.errorDetail).toContain('SENSITIVE_TOKEN=[REDACTED]');
+    expect(result.errorDetail).toContain('CACHE_KEY=[REDACTED]');
+    expect(result.errorDetail).toContain('SESSION_SECRET=[REDACTED]');
+    expect(result.errorDetail).toContain('password=[REDACTED]');
+    expect(result.errorDetail).toContain('credential=[REDACTED]');
+    expect(result.errorDetail).toContain('service_role_key=[REDACTED]');
+    expect(result.errorDetail).not.toContain('top-secret-token');
+    expect(result.errorDetail).not.toContain('cache-key-secret');
+    expect(result.errorDetail).not.toContain('session-secret');
+    expect(result.errorDetail).not.toContain('password-secret');
+    expect(result.errorDetail).not.toContain('credential-secret');
+    expect(result.errorDetail).not.toContain('bearer-secret');
+    expect(result.errorDetail).not.toContain('authorization-secret');
+    expect(result.errorDetail).not.toContain('service-role-secret');
   });
 });
