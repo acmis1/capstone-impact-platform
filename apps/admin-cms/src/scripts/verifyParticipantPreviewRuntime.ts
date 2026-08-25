@@ -84,22 +84,30 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
       projectId: string,
       assetType: string,
       suffix: string,
-      overrides?: { bucket?: string; isPublicApproved?: boolean; publicUrl?: string | null }
+      overrides?: {
+        bucket?: string;
+        isPublicApproved?: boolean;
+        publicUrl?: string | null;
+        galleryPosition?: number;
+        altText?: string | null;
+      }
     ) => {
       const bucket = overrides?.bucket ?? PRIVATE_DRAFT_BUCKET;
       const isPosterImage = assetType === 'poster_image';
       const isPosterPdf = assetType === 'poster_pdf';
-      const fileName = isPosterImage ? 'poster.png' : isPosterPdf ? 'poster.pdf' : `${assetType}-${suffix}.bin`;
-      const mimeType = isPosterImage ? 'image/png' : isPosterPdf ? 'application/pdf' : 'application/octet-stream';
+      const isImage = isPosterImage || assetType === 'snapshot_image';
+      const fileName = isPosterImage ? 'poster.png' : isPosterPdf ? 'poster.pdf' : `${assetType}-${suffix}.png`;
+      const mimeType = isImage ? 'image/png' : isPosterPdf ? 'application/pdf' : 'application/octet-stream';
       const projectPublicId = `${testPrefix}-${suffix}`;
-      const storagePath = isPosterImage || isPosterPdf
-        ? `drafts/${projectPublicId}/${assetType}/${fileName}`
-        : `drafts/${suffix}/${assetType}/${assetType}.bin`;
+      const storagePath = `drafts/${projectPublicId}/${assetType}/${fileName}`;
       const { data, error } = await client
         .from('media_assets')
         .insert({
           project_id: projectId,
           asset_type: assetType,
+          // snapshot_image carries authoritative gallery identity; every other asset
+          // type must persist a NULL position.
+          gallery_position: assetType === 'snapshot_image' ? overrides?.galleryPosition ?? 1 : null,
           file_name: fileName,
           storage_bucket: bucket,
           storage_path: storagePath,
@@ -107,6 +115,7 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
           file_size_bytes: 10,
           public_url: overrides?.publicUrl ?? null,
           is_public_approved: overrides?.isPublicApproved ?? false,
+          alt_text_public: overrides?.altText ?? null,
         })
         .select()
         .single();
@@ -318,113 +327,108 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     }
 
     // ============================================================
-    // Test 8: Contradictory authoritative snapshot media fails closed.
-    //
-    // A snapshot row belonging to the target project must never be silently
-    // filtered out merely because it is already public-approved / has a
-    // public URL. Preview generation must reject the contradictory media
-    // state and create no participant preview.
+    // Test 8: Valid unrelated media is excluded by project scoping. In contrast, invalid
+    // same-project media fails the whole preview request closed and creates no preview.
     // ============================================================
-    console.log(
-      '--- Test 8: Contradictory snapshot media fails preview generation closed ---',
-    );
-
+    console.log('--- Test 8: Project-scoped valid media succeeds; invalid same-project media fails closed ---');
     const t8ProjA = await createProject('t8a', 'approved');
     const t8ProjB = await createProject('t8b', 'approved');
+    const t8APosterImage = await createMediaAsset(String(t8ProjA.id), 'poster_image', 't8a');
+    const t8APosterPdf = await createMediaAsset(String(t8ProjA.id), 'poster_pdf', 't8a');
+    const t8ASnapshot = await createMediaAsset(String(t8ProjA.id), 'snapshot_image', 't8a', {
+      galleryPosition: 1,
+      altText: 'Synthetic valid project A snapshot.',
+    });
+    await createRequiredApprovalMedia(String(t8ProjB.id), 't8b');
 
-    await createMediaAsset(
-      String(t8ProjA.id),
-      'poster_image',
-      't8a',
-    );
-
-    await createMediaAsset(
-      String(t8ProjA.id),
-      'poster_pdf',
-      't8a',
-    );
-
-    // Unrelated project media must have no bearing on t8a.
-    await createMediaAsset(
-      String(t8ProjB.id),
-      'poster_image',
-      't8b',
-    );
-
-    // Contradictory snapshot row for the SAME authoritative project.
-    // The preview generator must reject the project rather than silently
-    // filtering this row from media_snapshot.
-    const {
-      data: t8ContradictorySnapshot,
-      error: t8ContradictorySnapshotError,
-    } = await client
+    const t8 = await generate(String(t8ProjA.public_id), adminId);
+    const { data: t8Row } = await client.from('participant_previews').select('media_snapshot').eq('project_id', t8ProjA.id).single();
+    const t8MediaSnapshot: Array<Record<string, unknown>> = t8Row?.media_snapshot || [];
+    const t8MediaPaths = t8MediaSnapshot.map((m) => String(m.storagePath));
+    const t8SnapshotAssetIds = t8MediaSnapshot.map((m) => String(m.mediaAssetId));
+    const t8ExpectedAssetIds = [t8APosterImage.id, t8APosterPdf.id, t8ASnapshot.id].map(String);
+    const { data: t8MediaAfter } = await client
       .from('media_assets')
-      .insert({
-        project_id: t8ProjA.id,
-        asset_type: 'snapshot_image',
-        gallery_position: 1,
-        file_name: 'snapshot-1.png',
-        storage_bucket: PRIVATE_DRAFT_BUCKET,
-        storage_path:
-          `drafts/${String(t8ProjA.public_id)}/snapshot_image/snapshot-1.png`,
-        mime_type: 'image/png',
-        file_size_bytes: 1024,
-        alt_text_public:
-          'Synthetic participant preview snapshot showing the project interface.',
-        is_public_approved: true,
-        public_url:
-          'https://example.test/public/t8a-already-approved.png',
-      })
-      .select()
-      .single();
-
-    if (t8ContradictorySnapshotError || !t8ContradictorySnapshot) {
-      throw new Error(
-        `Failed to create contradictory snapshot fixture: ${
-          t8ContradictorySnapshotError?.message ?? 'missing row'
-        }`,
-      );
-    }
-
-    const t8 = await generate(
-      String(t8ProjA.public_id),
-      adminId,
+      .select('id, public_url, is_public_approved, public_storage_bucket, public_storage_path, storage_bucket')
+      .in('project_id', [t8ProjA.id, t8ProjB.id]);
+    const { data: t8ProjectsAfter } = await client.from('projects').select('id, status').in('id', [t8ProjA.id, t8ProjB.id]);
+    const t8AllMediaStillPrivate = (t8MediaAfter || []).every((media) =>
+      media.public_url === null &&
+      media.is_public_approved === false &&
+      media.public_storage_bucket === null &&
+      media.public_storage_path === null &&
+      media.storage_bucket === PRIVATE_DRAFT_BUCKET
     );
-
-    const { data: t8PreviewRows } = await client
-      .from('participant_previews')
-      .select('id, media_snapshot')
-      .eq('project_id', t8ProjA.id);
-
-    const { data: t8SnapshotAfter } = await client
-      .from('media_assets')
-      .select(
-        'id, public_url, is_public_approved, storage_bucket',
-      )
-      .eq('id', t8ContradictorySnapshot.id)
-      .single();
 
     if (
       !t8.res.error &&
-      t8.res.data?.resultCode === 'INVALID_SELECTION' &&
-      (t8PreviewRows || []).length === 0 &&
-      t8SnapshotAfter?.id === t8ContradictorySnapshot.id &&
-      t8SnapshotAfter?.is_public_approved === true &&
-      t8SnapshotAfter?.public_url ===
-        'https://example.test/public/t8a-already-approved.png'
+      t8.res.data?.resultCode === 'SUCCESS' &&
+      t8MediaPaths.length === t8ExpectedAssetIds.length &&
+      t8MediaPaths.every((mediaPath) => mediaPath.startsWith(`drafts/${String(t8ProjA.public_id)}/`)) &&
+      !t8MediaPaths.some((mediaPath) => mediaPath.startsWith(`drafts/${String(t8ProjB.public_id)}/`)) &&
+      t8SnapshotAssetIds.every((id) => t8ExpectedAssetIds.includes(id)) &&
+      t8ExpectedAssetIds.every((id) => t8SnapshotAssetIds.includes(id)) &&
+      t8AllMediaStillPrivate &&
+      (t8ProjectsAfter || []).every((project) => project.status === 'approved')
     ) {
-      console.log(
-        'PASS: Test 8 - Contradictory authoritative snapshot media was rejected, no preview was created, and media state was not mutated.',
-      );
+      console.log('PASS: Test 8 - Valid project media is project-scoped, private, and captured as immutable evidence.');
     } else {
-      console.error(
-        'FAIL: Test 8 - Contradictory snapshot media did not fail closed.',
-        {
-          result: t8.res.data,
-          previewRows: t8PreviewRows,
-          snapshotAfter: t8SnapshotAfter,
-        },
-      );
+      console.error('FAIL: Test 8 - Valid project-scoping assertion failed.', t8.res.data, t8MediaSnapshot, t8MediaAfter, t8ProjectsAfter);
+      success = false;
+    }
+
+    const t8PublicProject = await createProject('t8public', 'approved');
+    await createRequiredApprovalMedia(String(t8PublicProject.id), 't8public');
+    await createMediaAsset(String(t8PublicProject.id), 'snapshot_image', 't8public', {
+      isPublicApproved: true,
+      publicUrl: 'https://example.test/public/t8public-already-approved.png',
+      galleryPosition: 1,
+      altText: 'Synthetic publicly contradictory snapshot.',
+    });
+    const { data: t8PublicProjectBefore } = await client.from('projects').select('*').eq('id', t8PublicProject.id).single();
+    const { data: t8PublicMediaBefore } = await client.from('media_assets').select('*').eq('project_id', t8PublicProject.id).order('id');
+    const t8Public = await generate(String(t8PublicProject.public_id), adminId);
+    const { count: t8PublicPreviewCount } = await client.from('participant_previews').select('id', { count: 'exact', head: true }).eq('project_id', t8PublicProject.id);
+    const { data: t8PublicProjectAfter } = await client.from('projects').select('*').eq('id', t8PublicProject.id).single();
+    const { data: t8PublicMediaAfter } = await client.from('media_assets').select('*').eq('project_id', t8PublicProject.id).order('id');
+
+    if (
+      !t8Public.res.error &&
+      t8Public.res.data?.resultCode === 'PROJECT_MEDIA_INVALID' &&
+      t8PublicPreviewCount === 0 &&
+      JSON.stringify(t8PublicProjectAfter) === JSON.stringify(t8PublicProjectBefore) &&
+      JSON.stringify(t8PublicMediaAfter) === JSON.stringify(t8PublicMediaBefore)
+    ) {
+      console.log('PASS: Test 8 - Public-approved/public-URL same-project media fails closed with no preview or state mutation.');
+    } else {
+      console.error('FAIL: Test 8 - Public-approved/public-URL anomaly assertion failed.', t8Public.res.data, t8PublicPreviewCount, t8PublicProjectBefore, t8PublicProjectAfter, t8PublicMediaBefore, t8PublicMediaAfter);
+      success = false;
+    }
+
+    const t8WrongBucketProject = await createProject('t8bucket', 'approved');
+    await createRequiredApprovalMedia(String(t8WrongBucketProject.id), 't8bucket');
+    await createMediaAsset(String(t8WrongBucketProject.id), 'snapshot_image', 't8bucket', {
+      bucket: 'project-public-assets',
+      galleryPosition: 1,
+      altText: 'Synthetic wrong-bucket snapshot.',
+    });
+    const { data: t8WrongBucketProjectBefore } = await client.from('projects').select('*').eq('id', t8WrongBucketProject.id).single();
+    const { data: t8WrongBucketMediaBefore } = await client.from('media_assets').select('*').eq('project_id', t8WrongBucketProject.id).order('id');
+    const t8WrongBucket = await generate(String(t8WrongBucketProject.public_id), adminId);
+    const { count: t8WrongBucketPreviewCount } = await client.from('participant_previews').select('id', { count: 'exact', head: true }).eq('project_id', t8WrongBucketProject.id);
+    const { data: t8WrongBucketProjectAfter } = await client.from('projects').select('*').eq('id', t8WrongBucketProject.id).single();
+    const { data: t8WrongBucketMediaAfter } = await client.from('media_assets').select('*').eq('project_id', t8WrongBucketProject.id).order('id');
+
+    if (
+      !t8WrongBucket.res.error &&
+      t8WrongBucket.res.data?.resultCode === 'PROJECT_MEDIA_INVALID' &&
+      t8WrongBucketPreviewCount === 0 &&
+      JSON.stringify(t8WrongBucketProjectAfter) === JSON.stringify(t8WrongBucketProjectBefore) &&
+      JSON.stringify(t8WrongBucketMediaAfter) === JSON.stringify(t8WrongBucketMediaBefore)
+    ) {
+      console.log('PASS: Test 8 - Wrong-bucket same-project media fails closed with no preview or state mutation.');
+    } else {
+      console.error('FAIL: Test 8 - Wrong-bucket anomaly assertion failed.', t8WrongBucket.res.data, t8WrongBucketPreviewCount, t8WrongBucketProjectBefore, t8WrongBucketProjectAfter, t8WrongBucketMediaBefore, t8WrongBucketMediaAfter);
       success = false;
     }
 

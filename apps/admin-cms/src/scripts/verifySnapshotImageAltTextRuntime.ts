@@ -1947,9 +1947,9 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
 
         assert(
           JSON.stringify(data?.blockingReasons ?? []).includes(
-            'MISSING_OR_INCONSISTENT_SNAPSHOT_MEDIA',
+            'INVALID_SNAPSHOT_GALLERY_STRUCTURE',
           ),
-          `Expected MISSING_OR_INCONSISTENT_SNAPSHOT_MEDIA, got ${JSON.stringify(
+          `Expected INVALID_SNAPSHOT_GALLERY_STRUCTURE, got ${JSON.stringify(
             data?.blockingReasons,
           )}`,
         );
@@ -2061,13 +2061,13 @@ export async function verifySnapshotImageAltTextRuntime(): Promise<void> {
 
         assert(
           after?.ready === false &&
-            after?.resultCode === 'READINESS_UNAVAILABLE',
+            after?.resultCode === 'ACCESSIBILITY_CONTENT_REQUIRED',
           `Malformed current gallery did not fail closed: ${JSON.stringify(after)}`,
         );
 
         assert(
           JSON.stringify(after?.blockers ?? []).includes(
-            'Current snapshot media state is malformed',
+            'Snapshot gallery media state is invalid',
           ),
           `Expected malformed snapshot media blocker, got ${JSON.stringify(
             after?.blockers,

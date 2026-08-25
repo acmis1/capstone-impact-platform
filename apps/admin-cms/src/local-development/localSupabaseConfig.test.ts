@@ -176,6 +176,109 @@ describe('Local Supabase Configuration & Migration Integrity Tests', () => {
     expect(content).not.toContain('password');
   });
 
+  it('7. The published seed snapshot carries complete structured gallery evidence', () => {
+    const content = fs.readFileSync(seedPath, 'utf8');
+
+    // The published synthetic project advertises exactly one snapshot URL.
+    const snapshotsArray = content.match(
+      /ARRAY\['(http:\/\/127\.0\.0\.1:54321\/storage\/v1\/object\/public\/project-public-assets\/2026\/traffic-engine\/snapshot1\.png)'\]/,
+    );
+    expect(snapshotsArray).not.toBeNull();
+    const advertisedUrl = snapshotsArray![1];
+
+    // Its backing media row must be a public-approved snapshot with authoritative
+    // alt text AND an authoritative gallery position. Without the position the
+    // public mapping skips the row, so the project advertises a snapshot URL with
+    // no paired text alternative and the feed contract rejects the record.
+    const mediaBlock = content.slice(content.indexOf("'snapshot_image'"));
+    const insertTuple = mediaBlock.slice(0, mediaBlock.indexOf('ON CONFLICT'));
+
+    expect(insertTuple).toContain(advertisedUrl);
+    expect(insertTuple).toContain('true,');
+    expect(insertTuple).toMatch(/'Synthetic simulation dashboard[^']*'/);
+
+    // Column list and value tuple must both carry the position.
+    const columnList = content.slice(
+      content.lastIndexOf('INSERT INTO public.media_assets (', content.indexOf("'snapshot_image'")),
+    );
+    expect(columnList.slice(0, columnList.indexOf('VALUES'))).toContain('gallery_position');
+
+    // Sole snapshot => authoritative position 1.
+    expect(insertTuple.replace(/\s+/g, ' ')).toMatch(/',\s*1\s*\)/);
+  });
+
+  it('8. The published seed compiles to a valid feed with paired structured snapshot media', async () => {
+    const { compilePublicFeed } = await import('../feed/compilePublicFeed');
+    const { validatePublicFeed } = await import('../feed/validatePublicFeed');
+
+    const url =
+      'http://127.0.0.1:54321/storage/v1/object/public/project-public-assets/2026/traffic-engine/snapshot1.png';
+    const altText =
+      'Synthetic simulation dashboard comparing queue lengths at a four-way intersection before and after adaptive signal timing.';
+
+    // Mirrors the shape verifyLocalSupabase derives from the seeded rows: a
+    // snapshot media row is admitted only with a public URL, usable alt text and
+    // an integer gallery position from 1 through 10.
+    const buildProject = (galleryPosition: number | null) => ({
+      id: 1155911741,
+      publicId: '2026-traffic-engine',
+      title: 'Synthetic Traffic Engine',
+      summary: 'Synthetic summary.',
+      background: 'Synthetic background.',
+      solution: 'Synthetic solution.',
+      year: '2026',
+      program: 'School of Computing',
+      studyProgram: 'Computer Science',
+      discipline: 'Software Engineering',
+      disciplines: ['Software Engineering'],
+      industry: 'Technology',
+      industryPartner: '',
+      academicSupervisor: '',
+      groupName: 'Capstone Team 1',
+      teamMembers: ['Synthetic Member 1'],
+      poster:
+        'http://127.0.0.1:54321/storage/v1/object/public/project-public-assets/2026/traffic-engine/poster.png',
+      posterPdf:
+        'http://127.0.0.1:54321/storage/v1/object/public/project-public-assets/2026/traffic-engine/poster.pdf',
+      posterText: 'Synthetic poster full text.',
+      accessibilityText: 'Synthetic accessibility text.',
+      status: 'published',
+      snapshots: [url],
+      snapshotMedia:
+        typeof galleryPosition === 'number' &&
+        Number.isInteger(galleryPosition) &&
+        galleryPosition >= 1 &&
+        galleryPosition <= 10
+          ? [{ url, altText, galleryPosition }]
+          : [],
+      layoutConfig: {
+        templateId: 'poster_showcase',
+        featuredMedia: 'poster',
+        sectionOrder: ['background', 'solution'],
+      },
+    }) as unknown as Parameters<typeof compilePublicFeed>[0][number];
+
+    // Corrected seed: position 1 is present.
+    const feed = compilePublicFeed([buildProject(1)]);
+    expect(feed).toHaveLength(1);
+    expect(feed[0].snapshots).toEqual([url]);
+    expect(feed[0].snapshotMedia).toHaveLength(1);
+    expect(feed[0].snapshotMedia![0].url).toBe(url);
+    expect(feed[0].snapshotMedia![0].url).toBe(feed[0].snapshots[0]);
+    expect(feed[0].snapshotMedia![0].galleryPosition).toBe(1);
+    expect(feed[0].snapshotMedia![0].altText).toBe(altText);
+    expect(validatePublicFeed(feed).valid).toBe(true);
+
+    // Negative control: a seed row lacking the authoritative position reproduces
+    // the exact Local Supabase integration failure this guard exists to prevent.
+    const withoutPosition = compilePublicFeed([buildProject(null)]);
+    const invalid = validatePublicFeed(withoutPosition);
+    expect(invalid.valid).toBe(false);
+    expect(invalid.errors.join(' ')).toContain(
+      '"snapshotMedia" has 0 entries but "snapshots" has 1',
+    );
+  });
+
   it('6. The normal Admin/CMS development script binds Next.js to IPv4 loopback only', () => {
     const adminPackage = JSON.parse(fs.readFileSync(adminPackagePath, 'utf8')) as { scripts?: Record<string, string> };
     expect(adminPackage.scripts?.dev).toBe('next dev --hostname 127.0.0.1');

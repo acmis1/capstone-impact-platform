@@ -30,9 +30,12 @@ DECLARE
   v_preview_id uuid;
   v_snapshot jsonb;
   v_media_snapshot jsonb;
-  v_snapshot_count integer;
-  v_valid_snapshot_count integer;
-  v_distinct_snapshot_positions integer;
+  v_media_total_count integer;
+  v_media_valid_count integer;
+  v_poster_image_count integer;
+  v_poster_pdf_count integer;
+  v_snapshot_total_count integer;
+  v_snapshot_position_count integer;
   v_has_edit boolean;
   v_has_review boolean;
 BEGIN
@@ -258,31 +261,34 @@ BEGIN
   END IF;
 
   ---------------------------------------------------------------------------
-  -- 6a. Task 3 authoritative snapshot-gallery integrity gate.
+  -- 6b. Task 3 authoritative media state gate.
   --
-  -- Zero snapshots is valid. If snapshots exist, every authoritative
-  -- snapshot row must be usable private staged media. No contradictory row
-  -- may be silently filtered out of the immutable participant preview.
+  -- The immutable preview is the participant's evidence of exactly which
+  -- gallery they were asked to confirm, so it must be derived from the
+  -- COMPLETE validated media set -- never from rows pre-filtered to those
+  -- that already look private. Filtering first would let an anomalous row
+  -- (wrong bucket, unexpectedly public, malformed identity, duplicate or
+  -- out-of-range position) be silently omitted from immutable evidence
+  -- instead of blocking issuance. Every project media row is therefore
+  -- locked and validated here, and any contradiction fails closed.
   ---------------------------------------------------------------------------
+
+  PERFORM 1
+     FROM public.media_assets ma
+    WHERE ma.project_id = v_project_id
+      FOR UPDATE;
 
   SELECT
     pg_catalog.count(*),
-
     pg_catalog.count(*) FILTER (
-      WHERE
-        ma.storage_bucket = v_private_bucket
+      WHERE ma.asset_type IN ('poster_image', 'poster_pdf', 'snapshot_image')
+        AND ma.storage_bucket = v_private_bucket
+        AND ma.is_public_approved = false
+        AND ma.public_url IS NULL
+        AND ma.public_storage_bucket IS NULL
+        AND ma.public_storage_path IS NULL
         AND ma.storage_path = pg_catalog.btrim(ma.storage_path)
-        AND pg_catalog.left(
-              ma.storage_path,
-              pg_catalog.length(
-                'drafts/' || v_public_id || '/snapshot_image/'
-              )
-            ) =
-            'drafts/' || v_public_id || '/snapshot_image/'
-        AND pg_catalog.right(
-              ma.storage_path,
-              pg_catalog.length(ma.file_name)
-            ) = ma.file_name
+        AND ma.storage_path <> ''
         AND pg_catalog.strpos(ma.storage_path, '..') = 0
         AND pg_catalog.strpos(ma.storage_path, E'\\') = 0
         AND ma.file_name = pg_catalog.btrim(ma.file_name)
@@ -290,39 +296,65 @@ BEGIN
         AND pg_catalog.strpos(ma.file_name, '..') = 0
         AND pg_catalog.strpos(ma.file_name, '/') = 0
         AND pg_catalog.strpos(ma.file_name, E'\\') = 0
-        AND ma.mime_type IN ('image/png', 'image/jpeg', 'image/webp')
-        AND ma.file_size_bytes BETWEEN 1 AND 5242880
-        AND ma.is_public_approved = false
-        AND ma.public_url IS NULL
-        AND ma.public_storage_bucket IS NULL
-        AND ma.public_storage_path IS NULL
-        AND ma.gallery_position BETWEEN 1 AND 10
+        AND pg_catalog.right(ma.storage_path, pg_catalog.length(ma.file_name)) = ma.file_name
+        AND pg_catalog.left(
+              ma.storage_path,
+              pg_catalog.length('drafts/' || v_public_id || '/' || ma.asset_type || '/')
+            ) = 'drafts/' || v_public_id || '/' || ma.asset_type || '/'
+        AND ma.file_size_bytes IS NOT NULL
+        AND ma.file_size_bytes >= 1
+        AND (
+          CASE ma.asset_type
+            WHEN 'poster_pdf' THEN
+              ma.mime_type = 'application/pdf'
+              AND ma.file_size_bytes <= 20971520
+              AND ma.gallery_position IS NULL
+            WHEN 'poster_image' THEN
+              ma.mime_type IN ('image/png', 'image/jpeg', 'image/webp')
+              AND ma.file_size_bytes <= 5242880
+              AND ma.gallery_position IS NULL
+            ELSE
+              ma.mime_type IN ('image/png', 'image/jpeg', 'image/webp')
+              AND ma.file_size_bytes <= 5242880
+              AND ma.gallery_position BETWEEN 1 AND 10
+          END
+        )
     ),
-
+    pg_catalog.count(*) FILTER (WHERE ma.asset_type = 'poster_image'),
+    pg_catalog.count(*) FILTER (WHERE ma.asset_type = 'poster_pdf'),
+    pg_catalog.count(*) FILTER (WHERE ma.asset_type = 'snapshot_image'),
     pg_catalog.count(DISTINCT ma.gallery_position)
+      FILTER (WHERE ma.asset_type = 'snapshot_image')
+  INTO
+    v_media_total_count,
+    v_media_valid_count,
+    v_poster_image_count,
+    v_poster_pdf_count,
+    v_snapshot_total_count,
+    v_snapshot_position_count
+  FROM public.media_assets ma
+  WHERE ma.project_id = v_project_id;
 
-    INTO
-      v_snapshot_count,
-      v_valid_snapshot_count,
-      v_distinct_snapshot_positions
-
-    FROM public.media_assets ma
-   WHERE ma.project_id = v_project_id
-     AND ma.asset_type = 'snapshot_image';
-
-  IF v_snapshot_count > 10
-     OR v_valid_snapshot_count <> v_snapshot_count
-     OR v_distinct_snapshot_positions <> v_snapshot_count
-  THEN
+  -- Poster assets are singletons; the gallery is bounded at 10 and every
+  -- member must hold a distinct position. Position, not asset type, is
+  -- snapshot identity, so a duplicate or absent position is a hard defect.
+  IF v_media_valid_count <> v_media_total_count
+     OR v_poster_image_count > 1
+     OR v_poster_pdf_count > 1
+     OR v_snapshot_total_count > 10
+     OR v_snapshot_position_count <> v_snapshot_total_count THEN
     RETURN pg_catalog.jsonb_build_object(
       'resultCode',
-      'INVALID_SELECTION'
+      'PROJECT_MEDIA_INVALID'
     );
   END IF;
-  -- 6b. Task 3 multi-image accessibility gate.
+
+  ---------------------------------------------------------------------------
+  -- 6c. Task 3 multi-image accessibility gate.
   --
-  -- Fail closed if ANY authoritative snapshot row lacks usable
-  -- authoritative alt text.
+  -- Every snapshot in the now-validated gallery must carry usable
+  -- authoritative alt text. No private-only prefilter here: the gate above
+  -- already proved the complete set is private and well-formed.
   ---------------------------------------------------------------------------
 
   IF EXISTS (
@@ -474,10 +506,10 @@ BEGIN
   )
   INTO v_media_snapshot
   FROM public.media_assets ma
-  WHERE ma.project_id = v_project_id
-    AND ma.storage_bucket = v_private_bucket
-    AND ma.is_public_approved = false
-    AND ma.public_url IS NULL;
+  -- No private-only prefilter: gate 6b already proved every row for this
+  -- project is valid private staged media, so the evidence captured here is
+  -- the complete expected set rather than whatever happened to conform.
+  WHERE ma.project_id = v_project_id;
 
   ---------------------------------------------------------------------------
   -- Store immutable preview.

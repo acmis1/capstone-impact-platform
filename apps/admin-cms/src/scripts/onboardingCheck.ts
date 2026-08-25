@@ -52,6 +52,7 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260824060000_multi_image_gallery_approval_gate.sql',
   '20260824070000_multi_image_gallery_participant_preview.sql',
   '20260824080000_multi_image_gallery_publication_readiness.sql',
+  '20260824120000_bulk_project_review_concurrency.sql',
   '20260825025000_multi_image_gallery_review_submission.sql',
 ] as const;
 

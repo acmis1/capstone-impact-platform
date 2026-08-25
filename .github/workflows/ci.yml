@@ -132,6 +132,15 @@ jobs:
       - name: Onboarding Toolchain Precheck
         run: npm run onboarding:check
 
+      # This destructive migration-upgrade verifier must run before normal Local setup establishes shared staff and storage fixtures.
+      - name: Start Local Supabase specifically for migration-upgrade verification
+        run: npm run supabase:start
+        env:
+          SUPABASE_START_TIMEOUT_MS: '600000'
+
+      - name: Verify Migration 0030 to 0031 assistive upgrade behavior
+        run: npm run verify:assistive-upgrade-runtime --workspace=apps/admin-cms
+
       - name: Run local developer setup
         run: npm run setup:local
         env:
@@ -140,10 +149,13 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify thirty-nine migrations and local integrity
+      - name: Verify forty migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 39
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 40
+
+      - name: Verify multi-image gallery position invariant against the real schema
+        run: npm run verify:gallery-constraint-runtime --workspace=apps/admin-cms
 
       - name: Verify read-only hosted readiness inspection against Local Supabase
         run: npm run verify:hosted-readiness-inspection-runtime
@@ -216,9 +228,6 @@ jobs:
       - name: Verify assistive validation persistence runtime behavior
         run: npm run verify:assistive-persistence-runtime --workspace=apps/admin-cms
 
-      - name: Verify Migration 0030 to 0031 assistive upgrade behavior
-        run: npm run verify:assistive-upgrade-runtime --workspace=apps/admin-cms
-
       - name: Verify assistive validation job coordination runtime behavior
         run: npm run verify:assistive-jobs-runtime --workspace=apps/admin-cms
 
@@ -227,6 +236,12 @@ jobs:
 
       - name: Verify assistive duplicate shortlist Migration 0033 runtime behavior
         run: npm run verify:assistive-duplicate-shortlist-runtime --workspace=apps/admin-cms
+
+      - name: Verify bulk project review workflow runtime behavior
+        run: npm run verify:bulk-project-review-runtime --workspace=apps/admin-cms
+
+      - name: Verify 120-project bulk review functional workflow
+        run: npm run verify:bulk-project-review-functional-workflow --workspace=apps/admin-cms
 
       - name: Admin Application Smoke Test (/api/health & /login 200 OK)
         run: npm run check:app-smoke

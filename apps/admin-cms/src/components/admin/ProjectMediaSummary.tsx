@@ -5,7 +5,7 @@ import { MediaAccessibilityReview } from '../admin-media/MediaAccessibilityRevie
 import { MediaPreview } from '../admin-media/MediaPreview';
 import type { ProjectMediaPreviewItem } from '../admin-media/mediaPreviewTypes';
 import { isValidMediaUrl } from '../admin-media/mediaPreviewUtils';
-import { SnapshotAltTextEditor } from './SnapshotAltTextEditor';
+import { SnapshotAltTextGalleryEditor } from './SnapshotAltTextGalleryEditor';
 import type { SnapshotAltTextActionResult } from '../../projects/snapshotAltText';
 import { ExternalLink as ExternalLinkIcon, Video, Globe, Code2 } from 'lucide-react';
 
@@ -74,27 +74,14 @@ export function ProjectMediaSummary({ project, mediaItems, mediaAvailable, snaps
       )}
 
       {mediaAvailable && snapshotAltText && snapshotMediaItems.length > 0 && (
-        <div className="border-t border-border pt-4">
-          <div className="flex flex-col gap-4">
-            {snapshotMediaItems.map((media) => (
-              <div key={media.id} className="rounded-lg border border-border p-3">
-                <p className="mb-2 text-sm font-semibold text-foreground">
-                  Snapshot {media.galleryPosition ?? 'order unavailable'} alt text
-                </p>
-
-                <SnapshotAltTextEditor
-                  publicId={project.publicId || ''}
-                  mediaAssetId={media.id}
-                  initialAltText={media.altText ?? ''}
-                  initialExpectedUpdatedAt={snapshotAltText.expectedUpdatedAt}
-                  canEdit={snapshotAltText.canEdit}
-                  projectStatus={project.status}
-                  saveAction={snapshotAltText.saveAction}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+        <SnapshotAltTextGalleryEditor
+          publicId={project.publicId || ''}
+          mediaItems={snapshotMediaItems}
+          canEdit={snapshotAltText.canEdit}
+          initialExpectedUpdatedAt={snapshotAltText.expectedUpdatedAt}
+          projectStatus={project.status}
+          saveAction={snapshotAltText.saveAction}
+        />
       )}
 
       {/* External Showcase Links */}

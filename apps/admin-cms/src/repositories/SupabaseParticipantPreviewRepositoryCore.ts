@@ -235,6 +235,8 @@ export class SupabaseParticipantPreviewRepositoryCore {
         throw new ParticipantPreviewExecutionError('AMBIGUOUS_CORRECTION_REQUEST');
       case 'MEDIA_ACCESSIBILITY_REQUIRED':
         throw new ParticipantPreviewExecutionError('MEDIA_ACCESSIBILITY_REQUIRED');
+      case 'PROJECT_MEDIA_INVALID':
+        throw new ParticipantPreviewExecutionError('PROJECT_MEDIA_INVALID');
       default:
         throw new ParticipantPreviewExecutionError('INPUT_INVALID');
     }

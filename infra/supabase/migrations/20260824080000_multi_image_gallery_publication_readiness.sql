@@ -22,9 +22,11 @@ DECLARE
   v_unresolved_corr_count integer;
   v_replacement_count integer;
   v_invalid_media_element_count integer;
-  v_snapshot_count integer;
-  v_valid_snapshot_count integer;
-  v_distinct_snapshot_positions integer;
+  v_snapshot_total_count integer;
+  v_snapshot_valid_count integer;
+  v_snapshot_position_count integer;
+  v_snapshot_missing_alt_count integer;
+  v_snapshot_long_alt_count integer;
   v_current_snapshot jsonb;
   v_current_media_snapshot jsonb;
   v_stored_media_snapshot jsonb;
@@ -176,30 +178,21 @@ BEGIN
     v_accessibility_blockers := pg_catalog.array_append(v_accessibility_blockers, 'Accessibility text exceeds the 2,000 character safety limit');
   END IF;
 
-  -- 4c. Current authoritative snapshot-gallery integrity.
-  --
-  -- Zero snapshots is valid. If snapshots exist, every authoritative row
-  -- must remain valid private staged media with a unique bounded position.
-  -- This gate prevents contradictory rows from being filtered out of the
-  -- current media snapshot used for participant-confirmation comparison.
+  -- 4c. Snapshot gallery accessibility and structural validity, evaluated against the CURRENT
+  -- media rows for the same reason as 4b: a snapshot whose alt was already absent when the preview
+  -- was issued would otherwise match its own stored snapshot and pass unnoticed. Every current
+  -- gallery row is inspected -- never an arbitrary first row of a multi-row gallery -- and no
+  -- private-only prefilter is applied, so a contradictory row fails closed here instead of being
+  -- silently skipped by the filter that was meant to find it.
   SELECT
     pg_catalog.count(*),
-
     pg_catalog.count(*) FILTER (
-      WHERE
-        ma.storage_bucket = v_private_bucket
+      WHERE ma.storage_bucket = v_private_bucket
+        AND ma.is_public_approved = false
+        AND ma.public_url IS NULL
+        AND ma.public_storage_bucket IS NULL
+        AND ma.public_storage_path IS NULL
         AND ma.storage_path = pg_catalog.btrim(ma.storage_path)
-        AND pg_catalog.left(
-              ma.storage_path,
-              pg_catalog.length(
-                'drafts/' || v_public_id || '/snapshot_image/'
-              )
-            ) =
-            'drafts/' || v_public_id || '/snapshot_image/'
-        AND pg_catalog.right(
-              ma.storage_path,
-              pg_catalog.length(ma.file_name)
-            ) = ma.file_name
         AND pg_catalog.strpos(ma.storage_path, '..') = 0
         AND pg_catalog.strpos(ma.storage_path, E'\\') = 0
         AND ma.file_name = pg_catalog.btrim(ma.file_name)
@@ -207,73 +200,60 @@ BEGIN
         AND pg_catalog.strpos(ma.file_name, '..') = 0
         AND pg_catalog.strpos(ma.file_name, '/') = 0
         AND pg_catalog.strpos(ma.file_name, E'\\') = 0
+        AND pg_catalog.right(ma.storage_path, pg_catalog.length(ma.file_name)) = ma.file_name
+        AND pg_catalog.left(
+              ma.storage_path,
+              pg_catalog.length('drafts/' || v_project.public_id || '/snapshot_image/')
+            ) = 'drafts/' || v_project.public_id || '/snapshot_image/'
         AND ma.mime_type IN ('image/png', 'image/jpeg', 'image/webp')
         AND ma.file_size_bytes BETWEEN 1 AND 5242880
-        AND ma.is_public_approved = false
-        AND ma.public_url IS NULL
-        AND ma.public_storage_bucket IS NULL
-        AND ma.public_storage_path IS NULL
         AND ma.gallery_position BETWEEN 1 AND 10
     ),
-
-    pg_catalog.count(DISTINCT ma.gallery_position)
-
+    pg_catalog.count(DISTINCT ma.gallery_position),
+    pg_catalog.count(*) FILTER (
+      WHERE pg_catalog.btrim(COALESCE(ma.alt_text_public, '')) = ''
+    ),
+    pg_catalog.count(*) FILTER (
+      WHERE ma.alt_text_public IS NOT NULL
+        AND pg_catalog.length(pg_catalog.btrim(ma.alt_text_public)) > 2000
+    )
     INTO
-      v_snapshot_count,
-      v_valid_snapshot_count,
-      v_distinct_snapshot_positions
-
+      v_snapshot_total_count,
+      v_snapshot_valid_count,
+      v_snapshot_position_count,
+      v_snapshot_missing_alt_count,
+      v_snapshot_long_alt_count
     FROM public.media_assets ma
    WHERE ma.project_id = v_project.id
      AND ma.asset_type = 'snapshot_image';
 
-  IF v_snapshot_count > 10
-     OR v_valid_snapshot_count <> v_snapshot_count
-     OR v_distinct_snapshot_positions <> v_snapshot_count
-  THEN
-    RETURN pg_catalog.jsonb_build_object(
-      'ready', false,
-      'resultCode', 'READINESS_UNAVAILABLE',
-      'blockers',
-        pg_catalog.to_jsonb(
-          ARRAY['Current snapshot media state is malformed']
-        )
-    );
-  END IF;
+  -- A zero-snapshot gallery stays publishable. A populated one must be wholly
+  -- valid: bounded at 10, every member privately staged and well-formed, and
+  -- every member holding a distinct position. Position, not asset type, is
+  -- snapshot identity.
+  IF v_snapshot_total_count > 0 THEN
+    IF v_snapshot_total_count > 10
+       OR v_snapshot_valid_count <> v_snapshot_total_count
+       OR v_snapshot_position_count <> v_snapshot_total_count THEN
+      v_accessibility_blockers := pg_catalog.array_append(
+        v_accessibility_blockers,
+        'Snapshot gallery media state is invalid'
+      );
+    END IF;
 
-  -- Accessibility is evaluated over the whole authoritative gallery.
-  IF EXISTS (
-    SELECT 1
-      FROM public.media_assets ma
-     WHERE ma.project_id = v_project.id
-       AND ma.asset_type = 'snapshot_image'
-       AND pg_catalog.btrim(
-             COALESCE(ma.alt_text_public, '')
-           ) = ''
-  ) THEN
-    v_accessibility_blockers :=
-      pg_catalog.array_append(
+    IF v_snapshot_missing_alt_count > 0 THEN
+      v_accessibility_blockers := pg_catalog.array_append(
         v_accessibility_blockers,
         'Snapshot image alt text is missing'
       );
-  END IF;
+    END IF;
 
-  IF EXISTS (
-    SELECT 1
-      FROM public.media_assets ma
-     WHERE ma.project_id = v_project.id
-       AND ma.asset_type = 'snapshot_image'
-       AND pg_catalog.length(
-             pg_catalog.btrim(
-               COALESCE(ma.alt_text_public, '')
-             )
-           ) > 2000
-  ) THEN
-    v_accessibility_blockers :=
-      pg_catalog.array_append(
+    IF v_snapshot_long_alt_count > 0 THEN
+      v_accessibility_blockers := pg_catalog.array_append(
         v_accessibility_blockers,
         'Snapshot image alt text exceeds the 2,000 character safety limit'
       );
+    END IF;
   END IF;
 
   IF pg_catalog.cardinality(v_accessibility_blockers) > 0 THEN

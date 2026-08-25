@@ -10,6 +10,10 @@ import type {
   ApprovalSnapshotMediaInput,
 } from '../validation/projectValidation';
 import { validateMediaAsset } from '../storage/mediaValidationCore';
+import {
+  describeAccessibleContentProblem,
+  getSnapshotAltTextProblem,
+} from '../domain/accessibleContent';
 
 export interface ProjectMediaAssetPreviewRow {
   id: string;
@@ -44,6 +48,47 @@ function fileSizeBytes(value: ProjectMediaAssetPreviewRow['file_size_bytes']): n
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
+function mediaDisplayRank(assetType: string): number {
+  switch (assetType) {
+    case 'poster_image':
+      return 0;
+    case 'poster_pdf':
+      return 1;
+    case 'snapshot_image':
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function validGalleryPosition(position: number | null): number | undefined {
+  return typeof position === 'number' && Number.isInteger(position) && position > 0
+    ? position
+    : undefined;
+}
+
+/** Authoritative Admin media display order, including the numeric snapshot gallery sequence. */
+export function compareProjectMediaDisplayOrder(
+  left: Pick<ProjectMediaAssetPreviewRow, 'id' | 'asset_type' | 'gallery_position'>,
+  right: Pick<ProjectMediaAssetPreviewRow, 'id' | 'asset_type' | 'gallery_position'>,
+): number {
+  const rankDifference = mediaDisplayRank(left.asset_type) - mediaDisplayRank(right.asset_type);
+  if (rankDifference !== 0) return rankDifference;
+
+  if (left.asset_type === 'snapshot_image' && right.asset_type === 'snapshot_image') {
+    const leftPosition = validGalleryPosition(left.gallery_position);
+    const rightPosition = validGalleryPosition(right.gallery_position);
+    if (leftPosition !== undefined || rightPosition !== undefined) {
+      if (leftPosition === undefined) return 1;
+      if (rightPosition === undefined) return -1;
+      if (leftPosition !== rightPosition) return leftPosition - rightPosition;
+    }
+  }
+
+  if (left.asset_type !== right.asset_type) return left.asset_type.localeCompare(right.asset_type);
+  return left.id.localeCompare(right.id);
+}
+
 function isValidPrivateApprovalAsset(
   row: ProjectMediaAssetPreviewRow,
   params: { assetType: string; projectPublicId: string; privateBucket: string },
@@ -65,6 +110,9 @@ function isValidPrivateApprovalAsset(
     !mimeType ||
     size === undefined ||
     !storagePath ||
+    row.file_name !== fileName ||
+    row.storage_path !== storagePath ||
+    row.mime_type !== mimeType ||
     !storagePath.startsWith(expectedPrefix) ||
     !storagePath.endsWith(fileName) ||
     storagePath.includes('..') ||
@@ -118,6 +166,48 @@ export function deriveApprovalMediaInput(
     );
 
   return { posterImage, posterPdf, snapshotMedia };
+}
+
+/**
+ * Read-only submission preflight for Tan's final snapshot-gallery gate. The
+ * submission RPC remains authoritative; this deliberately shares the same
+ * staged-media identity checks as the approval preview instead of inventing a
+ * second browser-only interpretation of a gallery row.
+ */
+export function validateSubmissionSnapshotGallery(
+  rows: ProjectMediaAssetPreviewRow[],
+  params: { projectPublicId: string; privateBucket: string },
+): string[] {
+  const snapshots = rows.filter((row) => row.asset_type === 'snapshot_image');
+  if (snapshots.length === 0) return [];
+
+  const positions = new Set<number>();
+  const structurallyInvalid = snapshots.length > 10 || snapshots.some((snapshot) => {
+    const position = snapshot.gallery_position;
+    if (
+      position === null ||
+      !Number.isInteger(position) ||
+      position < 1 ||
+      position > 10 ||
+      positions.has(position) ||
+      !isValidPrivateApprovalAsset(snapshot, { ...params, assetType: 'snapshot_image' })
+    ) {
+      return true;
+    }
+    positions.add(position);
+    return false;
+  });
+
+  const reasons: string[] = [];
+  if (structurallyInvalid) reasons.push('Snapshot gallery staged media is invalid.');
+
+  for (const snapshot of snapshots) {
+    const problem = getSnapshotAltTextProblem(snapshot.alt_text_public, { snapshotPresent: true });
+    if (!problem) continue;
+    const message = describeAccessibleContentProblem(problem, 'snapshotAltText');
+    if (!reasons.includes(message)) reasons.push(message);
+  }
+  return reasons;
 }
 
 /**
@@ -214,13 +304,11 @@ export async function loadProjectMediaReviewData(params: {
     .from('media_assets')
     .select('id,asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,is_public_approved,alt_text_public')
     .eq('project_id', params.projectId)
-    .order('asset_type', { ascending: true })
-    .order('created_at', { ascending: true })
     .order('id', { ascending: true });
 
   if (error) throw new ProjectMediaPreviewReadError();
 
-  const rows = (data ?? []) as ProjectMediaAssetPreviewRow[];
+  const rows = [...((data ?? []) as ProjectMediaAssetPreviewRow[])].sort(compareProjectMediaDisplayOrder);
   const items = await Promise.all(rows.map((row) => toProjectMediaPreviewItem(row, {
     projectTitle: params.projectTitle,
     accessibilityText: params.accessibilityText,

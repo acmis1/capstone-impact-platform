@@ -236,7 +236,7 @@ export async function runReviewActionsRuntimeVerification(options?: RuntimeVerif
       }
       if (media.snapshotAltText !== undefined) {
         mediaRows.push({
-          project_id: data.id, asset_type: 'snapshot_image', file_name: 'snapshot-1.png',
+          project_id: data.id, asset_type: 'snapshot_image', gallery_position: 1, file_name: 'snapshot-1.png',
           storage_bucket: 'project-drafts-private', storage_path: `drafts/${publicId}/snapshot_image/snapshot-1.png`,
           public_url: null, public_storage_bucket: null, public_storage_path: null,
           mime_type: 'image/png', file_size_bytes: SYNTHETIC_PNG.length, is_public_approved: false,

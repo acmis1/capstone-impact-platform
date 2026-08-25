@@ -266,25 +266,17 @@ ON CONFLICT (id) DO NOTHING;
 --
 -- Poster rows deliberately keep a NULL alt_text_public: the poster's text alternative is the
 -- project-level accessibility_text_public and is never duplicated onto the media asset.
-INSERT INTO public.media_assets (
-  id,
-  project_id,
-  asset_type,
-  gallery_position,
-  file_name,
-  storage_bucket,
-  storage_path,
-  public_url,
-  mime_type,
-  file_size_bytes,
-  is_public_approved,
-  alt_text_public
-) VALUES
+--
+-- gallery_position is authoritative gallery identity, not decoration: the public feed pairs each
+-- projects.snapshots URL with a structured snapshotMedia entry only when the media row carries an
+-- integer position 1..10. Without it the row is skipped and the published project advertises a
+-- snapshot URL with no text alternative, which the feed contract rejects. This project has a
+-- single snapshot, so its authoritative position is 1.
+INSERT INTO public.media_assets (id, project_id, asset_type, file_name, storage_bucket, storage_path, public_url, mime_type, file_size_bytes, is_public_approved, alt_text_public, gallery_position) VALUES
   (
     'f0000000-0000-0000-0000-000000000003',
     'e0000000-0000-0000-0000-000000000001',
     'snapshot_image',
-    1,
     'snapshot1.png',
     'project-public-assets',
     '2026/traffic-engine/snapshot1.png',
@@ -292,7 +284,8 @@ INSERT INTO public.media_assets (
     'image/png',
     524288,
     true,
-    'Synthetic simulation dashboard comparing queue lengths at a four-way intersection before and after adaptive signal timing.'
+    'Synthetic simulation dashboard comparing queue lengths at a four-way intersection before and after adaptive signal timing.',
+    1
   )
 ON CONFLICT (id) DO NOTHING;
 

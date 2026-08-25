@@ -211,7 +211,6 @@ BEGIN
         END IF;
 
     END IF;
-
   END IF;
   v_now := pg_catalog.now();
   IF p_action = 'archive' THEN

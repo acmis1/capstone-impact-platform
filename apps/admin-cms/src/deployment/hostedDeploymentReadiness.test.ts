@@ -154,14 +154,15 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches the exact repository migration inventory and keeps every historical migration byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
 
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(39);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(40);
 
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
-      const historicalMigrations =
-        EXPECTED_REPOSITORY_MIGRATIONS.slice(0, 33);
+      const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.filter(
+        (migration) => migration !== '20260824120000_bulk_project_review_concurrency.sql',
+      );
 
-      expect(historicalMigrations).toHaveLength(33);
+      expect(historicalMigrations).toHaveLength(39);
 
       expect(() =>
         execFileSync(
@@ -202,7 +203,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches every final service-role application RPC signature and isolates the one internal helper', () => {
       const contracts = migrationServiceRoleContracts();
       expect(contracts.application.map(contractKey).sort()).toEqual(REQUIRED_RPC_SIGNATURES.map(contractKey).sort());
-      expect(contracts.application).toHaveLength(58);
+      expect(contracts.application).toHaveLength(60);
       expect(REQUIRED_RPC_NAMES).toContain('persist_assistive_validation_run');
       expect(REQUIRED_RPC_NAMES).toContain('record_assistive_finding_disposition');
       expect(REQUIRED_RPC_NAMES).toContain('claim_next_assistive_validation_job');
@@ -330,7 +331,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const inspected = inspectPostgrestOpenApi(openApiDocument());
       expect(inspected?.publicRelations).toEqual([...ALL_REQUIRED_TABLES].sort());
       expect(inspected?.rpcNames).toEqual([...REQUIRED_RPC_NAMES].sort());
-      expect(inspected?.rpcSignatures).toHaveLength(57);
+      expect(inspected?.rpcSignatures).toHaveLength(59);
       expect(inspected?.rpcSignatures.some((signature) => signature.name === 'execute_controlled_publication')).toBe(false);
     });
 
