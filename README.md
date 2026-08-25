@@ -23,8 +23,8 @@ The target workflow needs structured submissions, validation, review, archival a
 | Review | Project inspection and atomic, transaction-backed review actions (`approve`, `request_changes`, `archive`) via PostgreSQL RPC `perform_project_review_action` are implemented. |
 | Project metadata editor | The Admin/CMS includes a page-owned editor backed by one atomic, service-role-only PostgreSQL transaction. Hosted deployment and broader staff acceptance remain separate activities. Browser Back/Forward interception is not claimed. |
 | Ingestion | Package parsing, metadata/file validation, import-batch tracking and import-review foundations are implemented. |
-| Media and feed | Private draft storage, validated promotion foundations and public-eligible JSON feed compilation are implemented. |
-| Local Supabase | Pinned CLI 2.109.1, 27 timestamped migrations, 3 local storage buckets, synthetic staff provisioning and automated verifiers implemented. *(Migrations 0007 through 0027 are repository/local only and not applied to hosted staging.)* |
+| Media and feed | Private draft storage, validated promotion, public-eligible JSON compilation, immutable deployment ledger/head, history UI, controlled reconciliation, and disposable-Local rollback foundations are implemented. |
+| Local Supabase | Pinned CLI 2.109.1, 35 timestamped migrations, 3 local storage buckets, synthetic staff provisioning and automated verifiers implemented. *(Repository migrations newer than the recorded hosted baseline remain repository/local only and are not represented as applied to hosted staging.)* |
 | Staging Guardrails | Target environment identity checks, hostname matching, loopback rejection and double-acknowledgement CLI flags implemented. |
 | Quality & Onboarding | Node 24.14.1 and npm 11.11.0 toolchain contract, `npm run onboarding:check` precheck, and unit tests implemented. Verified in a clean Windows remote-clone run; macOS, Linux and independent human onboarding remain unverified. |
 | Pending | Hosted migration reconciliation, hosted staff lifecycle, interactive browser UAT matrix, cross-platform human onboarding verification and production cutover. |
@@ -145,6 +145,6 @@ Run from the repository root:
 
 Implemented foundations include the authenticated Admin/CMS shell, project index, validation, import and media workflows, reproducible local Supabase stack, shared-staging execution guardrails, key preference model and public-eligible feed compiler.
 
-Remaining work includes hosted migration history reconciliation, controlled hosted staff lifecycle tooling, broader interactive browser UAT, participant confirmation, preview and publication-history workflows, accessibility QA, production deployment hardening and controlled Duda cutover. Phase 4 is not represented as implemented.
+Remaining work includes hosted migration history reconciliation, controlled hosted staff lifecycle tooling, broader interactive browser UAT, integrated preview workspace, accessibility QA, production deployment hardening, hosted publication/removal/rollback operating acceptance, and controlled Duda cutover. The public deployment ledger/history and disposable-Local rollback are technical foundations, not production backup/DR or cutover certification. Phase 4 is not represented as implemented.
 
 Developer contribution policies and security boundaries are defined in [`CONTRIBUTING.md`](./CONTRIBUTING.md).

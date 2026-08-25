@@ -141,8 +141,4 @@ export class SupabasePublicRemovalRepositoryCore {
     return data ? Buffer.from(await data.arrayBuffer()) : null;
   }
 
-  async overwriteObject(bucket: string, path: string, content: Buffer): Promise<void> {
-    const { error } = await this.supabase.storage.from(bucket).upload(path, content, { contentType: 'application/json', upsert: true });
-    if (error) throw new Error('Public-removal feed upload failed.');
-  }
 }

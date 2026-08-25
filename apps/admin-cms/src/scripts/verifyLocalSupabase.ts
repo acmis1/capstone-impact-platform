@@ -27,10 +27,25 @@ const EXPECTED_TABLES = [
   'published_snapshots',
   'publication_attempts',
   'public_removal_attempts',
+  'public_feed_operations',
+  'public_feed_versions',
+  'public_feed_version_members',
+  'public_feed_head',
+  'feed_rollback_preparations',
+  'public_feed_operation_events',
 ];
 
 const LOOKUP_TABLES = ['programs', 'disciplines', 'industry_categories'];
-const SERVICE_ROLE_READ_ONLY_TABLES = ['publication_attempts', 'public_removal_attempts'];
+const SERVICE_ROLE_READ_ONLY_TABLES = [
+  'publication_attempts',
+  'public_removal_attempts',
+  'public_feed_operations',
+  'public_feed_versions',
+  'public_feed_version_members',
+  'public_feed_head',
+  'feed_rollback_preparations',
+  'public_feed_operation_events',
+];
 
 const EXPECTED_BUCKETS = [
   {
@@ -539,6 +554,17 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       'mark_public_removal_storage_written',
       'finalize_public_removal_attempt',
       'fail_public_removal_attempt',
+      'reserve_public_feed_operation',
+      'bind_public_feed_operation',
+      'renew_public_feed_operation_lease',
+      'mark_public_feed_write_started',
+      'mark_public_feed_candidate_observed',
+      'claim_public_feed_operation',
+      'finalize_public_feed_operation',
+      'complete_public_feed_operation',
+      'fail_public_feed_operation',
+      'require_public_feed_recovery',
+      'prepare_public_feed_rollback',
     ];
     for (const routine of publicationRpcs) {
       if (!funcGrantSet.has(`SERVICE_ROLE|${routine}`)) {
@@ -554,7 +580,16 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
     }
 
     // Trigger-only helpers are never directly executable by API roles.
-    for (const routine of ['update_updated_at_column', 'normalize_public_media_mapping', 'guard_active_publication_attempt']) {
+    for (const routine of [
+      'update_updated_at_column',
+      'normalize_public_media_mapping',
+      'guard_active_publication_attempt',
+      'reject_public_feed_immutable_mutation',
+      'public_feed_owner_valid',
+      'append_public_feed_operation_event',
+      'public_feed_actor_is_admin',
+      'guard_active_public_feed_operation',
+    ]) {
       for (const grantee of ['PUBLIC', 'ANON', 'AUTHENTICATED', 'SERVICE_ROLE']) {
         if (funcGrantSet.has(`${grantee}|${routine}`)) {
           console.error(`❌ Function grant security violation: ${grantee} has EXECUTE on ${routine}.`);

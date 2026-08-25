@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FolderKanban, FileSpreadsheet, Users } from 'lucide-react';
+import { FolderKanban, FileSpreadsheet, History, Users } from 'lucide-react';
 import { NavigationItem, getNavigationItems, getRouteDescriptor } from './navigation';
 import { cn } from '../../lib/utils';
 import { AppMark } from '../ui/app-mark';
@@ -20,6 +20,9 @@ function getNavIcon(href: string) {
   }
   if (href.startsWith('/admin/staff')) {
     return Users;
+  }
+  if (href.startsWith('/admin/public-feed')) {
+    return History;
   }
   return FolderKanban;
 }

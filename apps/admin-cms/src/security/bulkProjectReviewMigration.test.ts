@@ -82,9 +82,15 @@ describe('bulk project review concurrency migration contract', () => {
       'utf8',
     );
 
-    expect(migrations).toHaveLength(40);
+    expect(migrations).toHaveLength(43);
     expect(wrapperIndex).toBeGreaterThan(-1);
-    expect(finalSubmissionIndex).toBe(wrapperIndex + 1);
+    // The deployment-ledger stream lands between the bulk-review wrapper and Tan's final gallery
+    // submission authority, so the wrapper still precedes it with exactly those two files between.
+    expect(migrations.slice(wrapperIndex + 1, finalSubmissionIndex)).toEqual([
+      '20260824180000_public_feed_deployment_ledger.sql',
+      '20260824183000_public_feed_writer_protocol.sql',
+    ]);
+    expect(finalSubmissionIndex).toBe(wrapperIndex + 3);
     expect(finalSubmission).toContain('CREATE OR REPLACE FUNCTION public.submit_import_projects_for_review');
     expect(finalSubmission).toContain('INVALID_SNAPSHOT_GALLERY_STRUCTURE');
   });

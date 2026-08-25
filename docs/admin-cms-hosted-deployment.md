@@ -160,7 +160,7 @@ sequenceDiagram
 8. **Participant Confirmation**: Participant accesses preview URL and submits confirmation for the exact approved version.
 9. **Publication Readiness Check**: Execute `get_project_publication_readiness` verification (the database contract requires the project to already be in `approved` status, with confirmed preview evidence and complete accessibility texts).
 10. **Publication Preparation**: Compile and validate the candidate public feed via the no-write preparation action.
-11. **Staging Showcase Publication (separate authorisation required)**: When the server has exact staging identity/host proof and explicit staging-publication enablement, an Admin may acknowledge **Publish to staging showcase**. The existing controlled coordinator promotes approved media, verifies and replaces the stable staging feed, and returns bounded feed/snapshot evidence. See [Duda Integration Plan](duda-integration-plan.md#5-separately-authorised-staging-demonstration) for the exact later demonstration procedure.
+11. **Staging Showcase Publication (separate authorisation required)**: When the server has exact staging identity/host proof, explicit staging-publication enablement, and an activated exact deployment head, an Admin may acknowledge **Publish to staging showcase**. The controlled ledger coordinator promotes approved media, composes from the current deployment head, verifies and replaces the stable staging feed, and returns bounded feed/snapshot evidence. See [Duda Integration Plan](duda-integration-plan.md#5-separately-authorised-staging-demonstration) for the exact later demonstration procedure. Rollback remains unavailable on hosted targets.
 
 > [!NOTE]
 > There is no ordinary second "final approval" step after participant confirmation. The domain model and database contract require the project to be reviewed and transitioned to `approved` status prior to preview generation and publication readiness checks.
@@ -187,7 +187,7 @@ The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpc
 - **Administrator Identity**: Initial staging administrator bootstrap completed; single Auth identity linked to `admin_users` profile with verified `admin` role in `user_roles` (`check:admin-auth` classification: `READY_FOR_MANUAL_LOGIN_TEST`).
 - **Next Lifecycle Action**: Standalone Admin/CMS hosted web service deployment and manual authenticated login verification.
 
-The repository now expects 34 migrations, ending at `20260824120000_bulk_project_review_concurrency`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that migrations `0027`–`0034` are hosted. Any hosted reconciliation remains a separately authorized operation followed by independent review.
+The repository now expects 43 migrations, ending at `20260825030000_public_feed_taxonomy_operation_guard`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that any newer repository migration is hosted. In particular, the multi-image gallery schema, the bulk-review concurrency gate, the public deployment ledger/head, the unified writer protocol, taxonomy operation guard, and rollback capability are not established by the historical hosted evidence. Any hosted reconciliation remains a separately authorized operation followed by independent review.
 
 Operators should **NOT** run `supabase migration repair` or replay migrations against this clean v2 environment.
 
@@ -216,8 +216,8 @@ Expected automated inspection output on the clean v2 staging target:
 - `TARGET_IDENTITY_MATCH = YES`
 - `MIGRATION_HISTORY_READABLE = NO`
 - `SCHEMA_BASELINE = UNVERIFIED`
-- `REQUIRED_TABLE_SET = PRESENT` (All 27 public application tables detected)
-- `REQUIRED_RPC_NAMES = PRESENT` (All 59 application RPC names detected)
+- `REQUIRED_TABLE_SET = PRESENT` (All 33 public application tables detected)
+- `REQUIRED_RPC_NAMES = PRESENT` (All 70 application RPC names detected; 71 exact signatures including the expected overload)
 - `REQUIRED_STORAGE_BUCKETS = PRESENT` (All 3 buckets detected)
 - `AUTH_FOUNDATION = READY`
 - `MANUAL_EVIDENCE_REQUIRED = YES`

@@ -87,6 +87,23 @@ export function compilePublicationCandidateFeed(projects: Project[], targetPubli
     .map(toPublicFeedRecord);
 }
 
+/**
+ * Builds a deployment-reconciliation candidate for one target that is ALREADY lifecycle
+ * `published` but absent from the current deployment head.
+ *
+ * This is deliberately a sibling of compilePublicationCandidateFeed rather than a relaxation of
+ * it: normal publication must keep demanding an `approved` target. Both funnel through the same
+ * toPublicFeedRecord projection, so the two modes emit an identical public-feed record contract.
+ */
+export function compilePublicReconciliationCandidateFeed(projects: Project[], targetPublicId: string): PublicFeedRecord[] {
+  const targets = projects.filter((project) => project.publicId === targetPublicId);
+  if (targets.length !== 1 || targets[0].status !== 'published') {
+    throw new Error('Deployment reconciliation candidate target is unavailable.');
+  }
+  return projects
+    .filter((project) => project.status === 'published')
+    .map(toPublicFeedRecord);
+}
 /** Builds a public-feed candidate with one exact published target removed. */
 export function compilePublicRemovalCandidateFeed(projects: Project[], targetPublicId: string): PublicFeedRecord[] {
   const targets = projects.filter((project) => project.publicId === targetPublicId);

@@ -11,9 +11,22 @@ The application currently owns:
 - package ingestion and import review;
 - project inspection and controlled review transitions;
 - private draft media and public-asset storage foundations;
-- public-eligible stable JSON feed compilation.
+- public-eligible stable JSON feed compilation; and
+- an immutable public deployment ledger, explicit deployment head, and bounded deployment-history UI.
 
-It includes a project metadata editor backed by one atomic, service-role-only database transaction. Hosted deployment and broader staff acceptance remain separate activities. Browser Back/Forward interception is not supported or claimed. It does not yet provide a participant portal or final confirmation workflow, integrated preview workspace, publishing/history or rollback UI, production Duda cutover, or production-readiness certification.
+It includes a project metadata editor backed by one atomic, service-role-only database transaction. Hosted deployment and broader staff acceptance remain separate activities. Browser Back/Forward interception is not supported or claimed. Participant preview/confirmation and the public deployment-history UI are implemented technical foundations; integrated preview workspace, production Duda cutover, hosted rollback, and production-readiness certification remain unavailable.
+
+### Public deployment ledger runtime verification
+
+Activating the deployment head is a governed, irreversible, singleton operation, and its immutable history deliberately refuses deletion of any project or audit record it references. The runtimes that exercise it therefore cannot share the canonical Local stack; each provisions and destroys its own throwaway Supabase project, port block, Docker network, and workdir:
+
+```bash
+npm run verify:public-feed-ledger-runtime:disposable -- ledger
+npm run verify:public-feed-ledger-runtime:disposable -- publication
+npm run verify:public-feed-ledger-runtime:disposable -- removal
+```
+
+Omitting the argument runs all three against one throwaway stack. `CAPSTONE_LEDGER_RUNTIME_PORT_BASE` moves the port block when another local stack already occupies it. CI runs each of the three as its own gate.
 
 ## Current capability and verification
 
@@ -28,8 +41,9 @@ It includes a project metadata editor backed by one atomic, service-role-only da
 | Project metadata editing | Yes | Editor route/UI and one atomic metadata RPC are implemented locally | Hosted deployment and broader staff acceptance remain separate |
 | Media validation/storage | Foundations | Offline media validation tests; private-to-public storage functions exist | End-to-end staging and production verification pending |
 | Public-eligible feed compiler | Yes | Compiler and schema validator tests; offline feed check | Controlled public cutover pending |
+| Public deployment ledger | Local/disposable foundation | Exact-byte versions, explicit head, controlled writer/recovery, history UI, reconciliation, and Local-only rollback verified | Hosted activation/rollback and production acceptance unavailable |
 | Duda integration | Design boundary | Stable-feed consumer is documented | Live Duda connection remains isolated |
-| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (29 timestamped migrations; migrations 0007 through 0029 repository/local-only) | Full production RLS verification pending |
+| Database schema/RLS | Versioned | Migration tests and SQL contracts exist (35 timestamped migrations; repository changes newer than the recorded hosted baseline remain local/repository-only) | Full production RLS verification pending |
 | Automated testing | Yes | Vitest offline suite and onboarding precheck | No hosted CI evidence is asserted here |
 | Production deployment | No | Not production-verified | Hardening and controlled cutover pending |
 
@@ -122,6 +136,7 @@ Run from the repository root:
 | `SUPABASE_PUBLIC_FEEDS_BUCKET` | Server-only | Public feed bucket name. |
 | `SUPABASE_PUBLIC_FEED_FILE` | Server-only | Stable feed object name. |
 | `CAPSTONE_STAGING_PUBLICATION_ENABLED` | Server-only optional | Exact `true` enables the staging showcase action only when the shared staging runtime identity and exact Supabase-host guard also pass. Absent/invalid means disabled; it never enables live publication. |
+| `CAPSTONE_LOCAL_PUBLIC_FEED_ROLLBACK_ENABLED` | Server-only optional | Exact `true` permits rollback only when `CAPSTONE_RUNTIME_ENV=local`, the Supabase URL is loopback, and the activated database head also carries Local rollback capability. It never enables hosted rollback. |
 | `GEMINI_API_KEY` and `GEMINI_MODEL` | Server-side optional | Assistive extraction configuration. |
 | `GEMINI_ASSISTIVE_EXTRACTION_ENABLED` | Server-side optional | Enables assistive extraction only when explicitly set to `true`. |
 | `STAFF_PROVISIONING_ENABLED` | Server-only optional | Enables new staff invitations and, only on a separately verified staging runtime, direct UAT test-account creation. Fails closed when absent. Never gates activation of an existing pending invitation. |
@@ -199,6 +214,8 @@ The migration set is manually governed for authorized isolated environments. It 
 - [`20260814090000_accessible_full_text_gate.sql`](../../infra/supabase/migrations/20260814090000_accessible_full_text_gate.sql) forward-redefines `public.update_project_metadata` (gaining bounded `p_poster_text` / `p_accessibility_text`, and dropping the obsolete signature), `public.submit_import_projects_for_review`, `public.perform_project_review_action` and `public.get_project_publication_readiness` so a blank poster full text or accessibility text blocks review submission, approval and publication readiness. It reuses the existing `projects.poster_text_public` and `projects.accessibility_text_public` columns and adds no schema. *(Repository/local-only; not applied to hosted staging.)*
 - [`20260814140000_snapshot_image_alt_text.sql`](../../infra/supabase/migrations/20260814140000_snapshot_image_alt_text.sql) establishes authoritative staff-authored alt text (`media_assets.alt_text_public`) for snapshot images, establishes `public.update_snapshot_image_alt_text`, and enforces snapshot alt text across media staging, review submission, approval, participant preview generation, and publication readiness. *(Repository/local-only; not applied to hosted staging.)*
 - [`20260816144917_staging_uat_direct_account_finalization.sql`](../../infra/supabase/migrations/20260816144917_staging_uat_direct_account_finalization.sql) adds the service-role-only `public.finalize_and_activate_staff_provisioning` transaction for ready-made staging UAT identities. It atomically creates/reuses the exact profile, assigns only Reviewer/Editor roles, and transitions the owned lifecycle directly to `activated`; any database failure rolls the entire RPC back to the compensatable `invited` state. *(Repository/local-only; not applied to hosted staging.)*
+- [`20260824180000_public_feed_deployment_ledger.sql`](../../infra/supabase/migrations/20260824180000_public_feed_deployment_ledger.sql) adds immutable exact-byte deployment versions and membership, the explicit head, globally exclusive operation ledger, opaque rollback preparations, immutable operation events, restrictive RLS, and service-role read grants. It performs no Storage I/O. *(Repository/local-only; not applied to hosted staging.)*
+- [`20260824183000_public_feed_writer_protocol.sql`](../../infra/supabase/migrations/20260824183000_public_feed_writer_protocol.sql) adds the service-role-only token/epoch-fenced canonical writer protocol, activation/publication/removal/reconciliation/rollback finalization, forward recovery, and fail-closed legacy writer replacements. It also adds `public.get_project_reconciliation_readiness`, a dedicated deployment authority for an already-`published` target that never relaxes the approved-only pre-publication gate `public.get_project_publication_readiness`; both the reservation and the final durable write-intent boundary prove it before any public side effect. *(Repository/local-only; not applied to hosted staging.)*
 
 See the [Supabase migration overview](../../infra/supabase/README.md), [manual apply guide](../../infra/supabase/manual-apply-guide.md), [staging reconciliation runbook](../../infra/supabase/staging-reconciliation-runbook.md) and [staging authentication verification runbook](../../infra/supabase/staging-auth-verification.md) before authorized operations.
 
@@ -267,8 +284,9 @@ Reminder bodies deliberately have no URL input. They tell the participant to use
 | `/admin/imports` | Authenticated provisioned Admin/CMS staff | List import batches and validation summaries. | Implemented |
 | `/admin/imports/[batchId]` | Authenticated provisioned Admin/CMS staff | Inspect a batch, linked project and validation flags. | Implemented |
 | `/admin/staff` | `requireAdmin` plus `staff.manage` | Invite Admin/CMS staff and review current access and incomplete provisioning attempts. | Implemented locally; institutional rollout and staff UAT pending |
+| `/admin/public-feed` | Authenticated provisioned Admin/CMS staff | Inspect bounded deployment versions, exact hashes/counts, membership, lifecycle/deployment drift, and blocking recovery state. | Implemented locally; rollback controls remain disposable-Local-only |
 
-There is no implemented participant project-confirmation workflow or route, publishing-history route, or settings route. The metadata editor is implemented locally; hosted deployment and broader staff acceptance remain separate activities.
+There is no settings route. The metadata editor, participant confirmation workflow, and public deployment-history route are implemented locally; hosted deployment and broader staff acceptance remain separate activities.
 
 ## API routes
 
@@ -278,8 +296,13 @@ There is no implemented participant project-confirmation workflow or route, publ
 | `GET`, `HEAD` | `/api/readiness` | Public | Fail-closed hosted staging configuration, target-identity, and bounded Supabase reachability evidence. | No |
 | `GET` | `/api/projects` | `requireAdmin` plus `projects.read` | Returns the protected project collection. | No |
 | `POST` | `/api/projects/[publicId]/review-action` | Same-origin check, `requireAdmin`, then review/archive permission | Validates and applies `request_changes`, `approve` or `archive`. | Yes |
+| `POST` | `/api/projects/[publicId]/deployment-reconciliation` | Same-origin check, `requireAdmin`, publication authority, and Local or explicitly enabled staging execution policy | Adds one lifecycle-`published` but currently undeployed project to the exact deployment head without replaying the lifecycle transition. | Yes |
 | `POST` | `/api/projects/bulk-review/preflight` | Same-origin check, `requireAdmin`, then action permission | Reads and classifies up to 50 selected projects without workflow mutation. | No |
 | `POST` | `/api/projects/bulk-review/execute` | Same-origin check, `requireAdmin`, then action permission | Executes bounded Submit for Review, Approve or Request Changes outcomes with version fencing. | Yes |
+| `POST` | `/api/public-feed/activation` | Same-origin check, `requireAdmin`, publication authority, and governed execution policy | Verifies or creates the exact baseline and establishes immutable deployment history/head. | Yes |
+| `POST` | `/api/public-feed/recovery` | Same-origin check, `requireAdmin`, publication authority, and governed execution policy | Explicitly claims and forward-reconciles the one durable `RECOVERY_REQUIRED` operation. | Yes |
+| `POST` | `/api/public-feed/rollback/prepare` | Same-origin check, `requireAdmin`, publication authority, and disposable-Local rollback capability | Creates an expiring actor-bound preparation with target and drift evidence. | Yes |
+| `POST` | `/api/public-feed/rollback` | Same-origin check, `requireAdmin`, publication authority, exact acknowledgement, and disposable-Local rollback capability | Restores a selected exact artifact as a new deployment version without changing project lifecycle. | Yes |
 | `POST` | `/api/staff/invitations` | Same-origin check, `requireAdmin`, then `staff.manage` | Creates a controlled staff provisioning invitation. Accepts only the target name, email and roles; all actor attribution is server-derived. | Yes |
 | `POST` | `/api/staff/test-accounts` | Same-origin check, `requireAdmin`, `staff.manage`, provisioning enablement, and exact staging target identity | Creates a ready-to-use Reviewer/Editor staging UAT account without sending email. Accepts only name, login, password, confirmation, and roles; returns no credential or internal identity. | Yes |
 | `POST`, `DELETE` | `/api/projects/[publicId]/participant-preview/reminders` | Same-origin check, `requireAdmin`, then participant-preview management authority | Schedules an explicit future reminder or cancels a still-scheduled reminder. Recipient, preview, initial delivery and actor are server-derived. | Yes |
@@ -370,7 +393,7 @@ Promotion and feed publication are separate authorized operations. Staging code 
 
 ## Public feed and Duda boundary
 
-The feed compiler includes only `approved` and `published` records and validates the resulting stable JSON contract. It excludes internal staff notes, review comments, validation internals, archive metadata and other CMS-only fields. Supabase Storage provides the publication foundation; Duda is the intended presentation consumer. The [Duda integration plan](../../docs/duda-integration-plan.md) is a design/operations reference, and live cutover remains pending and isolated from staging.
+Ordinary feed compilation includes only lifecycle-`published` records and validates the stable JSON contract. Controlled publication and removal instead compose one change from the exact current deployment head, while deployment reconciliation explicitly adds a lifecycle-`published` record that is not deployed. The ledger is intended deployment truth; Supabase Storage is the externally served exact copy of its head; Duda is the intended presentation consumer. Internal staff notes, review comments, validation internals, archive metadata and other CMS-only fields are excluded. The [public feed contract](../../docs/public-feed-contract.md) defines exact-byte and recovery invariants, and the [Duda integration plan](../../docs/duda-integration-plan.md) remains the operator-facing integration reference. Live cutover remains pending and isolated from staging.
 
 ## Testing and quality gates
 
@@ -405,7 +428,7 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - Reviewer/editor permission-matrix UAT remains pending.
 - Project detail is the next major UI modernization area.
 - PostgreSQL RPC migration 0009 introduced the local metadata editor transaction; it has not been applied to hosted staging, and hosted reconciliation remains pending.
-- Participant confirmation, integrated preview, publishing history and rollback UI are pending.
+- Integrated preview workspace remains pending. Deployment history and disposable-Local rollback controls are implemented; hosted/production rollback remains unavailable.
 - Live Duda cutover is pending.
 - Authenticated browser, responsive, accessibility and screen-reader validation remain incomplete.
 - Poster full text, poster accessibility text, and snapshot image alt text are required across core workflows. Formal WCAG conformance evaluation, multi-image gallery alt text, final Duda accessibility acceptance and human accessibility UAT remain pending.

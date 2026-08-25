@@ -154,15 +154,21 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches the exact repository migration inventory and keeps every historical migration byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
 
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(40);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(43);
 
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
+      // Only this branch's own three unmerged Stream K migrations are new relative
+      // to origin/main. Every other file - including the merged Tan gallery and
+      // Binh bulk-review migrations - must stay byte-identical to main.
       const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.filter(
-        (migration) => migration !== '20260824120000_bulk_project_review_concurrency.sql',
+        (migration) =>
+          migration !== '20260824180000_public_feed_deployment_ledger.sql' &&
+          migration !== '20260824183000_public_feed_writer_protocol.sql' &&
+          migration !== '20260825030000_public_feed_taxonomy_operation_guard.sql',
       );
 
-      expect(historicalMigrations).toHaveLength(39);
+      expect(historicalMigrations).toHaveLength(40);
 
       expect(() =>
         execFileSync(
@@ -190,7 +196,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       );
 
       expect([...ALL_REQUIRED_TABLES].sort()).toEqual([...new Set(createdTables)].sort());
-      expect(ALL_REQUIRED_TABLES).toHaveLength(27);
+      expect(ALL_REQUIRED_TABLES).toHaveLength(33);
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_runs');
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_findings');
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_jobs');
@@ -203,7 +209,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches every final service-role application RPC signature and isolates the one internal helper', () => {
       const contracts = migrationServiceRoleContracts();
       expect(contracts.application.map(contractKey).sort()).toEqual(REQUIRED_RPC_SIGNATURES.map(contractKey).sort());
-      expect(contracts.application).toHaveLength(60);
+      expect(contracts.application).toHaveLength(72);
       expect(REQUIRED_RPC_NAMES).toContain('persist_assistive_validation_run');
       expect(REQUIRED_RPC_NAMES).toContain('record_assistive_finding_disposition');
       expect(REQUIRED_RPC_NAMES).toContain('claim_next_assistive_validation_job');
@@ -331,7 +337,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const inspected = inspectPostgrestOpenApi(openApiDocument());
       expect(inspected?.publicRelations).toEqual([...ALL_REQUIRED_TABLES].sort());
       expect(inspected?.rpcNames).toEqual([...REQUIRED_RPC_NAMES].sort());
-      expect(inspected?.rpcSignatures).toHaveLength(59);
+      expect(inspected?.rpcSignatures).toHaveLength(71);
       expect(inspected?.rpcSignatures.some((signature) => signature.name === 'execute_controlled_publication')).toBe(false);
     });
 
