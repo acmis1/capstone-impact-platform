@@ -62,7 +62,16 @@ Header matching is case-insensitive, order-independent, trims surrounding whites
 | `Main media to feature` | `layoutConfig.featuredMedia` | Optional | `main media to feature`, `mainmediatofeature`, `featuredmedia`, `featured media` |
 | `Poster full text` | `posterText` | **Required** | `poster full text`, `poster text`, `postertext`, `posterfulltext` |
 | `Accessibility text` | `accessibilityText` | **Required** | `accessibility text`, `accessibilitytext` |
-| `Snapshot image alt text` | `snapshotAltText` | Conditional — required when the package contains `snapshot-1.png` | `snapshot image alt text`, `snapshot alt text`, `snapshot accessibility text`, `snapshotimagealttext`, `snapshotalttext` |
+| `Snapshot image alt text` | `snapshotAltText` | Conditional — required when gallery position 1 exists | `snapshot image alt text`, `snapshot alt text`, `snapshot accessibility text`, `snapshotimagealttext`, `snapshotalttext`, `snapshot 1 alt text`, `snapshot1alttext` |
+| `Snapshot 2 alt text` | `snapshot2AltText` | Conditional — required when gallery position 2 exists | `snapshot 2 alt text`, `snapshot2 alt text`, `snapshot2alttext` |
+| `Snapshot 3 alt text` | `snapshot3AltText` | Conditional — required when gallery position 3 exists | `snapshot 3 alt text`, `snapshot3 alt text`, `snapshot3alttext` |
+| `Snapshot 4 alt text` | `snapshot4AltText` | Conditional — required when gallery position 4 exists | `snapshot 4 alt text`, `snapshot4 alt text`, `snapshot4alttext` |
+| `Snapshot 5 alt text` | `snapshot5AltText` | Conditional — required when gallery position 5 exists | `snapshot 5 alt text`, `snapshot5 alt text`, `snapshot5alttext` |
+| `Snapshot 6 alt text` | `snapshot6AltText` | Conditional — required when gallery position 6 exists | `snapshot 6 alt text`, `snapshot6 alt text`, `snapshot6alttext` |
+| `Snapshot 7 alt text` | `snapshot7AltText` | Conditional — required when gallery position 7 exists | `snapshot 7 alt text`, `snapshot7 alt text`, `snapshot7alttext` |
+| `Snapshot 8 alt text` | `snapshot8AltText` | Conditional — required when gallery position 8 exists | `snapshot 8 alt text`, `snapshot8 alt text`, `snapshot8alttext` |
+| `Snapshot 9 alt text` | `snapshot9AltText` | Conditional — required when gallery position 9 exists | `snapshot 9 alt text`, `snapshot9 alt text`, `snapshot9alttext` |
+| `Snapshot 10 alt text` | `snapshot10AltText` | Conditional — required when gallery position 10 exists | `snapshot 10 alt text`, `snapshot10 alt text`, `snapshot10alttext` |
 
 ### Participant Contact Email
 
@@ -101,32 +110,24 @@ must carry a full text version of its image content plus a text alternative for 
   submitted for review, approved, or published until staff supply both through the Project Metadata
   editor in the Admin/CMS.
 
-### Snapshot Image Alt Text
+### Snapshot Gallery Alt Text
 
-`Snapshot image alt text` (`snapshotAltText`) is the text alternative describing the meaningful
-content of the package's snapshot image. It is **conditionally required**: the snapshot image itself
-stays optional, but a package that includes one must describe it.
+Snapshot gallery images are optional, but every included gallery image must have its own authoritative staff-authored text alternative.
 
-- **Package contains `snapshot-1.png`** — the value must be present and non-blank. An absent column,
-  a blank value after trim, or a formula cell with no usable cached result each block the import.
-- **Package contains no `snapshot-1.png`** — the column and value may be absent. Nobody is asked to
-  describe an image that is not there, and the existing "snapshot recommended" warning is unchanged.
-- The value is bounded at 2,000 characters and enforced as `WORKBOOK_VALUE_TOO_LONG`. An oversized
-  value is rejected outright and is **never** silently truncated.
-- Because the workbook parser cannot see which files a package contains, it enforces only what it
-  can evaluate alone (readable cell, bounded length). The conditional presence rule is applied at
-  the package-aware boundary, which reports `METADATA_MISSING_SNAPSHOT_ALT_TEXT` or
-  `METADATA_SNAPSHOT_ALT_TEXT_TOO_LONG`.
-- This value is per media asset, not per project, and is stored on `media_assets.alt_text_public`.
-  The poster image keeps `accessibilityText` as its text alternative; it is never duplicated here.
-- **Nothing derives this value** from the filename, the project title, the poster accessibility
-  text, OCR, or AI. A filename is file information, not a text alternative.
-- A legacy `project.json` package may supply `snapshotAltText`, and an oversized value there is
-  rejected. A legacy package with a snapshot and no alt text may still be staged into private draft
-  media, but it cannot be submitted for review, approved, given a participant preview, or published
-  until staff supply the text in the project media section of the Admin/CMS.
-- Only the single current snapshot image (`snapshot-1.png`) is supported. Arbitrary multi-image
-  galleries and gallery ordering are **not** implemented.
+- Gallery positions are numeric and bounded from **1 through 10**.
+- `snapshot-1` uses the backwards-compatible `Snapshot image alt text` workbook column.
+- Positions 2 through 10 use `Snapshot 2 alt text` through `Snapshot 10 alt text`.
+- An alt-text column is conditionally required only when the corresponding gallery image exists. A project with no image at that position is not required to provide that value.
+- Each gallery image and each alt-text entry maps to exactly one numeric gallery position. Duplicate or ambiguous positions are blocking package errors.
+- Gallery order is authoritative numeric position order, not filesystem selection order or workbook column order.
+- Positions do not need to be contiguous; the numeric position remains the authoritative identity and ordering value.
+- Every alt value must be non-blank after trim and is bounded at 2,000 characters. Oversized values are rejected rather than truncated.
+- Package-aware validation binds each image to the alt text for that exact gallery position. Alt text from another position is never used as a fallback.
+- The authoritative value is stored per media asset on `media_assets.alt_text_public`; gallery position is stored separately on the same media identity.
+- Nothing derives alt text from filenames, project titles, poster text, OCR, or AI.
+- The browser preview, server revalidation, staging intent, participant preview, publication readiness, and public feed preserve the same gallery identity, numeric ordering, and per-image alt text.
+- A missing, malformed, unmatched, duplicated, or oversized gallery alt blocks the workflow at the applicable validation/readiness boundary.
+- A legacy `project.json` package remains a developer/testing fallback, but it cannot bypass the authoritative gallery accessibility and readiness gates.
 
 ### Public ID Separation
 

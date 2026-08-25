@@ -1,6 +1,11 @@
 # Folder-Based Project Package Import Workflow
 
-This document defines the project package import workflow for the CMS.
+> [!WARNING]
+> **Historical prototype document.** This file records an earlier import-workflow design and does not define the current Admin/CMS package contract. In particular, its `snapshots/` folder examples, `snapshot-01.jpg` naming, `accessibility.txt` assumptions, and `project.json`-first required-file rules are historical and are not authoritative for the current implementation.
+>
+> For the current implemented contract, see [`docs/project-details-workbook-contract.md`](../../docs/project-details-workbook-contract.md) and the Admin/CMS Import Workflow Guide.
+
+This document defines the historical prototype project package import workflow for the CMS.
 
 ## Primary Workflow: Folder Upload
 The primary, stakeholder-friendly workflow is browser-based folder upload:

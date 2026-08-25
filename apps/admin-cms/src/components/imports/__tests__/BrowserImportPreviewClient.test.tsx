@@ -196,9 +196,13 @@ describe('PR2A Guided Import Workflow Components', () => {
       expect(screen.getByText(/Required poster image \(PNG; maximum 5 MB\)\./i)).toBeTruthy();
 
       // Verify JPEG and WEBP are not advertised for poster.png or anywhere in the guide
-      const guideContainer = screen.getByText(/Expected Files per Project/i).closest('div');
-      expect(guideContainer?.textContent).not.toContain('JPEG');
-      expect(guideContainer?.textContent).not.toContain('WEBP');
+      const posterLabel = screen.getByText('poster.png');
+      const posterDetails = posterLabel.parentElement;
+
+      expect(posterDetails?.textContent).toContain('PNG');
+      expect(posterDetails?.textContent).toContain('maximum 5 MB');
+      expect(posterDetails?.textContent).not.toContain('JPEG');
+      expect(posterDetails?.textContent).not.toContain('WEBP');
     });
   });
 
