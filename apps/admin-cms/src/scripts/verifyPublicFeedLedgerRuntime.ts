@@ -140,6 +140,7 @@ async function createReadyPublicationProject(
   client: SupabaseClient,
   publicId: string,
   snapshotCount = 0,
+  taxonomy?: { discipline: string; industryCategory: string },
 ): Promise<string> {
   const inserted = await client.from('projects').insert({
     public_id: publicId, title: `Runtime ${publicId}`, slug: publicId,
@@ -190,6 +191,24 @@ async function createReadyPublicationProject(
       alt_text_public: `Synthetic gallery image ${position}.`,
     });
     assert.equal(media.error, null, media.error?.message);
+  }
+
+  if (taxonomy) {
+    const discipline = await client.from('disciplines')
+      .insert({ name: taxonomy.discipline }).select('id').single();
+    assert.equal(discipline.error, null, discipline.error?.message);
+    const disciplineLink = await client.from('project_disciplines').insert({
+      project_id: projectId, discipline_id: discipline.data?.id,
+    });
+    assert.equal(disciplineLink.error, null, disciplineLink.error?.message);
+
+    const industryCategory = await client.from('industry_categories')
+      .insert({ name: taxonomy.industryCategory }).select('id').single();
+    assert.equal(industryCategory.error, null, industryCategory.error?.message);
+    const industryLink = await client.from('project_industry_categories').insert({
+      project_id: projectId, industry_category_id: industryCategory.data?.id,
+    });
+    assert.equal(industryLink.error, null, industryLink.error?.message);
   }
   const previews = new SupabaseParticipantPreviewRepositoryCore(client);
   const generated = await previews.generatePreview({
@@ -445,7 +464,8 @@ async function main(): Promise<void> {
   assertLoopbackBindings();
   const cli = path.resolve(repositoryRoot, 'node_modules/supabase/dist/supabase.js');
   const raw = execFileSync(process.execPath, [cli, 'status', '--workdir', verifierWorkdir, '-o', 'env'], {
-    cwd: repositoryRoot, encoding: 'utf8', env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: '1' },
+    cwd: repositoryRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: '1' },
   });
   const local = parseSupabaseCliEnv(raw);
   assert.equal(isLoopbackUrl(local.API_URL ?? ''), true);
@@ -455,10 +475,23 @@ async function main(): Promise<void> {
   const anon = createClient(local.API_URL!, local.ANON_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
   const ledger = new SupabasePublicFeedLedgerRepositoryCore(client);
 
-  assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version IN ('20260824180000','20260824183000');"), '2');
+  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '43');
+  assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version IN ('20260824180000','20260824183000','20260825030000');"), '3');
   assert.equal(psql("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('public_feed_operations','public_feed_versions','public_feed_version_members','public_feed_head','feed_rollback_preparations','public_feed_operation_events');"), '6');
   assert.equal(psql("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='public_feed_operations' AND column_name IN ('owner_token_hash','recovery_from_state')"), '2');
   assert.equal(psql("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='public_feed_operations' AND column_name IN ('owner_token','execution_token')"), '0');
+  assert.equal(
+    psql("SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND c.relname IN ('disciplines','industry_categories') AND t.tgname IN ('guard_discipline_lookup_during_public_feed_operation','guard_industry_category_lookup_during_public_feed_operation');"),
+    '2',
+  );
+  assert.equal(
+    psql("SELECT p.prosecdef::text || '|' || COALESCE(pg_catalog.array_to_string(p.proconfig, ','),'') FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='guard_active_public_feed_taxonomy';"),
+    'true|search_path=""',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.has_function_privilege('service_role','public.guard_active_public_feed_taxonomy()','EXECUTE');"),
+    'f',
+  );
   const preservedPublicId = process.env.CAPSTONE_VERIFY_PRESERVED_PUBLIC_ID?.trim();
   if (preservedPublicId) {
     assert.equal(psql(`SELECT count(*) FROM public.projects WHERE public_id=${sqlLiteral(preservedPublicId)};`), '1');
@@ -492,7 +525,12 @@ async function main(): Promise<void> {
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
 
   const medical = project('186-rollback-publication');
-  await createReadyPublicationProject(client, medical.publicId, 3);
+  const confirmedDiscipline = 'Taxonomy Discipline B';
+  const confirmedIndustryCategory = 'Taxonomy Industry B';
+  await createReadyPublicationProject(client, medical.publicId, 3, {
+    discipline: confirmedDiscipline,
+    industryCategory: confirmedIndustryCategory,
+  });
   const publication = await executeControlledPublication({
     permissions: ['projects.publish'], publicId: medical.publicId,
     privateBucket: 'project-drafts-private', publicAssetsBucket: 'project-public-assets',
@@ -701,6 +739,89 @@ async function main(): Promise<void> {
   const feedBeforeMappingGuard = await exactStored(client);
   const headGenerationBeforeMappingGuard = psql('SELECT generation FROM public.public_feed_head WHERE singleton=true;');
   const publicMediaBeforeMappingGuard = await publicMediaCount(client, medical.publicId);
+
+  // The participant confirmed the lookup names, not merely the relationship-row identifiers.
+  // Before this forward guard, B -> C could happen after reservation, candidate preparation could
+  // bind C, and C -> B could restore the final readiness snapshot before WRITE_STARTED. Freezing
+  // only project_disciplines/project_industry_categories did not close that ABA window.
+  const disciplineId = psql(`SELECT d.id::text FROM public.disciplines d
+    JOIN public.project_disciplines pd ON pd.discipline_id=d.id
+    WHERE pd.project_id=${sqlLiteral(medicalProjectId)}::uuid;`);
+  const industryCategoryId = psql(`SELECT ic.id::text FROM public.industry_categories ic
+    JOIN public.project_industry_categories pic ON pic.industry_category_id=ic.id
+    WHERE pic.project_id=${sqlLiteral(medicalProjectId)}::uuid;`);
+  const taxonomyEvidence = psql(`SELECT (pp.snapshot->'disciplines')::text || '|' ||
+      (pp.snapshot->'industryCategories')::text
+    FROM public.participant_previews pp
+    WHERE pp.project_id=${sqlLiteral(medicalProjectId)}::uuid AND pp.status='active';`);
+  assert.equal(
+    taxonomyEvidence,
+    `${JSON.stringify([confirmedDiscipline])}|${JSON.stringify([confirmedIndustryCategory])}`,
+  );
+  const disciplineLinkBefore = psql(`SELECT project_id::text || '|' || discipline_id::text
+    FROM public.project_disciplines WHERE project_id=${sqlLiteral(medicalProjectId)}::uuid;`);
+  const industryLinkBefore = psql(`SELECT project_id::text || '|' || industry_category_id::text
+    FROM public.project_industry_categories WHERE project_id=${sqlLiteral(medicalProjectId)}::uuid;`);
+
+  // Raw service-role-equivalent SQL is fenced for both UPDATE and DELETE.
+  expectOperationGuardRejection(
+    `UPDATE public.disciplines SET name='Taxonomy Discipline C' WHERE id=${sqlLiteral(disciplineId)}::uuid;`,
+    'post-reservation referenced discipline rename',
+  );
+  expectOperationGuardRejection(
+    `DELETE FROM public.disciplines WHERE id=${sqlLiteral(disciplineId)}::uuid;`,
+    'post-reservation referenced discipline delete',
+  );
+  expectOperationGuardRejection(
+    `UPDATE public.industry_categories SET name='Taxonomy Industry C' WHERE id=${sqlLiteral(industryCategoryId)}::uuid;`,
+    'post-reservation referenced industry-category rename',
+  );
+  expectOperationGuardRejection(
+    `DELETE FROM public.industry_categories WHERE id=${sqlLiteral(industryCategoryId)}::uuid;`,
+    'post-reservation referenced industry-category delete',
+  );
+
+  // PostgREST's normal service-role path reaches the same bounded trigger refusal.
+  const restDisciplineMutation = await client.from('disciplines')
+    .update({ name: 'Taxonomy Discipline C' }).eq('id', disciplineId);
+  assert.ok(restDisciplineMutation.error, 'Service-role discipline rename unexpectedly succeeded.');
+  assert.match(String(restDisciplineMutation.error?.message ?? ''), /PUBLIC_FEED_OPERATION_IN_PROGRESS/);
+  const restIndustryMutation = await client.from('industry_categories')
+    .update({ name: 'Taxonomy Industry C' }).eq('id', industryCategoryId);
+  assert.ok(restIndustryMutation.error, 'Service-role industry-category rename unexpectedly succeeded.');
+  assert.match(String(restIndustryMutation.error?.message ?? ''), /PUBLIC_FEED_OPERATION_IN_PROGRESS/);
+
+  // An active operation freezes only taxonomy referenced by its target. Independent lookup rows
+  // remain mutable, and INSERT remains available because a new row alone changes no project.
+  const unrelatedDiscipline = await client.from('disciplines')
+    .insert({ name: 'Unrelated Discipline B' }).select('id').single();
+  assert.equal(unrelatedDiscipline.error, null, unrelatedDiscipline.error?.message);
+  const unrelatedDisciplineId = String(unrelatedDiscipline.data?.id);
+  assert.equal((await client.from('disciplines').update({ name: 'Unrelated Discipline C' })
+    .eq('id', unrelatedDisciplineId)).error, null);
+  assert.equal(psql(`SELECT name FROM public.disciplines WHERE id=${sqlLiteral(unrelatedDisciplineId)}::uuid;`), 'Unrelated Discipline C');
+  assert.equal((await client.from('disciplines').update({ name: 'Unrelated Discipline B' })
+    .eq('id', unrelatedDisciplineId)).error, null);
+
+  const unrelatedIndustry = await client.from('industry_categories')
+    .insert({ name: 'Unrelated Industry B' }).select('id').single();
+  assert.equal(unrelatedIndustry.error, null, unrelatedIndustry.error?.message);
+  const unrelatedIndustryId = String(unrelatedIndustry.data?.id);
+  assert.equal((await client.from('industry_categories').update({ name: 'Unrelated Industry C' })
+    .eq('id', unrelatedIndustryId)).error, null);
+  assert.equal(psql(`SELECT name FROM public.industry_categories WHERE id=${sqlLiteral(unrelatedIndustryId)}::uuid;`), 'Unrelated Industry C');
+  assert.equal((await client.from('industry_categories').update({ name: 'Unrelated Industry B' })
+    .eq('id', unrelatedIndustryId)).error, null);
+
+  assert.equal((await client.from('disciplines').delete().eq('id', unrelatedDisciplineId)).error, null);
+  assert.equal((await client.from('industry_categories').delete().eq('id', unrelatedIndustryId)).error, null);
+
+  assert.equal(psql(`SELECT name FROM public.disciplines WHERE id=${sqlLiteral(disciplineId)}::uuid;`), confirmedDiscipline);
+  assert.equal(psql(`SELECT name FROM public.industry_categories WHERE id=${sqlLiteral(industryCategoryId)}::uuid;`), confirmedIndustryCategory);
+  assert.equal(psql(`SELECT project_id::text || '|' || discipline_id::text
+    FROM public.project_disciplines WHERE project_id=${sqlLiteral(medicalProjectId)}::uuid;`), disciplineLinkBefore);
+  assert.equal(psql(`SELECT project_id::text || '|' || industry_category_id::text
+    FROM public.project_industry_categories WHERE project_id=${sqlLiteral(medicalProjectId)}::uuid;`), industryLinkBefore);
 
   // Service-role SQL path, without the operation's internal app.public_feed_operation_id marker.
   expectOperationGuardRejection(
@@ -1116,7 +1237,7 @@ async function main(): Promise<void> {
   const memberHash = psql(`SELECT record_hash FROM public.public_feed_version_members WHERE version_id=${sqlLiteral(firstVersionId)}::uuid ORDER BY ordinal LIMIT 1;`);
   assert.equal(memberHash, trafficArtifact.members[0].recordHash);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
-  console.log('Public feed ledger runtime verification passed: fresh schema, exact Storage/head, activation, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
+  console.log('Public feed ledger runtime verification passed: fresh 43-migration schema, exact Storage/head, activation, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
 }
 
 main().catch((error: unknown) => {

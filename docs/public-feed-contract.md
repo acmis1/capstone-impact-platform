@@ -13,6 +13,7 @@ The schema constraints, field mappings, and filters defined here are implemented
 *   [apps/admin-cms/src/projects/publicFeedWriterCoordinator.ts](../apps/admin-cms/src/projects/publicFeedWriterCoordinator.ts)
 *   [infra/supabase/migrations/20260824180000_public_feed_deployment_ledger.sql](../infra/supabase/migrations/20260824180000_public_feed_deployment_ledger.sql)
 *   [infra/supabase/migrations/20260824183000_public_feed_writer_protocol.sql](../infra/supabase/migrations/20260824183000_public_feed_writer_protocol.sql)
+*   [infra/supabase/migrations/20260825030000_public_feed_taxonomy_operation_guard.sql](../infra/supabase/migrations/20260825030000_public_feed_taxonomy_operation_guard.sql)
 *   `apps/admin-cms/src/feed/*.test.ts` (Automated feed compilation and validation test suites)
 
 ---
@@ -65,6 +66,8 @@ Reconciliation instead proves a separate, dedicated database authority, `get_pro
 Publication legitimately leaves a target's media rows carrying `public_url`, `public_storage_bucket`, `public_storage_path` and `is_public_approved` while the private source row is preserved. That expected mapping is not classified as drift; it is instead proved coherent, and a mapping that names anything other than the deterministic destination the plan would bind is refused as `PUBLISHED_MEDIA_MAPPING_INVALID`.
 
 That authority is proved twice: once when the operation is reserved and its confirmation evidence (`confirmed_preview_id`, `confirmed_at`) is frozen into immutable operation intent, and again inside `mark_public_feed_write_started` at the final durable boundary immediately before any public side effect. The final check re-establishes admin authority, owner epoch and token currency, that the target is still `published`, that it is still absent from the deployment head, and that the frozen confirmation evidence still matches, rather than trusting an earlier application-side preflight. Once write intent is durable, the mutable drift gate deliberately does not run again, so a later lifecycle edit cannot make recovery converge on a different candidate.
+
+A persistent taxonomy rename after reservation is rejected by that final readiness comparison. The remaining ABA case is closed at its mutation boundary: while a project has an active public-feed operation, `UPDATE` or `DELETE` of a `disciplines` or `industry_categories` row referenced by that project fails with `PUBLIC_FEED_OPERATION_IN_PROGRESS`. Unreferenced lookup rows remain mutable, and creating a new unlinked lookup row remains available. Discipline names are a direct public candidate dependency through the emitted `disciplines` array. Industry-category names are not currently emitted by `toPublicFeedRecord`, but they remain immutable participant-confirmation evidence used by publication and reconciliation readiness.
 
 The following statuses are strictly **excluded** from compilation:
 *   `draft`

@@ -154,17 +154,18 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches the exact repository migration inventory and keeps every historical migration byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
 
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(42);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(43);
 
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
-      // Only this branch's own two unmerged Stream K migrations are new relative
+      // Only this branch's own three unmerged Stream K migrations are new relative
       // to origin/main. Every other file - including the merged Tan gallery and
       // Binh bulk-review migrations - must stay byte-identical to main.
       const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.filter(
         (migration) =>
           migration !== '20260824180000_public_feed_deployment_ledger.sql' &&
-          migration !== '20260824183000_public_feed_writer_protocol.sql',
+          migration !== '20260824183000_public_feed_writer_protocol.sql' &&
+          migration !== '20260825030000_public_feed_taxonomy_operation_guard.sql',
       );
 
       expect(historicalMigrations).toHaveLength(40);

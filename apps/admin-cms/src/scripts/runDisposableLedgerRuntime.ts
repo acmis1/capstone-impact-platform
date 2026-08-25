@@ -27,13 +27,14 @@ const RUNTIME_SCRIPTS: Record<string, string> = {
 };
 
 /**
- * The two migrations this branch contributes. Everything else in the tree is already on `main`,
- * so removing exactly these two reproduces a `main` database, and re-adding them reproduces the
+ * The three migrations this branch contributes. Everything else in the tree is already on `main`,
+ * so removing exactly these three reproduces a `main` database, and re-adding them reproduces the
  * upgrade an existing deployment would actually perform.
  */
 const STREAM_K_MIGRATIONS = [
   '20260824180000_public_feed_deployment_ledger.sql',
   '20260824183000_public_feed_writer_protocol.sql',
+  '20260825030000_public_feed_taxonomy_operation_guard.sql',
 ];
 
 const MAIN_MIGRATION_COUNT = 40;
@@ -137,18 +138,47 @@ function verifyMainUpgrade(workdir: string): void {
   // main, and the upgrade must not disturb either of them.
   assert.equal(routineCount('get_project_publication_readiness'), '1');
   assert.equal(routineCount('submit_import_projects_for_review'), '1');
+  psql(`
+    INSERT INTO public.disciplines(id,name)
+      VALUES ('18600000-0000-4000-8000-000000000011'::uuid,'Upgrade Preserved Discipline');
+    INSERT INTO public.industry_categories(id,name)
+      VALUES ('18600000-0000-4000-8000-000000000012'::uuid,'Upgrade Preserved Industry');
+    INSERT INTO public.projects(id,public_id,title,slug,year,status)
+      VALUES ('18600000-0000-4000-8000-000000000013'::uuid,'186-upgrade-preserved',
+        'Upgrade Preserved Project','186-upgrade-preserved',2026,'draft');
+    INSERT INTO public.project_disciplines(project_id,discipline_id)
+      VALUES ('18600000-0000-4000-8000-000000000013'::uuid,
+        '18600000-0000-4000-8000-000000000011'::uuid);
+    INSERT INTO public.project_industry_categories(project_id,industry_category_id)
+      VALUES ('18600000-0000-4000-8000-000000000013'::uuid,
+        '18600000-0000-4000-8000-000000000012'::uuid);
+  `);
+  const preservedBefore = psql(`SELECT pg_catalog.jsonb_build_object(
+      'project', (SELECT pg_catalog.to_jsonb(p) FROM public.projects p
+        WHERE p.id='18600000-0000-4000-8000-000000000013'::uuid),
+      'discipline', (SELECT pg_catalog.to_jsonb(d) FROM public.disciplines d
+        WHERE d.id='18600000-0000-4000-8000-000000000011'::uuid),
+      'industry', (SELECT pg_catalog.to_jsonb(ic) FROM public.industry_categories ic
+        WHERE ic.id='18600000-0000-4000-8000-000000000012'::uuid),
+      'disciplineLink', (SELECT pg_catalog.to_jsonb(pd) FROM public.project_disciplines pd
+        WHERE pd.project_id='18600000-0000-4000-8000-000000000013'::uuid),
+      'industryLink', (SELECT pg_catalog.to_jsonb(pic) FROM public.project_industry_categories pic
+        WHERE pic.project_id='18600000-0000-4000-8000-000000000013'::uuid)
+    )::text;`);
+  const headAbsentBefore = psql("SELECT to_regclass('public.public_feed_head') IS NULL;");
+  assert.equal(headAbsentBefore, 't');
   console.log('PASS: disposable stack provisioned at exactly the 40 migrations on main');
 
   restoreMigrations(workdir, STREAM_K_MIGRATIONS);
   runSupabase('migrate', workdir, '');
 
-  assert.equal(appliedCount(), '42', 'The upgraded database is not exactly 42 migrations.');
+  assert.equal(appliedCount(), '43', 'The upgraded database is not exactly 43 migrations.');
   assert.equal(
     psql(
       'SELECT count(*) FROM supabase_migrations.schema_migrations'
-      + " WHERE version IN ('20260824180000','20260824183000');",
+      + " WHERE version IN ('20260824180000','20260824183000','20260825030000');",
     ),
-    '2',
+    '3',
   );
   assert.equal(
     psql(
@@ -161,10 +191,27 @@ function verifyMainUpgrade(workdir: string): void {
   assert.equal(routineCount('get_project_reconciliation_readiness'), '1');
   assert.equal(routineCount('reserve_public_feed_operation'), '1');
   assert.equal(routineCount('mark_public_feed_write_started'), '1');
+  assert.equal(routineCount('guard_active_public_feed_taxonomy'), '1');
+  assert.equal(
+    psql("SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND c.relname IN ('disciplines','industry_categories') AND t.tgname IN ('guard_discipline_lookup_during_public_feed_operation','guard_industry_category_lookup_during_public_feed_operation');"),
+    '2',
+  );
   // Upgrading installs authority, never deployment state: nothing is active and no version exists.
   assert.equal(psql('SELECT count(*) FROM public.public_feed_head;'), '0');
   assert.equal(psql('SELECT count(*) FROM public.public_feed_versions;'), '0');
-  console.log('PASS: main upgraded forward to the integrated 42-migration deployment ledger');
+  assert.equal(psql(`SELECT pg_catalog.jsonb_build_object(
+      'project', (SELECT pg_catalog.to_jsonb(p) FROM public.projects p
+        WHERE p.id='18600000-0000-4000-8000-000000000013'::uuid),
+      'discipline', (SELECT pg_catalog.to_jsonb(d) FROM public.disciplines d
+        WHERE d.id='18600000-0000-4000-8000-000000000011'::uuid),
+      'industry', (SELECT pg_catalog.to_jsonb(ic) FROM public.industry_categories ic
+        WHERE ic.id='18600000-0000-4000-8000-000000000012'::uuid),
+      'disciplineLink', (SELECT pg_catalog.to_jsonb(pd) FROM public.project_disciplines pd
+        WHERE pd.project_id='18600000-0000-4000-8000-000000000013'::uuid),
+      'industryLink', (SELECT pg_catalog.to_jsonb(pic) FROM public.project_industry_categories pic
+        WHERE pic.project_id='18600000-0000-4000-8000-000000000013'::uuid)
+    )::text;`), preservedBefore);
+  console.log('PASS: main upgraded forward to the integrated 43-migration deployment ledger with project and taxonomy data preserved');
 
   // End-of-sequence composition. The deployment-ledger migrations carry earlier timestamps than the
   // final merged gallery migration, so the composed database must still end on the merged gallery
@@ -209,7 +256,10 @@ function runSupabase(command: 'start' | 'stop' | 'migrate', workdir: string, net
       ...commandArguments,
       '--workdir', workdir, ...(networkId ? ['--network-id', networkId] : []),
     ], {
-      cwd: repositoryRoot, encoding: 'utf8', stdio: ['ignore', 'inherit', 'inherit'],
+      // Supabase start prints disposable local keys in its normal stdout summary. The verifier
+      // needs no value from that summary, so keep stdout out of CI/task logs while preserving
+      // stderr for actionable startup or migration failures.
+      cwd: repositoryRoot, encoding: 'utf8', stdio: ['ignore', 'ignore', 'inherit'],
       timeout: command === 'start' ? 900_000 : 300_000,
       env: {
         ...process.env, SUPABASE_TELEMETRY_DISABLED: '1', DOCKER_HOST: proxy.dockerHost,
@@ -265,6 +315,7 @@ function main(): void {
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : 'Disposable ledger runtime provisioning failed.');
+    exitCode = 1;
   } finally {
     if (started && networkId) {
       try { runSupabase('stop', workdir, networkId); } catch { /* cleanup is best effort */ }
