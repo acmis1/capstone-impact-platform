@@ -1,0 +1,86 @@
+{
+  "schema_version": "pp1-ocr-iteration3-protocol/v1",
+  "protocol_version": "pp1-ocr-iteration3-reading-order-v1",
+  "candidate": {
+    "engine": "paddle-small",
+    "provider_id": "paddleocr-local",
+    "model_family": "PP-OCRv6 Small",
+    "detection_model": "PP-OCRv6_small_det",
+    "recognition_model": "PP-OCRv6_small_rec",
+    "detection_archive_sha256": "bfb7c1e59f0faa6b540ebdca93aea3f4b1f2477805b389fbee117820d68fe9f5",
+    "recognition_archive_sha256": "da460f968ce9f88325ac3a34fa302077d6e9b0dcefb16ba3137cd7796f879d06",
+    "detection_tree_sha256": "8af984562965b7be9bd5d1c8acb52f6d0bf37de475947b520d876ed8640eb29a",
+    "recognition_tree_sha256": "0ee2c443863549fabdb1120d7a58df5e8afa0d67bce0827b75529f105c993eae",
+    "artifact_footprint_bytes": 31481281,
+    "runtime": {"paddleocr": "3.7.0", "paddlepaddle": "3.3.0", "paddlex": "3.7.2"},
+    "license": "Apache-2.0",
+    "artifact_source": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/"
+  },
+  "configuration": {
+    "device": "cpu",
+    "raster_dpi": 180,
+    "max_input_dimension": 1920,
+    "enable_mkldnn": false,
+    "use_doc_orientation_classify": false,
+    "use_doc_unwarping": false,
+    "use_textline_orientation": false
+  },
+  "reading_order": {
+    "primary": "adaptive-left-anchors-and-bands/v1",
+    "inputs": "OCR bounding geometry only; text, metadata, truth and case identity forbidden",
+    "fallback": "deterministic geometry order when repeated column anchors are unsupported",
+    "maximum_columns": 4
+  },
+  "title_contract": {
+    "selector": "top-band-group-prominence-v2@geometry",
+    "normalization": "NFKC, casefold, Unicode dash/quote folding, punctuation-to-space, whitespace collapse",
+    "semantic_similarity_may_agree": false
+  },
+  "metrics": {
+    "primary_wer": "corpus-aggregate Levenshtein word edits after NFKC plus whitespace collapse only",
+    "exact_title": "normalized OCR title equals rendered title; fuzzy/review excluded",
+    "diagnostic_orders": ["raw", "iteration2_column"]
+  },
+  "quality_gates": {
+    "exact_title_rate_minimum": 0.95,
+    "primary_wer_maximum": 0.12,
+    "material_false_automatic_agreements_maximum": 0,
+    "all_scored_cases_must_execute": true
+  },
+  "calibration_selection": {
+    "exact_title_rate_minimum": 1.0,
+    "adaptive_wer_maximum": 0.1,
+    "rule": "select Candidate A only when every final gate passes and title/WER retain stated calibration margin; otherwise evaluate Candidate B"
+  },
+  "operational_gates": {
+    "cold_start_ms_maximum": 30000,
+    "p50_ms_maximum": 10000,
+    "p95_ms_maximum": 20000,
+    "peak_working_set_bytes_maximum": 4294967296,
+    "artifact_footprint_bytes_maximum": 1073741824,
+    "per_case_timeout_seconds": 90
+  },
+  "security": {
+    "network_during_holdout": "denied process-wide before model construction",
+    "cloud_inference": false,
+    "hosted_api": false,
+    "document_text_authority": "untrusted plain text only",
+    "bounds": {"max_pdf_pages": 10, "max_raster_pixels_per_page": 40000000, "max_total_raster_pixels": 80000000, "max_extracted_characters": 100000, "max_text_blocks": 5000}
+  },
+  "holdout_contract": {
+    "scored_case_count": 45,
+    "cases_per_media_layout_cell": 5,
+    "independently_crossed_media": ["png", "jpeg", "scanned_pdf"],
+    "independently_crossed_layouts": ["one_column", "two_column", "three_column"],
+    "fresh_seed_required": true,
+    "calibration_and_historical_non_reuse_required": true,
+    "seal_before_candidate_output": true,
+    "one_shot": true
+  },
+  "decision_contract": {
+    "allowed": ["READY_FOR_OCR_PROVIDER_INTEGRATION", "OCR_PROVIDER_DEFERRED", "HOLDOUT_INVALID_PROTOCOL_BUG"],
+    "ready_requires_all_gate_families": true,
+    "near_miss_may_select": false,
+    "post_result_tuning_permitted": false
+  }
+}
