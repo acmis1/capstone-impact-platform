@@ -1,4 +1,5 @@
-import { spawn, execSync, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createServer } from 'node:net';
 import path from 'node:path';
 import { deadlineFetch } from './verifyLocalSupabase';
 
@@ -18,7 +19,95 @@ export interface AppSmokeOptions {
   readinessTimeoutMs?: number;
   gracefulShutdownTimeoutMs?: number;
   fetcher?: (url: string) => Promise<Response>;
+  portAvailabilityChecker?: () => Promise<boolean>;
   spawnRunner?: (cmd: string, args: string[], opts: Record<string, unknown>) => ChildProcess;
+  processGroupKillRunner?: (pid: number, signal: NodeJS.Signals) => void;
+}
+
+function isAppPortAvailable(): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+
+    server.once('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        resolve(false);
+      } else {
+        reject(error);
+      }
+    });
+
+    server.listen({ host: '127.0.0.1', port: 3000, exclusive: true }, () => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(true);
+        }
+      });
+    });
+  });
+}
+
+async function waitForProcessClose(isClosed: () => boolean, timeoutMs: number): Promise<boolean> {
+  const waitStart = Date.now();
+
+  while (!isClosed() && Date.now() - waitStart < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  return isClosed();
+}
+
+async function cleanupAppProcess(options: {
+  childProc: ChildProcess;
+  gracefulTimeoutMs: number;
+  isClosed: () => boolean;
+  isExited: () => boolean;
+  isWin: boolean;
+  processGroupKillRunner: (pid: number, signal: NodeJS.Signals) => void;
+}): Promise<string | undefined> {
+  const { childProc, gracefulTimeoutMs, isClosed, isExited, isWin, processGroupKillRunner } = options;
+  const pid = childProc.pid;
+
+  if (!pid || isClosed()) return undefined;
+
+  const terminationErrors: string[] = [];
+  const signalOwnedProcess = (signal: NodeJS.Signals): void => {
+    try {
+      if (isWin) {
+        if (!childProc.kill(signal)) {
+          terminationErrors.push(`${signal} was not accepted for PID ${pid}`);
+        }
+      } else {
+        try {
+          processGroupKillRunner(-pid, signal);
+        } catch {
+          if (!childProc.kill(signal)) {
+            terminationErrors.push(`${signal} was not accepted for PID ${pid}`);
+          }
+        }
+      }
+    } catch (error: unknown) {
+      terminationErrors.push(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  if (!isExited() || !isWin) {
+    signalOwnedProcess('SIGTERM');
+  }
+
+  if (await waitForProcessClose(isClosed, gracefulTimeoutMs)) return undefined;
+
+  if (!isExited() || !isWin) {
+    signalOwnedProcess('SIGKILL');
+  }
+
+  if (await waitForProcessClose(isClosed, gracefulTimeoutMs)) return undefined;
+
+  const failureContext = terminationErrors.length > 0
+    ? ` (${terminationErrors.join('; ')})`
+    : '';
+  return `Application process cleanup failed for PID ${pid}: process streams did not close after termination${failureContext}`;
 }
 
 function appendCapturedLog(log: string, chunk: Buffer): string {
@@ -56,25 +145,36 @@ export async function runAdminAppSmokeTest(options?: AppSmokeOptions): Promise<A
   const readinessTimeoutMs = options?.readinessTimeoutMs ?? 60_000;
   const gracefulTimeoutMs = options?.gracefulShutdownTimeoutMs ?? 5_000;
   const httpFetch = options?.fetcher || deadlineFetch;
+  const portAvailabilityChecker = options?.portAvailabilityChecker || isAppPortAvailable;
+  const processGroupKillRunner = options?.processGroupKillRunner || process.kill;
 
   let childProc: ChildProcess | undefined;
   let processExited = false;
+  let processClosed = false;
   let exitCode: number | null = null;
   let processError: Error | undefined;
+  let result: AppSmokeResult | undefined;
+  let cleanupError: string | undefined;
+  let healthOk = false;
+  let loginOk = false;
 
   let stdoutLog = '';
   let stderrLog = '';
 
   try {
-    const isWin = process.platform === 'win32';
-    const npmCmd = isWin ? 'npm.cmd' : 'npm';
-    const spawnFn = options?.spawnRunner || spawn;
+    if (!(await portAvailabilityChecker())) {
+      throw new Error('Port 3000 is already in use; refusing to test an unrelated application process');
+    }
 
-    // Start process in detached process group on POSIX to allow group signal cleanup
-    childProc = spawnFn(npmCmd, ['run', 'dev'], {
+    const isWin = process.platform === 'win32';
+    const spawnFn = options?.spawnRunner || spawn;
+    const nextCliPath = require.resolve('next/dist/bin/next');
+
+    // Own the Next.js CLI directly so Windows can terminate it through the retained child handle.
+    childProc = spawnFn(process.execPath, [nextCliPath, 'dev', '--hostname', '127.0.0.1'], {
       cwd: appDir,
       detached: !isWin,
-      shell: isWin,
+      shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, PORT: '3000' },
     });
@@ -97,24 +197,26 @@ export async function runAdminAppSmokeTest(options?: AppSmokeOptions): Promise<A
       exitCode = code;
     });
 
-    // Readiness polling loop
-    let healthOk = false;
-    let loginOk = false;
+    childProc.on('close', () => {
+      processClosed = true;
+    });
 
+    // Readiness polling loop
     while (Date.now() - startTime < readinessTimeoutMs) {
       if (processError) {
-        return {
+        result = {
           success: false,
           healthOk: false,
           loginOk: false,
           errorDetail: `Next.js application failed to start: ${processError.message}`,
           durationMs: Date.now() - startTime,
         };
+        break;
       }
 
       if (processExited) {
         const errContext = formatDiagnosticLogTail('stderr', stderrLog);
-        return {
+        result = {
           success: false,
           healthOk: false,
           loginOk: false,
@@ -124,6 +226,7 @@ export async function runAdminAppSmokeTest(options?: AppSmokeOptions): Promise<A
           ].filter((detail): detail is string => Boolean(detail)).join('. '),
           durationMs: Date.now() - startTime,
         };
+        break;
       }
 
       if (!healthOk) {
@@ -156,13 +259,13 @@ export async function runAdminAppSmokeTest(options?: AppSmokeOptions): Promise<A
       await new Promise((r) => setTimeout(r, 1000));
     }
 
-    if (!healthOk || !loginOk) {
+    if (!result && (!healthOk || !loginOk)) {
       const diagnosticLogTails = [
         formatDiagnosticLogTail('stdout', stdoutLog),
         formatDiagnosticLogTail('stderr', stderrLog),
       ].filter((tail): tail is string => Boolean(tail));
 
-      return {
+      result = {
         success: false,
         healthOk,
         loginOk,
@@ -174,14 +277,16 @@ export async function runAdminAppSmokeTest(options?: AppSmokeOptions): Promise<A
       };
     }
 
-    return {
-      success: true,
-      healthOk: true,
-      loginOk: true,
-      durationMs: Date.now() - startTime,
-    };
+    if (!result) {
+      result = {
+        success: true,
+        healthOk: true,
+        loginOk: true,
+        durationMs: Date.now() - startTime,
+      };
+    }
   } catch (err: unknown) {
-    return {
+    result = {
       success: false,
       healthOk: false,
       loginOk: false,
@@ -189,43 +294,39 @@ export async function runAdminAppSmokeTest(options?: AppSmokeOptions): Promise<A
       durationMs: Date.now() - startTime,
     };
   } finally {
-    // Process-tree cleanup in finally block
-    if (childProc && childProc.pid && !processExited) {
-      const pid = childProc.pid;
-      const isWin = process.platform === 'win32';
-
-      try {
-        if (isWin) {
-          // Synchronously taskkill whole tree on Windows and wait
-          execSync(`taskkill /pid ${pid} /f /t`, { stdio: 'ignore' });
-        } else {
-          // POSIX: Graceful SIGTERM to negative PID (process group)
-          try {
-            process.kill(-pid, 'SIGTERM');
-          } catch {
-            childProc.kill('SIGTERM');
-          }
-
-          // Bounded wait for process exit
-          const termStart = Date.now();
-          while (!processExited && Date.now() - termStart < gracefulTimeoutMs) {
-            await new Promise((r) => setTimeout(r, 100));
-          }
-
-          // Force SIGKILL fallback if process group hasn't exited
-          if (!processExited) {
-            try {
-              process.kill(-pid, 'SIGKILL');
-            } catch {
-              childProc.kill('SIGKILL');
-            }
-          }
-        }
-      } catch {
-        // Ignore cleanup process kill errors
-      }
+    if (childProc) {
+      cleanupError = await cleanupAppProcess({
+        childProc,
+        gracefulTimeoutMs,
+        isClosed: () => processClosed,
+        isExited: () => processExited,
+        isWin: process.platform === 'win32',
+        processGroupKillRunner,
+      });
     }
   }
+
+  if (cleanupError) {
+    return {
+      ...(result || {
+        healthOk,
+        loginOk,
+        durationMs: Date.now() - startTime,
+      }),
+      success: false,
+      errorDetail: [result?.errorDetail, cleanupError]
+        .filter((detail): detail is string => Boolean(detail))
+        .join('. '),
+    };
+  }
+
+  return result || {
+    success: false,
+    healthOk,
+    loginOk,
+    errorDetail: 'Application smoke test ended without a result',
+    durationMs: Date.now() - startTime,
+  };
 }
 
 if (process.argv[1] && process.argv[1].endsWith('runAppSmokeTest.ts')) {
