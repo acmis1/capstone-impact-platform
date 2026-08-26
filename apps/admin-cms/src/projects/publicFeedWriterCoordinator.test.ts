@@ -209,6 +209,21 @@ describe('legacy initial-baseline adoption', () => {
     expect(harness.storage.writeExact).not.toHaveBeenCalled();
   });
 
+  it('revalidates a current-contract activation before directly observing its stored candidate', async () => {
+    harness.ledger = createLedger('RESERVED', activationOperation('RESERVED'));
+    harness.ledger.getHead = vi.fn(async () => null);
+    harness.storage = createStorage(baseline);
+
+    await expect(executePublicFeedWriter(activationParameters({
+      validateBeforeWriteIntent: async () => { throw new Error('LIFECYCLE_STORAGE_MISMATCH'); },
+    }))).resolves.toEqual({
+      resultCode: 'EXECUTION_FAILED', failureCode: 'LIFECYCLE_STORAGE_MISMATCH',
+    });
+    expect(harness.ledger.observeCandidate).not.toHaveBeenCalled();
+    expect(harness.ledger.finalize).not.toHaveBeenCalled();
+    expect(harness.ledger.fail).toHaveBeenCalledOnce();
+  });
+
   it('binds the exact legacy baseline, crosses write intent, and writes only the current projection', async () => {
     harness.ledger = createLedger('RESERVED', activationOperation('RESERVED'));
     harness.ledger.getHead = vi.fn(async () => null);
@@ -276,6 +291,59 @@ describe('legacy initial-baseline adoption', () => {
     expect(harness.storage.writeExact).toHaveBeenCalledWith(BUCKET, PATH, baseline.bytes);
     const stored = await (harness.storage.readExact as unknown as () => Promise<Buffer>)();
     expect(stored.equals(baseline.bytes)).toBe(true);
+  });
+
+  it('revalidates PREPARED recovery before its first transition into WRITE_STARTED', async () => {
+    const legacyHash = createHash('sha256').update(legacyBaselineBytes).digest('hex');
+    const durable = activationOperation('RECOVERY_REQUIRED', {
+      baselineFeedHash: legacyHash,
+      baselineFeedContent: legacyBaselineBytes.toString('utf8'),
+      recoveryFromState: 'PREPARED',
+      storageRequestGeneration: 0,
+      leaseExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    harness.ledger = createLedger('RECOVERY_REQUIRED', durable);
+    harness.ledger.getBlockingOperation = vi.fn(async () => durable);
+    harness.storage = createStorage(legacyBaselineBytes);
+    const validateBeforeWriteIntent = vi.fn(async () => undefined);
+
+    const result = await executePublicFeedWriter(activationParameters({
+      recoveryOperationId: durable.id,
+      validateBeforeWriteIntent,
+      prepareCandidate: async () => { throw new Error('RECOVERY_ARTIFACT_MUST_BE_DURABLE'); },
+    }));
+
+    expect(result).toMatchObject({ resultCode: 'COMPLETED' });
+    expect(validateBeforeWriteIntent).toHaveBeenCalledOnce();
+    expect(validateBeforeWriteIntent.mock.invocationCallOrder[0])
+      .toBeLessThan(harness.ledger.markWriteStarted.mock.invocationCallOrder[0]);
+  });
+
+  it('keeps post-WRITE_STARTED recovery forward-only without mutable-authority revalidation', async () => {
+    const legacyHash = createHash('sha256').update(legacyBaselineBytes).digest('hex');
+    const durable = activationOperation('RECOVERY_REQUIRED', {
+      baselineFeedHash: legacyHash,
+      baselineFeedContent: legacyBaselineBytes.toString('utf8'),
+      recoveryFromState: 'WRITE_STARTED',
+      storageRequestGeneration: 1,
+      leaseExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    harness.ledger = createLedger('RECOVERY_REQUIRED', durable);
+    harness.ledger.getBlockingOperation = vi.fn(async () => durable);
+    harness.storage = createStorage(legacyBaselineBytes);
+    const validateBeforeWriteIntent = vi.fn(async () => {
+      throw new Error('POST_WRITE_REVALIDATION_MUST_NOT_RUN');
+    });
+
+    const result = await executePublicFeedWriter(activationParameters({
+      recoveryOperationId: durable.id,
+      validateBeforeWriteIntent,
+      prepareCandidate: async () => { throw new Error('RECOVERY_ARTIFACT_MUST_BE_DURABLE'); },
+    }));
+
+    expect(result).toMatchObject({ resultCode: 'COMPLETED' });
+    expect(validateBeforeWriteIntent).not.toHaveBeenCalled();
+    expect(harness.ledger.markWriteStarted).toHaveBeenCalledOnce();
   });
 
   it('refuses a pre-write takeover when its durable candidate no longer equals current lifecycle authority', async () => {

@@ -63,8 +63,9 @@ export interface PublicFeedWriterParameters {
   recoveryOperationId?: string;
   prepareCandidate(baseline: VerifiedPublicFeedArtifact | null): Promise<PreparedPublicFeedCandidate>;
   /**
-   * Read-only re-validation of the bound media manifest. Invoked immediately before write intent,
-   * while failure is still free: throwing here fails the operation with zero external side effects.
+   * Read-only re-validation of every mutable authority behind the bound candidate. Invoked before
+   * the first durable write/observation boundary, while failure is still free. Pre-write recovery
+   * receives the same check; recovery after WRITE_STARTED deliberately does not.
    */
   validateBeforeWriteIntent?(manifest: PublicationMediaBinding[]): Promise<void>;
   /**
@@ -418,6 +419,9 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
       const stored = await observeOperationStorage(
         storage, params.feedBucket, params.feedPath, baseline,
       );
+      if (operation.storageRequestGeneration === 0 && params.validateBeforeWriteIntent) {
+        await params.validateBeforeWriteIntent(mediaManifest);
+      }
       if (stored?.content === candidate.content) {
         const observed = await ledger.observeCandidate(
           operation.id, epoch, ownerToken, params.adminId, candidate.feedHash, candidate.recordCount,
@@ -469,7 +473,23 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
       const currentStored = await observeOperationStorage(
         storage, params.feedBucket, params.feedPath, baseline,
       );
-      if (currentStored?.content === candidate.content && mediaManifest.length === 0) {
+      const candidateAlreadyStored = currentStored?.content === candidate.content
+        && mediaManifest.length === 0;
+      const baselineMatches = baseline === null
+        ? currentStored === null
+        : currentStored?.content === baseline.content;
+      if (!candidateAlreadyStored && !baselineMatches) {
+        await ledger.requireRecovery(operation.id, epoch, ownerToken, params.adminId, 'UNEXPECTED_STORAGE_STATE', currentStored?.feedHash ?? null, currentStored?.recordCount ?? null);
+        return { resultCode: 'RECOVERY_REQUIRED' };
+      }
+
+      // This is the final application-side proof before either form of durable authority: a
+      // Storage write needs WRITE_STARTED, while an already-exact candidate can move directly to
+      // CANDIDATE_OBSERVED. The database activation fence makes this proof atomic with that state
+      // transition even for direct service-role mutations.
+      if (params.validateBeforeWriteIntent) await params.validateBeforeWriteIntent(mediaManifest);
+
+      if (candidateAlreadyStored) {
         try {
           const observed = await ledger.observeCandidate(
             operation.id, epoch, ownerToken, params.adminId, candidate.feedHash, candidate.recordCount,
@@ -480,17 +500,6 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
           if (!reloaded || reloaded.state !== 'CANDIDATE_OBSERVED') throw error;
         }
       } else {
-        const baselineMatches = baseline === null ? currentStored === null : currentStored?.content === baseline.content;
-        if (!baselineMatches) {
-          await ledger.requireRecovery(operation.id, epoch, ownerToken, params.adminId, 'UNEXPECTED_STORAGE_STATE', currentStored?.feedHash ?? null, currentStored?.recordCount ?? null);
-          return { resultCode: 'RECOVERY_REQUIRED' };
-        }
-
-        // Last pre-intent gate. Everything that this operation is about to expose is re-read and
-        // re-checked while failure is still free; a throw here reaches the PREPARED failure path
-        // below with zero task-created public objects in existence.
-        if (params.validateBeforeWriteIntent) await params.validateBeforeWriteIntent(mediaManifest);
-
         let started: Record<string, unknown>;
         try {
           started = await ledger.markWriteStarted(operation.id, epoch, ownerToken, params.adminId);

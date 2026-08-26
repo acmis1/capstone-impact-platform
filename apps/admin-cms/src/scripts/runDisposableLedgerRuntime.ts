@@ -28,17 +28,14 @@ const RUNTIME_SCRIPTS: Record<string, string> = {
 };
 
 /**
- * The three migrations this branch contributes. Everything else in the tree is already on `main`,
- * so removing exactly these three reproduces a `main` database, and re-adding them reproduces the
- * upgrade an existing deployment would actually perform.
+ * The sole correction migration. Removing exactly this file reproduces the reviewed 43-migration
+ * PR baseline; restoring it proves the exact forward-only 43 -> 44 upgrade.
  */
-const STREAM_K_MIGRATIONS = [
-  '20260824180000_public_feed_deployment_ledger.sql',
-  '20260824183000_public_feed_writer_protocol.sql',
-  '20260825030000_public_feed_taxonomy_operation_guard.sql',
+const CORRECTION_MIGRATIONS = [
+  '20260826090000_public_feed_activation_authority_guard.sql',
 ];
 
-const MAIN_MIGRATION_COUNT = 40;
+const REVIEWED_BASE_MIGRATION_COUNT = 43;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -120,23 +117,30 @@ function routineDefinition(name: string): string {
 }
 
 /**
- * Proves the upgrade an existing `main` deployment would perform, rather than only proving a fresh
- * install. The stack is provisioned from a `main`-only migration set, the deployment-ledger stream
- * is then applied forward with `--include-all` (its timestamps predate the final merged gallery
- * migration, so it is legitimately out of order), and the composed end state is re-inspected.
+ * Proves the exact correction upgrade rather than only proving a fresh install. The stack starts
+ * at the reviewed 43-migration PR head, preserves synthetic relational data, applies Migration 0044
+ * alone, and re-inspects both the new fence and the pre-existing writer protocol.
  */
-function verifyMainUpgrade(workdir: string): void {
+function verifyCorrectionUpgrade(workdir: string): void {
   const appliedCount = () => psql('SELECT count(*) FROM supabase_migrations.schema_migrations;');
   const baselineFiles = fs.readdirSync(path.join(workdir, 'supabase', 'migrations'))
     .filter((name) => name.endsWith('.sql'));
 
-  assert.equal(baselineFiles.length, MAIN_MIGRATION_COUNT, 'The main-only baseline is not exactly 40 files.');
-  assert.equal(appliedCount(), String(MAIN_MIGRATION_COUNT), 'The provisioned baseline is not exactly main.');
-  assert.equal(psql("SELECT to_regclass('public.public_feed_operations') IS NULL;"), 't');
-  assert.equal(psql("SELECT to_regclass('public.public_feed_head') IS NULL;"), 't');
-  assert.equal(routineCount('get_project_reconciliation_readiness'), '0');
-  // The merged approved-only pre-publication authority and final review submission are already on
-  // main, and the upgrade must not disturb either of them.
+  assert.equal(
+    baselineFiles.length,
+    REVIEWED_BASE_MIGRATION_COUNT,
+    'The reviewed baseline is not exactly 43 files.',
+  );
+  assert.equal(
+    appliedCount(),
+    String(REVIEWED_BASE_MIGRATION_COUNT),
+    'The provisioned baseline is not exactly the reviewed PR head.',
+  );
+  assert.equal(psql("SELECT to_regclass('public.public_feed_operations') IS NOT NULL;"), 't');
+  assert.equal(psql("SELECT to_regclass('public.public_feed_head') IS NOT NULL;"), 't');
+  assert.equal(routineCount('get_project_reconciliation_readiness'), '1');
+  assert.equal(routineCount('guard_public_feed_activation_projection'), '0');
+  assert.equal(routineCount('lock_public_feed_activation_authority_transition'), '0');
   assert.equal(routineCount('get_project_publication_readiness'), '1');
   assert.equal(routineCount('submit_import_projects_for_review'), '1');
   psql(`
@@ -144,15 +148,29 @@ function verifyMainUpgrade(workdir: string): void {
       VALUES ('18600000-0000-4000-8000-000000000011'::uuid,'Upgrade Preserved Discipline');
     INSERT INTO public.industry_categories(id,name)
       VALUES ('18600000-0000-4000-8000-000000000012'::uuid,'Upgrade Preserved Industry');
-    INSERT INTO public.projects(id,public_id,title,slug,year,status)
+    INSERT INTO public.projects(id,public_id,title,slug,year,status,snapshots)
       VALUES ('18600000-0000-4000-8000-000000000013'::uuid,'186-upgrade-preserved',
-        'Upgrade Preserved Project','186-upgrade-preserved',2026,'draft');
+        'Upgrade Preserved Project','186-upgrade-preserved',2026,'published',
+        ARRAY['https://assets.example.invalid/upgrade-preserved.png']);
     INSERT INTO public.project_disciplines(project_id,discipline_id)
       VALUES ('18600000-0000-4000-8000-000000000013'::uuid,
         '18600000-0000-4000-8000-000000000011'::uuid);
     INSERT INTO public.project_industry_categories(project_id,industry_category_id)
       VALUES ('18600000-0000-4000-8000-000000000013'::uuid,
         '18600000-0000-4000-8000-000000000012'::uuid);
+    INSERT INTO public.media_assets(
+      id,project_id,asset_type,file_name,storage_bucket,storage_path,mime_type,file_size_bytes,
+      public_storage_bucket,public_storage_path,public_url,is_public_approved,
+      gallery_position,alt_text_public
+    ) VALUES (
+      '18600000-0000-4000-8000-000000000014'::uuid,
+      '18600000-0000-4000-8000-000000000013'::uuid,
+      'snapshot_image','upgrade-preserved.png','project-drafts-private',
+      'drafts/186-upgrade-preserved/snapshot_image/upgrade-preserved.png','image/png',12,
+      'project-public-assets','published/186-upgrade-preserved/snapshot_image/upgrade-preserved.png',
+      'https://assets.example.invalid/upgrade-preserved.png',true,1,
+      'Synthetic pre-upgrade snapshot.'
+    );
   `);
   const preservedBefore = psql(`SELECT pg_catalog.jsonb_build_object(
       'project', (SELECT pg_catalog.to_jsonb(p) FROM public.projects p
@@ -164,22 +182,23 @@ function verifyMainUpgrade(workdir: string): void {
       'disciplineLink', (SELECT pg_catalog.to_jsonb(pd) FROM public.project_disciplines pd
         WHERE pd.project_id='18600000-0000-4000-8000-000000000013'::uuid),
       'industryLink', (SELECT pg_catalog.to_jsonb(pic) FROM public.project_industry_categories pic
-        WHERE pic.project_id='18600000-0000-4000-8000-000000000013'::uuid)
+        WHERE pic.project_id='18600000-0000-4000-8000-000000000013'::uuid),
+      'media', (SELECT pg_catalog.to_jsonb(ma) FROM public.media_assets ma
+        WHERE ma.id='18600000-0000-4000-8000-000000000014'::uuid)
     )::text;`);
-  const headAbsentBefore = psql("SELECT to_regclass('public.public_feed_head') IS NULL;");
-  assert.equal(headAbsentBefore, 't');
-  console.log('PASS: disposable stack provisioned at exactly the 40 migrations on main');
+  assert.equal(psql('SELECT count(*) FROM public.public_feed_head;'), '0');
+  console.log('PASS: disposable stack provisioned at the exact reviewed 43-migration baseline');
 
-  restoreMigrations(workdir, STREAM_K_MIGRATIONS);
+  restoreMigrations(workdir, CORRECTION_MIGRATIONS);
   runSupabase('migrate', workdir, '');
 
-  assert.equal(appliedCount(), '43', 'The upgraded database is not exactly 43 migrations.');
+  assert.equal(appliedCount(), '44', 'The upgraded database is not exactly 44 migrations.');
   assert.equal(
     psql(
       'SELECT count(*) FROM supabase_migrations.schema_migrations'
-      + " WHERE version IN ('20260824180000','20260824183000','20260825030000');",
+      + " WHERE version='20260826090000';",
     ),
-    '3',
+    '1',
   );
   assert.equal(
     psql(
@@ -193,9 +212,15 @@ function verifyMainUpgrade(workdir: string): void {
   assert.equal(routineCount('reserve_public_feed_operation'), '1');
   assert.equal(routineCount('mark_public_feed_write_started'), '1');
   assert.equal(routineCount('guard_active_public_feed_taxonomy'), '1');
+  assert.equal(routineCount('guard_public_feed_activation_projection'), '1');
+  assert.equal(routineCount('lock_public_feed_activation_authority_transition'), '1');
   assert.equal(
     psql("SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND c.relname IN ('disciplines','industry_categories') AND t.tgname IN ('guard_discipline_lookup_during_public_feed_operation','guard_industry_category_lookup_during_public_feed_operation');"),
     '2',
+  );
+  assert.equal(
+    psql("SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND t.tgname IN ('lock_public_feed_activation_authority_transition','guard_projects_during_public_feed_activation','guard_snapshot_media_during_public_feed_activation','guard_project_disciplines_during_public_feed_activation','guard_discipline_lookup_during_public_feed_activation');"),
+    '5',
   );
   // Upgrading installs authority, never deployment state: nothing is active and no version exists.
   assert.equal(psql('SELECT count(*) FROM public.public_feed_head;'), '0');
@@ -210,9 +235,11 @@ function verifyMainUpgrade(workdir: string): void {
       'disciplineLink', (SELECT pg_catalog.to_jsonb(pd) FROM public.project_disciplines pd
         WHERE pd.project_id='18600000-0000-4000-8000-000000000013'::uuid),
       'industryLink', (SELECT pg_catalog.to_jsonb(pic) FROM public.project_industry_categories pic
-        WHERE pic.project_id='18600000-0000-4000-8000-000000000013'::uuid)
+        WHERE pic.project_id='18600000-0000-4000-8000-000000000013'::uuid),
+      'media', (SELECT pg_catalog.to_jsonb(ma) FROM public.media_assets ma
+        WHERE ma.id='18600000-0000-4000-8000-000000000014'::uuid)
     )::text;`), preservedBefore);
-  console.log('PASS: main upgraded forward to the integrated 43-migration deployment ledger with project and taxonomy data preserved');
+  console.log('PASS: exact 43 -> 44 activation-authority upgrade preserved project, taxonomy, and media data');
 
   // End-of-sequence composition. The deployment-ledger migrations carry earlier timestamps than the
   // final merged gallery migration, so the composed database must still end on the merged gallery
@@ -280,9 +307,9 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
-  // An upgrade run must start from a main-only database; a script run must start from a fresh full
-  // install. Provisioning one stack per invocation keeps both baselines exact.
-  const workdir = createWorkdir(upgradeRequested ? STREAM_K_MIGRATIONS : []);
+  // An upgrade run must start from the reviewed 43-migration database; a script run must start
+  // from a fresh full install. Provisioning one stack per invocation keeps both baselines exact.
+  const workdir = createWorkdir(upgradeRequested ? CORRECTION_MIGRATIONS : []);
   let networkId = '';
   let networkCreateAttempted = false;
   let startAttempted = false;
@@ -295,7 +322,7 @@ function main(): void {
     startAttempted = true;
     runSupabase('start', workdir, networkId);
     exitCode = 0;
-    if (upgradeRequested) verifyMainUpgrade(workdir);
+    if (upgradeRequested) verifyCorrectionUpgrade(workdir);
     for (const name of scriptModes) {
       const script = RUNTIME_SCRIPTS[name];
       if (!script) throw new Error(`Unknown disposable runtime "${name}".`);

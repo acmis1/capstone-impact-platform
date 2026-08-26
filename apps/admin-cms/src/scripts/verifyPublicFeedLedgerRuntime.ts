@@ -6,7 +6,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Project } from '../domain/project';
 import { parseSupabaseCliEnv, isLoopbackUrl } from '../local-development/localEnvironmentFile';
 import { createMockProject } from '../test/projectFixtures';
-import { toPublicFeedRecord } from '../feed/compilePublicFeed';
+import { compilePublicFeed } from '../feed/compilePublicFeed';
 import {
   composePublicFeedRemoval,
   createPublicFeedArtifact,
@@ -18,7 +18,6 @@ import { executeControlledPublication } from '../projects/controlledPublicationS
 import { createControlledPublicationDependencies } from '../projects/createControlledPublicationDependencies';
 import { executeControlledPublicRemoval } from '../projects/controlledPublicRemovalService';
 import {
-  activatePublicFeedHistory,
   executePublicFeedRollback,
   preparePublicFeedRollback,
   recoverPublicFeedOperation,
@@ -31,6 +30,7 @@ import {
   type PublicFeedOperationState,
 } from '../repositories/SupabasePublicFeedLedgerRepositoryCore';
 import { SupabaseParticipantPreviewRepositoryCore } from '../repositories/SupabaseParticipantPreviewRepositoryCore';
+import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
 import { SupabasePublicationExecutionRepositoryCore } from '../repositories/SupabasePublicationExecutionRepositoryCore';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -94,6 +94,16 @@ function expectOperationGuardRejection(sql: string, marker: string): void {
   } catch (error) {
     const stderr = String((error as { stderr?: unknown }).stderr ?? '');
     assert.match(stderr, /PUBLIC_FEED_OPERATION_IN_PROGRESS/, `${marker}: ${stderr}`);
+  }
+}
+
+function expectActivationGuardRejection(sql: string, marker: string): void {
+  try {
+    psql(sql);
+    assert.fail(`${marker} unexpectedly succeeded.`);
+  } catch (error) {
+    const stderr = String((error as { stderr?: unknown }).stderr ?? '');
+    assert.match(stderr, /PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN/, `${marker}: ${stderr}`);
   }
 }
 
@@ -489,8 +499,9 @@ async function main(): Promise<void> {
   const anon = createClient(local.API_URL!, local.ANON_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
   const ledger = new SupabasePublicFeedLedgerRepositoryCore(client);
 
-  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '43');
+  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '44');
   assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version IN ('20260824180000','20260824183000','20260825030000');"), '3');
+  assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260826090000';"), '1');
   assert.equal(psql("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('public_feed_operations','public_feed_versions','public_feed_version_members','public_feed_head','feed_rollback_preparations','public_feed_operation_events');"), '6');
   assert.equal(psql("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='public_feed_operations' AND column_name IN ('owner_token_hash','recovery_from_state')"), '2');
   assert.equal(psql("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='public_feed_operations' AND column_name IN ('owner_token','execution_token')"), '0');
@@ -504,6 +515,18 @@ async function main(): Promise<void> {
   );
   assert.equal(
     psql("SELECT pg_catalog.has_function_privilege('service_role','public.guard_active_public_feed_taxonomy()','EXECUTE');"),
+    'f',
+  );
+  assert.equal(
+    psql("SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND t.tgname IN ('lock_public_feed_activation_authority_transition','guard_projects_during_public_feed_activation','guard_snapshot_media_during_public_feed_activation','guard_project_disciplines_during_public_feed_activation','guard_discipline_lookup_during_public_feed_activation');"),
+    '5',
+  );
+  assert.equal(
+    psql("SELECT p.prosecdef::text || '|' || COALESCE(pg_catalog.array_to_string(p.proconfig, ','),'') FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='guard_public_feed_activation_projection';"),
+    'true|search_path=""',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.has_function_privilege('service_role','public.guard_public_feed_activation_projection()','EXECUTE');"),
     'f',
   );
   const preservedPublicId = process.env.CAPSTONE_VERIFY_PRESERVED_PUBLIC_ID?.trim();
@@ -528,12 +551,111 @@ async function main(): Promise<void> {
   });
   assert.equal((legacy.data as { resultCode?: string })?.resultCode, 'LEDGER_PROTOCOL_REQUIRED');
 
-  const traffic = project('2026-traffic-engine');
-  const trafficArtifact = createPublicFeedArtifact([toPublicFeedRecord(traffic)]);
+  const activationFixture = {
+    projectId: 'e0000000-0000-0000-0000-000000000001',
+    disciplineId: 'b0000000-0000-0000-0000-000000000001',
+    snapshotId: 'f0000000-0000-0000-0000-000000000003',
+  };
+  const activationSnapshotBefore = psql(`SELECT alt_text_public || '|' || gallery_position::text
+    FROM public.media_assets WHERE id=${sqlLiteral(activationFixture.snapshotId)}::uuid;`);
+  const activationDisciplineBefore = psql(`SELECT name FROM public.disciplines
+    WHERE id=${sqlLiteral(activationFixture.disciplineId)}::uuid;`);
+  const projectRepository = new SupabaseProjectRepositoryCore(client);
+  const activationProjects = await projectRepository.listProjects();
+  const publishedProjects = activationProjects.filter((candidate) => candidate.status === 'published');
+  assert.equal(publishedProjects.length, 1);
+  assert.equal(publishedProjects[0].publicId, '2026-traffic-engine');
+  const traffic = publishedProjects[0] as ReturnType<typeof project>;
+  const trafficArtifact = createPublicFeedArtifact(compilePublicFeed(activationProjects));
   const trafficLegacyBytes = preGalleryBytes(trafficArtifact);
   const trafficLegacyHash = createHash('sha256').update(trafficLegacyBytes).digest('hex');
   await uploadLegacyBaseline(client, trafficLegacyBytes);
-  const activation = await activatePublicFeedHistory(historyDependencies(client, [traffic]));
+
+  // Bind candidate A, then force a third observed Storage state so the exact PREPARED candidate
+  // parks in RECOVERY_REQUIRED before any write intent. This is the reviewed pre-write recovery
+  // interleaving, not a sequential mock.
+  const activationToken = token();
+  const activationReservation = await ledger.reserve({
+    operationKey: randomUUID(), kind: 'activation', mode: null, adminId,
+    publicId: null, ownerToken: activationToken, storageBucket: feedBucket, storagePath: feedPath,
+    rollbackCapability: true,
+  });
+  assert.equal(activationReservation.resultCode, 'OPERATION_RESERVED');
+  const activationOperationId = String(activationReservation.operationId);
+  const activationEpoch = Number(activationReservation.ownerEpoch);
+  const activationBound = await ledger.bind({
+    operationId: activationOperationId, epoch: activationEpoch, token: activationToken,
+    actorId: adminId, baselineVersionId: null, baselineStorageExisted: true,
+    baselineHash: trafficLegacyHash, baselineCount: trafficArtifact.recordCount,
+    baselineContent: trafficLegacyBytes.toString('utf8'),
+    candidateHash: trafficArtifact.feedHash, candidateCount: trafficArtifact.recordCount,
+    candidateContent: trafficArtifact.content, candidateMembers: trafficArtifact.members,
+    feedPublicUrl: `${runtimeApiUrl}/storage/v1/object/public/${feedBucket}/${feedPath}`,
+    mediaManifest: [],
+  });
+  assert.equal(activationBound.resultCode, 'ARTIFACT_BOUND');
+
+  const thirdStorageState = createPublicFeedArtifact([
+    { ...trafficArtifact.feed[0], title: 'Unexpected third Storage state' },
+  ]);
+  await uploadExact(client, thirdStorageState);
+  psql(`UPDATE public.public_feed_operations SET lease_expires_at=pg_catalog.now()-interval '1 second'
+    WHERE id=${sqlLiteral(activationOperationId)}::uuid;`);
+  const parked = await executePublicFeedWriter({
+    supabase: client, adminId, kind: 'activation', feedBucket, feedPath,
+    rollbackCapability: true, legacyActivationTarget: trafficArtifact,
+    recoveryOperationId: activationOperationId,
+    prepareCandidate: async () => { throw new Error('RECOVERY_ARTIFACT_MUST_BE_DURABLE'); },
+  });
+  assert.equal(parked.resultCode, 'RECOVERY_REQUIRED', JSON.stringify(parked));
+  assert.equal(
+    psql(`SELECT state || '|' || recovery_from_state || '|' || storage_request_generation::text
+      FROM public.public_feed_operations WHERE id=${sqlLiteral(activationOperationId)}::uuid;`),
+    'RECOVERY_REQUIRED|PREPARED|0',
+  );
+
+  // Lifecycle drift remains refused while the raw baseline is restored for explicit recovery.
+  const preRecoveryMutation = await client.from('projects')
+    .update({ title: 'Stale lifecycle mutation' }).eq('id', activationFixture.projectId);
+  assert.ok(preRecoveryMutation.error, 'PREPARED recovery allowed lifecycle drift.');
+  assert.match(String(preRecoveryMutation.error?.message ?? ''), /PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN/);
+  await uploadLegacyBaseline(client, trafficLegacyBytes);
+
+  // The coordinator's final application proof runs first. Separate service-role/PostgREST
+  // transactions then try representative scalar, media alt/position, and discipline mutations
+  // before mark_public_feed_write_started. The database fence must reject each exact interleaving.
+  let finalAuthorityValidated = false;
+  const activation = await executePublicFeedWriter({
+    supabase: client, adminId, kind: 'activation', feedBucket, feedPath,
+    rollbackCapability: true, legacyActivationTarget: trafficArtifact,
+    recoveryOperationId: activationOperationId,
+    prepareCandidate: async () => { throw new Error('RECOVERY_ARTIFACT_MUST_BE_DURABLE'); },
+    validateBeforeWriteIntent: async () => {
+      const current = createPublicFeedArtifact(
+        compilePublicFeed(await projectRepository.listProjects()),
+      );
+      assert.equal(current.content, trafficArtifact.content);
+      finalAuthorityValidated = true;
+
+      expectActivationGuardRejection(
+        `UPDATE public.projects SET title='Mutation after final validation'
+          WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`,
+        'Raw SQL project scalar after final activation validation',
+      );
+
+      const media = await client.from('media_assets').update({
+        alt_text_public: 'Mutation after final validation.', gallery_position: 3,
+      }).eq('id', activationFixture.snapshotId);
+      assert.ok(media.error, 'Snapshot identity crossed final activation validation.');
+      assert.match(String(media.error?.message ?? ''), /PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN/);
+
+      const taxonomy = await client.from('disciplines')
+        .update({ name: 'Mutation after final validation' }).eq('id', activationFixture.disciplineId);
+      assert.ok(taxonomy.error, 'Discipline lookup crossed final activation validation.');
+      assert.match(String(taxonomy.error?.message ?? ''), /PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN/);
+    },
+  });
+  assert.equal(finalAuthorityValidated, true);
   assert.equal(activation.resultCode, 'COMPLETED', JSON.stringify(activation));
   let head = await ledger.getHead();
   assert.ok(head?.rollbackEnabled);
@@ -541,6 +663,7 @@ async function main(): Promise<void> {
   assert.equal(head.currentVersion.versionNumber, 1);
   assert.equal(head.currentVersion.artifactContent, trafficArtifact.content);
   assert.equal(head.currentVersion.feedHash, trafficArtifact.feedHash);
+  assert.notEqual(head.currentVersion.artifactContent, thirdStorageState.content);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
   assert.equal(
     psql("SELECT baseline_feed_hash || '|' || candidate_feed_hash || '|' || state FROM public.public_feed_operations WHERE kind='activation';"),
@@ -548,6 +671,19 @@ async function main(): Promise<void> {
   );
   assert.equal(psql('SELECT count(*) FROM public.public_feed_versions;'), '1');
   assert.equal(psql('SELECT count(*) FROM public.public_feed_head WHERE singleton=true AND generation=1;'), '1');
+  assert.equal(
+    psql(`SELECT title FROM public.projects WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`),
+    traffic.title,
+  );
+  assert.equal(
+    psql(`SELECT alt_text_public || '|' || gallery_position::text FROM public.media_assets
+      WHERE id=${sqlLiteral(activationFixture.snapshotId)}::uuid;`),
+    activationSnapshotBefore,
+  );
+  assert.equal(
+    psql(`SELECT name FROM public.disciplines WHERE id=${sqlLiteral(activationFixture.disciplineId)}::uuid;`),
+    activationDisciplineBefore,
+  );
 
   const medical = project('186-rollback-publication');
   const confirmedDiscipline = 'Taxonomy Discipline B';
@@ -1262,7 +1398,7 @@ async function main(): Promise<void> {
   const memberHash = psql(`SELECT record_hash FROM public.public_feed_version_members WHERE version_id=${sqlLiteral(firstVersionId)}::uuid ORDER BY ordinal LIMIT 1;`);
   assert.equal(memberHash, trafficArtifact.members[0].recordHash);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
-  console.log('Public feed ledger runtime verification passed: fresh 43-migration schema, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
+  console.log('Public feed ledger runtime verification passed: fresh 44-migration schema, atomic activation authority through pre-write recovery, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
 }
 
 main().catch((error: unknown) => {

@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 43;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 44;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -51,6 +51,7 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260824183000_public_feed_writer_protocol.sql',
   '20260825025000_multi_image_gallery_review_submission.sql',
   '20260825030000_public_feed_taxonomy_operation_guard.sql',
+  '20260826090000_public_feed_activation_authority_guard.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [
@@ -131,7 +132,7 @@ function rpc(
   return { name, parameterNames, parameterTypes };
 }
 
-/** Final application RPC signatures granted to service_role by migrations 0001-0043. */
+/** Final application RPC signatures granted to service_role by migrations 0001-0044. */
 export const REQUIRED_RPC_SIGNATURES = [
   rpc('bootstrap_initial_admin', ['p_auth_user_id', 'p_email', 'p_full_name'], ['uuid', 'text', 'text']),
   rpc('register_password_recovery_session', ['p_session_id', 'p_auth_user_id'], ['uuid', 'uuid']),

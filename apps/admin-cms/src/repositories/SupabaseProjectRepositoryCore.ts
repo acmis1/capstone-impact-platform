@@ -111,7 +111,17 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
       galleryPosition: number;
     }
   >();
-  const ambiguousUrls = new Set<string>();
+
+  // Count public-approved snapshot URL claims before validating any claimant's descriptive data.
+  // A malformed claimant must not disappear early and let another row silently become the unique
+  // authority for the same URL.
+  const claimCountByUrl = new Map<string, number>();
+  for (const asset of row.media_assets) {
+    if (asset.asset_type !== 'snapshot_image' || asset.is_public_approved !== true) continue;
+    const url = typeof asset.public_url === 'string' ? asset.public_url : '';
+    if (url === '') continue;
+    claimCountByUrl.set(url, (claimCountByUrl.get(url) ?? 0) + 1);
+  }
 
   for (const asset of row.media_assets) {
     if (asset.asset_type !== 'snapshot_image') continue;
@@ -131,18 +141,13 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
 
     if (
       url === '' ||
+      claimCountByUrl.get(url) !== 1 ||
       altText === '' ||
       typeof galleryPosition !== 'number' ||
       !Number.isInteger(galleryPosition) ||
       galleryPosition < 1 ||
       galleryPosition > 10
     ) {
-      continue;
-    }
-
-    if (mediaByUrl.has(url) || ambiguousUrls.has(url)) {
-      mediaByUrl.delete(url);
-      ambiguousUrls.add(url);
       continue;
     }
 

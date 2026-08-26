@@ -443,4 +443,73 @@ describe('SupabaseProjectRepositoryCore public snapshot authority', () => {
 
     expect(project.snapshotMedia).toEqual([]);
   });
+
+  it.each([
+    [
+      'invalid-alt then valid',
+      [
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: null, gallery_position: 1, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: 'Valid claim.', gallery_position: 2, is_public_approved: true },
+      ],
+    ],
+    [
+      'valid then invalid-alt',
+      [
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: 'Valid claim.', gallery_position: 2, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: null, gallery_position: 1, is_public_approved: true },
+      ],
+    ],
+    [
+      'invalid-position then valid',
+      [
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: 'Malformed position.', gallery_position: null, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: 'Valid claim.', gallery_position: 2, is_public_approved: true },
+      ],
+    ],
+    [
+      'valid then invalid-position',
+      [
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: 'Valid claim.', gallery_position: 2, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: 'Malformed position.', gallery_position: null, is_public_approved: true },
+      ],
+    ],
+  ])('fails closed for duplicate authority with %s row order', (_label, mediaAssets) => {
+    const duplicated = 'https://example.com/project-a/shared.png';
+    const project = map({ snapshots: [duplicated], media_assets: mediaAssets });
+
+    expect(project.snapshotMedia).toEqual([]);
+  });
+
+  it('fails closed when three public-approved rows claim the same snapshot URL', () => {
+    const duplicated = 'https://example.com/project-a/three-claims.png';
+    const project = map({
+      snapshots: [duplicated],
+      media_assets: [
+        { asset_type: 'snapshot_image', public_url: duplicated, alt_text_public: null, gallery_position: 1, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: duplicated, alt_text_public: 'Valid claim.', gallery_position: 2, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: duplicated, alt_text_public: 'Third claim.', gallery_position: 3, is_public_approved: true },
+      ],
+    });
+
+    expect(project.snapshotMedia).toEqual([]);
+  });
+
+  it('keeps URL authority project-scoped when another project claims the same URL', () => {
+    const shared = 'https://example.com/shared-across-projects.png';
+    const first = map({
+      public_id: 'project-a', snapshots: [shared],
+      media_assets: [
+        { asset_type: 'snapshot_image', public_url: shared, alt_text_public: 'Project A.', gallery_position: 1, is_public_approved: true },
+      ],
+    });
+    const second = map({
+      public_id: 'project-b', snapshots: [shared],
+      media_assets: [
+        { asset_type: 'snapshot_image', public_url: shared, alt_text_public: 'Project B.', gallery_position: 2, is_public_approved: true },
+      ],
+    });
+
+    expect(first.snapshotMedia).toEqual([{ url: shared, altText: 'Project A.', galleryPosition: 1 }]);
+    expect(second.snapshotMedia).toEqual([{ url: shared, altText: 'Project B.', galleryPosition: 2 }]);
+  });
 });
