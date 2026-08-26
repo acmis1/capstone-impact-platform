@@ -1,0 +1,132 @@
+{
+  "schema_version": "pp1-ocr-title-consistency-protocol/v1",
+  "protocol_version": "pp1-ocr-title-consistency-v1",
+  "phase": "CALIBRATION_CANDIDATE",
+  "scope": {
+    "production_capability": "extract bounded poster/image title evidence for deterministic comparison with authoritative project metadata",
+    "body_wer_role": "DIAGNOSTIC_NON_GATING",
+    "excluded": [
+      "full-page OCR transcription",
+      "general document reconstruction or paragraph reading order",
+      "grammar or spelling validation",
+      "accessibility full-text or alt-text generation",
+      "semantic project validation or summarization",
+      "automatic metadata correction",
+      "workflow, approval, publication, Duda, or public-feed authority"
+    ]
+  },
+  "candidate": {
+    "engine": "paddle-small",
+    "provider_id": "paddleocr-local",
+    "model_family": "PP-OCRv6 Small",
+    "detection_model": "PP-OCRv6_small_det",
+    "recognition_model": "PP-OCRv6_small_rec",
+    "detection_archive_sha256": "bfb7c1e59f0faa6b540ebdca93aea3f4b1f2477805b389fbee117820d68fe9f5",
+    "recognition_archive_sha256": "da460f968ce9f88325ac3a34fa302077d6e9b0dcefb16ba3137cd7796f879d06",
+    "detection_tree_sha256": "8af984562965b7be9bd5d1c8acb52f6d0bf37de475947b520d876ed8640eb29a",
+    "recognition_tree_sha256": "0ee2c443863549fabdb1120d7a58df5e8afa0d67bce0827b75529f105c993eae",
+    "artifact_footprint_bytes": 31481281,
+    "runtime": {"paddleocr": "3.7.0", "paddlepaddle": "3.3.0", "paddlex": "3.7.2"},
+    "license": "Apache-2.0",
+    "artifact_source": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/",
+    "official_sources": [
+      "https://github.com/PaddlePaddle/PaddleOCR/releases/tag/v3.7.0",
+      "https://www.paddleocr.ai/main/en/version3.x/pipeline_usage/OCR.html",
+      "https://github.com/PaddlePaddle/PaddleOCR/blob/v3.7.0/LICENSE"
+    ]
+  },
+  "configuration": {
+    "device": "cpu",
+    "raster_dpi": 180,
+    "max_input_dimension": 1920,
+    "enable_mkldnn": false,
+    "use_doc_orientation_classify": false,
+    "use_doc_unwarping": false,
+    "use_textline_orientation": false,
+    "worker_concurrency": 1
+  },
+  "title_contract": {
+    "selector": "top-band-group-prominence-v3@geometry",
+    "maximum_title_band_ratio": 0.34,
+    "maximum_joined_lines": 3,
+    "multiline_prominence_bonus_per_extra_line": 0.12,
+    "maximum_candidates": 8,
+    "normalization": "Unicode NFKC, casefold, Unicode dash/quote folding, bounded punctuation-to-space, whitespace collapse",
+    "classifier": "deterministic-title-safety-v1",
+    "no_candidate_outcome": "REVIEW",
+    "semantic_similarity_may_agree": false,
+    "outcomes": ["AGREES", "REVIEW", "MISMATCH"],
+    "classification": "NON_BLOCKING"
+  },
+  "metric_definitions": {
+    "exact_title_recovery": "normalized selected title equals expected_visible_title; title-absent and materially illegible labels are excluded and reported separately",
+    "predicted_inconsistency": "outcome is REVIEW or MISMATCH",
+    "predicted_consistency": "outcome is AGREES",
+    "material_false_automatic_agreement": "expected INCONSISTENT and outcome AGREES",
+    "automatic_agreement_precision": "expected CONSISTENT among outcome AGREES",
+    "review_rate": "outcome REVIEW divided by all scored cases",
+    "body_wer": "diagnostic only; never enters readiness"
+  },
+  "quality_gates": {
+    "exact_title_rate_minimum": 0.95,
+    "inconsistency_precision_minimum": 0.98,
+    "inconsistency_recall_minimum": 0.95,
+    "material_false_automatic_agreements_maximum": 0,
+    "automatic_agreement_precision_target": 1.0,
+    "all_scored_cases_must_execute": true
+  },
+  "calibration_margin": {
+    "exact_title_rate_minimum": 1.0,
+    "inconsistency_precision_minimum": 1.0,
+    "inconsistency_recall_minimum": 1.0,
+    "material_false_automatic_agreements_maximum": 0
+  },
+  "operational_gates": {
+    "worker_concurrency_maximum": 1,
+    "cold_start_ms_maximum": 30000,
+    "p50_ms_maximum": 10000,
+    "p95_ms_maximum": 20000,
+    "peak_working_set_bytes_maximum": 4294967296,
+    "artifact_footprint_bytes_maximum": 1073741824,
+    "per_case_timeout_seconds": 90
+  },
+  "security": {
+    "network_during_inference": "denied process-wide before model construction",
+    "download_during_capture": false,
+    "cloud_inference": false,
+    "hosted_api": false,
+    "document_text_authority": "untrusted bounded plain-text evidence only",
+    "model_paths": "explicit local operator-provisioned directories with frozen tree hashes",
+    "bounds": {
+      "max_pdf_pages": 10,
+      "max_raster_pixels_per_page": 40000000,
+      "max_total_raster_pixels": 80000000,
+      "max_extracted_characters": 100000,
+      "max_text_blocks": 5000
+    }
+  },
+  "evidence_schema": {
+    "persist_full_transcript": false,
+    "bounded_title_candidate": true,
+    "bounded_relevant_blocks": true,
+    "page_and_boxes": true,
+    "provider_and_pipeline_identity": true,
+    "raw_provider_dump": false,
+    "reasoning_trace": false
+  },
+  "holdout_contract": {
+    "scored_case_count": 45,
+    "minimum_inconsistent_cases": 15,
+    "fresh_seed_required": true,
+    "historical_and_calibration_non_reuse_required": true,
+    "candidate_freeze_precedes_holdout_existence": true,
+    "seal_before_candidate_output": true,
+    "one_shot": true
+  },
+  "decision_contract": {
+    "allowed": ["READY_FOR_TITLE_OCR_INTEGRATION", "OCR_TITLE_PROVIDER_DEFERRED", "HOLDOUT_INVALID_PROTOCOL_BUG"],
+    "ready_requires_every_frozen_gate": true,
+    "near_miss_may_select": false,
+    "post_result_tuning_permitted": false
+  }
+}
