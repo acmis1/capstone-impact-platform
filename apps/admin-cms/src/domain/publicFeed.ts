@@ -32,7 +32,8 @@ export interface PublicFeedRecord {
   snapshots: string[];
   /**
    * Additive structured pairing of each `snapshots` URL with its text alternative. Consuming this
-   * in the Duda template is a separate later slice; publishing it here establishes the contract.
+   * exact URL binding lets the Duda renderer preserve the compatibility URL array without risking
+   * an alternative being paired with the wrong image.
    */
   snapshotMedia: PublicSnapshotMedia[];
   videoUrl?: string;

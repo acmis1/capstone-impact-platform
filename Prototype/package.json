@@ -13,6 +13,7 @@
     "validate-feed": "node scripts/validate-feed.js",
     "test": "node scripts/test-recovery.js",
     "test:duda-feed-url-validator": "node scripts/test-duda-feed-url-validator.js",
+    "test:duda-current-feed-browser": "node scripts/test-duda-current-feed-browser.js",
     "recovery:dry-run": "node scripts/recoverPrototypeSupabase.js",
     "recovery:apply": "node scripts/recoverPrototypeSupabase.js --apply"
   },
