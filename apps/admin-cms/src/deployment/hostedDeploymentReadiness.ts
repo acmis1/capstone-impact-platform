@@ -90,6 +90,9 @@ export const REQUIRED_PUBLICATION_TABLES = [
   'public_feed_head',
   'feed_rollback_preparations',
   'public_feed_operation_events',
+  'public_feed_activation_authority',
+  'public_feed_project_projection_authority',
+  'public_feed_discipline_projection_authority',
 ] as const;
 
 export const REQUIRED_STAFF_TABLES = ['staff_provisioning_requests'] as const;

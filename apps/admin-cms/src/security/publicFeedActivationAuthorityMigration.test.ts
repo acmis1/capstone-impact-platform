@@ -28,22 +28,49 @@ describe('public-feed activation authority migration', () => {
     }
   });
 
-  it('serializes activation phase changes and dependency mutations on one transaction lock', () => {
-    expect(source.match(/hashtext\('public_feed_activation_projection'\)/g)).toHaveLength(2);
-    expect(source).toMatch(
-      /BEFORE UPDATE OF state ON public\.public_feed_operations[\s\S]*?lock_public_feed_activation_authority_transition/,
-    );
-    expect(source).toContain("NEW.kind = 'activation'");
-    expect(source).toContain('NEW.state IS DISTINCT FROM OLD.state');
+  it('uses durable write/write authority instead of snapshot-visible operation reads', () => {
+    for (const table of [
+      'public_feed_activation_authority',
+      'public_feed_project_projection_authority',
+      'public_feed_discipline_projection_authority',
+    ]) {
+      expect(source).toContain(`CREATE TABLE public.${table}`);
+      expect(source).toContain(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`);
+    }
+    expect(source).toContain('ADD COLUMN activation_authority_generation bigint');
+    expect(source).not.toMatch(/pg_advisory|FROM public\.public_feed_operations o/);
   });
 
-  it('freezes only bound pre-write activation authority, including PREPARED recovery', () => {
-    expect(source).toContain("o.kind = 'activation'");
-    expect(source).toContain('o.storage_request_generation = 0');
-    expect(source).toContain("o.state = 'PREPARED'");
-    expect(source).toContain("o.state = 'RECOVERY_REQUIRED'");
-    expect(source).toContain("o.recovery_from_state = 'PREPARED'");
+  it('claims PREPARED and atomically verifies the first write or observation boundary', () => {
+    expect(source).toMatch(
+      /OLD\.state = 'RESERVED' AND NEW\.state = 'PREPARED'[\s\S]*?active_activation_operation_id = NEW\.id/,
+    );
+    expect(source).toContain('NEW.activation_authority_generation := v_generation');
+    expect(source).toContain('OLD.storage_request_generation = 0');
+    expect(source).toContain("OLD.state = 'RECOVERY_REQUIRED'");
+    expect(source).toContain("OLD.recovery_from_state = 'PREPARED'");
+    expect(source).toContain("NEW.state IN ('WRITE_STARTED', 'CANDIDATE_OBSERVED')");
+    expect(source).toContain('active_activation_operation_id = OLD.id');
+    expect(source).toContain('generation = OLD.activation_authority_generation');
     expect(source).toContain("RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN'");
+  });
+
+  it('classifies through per-object write fences before touching global authority', () => {
+    const projectFence = source.indexOf(
+      'INSERT INTO public.public_feed_project_projection_authority AS authority',
+    );
+    const disciplineFence = source.indexOf(
+      'INSERT INTO public.public_feed_discipline_projection_authority AS authority',
+    );
+    const relevance = source.indexOf('IF v_relevant THEN');
+    expect(projectFence).toBeGreaterThan(-1);
+    expect(disciplineFence).toBeGreaterThan(projectFence);
+    expect(relevance).toBeGreaterThan(disciplineFence);
+    expect(source).toContain('SET generation = authority.generation + 1');
+    expect(source).toContain('AND active_activation_operation_id IS NULL');
+    expect(source).toContain('v_membership_changed');
+    expect(source).toContain('FROM public.project_disciplines pd');
+    expect(source).toContain('FOR KEY SHARE');
   });
 
   it('covers every persisted dependency used by the lifecycle activation projection', () => {
@@ -71,9 +98,9 @@ describe('public-feed activation authority migration', () => {
     expect(source).toContain('p.deleted_at IS NULL');
   });
 
-  it('is a pinned trigger-only boundary with no direct execution or Storage I/O', () => {
+  it('is a pinned internal boundary with no direct execution or Storage I/O', () => {
     for (const helper of [
-      'lock_public_feed_activation_authority_transition',
+      'guard_public_feed_activation_authority_transition',
       'guard_public_feed_activation_projection',
     ]) {
       expect(source).toMatch(new RegExp(
@@ -83,6 +110,9 @@ describe('public-feed activation authority migration', () => {
         `REVOKE ALL ON FUNCTION public.${helper}()\nFROM PUBLIC, anon, authenticated, service_role;`,
       );
     }
+    expect(source).toMatch(
+      /REVOKE ALL ON TABLE[\s\S]*?public_feed_activation_authority[\s\S]*?FROM PUBLIC, anon, authenticated, service_role/,
+    );
     expect(source).not.toMatch(/GRANT EXECUTE|storage\.|supabase\.storage|http_|net\./i);
   });
 });

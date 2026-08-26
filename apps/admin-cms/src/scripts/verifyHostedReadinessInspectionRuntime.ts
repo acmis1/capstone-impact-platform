@@ -47,7 +47,7 @@ async function main(): Promise<void> {
   const openApiDocument = await fetchPostgrestOpenApi(apiUrl, serviceRoleKey, auditedFetch);
   const evaluation = await checkHostedDeploymentReadinessWithClient(client, { openApiDocument });
 
-  assert.equal(ALL_REQUIRED_TABLES.length, 33);
+  assert.equal(ALL_REQUIRED_TABLES.length, 36);
   assert.equal(ALL_REQUIRED_TABLES.includes('publication_attempts'), true);
   assert.equal(ALL_REQUIRED_TABLES.includes('participant_preview_tokens' as never), false);
   assert.equal(
@@ -57,8 +57,11 @@ async function main(): Promise<void> {
   );
   assert.equal(evaluation.missingTables.length, 0);
   // Every table whose privileges are fully revoked is invisible to PostgREST by design, so the
-  // recovery ledger and all three assistive tables are correctly reported as needing manual evidence.
+  // activation authority, recovery ledger and all three assistive tables need manual evidence.
   assert.deepEqual(evaluation.unverifiedTables, [
+    'public_feed_activation_authority',
+    'public_feed_project_projection_authority',
+    'public_feed_discipline_projection_authority',
     'password_recovery_sessions',
     'assistive_validation_runs',
     'assistive_validation_findings',

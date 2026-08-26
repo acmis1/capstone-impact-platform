@@ -192,12 +192,15 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       );
 
       expect([...ALL_REQUIRED_TABLES].sort()).toEqual([...new Set(createdTables)].sort());
-      expect(ALL_REQUIRED_TABLES).toHaveLength(33);
+      expect(ALL_REQUIRED_TABLES).toHaveLength(36);
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_runs');
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_findings');
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_jobs');
       expect(ALL_REQUIRED_TABLES).toContain('publication_attempts');
       expect(ALL_REQUIRED_TABLES).toContain('public_removal_attempts');
+      expect(ALL_REQUIRED_TABLES).toContain('public_feed_activation_authority');
+      expect(ALL_REQUIRED_TABLES).toContain('public_feed_project_projection_authority');
+      expect(ALL_REQUIRED_TABLES).toContain('public_feed_discipline_projection_authority');
       expect(ALL_REQUIRED_TABLES).not.toContain('participant_preview_tokens');
       expect(ALL_REQUIRED_TABLES).toContain('password_recovery_sessions');
     });

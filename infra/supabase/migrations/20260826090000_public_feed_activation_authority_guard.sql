@@ -4,31 +4,130 @@
 BEGIN;
 
 /**
- * Every activation phase change and every mutation capable of changing compilePublicFeed's
- * lifecycle-published projection takes this same transaction lock. The mutation trigger then
- * fails closed while a bound activation is still pre-write. This closes both directions of the
- * race: a mutation already in flight commits before PREPARED is established, while a mutation
- * arriving after PREPARED cannot cross the authority boundary.
+ * The singleton row is the durable activation authority. PREPARED claims it and captures its
+ * generation. Every lifecycle-public projection mutation must advance that generation while the
+ * authority is unclaimed. The first durable activation boundary verifies the exact claim and
+ * releases it in the same transaction as the operation transition.
+ *
+ * Project and discipline fence rows make relevance classification safe under old MVCC snapshots.
+ * A draft-only mutation touches only its own local fence, so unrelated draft projects do not
+ * serialize globally. A transaction whose REPEATABLE READ snapshot predates a conflicting
+ * membership/relationship change instead encounters PostgreSQL's write/write serialization
+ * failure when it tries to advance the same local fence.
  */
-CREATE OR REPLACE FUNCTION public.lock_public_feed_activation_authority_transition()
+CREATE TABLE public.public_feed_activation_authority (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  generation bigint NOT NULL DEFAULT 1 CHECK (generation > 0),
+  active_activation_operation_id uuid
+    REFERENCES public.public_feed_operations(id) ON DELETE RESTRICT
+);
+
+INSERT INTO public.public_feed_activation_authority(singleton, generation)
+VALUES (true, 1);
+
+CREATE TABLE public.public_feed_project_projection_authority (
+  project_id uuid PRIMARY KEY,
+  generation bigint NOT NULL DEFAULT 1 CHECK (generation > 0)
+);
+
+INSERT INTO public.public_feed_project_projection_authority(project_id, generation)
+SELECT p.id, 1
+FROM public.projects p;
+
+CREATE TABLE public.public_feed_discipline_projection_authority (
+  discipline_id uuid PRIMARY KEY,
+  generation bigint NOT NULL DEFAULT 1 CHECK (generation > 0)
+);
+
+INSERT INTO public.public_feed_discipline_projection_authority(discipline_id, generation)
+SELECT d.id, 1
+FROM public.disciplines d;
+
+ALTER TABLE public.public_feed_operations
+  ADD COLUMN activation_authority_generation bigint
+    CHECK (activation_authority_generation IS NULL OR activation_authority_generation > 0);
+
+ALTER TABLE public.public_feed_activation_authority ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.public_feed_project_projection_authority ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.public_feed_discipline_projection_authority ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE
+  public.public_feed_activation_authority,
+  public.public_feed_project_projection_authority,
+  public.public_feed_discipline_projection_authority
+FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.guard_public_feed_activation_authority_transition()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
+DECLARE
+  v_generation bigint;
+  v_prewrite_bound boolean;
 BEGIN
-  IF NEW.kind = 'activation' AND NEW.state IS DISTINCT FROM OLD.state THEN
-    PERFORM pg_catalog.pg_advisory_xact_lock(
-      pg_catalog.hashtext('public_feed_activation_projection')
-    );
+  IF NEW.kind <> 'activation' OR NEW.state IS NOT DISTINCT FROM OLD.state THEN
+    RETURN NEW;
   END IF;
+
+  v_prewrite_bound := OLD.storage_request_generation = 0 AND (
+    OLD.state = 'PREPARED'
+    OR (
+      OLD.state = 'RECOVERY_REQUIRED'
+      AND OLD.recovery_from_state = 'PREPARED'
+    )
+  );
+
+  IF OLD.state = 'RESERVED' AND NEW.state = 'PREPARED' THEN
+    v_generation := NULL;
+    UPDATE public.public_feed_activation_authority
+       SET active_activation_operation_id = NEW.id
+     WHERE singleton = true
+       AND active_activation_operation_id IS NULL
+     RETURNING generation INTO v_generation;
+
+    IF v_generation IS NULL THEN
+      RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN';
+    END IF;
+    NEW.activation_authority_generation := v_generation;
+  ELSIF v_prewrite_bound
+    AND NEW.state IN ('WRITE_STARTED', 'CANDIDATE_OBSERVED')
+  THEN
+    v_generation := NULL;
+    UPDATE public.public_feed_activation_authority
+       SET active_activation_operation_id = NULL
+     WHERE singleton = true
+       AND active_activation_operation_id = OLD.id
+       AND generation = OLD.activation_authority_generation
+     RETURNING generation INTO v_generation;
+
+    IF v_generation IS NULL THEN
+      RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN';
+    END IF;
+  ELSIF v_prewrite_bound AND NEW.state <> 'RECOVERY_REQUIRED' THEN
+    -- A PREPARED activation that terminates without crossing the public boundary relinquishes its
+    -- claim. PREPARED recovery deliberately retains it until WRITE_STARTED/CANDIDATE_OBSERVED.
+    v_generation := NULL;
+    UPDATE public.public_feed_activation_authority
+       SET active_activation_operation_id = NULL
+     WHERE singleton = true
+       AND active_activation_operation_id = OLD.id
+       AND generation = OLD.activation_authority_generation
+     RETURNING generation INTO v_generation;
+
+    IF v_generation IS NULL THEN
+      RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN';
+    END IF;
+  END IF;
+
   RETURN NEW;
 END;
 $$;
 
-CREATE TRIGGER lock_public_feed_activation_authority_transition
+CREATE TRIGGER guard_public_feed_activation_authority_transition
   BEFORE UPDATE OF state ON public.public_feed_operations
-  FOR EACH ROW EXECUTE FUNCTION public.lock_public_feed_activation_authority_transition();
+  FOR EACH ROW EXECUTE FUNCTION public.guard_public_feed_activation_authority_transition();
 
 CREATE OR REPLACE FUNCTION public.guard_public_feed_activation_projection()
 RETURNS trigger
@@ -37,84 +136,172 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
+  v_project_ids uuid[] := ARRAY[]::uuid[];
+  v_discipline_ids uuid[] := ARRAY[]::uuid[];
+  v_related_discipline_ids uuid[] := ARRAY[]::uuid[];
   v_relevant boolean := false;
-  v_old_project_id uuid;
-  v_new_project_id uuid;
-  v_old_discipline_id uuid;
-  v_new_discipline_id uuid;
+  v_membership_changed boolean := false;
+  v_old_public boolean := false;
+  v_new_public boolean := false;
+  v_old_media_claimant boolean := false;
+  v_new_media_claimant boolean := false;
+  v_generation bigint;
 BEGIN
-  -- Take the lock before reading project lifecycle or operation state. Even a mutation that is
-  -- currently unrelated must serialize with a concurrent status change that could make it public.
-  PERFORM pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtext('public_feed_activation_projection')
-  );
+  IF TG_TABLE_NAME = 'projects' THEN
+    IF TG_OP <> 'INSERT' THEN
+      v_project_ids := v_project_ids || OLD.id;
+      v_old_public := OLD.status = 'published' AND OLD.deleted_at IS NULL;
+    END IF;
+    IF TG_OP <> 'DELETE' THEN
+      v_project_ids := v_project_ids || NEW.id;
+      v_new_public := NEW.status = 'published' AND NEW.deleted_at IS NULL;
+    END IF;
+    v_membership_changed := v_old_public IS DISTINCT FROM v_new_public;
+  ELSIF TG_TABLE_NAME = 'media_assets' THEN
+    IF TG_OP <> 'INSERT' THEN
+      v_project_ids := v_project_ids || OLD.project_id;
+      v_old_media_claimant := OLD.asset_type = 'snapshot_image'
+        AND OLD.is_public_approved = true
+        AND COALESCE(OLD.public_url, '') <> '';
+    END IF;
+    IF TG_OP <> 'DELETE' THEN
+      v_project_ids := v_project_ids || NEW.project_id;
+      v_new_media_claimant := NEW.asset_type = 'snapshot_image'
+        AND NEW.is_public_approved = true
+        AND COALESCE(NEW.public_url, '') <> '';
+    END IF;
+  ELSIF TG_TABLE_NAME = 'project_disciplines' THEN
+    IF TG_OP <> 'INSERT' THEN
+      v_project_ids := v_project_ids || OLD.project_id;
+      v_discipline_ids := v_discipline_ids || OLD.discipline_id;
+    END IF;
+    IF TG_OP <> 'DELETE' THEN
+      v_project_ids := v_project_ids || NEW.project_id;
+      v_discipline_ids := v_discipline_ids || NEW.discipline_id;
+    END IF;
+  ELSIF TG_TABLE_NAME = 'disciplines' THEN
+    IF TG_OP <> 'INSERT' THEN v_discipline_ids := v_discipline_ids || OLD.id; END IF;
+    IF TG_OP <> 'DELETE' THEN v_discipline_ids := v_discipline_ids || NEW.id; END IF;
+  END IF;
+
+  SELECT COALESCE(pg_catalog.array_agg(ids.id ORDER BY ids.id), ARRAY[]::uuid[])
+    INTO v_project_ids
+    FROM (
+      SELECT DISTINCT source.id
+      FROM pg_catalog.unnest(v_project_ids) AS source(id)
+      WHERE source.id IS NOT NULL
+    ) ids;
+  SELECT COALESCE(pg_catalog.array_agg(ids.id ORDER BY ids.id), ARRAY[]::uuid[])
+    INTO v_discipline_ids
+    FROM (
+      SELECT DISTINCT source.id
+      FROM pg_catalog.unnest(v_discipline_ids) AS source(id)
+      WHERE source.id IS NOT NULL
+    ) ids;
+
+  -- Child changes lock referenced lookup rows before taking any fence row. This matches foreign-
+  -- key ordering and prevents a project/discipline delete from waiting on a fence held by a child
+  -- transaction that is itself waiting on the referenced parent row.
+  IF TG_TABLE_NAME = 'project_disciplines'
+     AND pg_catalog.cardinality(v_discipline_ids) > 0
+  THEN
+    PERFORM d.id
+    FROM public.disciplines d
+    WHERE d.id = ANY(v_discipline_ids)
+    ORDER BY d.id
+    FOR KEY SHARE;
+  END IF;
+
+  IF TG_TABLE_NAME IN ('media_assets', 'project_disciplines')
+     AND pg_catalog.cardinality(v_project_ids) > 0
+  THEN
+    PERFORM p.id
+    FROM public.projects p
+    WHERE p.id = ANY(v_project_ids)
+    ORDER BY p.id
+    FOR KEY SHARE;
+  END IF;
+
+  IF pg_catalog.cardinality(v_project_ids) > 0 THEN
+    INSERT INTO public.public_feed_project_projection_authority AS authority(project_id, generation)
+    SELECT source.id, 1
+    FROM pg_catalog.unnest(v_project_ids) AS source(id)
+    ORDER BY source.id
+    ON CONFLICT (project_id) DO UPDATE
+      SET generation = authority.generation + 1;
+  END IF;
+
+  -- Membership changes also advance each currently linked discipline fence. Therefore an older
+  -- discipline transaction cannot miss a newly public reference through its stale snapshot.
+  IF TG_TABLE_NAME = 'projects'
+     AND v_membership_changed
+     AND pg_catalog.cardinality(v_project_ids) > 0
+  THEN
+    SELECT COALESCE(pg_catalog.array_agg(pd.discipline_id ORDER BY pd.discipline_id), ARRAY[]::uuid[])
+      INTO v_related_discipline_ids
+      FROM public.project_disciplines pd
+     WHERE pd.project_id = ANY(v_project_ids);
+    v_discipline_ids := v_discipline_ids || v_related_discipline_ids;
+  END IF;
+
+  SELECT COALESCE(pg_catalog.array_agg(ids.id ORDER BY ids.id), ARRAY[]::uuid[])
+    INTO v_discipline_ids
+    FROM (
+      SELECT DISTINCT source.id
+      FROM pg_catalog.unnest(v_discipline_ids) AS source(id)
+      WHERE source.id IS NOT NULL
+    ) ids;
+
+  IF pg_catalog.cardinality(v_discipline_ids) > 0 THEN
+    INSERT INTO public.public_feed_discipline_projection_authority AS authority(discipline_id, generation)
+    SELECT source.id, 1
+    FROM pg_catalog.unnest(v_discipline_ids) AS source(id)
+    ORDER BY source.id
+    ON CONFLICT (discipline_id) DO UPDATE
+      SET generation = authority.generation + 1;
+  END IF;
 
   IF TG_TABLE_NAME = 'projects' THEN
-    IF TG_OP = 'INSERT' THEN
-      v_relevant := NEW.status = 'published' AND NEW.deleted_at IS NULL;
-    ELSIF TG_OP = 'DELETE' THEN
-      v_relevant := OLD.status = 'published' AND OLD.deleted_at IS NULL;
-    ELSE
-      v_relevant := (OLD.status = 'published' AND OLD.deleted_at IS NULL)
-        OR (NEW.status = 'published' AND NEW.deleted_at IS NULL);
-    END IF;
+    v_relevant := v_old_public OR v_new_public;
   ELSIF TG_TABLE_NAME = 'media_assets' THEN
-    IF TG_OP <> 'INSERT' THEN v_old_project_id := OLD.project_id; END IF;
-    IF TG_OP <> 'DELETE' THEN v_new_project_id := NEW.project_id; END IF;
     SELECT EXISTS (
       SELECT 1
       FROM public.projects p
-      WHERE p.id IN (v_old_project_id, v_new_project_id)
+      WHERE p.id = ANY(v_project_ids)
         AND p.status = 'published'
         AND p.deleted_at IS NULL
-    ) AND (
-      (TG_OP <> 'INSERT'
-        AND OLD.asset_type = 'snapshot_image'
-        AND OLD.is_public_approved = true
-        AND COALESCE(OLD.public_url, '') <> '')
-      OR
-      (TG_OP <> 'DELETE'
-        AND NEW.asset_type = 'snapshot_image'
-        AND NEW.is_public_approved = true
-        AND COALESCE(NEW.public_url, '') <> '')
-    ) INTO v_relevant;
+    ) AND (v_old_media_claimant OR v_new_media_claimant)
+    INTO v_relevant;
   ELSIF TG_TABLE_NAME = 'project_disciplines' THEN
-    IF TG_OP <> 'INSERT' THEN v_old_project_id := OLD.project_id; END IF;
-    IF TG_OP <> 'DELETE' THEN v_new_project_id := NEW.project_id; END IF;
     SELECT EXISTS (
       SELECT 1
       FROM public.projects p
-      WHERE p.id IN (v_old_project_id, v_new_project_id)
+      WHERE p.id = ANY(v_project_ids)
         AND p.status = 'published'
         AND p.deleted_at IS NULL
     ) INTO v_relevant;
   ELSIF TG_TABLE_NAME = 'disciplines' THEN
-    v_old_discipline_id := OLD.id;
-    IF TG_OP <> 'DELETE' THEN v_new_discipline_id := NEW.id; END IF;
     SELECT EXISTS (
       SELECT 1
       FROM public.project_disciplines pd
       JOIN public.projects p ON p.id = pd.project_id
-      WHERE pd.discipline_id IN (v_old_discipline_id, v_new_discipline_id)
+      WHERE pd.discipline_id = ANY(v_discipline_ids)
         AND p.status = 'published'
         AND p.deleted_at IS NULL
     ) INTO v_relevant;
   END IF;
 
-  IF v_relevant AND EXISTS (
-    SELECT 1
-    FROM public.public_feed_operations o
-    WHERE o.kind = 'activation'
-      AND o.storage_request_generation = 0
-      AND (
-        o.state = 'PREPARED'
-        OR (
-          o.state = 'RECOVERY_REQUIRED'
-          AND o.recovery_from_state = 'PREPARED'
-        )
-      )
-  ) THEN
-    RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN';
+  IF v_relevant THEN
+    v_generation := NULL;
+    UPDATE public.public_feed_activation_authority
+       SET generation = generation + 1
+     WHERE singleton = true
+       AND active_activation_operation_id IS NULL
+     RETURNING generation INTO v_generation;
+
+    IF v_generation IS NULL THEN
+      RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN';
+    END IF;
   END IF;
 
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
@@ -151,7 +338,7 @@ CREATE TRIGGER guard_discipline_lookup_during_public_feed_activation
   BEFORE UPDATE OF id, name OR DELETE ON public.disciplines
   FOR EACH ROW EXECUTE FUNCTION public.guard_public_feed_activation_projection();
 
-REVOKE ALL ON FUNCTION public.lock_public_feed_activation_authority_transition()
+REVOKE ALL ON FUNCTION public.guard_public_feed_activation_authority_transition()
 FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.guard_public_feed_activation_projection()
 FROM PUBLIC, anon, authenticated, service_role;

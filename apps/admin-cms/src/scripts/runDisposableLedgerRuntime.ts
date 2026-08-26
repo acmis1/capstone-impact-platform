@@ -140,7 +140,7 @@ function verifyCorrectionUpgrade(workdir: string): void {
   assert.equal(psql("SELECT to_regclass('public.public_feed_head') IS NOT NULL;"), 't');
   assert.equal(routineCount('get_project_reconciliation_readiness'), '1');
   assert.equal(routineCount('guard_public_feed_activation_projection'), '0');
-  assert.equal(routineCount('lock_public_feed_activation_authority_transition'), '0');
+  assert.equal(routineCount('guard_public_feed_activation_authority_transition'), '0');
   assert.equal(routineCount('get_project_publication_readiness'), '1');
   assert.equal(routineCount('submit_import_projects_for_review'), '1');
   psql(`
@@ -213,14 +213,22 @@ function verifyCorrectionUpgrade(workdir: string): void {
   assert.equal(routineCount('mark_public_feed_write_started'), '1');
   assert.equal(routineCount('guard_active_public_feed_taxonomy'), '1');
   assert.equal(routineCount('guard_public_feed_activation_projection'), '1');
-  assert.equal(routineCount('lock_public_feed_activation_authority_transition'), '1');
+  assert.equal(routineCount('guard_public_feed_activation_authority_transition'), '1');
   assert.equal(
     psql("SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND c.relname IN ('disciplines','industry_categories') AND t.tgname IN ('guard_discipline_lookup_during_public_feed_operation','guard_industry_category_lookup_during_public_feed_operation');"),
     '2',
   );
   assert.equal(
-    psql("SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND t.tgname IN ('lock_public_feed_activation_authority_transition','guard_projects_during_public_feed_activation','guard_snapshot_media_during_public_feed_activation','guard_project_disciplines_during_public_feed_activation','guard_discipline_lookup_during_public_feed_activation');"),
+    psql("SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND t.tgname IN ('guard_public_feed_activation_authority_transition','guard_projects_during_public_feed_activation','guard_snapshot_media_during_public_feed_activation','guard_project_disciplines_during_public_feed_activation','guard_discipline_lookup_during_public_feed_activation');"),
     '5',
+  );
+  assert.equal(
+    psql("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('public_feed_activation_authority','public_feed_project_projection_authority','public_feed_discipline_projection_authority');"),
+    '3',
+  );
+  assert.equal(
+    psql("SELECT generation::text || '|' || COALESCE(active_activation_operation_id::text,'') FROM public.public_feed_activation_authority WHERE singleton=true;"),
+    '1|',
   );
   // Upgrading installs authority, never deployment state: nothing is active and no version exists.
   assert.equal(psql('SELECT count(*) FROM public.public_feed_head;'), '0');
