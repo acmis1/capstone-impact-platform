@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 from typing import Any
 
 from .renderer import reference_text
 from .schema import (
     calibration_data_root,
     corpus_summary,
-    file_sha256,
     load_json,
     normalize_identity_text,
     repository_root,
@@ -38,6 +38,11 @@ CALIBRATION_FREEZE_FILES = (
     "tools/assistive-validation-benchmark/src/assistive_validation_benchmark/ocr_iteration3/scoring.py",
     "tools/assistive-validation-benchmark/src/assistive_validation_benchmark/ocr_iteration3/title_selector.py",
 )
+
+
+def _source_sha256(path: Path) -> str:
+    content = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(content).hexdigest()
 
 
 def _historical_cases(value: dict[str, Any]) -> list[dict[str, Any]]:
@@ -189,7 +194,7 @@ def build_calibration_decision(
         raise ValueError("Candidate B unexpectedly satisfies the frozen calibration gates")
     root = repository_root()
     manifest = [
-        {"path": relative, "sha256": file_sha256(root / relative)}
+        {"path": relative, "sha256": _source_sha256(root / relative)}
         for relative in CALIBRATION_FREEZE_FILES
     ]
     return {
