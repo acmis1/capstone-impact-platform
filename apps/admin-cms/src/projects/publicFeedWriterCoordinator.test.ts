@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createMockProject } from '../test/projectFixtures';
 import { toPublicFeedRecord } from '../feed/compilePublicFeed';
@@ -10,6 +11,7 @@ import {
 import type {
   PublicFeedOperationRecord,
   PublicFeedOperationState,
+  SupabasePublicFeedLedgerRepositoryCore,
 } from '../repositories/SupabasePublicFeedLedgerRepositoryCore';
 import type { PublicationMediaBinding } from './publicationArtifact';
 
@@ -41,6 +43,17 @@ const candidate = composePublicFeedPublication(
   createPublicFeedArtifact([toPublicFeedRecord(createMockProject({ publicId: 'target', status: 'published' }))]).feed[0],
 );
 
+type BindParameters = Parameters<SupabasePublicFeedLedgerRepositoryCore['bind']>[0];
+
+function legacyBytes(artifact: VerifiedPublicFeedArtifact): Buffer {
+  return Buffer.from(JSON.stringify(artifact.feed.map((record) => ({
+    ...record,
+    snapshotMedia: record.snapshotMedia.map(({ url, altText }) => ({ url, altText })),
+  })), null, 2));
+}
+
+const legacyBaselineBytes = legacyBytes(baseline);
+
 function mediaBinding(overrides: Partial<PublicationMediaBinding> = {}): PublicationMediaBinding {
   return {
     mediaAssetId: '33333333-3333-4333-8333-333333333333', assetType: 'poster_image', galleryPosition: null,
@@ -69,8 +82,10 @@ function operationRecord(state: PublicFeedOperationState, overrides: Partial<Pub
   };
 }
 
-function createStorage(initial: VerifiedPublicFeedArtifact | null) {
-  let stored = initial === null ? null : Buffer.from(initial.bytes);
+function createStorage(initial: VerifiedPublicFeedArtifact | Buffer | null) {
+  let stored = initial === null
+    ? null
+    : Buffer.from(Buffer.isBuffer(initial) ? initial : initial.bytes);
   return {
     readExact: vi.fn(async () => stored),
     writeExact: vi.fn(async (_bucket: string, _path: string, bytes: Buffer) => { stored = Buffer.from(bytes); }),
@@ -105,7 +120,22 @@ function createLedger(initialState: PublicFeedOperationState, overrides: Partial
     })),
     reserve: vi.fn(async () => ({ resultCode: 'OPERATION_RESERVED', operationId: record.id, ownerEpoch: 1 })),
     claim: vi.fn(async () => ({ resultCode: 'OPERATION_CLAIMED', ownerEpoch: 2 })),
-    bind: vi.fn(async () => { advance('PREPARED'); return { resultCode: 'ARTIFACT_BOUND' }; }),
+    bind: vi.fn(async (params: BindParameters) => {
+      record = {
+        ...record,
+        baselineVersionId: params.baselineVersionId,
+        baselineStorageExisted: params.baselineStorageExisted,
+        baselineFeedHash: params.baselineHash,
+        baselineRecordCount: params.baselineCount,
+        baselineFeedContent: params.baselineContent,
+        candidateFeedHash: params.candidateHash,
+        candidateRecordCount: params.candidateCount,
+        candidateFeedContent: params.candidateContent,
+        mediaManifest: params.mediaManifest,
+      };
+      advance('PREPARED');
+      return { resultCode: 'ARTIFACT_BOUND' };
+    }),
     renew: vi.fn(async () => ({ resultCode: 'LEASE_RENEWED' })),
     markWriteStarted: vi.fn(async () => { advance('WRITE_STARTED'); return { resultCode: 'WRITE_STARTED' }; }),
     observeCandidate: vi.fn(async () => { advance('CANDIDATE_OBSERVED'); return { resultCode: 'CANDIDATE_OBSERVED' }; }),
@@ -128,6 +158,148 @@ function writerParameters(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+function activationOperation(
+  state: PublicFeedOperationState,
+  overrides: Partial<PublicFeedOperationRecord> = {},
+): PublicFeedOperationRecord {
+  return operationRecord(state, {
+    kind: 'activation', publicationMode: null, publicId: null,
+    confirmedPreviewId: null, confirmedAt: null, privateMediaBucket: null,
+    archiveReason: null, rollbackCapabilityRequested: true,
+    baselineVersionId: null, baselineStorageExisted: true,
+    baselineFeedHash: createPublicFeedArtifact(baseline.feed).feedHash,
+    baselineRecordCount: baseline.recordCount, baselineFeedContent: baseline.content,
+    candidateFeedHash: baseline.feedHash, candidateRecordCount: baseline.recordCount,
+    candidateFeedContent: baseline.content, mediaManifest: [],
+    ...overrides,
+  });
+}
+
+function activationParameters(overrides: Record<string, unknown> = {}) {
+  return {
+    supabase: {} as SupabaseClient, adminId: ADMIN, kind: 'activation' as const,
+    feedBucket: BUCKET, feedPath: PATH, rollbackCapability: true,
+    legacyActivationTarget: baseline,
+    prepareCandidate: async () => ({ artifact: baseline }),
+    ...overrides,
+  };
+}
+
+describe('legacy initial-baseline adoption', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('keeps exact current-contract activation unchanged and performs no Storage write', async () => {
+    harness.ledger = createLedger('RESERVED', activationOperation('RESERVED'));
+    harness.ledger.getHead = vi.fn(async () => null);
+    harness.storage = createStorage(baseline);
+
+    const result = await executePublicFeedWriter(activationParameters());
+
+    expect(result).toMatchObject({
+      resultCode: 'COMPLETED', feedHash: baseline.feedHash, recordCount: baseline.recordCount,
+    });
+    expect(harness.ledger.bind.mock.calls[0][0]).toMatchObject({
+      baselineContent: baseline.content,
+      baselineHash: baseline.feedHash,
+      candidateContent: baseline.content,
+      candidateHash: baseline.feedHash,
+    });
+    expect(harness.ledger.markWriteStarted).not.toHaveBeenCalled();
+    expect(harness.storage.writeExact).not.toHaveBeenCalled();
+  });
+
+  it('binds the exact legacy baseline, crosses write intent, and writes only the current projection', async () => {
+    harness.ledger = createLedger('RESERVED', activationOperation('RESERVED'));
+    harness.ledger.getHead = vi.fn(async () => null);
+    harness.storage = createStorage(legacyBaselineBytes);
+
+    const result = await executePublicFeedWriter(activationParameters());
+
+    expect(result).toMatchObject({
+      resultCode: 'COMPLETED', feedHash: baseline.feedHash, recordCount: baseline.recordCount,
+    });
+    expect(harness.ledger.bind.mock.calls[0][0]).toMatchObject({
+      baselineContent: legacyBaselineBytes.toString('utf8'),
+      candidateContent: baseline.content,
+      candidateHash: baseline.feedHash,
+    });
+    expect(harness.ledger.markWriteStarted).toHaveBeenCalledOnce();
+    expect(harness.storage.writeExact).toHaveBeenCalledWith(BUCKET, PATH, baseline.bytes);
+    expect(harness.ledger.markWriteStarted.mock.invocationCallOrder[0])
+      .toBeLessThan(harness.storage.writeExact.mock.invocationCallOrder[0]);
+    const stored = await (harness.storage.readExact as unknown as () => Promise<Buffer>)();
+    expect(stored.equals(baseline.bytes)).toBe(true);
+  });
+
+  it('rejects any legacy drift before binding, writing, version finalization, or head completion', async () => {
+    const drifted = JSON.parse(legacyBaselineBytes.toString('utf8')) as Array<{
+      snapshotMedia: Array<{ altText: string }>;
+    }>;
+    drifted[0].snapshotMedia[0].altText = 'Wrong image description.';
+    harness.ledger = createLedger('RESERVED', activationOperation('RESERVED'));
+    harness.ledger.getHead = vi.fn(async () => null);
+    harness.storage = createStorage(Buffer.from(JSON.stringify(drifted, null, 2)));
+
+    await expect(executePublicFeedWriter(activationParameters())).resolves.toEqual({
+      resultCode: 'EXECUTION_FAILED', failureCode: 'LEGACY_BASELINE_MISMATCH',
+    });
+    expect(harness.ledger.fail).toHaveBeenCalledOnce();
+    expect(harness.ledger.bind).not.toHaveBeenCalled();
+    expect(harness.ledger.markWriteStarted).not.toHaveBeenCalled();
+    expect(harness.storage.writeExact).not.toHaveBeenCalled();
+    expect(harness.ledger.finalize).not.toHaveBeenCalled();
+    expect(harness.ledger.complete).not.toHaveBeenCalled();
+  });
+
+  it('re-proves the durable legacy baseline and converges forward after write-intent ambiguity', async () => {
+    const legacyHash = createHash('sha256').update(legacyBaselineBytes).digest('hex');
+    const durable = activationOperation('WRITE_STARTED', {
+      baselineFeedHash: legacyHash,
+      baselineFeedContent: legacyBaselineBytes.toString('utf8'),
+      leaseExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    harness.ledger = createLedger('WRITE_STARTED', durable);
+    harness.ledger.getBlockingOperation = vi.fn(async () => durable);
+    harness.storage = createStorage(legacyBaselineBytes);
+
+    const result = await executePublicFeedWriter(activationParameters({
+      recoveryOperationId: durable.id,
+      legacyActivationTarget: undefined,
+      prepareCandidate: async () => { throw new Error('RECOVERY_ARTIFACT_MUST_BE_DURABLE'); },
+    }));
+
+    expect(result).toMatchObject({
+      resultCode: 'COMPLETED', feedHash: baseline.feedHash, recordCount: baseline.recordCount,
+    });
+    expect(harness.ledger.claim).toHaveBeenCalledOnce();
+    expect(harness.storage.writeExact).toHaveBeenCalledWith(BUCKET, PATH, baseline.bytes);
+    const stored = await (harness.storage.readExact as unknown as () => Promise<Buffer>)();
+    expect(stored.equals(baseline.bytes)).toBe(true);
+  });
+
+  it('refuses a pre-write takeover when its durable candidate no longer equals current lifecycle authority', async () => {
+    const changed = createPublicFeedArtifact([
+      { ...baseline.feed[0], title: 'Changed after the durable candidate was bound' },
+    ]);
+    const durable = activationOperation('PREPARED', {
+      leaseExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+    });
+    harness.ledger = createLedger('PREPARED', durable);
+    harness.ledger.getBlockingOperation = vi.fn(async () => durable);
+    harness.storage = createStorage(baseline);
+
+    await expect(executePublicFeedWriter(activationParameters({
+      legacyActivationTarget: changed,
+      prepareCandidate: async () => { throw new Error('BOUND_CANDIDATE_MUST_BE_REUSED'); },
+    }))).resolves.toEqual({
+      resultCode: 'EXECUTION_FAILED', failureCode: 'LEGACY_UPGRADE_TARGET_MISMATCH',
+    });
+    expect(harness.ledger.fail).toHaveBeenCalledOnce();
+    expect(harness.ledger.markWriteStarted).not.toHaveBeenCalled();
+    expect(harness.storage.writeExact).not.toHaveBeenCalled();
+  });
+});
 
 describe('canonical public feed writer boundary', () => {
   beforeEach(() => vi.clearAllMocks());

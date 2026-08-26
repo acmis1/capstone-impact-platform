@@ -91,6 +91,19 @@ export async function recoverPublicFeedOperation(
       prepareCandidate: async () => {
         throw new Error('RECOVERY_ARTIFACT_MUST_BE_DURABLE');
       },
+      validateBeforeWriteIntent: operation.kind === 'activation'
+        ? async () => {
+            if (operation.candidateFeedContent === null) {
+              throw new Error('BOUND_ARTIFACT_UNAVAILABLE');
+            }
+            const current = createPublicFeedArtifact(
+              compilePublicFeed(await dependencies.listProjects()),
+            );
+            if (current.content !== operation.candidateFeedContent) {
+              throw new Error('LIFECYCLE_STORAGE_MISMATCH');
+            }
+          }
+        : undefined,
       afterWriteIntent: dependencies.promoteBoundPublicMedia,
     });
     if (writer.resultCode === 'COMPLETED' || writer.resultCode === 'ALREADY_COMPLETED') {
@@ -125,12 +138,14 @@ export async function activatePublicFeedHistory(
   catch { return { resultCode: 'EXECUTION_FAILED', failureCode: 'EXECUTION_POLICY_DENIED' }; }
 
   try {
-    const inspected = await inspectPublicFeedHead(
-      dependencies.supabase, dependencies.feedBucket, dependencies.feedPath,
-    );
-    if (inspected.head && inspected.artifact) {
+    const existingHead = await new SupabasePublicFeedLedgerRepositoryCore(dependencies.supabase).getHead();
+    if (existingHead) {
+      const inspected = await inspectPublicFeedHead(
+        dependencies.supabase, dependencies.feedBucket, dependencies.feedPath,
+      );
+      if (!inspected.artifact) throw new Error('PUBLIC_FEED_HEAD_CORRUPT');
       return {
-        resultCode: 'ALREADY_ACTIVE', versionNumber: inspected.head.currentVersion.versionNumber,
+        resultCode: 'ALREADY_ACTIVE', versionNumber: existingHead.currentVersion.versionNumber,
         feedHash: inspected.artifact.feedHash, recordCount: inspected.artifact.recordCount,
       };
     }
@@ -142,10 +157,17 @@ export async function activatePublicFeedHistory(
       rollbackCapability: isLocalPublicFeedRollbackAvailable(
         dependencies.supabaseUrl, dependencies.environment,
       ),
+      legacyActivationTarget: projection,
       prepareCandidate: async (baseline) => {
         if (baseline && baseline.content !== projection.content) throw new Error('LIFECYCLE_STORAGE_MISMATCH');
         if (!baseline && projection.recordCount > 0) throw new Error('MISSING_NONEMPTY_BASELINE');
         return { artifact: projection };
+      },
+      validateBeforeWriteIntent: async () => {
+        const current = createPublicFeedArtifact(
+          compilePublicFeed(await dependencies.listProjects()),
+        );
+        if (current.content !== projection.content) throw new Error('LIFECYCLE_STORAGE_MISMATCH');
       },
     });
     if (writer.resultCode === 'COMPLETED' || writer.resultCode === 'ALREADY_COMPLETED') {

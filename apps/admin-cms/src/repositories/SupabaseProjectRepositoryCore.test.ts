@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SupabaseProjectRepositoryCore } from './SupabaseProjectRepositoryCore';
 import { ProjectListQuery, AllowedSortField } from '../domain/projectQuery';
+import type { DatabaseProjectRow } from './SupabaseProjectRepositoryCore';
 
 interface OrderCall {
   column: string;
@@ -402,5 +403,44 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
     const log = mockClient._executionLogs[0];
     expect(log.isCol).toBe('deleted_at');
     expect(log.isVal).toBeNull();
+  });
+});
+
+describe('SupabaseProjectRepositoryCore public snapshot authority', () => {
+  function map(row: Partial<DatabaseProjectRow>) {
+    const repo = new SupabaseProjectRepositoryCore({} as never);
+    return repo.mapDbToDomain({
+      id: 'project-id', public_id: 'project-a', snapshots: [], ...row,
+    });
+  }
+
+  it('pairs by exact project-scoped public URL and carries the database gallery position', () => {
+    const first = 'https://example.com/project-a/first.png';
+    const second = 'https://example.com/project-a/second.png';
+    const project = map({
+      snapshots: [first, second],
+      media_assets: [
+        { asset_type: 'snapshot_image', public_url: second, alt_text_public: 'Second.', gallery_position: 2, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: first, alt_text_public: 'First.', gallery_position: 1, is_public_approved: true },
+      ],
+    });
+
+    expect(project.snapshotMedia).toEqual([
+      { url: first, altText: 'First.', galleryPosition: 1 },
+      { url: second, altText: 'Second.', galleryPosition: 2 },
+    ]);
+  });
+
+  it('omits a duplicated public URL instead of selecting an ambiguous media authority', () => {
+    const duplicated = 'https://example.com/project-a/duplicated.png';
+    const project = map({
+      snapshots: [duplicated],
+      media_assets: [
+        { asset_type: 'snapshot_image', public_url: duplicated, alt_text_public: 'First claim.', gallery_position: 1, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: duplicated, alt_text_public: 'Second claim.', gallery_position: 2, is_public_approved: true },
+      ],
+    });
+
+    expect(project.snapshotMedia).toEqual([]);
   });
 });

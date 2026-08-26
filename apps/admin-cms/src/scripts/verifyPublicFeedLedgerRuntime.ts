@@ -129,6 +129,20 @@ async function uploadExact(client: SupabaseClient, artifact: VerifiedPublicFeedA
   assert.equal(result.error, null, result.error?.message);
 }
 
+function preGalleryBytes(artifact: VerifiedPublicFeedArtifact): Buffer {
+  return Buffer.from(JSON.stringify(artifact.feed.map((record) => ({
+    ...record,
+    snapshotMedia: record.snapshotMedia.map(({ url, altText }) => ({ url, altText })),
+  })), null, 2));
+}
+
+async function uploadLegacyBaseline(client: SupabaseClient, bytes: Buffer): Promise<void> {
+  const result = await client.storage.from(feedBucket).upload(feedPath, bytes, {
+    contentType: 'application/json', upsert: true,
+  });
+  assert.equal(result.error, null, result.error?.message);
+}
+
 async function exactStored(client: SupabaseClient): Promise<VerifiedPublicFeedArtifact> {
   const result = await client.storage.from(feedBucket).download(feedPath);
   assert.equal(result.error, null, result.error?.message);
@@ -516,13 +530,24 @@ async function main(): Promise<void> {
 
   const traffic = project('2026-traffic-engine');
   const trafficArtifact = createPublicFeedArtifact([toPublicFeedRecord(traffic)]);
-  await uploadExact(client, trafficArtifact);
+  const trafficLegacyBytes = preGalleryBytes(trafficArtifact);
+  const trafficLegacyHash = createHash('sha256').update(trafficLegacyBytes).digest('hex');
+  await uploadLegacyBaseline(client, trafficLegacyBytes);
   const activation = await activatePublicFeedHistory(historyDependencies(client, [traffic]));
   assert.equal(activation.resultCode, 'COMPLETED', JSON.stringify(activation));
   let head = await ledger.getHead();
   assert.ok(head?.rollbackEnabled);
   assert.equal(head.currentVersion.operation, 'baseline');
+  assert.equal(head.currentVersion.versionNumber, 1);
+  assert.equal(head.currentVersion.artifactContent, trafficArtifact.content);
+  assert.equal(head.currentVersion.feedHash, trafficArtifact.feedHash);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
+  assert.equal(
+    psql("SELECT baseline_feed_hash || '|' || candidate_feed_hash || '|' || state FROM public.public_feed_operations WHERE kind='activation';"),
+    `${trafficLegacyHash}|${trafficArtifact.feedHash}|COMPLETED`,
+  );
+  assert.equal(psql('SELECT count(*) FROM public.public_feed_versions;'), '1');
+  assert.equal(psql('SELECT count(*) FROM public.public_feed_head WHERE singleton=true AND generation=1;'), '1');
 
   const medical = project('186-rollback-publication');
   const confirmedDiscipline = 'Taxonomy Discipline B';
@@ -1237,7 +1262,7 @@ async function main(): Promise<void> {
   const memberHash = psql(`SELECT record_hash FROM public.public_feed_version_members WHERE version_id=${sqlLiteral(firstVersionId)}::uuid ORDER BY ordinal LIMIT 1;`);
   assert.equal(memberHash, trafficArtifact.members[0].recordHash);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
-  console.log('Public feed ledger runtime verification passed: fresh 43-migration schema, exact Storage/head, activation, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
+  console.log('Public feed ledger runtime verification passed: fresh 43-migration schema, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
 }
 
 main().catch((error: unknown) => {

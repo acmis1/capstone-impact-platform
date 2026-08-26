@@ -111,6 +111,7 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
       galleryPosition: number;
     }
   >();
+  const ambiguousUrls = new Set<string>();
 
   for (const asset of row.media_assets) {
     if (asset.asset_type !== 'snapshot_image') continue;
@@ -136,6 +137,12 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
       galleryPosition < 1 ||
       galleryPosition > 10
     ) {
+      continue;
+    }
+
+    if (mediaByUrl.has(url) || ambiguousUrls.has(url)) {
+      mediaByUrl.delete(url);
+      ambiguousUrls.add(url);
       continue;
     }
 
