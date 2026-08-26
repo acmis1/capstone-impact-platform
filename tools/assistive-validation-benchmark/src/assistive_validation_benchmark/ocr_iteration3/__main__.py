@@ -18,11 +18,20 @@ from .evidence import (
     validate_calibration_decision,
     validate_candidate_b_report,
 )
+from .holdout import (
+    build_holdout_corpus,
+    holdout_evidence_root,
+    run_holdout_once,
+    validate_holdout_result,
+    validate_seal,
+    write_seal,
+)
 from .renderer import generate_assets
 from .schema import (
     calibration_data_root,
     canonical_json_bytes,
     evidence_root,
+    holdout_data_root,
     load_json,
     tool_root,
     validate_corpus,
@@ -42,6 +51,7 @@ def _defaults() -> dict[str, Path]:
         "candidate_a_repeat_capture": evidence_root() / "candidate-a-repeat-capture.json",
         "candidate_a_repeat_report": evidence_root() / "candidate-a-repeat-report.json",
         "calibration_decision": evidence_root() / "calibration-decision.json",
+        "holdout_run": tool_root() / "artifacts" / "ocr-iteration3-fresh-holdout",
     }
 
 
@@ -78,6 +88,16 @@ def _parser() -> argparse.ArgumentParser:
     decision.add_argument("--output", type=Path, default=defaults["calibration_decision"])
     check_decision = sub.add_parser("check-calibration-decision", help="recompute the candidate selection chronology")
     check_decision.add_argument("--decision", type=Path, default=defaults["calibration_decision"])
+    sub.add_parser("write-holdout", help="write the deterministic post-freeze fresh holdout corpus")
+    generate_h = sub.add_parser("generate-holdout", help="render the sealed fresh holdout assets")
+    generate_h.add_argument("--output-dir", type=Path, default=defaults["holdout_run"] / "corpus")
+    seal_h = sub.add_parser("seal-holdout", help="seal corpus and asset hashes before candidate output")
+    seal_h.add_argument("--run-dir", type=Path, default=defaults["holdout_run"])
+    sub.add_parser("check-holdout-seal", help="recompute the holdout seal without OCR")
+    run_h = sub.add_parser("run-holdout-once", help="consume the sealed holdout exactly once")
+    run_h.add_argument("--run-dir", type=Path, default=defaults["holdout_run"])
+    run_h.add_argument("--models-dir", type=Path, default=defaults["models"])
+    sub.add_parser("check-holdout-result", help="recompute the consumed one-shot result without OCR")
     return parser
 
 
@@ -155,7 +175,7 @@ def main() -> int:
         report = load_json(args.report)
         validate_candidate_b_report(report, capture, corpus, protocol)
         result = {"valid": True, "selection": report["candidate_b"]["selection"]}
-    else:
+    elif args.command in {"build-calibration-decision", "check-calibration-decision"}:
         protocol, corpus = calibration_inputs()
         values = {
             "initial_capture": load_json(defaults["capture"]),
@@ -175,6 +195,49 @@ def main() -> int:
         else:
             validate_calibration_decision(load_json(args.decision), **values)
             result = {"valid": True, "selected_candidate": "CANDIDATE_A"}
+    elif args.command == "write-holdout":
+        corpus = build_holdout_corpus()
+        validate_corpus(corpus, expected_split="holdout", expected_count=45)
+        target = holdout_data_root() / "corpus" / "holdout.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(canonical_json_bytes(corpus))
+        result = {"corpus": str(target), "case_count": 45, "seed": corpus["seed"]}
+    elif args.command == "generate-holdout":
+        corpus = validate_corpus(
+            load_json(holdout_data_root() / "corpus" / "holdout.json"),
+            expected_split="holdout",
+            expected_count=45,
+        )
+        result = generate_assets(corpus, args.output_dir)
+    elif args.command == "seal-holdout":
+        corpus = validate_corpus(
+            load_json(holdout_data_root() / "corpus" / "holdout.json"),
+            expected_split="holdout",
+            expected_count=45,
+        )
+        sealed = write_seal(corpus, load_json(args.run_dir / "corpus" / "generation.json"))
+        result = {
+            "seal": str(holdout_evidence_root() / "seal.json"),
+            "state": sealed["state"]["status"],
+            "case_count": sealed["seal"]["case_count"],
+        }
+    elif args.command == "check-holdout-seal":
+        sealed = validate_seal()
+        result = {
+            "valid": True,
+            "state": sealed["state"]["status"],
+            "case_count": sealed["seal"]["case_count"],
+        }
+    elif args.command == "run-holdout-once":
+        completed = run_holdout_once(run_dir=args.run_dir, models_dir=args.models_dir)
+        result = {
+            "state": completed["state"]["status"],
+            "decision": completed["report"]["final_decision"],
+            "failures": completed["capture"]["failures"],
+        }
+    else:
+        checked = validate_holdout_result()
+        result = {"valid": True, "decision": checked["decision"], "state": checked["state"]["status"]}
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 

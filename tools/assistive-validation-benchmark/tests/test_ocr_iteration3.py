@@ -6,6 +6,7 @@ import unittest
 from assistive_validation_benchmark.ocr_failure_analysis.ordering import column_order, geometry_order
 from assistive_validation_benchmark.ocr_iteration3.candidate_b import _compact_parsing, pp_structure_assisted_order
 from assistive_validation_benchmark.ocr_iteration3.corpus import build_calibration_corpus
+from assistive_validation_benchmark.ocr_iteration3.holdout import build_holdout_corpus
 from assistive_validation_benchmark.ocr_iteration3.reading_order import (
     adaptive_column_order,
     adaptive_column_order_with_trace,
@@ -146,6 +147,19 @@ class Iteration3EvidenceContractTests(unittest.TestCase):
         corpus["ocr_cases"][1]["id"] = "ocr3-hold-001"
         with self.assertRaisesRegex(ValueError, "identity"):
             validate_corpus(corpus, expected_split="calibration", expected_count=18)
+
+    def test_fresh_holdout_has_five_cases_in_every_media_layout_cell(self) -> None:
+        corpus = build_holdout_corpus()
+        validate_corpus(corpus, expected_split="holdout", expected_count=45)
+        scored = [case for case in corpus["ocr_cases"] if case["split"] == "holdout"]
+        cells = {
+            (media, layout): sum(case["media"] == media and case["layout"] == layout for case in scored)
+            for media in ("png", "jpeg", "scanned_pdf")
+            for layout in ("one_column", "two_column", "three_column")
+        }
+        self.assertEqual({5}, set(cells.values()))
+        self.assertEqual(45, len({case["title"] for case in scored}))
+        self.assertTrue(any(not case["expected_agreement"] for case in scored))
 
 
 if __name__ == "__main__":
