@@ -4,6 +4,7 @@ import copy
 import unittest
 
 from assistive_validation_benchmark.ocr_iteration4.corpus import build_calibration_corpus
+from assistive_validation_benchmark.ocr_iteration4.capture import _failure
 from assistive_validation_benchmark.ocr_iteration4.provider import compact_parsing_blocks, sanitize_document_text
 from assistive_validation_benchmark.ocr_iteration4.schema import validate_corpus
 
@@ -48,6 +49,14 @@ class Iteration4OutputBoundaryTests(unittest.TestCase):
             [{"block_label": "doc_title", "block_content": "Bounded title", "block_bbox": [4, 3, 2, 1]}]
         )
         self.assertIsNone(blocks[0]["box"])
+
+
+class Iteration4FailureEvidenceTests(unittest.TestCase):
+    def test_failure_records_are_bounded_and_keep_case_identity(self) -> None:
+        failure = _failure("ocr4-cal-001", "x" * 100, "y" * 400)
+        self.assertEqual("ocr4-cal-001", failure["case_id"])
+        self.assertEqual(80, len(failure["error_type"]))
+        self.assertEqual(300, len(failure["message"]))
 
 
 if __name__ == "__main__":

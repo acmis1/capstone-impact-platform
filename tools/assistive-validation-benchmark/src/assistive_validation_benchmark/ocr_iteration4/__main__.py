@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from ..ocr_productionization.offline import enable_offline_guard
-from .capture import capture_calibration
+from .capture import capture_calibration, warmup_timeout_capture
 from .corpus import build_calibration_corpus
 from .evidence import (
     build_calibration_report,
@@ -65,6 +65,14 @@ def _parser() -> argparse.ArgumentParser:
     capture.add_argument("--run-dir", type=Path, default=defaults["run"])
     capture.add_argument("--model-dir", type=Path, default=defaults["model"])
     capture.add_argument("--layout-dir", type=Path, default=defaults["layout"])
+    failed = sub.add_parser(
+        "record-warmup-timeout",
+        help="serialize an already-observed warmup timeout without rerunning inference",
+    )
+    failed.add_argument("--run-dir", type=Path, default=defaults["run"])
+    failed.add_argument("--model-dir", type=Path, default=defaults["model"])
+    failed.add_argument("--layout-dir", type=Path, default=defaults["layout"])
+    failed.add_argument("--observed-message", required=True)
     build = sub.add_parser("build-calibration-evidence", help="track bounded capture and recomputable score")
     build.add_argument("--run-dir", type=Path, default=defaults["run"])
     build.add_argument("--capture-output", type=Path, default=defaults["capture"])
@@ -136,6 +144,24 @@ def main() -> int:
             run_dir=args.run_dir,
             model_dir=args.model_dir,
             layout_dir=args.layout_dir,
+        )
+        target = args.run_dir / "capture.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(canonical_json_bytes(capture))
+        result = {"capture": str(target), "case_count": capture["case_count"], "failures": capture["failures"]}
+    elif args.command == "record-warmup-timeout":
+        protocol, corpus = calibration_inputs()
+        expected_message = "PaddleOCR-VL worker exceeded 180s for ocr4-cal-warmup-001"
+        if args.observed_message != expected_message:
+            raise ValueError("observed warmup timeout does not match the frozen runner failure")
+        capture = warmup_timeout_capture(
+            corpus,
+            protocol,
+            run_dir=args.run_dir,
+            model_dir=args.model_dir,
+            layout_dir=args.layout_dir,
+            manifest_path=defaults["manifest"],
+            observed_message=args.observed_message,
         )
         target = args.run_dir / "capture.json"
         target.parent.mkdir(parents=True, exist_ok=True)

@@ -196,8 +196,8 @@ def score_capture(capture: dict[str, Any], corpus: dict[str, Any], protocol: dic
         "all_scored_cases_executed": not failures and len(records) == len(cases),
         "exact_title": title_rate >= quality["exact_title_rate_minimum"],
         "primary_wer": primary_wer["wer"] is not None and primary_wer["wer"] <= quality["primary_wer_maximum"],
-        "material_false_automatic_agreements": material_false
-        <= quality["material_false_automatic_agreements_maximum"],
+        "material_false_automatic_agreements": not failures
+        and material_false <= quality["material_false_automatic_agreements_maximum"],
         "operational": all(operational.values()),
         "provisioning": capture["provisioning"]["downloaded_during_capture"] is False
         and capture["provisioning"]["local_directories_explicit"] is True,
@@ -225,7 +225,7 @@ def score_capture(capture: dict[str, Any], corpus: dict[str, Any], protocol: dic
         "equality_path": _classification_counts(labels, equality),
         "assistive_path": _classification_counts(labels, assistive),
         "material_false_automatic_agreements": material_false,
-        "title_mismatch_fail_safe": material_false == 0,
+        "title_mismatch_fail_safe": not failures and material_false == 0,
         "word_error_rate": primary_wer,
         "difficulty_breakdown": _breakdown(records, cases, "difficulty"),
         "media_breakdown": _breakdown(records, cases, "media"),

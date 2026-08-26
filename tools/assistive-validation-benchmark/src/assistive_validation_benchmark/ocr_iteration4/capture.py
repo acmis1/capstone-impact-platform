@@ -61,6 +61,62 @@ def _failure(case_id: str, error_type: str, message: str) -> dict[str, str]:
     return {"case_id": case_id, "error_type": error_type[:80], "message": message[:300]}
 
 
+def warmup_timeout_capture(
+    corpus: dict[str, Any],
+    protocol: dict[str, Any],
+    *,
+    run_dir: Path,
+    model_dir: Path,
+    layout_dir: Path,
+    manifest_path: Path,
+    observed_message: str,
+) -> dict[str, Any]:
+    """Serialize the observed failed attempt without starting inference again."""
+    assets_dir = run_dir / "corpus"
+    generation = generate_assets(corpus, assets_dir)
+    provisioning = load_and_verify_model_manifest(manifest_path, model_dir, layout_dir)
+    offline = enable_offline_guard()
+    cases = [case for case in corpus["ocr_cases"] if case["split"] == "calibration"]
+    message = "unscored warmup exceeded the frozen 180s timeout; scored calibration did not begin"
+    return {
+        "schema_version": CAPTURE_SCHEMA,
+        "engine": "paddleocr-vl-1.6-native",
+        "configuration_id": "v1.6-native-cpu-layoutv3-threads10",
+        "configuration": protocol["configuration"],
+        "versions": runtime_versions(),
+        "offline": offline,
+        "environment": {
+            "python": platform.python_version(),
+            "platform": platform.platform(),
+            "machine": platform.machine(),
+            "processor": platform.processor(),
+            "cpu_count": os.cpu_count(),
+            "worker_start_method": "spawn",
+            "per_case_timeout_seconds": PER_CASE_TIMEOUT_SECONDS,
+            "whole_run_timeout_seconds": WHOLE_RUN_TIMEOUT_SECONDS,
+        },
+        "generation": generation,
+        "provisioning": provisioning,
+        "cold_start_ms": None,
+        "warmup_runtime_ms": None,
+        "memory_baseline_bytes": None,
+        "peak_working_set_bytes": None,
+        "artifact_footprint_bytes": provisioning["artifact_footprint_bytes"],
+        "worker_concurrency": 1,
+        "total_run_ms": None,
+        "case_count": len(cases),
+        "execution_failure": {
+            "stage": "warmup",
+            "case_id": "ocr4-cal-warmup-001",
+            "timeout_seconds": PER_CASE_TIMEOUT_SECONDS,
+            "process_exit_code": 1,
+            "message": observed_message,
+        },
+        "failures": [_failure(case["id"], "CalibrationNotExecuted", message) for case in cases],
+        "records": [],
+    }
+
+
 def capture_corpus(
     corpus: dict[str, Any],
     protocol: dict[str, Any],
@@ -94,6 +150,7 @@ def capture_corpus(
         ready = _receive(responses, timeout=PER_CASE_TIMEOUT_SECONDS)
         if ready.get("kind") != "ready":
             raise RuntimeError(f"PaddleOCR-VL worker failed during initialization: {ready}")
+        cold_start_ms = (time.perf_counter() - run_started) * 1000
         warmup = next(case for case in corpus["ocr_cases"] if case["split"] == "warmup")
         warmup_path = raster_path(
             warmup,
@@ -103,14 +160,26 @@ def capture_corpus(
             protocol["rendering"]["max_input_dimension"],
         )
         requests.put({"case_id": warmup["id"], "path": str(warmup_path)})
-        warmup_response = _receive(responses, timeout=PER_CASE_TIMEOUT_SECONDS, expected_case=warmup["id"])
-        if warmup_response.get("kind") != "result":
+        try:
+            warmup_response = _receive(responses, timeout=PER_CASE_TIMEOUT_SECONDS, expected_case=warmup["id"])
+        except TimeoutError:
+            failures.extend(
+                _failure(
+                    case["id"],
+                    "CalibrationNotExecuted",
+                    "unscored warmup exceeded the frozen 180s timeout; scored calibration did not begin",
+                )
+                for case in cases
+            )
+            worker.terminate()
+            warmup_response = None
+        if warmup_response is not None and warmup_response.get("kind") != "result":
             raise RuntimeError(f"PaddleOCR-VL warmup failed: {warmup_response}")
-        warmup_result = warmup_response["observation"]
-        warmup_runtime_ms = float(warmup_result["runtime_ms"])
-        cold_start_ms = (time.perf_counter() - run_started) * 1000
-        peak_values.append(int(warmup_result.get("peak_memory_bytes") or 0))
-        for position, case in enumerate(cases):
+        if warmup_response is not None:
+            warmup_result = warmup_response["observation"]
+            warmup_runtime_ms = float(warmup_result["runtime_ms"])
+            peak_values.append(int(warmup_result.get("peak_memory_bytes") or 0))
+        for position, case in enumerate([] if warmup_response is None else cases):
             elapsed = time.perf_counter() - run_started
             if elapsed > WHOLE_RUN_TIMEOUT_SECONDS:
                 failures.extend(
