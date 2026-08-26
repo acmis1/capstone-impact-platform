@@ -528,8 +528,8 @@ describe('project detail workspace information architecture', () => {
   });
 
   it('shows a bounded unavailable archive state only for a declared staging runtime', () => {
-    expect(pageSource).toContain("isStagingRuntimeEnvironment()\n              ? 'staging-unavailable'");
-    expect(pageSource).toContain("? 'staging'\n            : isStagingRuntimeEnvironment()");
+    expect(pageSource).toMatch(/isStagingRuntimeEnvironment\(\)\s*\? 'staging-unavailable'/);
+    expect(pageSource).toMatch(/\? 'staging'\s*: isStagingRuntimeEnvironment\(\)/);
     expect(pageSource).not.toContain("archiveExecutionTarget = 'staging-unavailable'");
   });
 
