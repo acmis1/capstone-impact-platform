@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import platform
 import shutil
@@ -19,6 +18,7 @@ from .history import (
     check_policy_freeze,
     load_benchmark_history,
     load_exposed_holdout_texts,
+    normalised_text_file_sha256,
 )
 from .metrics import check_report_metrics
 from .provenance import approved_terms, validate_vocabulary_policy
@@ -202,7 +202,7 @@ def run_phase6_benchmark(
         "corpus_version": PHASE6_CORPUS_VERSION,
         "seed": PHASE6_SEED,
         "manifest_sha256": manifest_sha256(manifest),
-        "vocabulary_policy_sha256": hashlib.sha256(policy_path.read_bytes()).hexdigest(),
+        "vocabulary_policy_sha256": normalised_text_file_sha256(policy_path),
         "measurement": measurement,
         "completed_at": completed.isoformat(),
         "policy_freeze_commit_sha": (freeze or {}).get("policy_freeze_commit_sha"),
@@ -278,7 +278,7 @@ def validate_phase6_evidence(
         raise ValueError("Stored Phase 6 evidence must be a final measurement")
     if report.get("manifest_sha256") != manifest_sha256(manifest):
         raise ValueError("Stored evidence manifest hash is stale")
-    if report.get("vocabulary_policy_sha256") != hashlib.sha256(policy_path.read_bytes()).hexdigest():
+    if report.get("vocabulary_policy_sha256") != normalised_text_file_sha256(policy_path):
         raise ValueError("Stored evidence vocabulary policy hash is stale")
     if report.get("corpus", {}).get("grammar_cases") != 80 or report.get("corpus", {}).get("duplicate_candidates") < 100:
         raise ValueError("Stored evidence corpus counts are inconsistent")
