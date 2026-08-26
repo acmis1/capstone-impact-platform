@@ -7,7 +7,7 @@ import { validatePublicRemovalInput } from '../../../../../auth/publicRemovalInp
 import { requireAdmin } from '../../../../../auth/requireAdmin';
 import { AdminAuthError } from '../../../../../auth/authTypes';
 import { getServerEnv } from '../../../../../lib/env';
-import { createSupabaseAdminClient } from '../../../../../lib/supabase/admin';
+import { createSupabaseAdminClientForServerEnv } from '../../../../../lib/supabase/admin';
 import { executeControlledPublicRemoval } from '../../../../../projects/controlledPublicRemovalService';
 import { createControlledPublicRemovalDependencies } from '../../../../../projects/createControlledPublicRemovalDependencies';
 import { isStagingPublicationExecutionAvailable } from '../../../../../projects/publicationExecutionPolicy';
@@ -21,6 +21,23 @@ function unavailable() {
     code: 'STAGING_ARCHIVE_UNAVAILABLE',
     error: 'Staging showcase archive is unavailable.',
   }, 404);
+}
+
+function stagingEnvironmentSnapshot(supabaseUrl: string) {
+  return Object.freeze({
+    CAPSTONE_RUNTIME_ENV: process.env.CAPSTONE_RUNTIME_ENV,
+    CAPSTONE_EXPECTED_SUPABASE_HOST: process.env.CAPSTONE_EXPECTED_SUPABASE_HOST,
+    CAPSTONE_STAGING_PUBLICATION_ENABLED: process.env.CAPSTONE_STAGING_PUBLICATION_ENABLED,
+    NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
+  });
+}
+
+function failed() {
+  return json({
+    success: false,
+    code: 'STAGING_ARCHIVE_FAILED',
+    error: 'Staging showcase archive could not be completed.',
+  }, 500);
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ publicId: string }> }) {
@@ -38,16 +55,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const input = validatePublicRemovalInput(body, publicId.publicId);
     if (!input.valid) return json({ success: false, error: 'Validation failed.' }, 400);
 
-    const env = getServerEnv();
-    if (!isStagingPublicationExecutionAvailable(env.supabaseUrl)) return unavailable();
+    const env = Object.freeze(getServerEnv());
+    const executionEnvironment = stagingEnvironmentSnapshot(env.supabaseUrl);
+    if (!isStagingPublicationExecutionAvailable(env.supabaseUrl, executionEnvironment)) {
+      return unavailable();
+    }
     const dependencies = createControlledPublicRemovalDependencies({
-      supabase: createSupabaseAdminClient(),
+      supabase: createSupabaseAdminClientForServerEnv(env),
       supabaseUrl: env.supabaseUrl,
       publicId: input.publicId,
       adminId: admin.adminUserId,
       feedBucket: env.SUPABASE_PUBLIC_FEEDS_BUCKET,
       feedPath: env.SUPABASE_PUBLIC_FEED_FILE,
       executionTarget: 'staging',
+      executionEnvironment,
     });
     const result = await executeControlledPublicRemoval({
       permissions: admin.permissions,
@@ -89,12 +110,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         error: 'The canonical staging feed no longer matches the authoritative database. Archive was not performed.',
       }, 409);
     }
-    return json({ success: false, error: 'Staging showcase archive could not be completed.' }, 500);
+    return failed();
   } catch (error) {
     if (error instanceof AdminAuthError) {
       return json({ success: false, error: getPublicAuthErrorMessage(error.type) }, getAuthErrorHttpStatus(error.type));
     }
     console.error('[Staging archive API Error]: unavailable');
-    return json({ success: false, error: 'Staging showcase archive could not be completed.' }, 500);
+    return failed();
   }
 }

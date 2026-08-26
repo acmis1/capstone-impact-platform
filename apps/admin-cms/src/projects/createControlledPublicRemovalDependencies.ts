@@ -5,6 +5,7 @@ import {
   assertPublicationExecutionTarget,
   type PublicationExecutionTarget,
 } from './publicationExecutionPolicy';
+import type { StagingRuntimeEnvironment } from '../security/stagingRuntimeIdentity';
 
 export function createControlledPublicRemovalDependencies(params: {
   supabase: SupabaseClient;
@@ -14,6 +15,7 @@ export function createControlledPublicRemovalDependencies(params: {
   feedBucket: string;
   feedPath: string;
   executionTarget: PublicationExecutionTarget;
+  executionEnvironment?: StagingRuntimeEnvironment;
 }): ControlledPublicRemovalDependencies {
   const projects = new SupabaseProjectRepositoryCore(params.supabase);
   return {
@@ -24,6 +26,7 @@ export function createControlledPublicRemovalDependencies(params: {
     assertExecutionEnvironment: () => assertPublicationExecutionTarget({
       target: params.executionTarget,
       supabaseUrl: params.supabaseUrl,
+      env: params.executionEnvironment,
     }),
     listProjects: () => projects.listProjects(),
   };

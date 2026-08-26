@@ -71,6 +71,8 @@ describe('ledger-backed controlled public removal', () => {
     mocks.execute.mockImplementation(async (params) => {
       const prepared = await params.prepareCandidate(baseline);
       expect(prepared.artifact.feed.map((record: { publicId: string }) => record.publicId)).toEqual(['a', 'b']);
+      expect(JSON.stringify(prepared.artifact.feed[0])).toBe(JSON.stringify(baseline.feed[0]));
+      expect(JSON.stringify(prepared.artifact.feed[1])).toBe(JSON.stringify(baseline.feed[2]));
       return {
         resultCode: 'COMPLETED', operationId: 'operation', versionNumber: 2,
         snapshotId: null, auditRecordId: 'audit', feedHash: prepared.artifact.feedHash,
@@ -78,6 +80,25 @@ describe('ledger-backed controlled public removal', () => {
       };
     });
     await expect(remove(dependencies())).resolves.toMatchObject({ resultCode: 'COMPLETED', recordCount: 2 });
+  });
+
+  it('fails closed before candidate binding when a lifecycle-published target is absent', async () => {
+    const baseline = headWithoutTarget().artifact;
+    mocks.execute.mockImplementation(async (params) => {
+      try {
+        await params.prepareCandidate(baseline);
+        throw new Error('EXPECTED_DIVERGENCE');
+      } catch (error) {
+        return {
+          resultCode: 'EXECUTION_FAILED',
+          failureCode: error instanceof Error ? error.message : 'EXECUTION_UNAVAILABLE',
+        };
+      }
+    });
+
+    await expect(remove(dependencies('published'))).resolves.toEqual({
+      resultCode: 'EXECUTION_FAILED', failureCode: 'CURRENT_FEED_DIVERGED',
+    });
   });
 
   it('reports the retried target own removal evidence, not the operation that owns the head', async () => {

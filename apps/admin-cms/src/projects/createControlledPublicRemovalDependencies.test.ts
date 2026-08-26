@@ -5,7 +5,11 @@ import { createControlledPublicRemovalDependencies } from './createControlledPub
 const STAGING_HOST = 'synthetic-pp1-staging.supabase.co';
 const STAGING_URL = `https://${STAGING_HOST}`;
 
-function dependencies(executionTarget: 'local' | 'staging', supabaseUrl: string) {
+function dependencies(
+  executionTarget: 'local' | 'staging',
+  supabaseUrl: string,
+  executionEnvironment?: Record<string, string | undefined>,
+) {
   return createControlledPublicRemovalDependencies({
     supabase: {} as SupabaseClient,
     supabaseUrl,
@@ -14,6 +18,7 @@ function dependencies(executionTarget: 'local' | 'staging', supabaseUrl: string)
     feedBucket: 'server-public-feeds',
     feedPath: 'capstones-latest.json',
     executionTarget,
+    executionEnvironment,
   });
 }
 
@@ -34,6 +39,18 @@ describe('controlled public removal dependency execution target', () => {
   it('accepts only the exact enabled staging runtime and expected Supabase host', () => {
     enableStaging();
     expect(() => dependencies('staging', STAGING_URL).assertExecutionEnvironment()).not.toThrow();
+  });
+
+  it('retains one immutable staging policy snapshot even if process environment later changes', () => {
+    const executionEnvironment = {
+      CAPSTONE_RUNTIME_ENV: 'staging',
+      CAPSTONE_EXPECTED_SUPABASE_HOST: STAGING_HOST,
+      CAPSTONE_STAGING_PUBLICATION_ENABLED: 'true',
+      NEXT_PUBLIC_SUPABASE_URL: STAGING_URL,
+    };
+    const resolved = dependencies('staging', STAGING_URL, executionEnvironment);
+    vi.stubEnv('CAPSTONE_RUNTIME_ENV', 'production');
+    expect(() => resolved.assertExecutionEnvironment()).not.toThrow();
   });
 
   it('rejects staging when the explicit publication gate is disabled', () => {

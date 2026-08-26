@@ -9,17 +9,37 @@ import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 
+const STAGING_FAILURE_MESSAGES = {
+  STAGING_ARCHIVE_UNAVAILABLE: 'Staging archive execution is disabled or its runtime identity is unavailable. Do not retry until an operator restores the staging capability.',
+  NOT_PUBLISHED: 'This project is not in the published lifecycle state required for staging archive.',
+  PUBLICATION_IN_PROGRESS: 'Another canonical public-feed operation is in progress. Wait for it to finish, then refresh before taking further action.',
+  RECOVERY_REQUIRED: 'The canonical public-feed writer has an unresolved durable operation. Do not retry archive; use and complete the public-feed recovery workflow.',
+  CURRENT_FEED_DIVERGED: 'The project lifecycle and deployed staging feed disagree. Archive was not executed; operator reconciliation is required.',
+  STAGING_ARCHIVE_FAILED: 'Staging showcase archive failed without a specific public result. Review bounded operational status before retrying.',
+} as const;
+
+function stagingFailureMessage(data: unknown): string {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return STAGING_FAILURE_MESSAGES.STAGING_ARCHIVE_FAILED;
+  }
+  const code = (data as Record<string, unknown>).code;
+  return typeof code === 'string' && Object.hasOwn(STAGING_FAILURE_MESSAGES, code)
+    ? STAGING_FAILURE_MESSAGES[code as keyof typeof STAGING_FAILURE_MESSAGES]
+    : STAGING_FAILURE_MESSAGES.STAGING_ARCHIVE_FAILED;
+}
+
 export function LocalArchivePanel({
   publicId,
   executionTarget = 'local',
 }: {
   publicId: string;
-  executionTarget?: 'local' | 'staging';
+  executionTarget?: 'local' | 'staging' | 'staging-unavailable';
 }) {
   const router = useRouter();
   const [state, dispatch] = useReducer(localArchiveReducer, initialLocalArchiveState);
   const inFlight = useRef(false);
-  const isStaging = executionTarget === 'staging';
+  const isStaging = executionTarget !== 'local';
+  const isUnavailable = executionTarget === 'staging-unavailable';
   const reasonId = `${executionTarget}-archive-reason`;
 
   async function execute() {
@@ -30,16 +50,41 @@ export function LocalArchivePanel({
       const endpoint = isStaging ? 'staging-archive' : 'local-archive';
       const response = await fetch(`/api/projects/${encodeURIComponent(publicId)}/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archiveReason: state.reason }) });
       const data = await response.json().catch(() => ({ success: false }));
-      if (!response.ok || !data.success) throw new Error();
-      dispatch({ type: 'SUCCESS', resultCode: data.result.resultCode });
+      if (!response.ok || !data.success) {
+        if (isStaging) {
+          dispatch({ type: 'FAIL', error: stagingFailureMessage(data) });
+          return;
+        }
+        throw new Error();
+      }
+      const resultCode = data?.result?.resultCode;
+      if (resultCode !== 'COMPLETED' && resultCode !== 'ALREADY_COMPLETED') throw new Error();
+      dispatch({ type: 'SUCCESS', resultCode });
       router.refresh();
     } catch {
       dispatch({ type: 'FAIL', error: isStaging
-        ? 'Staging showcase archive could not be completed. Please try again.'
+        ? STAGING_FAILURE_MESSAGES.STAGING_ARCHIVE_FAILED
         : 'Local archive could not be completed. Please try again.' });
     } finally {
       inFlight.current = false;
     }
+  }
+
+  if (isUnavailable) {
+    return (
+      <div className="mt-5 flex flex-col gap-4 border-t border-border pt-5 text-xs sm:text-sm">
+        <div className="flex items-center gap-2">
+          <Archive className="h-4 w-4 text-warning" aria-hidden="true" />
+          <h4 className="text-sm font-semibold text-foreground">Staging showcase archive</h4>
+        </div>
+        <Alert
+          variant="warning"
+          icon={ShieldAlert}
+          title="Staging archive unavailable"
+          description="Staging archive execution is disabled or its runtime identity is unavailable. No archive was attempted; contact the platform operator before taking further action."
+        />
+      </div>
+    );
   }
 
   return (

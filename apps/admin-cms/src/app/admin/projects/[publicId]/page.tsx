@@ -39,6 +39,7 @@ import { getServerEnv } from '../../../../lib/env';
 import { PublicationPreparationPanel } from '../../../../components/admin/PublicationPreparationPanel';
 import { isLocalPublicationExecutionAvailable } from '../../../../projects/localPublicationExecution';
 import { isStagingPublicationExecutionAvailable } from '../../../../projects/publicationExecutionPolicy';
+import { isStagingRuntimeEnvironment } from '../../../../security/stagingRuntimeIdentity';
 import { LocalArchivePanel } from '../../../../components/admin/LocalArchivePanel';
 import type { AuthenticatedAdminContext } from '../../../../auth/authTypes';
 import {
@@ -131,7 +132,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let canPreparePublicationPlan = false;
   let localPublicationExecutionAvailable = false;
   let publicationExecutionTarget: 'local' | 'staging' | null = null;
-  let archiveExecutionTarget: 'local' | 'staging' | null = null;
+  let archiveExecutionTarget: 'local' | 'staging' | 'staging-unavailable' | null = null;
   let mediaItems: ProjectMediaPreviewItem[] = [];
   let mediaAvailable = false;
   let approvalMedia: ApprovalMediaInput | null = null;
@@ -206,7 +207,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           ? 'local'
           : isStagingPublicationExecutionAvailable(env.supabaseUrl)
             ? 'staging'
-            : null;
+            : isStagingRuntimeEnvironment()
+              ? 'staging-unavailable'
+              : null;
       }
 
       const projectDbId = (async () => {
@@ -366,7 +369,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     canManageParticipantPreview: canManagePreview,
     canResolveParticipantCorrection: canResolveCorrection,
     canPreparePublication: canPreparePublicationPlan,
-    canExecuteArchive: archiveExecutionTarget !== null,
+    canExecuteArchive: archiveExecutionTarget === 'local' || archiveExecutionTarget === 'staging',
     participantResponse: previewStateAvailable ? previewResponseState.type : null,
     hasActivePreview: activePreview !== null,
     publicationReadiness,

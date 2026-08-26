@@ -219,4 +219,33 @@ describe('LocalArchivePanel', () => {
     expect(await screen.findByText('Staging showcase archive completed.')).toBeTruthy();
     expect(refresh).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    ['STAGING_ARCHIVE_UNAVAILABLE', 'Do not retry until an operator restores the staging capability.'],
+    ['NOT_PUBLISHED', 'not in the published lifecycle state'],
+    ['PUBLICATION_IN_PROGRESS', 'Wait for it to finish, then refresh'],
+    ['RECOVERY_REQUIRED', 'Do not retry archive; use and complete the public-feed recovery workflow.'],
+    ['CURRENT_FEED_DIVERGED', 'operator reconciliation is required.'],
+    ['STAGING_ARCHIVE_FAILED', 'failed without a specific public result.'],
+  ])('preserves the bounded staging operational state %s', async (code, message) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ success: false, code, error: 'server wording is not trusted by the UI' }),
+    }));
+    render(<LocalArchivePanel publicId={PLAN.publicId} executionTarget="staging" />);
+    fireEvent.change(screen.getByLabelText(/Archive reason/i), { target: { value: 'Retire staging entry' } });
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive and remove from staging showcase' }));
+
+    expect(await screen.findByText(new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'))).toBeTruthy();
+    expect(screen.queryByText('server wording is not trusted by the UI')).toBeNull();
+  });
+
+  it('renders a bounded disabled state in staging without exposing an archive mutation control', () => {
+    render(<LocalArchivePanel publicId={PLAN.publicId} executionTarget="staging-unavailable" />);
+    expect(screen.getByText('Staging archive unavailable')).toBeTruthy();
+    expect(screen.getByText(/No archive was attempted/i)).toBeTruthy();
+    expect(screen.queryByLabelText(/Archive reason/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Archive and remove/i })).toBeNull();
+  });
 });
