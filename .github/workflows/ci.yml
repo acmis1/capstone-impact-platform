@@ -64,6 +64,10 @@ jobs:
       - name: Vitest Unit & Security Tests
         run: npm run test:admin
 
+      - name: Duda Current-Feed Chrome Contract Harness
+        if: runner.os == 'Linux'
+        run: npm --prefix Prototype run test:duda-current-feed-browser
+
       - name: TypeScript Typecheck
         run: npm run typecheck:admin
 

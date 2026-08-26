@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePublicFeed } from './validatePublicFeed';
+import { canonicalPathForms, validatePublicFeed } from './validatePublicFeed';
 import { createMockProject } from '../test/projectFixtures';
 import { compilePublicFeed } from './compilePublicFeed';
 import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
@@ -74,6 +74,19 @@ describe('validatePublicFeed', () => {
     expect(result.errors.length).toBeGreaterThan(0);
     expect(result.errors[0]).toContain('must be an integer');
   });
+
+  it.each([0, -1, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects id %s outside the positive safe numeric routing range',
+    (id) => {
+      const [record] = compilePublicFeed([createMockProject({ status: 'published' })]);
+      (record as unknown as Record<string, unknown>).id = id;
+
+      const result = validatePublicFeed([record]);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((error) => error.includes('positive safe routing range'))).toBe(true);
+    },
+  );
 
   it('fails validation when teamMembers is not an array', () => {
     const validProject = createMockProject({ status: 'published' });
@@ -546,5 +559,215 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
     const res = validatePublicFeed([rec]);
     expect(res.valid).toBe(false);
     expect(res.errors.some((e) => e.includes('contains unknown field: "internalTrackingId"'))).toBe(true);
+  });
+});
+
+describe('canonical percent-encoded storage path boundary', () => {
+  const publishedRecord = (overrides: Record<string, unknown> = {}) => {
+    const valid = createMockProject({ status: 'published' });
+    const compiled = compilePublicFeed([valid]);
+    return { ...compiled[0], ...overrides } as unknown as Record<string, unknown>;
+  };
+
+  const withSnapshot = (url: string) =>
+    publishedRecord({
+      snapshots: [url],
+      snapshotMedia: [{ url, altText: 'Synthetic gallery alternative.', galleryPosition: 1 }],
+    });
+
+  it('canonicalizes a plain path without decoding work', () => {
+    expect(canonicalPathForms('/storage/v1/object/public/Assets/One.JPG')).toEqual([
+      '/storage/v1/object/public/assets/one.jpg',
+    ]);
+  });
+
+  it('exposes every bounded decoded form so a marker cannot hide behind one encoding layer', () => {
+    expect(canonicalPathForms('/a%2Fb')).toEqual(['/a%2fb', '/a/b']);
+  });
+
+  it.each([
+    ['/assets/gallery%20one.jpg', ['/assets/gallery%20one.jpg', '/assets/gallery one.jpg']],
+    ['/assets/caf%C3%A9.jpg', ['/assets/caf%c3%a9.jpg', '/assets/café.jpg']],
+    ['/assets/literal%25.jpg', ['/assets/literal%25.jpg', '/assets/literal%.jpg']],
+  ])('accepts the legitimate encoded path %s', (pathname, expected) => {
+    expect(canonicalPathForms(pathname)).toEqual(expected);
+  });
+
+  it('fails closed on malformed percent-encoding', () => {
+    expect(canonicalPathForms('/assets/x%ZZ.jpg')).toBeNull();
+  });
+
+  it('fails closed when encoding cannot be resolved inside the bounded budget', () => {
+    expect(canonicalPathForms('/assets/x%2525252525.jpg')).toBeNull();
+  });
+
+  const encodedPrivateSnapshotUrls: [string, string, string][] = [
+    [
+      'percent-encoded private ingestion bucket',
+      'https://demofixture.supabase.co/storage/v1/object/public/project%2Ddrafts%2Dprivate/leak.jpg',
+      'private storage bucket',
+    ],
+    [
+      'lower-case percent-encoded private ingestion bucket',
+      'https://demofixture.supabase.co/storage/v1/object/public/project%2ddrafts%2dprivate/leak.jpg',
+      'private storage bucket',
+    ],
+    [
+      'double-encoded private ingestion bucket',
+      'https://demofixture.supabase.co/storage/v1/object/public/project%252Ddrafts%252Dprivate/leak.jpg',
+      'private storage bucket',
+    ],
+    [
+      'percent-encoded signed storage route',
+      'https://demofixture.supabase.co/storage/v1/object/%73ign/project-public-assets/leak.jpg',
+      'private or signed storage endpoint',
+    ],
+    [
+      'mixed-case percent-encoded authenticated storage route',
+      'https://demofixture.supabase.co/storage/v1/object/%41uthenticated/project-public-assets/leak.jpg',
+      'private or signed storage endpoint',
+    ],
+    [
+      'percent-encoded draft path segment',
+      'https://demofixture.supabase.co/storage/v1/object/public/assets%2Fdrafts%2Fpending.jpg',
+      'private draft path segment',
+    ],
+    [
+      'malformed percent-encoding',
+      'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/leak%ZZ.jpg',
+      'malformed or unresolvable percent-encoding',
+    ],
+  ];
+
+  it.each(encodedPrivateSnapshotUrls)('rejects a snapshot URL using a %s', (_label, url, reason) => {
+    const res = validatePublicFeed([withSnapshot(url)]);
+    expect(res.valid).toBe(false);
+    expect(res.errors.some((error) => error.includes(reason))).toBe(true);
+  });
+
+  it('still accepts an ordinary public storage URL that carries harmless percent-encoding', () => {
+    const url = 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/gallery%20one.jpg';
+    const res = validatePublicFeed([withSnapshot(url)]);
+    expect(res.valid).toBe(true);
+    expect(res.errors).toEqual([]);
+  });
+
+  it('accepts a public storage filename containing a literal encoded percent', () => {
+    const url = 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/progress%25.jpg';
+    const res = validatePublicFeed([withSnapshot(url)]);
+    expect(res.valid).toBe(true);
+    expect(res.errors).toEqual([]);
+  });
+});
+
+describe('authoritative public URL safety policy', () => {
+  const publishedRecord = (overrides: Record<string, unknown> = {}) => {
+    const [compiled] = compilePublicFeed([createMockProject({ status: 'published' })]);
+    return { ...compiled, ...overrides } as unknown as Record<string, unknown>;
+  };
+
+  const unsafeStorageUrl =
+    'https://demofixture.supabase.co/storage/v1/object/sign/project-public-assets/private.bin?token=synthetic';
+
+  const activeUrlFields: [string, (url: string) => Record<string, unknown>][] = [
+    ['poster', (url) => ({ poster: url })],
+    ['posterPdf', (url) => ({ posterPdf: url })],
+    [
+      'snapshots',
+      (url) => ({
+        snapshots: [url],
+        snapshotMedia: [{ url, altText: 'Synthetic unsafe snapshot.', galleryPosition: 1 }],
+      }),
+    ],
+    [
+      'snapshotMedia[].url',
+      (url) => ({
+        snapshots: [url],
+        snapshotMedia: [{ url, altText: 'Synthetic unsafe snapshot.', galleryPosition: 1 }],
+      }),
+    ],
+    ['videoUrl', (url) => ({ videoUrl: url })],
+    ['demoUrl', (url) => ({ demoUrl: url })],
+    ['repositoryUrl', (url) => ({ repositoryUrl: url })],
+    ['externalLinks[].url', (url) => ({ externalLinks: [{ label: 'Unsafe attachment', url }] })],
+  ];
+
+  it.each(activeUrlFields)('rejects a private signed URL in %s', (_field, buildOverrides) => {
+    const result = validatePublicFeed([publishedRecord(buildOverrides(unsafeStorageUrl))]);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes('public-safe'))).toBe(true);
+  });
+
+  it.each(['token', 'TOKEN', 'Token', 'access_token', 'ACCESS_TOKEN'])(
+    'rejects the canonical private-access query key %s on Supabase Storage',
+    (queryKey) => {
+      const url = `https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/demo.mp4?${queryKey}=synthetic`;
+      const result = validatePublicFeed([publishedRecord({ videoUrl: url })]);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((error) => error.includes('private-access credential'))).toBe(true);
+    },
+  );
+
+  it('rejects duplicate mixed-case private-access query keys on Supabase Storage', () => {
+    const url =
+      'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/demo.mp4?download=1&TOKEN=one&token=two';
+    const result = validatePublicFeed([publishedRecord({ videoUrl: url })]);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes('private-access credential'))).toBe(true);
+  });
+
+  it.each(['#Token=synthetic', '#section?ACCESS_TOKEN=synthetic'])(
+    'rejects private-access material in the Supabase Storage fragment %s',
+    (fragment) => {
+      const url = `https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/demo.mp4${fragment}`;
+      const result = validatePublicFeed([publishedRecord({ videoUrl: url })]);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((error) => error.includes('private-access credential'))).toBe(true);
+    },
+  );
+
+  it.each([
+    'https://cdn.example.test/public.jpg?ref=/drafts/example',
+    'https://project-drafts-private.example.test/public.jpg',
+    'https://cdn.example.test/files/project-drafts-private/public.jpg?token=ordinary-site-value',
+    'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/project-drafts-private-summary.jpg',
+    'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/drafts-overview.jpg',
+  ])('does not classify unrelated URL text as a private storage path: %s', (url) => {
+    const result = validatePublicFeed([publishedRecord({ demoUrl: url })]);
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('keeps legitimate query strings and fragments on ordinary external URLs', () => {
+    const result = validatePublicFeed([
+      publishedRecord({
+        videoUrl: 'https://www.youtube.com/watch?v=AbCdEfGhI12',
+        demoUrl: 'https://demo.example.test/launch?ref=showcase&mode=public',
+        repositoryUrl: 'https://code.example.test/project?tab=readme#install',
+        externalLinks: [
+          { label: 'Overview', url: 'https://projects.example.test/project?section=summary&view=public' },
+        ],
+      }),
+    ]);
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it.each([
+    'https://operator:secret@demo.example.test/launch',
+    'javascript:alert(1)',
+    'data:text/html,unsafe',
+    '/relative/path',
+  ])('rejects a generally unsafe active URL: %s', (url) => {
+    const result = validatePublicFeed([publishedRecord({ repositoryUrl: url })]);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((error) => error.includes('public-safe'))).toBe(true);
   });
 });

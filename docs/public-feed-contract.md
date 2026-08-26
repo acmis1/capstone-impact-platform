@@ -96,17 +96,20 @@ Every compiled project object must contain the following required fields to pass
 *   `posterText` — Required accessible full text for poster content
 *   `accessibilityText` — Required poster text alternative
 *   `snapshots` — Public snapshot URL array
-*   `snapshotMedia` — Exact `{ url, altText }` pairing for every snapshot
+*   `snapshotMedia` — Exact `{ url, altText, galleryPosition }` pairing for every snapshot
 *   `layoutConfig` — Visual preset settings object containing `templateId`.
 
 ### Runtime Validator Field Rules
 The runtime validator behaves as follows:
 *   Requires the above fields to be present and non-null.
-*   Checks `id` is an integer.
+*   Checks `id` is a positive safe integer suitable for deterministic numeric detail routing.
 *   Checks `teamMembers` is an array (does not currently check if every element inside the array is a string).
 *   Requires non-blank bounded `posterText` and `accessibilityText` values.
-*   Checks that each snapshot URL is an absolute HTTP(S), structurally public-safe URL; rejects malformed, relative, non-HTTP(S), private-draft, private-ingestion, signed, and authenticated-storage URLs. It does not perform network reachability checks.
-*   Requires unique snapshot URLs and an exact, order-independent one-to-one correspondence with `snapshotMedia`; each media item has only `url` and non-blank bounded `altText` fields.
+*   Applies one public URL policy to every active field: `poster`, `posterPdf`, `snapshots[]`, `snapshotMedia[].url`, `videoUrl`, `demoUrl`, `repositoryUrl`, and `externalLinks[].url`. Each populated URL must be an absolute, credential-free HTTP(S) URL. It does not perform network reachability checks.
+*   Identifies Storage object URLs from the parsed canonical `/storage/v1/` path, not arbitrary substrings elsewhere in the full URL. Signed/authenticated object routes and exact `/drafts/` or `project-drafts-private` path segments are rejected; those words inside a public filename are not misclassified. Private-access query or fragment keys are also rejected. Credential-key comparison is case-insensitive and covers duplicate forms, including `token` and `access_token`; ordinary non-Storage websites retain normal query strings and fragments.
+*   Inspects the URL path canonically rather than only in its raw form. A private identifier can survive `URL.pathname` percent-encoded, so the validator matches its markers against the raw path and against a bounded number of decoded forms (at most three passes). Malformed original encoding and another complete encoded layer beyond that budget fail closed. A decoded literal percent from a legitimate `%25` filename is not mistaken for another malformed layer. The decoder is deliberately bounded rather than recursive.
+*   Requires unique snapshot URLs and an exact one-to-one correspondence with `snapshotMedia`; each media item has only `url`, non-blank bounded `altText`, and an authoritative integer `galleryPosition` from 1 through 10. Entries must follow strictly increasing gallery order and align with `snapshots` at the same index.
+*   Does **not** require `galleryPosition` values to be contiguous or to equal an array index. A unique increasing set inside 1 through 10 is valid, so `[2]` and `[2, 5]` are both accepted. Consumers must preserve the authoritative values rather than renumbering them.
 *   Checks `layoutConfig` is an object.
 *   Checks `layoutConfig.templateId` is one of: `poster_showcase`, `technical_detail`, `media_rich`.
 *   Does not require or type-check `featuredMedia` or `sectionOrder` at runtime. They are defined in the TypeScript domain, and `compilePublicFeed` supplies/defaults and emits them inside `layoutConfig`, but `validatePublicFeed` does not independently require or type-check them.
@@ -153,9 +156,10 @@ If any of these fields are present in the payload sent to the validator (`valida
 *   **Empty Feed**: An empty feed array is technically valid but returns a validation warning.
 *   **Unknown or Forbidden Keys**: Triggers validation errors.
 *   **Missing/Null Required Fields**: Triggers validation errors.
-*   **Type Constraints**: `id` must be an integer; `teamMembers`, `snapshots`, and `snapshotMedia` must be arrays; and `templateId` must match one of the allowed template strings. `teamMembers` elements are not checked.
+*   **Type Constraints**: `id` must be a positive safe integer; `teamMembers`, `snapshots`, and `snapshotMedia` must be arrays; and `templateId` must match one of the allowed template strings. `teamMembers` elements are not checked.
 *   **Feed Validation Warnings**: An empty feed is valid with a warning; several optional indexing/display fields can also produce non-blocking warnings. Required accessibility fields are validation errors when missing, blank, or over their bounds.
 *   **Snapshot URL/Media Checks**: Snapshot URLs undergo structural public-safety checks and must correspond exactly to `snapshotMedia` entries and their alt text. These checks do not fetch URLs or establish network reachability.
+*   **Other Active URL Checks**: Poster, poster PDF, video, demo, repository, and external-link URLs undergo the same structural public-safety policy. External-link entries must use the exact public `{ label, url }` shape.
 *   **Duplicate IDs**: The artifact verifier rejects duplicate `publicId` values even though the lower-level structural validator remains reusable independently.
 
 ---
@@ -222,6 +226,11 @@ No browser role can execute the privileged ledger protocol. Ledger tables use RL
     *   Private Drafts: `project-drafts-private`
 *   **Prototype Environment Note**: The recovered Prototype uses exactly the bucket names `feeds` and `project-assets`. These are separate from the configurable Admin/CMS defaults (`public-feeds`, `project-public-assets`, `project-drafts-private`).
 *   **Caching**: `bodyend.html` appends a timestamp query parameter and uses `cache: no-store` to bypass client browser cache.
+*   **Snapshot Accessibility**: `bodyend.html` preserves the `snapshots` URL order used by the existing gallery and lightbox, and resolves each rendered image's governed alternative from `snapshotMedia` by exact URL. It never pairs alternatives by independent array index and omits malformed or unpaired entries.
+*   **Gallery Positions**: `bodyend.html` carries each authoritative `galleryPosition` through untouched and never fabricates one, so a server-valid non-contiguous gallery such as `[2]` or `[2, 5]` stays visible. It drops an entry only where the server contract also treats it as invalid (out-of-range or contested position, duplicate or unpaired URL, blank alternative) or where rendering it would be unsafe.
+*   **Optional Presentation Defaults**: `disciplines` is recommendation-only at the validator boundary; when omitted or empty, Duda falls back to the primary `discipline`. Missing or malformed warning-only text/array fields become inert empty values. A missing/unrecognized `featuredMedia` uses `auto`, a missing/invalid `sectionOrder` uses the reusable default order, and an invalid layout preset falls back to `poster_showcase`.
+*   **Per-Record Availability Boundary**: A record is omitted only when its numeric routing identity is structurally unusable or duplicates an earlier retained identity. Unsafe optional URLs, malformed external links, and unsafe/unpaired snapshot entries are removed locally while the project remains renderable. One omitted record emits only the bounded `FEED_RECORD_OMITTED` diagnostic and cannot erase valid siblings; a non-empty payload with zero renderable records uses the bounded `FEED_RECORD_INVALID` unavailable state.
+*   **Public URL Defense**: `bodyend.html` independently enforces the same active-field URL policy as the server before values can become `href` or `src`. General external HTTP(S) links keep legitimate query strings and fragments. Storage privacy classification uses canonical parsed path semantics, private-access keys are case-insensitive across query/fragment text, and unsafe fields/pairs are omitted instead of rejecting their complete project.
 
 ---
 
