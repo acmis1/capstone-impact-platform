@@ -57,6 +57,8 @@ export function ResetPasswordForm() {
         return 'Passwords do not match.';
       case 'SESSION_TERMINATION_FAILED':
         return 'Your password changed, but the recovery session could not be closed. Try again.';
+      case 'PASSWORD_COMPROMISED':
+        return 'This password has appeared in a known data breach. Choose a different password.';
       case 'PASSWORD_UPDATE_FAILED':
         return 'The password could not be updated. Please try again.';
       default:
