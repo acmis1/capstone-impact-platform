@@ -58,6 +58,18 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark phase6-check-evidence
 
+      - name: Validate Phase 6C calibration and frozen policy evidence
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.phase6c check-calibration
+          python -m assistive_validation_benchmark.phase6c check-calibration-evidence
+          python -m assistive_validation_benchmark.phase6c check-freeze-manifest
+          python -m assistive_validation_benchmark.phase6c check-freeze-record
+
+      - name: Re-prove the Phase 6C one-shot holdout result without rerunning engines
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.phase6c check-final-evidence
+
       - name: Validate OCR productionization evidence and decision
         working-directory: tools/assistive-validation-benchmark
         run: |
