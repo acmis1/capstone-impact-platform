@@ -5,6 +5,11 @@ import unittest
 
 from assistive_validation_benchmark.ocr_iteration4.corpus import build_calibration_corpus
 from assistive_validation_benchmark.ocr_iteration4.capture import _failure
+from assistive_validation_benchmark.ocr_iteration4.evidence import (
+    build_calibration_report,
+    calibration_inputs,
+    tracked_calibration_evidence,
+)
 from assistive_validation_benchmark.ocr_iteration4.provider import compact_parsing_blocks, sanitize_document_text
 from assistive_validation_benchmark.ocr_iteration4.schema import validate_corpus
 
@@ -57,6 +62,14 @@ class Iteration4FailureEvidenceTests(unittest.TestCase):
         self.assertEqual("ocr4-cal-001", failure["case_id"])
         self.assertEqual(80, len(failure["error_type"]))
         self.assertEqual(300, len(failure["message"]))
+
+    def test_tracked_capture_is_bound_to_the_full_model_manifest(self) -> None:
+        protocol, corpus = calibration_inputs()
+        capture, _ = tracked_calibration_evidence()
+        capture = copy.deepcopy(capture)
+        capture["provisioning"]["model_manifest_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "model manifest"):
+            build_calibration_report(capture, corpus, protocol)
 
 
 if __name__ == "__main__":

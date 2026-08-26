@@ -13,6 +13,7 @@ from ..ocr_iteration2_calibration.scoring import (
 from ..ocr_iteration2_holdout_protocol.renderer import reference_text as iteration2_holdout_reference
 from ..ocr_iteration3.renderer import reference_text as iteration3_reference
 from ..ocr_productionization.title_safety import evaluate_title_safety, normalize_metric_title
+from .corpus import build_calibration_corpus
 from .provider import select_title_candidates
 from .renderer import reference_text
 from .schema import (
@@ -139,9 +140,51 @@ def _breakdown(records: list[dict[str, Any]], cases: dict[str, dict[str, Any]], 
     }
 
 
+def _validate_capture_identity(capture: dict[str, Any], corpus: dict[str, Any], protocol: dict[str, Any]) -> None:
+    manifest = load_json(calibration_data_root() / "model-manifest.json")
+    expected_provisioning = {
+        "model_manifest_sha256": value_sha256(manifest),
+        "artifact_footprint_bytes": manifest["artifact_footprint_bytes"],
+        "artifacts": [
+            {
+                "id": item["id"],
+                "repository": item["repository"],
+                "revision": item["revision"],
+                "tree_sha256": item["tree_sha256"],
+                "bytes": item["bytes"],
+            }
+            for item in manifest["artifacts"]
+        ],
+        "downloaded_during_capture": False,
+        "local_directories_explicit": True,
+    }
+    if capture.get("configuration") != protocol["configuration"]:
+        raise ValueError("Iteration 4 capture configuration differs from the frozen protocol")
+    if capture.get("versions") != protocol["runtime"]:
+        raise ValueError("Iteration 4 capture runtime differs from the frozen protocol")
+    if capture.get("provisioning") != expected_provisioning:
+        raise ValueError("Iteration 4 capture provisioning differs from the tracked model manifest")
+    if capture.get("artifact_footprint_bytes") != manifest["artifact_footprint_bytes"]:
+        raise ValueError("Iteration 4 capture artifact footprint differs from the tracked model manifest")
+    environment = capture.get("environment") or {}
+    gates = protocol["operational_gates"]
+    if environment.get("per_case_timeout_seconds") != gates["per_case_timeout_seconds"]:
+        raise ValueError("Iteration 4 capture case timeout differs from the frozen protocol")
+    if environment.get("whole_run_timeout_seconds") != gates["whole_run_timeout_seconds"]:
+        raise ValueError("Iteration 4 capture whole-run timeout differs from the frozen protocol")
+    if capture.get("worker_concurrency") != protocol["configuration"]["worker_concurrency"]:
+        raise ValueError("Iteration 4 capture concurrency differs from the frozen protocol")
+    generation = capture.get("generation") or {}
+    if generation.get("corpus_version") != corpus["corpus_version"] or generation.get("seed") != corpus["seed"]:
+        raise ValueError("Iteration 4 capture generation differs from the tracked corpus")
+    if generation.get("renderer_id") != protocol["rendering"]["renderer"]:
+        raise ValueError("Iteration 4 capture renderer differs from the frozen protocol")
+
+
 def score_capture(capture: dict[str, Any], corpus: dict[str, Any], protocol: dict[str, Any]) -> dict[str, Any]:
     if capture.get("schema_version") != "pp1-ocr-iteration4-capture/v1":
         raise ValueError("unsupported Iteration 4 capture")
+    _validate_capture_identity(capture, corpus, protocol)
     cases = {case["id"]: case for case in corpus["ocr_cases"] if case["split"] in {"calibration", "holdout"}}
     observed = {record["case_id"]: record for record in capture["records"]}
     failures = {failure["case_id"] for failure in capture["failures"]}
@@ -266,6 +309,10 @@ def validate_calibration_report(
 ) -> dict[str, Any]:
     if report != build_calibration_report(capture, corpus, protocol):
         raise ValueError("stored Iteration 4 calibration evidence differs from recomputation")
+    if report["score"]["calibration_decision"] != "ITERATION4_CALIBRATION_INSUFFICIENT":
+        raise ValueError("tracked Iteration 4 calibration decision is not the recorded terminal outcome")
+    if report["holdout_permitted"] or report["production_integration_permitted"]:
+        raise ValueError("tracked Iteration 4 evidence unexpectedly permits holdout or production integration")
     return report
 
 
@@ -276,6 +323,8 @@ def calibration_inputs() -> tuple[dict[str, Any], dict[str, Any]]:
         expected_split="calibration",
         expected_count=27,
     )
+    if corpus != build_calibration_corpus():
+        raise ValueError("tracked Iteration 4 calibration differs from deterministic source")
     return protocol, corpus
 
 
