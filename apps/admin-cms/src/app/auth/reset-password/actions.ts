@@ -12,6 +12,7 @@ import {
 } from '../../../auth/recoveryContext';
 import { getVerifiedPasswordRecoveryAccess } from '../../../auth/recoverySession';
 import { createSupabaseServerClient } from '../../../lib/supabase/server';
+import { isCompromisedPasswordError } from '../passwordUpdateError';
 
 export interface RecoveryPasswordUpdateInput {
   password?: unknown;
@@ -54,7 +55,9 @@ export async function resetPasswordAction(input: RecoveryPasswordUpdateInput) {
         password: input.password,
       });
       if (updateError) {
-        actionError = 'PASSWORD_UPDATE_FAILED';
+        actionError = isCompromisedPasswordError(updateError)
+          ? 'PASSWORD_COMPROMISED'
+          : 'PASSWORD_UPDATE_FAILED';
       } else {
         const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
         if (signOutError) {

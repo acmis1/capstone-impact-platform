@@ -101,4 +101,24 @@ describe('recovery reset-password page', () => {
     resolveAction?.({ error: 'PASSWORD_UPDATE_FAILED' });
     await screen.findByText('The password could not be updated. Please try again.');
   });
+
+  it('shows compromised-password guidance, marks the password invalid, and clears on change', async () => {
+    mocks.resetAction.mockResolvedValueOnce({ error: 'PASSWORD_COMPROMISED' });
+    render(await ResetPasswordPage());
+    const password = screen.getByLabelText(/New password/) as HTMLInputElement;
+    fireEvent.change(password, { target: { value: 'ValidPassword1' } });
+    fireEvent.change(screen.getByLabelText(/Confirm new password/), {
+      target: { value: 'ValidPassword1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset password' }));
+
+    await screen.findByText(
+      'This password has appeared in a known data breach. Choose a different password.',
+    );
+    expect(password.getAttribute('aria-invalid')).toBe('true');
+
+    fireEvent.change(password, { target: { value: 'DifferentPassword1' } });
+    expect(screen.queryByText(/known data breach/)).toBeNull();
+    expect(password.getAttribute('aria-invalid')).toBeNull();
+  });
 });

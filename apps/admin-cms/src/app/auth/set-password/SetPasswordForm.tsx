@@ -65,7 +65,7 @@ export function SetPasswordForm() {
     if (error) setError(null);
   };
 
-  const hasPasswordError = !!error && (error === 'PASSWORD_TOO_SHORT' || error === 'PASSWORD_TOO_LONG' || error === 'PASSWORD_EMPTY');
+  const hasPasswordError = !!error && (error === 'PASSWORD_TOO_SHORT' || error === 'PASSWORD_TOO_LONG' || error === 'PASSWORD_EMPTY' || error === 'PASSWORD_COMPROMISED');
   const hasConfirmationError = !!error && (error === 'CONFIRMATION_MISMATCH');
 
   return (
@@ -149,6 +149,7 @@ export function SetPasswordForm() {
           {error === 'PASSWORD_EMPTY' && 'Password cannot be empty.'}
           {error === 'UNAUTHENTICATED' && 'Session expired. Please request a new invitation.'}
           {error === 'SESSION_TERMINATION_FAILED' && 'Failed to terminate the invitation session.'}
+          {error === 'PASSWORD_COMPROMISED' && 'This password has appeared in a known data breach. Choose a different password.'}
           {error === 'PASSWORD_UPDATE_FAILED' && 'Failed to update password.'}
           {error !== 'CONFIRMATION_MISMATCH' &&
            error !== 'PASSWORD_TOO_SHORT' &&
@@ -156,6 +157,7 @@ export function SetPasswordForm() {
            error !== 'PASSWORD_EMPTY' &&
            error !== 'UNAUTHENTICATED' &&
            error !== 'SESSION_TERMINATION_FAILED' &&
+           error !== 'PASSWORD_COMPROMISED' &&
            error !== 'PASSWORD_UPDATE_FAILED' &&
            'An unexpected error occurred.'}
         </div>

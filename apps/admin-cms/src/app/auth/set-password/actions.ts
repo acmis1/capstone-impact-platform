@@ -7,6 +7,7 @@ import { createSupabaseAdminClient } from '../../../lib/supabase/admin';
 import { validatePasswordUpdate } from '../../../auth/invitationValidation';
 import { completeStaffActivation } from '../../../staff/staffActivation';
 import { redirect } from 'next/navigation';
+import { isCompromisedPasswordError } from '../passwordUpdateError';
 
 /**
  * Server Action to set/update a user's password during the invitation flow.
@@ -71,7 +72,9 @@ export async function setPasswordAction(input: PasswordUpdateInput) {
       });
 
       if (updateError) {
-        actionError = 'PASSWORD_UPDATE_FAILED';
+        actionError = isCompromisedPasswordError(updateError)
+          ? 'PASSWORD_COMPROMISED'
+          : 'PASSWORD_UPDATE_FAILED';
       } else {
         // 4. Complete staff activation for the exact authenticated identity. An identity that is
         // not completing a provisioning invitation returns a benign mismatch and continues.
