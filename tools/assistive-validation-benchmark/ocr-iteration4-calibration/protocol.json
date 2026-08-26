@@ -1,0 +1,125 @@
+{
+  "authority": {
+    "closed_historical_holdouts": [
+      "OCR Iteration 2",
+      "OCR Iteration 3"
+    ],
+    "historical_case_level_tuning_permitted": false,
+    "local_inference_only": true,
+    "tracking_issue": 210
+  },
+  "calibration_selection": {
+    "all_final_gate_families_must_pass": true,
+    "exact_title_rate_minimum": 1.0,
+    "primary_wer_maximum": 0.09
+  },
+  "candidate": {
+    "layout_model": "PP-DocLayoutV3",
+    "layout_repository": "PaddlePaddle/PP-DocLayoutV3",
+    "layout_revision": "7b48a7566925fa464281f930c58eee04fe2c862a",
+    "license": "Apache-2.0",
+    "model_manifest": "model-manifest.json",
+    "pipeline": "PaddleOCR-VL-1.6",
+    "vl_model": "PaddleOCR-VL-1.6-0.9B",
+    "vl_repository": "PaddlePaddle/PaddleOCR-VL-1.6",
+    "vl_revision": "c5630abae1d940eafe0697512a0325494b02ab42"
+  },
+  "configuration": {
+    "backend": "native",
+    "cpu_threads": 10,
+    "device": "cpu",
+    "enable_mkldnn": true,
+    "format_block_content": false,
+    "layout_threshold": 0.3,
+    "merge_layout_blocks": true,
+    "pipeline_version": "v1.6",
+    "use_chart_recognition": false,
+    "use_doc_orientation_classify": false,
+    "use_doc_unwarping": false,
+    "use_layout_detection": true,
+    "use_ocr_for_image_block": false,
+    "use_queues": false,
+    "use_seal_recognition": false,
+    "worker_concurrency": 1
+  },
+  "decision_contract": {
+    "allowed": [
+      "READY_FOR_OCR_PROVIDER_INTEGRATION",
+      "OCR_PROVIDER_DEFERRED",
+      "HOLDOUT_INVALID_PROTOCOL_BUG"
+    ],
+    "near_miss_is_deferred": true,
+    "production_integration_requires_ready": true
+  },
+  "holdout_contract": {
+    "cases_per_media_layout_cell": 5,
+    "fresh_seed_after_candidate_freeze": true,
+    "one_shot": true,
+    "scored_case_count": 45,
+    "warmup_case_count": 1
+  },
+  "metrics": {
+    "primary_quality_metric": "corpus_aggregate_word_error_rate_after_nfkc_and_whitespace_collapse",
+    "title_metric": "exact_normalized_visible_title",
+    "title_safety_metric": "deterministic_material_false_automatic_agreements"
+  },
+  "operational_budget_justification": {
+    "artifact_ceiling": "The verified official VLM plus PP-DocLayoutV3 is about 2.06 GB, so 3 GiB is a pre-measurement ceiling with bounded packaging headroom.",
+    "latency_ceiling": "PP1 documents ordinary-project p95 below three minutes; cold start, p95 and each case are therefore capped at 180 seconds before measurement.",
+    "memory_ceiling": "A 10 GiB process ceiling leaves approximately 6 GiB for the operating system on the 16 GB minimum practical worker.",
+    "worker_policy": "One local CPU worker and one in-flight inference preserve the minimum practical 16 GB deployment policy."
+  },
+  "operational_gates": {
+    "artifact_footprint_bytes_maximum": 3221225472,
+    "cold_start_ms_maximum": 180000,
+    "p50_ms_maximum": 120000,
+    "p95_ms_maximum": 180000,
+    "peak_working_set_bytes_maximum": 10737418240,
+    "per_case_timeout_seconds": 180,
+    "whole_run_timeout_seconds": 300,
+    "worker_concurrency_maximum": 1
+  },
+  "output_extraction": {
+    "block_order": "official structured parsing block_order",
+    "bounds": {
+      "characters": 100000,
+      "model_block_characters": 20000,
+      "structured_blocks": 5000
+    },
+    "format_block_content": false,
+    "markup_policy": "sanitize untrusted HTML and Markdown to bounded visible plain text without execution",
+    "model_role": "faithful visible document parsing only"
+  },
+  "protocol_version": "pp1-ocr-iteration4-paddleocr-vl-v1",
+  "quality_gates": {
+    "all_scored_cases_must_execute": true,
+    "exact_title_rate_minimum": 0.95,
+    "material_false_automatic_agreements_maximum": 0,
+    "primary_wer_maximum": 0.12
+  },
+  "rendering": {
+    "max_input_dimension": 1920,
+    "raster_dpi": 180,
+    "renderer": "pillow-noto-synthetic-poster/v4-reuse-iteration3-engine"
+  },
+  "runtime": {
+    "paddleocr": "3.7.0",
+    "paddlepaddle": "3.3.1",
+    "paddlex": "3.7.2"
+  },
+  "schema_version": "pp1-ocr-iteration4-protocol/v1",
+  "security": {
+    "document_text_authority": "none",
+    "external_url_fetch": false,
+    "model_fetch_after_freeze": false,
+    "network_during_scored_inference": false,
+    "offline_guard": "process-wide Python socket connect/create_connection/connect_ex denial",
+    "provider_directories": "explicit verified local paths",
+    "synthetic_only": true
+  },
+  "title_contract": {
+    "automatic_agreement": "existing deterministic title-safety equality path",
+    "candidate_selection": "structured doc_title first; bounded top-page title-label fallback",
+    "semantic_similarity_may_automatically_agree": false
+  }
+}
