@@ -204,6 +204,34 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_iteration4 check-calibration-evidence
 
+      # PP1's title-only candidate evidence is intentionally replayed without installing
+      # Paddle or loading model weights. These checks cover corpus novelty, deterministic
+      # rendering, frozen arithmetic, both preserved calibration attempts and the decision.
+      - name: Validate PP1 OCR title-consistency calibration and non-reuse
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_consistency check-calibration
+
+      - name: Prove PP1 OCR title-consistency renderer determinism
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_title_consistency generate-calibration --output-dir artifacts/ocr-title-repeat-a
+          python -m assistive_validation_benchmark.ocr_title_consistency generate-calibration --output-dir artifacts/ocr-title-repeat-b
+          cmp artifacts/ocr-title-repeat-a/generation.json artifacts/ocr-title-repeat-b/generation.json
+
+      - name: Recompute PP1 OCR title-consistency calibration evidence without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_consistency check-calibration-evidence
+
+      - name: Verify PP1 OCR title-consistency candidate freeze
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_consistency check-freeze
+
+      # The one authorised fresh holdout run is consumed. This validates the seal, consumed
+      # state, stored hashes and exact frozen rescoring without Paddle, model files or OCR.
+      - name: Re-prove the final PP1 OCR title-consistency holdout result without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_consistency_holdout check-result
+
       - name: Generate deterministic synthetic corpus smoke fixture
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark generate --output-dir artifacts/ci-corpus
