@@ -169,6 +169,27 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_iteration2_fresh_holdout check-result-evidence
 
+      - name: Validate OCR Iteration 3 calibration corpus and historical non-reuse
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration3 check-calibration
+
+      - name: Prove OCR Iteration 3 renderer and calibration byte determinism
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_iteration3 generate-calibration --output-dir artifacts/ocr3-repeat-a
+          python -m assistive_validation_benchmark.ocr_iteration3 generate-calibration --output-dir artifacts/ocr3-repeat-b
+          cmp artifacts/ocr3-repeat-a/generation.json artifacts/ocr3-repeat-b/generation.json
+
+      - name: Recompute OCR Iteration 3 candidate evidence without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_iteration3 check-calibration-evidence
+          python -m assistive_validation_benchmark.ocr_iteration3 check-calibration-evidence \
+            --capture ../../docs/assistive-validation/evidence/ocr-iteration3/candidate-a-repeat-capture.json \
+            --report ../../docs/assistive-validation/evidence/ocr-iteration3/candidate-a-repeat-report.json
+          python -m assistive_validation_benchmark.ocr_iteration3 check-candidate-b-evidence
+          python -m assistive_validation_benchmark.ocr_iteration3 check-calibration-decision
+
       - name: Generate deterministic synthetic corpus smoke fixture
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark generate --output-dir artifacts/ci-corpus
