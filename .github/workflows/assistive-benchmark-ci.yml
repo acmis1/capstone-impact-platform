@@ -190,6 +190,13 @@ jobs:
           python -m assistive_validation_benchmark.ocr_iteration3 check-candidate-b-evidence
           python -m assistive_validation_benchmark.ocr_iteration3 check-calibration-decision
 
+      # The Iteration 3 one-shot is consumed. This revalidates the seal and state, re-scores
+      # the preserved capture, and requires exact equality with the deferred final report.
+      # It performs no OCR, loads no Paddle runtime, and must never invoke the one-shot runner.
+      - name: Re-prove the final OCR Iteration 3 holdout result without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration3 check-holdout-result
+
       - name: Generate deterministic synthetic corpus smoke fixture
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark generate --output-dir artifacts/ci-corpus
