@@ -196,4 +196,27 @@ describe('LocalArchivePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Archive and remove/i }));
     expect(await screen.findByText('Local archive was already completed.')).toBeTruthy();
   });
+
+  it('uses the dedicated governed staging archive route and staging-specific acknowledgement', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, result: { resultCode: 'COMPLETED' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<LocalArchivePanel publicId={PLAN.publicId} executionTarget="staging" />);
+
+    expect(screen.getByText('Staging showcase archive')).toBeTruthy();
+    expect(screen.getAllByText(/Duda TEST showcase/i)).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText(/Archive reason/i), { target: { value: 'Retire staging entry' } });
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive and remove from staging showcase' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/projects/2026-agri-iot/staging-archive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archiveReason: 'Retire staging entry' }),
+    }));
+    expect(await screen.findByText('Staging showcase archive completed.')).toBeTruthy();
+    expect(refresh).toHaveBeenCalledOnce();
+  });
 });

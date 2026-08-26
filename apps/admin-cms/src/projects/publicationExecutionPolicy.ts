@@ -10,7 +10,7 @@ export const STAGING_PUBLICATION_ENABLED_VAR = 'CAPSTONE_STAGING_PUBLICATION_ENA
 
 /** Only an exact server-side `true` enables the staging publication capability. */
 export function isStagingPublicationEnabledValue(value: string | undefined | null): boolean {
-  return typeof value === 'string' && value.trim().toLowerCase() === 'true';
+  return value === 'true';
 }
 
 /**

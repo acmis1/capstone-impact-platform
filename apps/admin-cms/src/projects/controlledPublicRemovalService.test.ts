@@ -18,7 +18,7 @@ import { executeControlledPublicRemoval, type ControlledPublicRemovalDependencie
 function dependencies(status: 'published' | 'archived' = 'published'): ControlledPublicRemovalDependencies {
   return {
     supabase: {} as SupabaseClient, adminId: '11111111-1111-4111-8111-111111111111',
-    feedBucket: 'feeds', feedPath: 'feed.json', assertDisposableLocalEnvironment: vi.fn(),
+    feedBucket: 'feeds', feedPath: 'feed.json', assertExecutionEnvironment: vi.fn(),
     listProjects: vi.fn().mockResolvedValue([createMockProject({ publicId: 'target', status })]),
   };
 }
@@ -53,6 +53,15 @@ describe('ledger-backed controlled public removal', () => {
     await expect(executeControlledPublicRemoval({
       permissions: ['projects.read'], publicId: 'target', archiveReason: 'Archive', dependencies: deps,
     })).resolves.toEqual({ resultCode: 'PERMISSION_DENIED' });
+    expect(deps.listProjects).not.toHaveBeenCalled();
+  });
+
+  it('preserves the existing sanitized failure before reads when execution policy rejects the runtime', async () => {
+    const deps = dependencies();
+    vi.mocked(deps.assertExecutionEnvironment).mockImplementation(() => { throw new Error('denied'); });
+    await expect(remove(deps)).resolves.toEqual({
+      resultCode: 'EXECUTION_FAILED', failureCode: 'NON_LOCAL_ENVIRONMENT',
+    });
     expect(deps.listProjects).not.toHaveBeenCalled();
   });
 
@@ -111,6 +120,20 @@ describe('ledger-backed controlled public removal', () => {
     });
     await expect(remove(dependencies(), 'Withdrawn by the participant'))
       .resolves.toMatchObject({ resultCode: 'COMPLETED' });
+  });
+
+  it('provides no public-media mutation or deletion compensation hook', async () => {
+    mocks.execute.mockImplementation(async (params) => {
+      expect(params.afterWriteIntent).toBeUndefined();
+      expect(params.validateBeforeWriteIntent).toBeUndefined();
+      expect(JSON.stringify(params)).not.toContain('delete');
+      return {
+        resultCode: 'COMPLETED', operationId: 'operation', versionNumber: 2, snapshotId: null,
+        auditRecordId: 'audit', feedHash: 'hash', recordCount: 0,
+        feedPublicUrl: 'https://example.com/feed.json',
+      };
+    });
+    await expect(remove(dependencies())).resolves.toMatchObject({ resultCode: 'COMPLETED' });
   });
 
   it('surfaces durable recovery-required state without claiming compensation succeeded', async () => {

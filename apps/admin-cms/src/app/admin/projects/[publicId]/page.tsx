@@ -131,7 +131,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let canPreparePublicationPlan = false;
   let localPublicationExecutionAvailable = false;
   let publicationExecutionTarget: 'local' | 'staging' | null = null;
-  let canExecuteLocalArchive = false;
+  let archiveExecutionTarget: 'local' | 'staging' | null = null;
   let mediaItems: ProjectMediaPreviewItem[] = [];
   let mediaAvailable = false;
   let approvalMedia: ApprovalMediaInput | null = null;
@@ -201,7 +201,13 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         : canPreparePublicationPlan && isStagingPublicationExecutionAvailable(env.supabaseUrl)
           ? 'staging'
           : null;
-      canExecuteLocalArchive = hasPermission(adminContext.permissions, 'projects.archive') && isLocalPublicationExecutionAvailable(env.supabaseUrl);
+      if (hasPermission(adminContext.permissions, 'projects.archive')) {
+        archiveExecutionTarget = isLocalPublicationExecutionAvailable(env.supabaseUrl)
+          ? 'local'
+          : isStagingPublicationExecutionAvailable(env.supabaseUrl)
+            ? 'staging'
+            : null;
+      }
 
       const projectDbId = (async () => {
         const { data, error } = await supabase.from('projects').select('id').eq('public_id', publicId).maybeSingle();
@@ -360,7 +366,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     canManageParticipantPreview: canManagePreview,
     canResolveParticipantCorrection: canResolveCorrection,
     canPreparePublication: canPreparePublicationPlan,
-    canExecuteLocalArchive,
+    canExecuteArchive: archiveExecutionTarget !== null,
     participantResponse: previewStateAvailable ? previewResponseState.type : null,
     hasActivePreview: activePreview !== null,
     publicationReadiness,
@@ -728,7 +734,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               title="Publication and lifecycle"
               description={
                 laterStagesActive
-                  ? 'Publication readiness, preparation evidence, and the local showcase lifecycle. Approval alone does not publish a project, and this interface never performs live Duda publication.'
+                  ? 'Publication readiness, preparation evidence, and the governed showcase lifecycle. Approval alone does not publish a project, and this interface never performs live Duda publication.'
                   : 'Becomes relevant after approval and participant confirmation. Approval alone does not publish a project.'
               }
               icon={Rocket}
@@ -743,8 +749,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                   canPrepare={canPreparePublicationPlan}
                   executionTarget={publicationExecutionTarget}
                 />
-                {project.status === 'published' && canExecuteLocalArchive && (
-                  <LocalArchivePanel publicId={project.publicId || ''} />
+                {project.status === 'published' && archiveExecutionTarget && (
+                  <LocalArchivePanel publicId={project.publicId || ''} executionTarget={archiveExecutionTarget} />
                 )}
               </div>
             </ProjectReviewSection>
@@ -895,9 +901,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             <div className={`flex items-start gap-2.5 p-4 ${PROJECT_DETAIL_SURFACE_CLASSES.context}`}>
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-foreground-subtle" aria-hidden="true" />
               <p className="text-sm leading-relaxed">
-                <strong className="font-semibold text-foreground">Review staging sandbox.</strong> Hosted and
+                <strong className="font-semibold text-foreground">Review staging sandbox.</strong> Live
                 production public-feed operations are disabled and external integrations stay disconnected.
-                Local test publication controls appear only on loopback Local Supabase.
+                Publication and archive controls appear only when the server runtime identity and
+                capability gates match the configured Local or staging target.
               </p>
             </div>
           </aside>

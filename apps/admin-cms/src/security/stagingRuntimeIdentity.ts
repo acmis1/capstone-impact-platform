@@ -18,7 +18,7 @@ export function assertVerifiedStagingRuntime(
   env: StagingRuntimeEnvironment = process.env,
 ): void {
   const runtimeEnv = env.CAPSTONE_RUNTIME_ENV;
-  if (!runtimeEnv || runtimeEnv.trim().toLowerCase() !== 'staging') {
+  if (runtimeEnv !== 'staging') {
     throw new Error(
       'Staging Execution Refused: Environment identity is not configured for staging operations.',
     );

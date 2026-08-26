@@ -25,7 +25,7 @@ describe('POST /api/projects/[publicId]/local-archive', () => {
   beforeEach(() => { vi.clearAllMocks(); mocks.env.supabaseUrl = 'http://127.0.0.1:54321'; mocks.requireAdmin.mockResolvedValue(admin); mocks.createClient.mockReturnValue({ client: true }); mocks.createDeps.mockReturnValue(deps); mocks.execute.mockResolvedValue(completed); });
   it('invokes the coordinator with only server authority and the trimmed reason', async () => {
     const response = await post(); expect(response.status).toBe(200); expect(await read(response)).toEqual({ success: true, result: { resultCode: 'COMPLETED', publicId: 'project_2026', recordCount: 0, feedHash: 'a'.repeat(64) } });
-    expect(mocks.createDeps).toHaveBeenCalledWith({ supabase: { client: true }, supabaseUrl: 'http://127.0.0.1:54321', publicId: 'project_2026', adminId: 'server-admin', feedBucket: 'server-feed-bucket', feedPath: 'server-feed.json' });
+    expect(mocks.createDeps).toHaveBeenCalledWith({ supabase: { client: true }, supabaseUrl: 'http://127.0.0.1:54321', publicId: 'project_2026', adminId: 'server-admin', feedBucket: 'server-feed-bucket', feedPath: 'server-feed.json', executionTarget: 'local' });
     expect(mocks.execute).toHaveBeenCalledWith({ permissions: ['projects.archive'], publicId: 'project_2026', archiveReason: 'Retired showcase entry', dependencies: deps });
   });
   it('rejects invalid Origin before execution', async () => { const r = await post('project_2026', undefined, 'http://evil.test'); expect(r.status).toBe(403); await read(r); expect(mocks.execute).not.toHaveBeenCalled(); });

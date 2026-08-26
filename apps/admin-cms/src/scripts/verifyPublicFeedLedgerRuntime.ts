@@ -547,7 +547,7 @@ async function main(): Promise<void> {
     permissions: ['projects.archive'], publicId: traffic.publicId, archiveReason: 'Runtime removal',
     dependencies: {
       supabase: client, adminId, feedBucket, feedPath,
-      assertDisposableLocalEnvironment: () => undefined, listProjects: async () => [traffic],
+      assertExecutionEnvironment: () => undefined, listProjects: async () => [traffic],
     },
   });
   await assertCompleted(removal, 'controlled removal');
@@ -935,7 +935,7 @@ async function main(): Promise<void> {
     permissions: ['projects.archive'], publicId: traffic.publicId, archiveReason: 'Create empty rollback target',
     dependencies: {
       supabase: client, adminId, feedBucket, feedPath,
-      assertDisposableLocalEnvironment: () => undefined,
+      assertExecutionEnvironment: () => undefined,
       listProjects: async () => [project(traffic.publicId, 'archived')],
     },
   }), 'remove rollback-restored archived member');
@@ -943,7 +943,7 @@ async function main(): Promise<void> {
     permissions: ['projects.archive'], publicId: medical.publicId, archiveReason: 'Create empty rollback target',
     dependencies: {
       supabase: client, adminId, feedBucket, feedPath,
-      assertDisposableLocalEnvironment: () => undefined, listProjects: async () => [medical],
+      assertExecutionEnvironment: () => undefined, listProjects: async () => [medical],
     },
   }), 'remove final member');
   head = await ledger.getHead();
@@ -1091,7 +1091,7 @@ async function main(): Promise<void> {
     permissions: ['projects.archive'], publicId: crashPublicId, archiveReason: 'Restore rollback baseline',
     dependencies: {
       supabase: client, adminId, feedBucket, feedPath,
-      assertDisposableLocalEnvironment: () => undefined,
+      assertExecutionEnvironment: () => undefined,
       listProjects: async () => [project(crashPublicId)],
     },
   }), 'remove media crash fixture');
@@ -1100,7 +1100,7 @@ async function main(): Promise<void> {
       permissions: ['projects.archive'], publicId, archiveReason: 'Restore rollback baseline',
       dependencies: {
         supabase: client, adminId, feedBucket, feedPath,
-        assertDisposableLocalEnvironment: () => undefined,
+        assertExecutionEnvironment: () => undefined,
         listProjects: async () => [project(publicId)],
       },
     }), `remove ${publicId}`);

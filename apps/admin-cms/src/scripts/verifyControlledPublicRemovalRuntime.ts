@@ -52,6 +52,7 @@ async function main(): Promise<void> {
       supabase: db, supabaseUrl: apiUrl, publicId: fixture.publicId,
       adminId: role === 'admin' ? adminId : reviewerId,
       feedBucket: PUBLIC_FEED_BUCKET, feedPath: PUBLIC_FEED_PATH,
+      executionTarget: 'local',
     }),
   });
   const deployedIds = async (): Promise<string[]> => {

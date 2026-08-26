@@ -14,6 +14,8 @@ describe('web staging runtime identity', () => {
 
   it.each([
     ['production runtime', { ...VALID, CAPSTONE_RUNTIME_ENV: 'production' }],
+    ['case-variant runtime', { ...VALID, CAPSTONE_RUNTIME_ENV: 'Staging' }],
+    ['whitespace-padded runtime', { ...VALID, CAPSTONE_RUNTIME_ENV: ' staging ' }],
     ['missing runtime', { ...VALID, CAPSTONE_RUNTIME_ENV: undefined }],
     ['malformed URL', { ...VALID, NEXT_PUBLIC_SUPABASE_URL: 'not-a-url' }],
     ['HTTP target', { ...VALID, NEXT_PUBLIC_SUPABASE_URL: 'http://synthetic-staging.supabase.co' }],

@@ -27,7 +27,7 @@ export interface ControlledPublicRemovalDependencies {
   adminId: string;
   feedBucket: string;
   feedPath: string;
-  assertDisposableLocalEnvironment(): void;
+  assertExecutionEnvironment(): void;
   listProjects(): Promise<Project[]>;
 }
 
@@ -44,7 +44,7 @@ export async function executeControlledPublicRemoval(params: {
 }): Promise<ControlledPublicRemovalResult> {
   const { permissions, publicId, archiveReason, dependencies } = params;
   if (!hasPermission(permissions, 'projects.archive')) return { resultCode: 'PERMISSION_DENIED' };
-  try { dependencies.assertDisposableLocalEnvironment(); }
+  try { dependencies.assertExecutionEnvironment(); }
   catch { return { resultCode: 'EXECUTION_FAILED', failureCode: 'NON_LOCAL_ENVIRONMENT' }; }
 
   try {

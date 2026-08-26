@@ -524,7 +524,7 @@ describe('project detail workspace information architecture', () => {
     ]) {
       expect(pageSource).toContain(capability);
     }
-    expect(pageSource).toMatch(/canExecuteLocalArchive,\s*participantResponse:/);
+    expect(pageSource).toMatch(/canExecuteArchive: archiveExecutionTarget !== null,\s*participantResponse:/);
   });
 
   it('keeps technical details and change history available rather than removed', () => {
