@@ -14,11 +14,42 @@ const SNAPSHOT_MEDIA_KEYS = new Set([
   'galleryPosition',
 ]);
 
+const MAX_POLICY_PATH_DECODE_PASSES = 3;
+
+/**
+ * Bounded, explicit path canonicalization for URL policy decisions.
+ *
+ * A private identifier can survive inside `URL.pathname` in percent-encoded form, so a raw
+ * `pathname.includes(...)` check alone is bypassable. Policy markers are therefore matched against
+ * the raw path and against a bounded number of decoded forms. This is deliberately not an unbounded
+ * recursive decoder: at most `MAX_POLICY_PATH_DECODE_PASSES` passes run, malformed percent-encoding
+ * fails closed, and a value still carrying percent-encoding after the budget also fails closed.
+ *
+ * Returns lower-cased candidate forms, or `null` when the URL must be rejected.
+ */
+export function canonicalPathForms(pathname: string): string[] | null {
+  let current = String(pathname);
+  const forms = [current.toLowerCase()];
+  for (let pass = 0; pass < MAX_POLICY_PATH_DECODE_PASSES; pass += 1) {
+    if (!current.includes('%')) return forms;
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(current);
+    } catch {
+      return null;
+    }
+    if (decoded === current) return forms;
+    current = decoded;
+    forms.push(current.toLowerCase());
+  }
+  return current.includes('%') ? null : forms;
+}
+
 /**
  * Validates that a public snapshot URL is a legitimate, public-safe, absolute HTTP(S) URL.
  * Rejects malformed URLs, relative paths, non-http(s) schemes (javascript:, data:, etc.),
  * private draft paths (/drafts/), authenticated/signed storage endpoints, and references
- * to the private ingestion bucket.
+ * to the private ingestion bucket — including their percent-encoded equivalents.
  */
 function isPublicSafeUrl(urlStr: string): { valid: boolean; reason?: string } {
   if (typeof urlStr !== 'string' || urlStr.trim() === '') {
@@ -33,15 +64,25 @@ function isPublicSafeUrl(urlStr: string): { valid: boolean; reason?: string } {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return { valid: false, reason: `URL protocol "${parsed.protocol}" is not public-safe (must be http: or https:).` };
   }
-  if (urlStr.includes('/drafts/')) {
+  const pathForms = canonicalPathForms(parsed.pathname);
+  if (!pathForms) {
+    return { valid: false, reason: 'URL path contains malformed or unresolvable percent-encoding.' };
+  }
+  if (urlStr.includes('/drafts/') || pathForms.some((form) => form.includes('/drafts/'))) {
     return { valid: false, reason: 'URL contains private draft path segment "/drafts/".' };
   }
-  if (urlStr.includes(STORAGE_POLICIES.privateIngestionBucket)) {
+  if (
+    urlStr.includes(STORAGE_POLICIES.privateIngestionBucket) ||
+    pathForms.some((form) => form.includes(STORAGE_POLICIES.privateIngestionBucket))
+  ) {
     return { valid: false, reason: `URL references private storage bucket "${STORAGE_POLICIES.privateIngestionBucket}".` };
   }
   if (
-    parsed.pathname.includes('/storage/v1/object/sign/') ||
-    parsed.pathname.includes('/storage/v1/object/authenticated/')
+    pathForms.some(
+      (form) =>
+        form.includes('/storage/v1/object/sign/') ||
+        form.includes('/storage/v1/object/authenticated/'),
+    )
   ) {
     return { valid: false, reason: 'URL references private or signed storage endpoint.' };
   }

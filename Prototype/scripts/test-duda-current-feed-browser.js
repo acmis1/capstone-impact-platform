@@ -12,16 +12,39 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const prototypeDirectory = path.resolve(scriptDirectory, '..');
 const dudaDirectory = path.join(prototypeDirectory, 'duda');
 
-const [bodyEndHtml, listingHtml, listingCss, detailHtml, detailCss, fixtureText] = await Promise.all([
+const [bodyEndHtml, listingHtml, listingCss, detailHtml, detailCss, fixtureText, contractCasesText] = await Promise.all([
   readFile(path.join(dudaDirectory, 'bodyend.html'), 'utf8'),
   readFile(path.join(dudaDirectory, 'listing-page.html'), 'utf8'),
   readFile(path.join(dudaDirectory, 'listing-page.css'), 'utf8'),
   readFile(path.join(dudaDirectory, 'detail-page.html'), 'utf8'),
   readFile(path.join(dudaDirectory, 'detail-page.css'), 'utf8'),
   readFile(path.join(dudaDirectory, 'current-feed-demo-fixture.json'), 'utf8'),
+  readFile(path.join(dudaDirectory, 'current-feed-contract-cases.json'), 'utf8'),
 ]);
 
 const fixture = JSON.parse(fixtureText);
+const contractCases = JSON.parse(contractCasesText);
+
+/**
+ * Browser scenarios that consume a paired server-validator contract case. The same JSON drives
+ * `apps/admin-cms/src/feed/dudaCurrentFeedContract.test.ts`, so a record proven server-valid there
+ * is proven renderable here, and a record proven unsafe there is proven inert here.
+ */
+const CONTRACT_SCENARIOS = {
+  'contract-featured-media-auto-video': 'featured-media-auto-video',
+  'contract-featured-media-auto-gallery': 'featured-media-auto-gallery',
+  'contract-gallery-position-two': 'gallery-position-two',
+  'contract-gallery-positions-two-and-five': 'gallery-positions-two-and-five',
+  'contract-external-query-urls': 'external-query-urls',
+  'contract-lightbox-listener-lifecycle': 'three-image-gallery',
+  'contract-signed-supabase-video': 'signed-supabase-video',
+  'contract-signed-supabase-external-link': 'signed-supabase-external-link',
+  'contract-encoded-private-poster': 'encoded-private-supabase-poster',
+  'contract-encoded-signed-video': 'encoded-signed-supabase-video',
+  'contract-encoded-private-snapshot': 'encoded-private-supabase-snapshot',
+  'contract-vbscript-external-link': 'vbscript-scheme-external-link',
+};
+
 const chromeCandidates = process.platform === 'win32'
   ? [
       'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
@@ -45,6 +68,39 @@ function escapeInlineJson(value) {
   return JSON.stringify(value).replaceAll('<', '\\u003c');
 }
 
+/** Builds one contract-case record exactly as the paired repository test does. */
+function buildContractCaseRecord(cases, caseName) {
+  const entry = cases.cases.find((candidate) => candidate.name === caseName);
+  if (!entry) throw new Error(`Unknown paired contract case: ${caseName}`);
+  return { ...structuredClone(cases.base), ...structuredClone(entry.overrides) };
+}
+
+/**
+ * URL-shaped values from a case that must never reach the rendered document: every override URL of
+ * a rejected record, or the snapshot URLs of a record whose gallery must come out empty.
+ */
+function forbiddenMarkersFor(entry) {
+  const markers = [];
+  const collect = (value) => {
+    if (typeof value === 'string') {
+      if (/^[a-z][a-z0-9+.-]*:/i.test(value)) markers.push(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(collect);
+      return;
+    }
+    if (value && typeof value === 'object') Object.values(value).forEach(collect);
+  };
+  if (!entry.dudaAccepts) {
+    collect(entry.overrides);
+  } else if (entry.dudaGallery === 0 && entry.overrides.snapshots) {
+    collect(entry.overrides.snapshots);
+    collect(entry.overrides.snapshotMedia);
+  }
+  return [...new Set(markers)];
+}
+
 function harnessDriver() {
   const results = { checks: [], failures: [] };
   const check = (condition, label) => {
@@ -62,9 +118,72 @@ function harnessDriver() {
   const visibleCardTitles = () => Array.from(document.querySelectorAll('.capstone-card-image')).map(img => img.alt);
   const expectedAltByPath = new Map(
     window.__CAPSTONE_HARNESS_FIXTURE.flatMap(record =>
-      record.snapshotMedia.map(media => [new URL(media.url).pathname, media.altText]),
+      (Array.isArray(record.snapshotMedia) ? record.snapshotMedia : []).flatMap(media => {
+        try {
+          return [[new URL(media.url).pathname, media.altText]];
+        } catch (e) {
+          return [];
+        }
+      }),
     ),
   );
+
+  /**
+   * Positive controls for the error capture itself.
+   *
+   * An empty capture array only proves the application is clean if the capture demonstrably works,
+   * so each run first triggers one genuine console.error, one genuine uncaught window error and one
+   * genuine unhandled promise rejection, asserts all three were captured, then clears the arrays so
+   * every later assertion still requires zero unexpected errors.
+   */
+  const runCaptureSelfTest = async () => {
+    const marker = window.__CAPSTONE_HARNESS_CONTROL_MARKER;
+
+    console.error(`${marker}-console`);
+    check(
+      window.__CAPSTONE_HARNESS_ERRORS.some(entry => entry.includes(`${marker}-console`)),
+      'harness positive control proves console.error capture works',
+    );
+
+    setTimeout(() => { throw new Error(`${marker}-window`); }, 0);
+    check(
+      await waitFor(() => window.__CAPSTONE_HARNESS_WINDOW_ERRORS.some(entry => entry.includes(`${marker}-window`)), 2000),
+      'harness positive control proves window error capture works',
+    );
+
+    Promise.reject(new Error(`${marker}-rejection`));
+    check(
+      await waitFor(() => window.__CAPSTONE_HARNESS_REJECTIONS.some(entry => entry.includes(`${marker}-rejection`)), 2000),
+      'harness positive control proves unhandled rejection capture works',
+    );
+
+    const strays = [
+      ...window.__CAPSTONE_HARNESS_ERRORS,
+      ...window.__CAPSTONE_HARNESS_WINDOW_ERRORS,
+      ...window.__CAPSTONE_HARNESS_REJECTIONS,
+    ].filter(entry => !entry.includes(marker));
+    check(strays.length === 0, `harness positive controls captured no other errors (${strays.join(' | ')})`);
+
+    window.__CAPSTONE_HARNESS_ERRORS.length = 0;
+    window.__CAPSTONE_HARNESS_WINDOW_ERRORS.length = 0;
+    window.__CAPSTONE_HARNESS_REJECTIONS.length = 0;
+    window.__CAPSTONE_HARNESS_CONTROLS_VERIFIED = true;
+  };
+
+  /**
+   * Counts how many times an attribute is actually written while `action` runs. A duplicated
+   * keyboard listener writes the lightbox alternative twice for one key press, so the count - not
+   * only the final value - distinguishes one active navigation effect from several.
+   */
+  const countAttributeWrites = (element, attributeName, action) => {
+    const observer = new MutationObserver(() => {});
+    observer.observe(element, { attributes: true, attributeFilter: [attributeName], attributeOldValue: true });
+    action();
+    const records = observer.takeRecords().filter(record => record.attributeName === attributeName);
+    observer.disconnect();
+    return records.map(record => record.oldValue);
+  };
+
   const verifyRenderedSnapshotAlts = (minimumCount = 1) => {
     const images = Array.from(document.querySelectorAll('img[src*="/snapshots/"]'));
     check(images.length >= minimumCount, `rendered at least ${minimumCount} governed snapshot image(s)`);
@@ -86,6 +205,11 @@ function harnessDriver() {
       check(rel.has('noopener') && rel.has('noreferrer'), `external link ${link.textContent.trim()} retains noopener/noreferrer`);
     });
   };
+  const renderedShowcaseHtml = () => ['capstone-showcase-root', 'project-detail', 'capstone-lightbox']
+    .map(id => document.getElementById(id))
+    .filter(Boolean)
+    .map(root => root.innerHTML)
+    .join('\n');
   const verifyNoOverflow = () => {
     check(
       document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
@@ -94,6 +218,7 @@ function harnessDriver() {
   };
   const finish = () => {
     verifyNoOverflow();
+    check(window.__CAPSTONE_HARNESS_CONTROLS_VERIFIED === true, 'error capture was proven by positive controls before these assertions');
     check(window.__CAPSTONE_HARNESS_ERRORS.length === 0, 'application emitted no unexpected console.error calls');
     check(window.__CAPSTONE_HARNESS_WINDOW_ERRORS.length === 0, 'application emitted no window error events');
     check(window.__CAPSTONE_HARNESS_REJECTIONS.length === 0, 'application emitted no unhandled promise rejections');
@@ -109,6 +234,10 @@ function harnessDriver() {
 
   document.addEventListener('DOMContentLoaded', async () => {
     const scenario = window.__CAPSTONE_HARNESS_SCENARIO;
+    // The navigation scenario asserts only after it reaches the detail route; the first hop just
+    // triggers the click, so the controls run on the page that actually asserts.
+    const assertsOnThisPage = !(scenario === 'navigation' && !window.location.pathname.includes('project-detail'));
+    if (assertsOnThisPage) await runCaptureSelfTest();
     const ready = await waitFor(() =>
       document.querySelector('.capstone-card, .cip-module, .capstone-inline-error') ||
       document.getElementById('capstone-project-grid')?.textContent.includes('No projects'),
@@ -302,17 +431,157 @@ function harnessDriver() {
       return;
     }
 
+    if (scenario.startsWith('contract-')) {
+      const contractCase = window.__CAPSTONE_HARNESS_CONTRACT_CASE;
+      check(Boolean(contractCase), `${scenario} received its paired server-validator contract case`);
+
+      const renderedHtml = renderedShowcaseHtml();
+      contractCase.forbiddenMarkers.forEach(marker => {
+        check(
+          !renderedHtml.includes(marker),
+          `${scenario} never renders the rejected URL "${marker}"`,
+        );
+      });
+      check(
+        !document.querySelector('[href^="javascript:"], [href^="data:"], [href^="vbscript:"], [src^="javascript:"], [src^="data:"], [src^="vbscript:"]'),
+        `${scenario} creates no active unsafe URL`,
+      );
+
+      if (!contractCase.dudaAccepts) {
+        check(Boolean(document.querySelector('.capstone-inline-error')), `${scenario} rejects the record before rendering`);
+        check(document.body.textContent.includes('FEED_RECORD_INVALID'), `${scenario} exposes only the bounded record-invalid reason`);
+        check(!document.querySelector('.capstone-card, .cip-module'), `${scenario} renders no project content`);
+        finish();
+        return;
+      }
+
+      check(!document.querySelector('.capstone-inline-error'), `${scenario} accepts the server-valid record`);
+      check(Boolean(document.querySelector('.cip-module')), `${scenario} renders the project detail module`);
+      check(document.querySelector('h1')?.textContent === contractCase.record.title, `${scenario} renders the governed record title`);
+
+      const galleryCards = Array.from(document.querySelectorAll('.snapshot-card'));
+      check(
+        galleryCards.length === contractCase.dudaGallery,
+        `${scenario} renders exactly ${contractCase.dudaGallery} governed gallery image(s), saw ${galleryCards.length}`,
+      );
+      galleryCards.forEach(card => {
+        const image = card.querySelector('img');
+        const expected = expectedAltByPath.get(new URL(image.src).pathname);
+        check(Boolean(expected), `${scenario} gallery image ${new URL(image.src).pathname} belongs to the paired case`);
+        check(image.alt === expected, `${scenario} gallery image ${new URL(image.src).pathname} keeps its exact governed alternative`);
+      });
+      if (contractCase.dudaGallery > 0) verifyRenderedSnapshotAlts(contractCase.dudaGallery);
+      verifyExternalLinkSecurity();
+
+      if (scenario === 'contract-featured-media-auto-video') {
+        check(
+          document.querySelector('.media-hero-shell iframe')?.src === 'https://player.vimeo.com/video/987654321',
+          'automatic featured media elevates the video first',
+        );
+      }
+
+      if (scenario === 'contract-featured-media-auto-gallery') {
+        check(
+          Boolean(document.querySelector('.media-hero-shell .snapshot-hero-grid')),
+          'automatic featured media falls back to the governed gallery when no video is published',
+        );
+      }
+
+      if (scenario === 'contract-gallery-position-two') {
+        const governed = contractCase.record.snapshotMedia[0];
+        check(governed.galleryPosition === 2, 'paired case publishes its sole image at governed position two');
+        window.openLightbox(0);
+        await waitFor(() => document.getElementById('capstone-lightbox')?.style.display === 'flex');
+        check(document.getElementById('capstone-lightbox-img')?.alt === governed.altText, 'non-contiguous position 2 opens with its exact governed alternative');
+        window.closeLightbox();
+      }
+
+      if (scenario === 'contract-gallery-positions-two-and-five') {
+        const governed = contractCase.record.snapshotMedia;
+        check(
+          JSON.stringify(governed.map(media => media.galleryPosition)) === JSON.stringify([2, 5]),
+          'paired case publishes non-contiguous governed positions 2 and 5',
+        );
+        check(
+          JSON.stringify(galleryCards.map(card => card.querySelector('img').alt)) === JSON.stringify(governed.map(media => media.altText)),
+          'both non-contiguous positions render in snapshots display order with exact alternatives',
+        );
+        window.openLightbox(0);
+        await waitFor(() => document.getElementById('capstone-lightbox')?.style.display === 'flex');
+        check(document.getElementById('capstone-lightbox-img')?.alt === governed[0].altText, 'sparse gallery opens at the first governed image');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+        check(document.getElementById('capstone-lightbox-img')?.alt === governed[1].altText, 'sparse gallery advances to the second governed image');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+        check(document.getElementById('capstone-lightbox-img')?.alt === governed[0].altText, 'sparse gallery returns to the first governed image');
+        window.closeLightbox();
+      }
+
+      if (scenario === 'contract-external-query-urls') {
+        check(
+          document.querySelector('iframe')?.src === 'https://www.youtube.com/embed/AbCdEfGhI12',
+          'a YouTube watch URL with a query string still renders as the expected embed',
+        );
+        const hrefs = Array.from(document.querySelectorAll('a[target="_blank"]')).map(link => link.getAttribute('href'));
+        ['demoUrl', 'repositoryUrl'].forEach(field => {
+          check(hrefs.includes(contractCase.record[field]), `${field} keeps its legitimate query string in the rendered link`);
+        });
+        check(
+          hrefs.includes(contractCase.record.externalLinks[0].url),
+          'an external link keeps its legitimate query string in the rendered link',
+        );
+      }
+
+      if (scenario === 'contract-lightbox-listener-lifecycle') {
+        const governedAlts = contractCase.record.snapshotMedia.map(media => media.altText);
+        check(governedAlts.length === 3, 'listener lifecycle case uses a three image gallery so duplicates are distinguishable');
+        for (let cycle = 1; cycle <= 3; cycle += 1) {
+          window.openLightbox(0);
+          await waitFor(() => document.getElementById('capstone-lightbox')?.style.display === 'flex');
+          const image = document.getElementById('capstone-lightbox-img');
+          check(image?.alt === governedAlts[0], `lifecycle cycle ${cycle} opens at the first governed image`);
+
+          const forward = countAttributeWrites(image, 'alt', () =>
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })));
+          check(forward.length === 1, `lifecycle cycle ${cycle} performs exactly one navigation transition per key press, saw ${forward.length}`);
+          check(image.alt === governedAlts[1], `lifecycle cycle ${cycle} advances exactly one image`);
+
+          const backward = countAttributeWrites(image, 'alt', () =>
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })));
+          check(backward.length === 1, `lifecycle cycle ${cycle} reverses with exactly one transition, saw ${backward.length}`);
+          check(image.alt === governedAlts[0], `lifecycle cycle ${cycle} returns to the first governed image`);
+
+          window.closeLightbox();
+          check(document.getElementById('capstone-lightbox')?.style.display === 'none', `lifecycle cycle ${cycle} closes cleanly`);
+          const afterClose = countAttributeWrites(image, 'alt', () =>
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })));
+          check(afterClose.length === 0, `lifecycle cycle ${cycle} leaves no active navigation effect after closing`);
+        }
+      }
+
+      if (scenario === 'contract-encoded-private-snapshot') {
+        check(galleryCards.length === 0, 'an encoded private-bucket snapshot is removed from the gallery');
+        check(
+          !/drafts|%2d|%25/i.test(renderedShowcaseHtml()),
+          'no encoded private-bucket fragment reaches the rendered showcase markup',
+        );
+      }
+
+      finish();
+      return;
+    }
+
     check(false, `unknown harness scenario ${scenario}`);
     finish();
   });
 }
 
-function buildHarnessPage(requestUrl, runtimeFixture) {
+function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases) {
   const pathIsDetail = requestUrl.pathname.includes('project-detail');
   const requestedScenario = requestUrl.searchParams.get('scenario');
   const scenario = requestedScenario || (pathIsDetail && requestUrl.searchParams.get('id') === '202502' ? 'navigation' : 'listing');
   const fixtureCopy = structuredClone(runtimeFixture);
   let payload = fixtureCopy;
+  let harnessContractCase = null;
 
   if (scenario === 'empty-feed') payload = [];
   if (scenario === 'malformed-feed') payload = { records: fixtureCopy };
@@ -375,12 +644,31 @@ function buildHarnessPage(requestUrl, runtimeFixture) {
     payload[0].title = '\"><img id="unsafe-active-node" src=x onerror="window.location=\'https://attacker.example.test\'">';
     fixtureCopy[0].title = payload[0].title;
   }
+  if (CONTRACT_SCENARIOS[scenario]) {
+    const caseName = CONTRACT_SCENARIOS[scenario];
+    const entry = runtimeContractCases.cases.find((candidate) => candidate.name === caseName);
+    const record = buildContractCaseRecord(runtimeContractCases, caseName);
+    payload = [record];
+    fixtureCopy.length = 0;
+    fixtureCopy.push(structuredClone(record));
+    harnessContractCase = {
+      name: caseName,
+      serverValid: entry.serverValid,
+      dudaAccepts: entry.dudaAccepts,
+      dudaGallery: entry.dudaGallery,
+      forbiddenMarkers: forbiddenMarkersFor(entry),
+      record,
+    };
+  }
 
   const harnessSetup = `
     window.CAPSTONE_FEED_URL = 'https://demofixture.supabase.co/storage/v1/object/public/public-feeds/capstones-latest.json';
     window.__CAPSTONE_HARNESS_SCENARIO = ${escapeInlineJson(scenario)};
     window.__CAPSTONE_HARNESS_FIXTURE = ${escapeInlineJson(fixtureCopy)};
+    window.__CAPSTONE_HARNESS_CONTRACT_CASE = ${escapeInlineJson(harnessContractCase)};
     window.__CAPSTONE_HARNESS_SECRET = ['DISTINCTIVE', 'SECRET', 'LIKE', 'MARKER', '91f2c7'].join('_');
+    window.__CAPSTONE_HARNESS_CONTROL_MARKER = ['CAPSTONE', 'HARNESS', 'POSITIVE', 'CONTROL', '4d17be'].join('_');
+    window.__CAPSTONE_HARNESS_CONTROLS_VERIFIED = false;
     window.__CAPSTONE_HARNESS_ERRORS = [];
     window.__CAPSTONE_HARNESS_WINDOW_ERRORS = [];
     window.__CAPSTONE_HARNESS_REJECTIONS = [];
@@ -427,6 +715,7 @@ const server = http.createServer((request, response) => {
   const address = server.address();
   const localOrigin = `http://127.0.0.1:${address.port}`;
   const runtimeFixture = JSON.parse(JSON.stringify(fixture).replaceAll('https://media.example.test', localOrigin));
+  const runtimeContractCases = JSON.parse(JSON.stringify(contractCases).replaceAll('https://media.example.test', localOrigin));
 
   if (requestUrl.pathname.startsWith('/posters/') || requestUrl.pathname.startsWith('/snapshots/')) {
     response.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
@@ -440,7 +729,7 @@ const server = http.createServer((request, response) => {
   }
 
   response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-  response.end(buildHarnessPage(requestUrl, runtimeFixture));
+  response.end(buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases));
 });
 
 await new Promise((resolve, reject) => {
@@ -450,6 +739,7 @@ await new Promise((resolve, reject) => {
 
 const { port } = server.address();
 const requestedScenarios = new Set(process.argv.slice(2));
+const contractDetailRoute = '/project-detail?id=203101';
 const scenarios = [
   ['listing', '/', 1440, 1000],
   ['listing', '/', 390, 844],
@@ -470,6 +760,19 @@ const scenarios = [
   ['malformed-snapshots', '/project-detail?id=202601', 1440, 1000],
   ['unsafe-record', '/', 1440, 1000],
   ['escaped-text-record', '/', 1440, 1000],
+  ['contract-featured-media-auto-video', contractDetailRoute, 1440, 1000],
+  ['contract-featured-media-auto-gallery', contractDetailRoute, 1440, 1000],
+  ['contract-gallery-position-two', contractDetailRoute, 1440, 1000],
+  ['contract-gallery-positions-two-and-five', contractDetailRoute, 1440, 1000],
+  ['contract-gallery-positions-two-and-five', contractDetailRoute, 390, 844],
+  ['contract-external-query-urls', contractDetailRoute, 1440, 1000],
+  ['contract-lightbox-listener-lifecycle', contractDetailRoute, 1440, 1000],
+  ['contract-encoded-private-snapshot', contractDetailRoute, 1440, 1000],
+  ['contract-signed-supabase-video', '/', 1440, 1000],
+  ['contract-signed-supabase-external-link', '/', 1440, 1000],
+  ['contract-encoded-private-poster', '/', 1440, 1000],
+  ['contract-encoded-signed-video', '/', 1440, 1000],
+  ['contract-vbscript-external-link', '/', 1440, 1000],
 ].filter(([scenario]) => requestedScenarios.size === 0 || requestedScenarios.has(scenario));
 
 assert.ok(scenarios.length > 0, 'No matching Duda browser scenarios were requested.');

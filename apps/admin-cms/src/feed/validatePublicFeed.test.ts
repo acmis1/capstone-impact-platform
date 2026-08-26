@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePublicFeed } from './validatePublicFeed';
+import { canonicalPathForms, validatePublicFeed } from './validatePublicFeed';
 import { createMockProject } from '../test/projectFixtures';
 import { compilePublicFeed } from './compilePublicFeed';
 import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
@@ -546,5 +546,88 @@ describe('public feed snapshot and snapshotMedia strict pairing contract', () =>
     const res = validatePublicFeed([rec]);
     expect(res.valid).toBe(false);
     expect(res.errors.some((e) => e.includes('contains unknown field: "internalTrackingId"'))).toBe(true);
+  });
+});
+
+describe('canonical percent-encoded storage path boundary', () => {
+  const publishedRecord = (overrides: Record<string, unknown> = {}) => {
+    const valid = createMockProject({ status: 'published' });
+    const compiled = compilePublicFeed([valid]);
+    return { ...compiled[0], ...overrides } as unknown as Record<string, unknown>;
+  };
+
+  const withSnapshot = (url: string) =>
+    publishedRecord({
+      snapshots: [url],
+      snapshotMedia: [{ url, altText: 'Synthetic gallery alternative.', galleryPosition: 1 }],
+    });
+
+  it('canonicalizes a plain path without decoding work', () => {
+    expect(canonicalPathForms('/storage/v1/object/public/Assets/One.JPG')).toEqual([
+      '/storage/v1/object/public/assets/one.jpg',
+    ]);
+  });
+
+  it('exposes every bounded decoded form so a marker cannot hide behind one encoding layer', () => {
+    expect(canonicalPathForms('/a%2Fb')).toEqual(['/a%2fb', '/a/b']);
+  });
+
+  it('fails closed on malformed percent-encoding', () => {
+    expect(canonicalPathForms('/assets/x%ZZ.jpg')).toBeNull();
+  });
+
+  it('fails closed when encoding cannot be resolved inside the bounded budget', () => {
+    expect(canonicalPathForms('/assets/x%2525252525.jpg')).toBeNull();
+  });
+
+  const encodedPrivateSnapshotUrls: [string, string, string][] = [
+    [
+      'percent-encoded private ingestion bucket',
+      'https://demofixture.supabase.co/storage/v1/object/public/project%2Ddrafts%2Dprivate/leak.jpg',
+      'private storage bucket',
+    ],
+    [
+      'lower-case percent-encoded private ingestion bucket',
+      'https://demofixture.supabase.co/storage/v1/object/public/project%2ddrafts%2dprivate/leak.jpg',
+      'private storage bucket',
+    ],
+    [
+      'double-encoded private ingestion bucket',
+      'https://demofixture.supabase.co/storage/v1/object/public/project%252Ddrafts%252Dprivate/leak.jpg',
+      'private storage bucket',
+    ],
+    [
+      'percent-encoded signed storage route',
+      'https://demofixture.supabase.co/storage/v1/object/%73ign/project-public-assets/leak.jpg',
+      'private or signed storage endpoint',
+    ],
+    [
+      'mixed-case percent-encoded authenticated storage route',
+      'https://demofixture.supabase.co/storage/v1/object/%41uthenticated/project-public-assets/leak.jpg',
+      'private or signed storage endpoint',
+    ],
+    [
+      'percent-encoded draft path segment',
+      'https://demofixture.supabase.co/storage/v1/object/public/assets%2Fdrafts%2Fpending.jpg',
+      'private draft path segment',
+    ],
+    [
+      'malformed percent-encoding',
+      'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/leak%ZZ.jpg',
+      'malformed or unresolvable percent-encoding',
+    ],
+  ];
+
+  it.each(encodedPrivateSnapshotUrls)('rejects a snapshot URL using a %s', (_label, url, reason) => {
+    const res = validatePublicFeed([withSnapshot(url)]);
+    expect(res.valid).toBe(false);
+    expect(res.errors.some((error) => error.includes(reason))).toBe(true);
+  });
+
+  it('still accepts an ordinary public storage URL that carries harmless percent-encoding', () => {
+    const url = 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/gallery%20one.jpg';
+    const res = validatePublicFeed([withSnapshot(url)]);
+    expect(res.valid).toBe(true);
+    expect(res.errors).toEqual([]);
   });
 });

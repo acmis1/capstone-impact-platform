@@ -133,26 +133,95 @@
         return "";
     };
 
+    // --- PUBLIC RECORD POLICY (start: extracted verbatim by repository tests) ---
+    const MAX_POLICY_PATH_DECODE_PASSES = 3;
+
+    /**
+     * Bounded, explicit path canonicalization for URL policy decisions.
+     *
+     * A private identifier can survive inside `URL.pathname` in percent-encoded form, so policy
+     * markers are matched against the raw path and against a bounded number of decoded forms.
+     * This is deliberately not an unbounded recursive decoder: at most
+     * MAX_POLICY_PATH_DECODE_PASSES passes run, malformed percent-encoding fails closed, and a
+     * value still carrying percent-encoding after the budget also fails closed.
+     *
+     * Returns lower-cased candidate forms, or null when the URL must be rejected.
+     */
+    const canonicalPathForms = (pathname) => {
+        let current = String(pathname);
+        const forms = [current.toLowerCase()];
+        for (let pass = 0; pass < MAX_POLICY_PATH_DECODE_PASSES; pass += 1) {
+            if (!current.includes('%')) return forms;
+            let decoded;
+            try {
+                decoded = decodeURIComponent(current);
+            } catch (e) {
+                return null;
+            }
+            if (decoded === current) return forms;
+            current = decoded;
+            forms.push(current.toLowerCase());
+        }
+        return current.includes('%') ? null : forms;
+    };
+
+    const SUPABASE_STORAGE_HOST_PATTERN = /(^|\.)supabase\.(co|in|net)$/i;
+    const SUPABASE_STORAGE_PATH_MARKER = '/storage/v1/';
+    const PRIVATE_STORAGE_PATH_MARKERS = [
+        '/drafts/',
+        'project-drafts-private',
+        '/storage/v1/object/sign/',
+        '/storage/v1/object/authenticated/'
+    ];
+    const PRIVATE_ACCESS_QUERY_KEYS = ['token', 'jwt', 'apikey', 'api_key', 'access_token', 'authorization'];
+
+    /**
+     * One coherent public URL policy for every active URL this showcase renders.
+     *
+     * Every URL must be an absolute, credential-free HTTP(S) URL. General external links keep
+     * their query strings, so ordinary demo and repository links and YouTube `watch?v=` URLs stay
+     * usable. A URL that identifies Supabase Storage - by host, or by the `/storage/v1/` object
+     * API path in any of its canonical forms - is additionally never allowed to expose a signed
+     * object route, an authenticated object route, a private or draft bucket, or token-bearing
+     * access, no matter which field carried it. `enforcePublicAssetBoundary` keeps the existing
+     * stronger private-path rule for poster, poster PDF and snapshot media on any host.
+     */
     const isSafePublicUrl = (rawUrl, enforcePublicAssetBoundary = false) => {
         if (typeof rawUrl !== "string" || rawUrl.trim() !== rawUrl || !rawUrl) return false;
         if (/[\u0000-\u0020\u007f<>"'`]/.test(rawUrl)) return false;
+        let parsed;
         try {
-            const parsed = new URL(rawUrl);
-            if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-            if (parsed.username || parsed.password || !parsed.hostname) return false;
-            if (!enforcePublicAssetBoundary) return true;
-            const path = parsed.pathname.toLowerCase();
-            if (path.includes("/drafts/") || path.includes("/project-drafts-private/")) return false;
-            if (path.includes("/storage/v1/object/sign/") || path.includes("/storage/v1/object/authenticated/")) return false;
-            if (path.includes("/storage/v1/object/") && parsed.searchParams.has("token")) return false;
-            return true;
+            parsed = new URL(rawUrl);
         } catch (e) {
             return false;
         }
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+        if (parsed.username || parsed.password || !parsed.hostname) return false;
+
+        const pathForms = canonicalPathForms(parsed.pathname);
+        if (!pathForms) return false;
+
+        const isSupabaseStorage = SUPABASE_STORAGE_HOST_PATTERN.test(parsed.hostname) ||
+            pathForms.some(form => form.includes(SUPABASE_STORAGE_PATH_MARKER));
+        if (!enforcePublicAssetBoundary && !isSupabaseStorage) return true;
+
+        if (pathForms.some(form => PRIVATE_STORAGE_PATH_MARKERS.some(marker => form.includes(marker)))) return false;
+        if (isSupabaseStorage && PRIVATE_ACCESS_QUERY_KEYS.some(key => parsed.searchParams.has(key))) return false;
+        return true;
     };
 
     const isPublicSnapshotUrl = (rawUrl) => isSafePublicUrl(rawUrl, true);
 
+    /**
+     * Resolves the rendered gallery from the authoritative current-feed contract.
+     *
+     * `snapshots` supplies display order; `snapshotMedia` supplies the governed alternative and the
+     * authoritative `galleryPosition`. The server contract requires each position to be a unique
+     * integer from 1 through 10 in increasing order - it does not require positions to be
+     * contiguous or to equal an array index, so sparse patterns such as [2] or [2, 5] are valid and
+     * stay visible. Positions are never fabricated here. An entry is dropped only when the server
+     * contract also treats it as invalid, or when rendering it would be unsafe.
+     */
     const getSnapshotItems = (project) => {
         const snapshotUrls = Array.isArray(project && project.snapshots) ? project.snapshots : [];
         const snapshotMedia = Array.isArray(project && project.snapshotMedia) ? project.snapshotMedia : [];
@@ -166,7 +235,7 @@
             }
         });
 
-        snapshotMedia.forEach((item, index) => {
+        snapshotMedia.forEach(item => {
             if (!item || typeof item !== "object" || Array.isArray(item) || typeof item.url !== "string") {
                 return;
             }
@@ -178,7 +247,6 @@
                 typeof item.altText !== "string" ||
                 !item.altText.trim() ||
                 !Number.isInteger(item.galleryPosition) ||
-                item.galleryPosition !== index + 1 ||
                 item.galleryPosition < 1 ||
                 item.galleryPosition > 10
             ) {
@@ -188,15 +256,25 @@
             mediaByUrl.set(item.url, item);
         });
 
-        return snapshotUrls.flatMap(url => {
+        const candidates = snapshotUrls.flatMap(url => {
             if (!isPublicSnapshotUrl(url) || snapshotUrlCounts.get(url) !== 1 || duplicateMediaUrls.has(url)) {
                 return [];
             }
             const media = mediaByUrl.get(url);
-            return media && media.galleryPosition === snapshotUrls.indexOf(url) + 1
-                ? [{ url, altText: media.altText }]
-                : [];
+            return media ? [{ url, altText: media.altText, galleryPosition: media.galleryPosition }] : [];
         });
+
+        // A gallery position identifies exactly one image in the governed contract. When two
+        // surviving entries claim the same position the pairing is contradictory, so neither is
+        // rendered rather than guessing which alternative describes which image.
+        const seenPositions = new Set();
+        const contestedPositions = new Set();
+        candidates.forEach(({ galleryPosition }) => {
+            if (seenPositions.has(galleryPosition)) contestedPositions.add(galleryPosition);
+            seenPositions.add(galleryPosition);
+        });
+
+        return candidates.filter(({ galleryPosition }) => !contestedPositions.has(galleryPosition));
     };
 
     const normalizeProjectRecord = (record) => {
@@ -249,25 +327,36 @@
         const layoutConfig = record.layoutConfig;
         if (!layoutConfig || typeof layoutConfig !== 'object' || Array.isArray(layoutConfig)) return null;
         const validTemplates = ['poster_showcase', 'technical_detail', 'media_rich'];
-        const validFeaturedMedia = ['poster', 'snapshots', 'gallery', 'video', 'none'];
+        const validFeaturedMedia = ['auto', 'poster', 'snapshots', 'gallery', 'video', 'none'];
         const validSections = new Set([
             'background', 'solution', 'snapshots', 'video', 'team', 'links',
             'externalLinks', 'citations', 'accessibilityText', 'summary',
             'poster', 'posterPdf', 'metadata'
         ]);
         if (!validTemplates.includes(layoutConfig.templateId)) return null;
-        if (!validFeaturedMedia.includes(layoutConfig.featuredMedia)) return null;
-        if (!Array.isArray(layoutConfig.sectionOrder) || layoutConfig.sectionOrder.some(section => !validSections.has(section))) return null;
+        if (typeof layoutConfig.featuredMedia !== 'string') return null;
+        if (!Array.isArray(layoutConfig.sectionOrder) || layoutConfig.sectionOrder.some(section => typeof section !== 'string')) return null;
         if (
             layoutConfig.hiddenSections !== undefined &&
-            (!Array.isArray(layoutConfig.hiddenSections) || layoutConfig.hiddenSections.some(section => !validSections.has(section)))
+            (!Array.isArray(layoutConfig.hiddenSections) || layoutConfig.hiddenSections.some(section => typeof section !== 'string'))
         ) return null;
 
-        const snapshotItems = getSnapshotItems(record);
-        const normalizedSnapshotMedia = snapshotItems.map(({ url, altText }, index) => ({
+        // Presentation preferences are inert layout hints that the server contract deliberately does
+        // not type-check, and they are never interpolated into markup. Rejecting an entire public
+        // feed because of one is not a safety boundary, so an unrecognized value resolves to the
+        // renderer's documented automatic selection and unrecognized section names are dropped -
+        // exactly how the renderer already treats them.
+        const featuredMedia = validFeaturedMedia.includes(layoutConfig.featuredMedia)
+            ? layoutConfig.featuredMedia
+            : 'auto';
+
+        // `galleryPosition` is authoritative feed data, not a display index. It is carried through
+        // untouched so a server-valid sparse gallery such as [2] or [2, 5] keeps its exact governed
+        // positions instead of being renumbered.
+        const normalizedSnapshotMedia = getSnapshotItems(record).map(({ url, altText, galleryPosition }) => ({
             url,
             altText,
-            galleryPosition: index + 1
+            galleryPosition
         }));
 
         return {
@@ -300,12 +389,15 @@
             citations: record.citations ? [...record.citations] : [],
             layoutConfig: {
                 templateId: layoutConfig.templateId,
-                featuredMedia: layoutConfig.featuredMedia,
-                sectionOrder: [...layoutConfig.sectionOrder],
-                ...(layoutConfig.hiddenSections ? { hiddenSections: [...layoutConfig.hiddenSections] } : {})
+                featuredMedia,
+                sectionOrder: layoutConfig.sectionOrder.filter(section => validSections.has(section)),
+                ...(layoutConfig.hiddenSections
+                    ? { hiddenSections: layoutConfig.hiddenSections.filter(section => validSections.has(section)) }
+                    : {})
             }
         };
     };
+    // --- PUBLIC RECORD POLICY (end) ---
 
     const normalizeFeedRecords = (feed) => {
         const normalizedRecords = [];
@@ -634,6 +726,9 @@
         const canShowSnapshots = !!(snapshotItems.length > 0 && !isHidden("snapshots"));
         const canShowPoster = !!(project.poster && !isHidden("poster"));
 
+        // "auto" is a first-class authoritative value, and any value this renderer does not
+        // recognize resolves the same way: through the documented automatic preference order
+        // below - video first, then the governed gallery, then the poster.
         let elevatedMedia = "none";
         if (featuredMedia !== "none") {
             if (featuredMedia === "video" && canShowVideo) elevatedMedia = "video";
