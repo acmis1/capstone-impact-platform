@@ -98,6 +98,7 @@ def score_capture(
         "inconsistency_precision": detection["precision"] >= gates["inconsistency_precision_minimum"],
         "inconsistency_recall": detection["recall"] >= gates["inconsistency_recall_minimum"],
         "material_false_automatic_agreements": false_agreements <= gates["material_false_automatic_agreements_maximum"],
+        "automatic_agreement_precision": agreement_precision >= gates["automatic_agreement_precision_target"],
         "operational": all(operational.values()),
         "provisioning": capture["provisioning"]["downloaded_during_capture"] is False,
         "offline_security": capture["offline"]["enabled"] is True and capture["offline"]["self_test_passed"] is True,

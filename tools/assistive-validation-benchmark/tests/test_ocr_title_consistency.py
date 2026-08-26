@@ -115,6 +115,7 @@ class TitleConsistencyScoringTests(unittest.TestCase):
         self.assertEqual("DIAGNOSTIC_NON_GATING", result["body_wer_diagnostic"]["role"])
         self.assertTrue(result["calibration_margin_passed"])
         self.assertTrue(result["final_gates_passed"])
+        self.assertTrue(result["final_gate_checks"]["automatic_agreement_precision"])
         self.assertEqual("READY_TO_FREEZE_TITLE_PROTOCOL", result["decision"])
 
 
