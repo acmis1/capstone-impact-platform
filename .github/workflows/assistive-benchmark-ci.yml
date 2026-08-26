@@ -197,6 +197,13 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_iteration3 check-holdout-result
 
+      # Iteration 4 stopped at calibration because the unscored warmup exceeded the frozen
+      # timeout. This recomputes the independent-corpus, non-reuse, arithmetic, operational,
+      # offline and deferred-decision evidence without installing Paddle or loading the VLM.
+      - name: Re-prove the OCR Iteration 4 calibration deferral without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration4 check-calibration-evidence
+
       - name: Generate deterministic synthetic corpus smoke fixture
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark generate --output-dir artifacts/ci-corpus
