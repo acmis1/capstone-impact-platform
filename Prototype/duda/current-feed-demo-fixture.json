@@ -19,8 +19,8 @@
     "academicSupervisor": "Supervisor Alpha",
     "groupName": "Synthetic Group Alpha",
     "teamMembers": [
-      "Student Alpha",
-      "Student Beta"
+      "Participant Alpha",
+      "Participant Beta"
     ],
     "poster": "https://media.example.test/posters/flood-response.jpg",
     "posterPdf": "https://media.example.test/posters/flood-response.pdf",
@@ -86,8 +86,8 @@
     "academicSupervisor": "Supervisor Beta",
     "groupName": "Synthetic Group Beta",
     "teamMembers": [
-      "Student Gamma",
-      "Student Delta"
+      "Participant Gamma",
+      "Participant Delta"
     ],
     "poster": "https://media.example.test/posters/zero-trust.jpg",
     "posterPdf": "https://media.example.test/posters/zero-trust.pdf",
@@ -154,8 +154,8 @@
     "academicSupervisor": "Supervisor Gamma",
     "groupName": "Synthetic Group Gamma",
     "teamMembers": [
-      "Student Epsilon",
-      "Student Zeta"
+      "Participant Epsilon",
+      "Participant Zeta"
     ],
     "poster": "https://media.example.test/posters/clinic-wayfinding.jpg",
     "posterPdf": "https://media.example.test/posters/clinic-wayfinding.pdf",

@@ -47,8 +47,22 @@
 
     const CAPSTONE_FEED_URL = validateFeedUrl(window.CAPSTONE_FEED_URL);
     if (!CAPSTONE_FEED_URL) {
-        console.error('CAPSTONE_FEED_CONFIGURATION_INVALID');
+        console.warn('FEED_CONFIGURATION_INVALID');
     }
+
+    const PUBLIC_FEED_ERROR_CODES = new Set([
+        'FEED_CONFIGURATION_INVALID',
+        'FEED_REQUEST_FAILED',
+        'FEED_RESPONSE_INVALID',
+        'FEED_PARSE_FAILED',
+        'FEED_RECORD_INVALID'
+    ]);
+
+    const createPublicFeedError = (code) => {
+        const error = new Error(code);
+        error.publicReason = code;
+        return error;
+    };
 
     // --- STATE ---
     let allProjects = [];
@@ -68,13 +82,20 @@
     const escapeHTML = (str) => {
         if (!str) return '';
         const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
+        div.textContent = String(str);
+        return div.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
     };
 
     const getQueryParam = (name) => {
         const params = new URLSearchParams(window.location.search);
         return params.get(name);
+    };
+
+    const parseProjectId = (value) => {
+        if (Number.isSafeInteger(value) && value > 0) return value;
+        if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return null;
+        const numericId = Number(value);
+        return Number.isSafeInteger(numericId) ? numericId : null;
     };
 
     const buildDetailUrl = (projectId) => {
@@ -112,11 +133,14 @@
         return "";
     };
 
-    const isPublicSnapshotUrl = (rawUrl) => {
+    const isSafePublicUrl = (rawUrl, enforcePublicAssetBoundary = false) => {
         if (typeof rawUrl !== "string" || rawUrl.trim() !== rawUrl || !rawUrl) return false;
+        if (/[\u0000-\u0020\u007f<>"'`]/.test(rawUrl)) return false;
         try {
             const parsed = new URL(rawUrl);
             if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+            if (parsed.username || parsed.password || !parsed.hostname) return false;
+            if (!enforcePublicAssetBoundary) return true;
             const path = parsed.pathname.toLowerCase();
             if (path.includes("/drafts/") || path.includes("/project-drafts-private/")) return false;
             if (path.includes("/storage/v1/object/sign/") || path.includes("/storage/v1/object/authenticated/")) return false;
@@ -126,6 +150,8 @@
             return false;
         }
     };
+
+    const isPublicSnapshotUrl = (rawUrl) => isSafePublicUrl(rawUrl, true);
 
     const getSnapshotItems = (project) => {
         const snapshotUrls = Array.isArray(project && project.snapshots) ? project.snapshots : [];
@@ -141,7 +167,7 @@
         });
 
         snapshotMedia.forEach((item, index) => {
-            if (!item || typeof item !== "object" || typeof item.url !== "string") {
+            if (!item || typeof item !== "object" || Array.isArray(item) || typeof item.url !== "string") {
                 return;
             }
             if (mediaByUrl.has(item.url)) {
@@ -171,6 +197,126 @@
                 ? [{ url, altText: media.altText }]
                 : [];
         });
+    };
+
+    const normalizeProjectRecord = (record) => {
+        if (!record || typeof record !== 'object' || Array.isArray(record)) return null;
+        if (!Number.isSafeInteger(record.id) || record.id <= 0) return null;
+
+        const requiredTextFields = [
+            'publicId', 'title', 'summary', 'year', 'program', 'studyProgram',
+            'discipline', 'groupName', 'posterText', 'accessibilityText'
+        ];
+        if (requiredTextFields.some(field => typeof record[field] !== 'string')) return null;
+
+        const optionalTextFields = [
+            'background', 'solution', 'industry', 'industryPartner', 'academicSupervisor'
+        ];
+        if (optionalTextFields.some(field => record[field] !== undefined && typeof record[field] !== 'string')) return null;
+
+        const stringArrayFields = ['teamMembers', 'disciplines'];
+        if (stringArrayFields.some(field => !Array.isArray(record[field]) || record[field].some(value => typeof value !== 'string'))) {
+            return null;
+        }
+        if (record.citations !== undefined && (!Array.isArray(record.citations) || record.citations.some(value => typeof value !== 'string'))) {
+            return null;
+        }
+
+        if (typeof record.poster !== 'string' || (record.poster && !isSafePublicUrl(record.poster, true))) return null;
+        if (typeof record.posterPdf !== 'string' || (record.posterPdf && !isSafePublicUrl(record.posterPdf, true))) return null;
+
+        const optionalUrlFields = ['videoUrl', 'demoUrl', 'repositoryUrl'];
+        if (optionalUrlFields.some(field => (
+            record[field] !== undefined &&
+            (typeof record[field] !== 'string' || (record[field] && !isSafePublicUrl(record[field])))
+        ))) return null;
+
+        if (record.externalLinks !== undefined) {
+            if (!Array.isArray(record.externalLinks)) return null;
+            const hasInvalidExternalLink = record.externalLinks.some(link => (
+                !link ||
+                typeof link !== 'object' ||
+                Array.isArray(link) ||
+                typeof link.label !== 'string' ||
+                !isSafePublicUrl(link.url)
+            ));
+            if (hasInvalidExternalLink) return null;
+        }
+
+        if (!Array.isArray(record.snapshots) || !Array.isArray(record.snapshotMedia)) return null;
+        if (record.snapshots.length > 10 || record.snapshotMedia.length > 10) return null;
+
+        const layoutConfig = record.layoutConfig;
+        if (!layoutConfig || typeof layoutConfig !== 'object' || Array.isArray(layoutConfig)) return null;
+        const validTemplates = ['poster_showcase', 'technical_detail', 'media_rich'];
+        const validFeaturedMedia = ['poster', 'snapshots', 'gallery', 'video', 'none'];
+        const validSections = new Set([
+            'background', 'solution', 'snapshots', 'video', 'team', 'links',
+            'externalLinks', 'citations', 'accessibilityText', 'summary',
+            'poster', 'posterPdf', 'metadata'
+        ]);
+        if (!validTemplates.includes(layoutConfig.templateId)) return null;
+        if (!validFeaturedMedia.includes(layoutConfig.featuredMedia)) return null;
+        if (!Array.isArray(layoutConfig.sectionOrder) || layoutConfig.sectionOrder.some(section => !validSections.has(section))) return null;
+        if (
+            layoutConfig.hiddenSections !== undefined &&
+            (!Array.isArray(layoutConfig.hiddenSections) || layoutConfig.hiddenSections.some(section => !validSections.has(section)))
+        ) return null;
+
+        const snapshotItems = getSnapshotItems(record);
+        const normalizedSnapshotMedia = snapshotItems.map(({ url, altText }, index) => ({
+            url,
+            altText,
+            galleryPosition: index + 1
+        }));
+
+        return {
+            id: record.id,
+            publicId: record.publicId,
+            title: record.title,
+            summary: record.summary,
+            background: record.background || '',
+            solution: record.solution || '',
+            year: record.year,
+            program: record.program,
+            studyProgram: record.studyProgram,
+            discipline: record.discipline,
+            disciplines: [...record.disciplines],
+            industry: record.industry || '',
+            industryPartner: record.industryPartner || '',
+            academicSupervisor: record.academicSupervisor || '',
+            groupName: record.groupName,
+            teamMembers: [...record.teamMembers],
+            poster: record.poster,
+            posterPdf: record.posterPdf,
+            posterText: record.posterText,
+            accessibilityText: record.accessibilityText,
+            snapshots: normalizedSnapshotMedia.map(item => item.url),
+            snapshotMedia: normalizedSnapshotMedia,
+            ...(record.videoUrl ? { videoUrl: record.videoUrl } : {}),
+            ...(record.demoUrl ? { demoUrl: record.demoUrl } : {}),
+            ...(record.repositoryUrl ? { repositoryUrl: record.repositoryUrl } : {}),
+            externalLinks: record.externalLinks ? record.externalLinks.map(link => ({ label: link.label, url: link.url })) : [],
+            citations: record.citations ? [...record.citations] : [],
+            layoutConfig: {
+                templateId: layoutConfig.templateId,
+                featuredMedia: layoutConfig.featuredMedia,
+                sectionOrder: [...layoutConfig.sectionOrder],
+                ...(layoutConfig.hiddenSections ? { hiddenSections: [...layoutConfig.hiddenSections] } : {})
+            }
+        };
+    };
+
+    const normalizeFeedRecords = (feed) => {
+        const normalizedRecords = [];
+        const ids = new Set();
+        for (const record of feed) {
+            const normalized = normalizeProjectRecord(record);
+            if (!normalized || ids.has(normalized.id)) throw createPublicFeedError('FEED_RECORD_INVALID');
+            ids.add(normalized.id);
+            normalizedRecords.push(normalized);
+        }
+        return normalizedRecords;
     };
 
     const renderVideo = (url) => {
@@ -271,7 +417,7 @@
                 <div class="capstone-inline-error" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 25px; border-radius: 12px; border: 1px solid #ef4444; text-align: center; margin: 30px auto; max-width: 600px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6;">
                     <strong style="font-size: 1.15rem; display: block; margin-bottom: 5px; color: #f87171;">Projects could not be loaded.</strong>
                     Please check the public feed connection.<br>
-                    <small style="opacity: 0.75; font-size: 0.8em; display: block; margin-top: 10px; color: #fca5a5;">Reason: CAPSTONE_FEED_CONFIGURATION_INVALID</small>
+                    <small style="opacity: 0.75; font-size: 0.8em; display: block; margin-top: 10px; color: #fca5a5;">Reason: FEED_CONFIGURATION_INVALID</small>
                 </div>
             `;
             if (isDetailPage && detailContainer) {
@@ -287,14 +433,24 @@
             const feedRequestUrl = `${CAPSTONE_FEED_URL}?v=${Date.now()}`;
             console.log('[Showcase] Fetching feed:', feedRequestUrl);
 
-            const response = await fetch(feedRequestUrl, { cache: "no-store" });
-            if (!response.ok) throw new Error(`HTTP ${response.status}: Failed to fetch feed.`);
-
-            const feed = await response.json();
-            if (!Array.isArray(feed)) {
-                throw new Error('Public feed payload must be an array.');
+            let response;
+            try {
+                response = await fetch(feedRequestUrl, { cache: "no-store" });
+            } catch (error) {
+                throw createPublicFeedError('FEED_REQUEST_FAILED');
             }
-            allProjects = feed;
+            if (!response.ok) throw createPublicFeedError('FEED_REQUEST_FAILED');
+
+            let feed;
+            try {
+                feed = await response.json();
+            } catch (error) {
+                throw createPublicFeedError('FEED_PARSE_FAILED');
+            }
+            if (!Array.isArray(feed)) {
+                throw createPublicFeedError('FEED_RESPONSE_INVALID');
+            }
+            allProjects = normalizeFeedRecords(feed);
             console.log(`[Showcase] Records received: ${allProjects.length}`);
 
             if (isDetailPage) {
@@ -314,12 +470,15 @@
                 }
             }
         } catch (err) {
-            console.error('[Showcase] Error loading projects:', err);
+            const publicReason = err && PUBLIC_FEED_ERROR_CODES.has(err.publicReason)
+                ? err.publicReason
+                : 'FEED_RESPONSE_INVALID';
+            console.warn(`[Showcase] ${publicReason}`);
             const errorHtml = `
                 <div class="capstone-inline-error" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 25px; border-radius: 12px; border: 1px solid #ef4444; text-align: center; margin: 30px auto; max-width: 600px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.6;">
                     <strong style="font-size: 1.15rem; display: block; margin-bottom: 5px; color: #f87171;">Projects could not be loaded.</strong>
                     Please check the public feed connection.<br>
-                    <small style="opacity: 0.75; font-size: 0.8em; display: block; margin-top: 10px; color: #fca5a5;">Reason: ${escapeHTML(err.message)}</small>
+                    <small style="opacity: 0.75; font-size: 0.8em; display: block; margin-top: 10px; color: #fca5a5;">Reason: ${publicReason}</small>
                 </div>
             `;
             if (isDetailPage && detailContainer) {
@@ -424,10 +583,10 @@
                 <div class="capstone-projects-grid">
                     ${groups[year].map(p => `
                         <div class="capstone-card">
-                            <button class="capstone-poster-link" type="button" onclick="handleProjectClick('${p.id}')" aria-label="View ${escapeHTML(p.title)} project detail">
-                                <img class="capstone-card-image" src="${p.poster || 'https://via.placeholder.com/400x600?text=No+Poster'}" alt="${escapeHTML(p.title)}" loading="lazy">
+                            <button class="capstone-poster-link" type="button" onclick="handleProjectClick(${p.id})" aria-label="View ${escapeHTML(p.title)} project detail">
+                                <img class="capstone-card-image" src="${escapeHTML(p.poster || 'https://via.placeholder.com/400x600?text=No+Poster')}" alt="${escapeHTML(p.title)}" loading="lazy">
                             </button>
-                            <button class="capstone-card-btn" type="button" onclick="handleProjectClick('${p.id}')">Learn More</button>
+                            <button class="capstone-card-btn" type="button" onclick="handleProjectClick(${p.id})">Learn More</button>
                         </div>
                     `).join('')}
                 </div>
@@ -444,7 +603,8 @@
         const container = document.getElementById('project-detail');
         if (!container) return;
 
-        const project = allProjects.find(p => String(p.id) === String(id));
+        const numericId = parseProjectId(id);
+        const project = numericId === null ? null : allProjects.find(p => p.id === numericId);
         if (!project) {
             container.innerHTML = '<p style="color:#ffffff; text-align:center; padding:50px;">Project not found. <a href="sst-school-projects" style="color:#E61E2A;">Back to Showcase</a></p>';
             return;
@@ -900,7 +1060,8 @@
 
     const openLightbox = (index) => {
         const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
-        const project = allProjects.find(p => String(p.id) === String(projectId));
+        const numericId = parseProjectId(projectId);
+        const project = numericId === null ? null : allProjects.find(p => p.id === numericId);
         if (!project) return;
 
         const snapshotItems = getSnapshotItems(project);
@@ -937,7 +1098,8 @@
 
     const changeSnapshot = (dir) => {
         const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
-        const project = allProjects.find(p => String(p.id) === String(projectId));
+        const numericId = parseProjectId(projectId);
+        const project = numericId === null ? null : allProjects.find(p => p.id === numericId);
         if (!project) return;
         const snapshotItems = getSnapshotItems(project);
         if (snapshotItems.length === 0) return;
@@ -961,8 +1123,10 @@
     };
 
     const handleProjectClick = (id) => {
-        saveSelectedProject(id);
-        window.location.href = buildDetailUrl(id);
+        const numericId = parseProjectId(id);
+        if (numericId === null || !allProjects.some(project => project.id === numericId)) return;
+        saveSelectedProject(numericId);
+        window.location.href = buildDetailUrl(numericId);
     };
 
     const goBack = () => {

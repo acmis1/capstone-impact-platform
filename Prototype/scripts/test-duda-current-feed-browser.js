@@ -94,11 +94,12 @@ function harnessDriver() {
   };
   const finish = () => {
     verifyNoOverflow();
-    const expectedErrorScenario = ['failed-feed', 'malformed-feed'].includes(window.__CAPSTONE_HARNESS_SCENARIO);
-    if (!expectedErrorScenario) {
-      check(window.__CAPSTONE_HARNESS_ERRORS.length === 0, 'application emitted no browser console errors');
-    }
+    check(window.__CAPSTONE_HARNESS_ERRORS.length === 0, 'application emitted no unexpected console.error calls');
+    check(window.__CAPSTONE_HARNESS_WINDOW_ERRORS.length === 0, 'application emitted no window error events');
+    check(window.__CAPSTONE_HARNESS_REJECTIONS.length === 0, 'application emitted no unhandled promise rejections');
     results.consoleErrors = window.__CAPSTONE_HARNESS_ERRORS;
+    results.windowErrors = window.__CAPSTONE_HARNESS_WINDOW_ERRORS;
+    results.unhandledRejections = window.__CAPSTONE_HARNESS_REJECTIONS;
     results.ok = results.failures.length === 0;
     const marker = document.createElement('div');
     marker.id = 'capstone-harness-result';
@@ -135,7 +136,7 @@ function harnessDriver() {
     if (scenario === 'navigation') {
       if (!window.location.pathname.includes('project-detail')) {
         sessionStorage.setItem('capstone-navigation-test', 'active');
-        window.handleProjectClick('202502');
+        window.handleProjectClick(202502);
         return;
       }
       check(new URLSearchParams(window.location.search).get('id') === '202502', 'card navigation preserves the selected numeric id');
@@ -160,6 +161,22 @@ function harnessDriver() {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       check(document.getElementById('capstone-lightbox')?.style.display === 'none', 'gallery lightbox closes cleanly');
       verifyExternalLinkSecurity();
+      finish();
+      return;
+    }
+
+    if (scenario === 'lightbox-lifecycle') {
+      const expectedFirstAlt = window.__CAPSTONE_HARNESS_FIXTURE[0].snapshotMedia[0].altText;
+      const expectedSecondAlt = window.__CAPSTONE_HARNESS_FIXTURE[0].snapshotMedia[1].altText;
+      for (let cycle = 1; cycle <= 3; cycle += 1) {
+        window.openLightbox(0);
+        await waitFor(() => document.getElementById('capstone-lightbox')?.style.display === 'flex');
+        check(document.getElementById('capstone-lightbox-img')?.alt === expectedFirstAlt, `lightbox cycle ${cycle} opens at the requested image`);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+        check(document.getElementById('capstone-lightbox-img')?.alt === expectedSecondAlt, `lightbox cycle ${cycle} handles one keyboard action exactly once`);
+        window.closeLightbox();
+        check(document.getElementById('capstone-lightbox')?.style.display === 'none', `lightbox cycle ${cycle} closes cleanly`);
+      }
       finish();
       return;
     }
@@ -206,22 +223,81 @@ function harnessDriver() {
       return;
     }
 
-    if (scenario === 'malformed-feed' || scenario === 'failed-feed') {
+    if (['malformed-feed', 'failed-feed', 'parse-failed-feed'].includes(scenario)) {
+      const expectedReason = scenario === 'failed-feed'
+        ? 'FEED_REQUEST_FAILED'
+        : scenario === 'parse-failed-feed'
+          ? 'FEED_PARSE_FAILED'
+          : 'FEED_RESPONSE_INVALID';
       check(Boolean(document.querySelector('.capstone-inline-error')), `${scenario} renders a bounded unavailable state`);
       check(document.body.textContent.includes('Projects could not be loaded'), `${scenario} exposes a safe public error message`);
+      check(document.body.textContent.includes(expectedReason), `${scenario} exposes only its bounded public reason code`);
+      check(!document.body.textContent.includes(window.__CAPSTONE_HARNESS_SECRET), `${scenario} does not disclose synthetic exception text`);
+      check(!document.documentElement.innerHTML.includes(window.__CAPSTONE_HARNESS_SECRET), `${scenario} does not disclose malformed response excerpts in HTML`);
       finish();
       return;
     }
 
     if (scenario === 'malformed-snapshots') {
       const renderedSnapshots = Array.from(document.querySelectorAll('img[src*="/snapshots/"]'));
-      check(renderedSnapshots.length === 1, 'malformed snapshot pairs are omitted instead of guessed');
-      check(renderedSnapshots[0]?.src.endsWith('/snapshots/flood-alerts.jpg'), 'the one exact URL-bound snapshot remains');
-      check(renderedSnapshots[0]?.alt === window.__CAPSTONE_HARNESS_FIXTURE[0].snapshotMedia[1].altText, 'the surviving snapshot keeps its URL-matched governed alt text');
+      check(renderedSnapshots.length === 2, 'malformed snapshot pairs are omitted while two exact pairs survive');
+      check(renderedSnapshots[0]?.src.endsWith('/snapshots/flood-map.jpg'), 'the first exact URL-bound snapshot remains');
+      check(renderedSnapshots[1]?.src.endsWith('/snapshots/flood-alerts.jpg'), 'the second exact URL-bound snapshot remains after filtered entries');
+      check(renderedSnapshots[0]?.alt === window.__CAPSTONE_HARNESS_FIXTURE[0].snapshotMedia[0].altText, 'the first surviving snapshot keeps its URL-matched governed alt text');
+      check(renderedSnapshots[1]?.alt === window.__CAPSTONE_HARNESS_FIXTURE[0].snapshotMedia[1].altText, 'the second surviving snapshot keeps its URL-matched governed alt text');
       check(
         renderedSnapshots.every(image => !/project-drafts-private|\/object\/(?:sign|authenticated)\//.test(image.src)),
         'private, signed, and authenticated snapshot paths are not rendered',
       );
+      window.openLightbox(0);
+      await waitFor(() => document.getElementById('capstone-lightbox')?.style.display === 'flex');
+      check(document.getElementById('capstone-lightbox-img')?.src.endsWith('/snapshots/flood-map.jpg'), 'filtered gallery opens the first surviving image');
+      check(document.getElementById('capstone-lightbox-img')?.alt === window.__CAPSTONE_HARNESS_FIXTURE[0].snapshotMedia[0].altText, 'filtered gallery opens the exact governed first alt text');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+      check(document.getElementById('capstone-lightbox-img')?.src.endsWith('/snapshots/flood-alerts.jpg'), 'filtered gallery next navigation stays synchronized');
+      check(document.getElementById('capstone-lightbox-img')?.alt === window.__CAPSTONE_HARNESS_FIXTURE[0].snapshotMedia[1].altText, 'filtered gallery next navigation keeps the exact governed alt text');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+      check(document.getElementById('capstone-lightbox-img')?.src.endsWith('/snapshots/flood-map.jpg'), 'filtered gallery previous navigation stays synchronized');
+      window.closeLightbox();
+      finish();
+      return;
+    }
+
+    if (scenario === 'detail-featured-gallery') {
+      const heroGallery = document.querySelector('.media-hero-shell .snapshot-hero-grid');
+      check(Boolean(heroGallery), 'media-rich layout executes the featured snapshot hero branch');
+      verifyRenderedSnapshotAlts(2);
+      const secondMedia = window.__CAPSTONE_HARNESS_FIXTURE[2].snapshotMedia[1];
+      window.openLightbox(1);
+      await waitFor(() => document.getElementById('capstone-lightbox')?.style.display === 'flex');
+      check(document.getElementById('capstone-lightbox-img')?.src.endsWith(new URL(secondMedia.url).pathname), 'featured hero opens the selected governed image');
+      check(document.getElementById('capstone-lightbox-img')?.alt === secondMedia.altText, 'featured hero lightbox uses exact governed alt text');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+      check(document.getElementById('capstone-lightbox-img')?.alt === window.__CAPSTONE_HARNESS_FIXTURE[2].snapshotMedia[0].altText, 'featured hero lightbox navigation stays synchronized');
+      window.closeLightbox();
+      finish();
+      return;
+    }
+
+    if (scenario === 'unsafe-record') {
+      check(Boolean(document.querySelector('.capstone-inline-error')), 'unsafe record rejects the whole feed before rendering');
+      check(document.body.textContent.includes('FEED_RECORD_INVALID'), 'unsafe record exposes the bounded record-invalid reason');
+      check(!document.documentElement.innerHTML.includes(window.__CAPSTONE_HARNESS_SECRET), 'unsafe record marker never reaches generated HTML');
+      check(!document.querySelector('[href^="javascript:"], [href^="data:"], [href^="vbscript:"], [src^="javascript:"], [src^="data:"]'), 'unsafe record creates no active unsafe URL');
+      check(window.location.pathname === '/', 'unsafe record cannot trigger detail navigation');
+      finish();
+      return;
+    }
+
+    if (scenario === 'escaped-text-record') {
+      const maliciousTitle = window.__CAPSTONE_HARNESS_FIXTURE[0].title;
+      const cardImage = document.querySelector('.capstone-card-image');
+      const cardButton = document.querySelector('.capstone-poster-link');
+      check(document.querySelectorAll('.capstone-card').length === 1, 'quote-bearing valid record still renders');
+      check(cardImage?.alt === maliciousTitle, 'quote-bearing title is preserved as inert attribute text');
+      check(!document.getElementById('unsafe-active-node'), 'quote-breaking markup creates no active element');
+      check(cardButton?.getAttribute('onclick') === 'handleProjectClick(202601)', 'detail handler contains only the normalized numeric id');
+      check(window.location.pathname === '/', 'quote-bearing text cannot trigger navigation');
       finish();
       return;
     }
@@ -242,51 +318,88 @@ function buildHarnessPage(requestUrl, runtimeFixture) {
   if (scenario === 'malformed-feed') payload = { records: fixtureCopy };
   if (scenario === 'malformed-snapshots') {
     payload = [structuredClone(fixtureCopy[0])];
-    const duplicateUrl = payload[0].snapshots[0];
-    const survivingUrl = payload[0].snapshots[1];
+    const firstSurvivingUrl = payload[0].snapshots[0];
+    const secondSurvivingUrl = payload[0].snapshots[1];
+    const duplicateUrl = 'https://media.example.test/snapshots/duplicate.jpg';
     const signedUrl = 'https://private.example.test/storage/v1/object/sign/project-public-assets/signed.jpg?token=secret';
     const authenticatedUrl = 'https://private.example.test/storage/v1/object/authenticated/project-public-assets/authenticated.jpg';
     const privateDraftUrl = 'https://private.example.test/storage/v1/object/public/project-drafts-private/secret.jpg';
     payload[0].snapshots = [
-      duplicateUrl,
-      duplicateUrl,
-      survivingUrl,
+      firstSurvivingUrl,
       signedUrl,
+      secondSurvivingUrl,
+      duplicateUrl,
+      duplicateUrl,
       authenticatedUrl,
       privateDraftUrl,
-      'not-an-absolute-url',
+      'javascript:alert(1)',
       'https://media.example.test/snapshots/unpaired.jpg',
     ];
     payload[0].snapshotMedia = [
+      { url: firstSurvivingUrl, altText: fixtureCopy[0].snapshotMedia[0].altText, galleryPosition: 1 },
+      { url: signedUrl, altText: 'Signed image must not render.', galleryPosition: 2 },
+      { url: secondSurvivingUrl, altText: fixtureCopy[0].snapshotMedia[1].altText, galleryPosition: 3 },
       { url: duplicateUrl, altText: 'First contradictory alternative.', galleryPosition: 1 },
-      { url: duplicateUrl, altText: 'Second contradictory alternative.', galleryPosition: 2 },
-      { url: survivingUrl, altText: fixtureCopy[0].snapshotMedia[1].altText, galleryPosition: 3 },
-      { url: signedUrl, altText: 'Signed image must not render.', galleryPosition: 4 },
-      { url: authenticatedUrl, altText: 'Authenticated image must not render.', galleryPosition: 5 },
+      { url: duplicateUrl, altText: 'Second contradictory alternative.', galleryPosition: 5 },
+      { url: authenticatedUrl, altText: 'Authenticated image must not render.', galleryPosition: 6 },
       {
         url: privateDraftUrl,
         altText: 'Private draft image must not render.',
-        galleryPosition: 6,
+        galleryPosition: 7,
       },
-      { url: 'not-an-absolute-url', altText: '', galleryPosition: 7 },
+      { url: 'javascript:alert(1)', altText: 'Script URL must not render.', galleryPosition: 8 },
     ];
   }
   if (scenario === 'detail-generic-video') {
     payload[0].videoUrl = 'https://videos.example.test/presentation';
+  }
+  if (scenario === 'detail-featured-gallery') {
+    payload[2].layoutConfig.featuredMedia = 'snapshots';
+  }
+  if (scenario === 'unsafe-record') {
+    const unsafe = structuredClone(fixtureCopy[0]);
+    unsafe.id = "202601');window.location='https://attacker.example.test/?quote-break-marker";
+    unsafe.title = `\"><img id="unsafe-active-node" src=x onerror="window.location='https://attacker.example.test'">`;
+    unsafe.poster = 'javascript:alert(1)';
+    unsafe.posterPdf = 'data:text/html,<script>alert(1)</script>';
+    unsafe.videoUrl = 'vbscript:msgbox(1)';
+    unsafe.demoUrl = 'https://user:password@demo.example.test/private';
+    unsafe.repositoryUrl = 'not-an-absolute-url';
+    unsafe.snapshots = ['javascript:alert(1)', 'data:image/svg+xml,<svg onload=alert(1)>'];
+    unsafe.snapshotMedia = [{ url: 'javascript:alert(1)', altText: 'Unsafe snapshot.', galleryPosition: 1 }];
+    unsafe.externalLinks = [{ label: 'Unsafe link', url: 'javascript:alert(1)' }, 'malformed-link'];
+    payload = [unsafe];
+  }
+  if (scenario === 'escaped-text-record') {
+    payload = [structuredClone(fixtureCopy[0])];
+    payload[0].title = '\"><img id="unsafe-active-node" src=x onerror="window.location=\'https://attacker.example.test\'">';
+    fixtureCopy[0].title = payload[0].title;
   }
 
   const harnessSetup = `
     window.CAPSTONE_FEED_URL = 'https://demofixture.supabase.co/storage/v1/object/public/public-feeds/capstones-latest.json';
     window.__CAPSTONE_HARNESS_SCENARIO = ${escapeInlineJson(scenario)};
     window.__CAPSTONE_HARNESS_FIXTURE = ${escapeInlineJson(fixtureCopy)};
+    window.__CAPSTONE_HARNESS_SECRET = ['DISTINCTIVE', 'SECRET', 'LIKE', 'MARKER', '91f2c7'].join('_');
     window.__CAPSTONE_HARNESS_ERRORS = [];
+    window.__CAPSTONE_HARNESS_WINDOW_ERRORS = [];
+    window.__CAPSTONE_HARNESS_REJECTIONS = [];
     const originalConsoleError = console.error.bind(console);
     console.error = (...args) => {
       window.__CAPSTONE_HARNESS_ERRORS.push(args.map(value => value instanceof Error ? value.message : String(value)).join(' '));
       originalConsoleError(...args);
     };
+    window.addEventListener('error', event => {
+      window.__CAPSTONE_HARNESS_WINDOW_ERRORS.push(event.message || 'window-error');
+    });
+    window.addEventListener('unhandledrejection', event => {
+      window.__CAPSTONE_HARNESS_REJECTIONS.push(String(event.reason instanceof Error ? event.reason.message : event.reason));
+    });
     window.fetch = async () => {
-      if (window.__CAPSTONE_HARNESS_SCENARIO === 'failed-feed') throw new Error('Synthetic local feed failure.');
+      if (window.__CAPSTONE_HARNESS_SCENARIO === 'failed-feed') throw new Error(window.__CAPSTONE_HARNESS_SECRET);
+      if (window.__CAPSTONE_HARNESS_SCENARIO === 'parse-failed-feed') {
+        return { ok: true, status: 200, json: async () => { throw new Error(window.__CAPSTONE_HARNESS_SECRET + ' malformed JSON excerpt'); } };
+      }
       return { ok: true, status: 200, json: async () => structuredClone(${escapeInlineJson(payload)}) };
     };
   `;
@@ -343,15 +456,20 @@ const scenarios = [
   ['navigation', '/', 1440, 1000],
   ['detail-poster', '/project-detail?id=202601', 1440, 1000],
   ['detail-poster', '/project-detail?id=202601', 390, 844],
+  ['lightbox-lifecycle', '/project-detail?id=202601', 1440, 1000],
   ['detail-technical', '/project-detail?id=202502', 1440, 1000],
   ['detail-technical', '/project-detail?id=202502', 390, 844],
   ['detail-media', '/project-detail?id=202403', 1440, 1000],
   ['detail-media', '/project-detail?id=202403', 390, 844],
+  ['detail-featured-gallery', '/project-detail?id=202403', 1440, 1000],
   ['detail-generic-video', '/project-detail?id=202601', 1440, 1000],
   ['empty-feed', '/', 390, 844],
   ['malformed-feed', '/', 1440, 1000],
+  ['parse-failed-feed', '/', 1440, 1000],
   ['failed-feed', '/', 1440, 1000],
   ['malformed-snapshots', '/project-detail?id=202601', 1440, 1000],
+  ['unsafe-record', '/', 1440, 1000],
+  ['escaped-text-record', '/', 1440, 1000],
 ].filter(([scenario]) => requestedScenarios.size === 0 || requestedScenarios.has(scenario));
 
 assert.ok(scenarios.length > 0, 'No matching Duda browser scenarios were requested.');
