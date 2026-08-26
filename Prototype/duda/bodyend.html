@@ -112,6 +112,67 @@
         return "";
     };
 
+    const isPublicSnapshotUrl = (rawUrl) => {
+        if (typeof rawUrl !== "string" || rawUrl.trim() !== rawUrl || !rawUrl) return false;
+        try {
+            const parsed = new URL(rawUrl);
+            if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+            const path = parsed.pathname.toLowerCase();
+            if (path.includes("/drafts/") || path.includes("/project-drafts-private/")) return false;
+            if (path.includes("/storage/v1/object/sign/") || path.includes("/storage/v1/object/authenticated/")) return false;
+            if (path.includes("/storage/v1/object/") && parsed.searchParams.has("token")) return false;
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const getSnapshotItems = (project) => {
+        const snapshotUrls = Array.isArray(project && project.snapshots) ? project.snapshots : [];
+        const snapshotMedia = Array.isArray(project && project.snapshotMedia) ? project.snapshotMedia : [];
+        const snapshotUrlCounts = new Map();
+        const mediaByUrl = new Map();
+        const duplicateMediaUrls = new Set();
+
+        snapshotUrls.forEach(url => {
+            if (typeof url === "string") {
+                snapshotUrlCounts.set(url, (snapshotUrlCounts.get(url) || 0) + 1);
+            }
+        });
+
+        snapshotMedia.forEach((item, index) => {
+            if (!item || typeof item !== "object" || typeof item.url !== "string") {
+                return;
+            }
+            if (mediaByUrl.has(item.url)) {
+                duplicateMediaUrls.add(item.url);
+                return;
+            }
+            if (
+                typeof item.altText !== "string" ||
+                !item.altText.trim() ||
+                !Number.isInteger(item.galleryPosition) ||
+                item.galleryPosition !== index + 1 ||
+                item.galleryPosition < 1 ||
+                item.galleryPosition > 10
+            ) {
+                mediaByUrl.set(item.url, null);
+                return;
+            }
+            mediaByUrl.set(item.url, item);
+        });
+
+        return snapshotUrls.flatMap(url => {
+            if (!isPublicSnapshotUrl(url) || snapshotUrlCounts.get(url) !== 1 || duplicateMediaUrls.has(url)) {
+                return [];
+            }
+            const media = mediaByUrl.get(url);
+            return media && media.galleryPosition === snapshotUrls.indexOf(url) + 1
+                ? [{ url, altText: media.altText }]
+                : [];
+        });
+    };
+
     const renderVideo = (url) => {
         if (!url) return '';
         const escapedUrl = escapeHTML(url);
@@ -229,7 +290,11 @@
             const response = await fetch(feedRequestUrl, { cache: "no-store" });
             if (!response.ok) throw new Error(`HTTP ${response.status}: Failed to fetch feed.`);
 
-            allProjects = await response.json();
+            const feed = await response.json();
+            if (!Array.isArray(feed)) {
+                throw new Error('Public feed payload must be an array.');
+            }
+            allProjects = feed;
             console.log(`[Showcase] Records received: ${allProjects.length}`);
 
             if (isDetailPage) {
@@ -405,8 +470,8 @@
         };
 
         const canShowVideo = !!(project.videoUrl && !isHidden("video"));
-        const snapshots = Array.isArray(project.snapshots) ? project.snapshots : [];
-        const canShowSnapshots = !!(snapshots.length > 0 && !isHidden("snapshots"));
+        const snapshotItems = getSnapshotItems(project);
+        const canShowSnapshots = !!(snapshotItems.length > 0 && !isHidden("snapshots"));
         const canShowPoster = !!(project.poster && !isHidden("poster"));
 
         let elevatedMedia = "none";
@@ -516,18 +581,18 @@
         const renderSectionContent = (sec) => {
             if (sec === "background" && project.background) return `<p class="section-text">${escapeHTML(project.background)}</p>`;
             if (sec === "solution" && project.solution) return `<p class="section-text">${escapeHTML(project.solution)}</p>`;
-            if (sec === "snapshots" && snapshots.length > 0) {
+            if (sec === "snapshots" && snapshotItems.length > 0) {
                 return `
                     <div class="snapshot-grid">
-                        ${snapshots.map((url, idx) => `
-                            <div class="snapshot-card" onclick="openLightbox(${idx})">
+                        ${snapshotItems.map(({ url, altText }, idx) => `
+                            <button type="button" class="snapshot-card" onclick="openLightbox(${idx})" aria-label="Open ${escapeHTML(altText)}">
                                 <div class="snapshot-inner">
-                                    <img src="${url}" alt="Snapshot ${idx + 1}" loading="lazy">
+                                    <img src="${escapeHTML(url)}" alt="${escapeHTML(altText)}" loading="lazy">
                                     <div class="snapshot-overlay">
                                         <span class="view-icon">&#128269;</span>
                                     </div>
                                 </div>
-                            </div>
+                            </button>
                         `).join("")}
                     </div>
                 `;
@@ -586,7 +651,7 @@
         if (elevatedMedia === "video") consumedSections.push("video");
         if (elevatedMedia === "snapshots") consumedSections.push("snapshots");
         if (elevatedMedia === "poster") consumedSections.push("poster");
-        if (templateId === "poster_showcase" && snapshots.length > 0 && !isHidden("snapshots")) consumedSections.push("snapshots");
+        if (templateId === "poster_showcase" && snapshotItems.length > 0 && !isHidden("snapshots")) consumedSections.push("snapshots");
 
         const bodySections = fullOrder.filter(sec => {
             if (sec === "summary") return false;
@@ -613,15 +678,15 @@
             : elevatedMedia === "snapshots"
                 ? `
                     <div class="snapshot-grid snapshot-hero-grid">
-                        ${snapshots.map((url, idx) => `
-                            <div class="snapshot-card" onclick="openLightbox(${idx})">
+                        ${snapshotItems.map(({ url, altText }, idx) => `
+                            <button type="button" class="snapshot-card" onclick="openLightbox(${idx})" aria-label="Open ${escapeHTML(altText)}">
                                 <div class="snapshot-inner">
-                                    <img src="${url}" alt="Snapshot ${idx + 1}" loading="lazy">
+                                    <img src="${escapeHTML(url)}" alt="${escapeHTML(altText)}" loading="lazy">
                                     <div class="snapshot-overlay">
                                         <span class="view-icon">&#128269;</span>
                                     </div>
                                 </div>
-                            </div>
+                            </button>
                         `).join("")}
                     </div>
                 `
@@ -643,15 +708,15 @@
                     <div class="technical-aside-card">
                         <h4>Featured Snapshots</h4>
                         <div class="snapshot-grid">
-                            ${snapshots.slice(0, 4).map((url, idx) => `
-                                <div class="snapshot-card" onclick="openLightbox(${idx})">
+                            ${snapshotItems.slice(0, 4).map(({ url, altText }, idx) => `
+                                <button type="button" class="snapshot-card" onclick="openLightbox(${idx})" aria-label="Open ${escapeHTML(altText)}">
                                     <div class="snapshot-inner">
-                                        <img src="${url}" alt="Snapshot ${idx + 1}" loading="lazy">
+                                        <img src="${escapeHTML(url)}" alt="${escapeHTML(altText)}" loading="lazy">
                                         <div class="snapshot-overlay">
                                             <span class="view-icon">&#128269;</span>
                                         </div>
                                     </div>
-                                </div>
+                                </button>
                             `).join("")}
                         </div>
                     </div>
@@ -669,13 +734,13 @@
             return "";
         })();
 
-        const snapshotStripHTML = templateId === "poster_showcase" && snapshots.length > 0 && elevatedMedia !== "snapshots"
+        const snapshotStripHTML = templateId === "poster_showcase" && snapshotItems.length > 0 && elevatedMedia !== "snapshots"
             ? `
                 <div class="exhibition-strip">
                     <div>
-                        ${snapshots.map((url, idx) => `
-                            <button type="button" onclick="openLightbox(${idx})" aria-label="Open snapshot ${idx + 1}">
-                                <img src="${url}" alt="Snapshot ${idx + 1}" loading="lazy">
+                        ${snapshotItems.map(({ url, altText }, idx) => `
+                            <button type="button" onclick="openLightbox(${idx})" aria-label="Open ${escapeHTML(altText)}">
+                                <img src="${escapeHTML(url)}" alt="${escapeHTML(altText)}" loading="lazy">
                             </button>
                         `).join("")}
                     </div>
@@ -802,14 +867,14 @@
                 <button type="button" class="capstone-lightbox-close" style="position:absolute; top:24px; right:24px; width:48px; height:48px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; z-index:20; pointer-events:auto; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="closeLightbox()" aria-label="Close" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">&times;</button>
 
                 <div class="capstone-lightbox-nav-wrapper" style="position:relative; display:flex; align-items:center; justify-content:center; width:100%; height:100%; pointer-events:auto;">
-                    <button type="button" class="capstone-lightbox-prev" style="position:absolute; left:24px; width:64px; height:64px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="event.stopPropagation(); changeSnapshot(-1)" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">‹</button>
+                    <button type="button" class="capstone-lightbox-prev" style="position:absolute; left:24px; width:64px; height:64px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="event.stopPropagation(); changeSnapshot(-1)" aria-label="Previous snapshot" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">‹</button>
 
                     <div id="capstone-lightbox-img-container" style="max-width:90vw; max-height:85vh; display:flex; align-items:center; justify-content:center; position:relative;">
                         <img id="capstone-lightbox-img" style="max-width:100%; max-height:85vh; object-fit:contain; border-radius:12px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.1); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);" onclick="event.stopPropagation()">
                         <div id="capstone-lightbox-error" style="display:none; color:#fff; text-align:center; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.5); padding:24px; border-radius:12px; backdrop-filter:blur(8px);">Snapshot image failed to load.</div>
                     </div>
 
-                    <button type="button" class="capstone-lightbox-next" style="position:absolute; right:24px; width:64px; height:64px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="event.stopPropagation(); changeSnapshot(1)" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">›</button>
+                    <button type="button" class="capstone-lightbox-next" style="position:absolute; right:24px; width:64px; height:64px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="event.stopPropagation(); changeSnapshot(1)" aria-label="Next snapshot" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">›</button>
                 </div>
             </div>
         `;
@@ -836,10 +901,13 @@
     const openLightbox = (index) => {
         const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
         const project = allProjects.find(p => String(p.id) === String(projectId));
-        if (!project || !project.snapshots) return;
+        if (!project) return;
+
+        const snapshotItems = getSnapshotItems(project);
+        if (index < 0 || index >= snapshotItems.length) return;
 
         currentSnapshotIndex = index;
-        console.log(`[Showcase] Opening lightbox for snapshot ${index + 1} of ${project.snapshots.length}`, project.snapshots[index]);
+        console.log(`[Showcase] Opening lightbox for snapshot ${index + 1} of ${snapshotItems.length}`);
 
         const lb = ensureLightbox();
 
@@ -860,17 +928,21 @@
 
     const updateLightbox = (project) => {
         const img = document.getElementById('capstone-lightbox-img');
-        if (img && project.snapshots[currentSnapshotIndex]) {
-            img.src = project.snapshots[currentSnapshotIndex];
+        const snapshotItem = getSnapshotItems(project)[currentSnapshotIndex];
+        if (img && snapshotItem) {
+            img.src = snapshotItem.url;
+            img.alt = snapshotItem.altText;
         }
     };
 
     const changeSnapshot = (dir) => {
         const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
         const project = allProjects.find(p => String(p.id) === String(projectId));
-        if (!project || !project.snapshots) return;
+        if (!project) return;
+        const snapshotItems = getSnapshotItems(project);
+        if (snapshotItems.length === 0) return;
         ensureLightbox();
-        currentSnapshotIndex = (currentSnapshotIndex + dir + project.snapshots.length) % project.snapshots.length;
+        currentSnapshotIndex = (currentSnapshotIndex + dir + snapshotItems.length) % snapshotItems.length;
         updateLightbox(project);
     };
 

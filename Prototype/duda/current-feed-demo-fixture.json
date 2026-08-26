@@ -1,0 +1,205 @@
+[
+  {
+    "id": 202601,
+    "publicId": "2026-accessible-flood-response",
+    "title": "Accessible Flood Response Dashboard",
+    "summary": "A synthetic dashboard that coordinates flood-response resources.",
+    "background": "Emergency coordinators need one public-safe view of rapidly changing resource information.",
+    "solution": "The project combines bounded alerts, map summaries, and accessible response checklists.",
+    "year": "2026",
+    "program": "Bachelor of Software Engineering",
+    "studyProgram": "Bachelor of Software Engineering",
+    "discipline": "Software Engineering",
+    "disciplines": [
+      "Software Engineering",
+      "Data Analytics"
+    ],
+    "industry": "Emergency Services",
+    "industryPartner": "Synthetic Response Lab",
+    "academicSupervisor": "Supervisor Alpha",
+    "groupName": "Synthetic Group Alpha",
+    "teamMembers": [
+      "Student Alpha",
+      "Student Beta"
+    ],
+    "poster": "https://media.example.test/posters/flood-response.jpg",
+    "posterPdf": "https://media.example.test/posters/flood-response.pdf",
+    "posterText": "Flood response dashboard poster full text for the synthetic demonstration fixture.",
+    "accessibilityText": "Flood response dashboard poster with a map, alert summary, and response checklist.",
+    "snapshots": [
+      "https://media.example.test/snapshots/flood-map.jpg",
+      "https://media.example.test/snapshots/flood-alerts.jpg"
+    ],
+    "snapshotMedia": [
+      {
+        "url": "https://media.example.test/snapshots/flood-map.jpg",
+        "altText": "Map view showing three synthetic flood-response zones and their resource status.",
+        "galleryPosition": 1
+      },
+      {
+        "url": "https://media.example.test/snapshots/flood-alerts.jpg",
+        "altText": "Alert panel grouping synthetic road closures by urgency and affected district.",
+        "galleryPosition": 2
+      }
+    ],
+    "videoUrl": "https://media.example.test/videos/flood-response.mp4",
+    "demoUrl": "https://demo.example.test/flood-response",
+    "repositoryUrl": "https://code.example.test/flood-response",
+    "externalLinks": [
+      {
+        "label": "Project overview",
+        "url": "https://projects.example.test/flood-response"
+      }
+    ],
+    "citations": [
+      "Synthetic emergency-response reference, 2026."
+    ],
+    "layoutConfig": {
+      "templateId": "poster_showcase",
+      "featuredMedia": "video",
+      "sectionOrder": [
+        "background",
+        "solution",
+        "snapshots",
+        "video",
+        "team",
+        "links"
+      ]
+    }
+  },
+  {
+    "id": 202502,
+    "publicId": "2025-zero-trust-learning-lab",
+    "title": "Zero Trust Learning Lab",
+    "summary": "A synthetic teaching environment for exploring zero-trust controls.",
+    "background": "Security learners need safe, repeatable examples of identity and policy boundaries.",
+    "solution": "The lab explains each trust decision with an auditable synthetic scenario.",
+    "year": "2025",
+    "program": "Master of Cyber Security",
+    "studyProgram": "Master of Cyber Security",
+    "discipline": "Cyber Security",
+    "disciplines": [
+      "Cyber Security"
+    ],
+    "industry": "Financial Services",
+    "industryPartner": "Synthetic Security Studio",
+    "academicSupervisor": "Supervisor Beta",
+    "groupName": "Synthetic Group Beta",
+    "teamMembers": [
+      "Student Gamma",
+      "Student Delta"
+    ],
+    "poster": "https://media.example.test/posters/zero-trust.jpg",
+    "posterPdf": "https://media.example.test/posters/zero-trust.pdf",
+    "posterText": "Zero trust learning lab poster full text for the synthetic demonstration fixture.",
+    "accessibilityText": "Zero trust learning lab poster with a trust-boundary diagram and policy examples.",
+    "snapshots": [
+      "https://media.example.test/snapshots/zero-trust-boundary.jpg",
+      "https://media.example.test/snapshots/zero-trust-policy.jpg"
+    ],
+    "snapshotMedia": [
+      {
+        "url": "https://media.example.test/snapshots/zero-trust-boundary.jpg",
+        "altText": "Trust-boundary diagram separating a synthetic learner device from protected services.",
+        "galleryPosition": 1
+      },
+      {
+        "url": "https://media.example.test/snapshots/zero-trust-policy.jpg",
+        "altText": "Policy simulator showing a denied synthetic request and the controls that rejected it.",
+        "galleryPosition": 2
+      }
+    ],
+    "videoUrl": "https://www.youtube.com/watch?v=AbCdEfGhI12",
+    "demoUrl": "https://demo.example.test/zero-trust-lab",
+    "repositoryUrl": "https://code.example.test/zero-trust-lab",
+    "externalLinks": [
+      {
+        "label": "Learning guide",
+        "url": "https://projects.example.test/zero-trust-lab"
+      }
+    ],
+    "citations": [
+      "Synthetic zero-trust teaching reference, 2025."
+    ],
+    "layoutConfig": {
+      "templateId": "technical_detail",
+      "featuredMedia": "snapshots",
+      "sectionOrder": [
+        "background",
+        "solution",
+        "video",
+        "snapshots",
+        "links",
+        "citations",
+        "team"
+      ]
+    }
+  },
+  {
+    "id": 202403,
+    "publicId": "2024-clinic-wayfinding",
+    "title": "Inclusive Clinic Wayfinding",
+    "summary": "A synthetic media-rich wayfinding prototype for a community clinic.",
+    "background": "Visitors can struggle to understand complex clinic routes and appointment stages.",
+    "solution": "The prototype combines plain-language directions, visual landmarks, and an accessible journey preview.",
+    "year": "2024",
+    "program": "Bachelor of Information Technology",
+    "studyProgram": "Bachelor of Information Technology",
+    "discipline": "User Experience Design",
+    "disciplines": [
+      "User Experience Design"
+    ],
+    "industry": "Healthcare",
+    "industryPartner": "Synthetic Community Clinic",
+    "academicSupervisor": "Supervisor Gamma",
+    "groupName": "Synthetic Group Gamma",
+    "teamMembers": [
+      "Student Epsilon",
+      "Student Zeta"
+    ],
+    "poster": "https://media.example.test/posters/clinic-wayfinding.jpg",
+    "posterPdf": "https://media.example.test/posters/clinic-wayfinding.pdf",
+    "posterText": "Inclusive clinic wayfinding poster full text for the synthetic demonstration fixture.",
+    "accessibilityText": "Clinic wayfinding poster with a step-by-step route and recognizable visual landmarks.",
+    "snapshots": [
+      "https://media.example.test/snapshots/clinic-route.jpg",
+      "https://media.example.test/snapshots/clinic-landmarks.jpg"
+    ],
+    "snapshotMedia": [
+      {
+        "url": "https://media.example.test/snapshots/clinic-route.jpg",
+        "altText": "Mobile route screen listing three synthetic clinic checkpoints in visit order.",
+        "galleryPosition": 1
+      },
+      {
+        "url": "https://media.example.test/snapshots/clinic-landmarks.jpg",
+        "altText": "Landmark guide pairing synthetic clinic locations with distinct colors and symbols.",
+        "galleryPosition": 2
+      }
+    ],
+    "videoUrl": "https://vimeo.com/123456789",
+    "demoUrl": "https://demo.example.test/clinic-wayfinding",
+    "repositoryUrl": "https://code.example.test/clinic-wayfinding",
+    "externalLinks": [
+      {
+        "label": "Usability findings",
+        "url": "https://projects.example.test/clinic-wayfinding"
+      }
+    ],
+    "citations": [
+      "Synthetic inclusive-wayfinding reference, 2024."
+    ],
+    "layoutConfig": {
+      "templateId": "media_rich",
+      "featuredMedia": "video",
+      "sectionOrder": [
+        "snapshots",
+        "background",
+        "solution",
+        "video",
+        "links",
+        "team"
+      ]
+    }
+  }
+]

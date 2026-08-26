@@ -96,7 +96,7 @@ Every compiled project object must contain the following required fields to pass
 *   `posterText` — Required accessible full text for poster content
 *   `accessibilityText` — Required poster text alternative
 *   `snapshots` — Public snapshot URL array
-*   `snapshotMedia` — Exact `{ url, altText }` pairing for every snapshot
+*   `snapshotMedia` — Exact `{ url, altText, galleryPosition }` pairing for every snapshot
 *   `layoutConfig` — Visual preset settings object containing `templateId`.
 
 ### Runtime Validator Field Rules
@@ -106,7 +106,7 @@ The runtime validator behaves as follows:
 *   Checks `teamMembers` is an array (does not currently check if every element inside the array is a string).
 *   Requires non-blank bounded `posterText` and `accessibilityText` values.
 *   Checks that each snapshot URL is an absolute HTTP(S), structurally public-safe URL; rejects malformed, relative, non-HTTP(S), private-draft, private-ingestion, signed, and authenticated-storage URLs. It does not perform network reachability checks.
-*   Requires unique snapshot URLs and an exact, order-independent one-to-one correspondence with `snapshotMedia`; each media item has only `url` and non-blank bounded `altText` fields.
+*   Requires unique snapshot URLs and an exact one-to-one correspondence with `snapshotMedia`; each media item has only `url`, non-blank bounded `altText`, and an authoritative integer `galleryPosition` from 1 through 10. Entries must follow strictly increasing gallery order and align with `snapshots` at the same index.
 *   Checks `layoutConfig` is an object.
 *   Checks `layoutConfig.templateId` is one of: `poster_showcase`, `technical_detail`, `media_rich`.
 *   Does not require or type-check `featuredMedia` or `sectionOrder` at runtime. They are defined in the TypeScript domain, and `compilePublicFeed` supplies/defaults and emits them inside `layoutConfig`, but `validatePublicFeed` does not independently require or type-check them.
@@ -222,6 +222,7 @@ No browser role can execute the privileged ledger protocol. Ledger tables use RL
     *   Private Drafts: `project-drafts-private`
 *   **Prototype Environment Note**: The recovered Prototype uses exactly the bucket names `feeds` and `project-assets`. These are separate from the configurable Admin/CMS defaults (`public-feeds`, `project-public-assets`, `project-drafts-private`).
 *   **Caching**: `bodyend.html` appends a timestamp query parameter and uses `cache: no-store` to bypass client browser cache.
+*   **Snapshot Accessibility**: `bodyend.html` preserves the `snapshots` URL order used by the existing gallery and lightbox, and resolves each rendered image's governed alternative from `snapshotMedia` by exact URL. It never pairs alternatives by independent array index and omits malformed or unpaired entries.
 
 ---
 
