@@ -16,14 +16,40 @@ from typing import Any, Iterator
 
 from ..engines import _process_memory_bytes, run_command_measured
 
+MASK_PATTERN_CONTRACT = (
+    ("fenced_code", r"```.*?```", "DOTALL"),
+    ("inline_code_or_database_identifier", r"`[^`\r\n]+`", ""),
+    ("url", r"https?://[^\s]+", ""),
+    ("email", r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", ""),
+    ("rfc4122_uuid", r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b", ""),
+    ("dotted_filename_or_identifier", r"\b[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+\b", ""),
+)
+MATCHER_CONTRACT = {
+    "non_empty_span_overlap_of_shorter": 0.5,
+    "zero_width_distance_tolerance": 1,
+    "replacement_match": "normalised_exact_intersection_when_replacements_exist",
+    "redundant_finding_counting": "one_true_positive_per_truth_issue",
+}
 _MASK_PATTERNS = [
-    re.compile(r"```.*?```", re.DOTALL),
-    re.compile(r"`[^`\r\n]+`"),
-    re.compile(r"https?://[^\s]+"),
-    re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
-    re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b"),
-    re.compile(r"\b[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+\b"),
+    re.compile(pattern, re.DOTALL if flag == "DOTALL" else 0)
+    for _, pattern, flag in MASK_PATTERN_CONTRACT
 ]
+
+
+def grammar_mask_contract() -> dict[str, Any]:
+    return {
+        "preserve_offsets": True,
+        "replacement": "spaces_except_existing_line_breaks",
+        "patterns": [
+            {"id": identifier, "pattern": pattern, "flag": flag}
+            for identifier, pattern, flag in MASK_PATTERN_CONTRACT
+        ],
+        "exclude_overlapping_findings": True,
+    }
+
+
+def grammar_matcher_contract() -> dict[str, Any]:
+    return dict(MATCHER_CONTRACT)
 
 
 def prepare_grammar_text(text: str) -> tuple[str, list[tuple[int, int]]]:
@@ -97,10 +123,14 @@ def _finding_matches_issue(finding: dict[str, Any], issue: dict[str, Any]) -> bo
     start, end = int(finding["start"]), int(finding["end"])
     issue_start, issue_end = issue["start"], issue["end"]
     if start == end:
-        span_matches = issue_start - 1 <= start <= issue_end + 1
+        tolerance = MATCHER_CONTRACT["zero_width_distance_tolerance"]
+        span_matches = issue_start - tolerance <= start <= issue_end + tolerance
     else:
         overlap = max(0, min(end, issue_end) - max(start, issue_start))
-        span_matches = overlap / max(1, min(end - start, issue_end - issue_start)) >= 0.5
+        span_matches = (
+            overlap / max(1, min(end - start, issue_end - issue_start))
+            >= MATCHER_CONTRACT["non_empty_span_overlap_of_shorter"]
+        )
     if not span_matches:
         return False
     replacements = {_normalise_correction(value) for value in finding.get("replacements", []) if value is not None}

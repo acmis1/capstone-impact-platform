@@ -9,6 +9,11 @@ HISTORY_SCHEMA_VERSION = 1
 LOCK_SCHEMA_VERSION = 1
 
 
+def normalised_text_file_sha256(path: Path) -> str:
+    """Hash tracked text with LF endings so Git's Windows checkout filter is immaterial."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def history_dir(tool_root: Path) -> Path:
     return tool_root / "phase6" / "history"
 
@@ -104,7 +109,7 @@ def check_policy_freeze(tool_root: Path, policy_path: Path) -> dict[str, Any]:
     freeze = load_policy_freeze(tool_root)
     if freeze is None:
         raise ValueError("Phase 6 policy freeze record is missing; a final holdout may not be published")
-    actual = hashlib.sha256(policy_path.read_bytes()).hexdigest()
+    actual = normalised_text_file_sha256(policy_path)
     if freeze.get("vocabulary_policy_sha256") != actual:
         raise ValueError(
             "Vocabulary policy changed after the recorded freeze commit "
