@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertPublicationExecutionTarget,
+  isStagingPublicationEnabledValue,
   isStagingPublicationExecutionAvailable,
 } from './publicationExecutionPolicy';
 
@@ -13,6 +14,17 @@ const ENABLED_STAGING = {
 };
 
 describe('publication execution policy', () => {
+  it.each([undefined, null, '', 'false', 'TRUE', ' true ', '1'])(
+    'requires the exact staging publication enable value: %s',
+    (value) => {
+      expect(isStagingPublicationEnabledValue(value)).toBe(false);
+    },
+  );
+
+  it('accepts the exact staging publication enable value', () => {
+    expect(isStagingPublicationEnabledValue('true')).toBe(true);
+  });
+
   it.each([
     'http://127.0.0.1:54321',
     'http://localhost:54321',

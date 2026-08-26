@@ -52,6 +52,7 @@ async function main(): Promise<void> {
       supabase: db, supabaseUrl: apiUrl, publicId: fixture.publicId,
       adminId: role === 'admin' ? adminId : reviewerId,
       feedBucket: PUBLIC_FEED_BUCKET, feedPath: PUBLIC_FEED_PATH,
+      executionTarget: 'local',
     }),
   });
   const deployedIds = async (): Promise<string[]> => {
@@ -68,22 +69,44 @@ async function main(): Promise<void> {
 
   await harness.ensureActiveHead();
 
+  const diverged = await harness.createProject(`${prefix}-diverged`, 'published');
+  await scenario(2, 'a lifecycle-published target absent from the deployed baseline fails before mutation', async () => {
+    const feedBefore = await storedFeed();
+    const versionsBefore = psql('SELECT count(*) FROM public.public_feed_versions;');
+    const auditsBefore = await count('approval_records', 'project_id', diverged.id);
+    const result = await remove(diverged);
+    assert.deepEqual(result, { resultCode: 'EXECUTION_FAILED', failureCode: 'CURRENT_FEED_DIVERGED' });
+    assert.ok((await storedFeed())?.equals(feedBefore!), 'Divergence attempted a Storage write.');
+    assert.equal(psql('SELECT count(*) FROM public.public_feed_versions;'), versionsBefore);
+    assert.equal(psql(`SELECT status FROM public.projects WHERE id=${quoted(diverged.id)}::uuid;`), 'published');
+    assert.equal(await count('approval_records', 'project_id', diverged.id), auditsBefore);
+    assert.equal(psql(`SELECT count(*) FROM public.public_feed_versions
+      WHERE operation='removal' AND affected_public_id=${quoted(diverged.publicId)};`), '0');
+  });
+
+  const anchor = await harness.makeReady(`${prefix}-anchor`);
+  assert.equal((await publish(anchor)).resultCode, 'COMPLETED');
+
   const target = await harness.makeReady(`${prefix}-target`);
   assert.equal((await publish(target)).resultCode, 'COMPLETED');
 
-  await scenario(2, 'an editor cannot remove a deployed project', async () => {
+  await scenario(3, 'an editor cannot remove a deployed project', async () => {
     assert.equal((await remove(target, 'editor')).resultCode, 'PERMISSION_DENIED');
     assert.ok((await deployedIds()).includes(target.publicId));
   });
 
   const draft = await harness.createProject(`${prefix}-draft`, 'draft');
-  await scenario(3, 'a project that was never deployed is refused', async () => {
+  await scenario(4, 'a project that was never deployed is refused', async () => {
     const before = await storedFeed();
     assert.equal((await remove(draft)).resultCode, 'NOT_PUBLISHED');
     assert.ok((await storedFeed())?.equals(before!), 'A refused removal changed the canonical feed.');
   });
 
-  await scenario(4, 'removal archives the lifecycle record and recomposes the deployed head', async () => {
+  await scenario(5, 'removal archives the lifecycle record and preserves unrelated feed records byte-for-byte', async () => {
+    const before = await inspectPublicFeedHead(db, PUBLIC_FEED_BUCKET, PUBLIC_FEED_PATH);
+    const unrelatedBefore = before.artifact!.feed
+      .filter((record) => record.publicId !== target.publicId)
+      .map((record) => JSON.stringify(record));
     const result = await remove(target);
     assert.equal(result.resultCode, 'COMPLETED', JSON.stringify(result));
     assert.equal(psql(`SELECT status FROM public.projects WHERE id=${quoted(target.id)}::uuid;`), 'archived');
@@ -92,10 +115,15 @@ async function main(): Promise<void> {
     assert.equal((await deployedIds()).includes(target.publicId), false);
     const inspected = await inspectPublicFeedHead(db, PUBLIC_FEED_BUCKET, PUBLIC_FEED_PATH);
     assert.equal(inspected.artifact!.content, inspected.head!.currentVersion.artifactContent);
+    assert.deepEqual(
+      inspected.artifact!.feed.map((record) => JSON.stringify(record)),
+      unrelatedBefore,
+      'Removal rewrote an unrelated feed member.',
+    );
   });
 
   const laterTarget = await harness.makeReady(`${prefix}-later`);
-  await scenario(5, 'a later unrelated feed change does not become the removed target evidence', async () => {
+  await scenario(6, 'a later unrelated feed change does not become the removed target evidence', async () => {
     assert.equal((await publish(laterTarget)).resultCode, 'COMPLETED');
     const headOperation = psql(`SELECT o.id::text FROM public.public_feed_head h
       JOIN public.public_feed_versions v ON v.id = h.current_version_id
@@ -111,7 +139,7 @@ async function main(): Promise<void> {
     assert.equal(await count('approval_records', 'project_id', target.id), 2, 'An idempotent retry re-archived the project.');
   });
 
-  await scenario(6, 'an archived target that was never deployed completes without a feed change', async () => {
+  await scenario(7, 'an archived target that was never deployed completes without a feed change', async () => {
     const neverDeployed = await harness.createProject(`${prefix}-never-deployed`, 'archived');
     const versionsBefore = psql('SELECT count(*) FROM public.public_feed_versions;');
     const result = await remove(neverDeployed);
@@ -121,7 +149,7 @@ async function main(): Promise<void> {
     assert.equal(psql('SELECT count(*) FROM public.public_feed_versions;'), versionsBefore);
   });
 
-  await scenario(7, 'publication and removal share one global canonical writer', async () => {
+  await scenario(8, 'publication and removal share one global canonical writer', async () => {
     const contender = await harness.makeReady(`${prefix}-contender`);
     const [publication, removal] = await Promise.all([publish(contender), remove(laterTarget)]);
     const completed = [publication, removal].filter((result) => result.resultCode === 'COMPLETED');
@@ -131,7 +159,7 @@ async function main(): Promise<void> {
       WHERE state IN ('RESERVED','PREPARED','WRITE_STARTED','CANDIDATE_OBSERVED','DB_FINALIZED','RECOVERY_REQUIRED');`), '0');
   });
 
-  await scenario(8, 'the canonical object stays byte-identical to the deployed head', async () => {
+  await scenario(9, 'the canonical object stays byte-identical to the deployed head', async () => {
     const inspected = await inspectPublicFeedHead(db, PUBLIC_FEED_BUCKET, PUBLIC_FEED_PATH);
     assert.ok(inspected.artifact && inspected.head);
     assert.equal(inspected.artifact!.recordCount, inspected.head!.currentVersion.recordCount);

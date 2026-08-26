@@ -18,7 +18,7 @@ import { executeControlledPublicRemoval, type ControlledPublicRemovalDependencie
 function dependencies(status: 'published' | 'archived' = 'published'): ControlledPublicRemovalDependencies {
   return {
     supabase: {} as SupabaseClient, adminId: '11111111-1111-4111-8111-111111111111',
-    feedBucket: 'feeds', feedPath: 'feed.json', assertDisposableLocalEnvironment: vi.fn(),
+    feedBucket: 'feeds', feedPath: 'feed.json', assertExecutionEnvironment: vi.fn(),
     listProjects: vi.fn().mockResolvedValue([createMockProject({ publicId: 'target', status })]),
   };
 }
@@ -56,12 +56,23 @@ describe('ledger-backed controlled public removal', () => {
     expect(deps.listProjects).not.toHaveBeenCalled();
   });
 
+  it('preserves the existing sanitized failure before reads when execution policy rejects the runtime', async () => {
+    const deps = dependencies();
+    vi.mocked(deps.assertExecutionEnvironment).mockImplementation(() => { throw new Error('denied'); });
+    await expect(remove(deps)).resolves.toEqual({
+      resultCode: 'EXECUTION_FAILED', failureCode: 'NON_LOCAL_ENVIRONMENT',
+    });
+    expect(deps.listProjects).not.toHaveBeenCalled();
+  });
+
   it('removes only the exact deployed publicId and preserves unrelated ordering', async () => {
     const baseline = createPublicFeedArtifact(['a', 'target', 'b'].map((publicId) =>
       toPublicFeedRecord(createMockProject({ publicId, status: 'published' }))));
     mocks.execute.mockImplementation(async (params) => {
       const prepared = await params.prepareCandidate(baseline);
       expect(prepared.artifact.feed.map((record: { publicId: string }) => record.publicId)).toEqual(['a', 'b']);
+      expect(JSON.stringify(prepared.artifact.feed[0])).toBe(JSON.stringify(baseline.feed[0]));
+      expect(JSON.stringify(prepared.artifact.feed[1])).toBe(JSON.stringify(baseline.feed[2]));
       return {
         resultCode: 'COMPLETED', operationId: 'operation', versionNumber: 2,
         snapshotId: null, auditRecordId: 'audit', feedHash: prepared.artifact.feedHash,
@@ -69,6 +80,25 @@ describe('ledger-backed controlled public removal', () => {
       };
     });
     await expect(remove(dependencies())).resolves.toMatchObject({ resultCode: 'COMPLETED', recordCount: 2 });
+  });
+
+  it('fails closed before candidate binding when a lifecycle-published target is absent', async () => {
+    const baseline = headWithoutTarget().artifact;
+    mocks.execute.mockImplementation(async (params) => {
+      try {
+        await params.prepareCandidate(baseline);
+        throw new Error('EXPECTED_DIVERGENCE');
+      } catch (error) {
+        return {
+          resultCode: 'EXECUTION_FAILED',
+          failureCode: error instanceof Error ? error.message : 'EXECUTION_UNAVAILABLE',
+        };
+      }
+    });
+
+    await expect(remove(dependencies('published'))).resolves.toEqual({
+      resultCode: 'EXECUTION_FAILED', failureCode: 'CURRENT_FEED_DIVERGED',
+    });
   });
 
   it('reports the retried target own removal evidence, not the operation that owns the head', async () => {
@@ -111,6 +141,20 @@ describe('ledger-backed controlled public removal', () => {
     });
     await expect(remove(dependencies(), 'Withdrawn by the participant'))
       .resolves.toMatchObject({ resultCode: 'COMPLETED' });
+  });
+
+  it('provides no public-media mutation or deletion compensation hook', async () => {
+    mocks.execute.mockImplementation(async (params) => {
+      expect(params.afterWriteIntent).toBeUndefined();
+      expect(params.validateBeforeWriteIntent).toBeUndefined();
+      expect(JSON.stringify(params)).not.toContain('delete');
+      return {
+        resultCode: 'COMPLETED', operationId: 'operation', versionNumber: 2, snapshotId: null,
+        auditRecordId: 'audit', feedHash: 'hash', recordCount: 0,
+        feedPublicUrl: 'https://example.com/feed.json',
+      };
+    });
+    await expect(remove(dependencies())).resolves.toMatchObject({ resultCode: 'COMPLETED' });
   });
 
   it('surfaces durable recovery-required state without claiming compensation succeeded', async () => {

@@ -30,6 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const dependencies = createControlledPublicRemovalDependencies({
       supabase: createSupabaseAdminClient(), supabaseUrl: env.supabaseUrl, publicId: input.publicId,
       adminId: admin.adminUserId, feedBucket: env.SUPABASE_PUBLIC_FEEDS_BUCKET, feedPath: env.SUPABASE_PUBLIC_FEED_FILE,
+      executionTarget: 'local',
     });
     const result = await executeControlledPublicRemoval({ permissions: admin.permissions, publicId: input.publicId, archiveReason: input.archiveReason, dependencies });
     if (result.resultCode === 'COMPLETED' || result.resultCode === 'ALREADY_COMPLETED') {

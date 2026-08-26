@@ -524,7 +524,13 @@ describe('project detail workspace information architecture', () => {
     ]) {
       expect(pageSource).toContain(capability);
     }
-    expect(pageSource).toMatch(/canExecuteLocalArchive,\s*participantResponse:/);
+    expect(pageSource).toMatch(/canExecuteArchive: archiveExecutionTarget === 'local' \|\| archiveExecutionTarget === 'staging',\s*participantResponse:/);
+  });
+
+  it('shows a bounded unavailable archive state only for a declared staging runtime', () => {
+    expect(pageSource).toMatch(/isStagingRuntimeEnvironment\(\)\s*\? 'staging-unavailable'/);
+    expect(pageSource).toMatch(/\? 'staging'\s*: isStagingRuntimeEnvironment\(\)/);
+    expect(pageSource).not.toContain("archiveExecutionTarget = 'staging-unavailable'");
   });
 
   it('keeps technical details and change history available rather than removed', () => {
