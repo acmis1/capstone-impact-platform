@@ -58,6 +58,8 @@ def normalize_identity_text(value: str) -> str:
 def validate_protocol(protocol: dict[str, Any]) -> dict[str, Any]:
     if protocol.get("schema_version") != PROTOCOL_SCHEMA:
         raise ValueError("unsupported title-consistency protocol")
+    if protocol.get("phase") != "FROZEN_TITLE_CANDIDATE":
+        raise ValueError("title-consistency candidate is not frozen")
     candidate = protocol.get("candidate") or {}
     if (
         candidate.get("engine") != "paddle-small"

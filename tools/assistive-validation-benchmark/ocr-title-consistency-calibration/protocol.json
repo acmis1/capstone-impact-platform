@@ -1,7 +1,7 @@
 {
   "schema_version": "pp1-ocr-title-consistency-protocol/v1",
   "protocol_version": "pp1-ocr-title-consistency-v1",
-  "phase": "CALIBRATION_CANDIDATE",
+  "phase": "FROZEN_TITLE_CANDIDATE",
   "scope": {
     "production_capability": "extract bounded poster/image title evidence for deterministic comparison with authoritative project metadata",
     "body_wer_role": "DIAGNOSTIC_NON_GATING",

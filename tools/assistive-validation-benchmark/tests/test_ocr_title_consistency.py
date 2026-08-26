@@ -6,6 +6,7 @@ from pathlib import Path
 from assistive_validation_benchmark.ocr_productionization.title_safety import Candidate
 from assistive_validation_benchmark.ocr_title_consistency.corpus import build_calibration_corpus
 from assistive_validation_benchmark.ocr_title_consistency.evidence import non_reuse_evidence
+from assistive_validation_benchmark.ocr_title_consistency.freeze import build_freeze_manifest
 from assistive_validation_benchmark.ocr_title_consistency.schema import (
     calibration_data_root,
     load_json,
@@ -44,6 +45,11 @@ class TitleConsistencyCorpusTests(unittest.TestCase):
         validate_protocol(load_json(calibration_data_root() / "protocol.json"))
         tracked = load_json(calibration_data_root() / "corpus" / "calibration.json")
         self.assertEqual(build_calibration_corpus(), tracked)
+
+    def test_freeze_builder_proves_holdout_absent_at_calibration_checkpoint(self) -> None:
+        manifest = build_freeze_manifest("40e0f89ede258d6f3f038adf9f2d976902549a1c")
+        self.assertTrue(manifest["calibration_checkpoint"]["holdout_path_absent"])
+        self.assertFalse(manifest["holdout_existed_when_manifest_written"])
 
 
 class TitleConsistencySelectorTests(unittest.TestCase):

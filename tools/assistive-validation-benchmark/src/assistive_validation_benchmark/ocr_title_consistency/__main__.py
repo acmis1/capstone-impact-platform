@@ -6,6 +6,7 @@ from pathlib import Path
 from .capture import capture_calibration
 from .corpus import build_calibration_corpus
 from .evidence import non_reuse_evidence
+from .freeze import check_freeze_manifest, write_freeze_manifest
 from .schema import (
     calibration_data_root,
     calibration_evidence_root,
@@ -63,6 +64,9 @@ def main() -> int:
     record.add_argument("--run-dir", type=Path, default=tool_root() / "artifacts" / "ocr-title-consistency-calibration")
     record.add_argument("--prior-run-dir", type=Path, action="append", default=[])
     sub.add_parser("check-calibration-evidence")
+    freeze = sub.add_parser("write-freeze-manifest")
+    freeze.add_argument("--calibration-commit", required=True)
+    sub.add_parser("check-freeze")
     args = parser.parse_args()
 
     if args.command == "write-calibration-corpus":
@@ -73,6 +77,12 @@ def main() -> int:
         return 0
 
     protocol, corpus = _inputs()
+    if args.command == "write-freeze-manifest":
+        print(write_freeze_manifest(args.calibration_commit))
+        return 0
+    if args.command == "check-freeze":
+        print(canonical_json_bytes(check_freeze_manifest()).decode(), end="")
+        return 0
     if args.command == "check-calibration":
         reuse = non_reuse_evidence(corpus, split="calibration")
         if not reuse["passed"]:
