@@ -1,5 +1,5 @@
 {
-  "note": "Paired server-validator and Duda renderer cases. Every case is built by replacing the named top-level keys of `base`. `serverValid` records the authoritative `validatePublicFeed` verdict; `dudaAccepts` records whether the Duda renderer keeps the record at all; `dudaGallery` records how many gallery images the renderer may show. An unsafe snapshot entry is removed from the gallery, while an unsafe URL in a record-level field rejects the whole record. All data is synthetic.",
+  "note": "Paired server-validator and Duda renderer cases. Every case is built by omitting named top-level keys and then replacing the named overrides on `base`. `serverValid` records the authoritative `validatePublicFeed` verdict; every case must remain renderable by Duda, while `dudaGallery` records how many governed gallery images survive normalization. Unsafe optional URLs and snapshot pairs are removed without rejecting the record. All data is synthetic.",
   "base": {
     "id": 203101,
     "publicId": "2031-contract-case-baseline",
@@ -61,10 +61,64 @@
   },
   "cases": [
     {
+      "name": "disciplines-omitted",
+      "why": "The authoritative validator treats disciplines as recommendation-only, so the renderer falls back to the primary discipline instead of rejecting the record.",
+      "serverValid": true,
+      "omit": [
+        "disciplines"
+      ],
+      "overrides": {},
+      "dudaGallery": 1
+    },
+    {
+      "name": "recommended-fields-omitted",
+      "why": "Warning-only indexing and presentation fields use empty display defaults and never determine whether the project remains available.",
+      "serverValid": true,
+      "omit": [
+        "background",
+        "solution",
+        "industry",
+        "industryPartner",
+        "academicSupervisor"
+      ],
+      "overrides": {},
+      "dudaGallery": 1
+    },
+    {
+      "name": "featured-media-omitted",
+      "why": "The authoritative validator does not require featuredMedia, so the renderer applies its documented automatic media selection.",
+      "serverValid": true,
+      "overrides": {
+        "layoutConfig": {
+          "templateId": "media_rich",
+          "sectionOrder": [
+            "background",
+            "solution",
+            "snapshots",
+            "video",
+            "team",
+            "links"
+          ]
+        }
+      },
+      "dudaGallery": 1
+    },
+    {
+      "name": "section-order-omitted",
+      "why": "The authoritative validator does not require sectionOrder, so the renderer uses the documented reusable detail order.",
+      "serverValid": true,
+      "overrides": {
+        "layoutConfig": {
+          "templateId": "media_rich",
+          "featuredMedia": "poster"
+        }
+      },
+      "dudaGallery": 1
+    },
+    {
       "name": "featured-media-auto-video",
       "why": "The authoritative import mapping emits featuredMedia \"auto\" and the server validator does not reject it. Auto must elevate the video first.",
       "serverValid": true,
-      "dudaAccepts": true,
       "overrides": {
         "videoUrl": "https://vimeo.com/987654321",
         "layoutConfig": {
@@ -86,7 +140,6 @@
       "name": "featured-media-auto-gallery",
       "why": "With no video present, auto must fall back to the governed gallery before the poster.",
       "serverValid": true,
-      "dudaAccepts": true,
       "overrides": {
         "layoutConfig": {
           "templateId": "media_rich",
@@ -107,7 +160,6 @@
       "name": "gallery-position-two",
       "why": "The server contract permits a unique galleryPosition from 1 through 10 without requiring contiguity, so one image at position 2 must stay visible.",
       "serverValid": true,
-      "dudaAccepts": true,
       "overrides": {
         "snapshots": [
           "https://media.example.test/snapshots/contract-two.jpg"
@@ -126,7 +178,6 @@
       "name": "gallery-positions-two-and-five",
       "why": "Unique increasing non-contiguous positions are server-valid and must both render in snapshots display order.",
       "serverValid": true,
-      "dudaAccepts": true,
       "overrides": {
         "snapshots": [
           "https://media.example.test/snapshots/contract-two.jpg",
@@ -151,7 +202,6 @@
       "name": "three-image-gallery",
       "why": "Three images make a duplicated keyboard handler produce a distinguishable lightbox result.",
       "serverValid": true,
-      "dudaAccepts": true,
       "overrides": {
         "snapshots": [
           "https://media.example.test/snapshots/contract-one.jpg",
@@ -182,7 +232,6 @@
       "name": "external-query-urls",
       "why": "General external HTTP(S) links legitimately carry query strings, including YouTube watch URLs.",
       "serverValid": true,
-      "dudaAccepts": true,
       "overrides": {
         "videoUrl": "https://www.youtube.com/watch?v=AbCdEfGhI12",
         "demoUrl": "https://demo.example.test/launch?ref=showcase&mode=public",
@@ -198,19 +247,17 @@
     },
     {
       "name": "signed-supabase-video",
-      "why": "The server validator does not inspect videoUrl, so the Duda public boundary must reject a signed Supabase Storage route itself.",
-      "serverValid": true,
-      "dudaAccepts": false,
+      "why": "The server rejects a signed Supabase Storage video URL, and Duda independently removes that optional field while retaining the project.",
+      "serverValid": false,
       "overrides": {
         "videoUrl": "https://demofixture.supabase.co/storage/v1/object/sign/project-public-assets/talk.mp4?token=synthetic-signature"
       },
-      "dudaGallery": 0
+      "dudaGallery": 1
     },
     {
       "name": "signed-supabase-external-link",
-      "why": "The server validator does not inspect externalLinks, so a signed Supabase Storage link must be rejected at the Duda boundary.",
-      "serverValid": true,
-      "dudaAccepts": false,
+      "why": "The server rejects a signed Supabase Storage external link, and Duda independently removes that link while retaining the project.",
+      "serverValid": false,
       "overrides": {
         "externalLinks": [
           {
@@ -219,43 +266,39 @@
           }
         ]
       },
-      "dudaGallery": 0
+      "dudaGallery": 1
     },
     {
       "name": "authenticated-supabase-demo-url",
-      "why": "An authenticated Supabase Storage route is never a public asset, whichever generic field carries it.",
-      "serverValid": true,
-      "dudaAccepts": false,
+      "why": "An authenticated Supabase Storage route is never a public asset; the server rejects it and Duda removes the optional demo field.",
+      "serverValid": false,
       "overrides": {
         "demoUrl": "https://demofixture.supabase.co/storage/v1/object/authenticated/project-public-assets/private-demo.html"
       },
-      "dudaGallery": 0
+      "dudaGallery": 1
     },
     {
       "name": "encoded-private-supabase-poster",
-      "why": "The private bucket name survives the raw pathname in percent-encoded form; canonical inspection must still reject it.",
-      "serverValid": true,
-      "dudaAccepts": false,
+      "why": "The private bucket name survives percent encoding; the server rejects it and Duda removes only the poster field.",
+      "serverValid": false,
       "overrides": {
         "poster": "https://demofixture.supabase.co/storage/v1/object/public/project%2Ddrafts%2Dprivate/leaked-poster.jpg"
       },
-      "dudaGallery": 0
+      "dudaGallery": 1
     },
     {
       "name": "encoded-signed-supabase-video",
-      "why": "A percent-encoded /storage/v1/object/sign/ route must be rejected exactly like its literal form.",
-      "serverValid": true,
-      "dudaAccepts": false,
+      "why": "A percent-encoded /storage/v1/object/sign/ route is rejected by the server and removed from the retained Duda record.",
+      "serverValid": false,
       "overrides": {
         "videoUrl": "https://demofixture.supabase.co/storage/v1/object/%73ign/project-public-assets/talk.mp4?token=synthetic-signature"
       },
-      "dudaGallery": 0
+      "dudaGallery": 1
     },
     {
       "name": "encoded-private-supabase-snapshot",
       "why": "Lower-case percent encoding of the private bucket must fail on the server validator and at the Duda boundary. The record still publishes; only the unsafe gallery entry is removed.",
       "serverValid": false,
-      "dudaAccepts": true,
       "overrides": {
         "snapshots": [
           "https://demofixture.supabase.co/storage/v1/object/public/project%2ddrafts%2dprivate/leaked-snapshot.jpg"
@@ -274,7 +317,6 @@
       "name": "encoded-authenticated-supabase-snapshot",
       "why": "Mixed-case percent encoding of the authenticated storage route must fail on both sides. The record still publishes; only the unsafe gallery entry is removed.",
       "serverValid": false,
-      "dudaAccepts": true,
       "overrides": {
         "snapshots": [
           "https://demofixture.supabase.co/storage/v1/object/%41uthenticated/project-public-assets/leaked-snapshot.jpg"
@@ -293,7 +335,6 @@
       "name": "double-encoded-private-supabase-snapshot",
       "why": "A double-encoded private bucket name resolves to the private path after another decode and must fail closed. The record still publishes; only the unsafe gallery entry is removed.",
       "serverValid": false,
-      "dudaAccepts": true,
       "overrides": {
         "snapshots": [
           "https://demofixture.supabase.co/storage/v1/object/public/project%252Ddrafts%252Dprivate/leaked-snapshot.jpg"
@@ -312,7 +353,6 @@
       "name": "malformed-percent-supabase-snapshot",
       "why": "Malformed percent-encoding cannot be canonicalized, so the policy must fail closed rather than guess. The record still publishes; only the unsafe gallery entry is removed.",
       "serverValid": false,
-      "dudaAccepts": true,
       "overrides": {
         "snapshots": [
           "https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/leaked%ZZsnapshot.jpg"
@@ -329,29 +369,26 @@
     },
     {
       "name": "tokenized-supabase-poster",
-      "why": "Token-bearing access to Supabase Storage is private access even without a signed route segment.",
-      "serverValid": true,
-      "dudaAccepts": false,
+      "why": "Token-bearing Supabase Storage is private access; the server rejects it and Duda removes only the poster field.",
+      "serverValid": false,
       "overrides": {
         "poster": "https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/poster.jpg?token=synthetic-signature"
       },
-      "dudaGallery": 0
+      "dudaGallery": 1
     },
     {
       "name": "javascript-scheme-video",
-      "why": "Dangerous URL schemes must never reach an active attribute.",
-      "serverValid": true,
-      "dudaAccepts": false,
+      "why": "Dangerous URL schemes fail server validation and are removed by Duda before they can reach an active attribute.",
+      "serverValid": false,
       "overrides": {
         "videoUrl": "javascript:alert(1)"
       },
-      "dudaGallery": 0
+      "dudaGallery": 1
     },
     {
       "name": "vbscript-scheme-external-link",
-      "why": "The server validator does not inspect externalLinks, so the Duda boundary must reject vbscript: itself.",
-      "serverValid": true,
-      "dudaAccepts": false,
+      "why": "The server rejects vbscript external links, and Duda independently removes the bad link without dropping the project.",
+      "serverValid": false,
       "overrides": {
         "externalLinks": [
           {
@@ -360,13 +397,12 @@
           }
         ]
       },
-      "dudaGallery": 0
+      "dudaGallery": 1
     },
     {
       "name": "data-scheme-snapshot",
       "why": "A data: snapshot URL is rejected by the server validator and must not render. The record still publishes; only the unsafe gallery entry is removed.",
       "serverValid": false,
-      "dudaAccepts": true,
       "overrides": {
         "snapshots": [
           "data:image/svg+xml,placeholder"
@@ -383,13 +419,12 @@
     },
     {
       "name": "credentialed-demo-url",
-      "why": "Embedded credentials are never public-safe.",
-      "serverValid": true,
-      "dudaAccepts": false,
+      "why": "Embedded credentials are never public-safe; the server rejects the URL and Duda removes the optional demo field.",
+      "serverValid": false,
       "overrides": {
         "demoUrl": "https://operator:secret@demo.example.test/contract-baseline"
       },
-      "dudaGallery": 0
+      "dudaGallery": 1
     }
   ]
 }

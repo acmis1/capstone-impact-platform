@@ -136,14 +136,40 @@
     // --- PUBLIC RECORD POLICY (start: extracted verbatim by repository tests) ---
     const MAX_POLICY_PATH_DECODE_PASSES = 3;
 
+    const STORAGE_API_PATH_MARKER = '/storage/v1/';
+    const PRIVATE_INGESTION_BUCKET = 'project-drafts-private';
+    const PRIVATE_ACCESS_QUERY_KEYS = new Set([
+        'token', 'jwt', 'apikey', 'api_key', 'access_token', 'authorization'
+    ]);
+    const PRIVATE_ACCESS_TEXT_PATTERN = /(?:^|[?&#;])(?:token|jwt|apikey|api_key|access_token|authorization)(?:=|&|$)/i;
+    const PUBLIC_URL_FORBIDDEN_CHARACTERS = /[\u0000-\u0020\u007f<>"'`]/;
+
+    const inspectPercentEncoding = (value) => {
+        let hasPercent = false;
+        let hasEncodedByte = false;
+        let hasMalformedPercent = false;
+        for (let index = 0; index < value.length; index += 1) {
+            if (value[index] !== '%') continue;
+            hasPercent = true;
+            if (/^[0-9a-f]{2}$/i.test(value.slice(index + 1, index + 3))) {
+                hasEncodedByte = true;
+                index += 2;
+            } else {
+                hasMalformedPercent = true;
+            }
+        }
+        return { hasPercent, hasEncodedByte, hasMalformedPercent };
+    };
+
     /**
      * Bounded, explicit path canonicalization for URL policy decisions.
      *
      * A private identifier can survive inside `URL.pathname` in percent-encoded form, so policy
      * markers are matched against the raw path and against a bounded number of decoded forms.
      * This is deliberately not an unbounded recursive decoder: at most
-     * MAX_POLICY_PATH_DECODE_PASSES passes run, malformed percent-encoding fails closed, and a
-     * value still carrying percent-encoding after the budget also fails closed.
+     * MAX_POLICY_PATH_DECODE_PASSES passes run. Malformed encoding in the original path fails
+     * closed, as does another complete encoded layer beyond the fixed budget. A literal percent
+     * produced by decoding `%25` is not itself treated as a malformed extra layer.
      *
      * Returns lower-cased candidate forms, or null when the URL must be rejected.
      */
@@ -151,7 +177,11 @@
         let current = String(pathname);
         const forms = [current.toLowerCase()];
         for (let pass = 0; pass < MAX_POLICY_PATH_DECODE_PASSES; pass += 1) {
-            if (!current.includes('%')) return forms;
+            const encoding = inspectPercentEncoding(current);
+            if (!encoding.hasPercent) return forms;
+            if (encoding.hasMalformedPercent) {
+                return pass > 0 && !encoding.hasEncodedByte ? forms : null;
+            }
             let decoded;
             try {
                 decoded = decodeURIComponent(current);
@@ -162,33 +192,51 @@
             current = decoded;
             forms.push(current.toLowerCase());
         }
-        return current.includes('%') ? null : forms;
+        return inspectPercentEncoding(current).hasEncodedByte ? null : forms;
     };
 
-    const SUPABASE_STORAGE_HOST_PATTERN = /(^|\.)supabase\.(co|in|net)$/i;
-    const SUPABASE_STORAGE_PATH_MARKER = '/storage/v1/';
-    const PRIVATE_STORAGE_PATH_MARKERS = [
-        '/drafts/',
-        'project-drafts-private',
-        '/storage/v1/object/sign/',
-        '/storage/v1/object/authenticated/'
-    ];
-    const PRIVATE_ACCESS_QUERY_KEYS = ['token', 'jwt', 'apikey', 'api_key', 'access_token', 'authorization'];
+    const containsPrivateAccessMaterial = (parsed) => {
+        for (const key of parsed.searchParams.keys()) {
+            if (PRIVATE_ACCESS_QUERY_KEYS.has(key.toLowerCase())) return true;
+        }
+
+        for (const value of [parsed.search, parsed.hash.slice(1)]) {
+            let current = value;
+            for (let pass = 0; pass <= MAX_POLICY_PATH_DECODE_PASSES; pass += 1) {
+                if (PRIVATE_ACCESS_TEXT_PATTERN.test(current)) return true;
+                if (!current.includes('%')) break;
+                try {
+                    const decoded = decodeURIComponent(current);
+                    if (decoded === current) break;
+                    current = decoded;
+                } catch (e) {
+                    break;
+                }
+            }
+        }
+        return false;
+    };
+
+    const hasPathSegment = (pathname, segment) => pathname.split('/').includes(segment);
+    const hasStorageObjectRoute = (pathname, route) => {
+        const marker = `/storage/v1/object/${route}`;
+        return pathname === marker || pathname.endsWith(marker) || pathname.includes(`${marker}/`);
+    };
 
     /**
      * One coherent public URL policy for every active URL this showcase renders.
      *
      * Every URL must be an absolute, credential-free HTTP(S) URL. General external links keep
      * their query strings, so ordinary demo and repository links and YouTube `watch?v=` URLs stay
-     * usable. A URL that identifies Supabase Storage - by host, or by the `/storage/v1/` object
-     * API path in any of its canonical forms - is additionally never allowed to expose a signed
-     * object route, an authenticated object route, a private or draft bucket, or token-bearing
-     * access, no matter which field carried it. `enforcePublicAssetBoundary` keeps the existing
-     * stronger private-path rule for poster, poster PDF and snapshot media on any host.
+     * usable. A Storage object URL is identified from the canonical parsed `/storage/v1/` path,
+     * never arbitrary host/query text, and is additionally never allowed to expose a signed object
+     * route, an authenticated object route, a private or draft bucket, or token-bearing access, no
+     * matter which field carried it. The unused second argument remains accepted for compatibility
+     * with the extracted contract helper; every active field now follows this same policy.
      */
-    const isSafePublicUrl = (rawUrl, enforcePublicAssetBoundary = false) => {
+    const isSafePublicUrl = (rawUrl, _enforcePublicAssetBoundary = false) => {
         if (typeof rawUrl !== "string" || rawUrl.trim() !== rawUrl || !rawUrl) return false;
-        if (/[\u0000-\u0020\u007f<>"'`]/.test(rawUrl)) return false;
+        if (PUBLIC_URL_FORBIDDEN_CHARACTERS.test(rawUrl)) return false;
         let parsed;
         try {
             parsed = new URL(rawUrl);
@@ -201,12 +249,16 @@
         const pathForms = canonicalPathForms(parsed.pathname);
         if (!pathForms) return false;
 
-        const isSupabaseStorage = SUPABASE_STORAGE_HOST_PATTERN.test(parsed.hostname) ||
-            pathForms.some(form => form.includes(SUPABASE_STORAGE_PATH_MARKER));
-        if (!enforcePublicAssetBoundary && !isSupabaseStorage) return true;
+        const isStorageObjectUrl = pathForms.some(form => form.includes(STORAGE_API_PATH_MARKER));
+        if (!isStorageObjectUrl) return true;
 
-        if (pathForms.some(form => PRIVATE_STORAGE_PATH_MARKERS.some(marker => form.includes(marker)))) return false;
-        if (isSupabaseStorage && PRIVATE_ACCESS_QUERY_KEYS.some(key => parsed.searchParams.has(key))) return false;
+        if (pathForms.some(form => (
+            hasPathSegment(form, 'drafts') ||
+            hasPathSegment(form, PRIVATE_INGESTION_BUCKET) ||
+            hasStorageObjectRoute(form, 'sign') ||
+            hasStorageObjectRoute(form, 'authenticated')
+        ))) return false;
+        if (containsPrivateAccessMaterial(parsed)) return false;
         return true;
     };
 
@@ -281,65 +333,38 @@
         if (!record || typeof record !== 'object' || Array.isArray(record)) return null;
         if (!Number.isSafeInteger(record.id) || record.id <= 0) return null;
 
-        const requiredTextFields = [
-            'publicId', 'title', 'summary', 'year', 'program', 'studyProgram',
-            'discipline', 'groupName', 'posterText', 'accessibilityText'
-        ];
-        if (requiredTextFields.some(field => typeof record[field] !== 'string')) return null;
+        const textOrEmpty = (value) => typeof value === 'string' ? value : '';
+        const stringArrayOrEmpty = (value) => Array.isArray(value)
+            ? value.filter(item => typeof item === 'string')
+            : [];
+        const safeUrlOrEmpty = (value) => typeof value === 'string' && isSafePublicUrl(value)
+            ? value
+            : '';
 
-        const optionalTextFields = [
-            'background', 'solution', 'industry', 'industryPartner', 'academicSupervisor'
-        ];
-        if (optionalTextFields.some(field => record[field] !== undefined && typeof record[field] !== 'string')) return null;
+        const discipline = textOrEmpty(record.discipline);
+        const disciplines = stringArrayOrEmpty(record.disciplines);
+        if (disciplines.length === 0 && discipline) disciplines.push(discipline);
 
-        const stringArrayFields = ['teamMembers', 'disciplines'];
-        if (stringArrayFields.some(field => !Array.isArray(record[field]) || record[field].some(value => typeof value !== 'string'))) {
-            return null;
-        }
-        if (record.citations !== undefined && (!Array.isArray(record.citations) || record.citations.some(value => typeof value !== 'string'))) {
-            return null;
-        }
+        const externalLinks = Array.isArray(record.externalLinks)
+            ? record.externalLinks.flatMap(link => {
+                if (!link || typeof link !== 'object' || Array.isArray(link) || !isSafePublicUrl(link.url)) {
+                    return [];
+                }
+                return [{ label: textOrEmpty(link.label) || 'Project Link', url: link.url }];
+            })
+            : [];
 
-        if (typeof record.poster !== 'string' || (record.poster && !isSafePublicUrl(record.poster, true))) return null;
-        if (typeof record.posterPdf !== 'string' || (record.posterPdf && !isSafePublicUrl(record.posterPdf, true))) return null;
-
-        const optionalUrlFields = ['videoUrl', 'demoUrl', 'repositoryUrl'];
-        if (optionalUrlFields.some(field => (
-            record[field] !== undefined &&
-            (typeof record[field] !== 'string' || (record[field] && !isSafePublicUrl(record[field])))
-        ))) return null;
-
-        if (record.externalLinks !== undefined) {
-            if (!Array.isArray(record.externalLinks)) return null;
-            const hasInvalidExternalLink = record.externalLinks.some(link => (
-                !link ||
-                typeof link !== 'object' ||
-                Array.isArray(link) ||
-                typeof link.label !== 'string' ||
-                !isSafePublicUrl(link.url)
-            ));
-            if (hasInvalidExternalLink) return null;
-        }
-
-        if (!Array.isArray(record.snapshots) || !Array.isArray(record.snapshotMedia)) return null;
-        if (record.snapshots.length > 10 || record.snapshotMedia.length > 10) return null;
-
-        const layoutConfig = record.layoutConfig;
-        if (!layoutConfig || typeof layoutConfig !== 'object' || Array.isArray(layoutConfig)) return null;
+        const layoutConfig = record.layoutConfig && typeof record.layoutConfig === 'object' && !Array.isArray(record.layoutConfig)
+            ? record.layoutConfig
+            : {};
         const validTemplates = ['poster_showcase', 'technical_detail', 'media_rich'];
         const validFeaturedMedia = ['auto', 'poster', 'snapshots', 'gallery', 'video', 'none'];
+        const defaultSectionOrder = ['background', 'solution', 'snapshots', 'video', 'team', 'links'];
         const validSections = new Set([
             'background', 'solution', 'snapshots', 'video', 'team', 'links',
             'externalLinks', 'citations', 'accessibilityText', 'summary',
             'poster', 'posterPdf', 'metadata'
         ]);
-        if (!validTemplates.includes(layoutConfig.templateId)) return null;
-        if (typeof layoutConfig.featuredMedia !== 'string') return null;
-        if (!Array.isArray(layoutConfig.sectionOrder) || layoutConfig.sectionOrder.some(section => typeof section !== 'string')) return null;
-        if (
-            layoutConfig.hiddenSections !== undefined &&
-            (!Array.isArray(layoutConfig.hiddenSections) || layoutConfig.hiddenSections.some(section => typeof section !== 'string'))
-        ) return null;
 
         // Presentation preferences are inert layout hints that the server contract deliberately does
         // not type-check, and they are never interpolated into markup. Rejecting an entire public
@@ -349,6 +374,12 @@
         const featuredMedia = validFeaturedMedia.includes(layoutConfig.featuredMedia)
             ? layoutConfig.featuredMedia
             : 'auto';
+        const sectionOrder = Array.isArray(layoutConfig.sectionOrder)
+            ? layoutConfig.sectionOrder.filter(section => typeof section === 'string' && validSections.has(section))
+            : [];
+        const hiddenSections = Array.isArray(layoutConfig.hiddenSections)
+            ? layoutConfig.hiddenSections.filter(section => typeof section === 'string' && validSections.has(section))
+            : null;
 
         // `galleryPosition` is authoritative feed data, not a display index. It is carried through
         // untouched so a server-valid sparse gallery such as [2] or [2, 5] keeps its exact governed
@@ -361,38 +392,38 @@
 
         return {
             id: record.id,
-            publicId: record.publicId,
-            title: record.title,
-            summary: record.summary,
-            background: record.background || '',
-            solution: record.solution || '',
-            year: record.year,
-            program: record.program,
-            studyProgram: record.studyProgram,
-            discipline: record.discipline,
-            disciplines: [...record.disciplines],
-            industry: record.industry || '',
-            industryPartner: record.industryPartner || '',
-            academicSupervisor: record.academicSupervisor || '',
-            groupName: record.groupName,
-            teamMembers: [...record.teamMembers],
-            poster: record.poster,
-            posterPdf: record.posterPdf,
-            posterText: record.posterText,
-            accessibilityText: record.accessibilityText,
+            publicId: textOrEmpty(record.publicId),
+            title: textOrEmpty(record.title) || 'Untitled project',
+            summary: textOrEmpty(record.summary),
+            background: textOrEmpty(record.background),
+            solution: textOrEmpty(record.solution),
+            year: textOrEmpty(record.year),
+            program: textOrEmpty(record.program),
+            studyProgram: textOrEmpty(record.studyProgram),
+            discipline,
+            disciplines,
+            industry: textOrEmpty(record.industry),
+            industryPartner: textOrEmpty(record.industryPartner),
+            academicSupervisor: textOrEmpty(record.academicSupervisor),
+            groupName: textOrEmpty(record.groupName),
+            teamMembers: stringArrayOrEmpty(record.teamMembers),
+            poster: safeUrlOrEmpty(record.poster),
+            posterPdf: safeUrlOrEmpty(record.posterPdf),
+            posterText: textOrEmpty(record.posterText),
+            accessibilityText: textOrEmpty(record.accessibilityText),
             snapshots: normalizedSnapshotMedia.map(item => item.url),
             snapshotMedia: normalizedSnapshotMedia,
-            ...(record.videoUrl ? { videoUrl: record.videoUrl } : {}),
-            ...(record.demoUrl ? { demoUrl: record.demoUrl } : {}),
-            ...(record.repositoryUrl ? { repositoryUrl: record.repositoryUrl } : {}),
-            externalLinks: record.externalLinks ? record.externalLinks.map(link => ({ label: link.label, url: link.url })) : [],
-            citations: record.citations ? [...record.citations] : [],
+            ...(safeUrlOrEmpty(record.videoUrl) ? { videoUrl: record.videoUrl } : {}),
+            ...(safeUrlOrEmpty(record.demoUrl) ? { demoUrl: record.demoUrl } : {}),
+            ...(safeUrlOrEmpty(record.repositoryUrl) ? { repositoryUrl: record.repositoryUrl } : {}),
+            externalLinks,
+            citations: stringArrayOrEmpty(record.citations),
             layoutConfig: {
-                templateId: layoutConfig.templateId,
+                templateId: validTemplates.includes(layoutConfig.templateId) ? layoutConfig.templateId : 'poster_showcase',
                 featuredMedia,
-                sectionOrder: layoutConfig.sectionOrder.filter(section => validSections.has(section)),
-                ...(layoutConfig.hiddenSections
-                    ? { hiddenSections: layoutConfig.hiddenSections.filter(section => validSections.has(section)) }
+                sectionOrder: sectionOrder.length > 0 ? sectionOrder : [...defaultSectionOrder],
+                ...(hiddenSections
+                    ? { hiddenSections }
                     : {})
             }
         };
@@ -400,13 +431,22 @@
     // --- PUBLIC RECORD POLICY (end) ---
 
     const normalizeFeedRecords = (feed) => {
+        if (!Array.isArray(feed)) throw createPublicFeedError('FEED_RESPONSE_INVALID');
         const normalizedRecords = [];
         const ids = new Set();
+        let omittedRecord = false;
         for (const record of feed) {
             const normalized = normalizeProjectRecord(record);
-            if (!normalized || ids.has(normalized.id)) throw createPublicFeedError('FEED_RECORD_INVALID');
+            if (!normalized || ids.has(normalized.id)) {
+                omittedRecord = true;
+                continue;
+            }
             ids.add(normalized.id);
             normalizedRecords.push(normalized);
+        }
+        if (omittedRecord) console.warn('[Showcase] FEED_RECORD_OMITTED');
+        if (feed.length > 0 && normalizedRecords.length === 0) {
+            throw createPublicFeedError('FEED_RECORD_INVALID');
         }
         return normalizedRecords;
     };

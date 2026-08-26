@@ -31,6 +31,9 @@ const contractCases = JSON.parse(contractCasesText);
  * is proven renderable here, and a record proven unsafe there is proven inert here.
  */
 const CONTRACT_SCENARIOS = {
+  'contract-disciplines-omitted': 'disciplines-omitted',
+  'contract-featured-media-omitted': 'featured-media-omitted',
+  'contract-section-order-omitted': 'section-order-omitted',
   'contract-featured-media-auto-video': 'featured-media-auto-video',
   'contract-featured-media-auto-gallery': 'featured-media-auto-gallery',
   'contract-gallery-position-two': 'gallery-position-two',
@@ -72,12 +75,14 @@ function escapeInlineJson(value) {
 function buildContractCaseRecord(cases, caseName) {
   const entry = cases.cases.find((candidate) => candidate.name === caseName);
   if (!entry) throw new Error(`Unknown paired contract case: ${caseName}`);
-  return { ...structuredClone(cases.base), ...structuredClone(entry.overrides) };
+  const record = { ...structuredClone(cases.base), ...structuredClone(entry.overrides) };
+  entry.omit?.forEach((field) => delete record[field]);
+  return record;
 }
 
 /**
- * URL-shaped values from a case that must never reach the rendered document: every override URL of
- * a rejected record, or the snapshot URLs of a record whose gallery must come out empty.
+ * URL-shaped override values from a server-invalid case, or from a gallery that must come out
+ * empty. The renderer must retain the project while ensuring these values never reach the DOM.
  */
 function forbiddenMarkersFor(entry) {
   const markers = [];
@@ -92,7 +97,7 @@ function forbiddenMarkersFor(entry) {
     }
     if (value && typeof value === 'object') Object.values(value).forEach(collect);
   };
-  if (!entry.dudaAccepts) {
+  if (!entry.serverValid) {
     collect(entry.overrides);
   } else if (entry.dudaGallery === 0 && entry.overrides.snapshots) {
     collect(entry.overrides.snapshots);
@@ -431,6 +436,64 @@ function harnessDriver() {
       return;
     }
 
+    if (scenario === 'mixed-feed-availability') {
+      const proof = window.__CAPSTONE_HARNESS_MIXED_FEED;
+      check(Boolean(proof), 'mixed feed received its four-record availability proof');
+      const renderedHtml = renderedShowcaseHtml();
+      check(!document.querySelector('.capstone-inline-error'), 'mixed feed does not become wholly unavailable');
+      check(!renderedHtml.includes('FEED_RECORD_INVALID'), 'mixed feed never becomes FEED_RECORD_INVALID');
+      check(!renderedHtml.includes(proof.unsafeUrl), 'mixed feed removes the unsafe optional URL before DOM generation');
+      check(!renderedHtml.includes(proof.omitted.title), 'mixed feed omits only the structurally unusable project');
+      check(
+        !document.querySelector('[href^="javascript:"], [href^="data:"], [href^="vbscript:"], [src^="javascript:"], [src^="data:"], [src^="vbscript:"]'),
+        'mixed feed creates no active executable URL',
+      );
+
+      if (!window.location.pathname.includes('project-detail')) {
+        const expectedTitles = [proof.validA.title, proof.degradedB.title, proof.validD.title].sort();
+        check(
+          JSON.stringify(visibleCardTitles().sort()) === JSON.stringify(expectedTitles),
+          'mixed feed keeps valid A, degraded B, and valid D visible while omitting C',
+        );
+
+        const filterCases = [
+          ['year', proof.validA.year, proof.validA.title],
+          ['program', proof.degradedB.program, proof.degradedB.title],
+          ['discipline', proof.validD.discipline, proof.validD.title],
+          ['industry', proof.validD.industry, proof.validD.title],
+        ];
+        for (const [type, value, title] of filterCases) {
+          window.handleFilterChange(type, value);
+          check(JSON.stringify(visibleCardTitles()) === JSON.stringify([title]), `mixed feed ${type} filter preserves the expected record`);
+          window.handleFilterChange(type, 'All');
+        }
+
+        for (const expected of [proof.validA, proof.validD]) {
+          const cardImage = Array.from(document.querySelectorAll('.capstone-card-image'))
+            .find(image => image.alt === expected.title);
+          const card = cardImage?.closest('.capstone-card');
+          check(
+            card?.querySelector('.capstone-poster-link')?.getAttribute('onclick') === `handleProjectClick(${expected.id})`,
+            `mixed feed ${expected.title} retains its numeric detail navigation`,
+          );
+        }
+        finish();
+        return;
+      }
+
+      const requestedId = Number(new URLSearchParams(window.location.search).get('id'));
+      const expected = [proof.validA, proof.degradedB, proof.validD]
+        .find(record => record.id === requestedId);
+      check(Boolean(expected), 'mixed feed detail route names a retained record');
+      check(Boolean(document.querySelector('.cip-module')), 'mixed feed retained record renders its detail module');
+      check(document.querySelector('h1')?.textContent === expected?.title, 'mixed feed detail routing resolves the expected retained record');
+      if (requestedId === proof.degradedB.id) {
+        check(!document.querySelector(`a[href="${proof.unsafeUrl}"]`), 'degraded project B remains visible with its unsafe optional link removed');
+      }
+      finish();
+      return;
+    }
+
     if (scenario.startsWith('contract-')) {
       const contractCase = window.__CAPSTONE_HARNESS_CONTRACT_CASE;
       check(Boolean(contractCase), `${scenario} received its paired server-validator contract case`);
@@ -447,15 +510,7 @@ function harnessDriver() {
         `${scenario} creates no active unsafe URL`,
       );
 
-      if (!contractCase.dudaAccepts) {
-        check(Boolean(document.querySelector('.capstone-inline-error')), `${scenario} rejects the record before rendering`);
-        check(document.body.textContent.includes('FEED_RECORD_INVALID'), `${scenario} exposes only the bounded record-invalid reason`);
-        check(!document.querySelector('.capstone-card, .cip-module'), `${scenario} renders no project content`);
-        finish();
-        return;
-      }
-
-      check(!document.querySelector('.capstone-inline-error'), `${scenario} accepts the server-valid record`);
+      check(!document.querySelector('.capstone-inline-error'), `${scenario} keeps the record renderable`);
       check(Boolean(document.querySelector('.cip-module')), `${scenario} renders the project detail module`);
       check(document.querySelector('h1')?.textContent === contractCase.record.title, `${scenario} renders the governed record title`);
 
@@ -472,6 +527,27 @@ function harnessDriver() {
       });
       if (contractCase.dudaGallery > 0) verifyRenderedSnapshotAlts(contractCase.dudaGallery);
       verifyExternalLinkSecurity();
+
+      if (scenario === 'contract-disciplines-omitted') {
+        check(
+          document.body.textContent.includes(contractCase.record.discipline),
+          'omitted disciplines falls back to the authoritative primary discipline',
+        );
+      }
+
+      if (scenario === 'contract-featured-media-omitted') {
+        check(
+          Boolean(document.querySelector('.media-hero-shell .snapshot-hero-grid')),
+          'omitted featuredMedia uses automatic governed gallery selection',
+        );
+      }
+
+      if (scenario === 'contract-section-order-omitted') {
+        check(
+          Array.from(document.querySelectorAll('.section-title')).some(title => title.textContent === 'Background'),
+          'omitted sectionOrder uses the documented detail section fallback',
+        );
+      }
 
       if (scenario === 'contract-featured-media-auto-video') {
         check(
@@ -582,6 +658,7 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases) {
   const fixtureCopy = structuredClone(runtimeFixture);
   let payload = fixtureCopy;
   let harnessContractCase = null;
+  let harnessMixedFeed = null;
 
   if (scenario === 'empty-feed') payload = [];
   if (scenario === 'malformed-feed') payload = { records: fixtureCopy };
@@ -644,6 +721,40 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases) {
     payload[0].title = '\"><img id="unsafe-active-node" src=x onerror="window.location=\'https://attacker.example.test\'">';
     fixtureCopy[0].title = payload[0].title;
   }
+  if (scenario === 'mixed-feed-availability') {
+    const validA = structuredClone(fixtureCopy[0]);
+    const degradedB = structuredClone(fixtureCopy[1]);
+    const validD = structuredClone(fixtureCopy[2]);
+    const omitted = structuredClone(fixtureCopy[0]);
+    const unsafeUrl =
+      'https://demofixture.supabase.co/storage/v1/object/sign/project-public-assets/mixed-demo.html?TOKEN=synthetic-private-access';
+
+    degradedB.demoUrl = unsafeUrl;
+    omitted.id = 'structurally-unusable-id';
+    omitted.title = 'Mixed Feed Structurally Unusable Project C';
+    omitted.poster = 'javascript:alert(1)';
+
+    payload = [validA, degradedB, omitted, validD];
+    fixtureCopy.length = 0;
+    fixtureCopy.push(...structuredClone(payload));
+    const summarize = (record) => ({
+      id: record.id,
+      title: record.title,
+      year: record.year,
+      program: record.program || record.studyProgram,
+      discipline: Array.isArray(record.disciplines) && record.disciplines.length > 0
+        ? record.disciplines[0]
+        : record.discipline,
+      industry: record.industry,
+    });
+    harnessMixedFeed = {
+      validA: summarize(validA),
+      degradedB: summarize(degradedB),
+      omitted: summarize(omitted),
+      validD: summarize(validD),
+      unsafeUrl,
+    };
+  }
   if (CONTRACT_SCENARIOS[scenario]) {
     const caseName = CONTRACT_SCENARIOS[scenario];
     const entry = runtimeContractCases.cases.find((candidate) => candidate.name === caseName);
@@ -654,7 +765,6 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases) {
     harnessContractCase = {
       name: caseName,
       serverValid: entry.serverValid,
-      dudaAccepts: entry.dudaAccepts,
       dudaGallery: entry.dudaGallery,
       forbiddenMarkers: forbiddenMarkersFor(entry),
       record,
@@ -666,6 +776,7 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases) {
     window.__CAPSTONE_HARNESS_SCENARIO = ${escapeInlineJson(scenario)};
     window.__CAPSTONE_HARNESS_FIXTURE = ${escapeInlineJson(fixtureCopy)};
     window.__CAPSTONE_HARNESS_CONTRACT_CASE = ${escapeInlineJson(harnessContractCase)};
+    window.__CAPSTONE_HARNESS_MIXED_FEED = ${escapeInlineJson(harnessMixedFeed)};
     window.__CAPSTONE_HARNESS_SECRET = ['DISTINCTIVE', 'SECRET', 'LIKE', 'MARKER', '91f2c7'].join('_');
     window.__CAPSTONE_HARNESS_CONTROL_MARKER = ['CAPSTONE', 'HARNESS', 'POSITIVE', 'CONTROL', '4d17be'].join('_');
     window.__CAPSTONE_HARNESS_CONTROLS_VERIFIED = false;
@@ -760,6 +871,13 @@ const scenarios = [
   ['malformed-snapshots', '/project-detail?id=202601', 1440, 1000],
   ['unsafe-record', '/', 1440, 1000],
   ['escaped-text-record', '/', 1440, 1000],
+  ['mixed-feed-availability', '/', 1440, 1000],
+  ['mixed-feed-availability', '/project-detail?id=202601', 1440, 1000],
+  ['mixed-feed-availability', '/project-detail?id=202502', 1440, 1000],
+  ['mixed-feed-availability', '/project-detail?id=202403', 1440, 1000],
+  ['contract-disciplines-omitted', contractDetailRoute, 1440, 1000],
+  ['contract-featured-media-omitted', contractDetailRoute, 1440, 1000],
+  ['contract-section-order-omitted', contractDetailRoute, 1440, 1000],
   ['contract-featured-media-auto-video', contractDetailRoute, 1440, 1000],
   ['contract-featured-media-auto-gallery', contractDetailRoute, 1440, 1000],
   ['contract-gallery-position-two', contractDetailRoute, 1440, 1000],
@@ -768,11 +886,11 @@ const scenarios = [
   ['contract-external-query-urls', contractDetailRoute, 1440, 1000],
   ['contract-lightbox-listener-lifecycle', contractDetailRoute, 1440, 1000],
   ['contract-encoded-private-snapshot', contractDetailRoute, 1440, 1000],
-  ['contract-signed-supabase-video', '/', 1440, 1000],
-  ['contract-signed-supabase-external-link', '/', 1440, 1000],
-  ['contract-encoded-private-poster', '/', 1440, 1000],
-  ['contract-encoded-signed-video', '/', 1440, 1000],
-  ['contract-vbscript-external-link', '/', 1440, 1000],
+  ['contract-signed-supabase-video', contractDetailRoute, 1440, 1000],
+  ['contract-signed-supabase-external-link', contractDetailRoute, 1440, 1000],
+  ['contract-encoded-private-poster', contractDetailRoute, 1440, 1000],
+  ['contract-encoded-signed-video', contractDetailRoute, 1440, 1000],
+  ['contract-vbscript-external-link', contractDetailRoute, 1440, 1000],
 ].filter(([scenario]) => requestedScenarios.size === 0 || requestedScenarios.has(scenario));
 
 assert.ok(scenarios.length > 0, 'No matching Duda browser scenarios were requested.');

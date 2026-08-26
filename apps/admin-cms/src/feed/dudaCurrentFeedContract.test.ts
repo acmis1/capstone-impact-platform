@@ -54,9 +54,9 @@ interface ContractCase {
   name: string;
   why: string;
   serverValid: boolean;
-  dudaAccepts: boolean;
   dudaGallery: number;
   overrides: Record<string, unknown>;
+  omit?: string[];
 }
 
 interface ContractCaseFile {
@@ -70,7 +70,23 @@ function loadContractCases(): ContractCaseFile {
 
 /** Cases replace whole top-level keys of the base record, exactly as the browser harness does. */
 export function buildContractCaseRecord(base: PublicFeedRecord, contractCase: ContractCase): PublicFeedRecord {
-  return { ...structuredClone(base), ...structuredClone(contractCase.overrides) } as PublicFeedRecord;
+  const record = {
+    ...structuredClone(base),
+    ...structuredClone(contractCase.overrides),
+  } as unknown as Record<string, unknown>;
+  contractCase.omit?.forEach((field) => delete record[field]);
+  return record as unknown as PublicFeedRecord;
+}
+
+function collectUrlValues(value: unknown): string[] {
+  if (typeof value === 'string') {
+    return /^[a-z][a-z0-9+.-]*:/i.test(value) ? [value] : [];
+  }
+  if (Array.isArray(value)) return value.flatMap(collectUrlValues);
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).flatMap(collectUrlValues);
+  }
+  return [];
 }
 
 const policy = loadRendererPolicy();
@@ -101,11 +117,11 @@ describe('Duda renderer and public-feed server contract compatibility', () => {
 
       const normalized = policy.normalizeProjectRecord(record);
       expect(
-        normalized !== null,
+        normalized,
         `${contractCase.name}: ${contractCase.why}`,
-      ).toBe(contractCase.dudaAccepts);
+      ).not.toBeNull();
 
-      const gallery = normalized ? (normalized.snapshotMedia as unknown[]) : [];
+      const gallery = normalized?.snapshotMedia as unknown[];
       expect(
         gallery.length,
         `${contractCase.name}: rendered gallery size`,
@@ -115,12 +131,26 @@ describe('Duda renderer and public-feed server contract compatibility', () => {
 
   it('never rejects a server-valid record because of a stricter invented client rule', () => {
     const disagreements = cases
-      .filter((contractCase) => contractCase.serverValid && contractCase.dudaAccepts)
+      .filter((contractCase) => contractCase.serverValid)
       .filter((contractCase) => policy.normalizeProjectRecord(buildContractCaseRecord(base, contractCase)) === null)
       .map((contractCase) => contractCase.name);
 
     expect(disagreements).toEqual([]);
   });
+
+  it.each(cases.filter((contractCase) => !contractCase.serverValid).map((contractCase) => [contractCase.name, contractCase] as const))(
+    'removes unsafe URL values without rejecting record %s',
+    (_name, contractCase) => {
+      const record = buildContractCaseRecord(base, contractCase);
+      const normalized = policy.normalizeProjectRecord(record);
+      expect(normalized).toMatchObject({ id: base.id, title: base.title });
+
+      const normalizedJson = JSON.stringify(normalized);
+      const unsafeUrls = collectUrlValues(contractCase.overrides);
+      expect(unsafeUrls.length).toBeGreaterThan(0);
+      unsafeUrls.forEach((url) => expect(normalizedJson).not.toContain(url));
+    },
+  );
 });
 
 describe('featuredMedia contract', () => {
@@ -146,8 +176,8 @@ describe('featuredMedia contract', () => {
     expect(normalizedLayout('carousel')).toMatchObject({ featuredMedia: 'auto' });
   });
 
-  it('still rejects a non-string featured media value', () => {
-    expect(normalizedLayout(7)).toBeNull();
+  it('resolves a non-string featured media value to automatic selection', () => {
+    expect(normalizedLayout(7)).toMatchObject({ featuredMedia: 'auto' });
   });
 });
 
@@ -264,6 +294,13 @@ describe('Supabase Storage public URL boundary', () => {
     'http://demo.example.test/plain',
     'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/poster.jpg',
     'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/gallery%20one.jpg',
+    'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/caf%C3%A9.jpg',
+    'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/progress%25.jpg',
+    'https://cdn.example.test/public.jpg?ref=/drafts/example',
+    'https://project-drafts-private.example.test/public.jpg',
+    'https://cdn.example.test/files/project-drafts-private/public.jpg?token=ordinary-site-value',
+    'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/project-drafts-private-summary.jpg',
+    'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/drafts-overview.jpg',
   ];
 
   it.each(acceptedGeneralUrls)('accepts the legitimate public URL %s', (url) => {
@@ -281,7 +318,13 @@ describe('Supabase Storage public URL boundary', () => {
     ['mixed-case encoded authenticated route', 'https://demofixture.supabase.co/storage/v1/object/%41uthenticated/project-public-assets/x.jpg'],
     ['encoded path separator into a private bucket', 'https://demofixture.supabase.co/storage/v1/object/public%2Fproject-drafts-private/x.jpg'],
     ['token-bearing public storage route', 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/x.jpg?token=abc'],
+    ['upper-case token-bearing public storage route', 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/x.jpg?TOKEN=abc'],
+    ['mixed-case token-bearing public storage route', 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/x.jpg?Token=abc'],
     ['access token on a Supabase Storage route', 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/x.jpg?access_token=abc'],
+    ['upper-case access token on a Supabase Storage route', 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/x.jpg?ACCESS_TOKEN=abc'],
+    ['duplicate mixed-case token keys', 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/x.jpg?TOKEN=abc&token=def'],
+    ['token-bearing fragment', 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/x.jpg#Token=abc'],
+    ['access-token fragment text', 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/x.jpg#section?ACCESS_TOKEN=abc'],
     ['malformed percent-encoding', 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/x%ZZ.jpg'],
     ['unresolvable repeated encoding', 'https://demofixture.supabase.co/storage/v1/object/public/project-public-assets/x%2525252525.jpg'],
     ['signed route on a custom storage host', 'https://cdn.example.test/storage/v1/object/sign/project-public-assets/x.jpg?token=abc'],
@@ -301,10 +344,10 @@ describe('Supabase Storage public URL boundary', () => {
     expect(policy.isSafePublicUrl(url, true)).toBe(false);
   });
 
-  it('keeps the stronger draft-path rule for public asset fields on any host', () => {
+  it('does not classify an ordinary non-storage draft path as private Supabase Storage', () => {
     const draftUrl = 'https://media.example.test/drafts/pending-poster.jpg';
     expect(policy.isSafePublicUrl(draftUrl)).toBe(true);
-    expect(policy.isSafePublicUrl(draftUrl, true)).toBe(false);
-    expect(policy.isPublicSnapshotUrl(draftUrl)).toBe(false);
+    expect(policy.isSafePublicUrl(draftUrl, true)).toBe(true);
+    expect(policy.isPublicSnapshotUrl(draftUrl)).toBe(true);
   });
 });
