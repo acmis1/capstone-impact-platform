@@ -7,7 +7,7 @@ import PublicFeedHistoryPage from './page';
 import * as publicFeedRepo from '../../../projects/publicFeedHistoryRepository';
 import * as requireAdminModule from '../../../auth/requireAdmin';
 import * as envModule from '../../../lib/env';
-import { PUBLISHING_IN_PROGRESS_STATES } from '../../../components/admin/publishingHealthPresentation';
+import { PUBLISHING_BLOCKING_STATES } from '../../../components/admin/publishingHealthPresentation';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -33,6 +33,21 @@ const MOCK_ENV = {
   supabaseAnonKey: 'anon',
   supabaseServiceRoleKey: 'service',
 } as unknown as ReturnType<typeof envModule.getServerEnv>;
+
+const FUTURE_LEASE = '2099-08-27T12:02:00.000Z';
+const EXPIRED_LEASE = '2000-08-27T11:59:59.000Z';
+const FUTURE_FENCE = '2099-08-27T12:03:00.000Z';
+
+function blockingOperation(
+  state: string,
+  leaseExpiresAt = FUTURE_LEASE,
+  storageUncertaintyUntil: string | null = null,
+): NonNullable<publicFeedRepo.PublicFeedHistoryView['blockingOperation']> {
+  return {
+    kind: 'PUBLICATION', state, failureCode: null,
+    updatedAt: '2026-08-25T12:00:00.000Z', leaseExpiresAt, storageUncertaintyUntil,
+  };
+}
 
 const BASE_VIEW: publicFeedRepo.PublicFeedHistoryView = {
   active: true,
@@ -131,6 +146,7 @@ describe('PublicFeedHistoryPage', () => {
     const header = getPublishingHeader();
     expect(header.getByText('Setup required')).toBeTruthy();
     expect(header.queryByText('Publishing ready')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Set up showcase publishing' })).toBeTruthy();
   });
 
   it('renders truthful status metrics when on page 2+ without mislabeling page-relative timestamps', async () => {
@@ -204,14 +220,12 @@ describe('PublicFeedHistoryPage', () => {
   });
 
   describe('in-progress versus recovery semantics', () => {
-    it('presents RECOVERY_REQUIRED as recovery required and pauses publishing', async () => {
+    it('offers recovery for claimable RECOVERY_REQUIRED after its lease and fence expire', async () => {
       mockPage({
         ...BASE_VIEW,
         blockingOperation: {
-          kind: 'PUBLICATION',
-          state: 'RECOVERY_REQUIRED',
+          ...blockingOperation('RECOVERY_REQUIRED', EXPIRED_LEASE),
           failureCode: 'STORAGE_TIMEOUT',
-          updatedAt: '2026-08-25T12:00:00.000Z',
         },
       });
       await renderPage();
@@ -222,37 +236,71 @@ describe('PublicFeedHistoryPage', () => {
       // Header badge, publishing status card and publishing health card all agree.
       expect(screen.getAllByText('Needs attention')).toHaveLength(3);
       expect(screen.getByText('Publishing needs attention')).toBeTruthy();
-      expect(screen.getAllByText(/did not finish cleanly/i).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/stopped after its safety window expired/i)).toBeTruthy();
       expect(screen.getByRole('button', { name: /Recover publishing status/i })).toBeTruthy();
       expect(screen.queryByText('Publishing in progress')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Set up showcase publishing/i })).toBeNull();
     });
 
-    it.each(PUBLISHING_IN_PROGRESS_STATES)(
-      'presents %s as an ordinary publishing action still running, never as recovery',
+    it.each(PUBLISHING_BLOCKING_STATES.filter((state) => state !== 'RECOVERY_REQUIRED'))(
+      'presents live-lease %s as a publishing action still running, never as recovery',
       async (state) => {
         mockPage({
           ...BASE_VIEW,
-          blockingOperation: { kind: 'PUBLICATION', state, failureCode: null, updatedAt: '2026-08-25T12:00:00.000Z' },
+          blockingOperation: blockingOperation(state),
         });
         await renderPage();
 
         const header = getPublishingHeader();
         expect(header.getByText('Publishing in progress')).toBeTruthy();
         expect(header.queryByText('Needs attention')).toBeNull();
-        expect(screen.getByText(/Another publishing action is currently running/i)).toBeTruthy();
+        expect(screen.getByText(/Another publishing action has a live lease/i)).toBeTruthy();
 
         // No recovery wording and no recovery control merely because an operation is in flight.
         expect(screen.queryByText('Publishing needs attention')).toBeNull();
-        expect(screen.queryByText('Publishing recovery required')).toBeNull();
-        expect(screen.queryByText(/did not finish cleanly/i)).toBeNull();
+        expect(screen.queryByText('Publishing recovery available')).toBeNull();
         expect(screen.queryByRole('button', { name: /Recover publishing status/i })).toBeNull();
       },
     );
 
+    it.each(['RESERVED', 'WRITE_STARTED'])(
+      'offers recovery for expired %s rather than calling it ordinarily in progress',
+      async (state) => {
+        mockPage({ ...BASE_VIEW, blockingOperation: blockingOperation(state, EXPIRED_LEASE) });
+        await renderPage();
+
+        expect(getPublishingHeader().getByText('Needs attention')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Recover publishing status' })).toBeTruthy();
+        expect(screen.queryByText('Publishing in progress')).toBeNull();
+      },
+    );
+
+    it('waits without offering recovery while RECOVERY_REQUIRED still has a live lease', async () => {
+      mockPage({ ...BASE_VIEW, blockingOperation: blockingOperation('RECOVERY_REQUIRED') });
+      await renderPage();
+
+      expect(getPublishingHeader().getByText('Needs attention')).toBeTruthy();
+      expect(screen.getByText(/recovery cannot start while the current lease or Storage safety window is active/i)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Recover publishing status' })).toBeNull();
+    });
+
+    it('waits for the Storage fence after an expired WRITE_STARTED lease', async () => {
+      mockPage({
+        ...BASE_VIEW,
+        blockingOperation: blockingOperation('WRITE_STARTED', EXPIRED_LEASE, FUTURE_FENCE),
+      });
+      await renderPage();
+
+      expect(getPublishingHeader().getByText('Needs attention')).toBeTruthy();
+      expect(screen.getByText(/Storage safety window is active/i)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Recover publishing status' })).toBeNull();
+      expect(screen.queryByText('Publishing in progress')).toBeNull();
+    });
+
     it('keeps the publishing health card in agreement while an action is running', async () => {
       mockPage({
         ...BASE_VIEW,
-        blockingOperation: { kind: 'PUBLICATION', state: 'WRITE_STARTED', failureCode: null, updatedAt: '2026-08-25T12:00:00.000Z' },
+        blockingOperation: blockingOperation('WRITE_STARTED'),
       });
       await renderPage();
 
@@ -264,7 +312,7 @@ describe('PublicFeedHistoryPage', () => {
     it('keeps the raw operation state available under technical details only', async () => {
       mockPage({
         ...BASE_VIEW,
-        blockingOperation: { kind: 'PUBLICATION', state: 'CANDIDATE_OBSERVED', failureCode: null, updatedAt: '2026-08-25T12:00:00.000Z' },
+        blockingOperation: blockingOperation('CANDIDATE_OBSERVED'),
       });
       await renderPage();
 
@@ -273,6 +321,56 @@ describe('PublicFeedHistoryPage', () => {
       const technical = within(disclosure as HTMLElement);
       expect(technical.getByText('Technical details')).toBeTruthy();
       expect(technical.getByText(/candidate observed/i)).toBeTruthy();
+      expect(technical.getByText(/Lease expires:/i)).toBeTruthy();
+    });
+
+    it('fails safe for an unknown blocking state and offers neither setup nor recovery', async () => {
+      mockPage({
+        ...BASE_VIEW,
+        active: false,
+        blockingOperation: blockingOperation('FUTURE_BLOCKING_STATE', EXPIRED_LEASE),
+      });
+      await renderPage();
+
+      expect(getPublishingHeader().getByText('Needs attention')).toBeTruthy();
+      expect(screen.getByText(/cannot be safely interpreted/i)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Recover publishing status' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Set up showcase publishing' })).toBeNull();
+    });
+
+    it.each([
+      blockingOperation('RESERVED'),
+      blockingOperation('RESERVED', EXPIRED_LEASE),
+      blockingOperation('RECOVERY_REQUIRED'),
+      blockingOperation('RECOVERY_REQUIRED', EXPIRED_LEASE),
+    ])('suppresses inactive setup whenever a writer blocker exists %#', async (blocker) => {
+      mockPage({ ...BASE_VIEW, active: false, blockingOperation: blocker });
+      await renderPage();
+      expect(screen.queryByRole('button', { name: 'Set up showcase publishing' })).toBeNull();
+      expect(screen.queryByText('Showcase setup required')).toBeNull();
+    });
+  });
+
+  describe('repair concurrency', () => {
+    const diverged = [{
+      publicId: 'proj-2', title: 'Project Two', lifecycleStatus: 'published', deployed: false,
+    }];
+
+    it('keeps repair available while the writer is idle', async () => {
+      mockPage({ ...BASE_VIEW, deploymentStatuses: diverged });
+      await renderPage();
+      expect(screen.getByRole('button', { name: 'Repair showcase status' }).getAttribute('disabled')).toBeNull();
+    });
+
+    it.each([
+      blockingOperation('WRITE_STARTED'),
+      blockingOperation('PREPARED', EXPIRED_LEASE),
+    ])('disables repair and explains the publishing blocker %#', async (blocker) => {
+      mockPage({ ...BASE_VIEW, deploymentStatuses: diverged, blockingOperation: blocker });
+      await renderPage();
+      const repair = screen.getByRole('button', { name: 'Repair showcase status' });
+      expect(repair.getAttribute('disabled')).not.toBeNull();
+      expect(screen.getAllByText(/before repairing/i).length).toBeGreaterThanOrEqual(1);
     });
   });
 

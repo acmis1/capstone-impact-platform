@@ -112,12 +112,26 @@ interface PendingConfirmation {
  * Bounded, staff-readable explanation of an email delivery state. Raw transport failure codes are
  * never given invented meaning here — they stay under Technical details for diagnostics.
  */
-function deliveryExplanation(status: string): string | null {
+function deliveryExplanation(
+  kind: 'initial' | 'reminder',
+  status: string,
+  linkAvailableInSession = false,
+): string | null {
+  if (kind === 'reminder' && status === 'failed') {
+    return 'The reminder was not delivered. The existing preview is unchanged. Send another reminder only if it is still eligible.';
+  }
+  if (kind === 'reminder' && status === 'delivery_unknown') {
+    return 'The reminder may or may not have been delivered. The existing preview is unchanged. Send another reminder only if it is still eligible and appropriate.';
+  }
   if (status === 'failed') {
-    return 'The email was not delivered. The participant has not received this preview link. Revoke this preview and generate a new one to try again.';
+    return linkAvailableInSession
+      ? 'The preview email was not delivered. The preview link is still available in this session and can be copied and shared through the approved process.'
+      : 'The preview email was not delivered. If the preview link is no longer available in this session, revoke this preview and generate a new one before trying email again.';
   }
   if (status === 'delivery_unknown') {
-    return 'The message may or may not have reached the participant. It has not been sent again automatically. Revoke this preview and issue a new one if you need to be certain.';
+    return linkAvailableInSession
+      ? 'The preview email may or may not have been delivered. It has not been sent again automatically. The preview link is still available in this session and can be copied through the approved process.'
+      : 'The preview email may or may not have been delivered. It has not been sent again automatically. If a new email is needed and the preview link is no longer available in this session, revoke this preview and generate a new one.';
   }
   return null;
 }
@@ -228,7 +242,12 @@ export function ParticipantPreviewPanel({
       setJustGeneratedUrl(data.previewUrl || null);
       setActivePreview({ createdAt: data.createdAt || '', expiresAt: data.expiresAt || '' });
       setPreviewResponseState({ type: 'unresponded' });
-      setDeliveryNotice(data.notification?.message ?? null);
+      const deliveryStatus = data.notification?.status;
+      setDeliveryNotice(deliveryStatus === 'DELIVERY_FAILED'
+        ? deliveryExplanation('initial', 'failed', Boolean(data.previewUrl))
+        : deliveryStatus === 'DELIVERY_UNKNOWN'
+          ? deliveryExplanation('initial', 'delivery_unknown', Boolean(data.previewUrl))
+          : data.notification?.message ?? null);
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred while generating the preview.');
@@ -649,16 +668,16 @@ export function ParticipantPreviewPanel({
                     <span className="text-foreground">{formatParticipantPreviewDate(notification.sentAt)}</span>
                   </div>
                 )}
-                {deliveryExplanation(notification.status) && (
+                {deliveryExplanation(notification.kind, notification.status, Boolean(justGeneratedUrl)) && (
                   <div
                     className={`mt-1 font-medium sm:col-span-2 ${notification.status === 'failed' ? 'text-destructive-strong' : 'text-warning-strong'}`}
                   >
-                    {deliveryExplanation(notification.status)}
+                    {deliveryExplanation(notification.kind, notification.status, Boolean(justGeneratedUrl))}
                   </div>
                 )}
                 {notification.failureCode && (
                   <details className="sm:col-span-2 text-muted-foreground">
-                    <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
+                    <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical details</summary>
                     <span className="mt-1 block font-mono text-foreground">{notification.failureCode}</span>
                   </details>
                 )}
@@ -823,12 +842,12 @@ export function ParticipantPreviewPanel({
                       <span className="text-foreground font-medium">Delivery:</span>{' '}
                       {participantPreviewNotificationStatusLabel(reminder.delivery.status)}
                       {reminder.delivery.sentAt ? ` on ${formatParticipantPreviewDate(reminder.delivery.sentAt)}` : ''}
-                      {deliveryExplanation(reminder.delivery.status) && (
-                        <span className="mt-1 block text-foreground">{deliveryExplanation(reminder.delivery.status)}</span>
+                      {deliveryExplanation('reminder', reminder.delivery.status) && (
+                        <span className="mt-1 block text-foreground">{deliveryExplanation('reminder', reminder.delivery.status)}</span>
                       )}
                       {reminder.delivery.failureCode && (
                         <details className="mt-1">
-                          <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
+                          <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical details</summary>
                           <span className="mt-1 block font-mono">{reminder.delivery.failureCode}</span>
                         </details>
                       )}

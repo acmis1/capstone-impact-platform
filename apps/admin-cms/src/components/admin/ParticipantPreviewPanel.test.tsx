@@ -320,6 +320,29 @@ describe('ParticipantPreviewPanel core workflow', () => {
     expect(screen.getByText('Preview link copied to clipboard')).toBeTruthy();
   });
 
+  it('keeps a just-generated link available for approved sharing when its initial email fails', async () => {
+    const generatedUrl = 'https://showcase.test/participant-preview/ephemeral-token-failed-email';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      previewUrl: generatedUrl,
+      createdAt: '2026-08-16T10:00:00.000Z',
+      expiresAt: '2026-08-23T10:00:00.000Z',
+      notification: {
+        status: 'DELIVERY_FAILED',
+        message: 'The preview email could not be delivered.',
+        failureCode: 'RECIPIENT_REJECTED',
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    render(<ParticipantPreviewPanel {...BASE_PROPS} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate participant preview and send email' }));
+
+    expect(await screen.findByText(/preview link is still available in this session/i)).toBeTruthy();
+    expect(screen.getByText(generatedUrl)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy();
+    expect(screen.queryByText(/participant has not received this preview link/i)).toBeNull();
+  });
+
   it('explains a failed email in ordinary words and keeps the raw failure code under technical details', () => {
     render(<ParticipantPreviewPanel
       {...BASE_PROPS}
@@ -337,10 +360,59 @@ describe('ParticipantPreviewPanel core workflow', () => {
       }}
     />);
 
-    expect(screen.getByText(/The email was not delivered/i)).toBeTruthy();
+    expect(screen.getByText(/The preview email was not delivered/i)).toBeTruthy();
+    expect(screen.queryByText(/participant has not received this preview link/i)).toBeNull();
+    expect(screen.getByText(/If the preview link is no longer available in this session/i)).toBeTruthy();
     const code = screen.getByText('RECIPIENT_REJECTED');
     expect(code.closest('details')).toBeTruthy();
     expect(within(code.closest('details') as HTMLElement).getByText('Technical details')).toBeTruthy();
+  });
+
+  it('describes unknown initial delivery without claiming success or failure', () => {
+    render(<ParticipantPreviewPanel
+      {...BASE_PROPS}
+      initialActivePreview={{
+        createdAt: '2026-08-16T08:00:00.000Z',
+        expiresAt: '2026-08-23T08:00:00.000Z',
+      }}
+      notification={{
+        kind: 'initial',
+        recipient: 'contact@example.edu',
+        status: 'delivery_unknown',
+        requestedAt: '2026-08-16T08:00:00.000Z',
+        sentAt: null,
+        failureCode: 'DELIVERY_UNKNOWN',
+      }}
+    />);
+
+    expect(screen.getByText(/preview email may or may not have been delivered/i)).toBeTruthy();
+    expect(screen.getByText(/has not been sent again automatically/i)).toBeTruthy();
+    expect(screen.queryByText(/participant has not received/i)).toBeNull();
+  });
+
+  it('keeps an unknown email failure code only under Technical details', () => {
+    render(<ParticipantPreviewPanel
+      {...BASE_PROPS}
+      initialActivePreview={{
+        createdAt: '2026-08-16T08:00:00.000Z',
+        expiresAt: '2026-08-23T08:00:00.000Z',
+      }}
+      notification={{
+        kind: 'initial',
+        recipient: 'contact@example.edu',
+        status: 'failed',
+        requestedAt: '2026-08-16T08:00:00.000Z',
+        sentAt: null,
+        failureCode: 'UNRECOGNIZED_MAIL_FAILURE',
+      }}
+    />);
+
+    const rawCode = screen.getByText('UNRECOGNIZED_MAIL_FAILURE');
+    const technicalDetails = rawCode.closest('details');
+    expect(technicalDetails).toBeTruthy();
+    expect(within(technicalDetails as HTMLElement).getByText('Technical details')).toBeTruthy();
+    expect(screen.getByText(/preview email was not delivered/i).textContent)
+      .not.toContain('UNRECOGNIZED_MAIL_FAILURE');
   });
 
   it('names the reminder recipient field in ordinary words rather than as a snapshot', () => {

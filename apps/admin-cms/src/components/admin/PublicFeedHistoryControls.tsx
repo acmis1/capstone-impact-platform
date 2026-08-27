@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '../ui/button';
+import type { PublishingActivity } from './publishingHealthPresentation';
 
 interface Preparation {
   preparationHandle: string;
@@ -31,9 +32,30 @@ interface Preparation {
  * Staff-facing outcome. `text` always says what happened, whether anything changed, and what to do
  * next; any raw backend code stays under progressive disclosure rather than in the primary copy.
  */
-interface Outcome {
+export interface PublicFeedControlOutcome {
   text: string;
   code?: string | null;
+}
+
+export function publicFeedRecoveryOutcome(code: string): PublicFeedControlOutcome {
+  switch (code) {
+    case 'COMPLETED':
+      return { text: 'The interrupted publishing action completed safely. The latest publishing status is being refreshed.' };
+    case 'RELEASED':
+      return { text: 'The abandoned pre-write action was cleared safely. Retry the publishing action you intended to perform.' };
+    case 'NO_RECOVERY_REQUIRED':
+      return { text: 'The publishing state changed before recovery started. Refresh the page to see the current status.' };
+    case 'PERMISSION_DENIED':
+      return { text: 'You do not have permission to recover publishing status.', code };
+    case 'RECOVERY_REQUIRED':
+      return { text: 'Publishing still needs attention. Refresh the status before deciding whether to try recovery again.', code };
+    case 'PUBLICATION_IN_PROGRESS':
+      return { text: 'A publishing owner or safety window is still active. Wait for it to finish, then refresh.', code };
+    case 'EXECUTION_FAILED':
+      return { text: 'Publishing recovery could not be completed. Refresh the status before trying again.', code };
+    default:
+      return { text: 'Publishing recovery returned an unexpected result. Refresh the status and ask an administrator to review it.', code };
+  }
 }
 
 export function PublicFeedHistoryControls(props: {
@@ -42,14 +64,11 @@ export function PublicFeedHistoryControls(props: {
   rollbackAvailable: boolean;
   targetVersionNumber: number | null;
   targetIsCurrent: boolean;
-  /** True only when the backend proved an earlier action failed (`RECOVERY_REQUIRED`). */
-  recoveryAvailable: boolean;
-  /** True while an ordinary publishing action is still running; never implies recovery. */
-  publishingInProgress?: boolean;
+  publishingActivity: PublishingActivity;
 }) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
-  const [message, setMessage] = React.useState<Outcome | null>(null);
+  const [message, setMessage] = React.useState<PublicFeedControlOutcome | null>(null);
   const [preparation, setPreparation] = React.useState<Preparation | null>(null);
   const [acknowledgement, setAcknowledgement] = React.useState('');
 
@@ -138,16 +157,16 @@ export function PublicFeedHistoryControls(props: {
     setMessage(null);
     try {
       const response = await fetch('/api/public-feed/recovery', { method: 'POST' });
-      const body = await response.json() as { success?: boolean; code?: string };
-      setMessage(body.success
-        ? { text: 'Publishing status was safely recovered. Publishing is available again.' }
-        : {
-          text: 'Publishing is still paused. No showcase content was changed. Wait a few minutes and try again — if it stays paused, an administrator needs to review it.',
-          code: body.code || 'RECOVERY_FAILED',
-        });
+      const body = await response.json() as {
+        success?: boolean;
+        code?: string;
+        result?: { resultCode?: string };
+      };
+      const resultCode = body.result?.resultCode || body.code || 'RECOVERY_FAILED';
+      setMessage(publicFeedRecoveryOutcome(resultCode));
       if (body.success) router.refresh();
     } catch {
-      setMessage({ text: 'Publishing is still paused. No showcase content was changed. Check your connection and try again.' });
+      setMessage({ text: 'The recovery result could not be confirmed. Publishing status may have changed; refresh the page before trying again.' });
     } finally {
       setPending(false);
     }
@@ -158,25 +177,29 @@ export function PublicFeedHistoryControls(props: {
       <p role="status" className="text-sm font-medium leading-relaxed text-foreground">{message.text}</p>
       {message.code && (
         <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
+          <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical details</summary>
           <p className="mt-1 font-mono">{message.code}</p>
         </details>
       )}
     </div>
   ) : null;
 
-  // If history is active, no recovery needed, and rollback is not being shown, return minimal/advanced controls
-  if (props.historyActive && !props.recoveryAvailable && !props.rollbackAvailable) {
+  const recoveryAvailable = props.publishingActivity === 'RECOVERY_AVAILABLE';
+  const setupAvailable = !props.historyActive && props.publishingActivity === 'IDLE';
+  const rollbackAvailable = props.historyActive && props.publishingActivity === 'IDLE'
+    && props.rollbackAvailable && props.targetVersionNumber && !props.targetIsCurrent;
+
+  if (!recoveryAvailable && !setupAvailable && !rollbackAvailable) {
     return outcome;
   }
 
   return (
     <div className="flex flex-col gap-4">
-      {props.recoveryAvailable && (
+      {recoveryAvailable && (
         <section aria-labelledby="publishing-recovery-heading" className="rounded-xl border border-warning/40 bg-warning/5 p-5 shadow-xs">
-          <h2 id="publishing-recovery-heading" className="text-base font-semibold text-foreground">Publishing recovery required</h2>
+          <h2 id="publishing-recovery-heading" className="text-base font-semibold text-foreground">Publishing recovery available</h2>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            A previous publishing action did not finish cleanly. Publishing is paused until it is safely recovered.
+            The earlier action&apos;s lease and safety window have expired. Recovery will either finish its durable publishing intent or clear an abandoned pre-write reservation.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button type="button" variant="outline" onClick={recover} disabled={pending}>
@@ -184,7 +207,7 @@ export function PublicFeedHistoryControls(props: {
             </Button>
           </div>
           <details className="mt-3 text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground">Technical recovery details</summary>
+            <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical recovery details</summary>
             <p className="mt-1 leading-relaxed">
               Takeover is available only after the current lease and any Storage uncertainty fence expire. Bound operations replay their exact durable intent; unbound reservations are safely released.
             </p>
@@ -192,24 +215,19 @@ export function PublicFeedHistoryControls(props: {
         </section>
       )}
 
-      {!props.historyActive && (
+      {setupAvailable && (
         <section aria-labelledby="publishing-setup-heading" className="rounded-xl border border-border-structural bg-card p-5 shadow-xs">
           <h2 id="publishing-setup-heading" className="text-base font-semibold text-foreground">Showcase setup required</h2>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
             Showcase publishing needs to be set up before projects can be published.
           </p>
-          {props.publishingInProgress && (
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Another publishing action is currently running. Wait for it to finish before setting up showcase publishing.
-            </p>
-          )}
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={activate} disabled={pending || props.publishingInProgress === true}>
+            <Button type="button" onClick={activate} disabled={pending}>
               {pending ? 'Setting up…' : 'Set up showcase publishing'}
             </Button>
           </div>
           <details className="mt-3 text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground">Technical setup details</summary>
+            <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical setup details</summary>
             <p className="mt-1 leading-relaxed">
               Activation verifies the existing canonical Storage artifact against the current lifecycle-published projection before creating version 1.
             </p>
@@ -217,9 +235,9 @@ export function PublicFeedHistoryControls(props: {
         </section>
       )}
 
-      {props.historyActive && props.rollbackAvailable && props.targetVersionNumber && !props.targetIsCurrent && (
+      {rollbackAvailable && (
         <details className="rounded-xl border border-border-structural bg-card p-5 shadow-xs">
-          <summary className="cursor-pointer text-sm font-semibold text-foreground">Advanced rollback tools (Local test only)</summary>
+          <summary className="cursor-pointer rounded-sm text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Advanced rollback tools (Local test only)</summary>
           <div className="mt-4 space-y-4 text-sm">
             <p className="text-sm leading-relaxed text-muted-foreground">
               Preparation performs no public write. Rollback execution is available only in an explicitly enabled disposable Local runtime.
