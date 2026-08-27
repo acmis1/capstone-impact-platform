@@ -37,8 +37,9 @@ SOURCE_NAMES = (
     "selectors.py",
 )
 FREEZE_NAME = "candidate-freeze.json"
-HOLDOUT_DIRECTORY_NAME = "ocr-title-fullpage-holdout"
+HOLDOUT_DIRECTORY_NAME = "ocr-title-fullpage-holdout-v2"
 HOLDOUT_TRACKED_PREFIX = f"tools/assistive-validation-benchmark/{HOLDOUT_DIRECTORY_NAME}/"
+VALIDATOR_SOURCE_NAMES = frozenset({"freeze.py"})
 
 
 def _git(*args: str) -> str:
@@ -51,6 +52,61 @@ def _git(*args: str) -> str:
         encoding="utf-8",
     )
     return completed.stdout.strip()
+
+
+def _relative(path: Path) -> str:
+    return path.resolve().relative_to(repository_root().resolve()).as_posix()
+
+
+def _freeze_commit(freeze_path: Path) -> str:
+    commits = _git("log", "--diff-filter=A", "--format=%H", "--", _relative(freeze_path)).splitlines()
+    if len(commits) != 1:
+        raise ValueError("title-fullpage candidate freeze has no unique creation commit")
+    return commits[0]
+
+
+def _assert_frozen_git_identity(stored: dict[str, Any]) -> None:
+    """Verify the scientific subset at its immutable commit, independent of checkout EOLs."""
+    freeze_path = data_root() / FREEZE_NAME
+    freeze_commit = _freeze_commit(freeze_path)
+    checkpoint = _git("rev-parse", f"{stored['calibration_checkpoint']['commit']}^{{commit}}")
+    try:
+        _git("merge-base", "--is-ancestor", checkpoint, freeze_commit)
+    except subprocess.CalledProcessError as error:
+        raise ValueError("title-fullpage candidate freeze does not follow its calibration checkpoint") from error
+
+    tracked = set(_git("ls-tree", "-r", "--name-only", freeze_commit).splitlines())
+    if any(path.startswith(HOLDOUT_TRACKED_PREFIX) for path in tracked):
+        raise ValueError("a title-fullpage holdout existed at the candidate freeze")
+
+    source_root = Path(__file__).resolve().parent
+    source_paths: dict[str, str] = {
+        name: _relative(source_root / name) for name in stored["source_files"]
+    }
+    immutable_paths = [
+        _relative(data_root() / "protocol.json"),
+        _relative(data_root() / "corpus" / "calibration.json"),
+        *(_relative(evidence_root() / name) for name in stored["calibration_evidence_files"]),
+    ]
+
+    for name, path in source_paths.items():
+        if _git("rev-parse", f"{checkpoint}:{path}") != _git("rev-parse", f"{freeze_commit}:{path}"):
+            raise ValueError(f"title-fullpage source changed between calibration and freeze: {path}")
+        if name not in VALIDATOR_SOURCE_NAMES and _git("rev-parse", f"{freeze_commit}:{path}") != _git(
+            "rev-parse", f"HEAD:{path}"
+        ):
+            raise ValueError(f"title-fullpage frozen source drifted after freeze: {path}")
+
+    for path in immutable_paths:
+        checkpoint_blob = _git("rev-parse", f"{checkpoint}:{path}")
+        freeze_blob = _git("rev-parse", f"{freeze_commit}:{path}")
+        head_blob = _git("rev-parse", f"HEAD:{path}")
+        if checkpoint_blob != freeze_blob or freeze_blob != head_blob:
+            raise ValueError(f"title-fullpage frozen input drifted: {path}")
+
+    freeze_relative = _relative(freeze_path)
+    if _git("rev-parse", f"{freeze_commit}:{freeze_relative}") != _git("rev-parse", f"HEAD:{freeze_relative}"):
+        raise ValueError("title-fullpage candidate-freeze evidence drifted after freeze")
 
 
 def _evidence_file_names() -> tuple[str, ...]:
@@ -144,8 +200,14 @@ def write_freeze_manifest(calibration_commit: str) -> Path:
 
 def check_freeze_manifest() -> dict[str, Any]:
     stored = load_json(data_root() / FREEZE_NAME)
+    _assert_frozen_git_identity(stored)
     checkpoint = stored.get("calibration_checkpoint") or {}
     expected = build_freeze_manifest(str(checkpoint.get("commit", "")))
+    # Source identity is verified from immutable Git objects above. The historical manifest
+    # recorded mixed LF/CRLF working-tree hashes, so those raw hashes are evidence, not a
+    # portable reconstruction target.
+    expected["source_files"] = stored.get("source_files")
+    expected["source_files_sha256"] = stored.get("source_files_sha256")
     if stored != expected:
         raise ValueError("title-fullpage candidate freeze differs from frozen source and evidence")
     return stored

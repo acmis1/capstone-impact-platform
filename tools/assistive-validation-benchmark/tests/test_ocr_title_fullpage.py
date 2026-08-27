@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import copy
 import inspect
 import unittest
+from unittest.mock import patch
 
 from assistive_validation_benchmark.ocr_title_consistency.selector import (
     select_title_candidates as baseline_select,
@@ -20,12 +22,14 @@ from assistive_validation_benchmark.ocr_title_fullpage.evidence import (
     exposed_fingerprint_reuse,
     load_exposed_fingerprint_manifest,
 )
+from assistive_validation_benchmark.ocr_title_fullpage.freeze import check_freeze_manifest
 from assistive_validation_benchmark.ocr_title_fullpage.schema import (
     data_root,
     evidence_root,
     load_json,
     validate_corpus,
     validate_protocol,
+    value_sha256,
 )
 from assistive_validation_benchmark.ocr_title_fullpage.scoring import score_capture
 from assistive_validation_benchmark.ocr_title_fullpage.selection import (
@@ -85,6 +89,17 @@ def _candidate(candidate_id: str, *, threads: int | None, p50: float, p95: float
 class OcrTitleFullpageProtocolTests(unittest.TestCase):
     def setUp(self) -> None:
         self.protocol = validate_protocol(load_json(data_root() / "protocol.json"))
+
+    def test_candidate_freeze_uses_git_identity_instead_of_checkout_line_endings(self) -> None:
+        stored = load_json(data_root() / "candidate-freeze.json")
+        platform_variant = copy.deepcopy(stored)
+        platform_variant["source_files"]["__main__.py"] = "0" * 64
+        platform_variant["source_files_sha256"] = value_sha256(platform_variant["source_files"])
+        with patch(
+            "assistive_validation_benchmark.ocr_title_fullpage.freeze.build_freeze_manifest",
+            return_value=platform_variant,
+        ):
+            self.assertEqual(stored, check_freeze_manifest())
 
     def test_corpus_is_balanced_crossed_and_historically_fresh(self) -> None:
         corpus = validate_corpus(build_calibration_corpus())

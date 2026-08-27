@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import io
 import sys
 import time
@@ -10,6 +11,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -59,7 +61,10 @@ class _FakeEngine:
         self._payload = payload
         self._delay = delay
 
-    def predict(self, _page):
+    def predict(self, page):
+        page_path = Path(page)
+        if page_path.suffix != ".ppm" or not page_path.read_bytes().startswith(b"P6\n"):
+            raise AssertionError("the provider must pass a bounded local PPM path")
         if self._delay:
             time.sleep(self._delay)
         return [_FakeResult(self._payload)]
@@ -107,7 +112,9 @@ class PaddleTitleProviderAvailabilityTests(unittest.TestCase):
         self.assertIs(OcrAvailabilityState.UNAVAILABLE, availability.state)
 
     def test_unavailable_provider_fails_safely_instead_of_raising(self) -> None:
-        result = PaddleTitleOcrProvider(models_dir=None).extract(_raster())
+        provider = PaddleTitleOcrProvider(models_dir=None)
+        provider._engine = lambda *_args: self.fail("an unavailable provider must not construct an engine")  # noqa: SLF001
+        result = provider.extract(_raster())
         self.assertIs(OcrResultStatus.FAILED, result.status)
         self.assertIs(OcrProviderErrorCode.EXECUTION_FAILED, result.error_code)
 
@@ -136,6 +143,8 @@ class PaddleTitleProviderConfigurationTests(unittest.TestCase):
         self.assertEqual([True], guarded)
         self.assertEqual(FROZEN_CPU_THREADS, captured["cpu_threads"])
         self.assertEqual(FROZEN_MKLDNN_CACHE_CAPACITY, captured["mkldnn_cache_capacity"])
+        self.assertEqual("det", captured["text_detection_model_dir"])
+        self.assertEqual("rec", captured["text_recognition_model_dir"])
         self.assertEqual("cpu", captured["device"])
         self.assertFalse(captured["enable_mkldnn"])
         self.assertFalse(captured["enable_hpi"])
@@ -149,12 +158,14 @@ class PaddleTitleProviderConfigurationTests(unittest.TestCase):
         image.save(buffer, format="PNG")
         image.close()
         raster = OcrInput(png_bytes=buffer.getvalue(), page_number=1, width=3000, height=1500)
-        decoded = PaddleTitleOcrProvider(models_dir=None)._decode(raster)  # noqa: SLF001
-        self.assertEqual((MAX_INPUT_DIMENSION // 2, MAX_INPUT_DIMENSION, 3), decoded.shape)
+        decoded = PaddleTitleOcrProvider(models_dir=None)._decode_ppm(raster)  # noqa: SLF001
+        with Image.open(io.BytesIO(decoded)) as page:
+            self.assertEqual((MAX_INPUT_DIMENSION, MAX_INPUT_DIMENSION // 2), page.size)
+            self.assertEqual("RGB", page.mode)
 
 
 class PaddleTitleProviderExtractionTests(unittest.TestCase):
-    def _run(self, payload: dict, *, limits=DEFAULT_LIMITS, delay: float = 0.0):
+    def _run(self, payload: dict, *, limits=DEFAULT_LIMITS, delay: float = 0.0, raster: OcrInput | None = None):
         with TemporaryDirectory() as directory:
             models = Path(directory)
             _provisioned(models)
@@ -165,7 +176,7 @@ class PaddleTitleProviderExtractionTests(unittest.TestCase):
             original = (module.DETECTION_TREE_SHA256, module.RECOGNITION_TREE_SHA256)
             module.DETECTION_TREE_SHA256, module.RECOGNITION_TREE_SHA256 = detection, recognition
             try:
-                return provider.extract(_raster())
+                return provider.extract(raster or _raster())
             finally:
                 module.DETECTION_TREE_SHA256, module.RECOGNITION_TREE_SHA256 = original
 
@@ -185,6 +196,35 @@ class PaddleTitleProviderExtractionTests(unittest.TestCase):
             first.bounding_box.right, first.bounding_box.bottom,
         ))
         self.assertEqual("Copper Foundry Airflow Digest\nSCOPE", result.text)
+
+    def test_lightweight_provider_path_never_imports_numpy(self) -> None:
+        original_import = builtins.__import__
+
+        def guarded_import(name, *args, **kwargs):
+            if name == "numpy" or name.startswith("numpy."):
+                raise AssertionError("the lightweight provider path must not import NumPy")
+            return original_import(name, *args, **kwargs)
+
+        with patch.object(builtins, "__import__", side_effect=guarded_import):
+            result = self._run({"rec_texts": ["Title"], "rec_scores": [0.99], "rec_boxes": []})
+        self.assertIs(OcrResultStatus.SUCCESS, result.status)
+
+    def test_malformed_normalized_png_fails_safely(self) -> None:
+        malformed = OcrInput(
+            png_bytes=b"\x89PNG\r\n\x1a\nmalformed",
+            page_number=1,
+            width=1,
+            height=1,
+        )
+        result = self._run({"rec_texts": ["Title"]}, raster=malformed)
+        self.assertIs(OcrResultStatus.FAILED, result.status)
+        self.assertIs(OcrProviderErrorCode.EXECUTION_FAILED, result.error_code)
+
+    def test_provider_enforces_raster_bounds_before_prediction(self) -> None:
+        limits = replace(DEFAULT_LIMITS, max_raster_width=1)
+        result = self._run({"rec_texts": ["Title"]}, limits=limits)
+        self.assertIs(OcrResultStatus.FAILED, result.status)
+        self.assertIs(OcrProviderErrorCode.EXECUTION_FAILED, result.error_code)
 
     def test_polygon_geometry_is_reduced_to_an_axis_aligned_box(self) -> None:
         result = self._run({

@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import io
 import socket
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -193,7 +194,7 @@ class PaddleTitleOcrProvider:
         deadline = time.monotonic() + self._limits.provider_timeout_seconds
         try:
             engine = self._engine(*directories)
-            page = self._decode(raster)
+            ppm_bytes = self._decode_ppm(raster)
         except Exception:
             return OcrResult(
                 status=OcrResultStatus.FAILED,
@@ -202,7 +203,10 @@ class PaddleTitleOcrProvider:
                 error_message="The PP-OCRv6 Small provider failed to start safely.",
             )
         try:
-            blocks = self._predict(engine, page, raster, deadline)
+            with tempfile.TemporaryDirectory(prefix="capstone-paddle-title-") as directory:
+                page_path = Path(directory) / "page.ppm"
+                page_path.write_bytes(ppm_bytes)
+                blocks = self._predict(engine, str(page_path), raster, deadline)
         except _ProviderError as error:
             return OcrResult(
                 status=OcrResultStatus.FAILED,
@@ -224,11 +228,18 @@ class PaddleTitleOcrProvider:
             blocks=tuple(blocks),
         )
 
-    def _decode(self, raster: OcrInput) -> Any:
-        import numpy
+    def _decode_ppm(self, raster: OcrInput) -> bytes:
         from PIL import Image
 
         with Image.open(io.BytesIO(raster.png_bytes)) as decoded:
+            width, height = decoded.size
+            if (width, height) != (raster.width, raster.height):
+                raise ValueError("OCR input geometry differs from the normalized PNG")
+            if width > self._limits.max_raster_width or height > self._limits.max_raster_height:
+                raise ValueError("OCR input dimensions exceed the configured raster limit")
+            if width * height > self._limits.max_raster_pixels_per_page:
+                raise ValueError("OCR input pixels exceed the configured raster limit")
+            decoded.load()
             page = decoded.convert("RGB")
         try:
             longest = max(page.size)
@@ -240,7 +251,8 @@ class PaddleTitleOcrProvider:
                 )
                 page.close()
                 page = resized
-            return numpy.asarray(page)[:, :, ::-1].copy()
+            header = f"P6\n{page.width} {page.height}\n255\n".encode("ascii")
+            return header + page.tobytes()
         finally:
             page.close()
 
