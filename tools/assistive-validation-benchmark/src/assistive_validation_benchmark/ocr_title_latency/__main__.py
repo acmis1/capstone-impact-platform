@@ -7,6 +7,7 @@ from pathlib import Path
 from .capture import candidate_configuration, capture_candidate
 from .corpus import build_calibration_corpus
 from .evidence import calibration_non_reuse
+from .freeze import check_freeze_manifest, write_freeze_manifest
 from .renderer import generate_assets
 from .schema import (
     canonical_json_bytes,
@@ -109,6 +110,28 @@ def _comparison(root: Path, corpus: dict, protocol: dict) -> dict:
     }
 
 
+def _preferred_candidate(comparison: dict) -> dict:
+    eligible = [
+        item for item in comparison["candidates"]
+        if item["selection_eligible"] and item["calibration_margin_passed"]
+    ]
+    if not eligible:
+        raise ValueError("no candidate satisfies the prospective calibration margin")
+    minimum_rank = min(item["complexity_rank"] for item in eligible)
+    same_rank = [item for item in eligible if item["complexity_rank"] == minimum_rank]
+    minimum_p50 = min(item["p50_ms"] for item in same_rank)
+    stable = [item for item in same_rank if item["p50_ms"] <= minimum_p50 * 1.02]
+    return min(
+        stable,
+        key=lambda item: (
+            item["p95_ms"],
+            item["configuration"]["cpu_threads"],
+            item["p50_ms"],
+            item["candidate_id"],
+        ),
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="PP1 scoped title-OCR latency optimization")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -132,6 +155,9 @@ def main() -> int:
     select = sub.add_parser("write-selection")
     select.add_argument("--candidate-id", required=True)
     sub.add_parser("check-evidence")
+    freeze = sub.add_parser("write-freeze")
+    freeze.add_argument("--calibration-commit", required=True)
+    sub.add_parser("check-freeze")
     args = parser.parse_args()
 
     if args.command == "write-calibration-corpus":
@@ -142,6 +168,12 @@ def main() -> int:
         return 0
 
     protocol, corpus = _inputs()
+    if args.command == "write-freeze":
+        print(write_freeze_manifest(args.calibration_commit))
+        return 0
+    if args.command == "check-freeze":
+        print(canonical_json_bytes(check_freeze_manifest()).decode(), end="")
+        return 0
     if args.command == "check-calibration":
         reuse = calibration_non_reuse(corpus)
         if not reuse["passed"]:
@@ -192,25 +224,7 @@ def main() -> int:
         print(root / "candidate-comparison.json")
         return 0
     if args.command == "write-selection":
-        eligible = [
-            item for item in comparison["candidates"]
-            if item["selection_eligible"] and item["calibration_margin_passed"]
-        ]
-        if not eligible:
-            raise ValueError("no candidate satisfies the prospective calibration margin")
-        minimum_rank = min(item["complexity_rank"] for item in eligible)
-        same_rank = [item for item in eligible if item["complexity_rank"] == minimum_rank]
-        minimum_p50 = min(item["p50_ms"] for item in same_rank)
-        stable = [item for item in same_rank if item["p50_ms"] <= minimum_p50 * 1.02]
-        preferred = min(
-            stable,
-            key=lambda item: (
-                item["p95_ms"],
-                item["configuration"]["cpu_threads"],
-                item["p50_ms"],
-                item["candidate_id"],
-            ),
-        )
+        preferred = _preferred_candidate(comparison)
         if preferred["candidate_id"] != args.candidate_id:
             raise ValueError(f"selected candidate differs from the prospective simplicity/performance rule: {preferred['candidate_id']}")
         selection = {
@@ -235,6 +249,8 @@ def main() -> int:
         raise ValueError("stored selected candidate is not eligible")
     if selection["selected_configuration"] != selected["configuration"]:
         raise ValueError("stored selected configuration differs from evidence")
+    if selection["selected_candidate_id"] != _preferred_candidate(comparison)["candidate_id"]:
+        raise ValueError("stored selection differs from the prospective stability rule")
     compatibility = load_json(root / "mkldnn-compatibility.json")
     if (
         compatibility.get("decision") != "MKLDNN_NOT_DEPLOYABLE_ON_CURRENT_WINDOWS_RUNTIME"

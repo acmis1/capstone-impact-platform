@@ -240,6 +240,10 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_title_latency check-evidence
 
+      - name: Verify PP1 OCR title-latency candidate freeze
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency check-freeze
+
       - name: Verify PP1 OCR title-consistency candidate freeze
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_title_consistency check-freeze

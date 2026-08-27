@@ -5,6 +5,7 @@ import unittest
 from assistive_validation_benchmark.ocr_productionization.title_safety import Candidate
 from assistive_validation_benchmark.ocr_title_latency.corpus import build_calibration_corpus
 from assistive_validation_benchmark.ocr_title_latency.evidence import calibration_non_reuse
+from assistive_validation_benchmark.ocr_title_latency.freeze import check_freeze_manifest
 from assistive_validation_benchmark.ocr_title_consistency.selector import select_title_candidates
 from assistive_validation_benchmark.ocr_title_latency.pipeline import fast_path_credible, restore_full_document_extent
 from assistive_validation_benchmark.ocr_title_latency.schema import data_root, load_json, validate_corpus, validate_protocol
@@ -43,6 +44,12 @@ class OcrTitleLatencyTests(unittest.TestCase):
         self.assertNotEqual("Alpine Library Climate Ledger", select_title_candidates(blocks)[0].text)
         restored = restore_full_document_extent(blocks, (1600, 1100))
         self.assertEqual("Alpine Library Climate Ledger", select_title_candidates(restored)[0].text)
+
+    def test_candidate_freeze_recomputes_and_proves_holdout_absent(self) -> None:
+        freeze = check_freeze_manifest()
+        self.assertEqual("default-cpu-fast-r36-t4", freeze["selected_candidate_id"])
+        self.assertTrue(freeze["calibration_checkpoint"]["holdout_path_absent"])
+        self.assertFalse(freeze["holdout_existed_when_manifest_written"])
 
 
 if __name__ == "__main__":
