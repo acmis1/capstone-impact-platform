@@ -32,6 +32,24 @@ export function translateOperation(operation: string, mode?: string | null): str
   return 'Showcase update';
 }
 
+type PublishingStatusPresentation = {
+  badgeLabel: string;
+  badgeVariant: 'success' | 'warning';
+  summaryLabel: string;
+};
+
+function derivePublishingStatusPresentation(
+  view: Pick<PublicFeedHistoryView, 'active' | 'blockingOperation'>,
+): PublishingStatusPresentation {
+  if (view.blockingOperation) {
+    return { badgeLabel: 'Needs attention', badgeVariant: 'warning', summaryLabel: 'Needs attention' };
+  }
+  if (view.active) {
+    return { badgeLabel: 'Publishing ready', badgeVariant: 'success', summaryLabel: 'Ready' };
+  }
+  return { badgeLabel: 'Setup required', badgeVariant: 'warning', summaryLabel: 'Setup required' };
+}
+
 export default async function PublicFeedHistoryPage({
   searchParams,
 }: {
@@ -61,13 +79,14 @@ export default async function PublicFeedHistoryPage({
   const projectsPublishedCount = view.deploymentStatuses.filter((s) => s.deployed).length;
   const divergedProjectsCount = view.deploymentStatuses.filter((s) => s.lifecycleStatus === 'published' && !s.deployed).length;
   const hasDivergedProjects = divergedProjectsCount > 0;
+  const publishingStatus = derivePublishingStatusPresentation(view);
 
   return (
     <div className="flex flex-col gap-8">
       <header className="max-w-4xl">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Showcase publishing history</h1>
-          <Badge variant={view.active ? 'success' : 'warning'}>{view.active ? 'Publishing ready' : 'Setup required'}</Badge>
+          <Badge variant={publishingStatus.badgeVariant}>{publishingStatus.badgeLabel}</Badge>
         </div>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           Publish or remove individual projects from their project page. This page shows showcase publishing activity and system status.
@@ -95,7 +114,7 @@ export default async function PublicFeedHistoryPage({
         <div className="border-b border-border/80 px-5 py-4 sm:border-b-0 sm:border-r">
           <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Publishing status</dt>
           <dd className="mt-1 text-lg font-semibold text-foreground">
-            {view.blockingOperation ? 'Needs attention' : view.active ? 'Ready' : 'Setup required'}
+            {publishingStatus.summaryLabel}
           </dd>
         </div>
         <div className="border-b border-border/80 px-5 py-4 sm:border-b-0 sm:border-r">

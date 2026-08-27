@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 
 afterEach(cleanup);
 import PublicFeedHistoryPage from './page';
@@ -68,6 +68,12 @@ const BASE_VIEW: publicFeedRepo.PublicFeedHistoryView = {
   blockingOperation: null,
 };
 
+function getPublishingHeader() {
+  const header = screen.getByRole('heading', { name: 'Showcase publishing history' }).closest('header');
+  if (!header) throw new Error('Publishing page header was not rendered.');
+  return within(header);
+}
+
 describe('PublicFeedHistoryPage', () => {
   it('renders top summary cards truthfully and does not leak raw publication modes', async () => {
     vi.mocked(requireAdminModule.requireAdmin).mockResolvedValue(MOCK_ADMIN);
@@ -86,6 +92,20 @@ describe('PublicFeedHistoryPage', () => {
     expect(screen.queryByText('Showcase connected')).toBeNull();
     expect(screen.queryByText('Connected')).toBeNull();
     expect(screen.queryByText(/Published · normal/i)).toBeNull();
+    expect(getPublishingHeader().getByText('Publishing ready')).toBeTruthy();
+  });
+
+  it('shows setup required in the header when publishing is inactive and no operation is blocking', async () => {
+    vi.mocked(requireAdminModule.requireAdmin).mockResolvedValue(MOCK_ADMIN);
+    vi.mocked(envModule.getServerEnv).mockReturnValue(MOCK_ENV);
+    vi.mocked(publicFeedRepo.readPublicFeedHistory).mockResolvedValue({ ...BASE_VIEW, active: false });
+
+    const jsx = await PublicFeedHistoryPage({ searchParams: Promise.resolve({}) });
+    render(jsx);
+
+    const header = getPublishingHeader();
+    expect(header.getByText('Setup required')).toBeTruthy();
+    expect(header.queryByText('Publishing ready')).toBeNull();
   });
 
   it('renders truthful status metrics when on page 2+ without mislabeling page-relative timestamps', async () => {
@@ -196,7 +216,10 @@ describe('PublicFeedHistoryPage', () => {
     const jsx = await PublicFeedHistoryPage({ searchParams: Promise.resolve({}) });
     render(jsx);
 
-    expect(screen.getByText('Needs attention')).toBeTruthy();
+    const header = getPublishingHeader();
+    expect(header.getByText('Needs attention')).toBeTruthy();
+    expect(header.queryByText('Publishing ready')).toBeNull();
+    expect(screen.getAllByText('Needs attention')).toHaveLength(2);
     expect(screen.getByText('Recovery required')).toBeTruthy();
     expect(screen.getByText('Publishing needs attention')).toBeTruthy();
   });
