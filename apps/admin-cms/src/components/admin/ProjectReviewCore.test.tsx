@@ -430,7 +430,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
     };
 
     const enterEditAndChangeTitle = (title: string) => {
-      fireEvent.click(screen.getByRole('button', { name: /edit metadata/i }));
+      fireEvent.click(screen.getByRole('button', { name: /edit project information/i }));
       fireEvent.change(screen.getByLabelText(/project title/i), { target: { value: title } });
     };
 
@@ -439,11 +439,11 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       renderEditor({ resultCode: 'SUCCESS', metadata: revisedMetadata, auditRecordId: 'e0000000-0000-4000-8000-000000000001' });
 
       enterEditAndChangeTitle('Revised title');
-      fireEvent.click(screen.getByRole('button', { name: /save metadata/i }));
+      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
-      expect(await screen.findByText('Project metadata saved.')).toBeTruthy();
-      expect(screen.queryByRole('button', { name: /save metadata/i })).toBeNull();
-      expect(screen.getByRole('button', { name: /edit metadata/i })).toBeTruthy();
+      expect(await screen.findByText('Project information saved.')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /save changes/i })).toBeNull();
+      expect(screen.getByRole('button', { name: /edit project information/i })).toBeTruthy();
     });
 
     it('stays in edit mode when the RPC response omits the audit record the authoritative contract always returns', async () => {
@@ -451,10 +451,10 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       renderEditor({ resultCode: 'SUCCESS', metadata: revisedMetadata });
 
       enterEditAndChangeTitle('Revised title');
-      fireEvent.click(screen.getByRole('button', { name: /save metadata/i }));
+      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
       expect(await screen.findByText('We could not save your changes. Please try again.')).toBeTruthy();
-      expect(screen.getByRole('button', { name: /save metadata/i })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /save changes/i })).toBeTruthy();
     });
   });
 });

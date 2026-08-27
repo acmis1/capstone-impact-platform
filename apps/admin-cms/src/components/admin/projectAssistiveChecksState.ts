@@ -47,6 +47,7 @@ export type AssistiveChecksAction =
   | { type: 'DISPOSITION_FAILED'; error: string }
   | { type: 'APPLY_STARTED' }
   | { type: 'APPLY_COMPLETED'; message: string; success: boolean }
+  | { type: 'APPLY_FAILED'; error: string }
   | { type: 'COPY_FEEDBACK'; findingId: string | null; status: 'copied' | 'failed' | null }
   | { type: 'CLEAR_FEEDBACK' };
 
@@ -132,6 +133,8 @@ export function assistiveChecksReducer(
         actionInFlight: 'idle',
         feedback: { message: action.message, type: action.success ? 'success' : 'warning' },
       };
+    case 'APPLY_FAILED':
+      return { ...state, actionInFlight: 'idle', feedback: null, error: action.error };
     case 'COPY_FEEDBACK':
       return { ...state, copiedFindingId: action.findingId, copyStatus: action.status };
     case 'CLEAR_FEEDBACK':

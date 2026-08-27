@@ -6,7 +6,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { AssistiveInspectionFinding, AssistiveInspectionView } from '../../../assistive-validation';
 import * as assistiveActions from '../../../app/admin/projects/[publicId]/assistiveActions';
 import { ProjectAssistiveChecks } from '../ProjectAssistiveChecks';
+import { ProjectMetadataEditor } from '../ProjectMetadataEditor';
 import { ProjectMetadataNavigationProvider } from '../ProjectMetadataNavigation';
+import type { ProjectMetadataActionResult, ProjectMetadataView } from '../../../projects/projectMetadata';
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
 
 vi.mock('../../../app/admin/projects/[publicId]/assistiveActions', () => ({
   runAssistiveChecksAction: vi.fn(),
@@ -878,5 +884,105 @@ describe('Stale Prop Synchronization Tests (Blocker 3)', () => {
     );
 
     expect(screen.getByText('Document evidence unverifiable')).toBeTruthy();
+  });
+});
+
+describe('Assistive title suggestion reports success only after the draft actually changes', () => {
+  const APPLIED_MESSAGE = 'Suggestion applied to the metadata editor draft.';
+  const CANDIDATE_TITLE = 'Smart Urban Analytics & AI';
+
+  const editorMetadata: ProjectMetadataView = {
+    publicId: PUBLIC_ID,
+    expectedUpdatedAt: '2026-08-21T09:00:00.000Z',
+    title: 'Smart Urban Analytics',
+    summary: 'A short summary of the project.',
+    background: 'Background information goes here.',
+    solution: 'Solution details go here.',
+    posterText: 'Poster text here.',
+    accessibilityText: 'Alt text for poster.',
+    year: '2026',
+    programId: 'prog-1',
+    disciplineIds: ['disc-1'],
+    industryCategoryIds: ['cat-1'],
+  };
+
+  function renderWorkspace() {
+    const saveAction = vi
+      .fn()
+      .mockResolvedValue({ ok: true, metadata: editorMetadata } as ProjectMetadataActionResult);
+    return render(
+      <ProjectMetadataNavigationProvider>
+        <ProjectMetadataEditor
+          initialMetadata={editorMetadata}
+          programs={[{ id: 'prog-1', name: 'Bachelor of Software Engineering' }]}
+          disciplines={[{ id: 'disc-1', name: 'Software Engineering' }]}
+          industryCategories={[{ id: 'cat-1', name: 'Information Technology' }]}
+          canEdit={true}
+          projectStatus="draft"
+          saveAction={saveAction}
+        />
+        <ProjectAssistiveChecks
+          publicId={PUBLIC_ID}
+          canEditMetadata={true}
+          canReview={true}
+          initialInspection={sampleInspection()}
+        />
+      </ProjectMetadataNavigationProvider>,
+    );
+  }
+
+  function makeTitleDraftDirty(typedTitle: string) {
+    fireEvent.click(screen.getByRole('button', { name: /Edit project information/i }));
+    fireEvent.change(screen.getByLabelText(/Project title/i), { target: { value: typedTitle } });
+  }
+
+  it('reports success for a suggestion that needs no confirmation', async () => {
+    renderWorkspace();
+
+    fireEvent.click(screen.getByRole('button', { name: /Apply to draft/i }));
+
+    expect(await screen.findByText(APPLIED_MESSAGE)).toBeTruthy();
+    expect(screen.queryByText('Replace unsaved title?')).toBeNull();
+  });
+
+  it('reports no success while the replacement confirmation is still pending', async () => {
+    renderWorkspace();
+    makeTitleDraftDirty('A title the reviewer typed');
+
+    fireEvent.click(screen.getByRole('button', { name: /Apply to draft/i }));
+
+    expect(await screen.findByText('Replace unsaved title?')).toBeTruthy();
+    expect(screen.queryByText(APPLIED_MESSAGE)).toBeNull();
+    expect((screen.getByLabelText(/Project title/i) as HTMLInputElement).value).toBe(
+      'A title the reviewer typed',
+    );
+  });
+
+  it('reports no success and leaves the draft alone when the current title is kept', async () => {
+    renderWorkspace();
+    makeTitleDraftDirty('A title the reviewer typed');
+
+    fireEvent.click(screen.getByRole('button', { name: /Apply to draft/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Keep current title' }));
+
+    await waitFor(() => expect(screen.queryByText('Replace unsaved title?')).toBeNull());
+    expect(screen.queryByText(APPLIED_MESSAGE)).toBeNull();
+    expect((screen.getByLabelText(/Project title/i) as HTMLInputElement).value).toBe(
+      'A title the reviewer typed',
+    );
+  });
+
+  it('reports success only once the replacement has changed the draft', async () => {
+    renderWorkspace();
+    makeTitleDraftDirty('A title the reviewer typed');
+
+    fireEvent.click(screen.getByRole('button', { name: /Apply to draft/i }));
+    expect(await screen.findByText('Replace unsaved title?')).toBeTruthy();
+    expect(screen.queryByText(APPLIED_MESSAGE)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Replace title' }));
+
+    expect(await screen.findByText(APPLIED_MESSAGE)).toBeTruthy();
+    expect((screen.getByLabelText(/Project title/i) as HTMLInputElement).value).toBe(CANDIDATE_TITLE);
   });
 });

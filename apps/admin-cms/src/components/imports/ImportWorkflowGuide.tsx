@@ -20,7 +20,7 @@ export interface ImportWorkflowGuideProps {
 }
 
 const STEPS = [
-  { step: 1, label: 'Reference file' },
+  { step: 1, label: 'School spreadsheet' },
   { step: 2, label: 'Project folder' },
   // Step 3 is current *before and while* the file check runs; once validation
   // results exist the workflow has already advanced to the confirmation stage.

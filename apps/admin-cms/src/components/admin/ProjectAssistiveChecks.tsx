@@ -240,20 +240,29 @@ export function ProjectAssistiveChecks({
     }
   };
 
-  const handleApplyToDraft = (candidateText: string) => {
+  // Reports success only once the metadata editor draft has actually changed. When the editor asks
+  // a human to confirm replacing an unsaved title, this stays in the "applying" state until they
+  // decide: a pending confirmation is never reported as an applied suggestion.
+  const handleApplyToDraft = async (candidateText: string) => {
     dispatch({ type: 'APPLY_STARTED' });
-    const applied = applyTitleSuggestion(candidateText);
-    if (applied) {
+    const outcome = await applyTitleSuggestion(candidateText);
+    if (!isMountedRef.current) return;
+    if (outcome === 'applied') {
       dispatch({
         type: 'APPLY_COMPLETED',
         message: 'Suggestion applied to the metadata editor draft.',
         success: true,
       });
-    } else {
+    } else if (outcome === 'cancelled') {
       dispatch({
         type: 'APPLY_COMPLETED',
-        message: 'Could not apply suggestion to draft.',
+        message: 'Suggestion not applied. The current title was kept.',
         success: false,
+      });
+    } else {
+      dispatch({
+        type: 'APPLY_FAILED',
+        error: 'Could not apply the suggestion: the project information editor is not available for editing.',
       });
     }
   };
@@ -444,7 +453,7 @@ export function ProjectAssistiveChecks({
         {state.readUnavailable && !state.inspection && !isJobActive && (
           <div className="rounded-lg border border-border bg-surface-inset p-4 text-sm text-muted-foreground">
             <p className="font-medium text-foreground">Assistive checks are temporarily unavailable.</p>
-            <p className="mt-1 text-xs">Could not load historical check results. You can still review and edit metadata below.</p>
+            <p className="mt-1 text-xs">Could not load historical check results. You can still review and edit project information below.</p>
           </div>
         )}
 
@@ -786,7 +795,7 @@ export function ProjectAssistiveChecks({
                               variant="secondary"
                               size="sm"
                               disabled={!canApply || state.actionInFlight !== 'idle'}
-                              onClick={() => handleApplyToDraft(legacyEvidence.candidateValue!)}
+                              onClick={() => { void handleApplyToDraft(legacyEvidence.candidateValue!); }}
                               title={
                                 !canEditMetadata
                                   ? 'Your role cannot edit project metadata.'
