@@ -15,13 +15,13 @@ export function DeploymentReconciliationButton({ publicId }: { publicId: string 
       const response = await fetch(`/api/projects/${encodeURIComponent(publicId)}/deployment-reconciliation`, { method: 'POST' });
       const body = await response.json() as { success?: boolean; code?: string };
       if (body.success) {
-        setMessage('Deployed.');
+        setMessage('Status repaired.');
         router.refresh();
       } else {
-        setMessage(`Stopped: ${body.code || 'RECONCILIATION_FAILED'}.`);
+        setMessage(`Repair stopped: ${body.code || 'RECONCILIATION_FAILED'}.`);
       }
     } catch {
-      setMessage('Reconciliation failed.');
+      setMessage('Repair could not be completed.');
     } finally {
       setPending(false);
     }
@@ -29,9 +29,9 @@ export function DeploymentReconciliationButton({ publicId }: { publicId: string 
   return (
     <div className="flex items-center gap-2">
       <Button type="button" size="sm" variant="outline" onClick={reconcile} disabled={pending}>
-        {pending ? 'Deploying…' : 'Reconcile deployment'}
+        {pending ? 'Repairing…' : 'Repair showcase status'}
       </Button>
-      {message && <span role="status" className="text-xs text-muted-foreground">{message}</span>}
+      {message && <span role="status" className="text-xs font-medium text-foreground">{message}</span>}
     </div>
   );
 }
