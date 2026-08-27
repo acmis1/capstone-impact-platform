@@ -12,7 +12,7 @@ export interface RouteDescriptor {
 export const NAVIGATION_ITEMS: NavigationItem[] = [
   { name: 'Projects', href: '/admin' },
   { name: 'Imports', href: '/admin/imports' },
-  { name: 'Public feed', href: '/admin/public-feed' },
+  { name: 'Publishing', href: '/admin/public-feed' },
 ];
 
 export const STAFF_NAVIGATION_ITEM: NavigationItem = { name: 'Staff access', href: '/admin/staff' };
@@ -32,8 +32,8 @@ export function getRouteDescriptor(pathname: string): RouteDescriptor {
 
   if (cleanPath === '/admin/public-feed') {
     return {
-      title: 'Public deployment history',
-      breadcrumbs: [{ label: 'Public feed' }],
+      title: 'Showcase publishing history',
+      breadcrumbs: [{ label: 'Publishing' }],
       activeHref: '/admin/public-feed',
     };
   }

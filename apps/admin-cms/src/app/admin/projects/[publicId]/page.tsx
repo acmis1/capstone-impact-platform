@@ -734,11 +734,11 @@ export default async function ProjectDetailPage({ params }: PageProps) {
 
             <ProjectReviewSection
               id="publication-lifecycle"
-              title="Publication and lifecycle"
+              title="Showcase publishing"
               description={
                 laterStagesActive
-                  ? 'Publication readiness, preparation evidence, and the governed showcase lifecycle. Approval alone does not publish a project, and this interface never performs live Duda publication.'
-                  : 'Becomes relevant after approval and participant confirmation. Approval alone does not publish a project.'
+                  ? 'Review publication readiness, publish the project to the test showcase, or manage showcase removal.'
+                  : 'Becomes available after approval and participant confirmation. Approval alone does not publish a project.'
               }
               icon={Rocket}
               collapsible={!laterStagesActive}
@@ -882,7 +882,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                   )}
                 </RecordFact>
                 <RecordFact label="Academic supervisor">{project.academicSupervisor || 'Not provided'}</RecordFact>
-                <RecordFact label="Public feed eligibility">
+                <RecordFact label="Showcase publishing eligibility">
                   {isEligible ? 'Eligible by status' : 'Not eligible at this status'}
                 </RecordFact>
               </dl>
@@ -905,9 +905,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-foreground-subtle" aria-hidden="true" />
               <p className="text-sm leading-relaxed">
                 <strong className="font-semibold text-foreground">Review staging sandbox.</strong> Live
-                production public-feed operations are disabled and external integrations stay disconnected.
-                Publication and archive controls appear only when the server runtime identity and
-                capability gates match the configured Local or staging target.
+                showcase publishing is disabled and external integrations stay disconnected.
+                Publishing controls appear only when the server runtime identity matches the configured
+                Local or test showcase target.
               </p>
             </div>
           </aside>
