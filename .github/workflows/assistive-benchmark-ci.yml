@@ -222,6 +222,28 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_title_consistency check-calibration-evidence
 
+      # Issue #214's latency evidence is replayed without Paddle or model weights. These
+      # checks cover corpus novelty, deterministic rendering, score arithmetic, bounded
+      # candidate comparison and the prospective stability-based selection.
+      - name: Validate PP1 OCR title-latency calibration and non-reuse
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency check-calibration
+
+      - name: Prove PP1 OCR title-latency renderer determinism
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_title_latency generate-calibration --output-dir artifacts/ocr-title-latency-repeat-a
+          python -m assistive_validation_benchmark.ocr_title_latency generate-calibration --output-dir artifacts/ocr-title-latency-repeat-b
+          cmp artifacts/ocr-title-latency-repeat-a/generation.json artifacts/ocr-title-latency-repeat-b/generation.json
+
+      - name: Recompute PP1 OCR title-latency candidate evidence without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency check-evidence
+
+      - name: Verify PP1 OCR title-latency candidate freeze
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency check-freeze
+
       - name: Verify PP1 OCR title-consistency candidate freeze
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_title_consistency check-freeze
@@ -231,6 +253,16 @@ jobs:
       - name: Re-prove the final PP1 OCR title-consistency holdout result without OCR
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_title_consistency_holdout check-result
+
+      # The Issue #214 holdout is also one-shot. These commands validate its frozen seal,
+      # consumed state, score arithmetic and decision without loading Paddle or model files.
+      - name: Verify PP1 OCR title-latency holdout seal without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency_holdout check-seal --allow-consumed
+
+      - name: Re-prove the final PP1 OCR title-latency holdout result without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency_holdout check-result
 
       - name: Generate deterministic synthetic corpus smoke fixture
         working-directory: tools/assistive-validation-benchmark
