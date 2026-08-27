@@ -147,7 +147,7 @@ describe('PublicationPreparationPanel', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('generates a plan through the exact POST endpoint without a body and shows human review summary', async () => {
+  it('generates a plan through the exact POST endpoint without mislabeling its record count as publication state', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, result: PLAN }) });
     vi.stubGlobal('fetch', fetchMock);
     render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare executionTarget={null} />);
@@ -155,6 +155,10 @@ describe('PublicationPreparationPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Review publication/i }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/projects/2026-agri-iot/publication-plan', { method: 'POST' }));
     expect(await screen.findByText(/Review complete\. Nothing has been published yet\./i)).toBeTruthy();
+    expect(screen.getByText('Review artifact record count:')).toBeTruthy();
+    expect(screen.queryByText('Projects on showcase')).toBeNull();
+    expect(screen.queryByText('Projects published')).toBeNull();
+    expect(screen.queryByText('Projects after publication')).toBeNull();
     expect(screen.queryByText(/Publish to local test showcase/i)).toBeNull();
   });
 
@@ -189,7 +193,7 @@ describe('PublicationPreparationPanel', () => {
     expect(await screen.findByText('Already published locally')).toBeTruthy();
   });
 
-  it('labels staging publication explicitly, submits no browser authority, and shows human-first success', async () => {
+  it('labels staging publication without claiming Duda visibility and shows a verification reminder', async () => {
     const stagingSuccess = {
       ...SUCCESS,
       feedPublicUrl: 'https://synthetic-pp1-staging.supabase.co/storage/v1/object/public/public-feeds/capstones-latest.json',
@@ -202,24 +206,41 @@ describe('PublicationPreparationPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Review publication/i }));
     expect(await screen.findByRole('heading', { name: 'Publish to test showcase' })).toBeTruthy();
-    expect(screen.getByText(/visible on the test showcase\. The live public showcase will not be changed/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole('checkbox'));
+    expect(screen.getByText('This publishes the project for the test showcase. The live public showcase is not changed.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'I understand this publishes the project for the test showcase and does not change the live public showcase.' }));
     fireEvent.click(screen.getByRole('button', { name: 'Publish to test showcase' }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith(
       '/api/projects/2026-agri-iot/staging-publication',
       { method: 'POST' },
     ));
-    expect(await screen.findByText('Published to test showcase')).toBeTruthy();
-    expect(screen.getByText(/This project is now visible on the test showcase\./i)).toBeTruthy();
+    expect(await screen.findByText('Published for test showcase')).toBeTruthy();
+    expect(screen.getByText('Publishing completed successfully. Refresh the test showcase to confirm the project appears.')).toBeTruthy();
+    expect(screen.queryByText(/visible on the test showcase/i)).toBeNull();
     const feedLink = screen.getByRole('link', { name: stagingSuccess.feedPublicUrl });
     expect(feedLink.getAttribute('href')).toBe(stagingSuccess.feedPublicUrl);
     expect(JSON.stringify(fetchMock.mock.calls[1])).not.toMatch(/service|secret|supabaseUrl|bucket/i);
 
     rerender(<PublicationPreparationPanel publicId={PLAN.publicId} ready={false} canPrepare executionTarget="staging" />);
-    expect(screen.getByText('Published to test showcase')).toBeTruthy();
+    expect(screen.getByText('Published for test showcase')).toBeTruthy();
     expect(screen.getByRole('link', { name: stagingSuccess.feedPublicUrl })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Publish to test showcase' })).toBeNull();
+  });
+
+  it('describes an already-completed staging publication without claiming current presentation visibility', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, result: PLAN }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, result: { ...SUCCESS, resultCode: 'ALREADY_COMPLETED' } }) });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<PublicationPreparationPanel publicId={PLAN.publicId} ready canPrepare executionTarget="staging" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Review publication/i }));
+    fireEvent.click(await screen.findByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish to test showcase' }));
+
+    expect(await screen.findByText('Already published for test showcase')).toBeTruthy();
+    expect(screen.getByText('Publishing completed successfully. Refresh the test showcase to confirm the project appears.')).toBeTruthy();
+    expect(screen.queryByText(/visible on the test showcase/i)).toBeNull();
   });
 
   it('shows bounded staging route failures in understandable language', async () => {
@@ -297,14 +318,15 @@ describe('LocalArchivePanel', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ archiveReason: 'Retire staging entry' }),
     }));
-    expect(await screen.findByText('Removed from test showcase')).toBeTruthy();
-    expect(screen.getByText('This project has been archived and is no longer shown on the test showcase.')).toBeTruthy();
+    expect(await screen.findByText('Removed from test showcase publishing')).toBeTruthy();
+    expect(screen.getByText('The project has been archived and removed from the published test-showcase data. Refresh the test showcase to confirm it no longer appears.')).toBeTruthy();
+    expect(screen.queryByText(/no longer shown on the test showcase/i)).toBeNull();
     expect(refresh).toHaveBeenCalledOnce();
   });
 
   it.each([
     ['STAGING_ARCHIVE_UNAVAILABLE', 'Showcase removal is currently unavailable. Please contact an administrator.'],
-    ['NOT_PUBLISHED', 'not currently published on the showcase'],
+    ['NOT_PUBLISHED', 'not in the current published test-showcase data'],
     ['PUBLICATION_IN_PROGRESS', 'Wait for it to finish, then refresh'],
     ['RECOVERY_REQUIRED', 'use the publishing recovery workflow.'],
     ['CURRENT_FEED_DIVERGED', 'repair the publishing status.'],

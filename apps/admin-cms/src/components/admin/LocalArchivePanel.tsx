@@ -11,10 +11,10 @@ import { Textarea } from '../ui/textarea';
 
 const STAGING_FAILURE_MESSAGES = {
   STAGING_ARCHIVE_UNAVAILABLE: 'Showcase removal is currently unavailable. Please contact an administrator.',
-  NOT_PUBLISHED: 'This project is not currently published on the showcase.',
+  NOT_PUBLISHED: 'This project is not in the current published test-showcase data.',
   PUBLICATION_IN_PROGRESS: 'Another publishing action is still running. Wait for it to finish, then refresh before taking further action.',
   RECOVERY_REQUIRED: 'A previous publishing action needs recovery before you continue. Do not retry this removal; use the publishing recovery workflow.',
-  CURRENT_FEED_DIVERGED: 'The CMS and showcase do not currently agree about this project. No removal was performed; an administrator needs to repair the publishing status.',
+  CURRENT_FEED_DIVERGED: 'The CMS and published test-showcase data do not currently agree about this project. No removal was performed; an administrator needs to repair the publishing status.',
   STAGING_ARCHIVE_FAILED: 'Removal could not be completed. Please refresh and check the project status before trying again.',
 } as const;
 
@@ -96,14 +96,16 @@ export function LocalArchivePanel({
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
           {isStaging
-            ? 'Remove this project from the test showcase and archive the record in the CMS.'
+            ? 'Remove this project from published test-showcase data and archive the record in the CMS. The live public showcase is not affected.'
             : 'Remove this project from the local test showcase and archive the record.'}
         </p>
       </div>
 
       <Alert variant="warning" icon={ShieldAlert} title="What happens when you remove this project">
         <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm text-muted-foreground">
-          <li>The project will no longer appear on the test showcase.</li>
+          <li>{isStaging
+            ? 'The project will be removed from published test-showcase data. Refresh the test showcase afterward to confirm it no longer appears.'
+            : 'The project will no longer appear in the local test showcase.'}</li>
           <li>The project record will remain in the CMS with Archived status.</li>
           <li>Uploaded files and media are kept safe and not deleted.</li>
           <li>The live public showcase is not affected.</li>
@@ -120,7 +122,7 @@ export function LocalArchivePanel({
         <input type="checkbox" checked={state.acknowledged} disabled={state.pending || state.success !== null} onChange={(event) => dispatch({ type: 'ACK', value: event.target.checked })} className="mt-0.5 h-4 w-4 rounded border-input" />
         <span>
           {isStaging
-            ? 'I understand this project will be removed from the test showcase and archived in the CMS. Uploaded files will not be deleted.'
+            ? 'I understand this removes the project from published test-showcase data and archives it in the CMS. The live public showcase is not affected, and uploaded files will not be deleted.'
             : 'I understand this project will be removed from the local test showcase and archived in the CMS.'}
         </span>
       </label>
@@ -139,10 +141,10 @@ export function LocalArchivePanel({
         <Alert
           variant="success"
           title={state.success === 'ALREADY_COMPLETED'
-            ? (isStaging ? 'Already removed from test showcase' : 'Already removed from local showcase')
-            : (isStaging ? 'Removed from test showcase' : 'Removed from local showcase')}
+            ? (isStaging ? 'Already removed from test showcase publishing' : 'Already removed from local showcase')
+            : (isStaging ? 'Removed from test showcase publishing' : 'Removed from local showcase')}
           description={isStaging
-            ? 'This project has been archived and is no longer shown on the test showcase.'
+            ? 'The project has been archived and removed from the published test-showcase data. Refresh the test showcase to confirm it no longer appears.'
             : 'This project has been archived and is no longer shown in the local test showcase.'}
         />
       )}

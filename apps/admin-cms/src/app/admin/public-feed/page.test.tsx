@@ -78,10 +78,13 @@ describe('PublicFeedHistoryPage', () => {
     render(jsx);
 
     expect(screen.getByText('Showcase publishing history')).toBeTruthy();
-    expect(screen.getByText('Connected')).toBeTruthy();
-    expect(screen.getByText('1')).toBeTruthy(); // 1 project deployed on showcase
+    expect(screen.getByText('Ready')).toBeTruthy();
+    expect(screen.getAllByText('Projects published').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('1')).toBeTruthy(); // 1 project in the published deployment state
     expect(screen.getByText('All projects in sync')).toBeTruthy();
-    expect(screen.getByText('Published')).toBeTruthy();
+    expect(screen.getAllByText('Published').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('Showcase connected')).toBeNull();
+    expect(screen.queryByText('Connected')).toBeNull();
     expect(screen.queryByText(/Published · normal/i)).toBeNull();
   });
 
@@ -143,6 +146,36 @@ describe('PublicFeedHistoryPage', () => {
 
     expect(screen.getByText('1 project needs repair')).toBeTruthy();
     expect(screen.getByText(/Publishing status needs attention:/i)).toBeTruthy();
+  });
+
+  it('uses reconciliation semantics consistently in activity and selected details', async () => {
+    const reconciliationItem: publicFeedRepo.PublicFeedHistoryDetail = {
+      ...BASE_VIEW.versions[0],
+      publicationMode: 'deployment_reconciliation',
+      affectedPublicId: 'proj-2',
+      affectedTitle: 'Project Two',
+      members: [{
+        ordinal: 1,
+        publicId: 'proj-2',
+        title: 'Project Two',
+        lifecycleStatus: 'published',
+        currentlyDeployed: true,
+      }],
+    };
+    vi.mocked(requireAdminModule.requireAdmin).mockResolvedValue(MOCK_ADMIN);
+    vi.mocked(envModule.getServerEnv).mockReturnValue(MOCK_ENV);
+    vi.mocked(publicFeedRepo.readPublicFeedHistory).mockResolvedValue({
+      ...BASE_VIEW,
+      versions: [reconciliationItem],
+      detail: reconciliationItem,
+    });
+
+    const jsx = await PublicFeedHistoryPage({ searchParams: Promise.resolve({ version: '10' }) });
+    render(jsx);
+
+    expect(screen.getByText('Showcase status repaired')).toBeTruthy();
+    expect(screen.getByText('Repaired showcase status for Project Two')).toBeTruthy();
+    expect(screen.queryByText('Published project Project Two')).toBeNull();
   });
 
   it('alerts when a blocking recovery operation is active', async () => {

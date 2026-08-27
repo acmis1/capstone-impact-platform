@@ -17,12 +17,16 @@ function formatTimestamp(value: string): string {
   return new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(value));
 }
 
+function isDeploymentReconciliation(operation: string, mode?: string | null): boolean {
+  return operation === 'publication' && mode === 'deployment_reconciliation';
+}
+
 export function translateOperation(operation: string, mode?: string | null): string {
   if (operation === 'baseline') return 'Initial setup';
   if (operation === 'removal') return 'Removed';
   if (operation === 'rollback') return 'Restored';
   if (operation === 'publication') {
-    if (mode === 'deployment_reconciliation') return 'Showcase status repaired';
+    if (isDeploymentReconciliation(operation, mode)) return 'Showcase status repaired';
     return 'Published';
   }
   return 'Showcase update';
@@ -54,7 +58,7 @@ export default async function PublicFeedHistoryPage({
   const rollbackAvailable = view.rollbackEnabled
     && isLocalPublicFeedRollbackAvailable(env.supabaseUrl, process.env);
 
-  const projectsOnShowcaseCount = view.deploymentStatuses.filter((s) => s.deployed).length;
+  const projectsPublishedCount = view.deploymentStatuses.filter((s) => s.deployed).length;
   const divergedProjectsCount = view.deploymentStatuses.filter((s) => s.lifecycleStatus === 'published' && !s.deployed).length;
   const hasDivergedProjects = divergedProjectsCount > 0;
 
@@ -63,7 +67,7 @@ export default async function PublicFeedHistoryPage({
       <header className="max-w-4xl">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Showcase publishing history</h1>
-          <Badge variant={view.active ? 'success' : 'warning'}>{view.active ? 'Showcase connected' : 'Setup required'}</Badge>
+          <Badge variant={view.active ? 'success' : 'warning'}>{view.active ? 'Publishing ready' : 'Setup required'}</Badge>
         </div>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           Publish or remove individual projects from their project page. This page shows showcase publishing activity and system status.
@@ -89,14 +93,14 @@ export default async function PublicFeedHistoryPage({
       {/* Top-Level Status Summary Cards */}
       <dl className="grid overflow-hidden rounded-xl border border-border-structural bg-card shadow-xs sm:grid-cols-3">
         <div className="border-b border-border/80 px-5 py-4 sm:border-b-0 sm:border-r">
-          <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Showcase status</dt>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Publishing status</dt>
           <dd className="mt-1 text-lg font-semibold text-foreground">
-            {view.blockingOperation ? 'Needs attention' : view.active ? 'Connected' : 'Setup required'}
+            {view.blockingOperation ? 'Needs attention' : view.active ? 'Ready' : 'Setup required'}
           </dd>
         </div>
         <div className="border-b border-border/80 px-5 py-4 sm:border-b-0 sm:border-r">
-          <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Projects on showcase</dt>
-          <dd className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{projectsOnShowcaseCount}</dd>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Projects published</dt>
+          <dd className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{projectsPublishedCount}</dd>
         </div>
         <div className="px-5 py-4">
           <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status alignment</dt>
@@ -149,7 +153,7 @@ export default async function PublicFeedHistoryPage({
                   <th className="px-4 py-3">Project</th>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">By</th>
-                  <th className="px-4 py-3">Projects on showcase</th>
+                  <th className="px-4 py-3">Projects published</th>
                   <th className="px-4 py-3">Version</th>
                 </tr>
               </thead>
@@ -189,12 +193,14 @@ export default async function PublicFeedHistoryPage({
           <div className="mt-3 text-sm text-foreground">
             <p className="font-medium">
               {view.detail.operation === 'baseline' && 'Initial showcase setup'}
-              {view.detail.operation === 'publication' && `Published project ${view.detail.affectedTitle || view.detail.affectedPublicId || ''}`}
+              {view.detail.operation === 'publication' && (isDeploymentReconciliation(view.detail.operation, view.detail.publicationMode)
+                ? `Repaired showcase status for ${view.detail.affectedTitle || view.detail.affectedPublicId || ''}`
+                : `Published project ${view.detail.affectedTitle || view.detail.affectedPublicId || ''}`)}
               {view.detail.operation === 'removal' && `Removed project ${view.detail.affectedTitle || view.detail.affectedPublicId || ''}`}
               {view.detail.operation === 'rollback' && `Restored version ${view.detail.restoredFromVersionNumber}`}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Performed by {view.detail.actorDisplay} on {formatTimestamp(view.detail.createdAt)} · {view.detail.recordCount} {view.detail.recordCount === 1 ? 'project' : 'projects'} on showcase
+              Performed by {view.detail.actorDisplay} on {formatTimestamp(view.detail.createdAt)} · {view.detail.recordCount} {view.detail.recordCount === 1 ? 'project' : 'projects'} published
             </p>
           </div>
 
@@ -221,7 +227,7 @@ export default async function PublicFeedHistoryPage({
                   </span>
                   <div className="flex items-center gap-2">
                     <Badge variant={member.currentlyDeployed ? 'success' : 'neutral'}>
-                      {member.currentlyDeployed ? 'On showcase' : 'Not on showcase'}
+                      {member.currentlyDeployed ? 'Published' : 'Not published'}
                     </Badge>
                   </div>
                 </li>
@@ -236,13 +242,13 @@ export default async function PublicFeedHistoryPage({
         <div>
           <h2 id="project-publishing-status-heading" className="text-lg font-semibold text-foreground">Project publishing status</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Review each project&apos;s workflow stage and showcase availability.
+            Review each project&apos;s workflow stage and publication status.
           </p>
         </div>
 
         {hasDivergedProjects && (
           <div className="rounded-lg border border-warning/40 bg-warning/5 p-4 text-sm text-foreground shadow-xs">
-            <strong className="font-semibold text-warning">Publishing status needs attention:</strong> One or more projects are marked as published in the CMS but are not currently on the showcase. Use &ldquo;Repair showcase status&rdquo; to resolve.
+            <strong className="font-semibold text-warning">Publishing status needs attention:</strong> One or more projects are marked as published in the CMS but are missing from the current published data. Use &ldquo;Repair showcase status&rdquo; to resolve.
           </div>
         )}
 
@@ -252,7 +258,7 @@ export default async function PublicFeedHistoryPage({
               <tr>
                 <th className="px-4 py-3">Project</th>
                 <th className="px-4 py-3">Workflow status</th>
-                <th className="px-4 py-3">Showcase status</th>
+                <th className="px-4 py-3">Publishing status</th>
                 <th className="px-4 py-3">Action</th>
               </tr>
             </thead>
@@ -268,7 +274,7 @@ export default async function PublicFeedHistoryPage({
                   <td className="px-4 py-3 capitalize text-muted-foreground">{item.lifecycleStatus.replaceAll('_', ' ')}</td>
                   <td className="px-4 py-3">
                     <Badge variant={item.deployed ? 'success' : 'neutral'}>
-                      {item.deployed ? 'On showcase' : 'Not on showcase'}
+                      {item.deployed ? 'Published' : 'Not published'}
                     </Badge>
                   </td>
                   <td className="px-4 py-3">

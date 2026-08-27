@@ -99,14 +99,11 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
               <dt className="font-medium text-foreground">Participant confirmation time</dt>
               <dd className="text-muted-foreground">{new Date(state.plan.confirmedAt).toLocaleString()}</dd>
             </div>
-            <div>
-              <dt className="font-medium text-foreground">Projects on showcase</dt>
-              <dd className="text-muted-foreground">{state.plan.recordCount}</dd>
-            </div>
           </dl>
           <details className="mt-3 text-xs text-muted-foreground">
             <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
             <dl className="mt-2 space-y-1">
+              <div><dt className="inline font-medium text-foreground">Review artifact record count:</dt> <dd className="inline">{state.plan.recordCount}</dd></div>
               <div><dt className="inline font-medium text-foreground">Project ID:</dt> <dd className="inline font-mono break-all">{state.plan.publicId}</dd></div>
               <div><dt className="inline font-medium text-foreground">Snapshot ID:</dt> <dd className="inline font-mono break-all">{state.plan.confirmedPreviewId}</dd></div>
               <div><dt className="inline font-medium text-foreground">SHA-256 hash:</dt> <dd className="inline font-mono break-all">{state.plan.feedHash}</dd></div>
@@ -124,7 +121,7 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {isStaging
-                ? 'This project will become visible on the test showcase. The live public showcase will not be changed.'
+                ? 'This publishes the project for the test showcase. The live public showcase is not changed.'
                 : 'This test action publishes only to the disposable Local Supabase environment. It does not affect the live showcase.'}
             </p>
           </div>
@@ -138,7 +135,7 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
             />
             <span>
               {isStaging
-                ? 'I understand this project will be visible on the test showcase and the live public showcase is not affected.'
+                ? 'I understand this publishes the project for the test showcase and does not change the live public showcase.'
                 : 'I understand this publishes only to the disposable Local Supabase test environment.'}
             </span>
           </label>
@@ -156,16 +153,18 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
         <Alert
           variant="success"
           title={state.success.resultCode === 'ALREADY_COMPLETED'
-            ? (isStaging ? 'Already on test showcase' : 'Already published locally')
-            : (isStaging ? 'Published to test showcase' : 'Published locally')}
+            ? (isStaging ? 'Already published for test showcase' : 'Already published locally')
+            : (isStaging ? 'Published for test showcase' : 'Published locally')}
         >
           <p className="text-sm text-foreground">
-            {isStaging ? 'This project is now visible on the test showcase.' : 'This project is now published in the local test environment.'}
+            {isStaging
+              ? 'Publishing completed successfully. Refresh the test showcase to confirm the project appears.'
+              : 'This project is now published in the local test environment.'}
           </p>
           <details className="mt-3 text-xs text-muted-foreground">
             <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
             <dl className="mt-2 space-y-1">
-              <div><dt className="inline font-medium text-foreground">Projects on showcase:</dt> <dd className="inline">{state.success.recordCount}</dd></div>
+              <div><dt className="inline font-medium text-foreground">Published deployment record count:</dt> <dd className="inline">{state.success.recordCount}</dd></div>
               <div><dt className="inline font-medium text-foreground">SHA-256 hash:</dt> <dd className="inline font-mono break-all">{state.success.feedHash}</dd></div>
               <div><dt className="inline font-medium text-foreground">Snapshot ID:</dt> <dd className="inline font-mono break-all">{state.success.snapshotId}</dd></div>
               {state.success.feedPublicUrl && (
