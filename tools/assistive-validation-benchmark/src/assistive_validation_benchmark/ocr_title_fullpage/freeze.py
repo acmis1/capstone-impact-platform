@@ -26,6 +26,7 @@ SOURCE_NAMES = (
     "corpus.py",
     "evidence.py",
     "freeze.py",
+    "host_load.py",
     "pipeline.py",
     "renderer.py",
     "schema.py",
