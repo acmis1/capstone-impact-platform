@@ -265,9 +265,10 @@ def main() -> int:
         return 0
     if args.command == "record-rejected-attempt":
         captured = load_json(args.run_dir / "capture.json")
-        stored = load_json(args.run_dir / "report.json")
-        if stored != _report(captured, corpus, protocol):
-            raise ValueError("rejected attempt report differs from recomputation")
+        # The capture is the measurement; the report is derived from it and is always recomputed
+        # here under the current protocol, so a protocol amendment made between measuring and
+        # recording never silently invalidates a raw capture.
+        stored = _report(captured, corpus, protocol)
         if captured["host_load"]["quiescent"] is not False:
             raise ValueError("only a measurement the host-load control rejected may be recorded as an attempt")
         bound = protocol["repeatability"]["host_load_control"]["maximum_attempts_per_repeat"]
@@ -296,9 +297,8 @@ def main() -> int:
         return 0
     if args.command in {"check-repeat", "record-repeat"}:
         captured = load_json(args.run_dir / "capture.json")
-        stored = load_json(args.run_dir / "report.json")
         expected = _report(captured, corpus, protocol)
-        if stored != expected:
+        if args.command == "check-repeat" and load_json(args.run_dir / "report.json") != expected:
             raise ValueError("candidate repeat report differs from recomputation")
         if args.command == "record-repeat":
             candidate_id = captured["candidate_id"]
