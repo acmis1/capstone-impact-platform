@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "policy_id": "pp1-assistive-final-language-policy-v1",
+  "content_constraints": {
+    "policy_development_sources": [
+      "trusted_repository_content",
+      "calibration_cases"
+    ],
+    "forbidden_sources": [
+      "holdout",
+      "production_data",
+      "participant_data",
+      "general_llm"
+    ],
+    "local_only": true,
+    "human_authoritative": true
+  },
+  "vocabulary": {
+    "matching": "case_sensitive_exact_source_span_spelling_findings_only",
+    "provenance_types": [
+      "REPOSITORY",
+      "CALIBRATION"
+    ],
+    "approved_terms": [
+      { "term": "API", "provenance": "REPOSITORY", "source": "infra/supabase/README.md" },
+      { "term": "Argon2id", "provenance": "CALIBRATION", "source": "lfc-c-024" },
+      { "term": "Duda", "provenance": "REPOSITORY", "source": "README.md" },
+      { "term": "F1", "provenance": "CALIBRATION", "source": "lfc-a-035" },
+      { "term": "FastAPI", "provenance": "CALIBRATION", "source": "lfc-c-023" },
+      { "term": "JSON", "provenance": "REPOSITORY", "source": "README.md" },
+      { "term": "Java", "provenance": "CALIBRATION", "source": "lfc-c-039" },
+      { "term": "LanguageTool", "provenance": "CALIBRATION", "source": "lfc-b-029" },
+      { "term": "Modbus", "provenance": "CALIBRATION", "source": "lfc-c-028" },
+      { "term": "MQTT", "provenance": "CALIBRATION", "source": "lfc-c-027" },
+      { "term": "Next.js", "provenance": "REPOSITORY", "source": "README.md" },
+      { "term": "Node.js", "provenance": "REPOSITORY", "source": "README.md" },
+      { "term": "npm", "provenance": "REPOSITORY", "source": "package.json" },
+      { "term": "OCR", "provenance": "REPOSITORY", "source": "docs/implementation-backlog.md" },
+      { "term": "OpenAPI", "provenance": "REPOSITORY", "source": "infra/supabase/staging-reconciliation-runbook.md" },
+      { "term": "OpenSearch", "provenance": "CALIBRATION", "source": "lfc-a-040" },
+      { "term": "OpenTelemetry", "provenance": "CALIBRATION", "source": "lfc-c-025" },
+      { "term": "PDF", "provenance": "REPOSITORY", "source": "infra/supabase/local-development.md" },
+      { "term": "PKCE", "provenance": "REPOSITORY", "source": "infra/supabase/README.md" },
+      { "term": "PostgREST", "provenance": "REPOSITORY", "source": "docs/admin-cms-hosted-deployment.md" },
+      { "term": "PostgreSQL", "provenance": "REPOSITORY", "source": "README.md" },
+      { "term": "Pydantic", "provenance": "CALIBRATION", "source": "lfc-b-023" },
+      { "term": "RabbitMQ", "provenance": "CALIBRATION", "source": "lfc-a-022" },
+      { "term": "Redis", "provenance": "CALIBRATION", "source": "lfc-b-024" },
+      { "term": "SvelteKit", "provenance": "CALIBRATION", "source": "lfc-b-022" },
+      { "term": "Supabase", "provenance": "REPOSITORY", "source": "README.md" },
+      { "term": "TypeScript", "provenance": "REPOSITORY", "source": "docs/implementation-backlog.md" },
+      { "term": "Turbopack", "provenance": "CALIBRATION", "source": "lfc-b-027" },
+      { "term": "Unicode", "provenance": "CALIBRATION", "source": "lfc-a-037" },
+      { "term": "UTF-16", "provenance": "CALIBRATION", "source": "lfc-c-035" },
+      { "term": "UUID", "provenance": "REPOSITORY", "source": "infra/supabase/manual-apply-guide.md" },
+      { "term": "Vitest", "provenance": "REPOSITORY", "source": "docs/security-and-maintainability-plan.md" },
+      { "term": "WebAuthn", "provenance": "CALIBRATION", "source": "lfc-c-026" },
+      { "term": "WebRTC", "provenance": "CALIBRATION", "source": "lfc-c-026" },
+      { "term": "deidentified", "provenance": "CALIBRATION", "source": "lfc-c-027" },
+      { "term": "loopback", "provenance": "CALIBRATION", "source": "lfc-b-026" },
+      { "term": "projectMetadataHash", "provenance": "CALIBRATION", "source": "lfc-b-033" }
+    ]
+  },
+  "technical_tokens": {
+    "exact_approved_spelling_findings": "suppress",
+    "unique_approved_near_miss": {
+      "algorithm": "casefolded_damerau_levenshtein",
+      "maximum_distance": 1,
+      "minimum_token_length": 5,
+      "requires_unique_match": true,
+      "replacement": "approved_term"
+    },
+    "shape_suppression_without_trusted_near_miss": [
+      "non_ascii_token",
+      "two_or_fewer_character_lowercase_token",
+      "internal_uppercase_compound",
+      "all_caps_or_digit_acronym"
+    ]
+  },
+  "correction_plausibility": {
+    "spelling_requires_replacement": true,
+    "ordinary_spelling_distance": {
+      "algorithm": "casefolded_damerau_levenshtein",
+      "maximum_distance_short_token": 1,
+      "maximum_distance_token_length_at_least_9": 2
+    },
+    "preserve_whitespace_shape": true,
+    "preserve_punctuation_shape": true,
+    "maximum_retained_suggestions": 3,
+    "maximum_suggestion_code_points": 100
+  },
+  "offsets": {
+    "canonical_unit": "UNICODE_CODE_POINTS",
+    "provider_unit": "UTF16_CODE_UNITS",
+    "conversion": "validated_utf16_boundary_to_unicode_code_point_before_policy_persistence_and_ui"
+  },
+  "calibration_gates": {
+    "candidate": "languagetool",
+    "overall_precision": 0.95,
+    "overall_recall": 0.50,
+    "partition_precision": 0.90,
+    "partition_recall": 0.40
+  },
+  "masking": {
+    "canonical_offset_unit": "UNICODE_CODE_POINTS",
+    "provider_offset_unit": "UTF16_CODE_UNITS",
+    "preserve_offsets": true,
+    "preserve_provider_utf16_length": true,
+    "replacement": "spaces_per_utf16_code_unit_except_existing_line_breaks",
+    "patterns": [
+      { "id": "fenced_code", "pattern": "```.*?```", "flag": "DOTALL" },
+      { "id": "inline_code_or_database_identifier", "pattern": "`[^`\\r\\n]+`", "flag": "" },
+      { "id": "url", "pattern": "https?://[^\\s]+", "flag": "" },
+      { "id": "email", "pattern": "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b", "flag": "" },
+      { "id": "rfc4122_uuid", "pattern": "\\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\\b", "flag": "" },
+      { "id": "prefixed_or_bare_hash", "pattern": "\\b(?:sha(?:1|224|256|384|512):)?[0-9a-fA-F]{32,128}\\b", "flag": "IGNORECASE" },
+      { "id": "filesystem_path", "pattern": "(?<!\\w)(?:[A-Za-z]:[\\\\/]|\\.?\\.?[\\\\/])(?:[^\\s<>:\"|?*]+[\\\\/])*[^\\s<>:\"|?*]*", "flag": "" },
+      { "id": "relative_slash_path", "pattern": "\\b[A-Za-z0-9_.-]+(?:[\\\\/][A-Za-z0-9_.-]+)+\\b", "flag": "" },
+      { "id": "dotted_filename_or_database_identifier", "pattern": "\\b[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)+\\b", "flag": "" },
+      { "id": "semantic_version", "pattern": "\\bv?\\d+(?:\\.\\d+){1,3}(?:-[0-9A-Za-z.-]+)?\\b", "flag": "" },
+      { "id": "environment_or_snake_identifier", "pattern": "\\b(?:[A-Z][A-Z0-9]*|[a-z][a-z0-9]*)(?:_[A-Za-z0-9]+)+\\b", "flag": "" },
+      { "id": "camel_case_identifier", "pattern": "\\b[a-z]+(?:[A-Z][A-Za-z0-9]*)+\\b", "flag": "" }
+    ],
+    "exclude_overlapping_findings": true
+  },
+  "fields": {
+    "title": "spelling_only",
+    "summary": "spelling_grammar_punctuation_capitalisation",
+    "background": "spelling_grammar_punctuation_capitalisation",
+    "solution": "spelling_grammar_punctuation_capitalisation"
+  },
+  "finding_policy": {
+    "harper": {
+      "excluded_kinds": [
+        {
+          "id": "Agreement",
+          "reason": "Across the 120-case final calibration, Harper Agreement produced two mass-noun false positives and no true positives; the comparator's retained families remain non-trivial.",
+          "calibration_case_ids": ["lfc-b-035", "lfc-c-006"],
+          "observed_false_positives": 2,
+          "observed_true_positives": 0
+        }
+      ],
+      "excluded_rules": [],
+      "excluded_categories": []
+    },
+    "languagetool": {
+      "excluded_kinds": [],
+      "excluded_rules": [],
+      "excluded_categories": []
+    }
+  },
+  "matcher": {
+    "non_empty_span_overlap_of_shorter": 0.5,
+    "zero_width_distance_tolerance": 1,
+    "replacement_match": "normalised_exact_intersection_when_replacements_exist",
+    "redundant_finding_counting": "one_true_positive_per_truth_issue"
+  },
+  "scoring": {
+    "precision_gate": 0.9,
+    "recall_gate": 0.4,
+    "selection_order": [
+      "precision",
+      "recall",
+      "fewer_false_positives",
+      "lower_p95_latency"
+    ],
+    "maximum_selected_candidates": 1,
+    "clean_case_silence_reported": true,
+    "counts_reported": [
+      "true_positives",
+      "false_positives",
+      "missed_issues"
+    ]
+  },
+  "engines": {
+    "harper": {
+      "version": "2.7.0",
+      "configuration": {
+        "dialect": "Australian",
+        "language": "plaintext"
+      },
+      "runtime_contract": {
+        "node_major": 24,
+        "package": "harper.js",
+        "local_only": true
+      }
+    },
+    "languagetool": {
+      "version": "6.6",
+      "configuration": {
+        "language": "en-AU",
+        "max_text_length": 25000,
+        "max_check_time_ms": 10000
+      },
+      "runtime_contract": {
+        "java_minimum_major": 17,
+        "loopback_only": true,
+        "archive_name": "LanguageTool-stable.zip",
+        "archive_sha256": "53600506b399bb5ffe1e4c8dec794fd378212f14aaf38ccef9b6f89314d11631",
+        "server_member": "LanguageTool-6.6/languagetool-server.jar"
+      }
+    }
+  },
+  "evidence": {
+    "schema": "pp1_assistive_final_language_evidence_v1",
+    "unexpected_keys": "reject",
+    "metrics_recomputed_from_counts": true,
+    "decision_recomputed_from_frozen_rule": true,
+    "required_engines": [
+      "harper",
+      "languagetool"
+    ]
+  }
+}
