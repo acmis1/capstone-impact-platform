@@ -56,6 +56,56 @@ def _decided_selector_id() -> str:
     return load_json(evidence_root() / "selector-decision.json")["selected_selector_id"]
 
 
+REJECTED_ATTEMPTS_NAME = "rejected-measurement-attempts.json"
+
+
+def _rejected_attempt(capture: dict[str, Any], report: dict[str, Any], attempt: int) -> dict[str, Any]:
+    """A bounded, auditable record of a measurement the host-load control rejected."""
+    score = report["score"]
+    measurements = score["operational"]["measurements"]
+    return {
+        "candidate_id": capture["candidate_id"],
+        "repeat": capture["repeat"],
+        "attempt": attempt,
+        "rejected_by": "host_load_control",
+        "mean_external_cpu_percent": capture["host_load"]["mean_external_cpu_percent"],
+        "maximum_external_cpu_percent": capture["host_load"]["maximum_external_cpu_percent"],
+        "precondition_external_cpu_percent": capture["host_load"]["precondition"]["observed_external_cpu_percent"],
+        "exact_title_count": score["exact_title_count"],
+        "visible_title_case_count": score["visible_title_case_count"],
+        "p50_ms": measurements["p50_ms"],
+        "p95_ms": measurements["p95_ms"],
+        "cold_start_ms": measurements["cold_start_ms"],
+        "capture_sha256": report["capture_sha256"],
+    }
+
+
+def _check_rejected_attempts(root: Path, protocol: dict[str, Any]) -> dict[str, Any]:
+    """Every re-measured repeat must be attributable to the host-load control alone."""
+    path = root / REJECTED_ATTEMPTS_NAME
+    bound = protocol["repeatability"]["host_load_control"]["maximum_attempts_per_repeat"]
+    ceiling = protocol["repeatability"]["host_load_control"]["maximum_external_cpu_percent"]
+    if not path.exists():
+        return {"attempt_count": 0, "attempts": []}
+    stored = load_json(path)
+    attempts = stored["attempts"]
+    if stored.get("rejected_by") != "host_load_control" or stored.get("maximum_attempts_per_repeat") != bound:
+        raise ValueError("rejected attempt evidence contract differs")
+    if stored.get("attempt_count") != len(attempts):
+        raise ValueError("rejected attempt count differs from the recorded attempts")
+    for attempt in attempts:
+        if attempt["rejected_by"] != "host_load_control":
+            raise ValueError("a repeat was re-measured for a reason other than the host-load control")
+        if attempt["mean_external_cpu_percent"] is not None and attempt["mean_external_cpu_percent"] <= ceiling:
+            raise ValueError("a rejected attempt was inside the host-load ceiling")
+    for candidate_id in {attempt["candidate_id"] for attempt in attempts}:
+        for repeat in {a["repeat"] for a in attempts if a["candidate_id"] == candidate_id}:
+            same = [a for a in attempts if a["candidate_id"] == candidate_id and a["repeat"] == repeat]
+            if len(same) > bound:
+                raise ValueError("a repeat exceeded its bounded measurement attempts")
+    return {"attempt_count": len(attempts), "attempts": attempts}
+
+
 def _repeat_pairs(root: Path, candidate_id: str) -> list[tuple[Path, Path]]:
     pairs = []
     for capture in sorted(root.glob(f"{candidate_id}-repeat-*-capture.json")):
@@ -120,6 +170,9 @@ def _build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--models-dir", type=Path, required=True)
     record = sub.add_parser("record-repeat")
     record.add_argument("--run-dir", type=Path, required=True)
+    rejected = sub.add_parser("record-rejected-attempt")
+    rejected.add_argument("--run-dir", type=Path, required=True)
+    rejected.add_argument("--attempt", type=int, required=True)
     check_run = sub.add_parser("check-repeat")
     check_run.add_argument("--run-dir", type=Path, required=True)
     sub.add_parser("write-comparison")
@@ -210,6 +263,37 @@ def main() -> int:
         (args.run_dir / "report.json").write_bytes(canonical_json_bytes(report))
         print(canonical_json_bytes(report["score"]["calibration_margin_checks"]).decode(), end="")
         return 0
+    if args.command == "record-rejected-attempt":
+        captured = load_json(args.run_dir / "capture.json")
+        stored = load_json(args.run_dir / "report.json")
+        if stored != _report(captured, corpus, protocol):
+            raise ValueError("rejected attempt report differs from recomputation")
+        if captured["host_load"]["quiescent"] is not False:
+            raise ValueError("only a measurement the host-load control rejected may be recorded as an attempt")
+        bound = protocol["repeatability"]["host_load_control"]["maximum_attempts_per_repeat"]
+        path = root / REJECTED_ATTEMPTS_NAME
+        root.mkdir(parents=True, exist_ok=True)
+        existing = load_json(path)["attempts"] if path.exists() else []
+        entry = _rejected_attempt(captured, stored, args.attempt)
+        same_repeat = [
+            item for item in existing
+            if item["candidate_id"] == entry["candidate_id"] and item["repeat"] == entry["repeat"]
+        ]
+        if len(same_repeat) >= bound:
+            raise ValueError("this repeat exhausted its bounded measurement attempts")
+        attempts = sorted(
+            [item for item in existing if item["capture_sha256"] != entry["capture_sha256"]] + [entry],
+            key=lambda item: (item["candidate_id"], item["repeat"], item["attempt"]),
+        )
+        path.write_bytes(canonical_json_bytes({
+            "schema_version": "pp1-ocr-title-fullpage-rejected-attempts/v1",
+            "rejected_by": "host_load_control",
+            "maximum_attempts_per_repeat": bound,
+            "attempt_count": len(attempts),
+            "attempts": attempts,
+        }))
+        print(path)
+        return 0
     if args.command in {"check-repeat", "record-repeat"}:
         captured = load_json(args.run_dir / "capture.json")
         stored = load_json(args.run_dir / "report.json")
@@ -282,8 +366,14 @@ def main() -> int:
     decision = load_json(root / "selector-decision.json")
     if decision != build_selector_decision(decision["diagnostic"], protocol):
         raise ValueError("stored selector decision differs from recomputation")
+    rejected = _check_rejected_attempts(root, protocol)
     print(
-        canonical_json_bytes({"comparison": comparison, "selection": selection, "selector_decision": decision}).decode(),
+        canonical_json_bytes({
+            "comparison": comparison,
+            "selection": selection,
+            "selector_decision": decision,
+            "rejected_measurement_attempts": rejected,
+        }).decode(),
         end="",
     )
     return 0

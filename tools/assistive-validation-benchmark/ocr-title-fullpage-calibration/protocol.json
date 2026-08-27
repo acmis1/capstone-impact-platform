@@ -131,7 +131,9 @@
       "precondition_sample_seconds": 5.0,
       "precondition_maximum_wait_seconds": 900.0,
       "metric": "system-wide CPU utilisation minus this benchmark process's own share",
-      "rationale": "This benchmark runs on a shared developer workstation. A repeat measured while an unrelated workload occupies the CPU characterises the host rather than the candidate, so external load is sampled before and throughout every repeat and a contaminated repeat can never satisfy the calibration margin."
+      "rationale": "This benchmark runs on a shared developer workstation. A repeat measured while an unrelated workload occupies the CPU characterises the host rather than the candidate, so external load is sampled before and throughout every repeat and a contaminated repeat can never satisfy the calibration margin.",
+      "maximum_attempts_per_repeat": 3,
+      "rejected_attempt_handling": "A measurement whose host-load control failed is a rejected attempt, not a repeat. It is preserved as evidence and the repeat is measured again, up to the attempt bound, so a host artefact can never exclude a candidate the way the superseded eligibility rule excluded one. Only the host-load control may trigger a re-measurement; a repeat that failed on any candidate metric stands as recorded."
     }
   },
   "selection_rule": {

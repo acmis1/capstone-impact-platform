@@ -152,6 +152,7 @@ def validate_protocol(protocol: dict[str, Any]) -> dict[str, Any]:
         or host_load.get("sampling_interval_seconds") != 1.0
         or host_load.get("precondition_sample_seconds") != 5.0
         or host_load.get("precondition_maximum_wait_seconds") != 900.0
+        or host_load.get("maximum_attempts_per_repeat") != 3
     ):
         raise ValueError("host load control changed")
     selection = protocol.get("selection_rule") or {}

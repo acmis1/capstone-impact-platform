@@ -184,7 +184,13 @@ measured and applied identically to all four:
   capture;
 * a repeat whose mean external utilisation exceeds the ceiling is recorded and marked
   contaminated, and **a contaminated repeat can never satisfy the calibration margin** — so the
-  control cannot be used to promote a failing run.
+  control cannot be used to promote a failing run;
+* a contaminated measurement is a *rejected attempt*, not a repeat: it is preserved in
+  `rejected-measurement-attempts.json` and the repeat is measured again, up to three attempts.
+  Excluding a candidate because the workstation was busy would be the same error class the
+  coordinator's audit found, so only the host-load control may trigger a re-measurement. A
+  repeat that failed on any candidate metric stands as recorded, and `check-evidence` refuses
+  evidence in which a repeat was re-measured for any other reason.
 
 External load is `system-wide CPU utilisation − this benchmark process's own share`. The
 uncontrolled first attempt is reported in section 6 alongside the controlled results; it is not
