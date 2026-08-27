@@ -188,7 +188,7 @@ export function ImportBatchReviewPanel({ batchId, batchStatus, projects, canSubm
                 <span className="sr-only">Select</span>
               </th>
               <th className="py-3 px-3">Title</th>
-              <th className="py-3 px-3">Public ID</th>
+              <th className="py-3 px-3">Project ID</th>
               <th className="py-3 px-3">Status</th>
               <th className="py-3 px-3">Readiness</th>
               <th className="py-3 px-3">Staged media</th>

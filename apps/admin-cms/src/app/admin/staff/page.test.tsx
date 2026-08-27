@@ -81,13 +81,13 @@ describe('StaffAccessPage', () => {
 
     expect(screen.getAllByRole('heading', { level: 1, name: 'Staff access' })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 2, name: 'Staff directory' })).toBeDefined();
-    expect(screen.getByRole('heading', { level: 2, name: 'Provisioning incidents' })).toBeDefined();
+    expect(screen.getByRole('heading', { level: 2, name: 'Invitations that did not complete' })).toBeDefined();
     expect(screen.getByText(/Review who can use the Admin\/CMS/i)).toBeDefined();
     expect(screen.getByText('2')).toBeDefined();
     expect(screen.getByText('Invitations available')).toBeDefined();
 
     const directory = screen.getByRole('region', { name: 'Staff directory' });
-    const actionsHeading = screen.getByRole('heading', { level: 2, name: 'Access creation' });
+    const actionsHeading = screen.getByRole('heading', { level: 2, name: 'Staff invitations' });
     expect(screen.getByRole('heading', { level: 3, name: 'Invite staff' })).toBeDefined();
     expect(directory.compareDocumentPosition(actionsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(mocks.canManageStaff).toHaveBeenCalledWith(['projects.read', 'staff.manage']);
@@ -135,5 +135,14 @@ describe('StaffAccessPage', () => {
 
     expect(screen.getByRole('heading', { level: 3, name: 'Create test account' })).toBeDefined();
     expect(screen.getByText('Staging only')).toBeDefined();
+  });
+
+  it('describes staff access in invitation language rather than provisioning jargon', async () => {
+    render(await StaffAccessPage());
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Staff invitations' })).toBeDefined();
+    expect(screen.getByText(/A secure invitation is the normal way to give someone access/i)).toBeDefined();
+    expect(document.body.textContent).not.toMatch(/provisioning/i);
+    expect(document.body.textContent).not.toMatch(/governed staff/i);
   });
 });

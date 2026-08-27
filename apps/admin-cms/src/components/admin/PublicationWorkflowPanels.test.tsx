@@ -121,9 +121,9 @@ describe('PublicationReadinessPanel', () => {
         confirmedAt: PLAN.confirmedAt,
       }} />);
       // Should show '○' unverified for Project approved, NOT '✓'
-      const passedTicks = screen.queryAllByLabelText('Passed');
+      const passedTicks = screen.queryAllByText('Passed');
       expect(passedTicks).toHaveLength(0);
-      const unverifiedItems = screen.getAllByLabelText('Not yet verified');
+      const unverifiedItems = screen.getAllByText('Not yet verified');
       expect(unverifiedItems.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -133,8 +133,30 @@ describe('PublicationReadinessPanel', () => {
         resultCode: 'READINESS_PERMISSION_DENIED',
         blockers: ['Permission denied'],
       }} />);
-      expect(screen.queryAllByLabelText('Passed')).toHaveLength(0);
-      expect(screen.getAllByLabelText('Not yet verified')).toHaveLength(3);
+      expect(screen.queryAllByText('Passed')).toHaveLength(0);
+      expect(screen.getAllByText('Not yet verified')).toHaveLength(3);
+    });
+
+    it('exposes each checklist state as real text rather than an aria-label on a bare span', () => {
+      const { container } = render(<PublicationReadinessPanel readiness={{
+        ready: false,
+        resultCode: 'PREVIEW_NOT_CONFIRMED',
+        blockers: ['Participant confirmation is required'],
+      }} />);
+
+      const items = screen.getAllByRole('listitem');
+      const approved = items.find((item) => item.textContent?.includes('Project approved'));
+      const confirmed = items.find((item) => item.textContent?.includes('Participant confirmation received'));
+      // State reaches assistive technology through the item's own text content.
+      expect(approved?.textContent).toContain('Passed');
+      expect(confirmed?.textContent).toContain('Needs attention');
+
+      // Glyphs are decorative only, and no state is announced via aria-label on a generic span.
+      expect(container.querySelector('span[aria-label]')).toBeNull();
+      for (const glyph of ['✓', '✕', '○']) {
+        const node = [...container.querySelectorAll('span')].find((span) => span.textContent === glyph);
+        if (node) expect(node.getAttribute('aria-hidden')).toBe('true');
+      }
     });
   });
 });

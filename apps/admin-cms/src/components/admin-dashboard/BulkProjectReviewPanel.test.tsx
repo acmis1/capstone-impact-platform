@@ -36,10 +36,10 @@ describe('BulkProjectReviewPanel', () => {
     render(<BulkProjectReviewPanel selectedProjects={[project]} canSubmitBulk={false} canReviewBulk />);
     fireEvent.click(screen.getAllByRole('button', { name: 'Approve' })[0]);
     await waitFor(() => expect(screen.getByText((_, element) => (
-      element?.tagName === 'P' && element.textContent?.includes('Preflight:') && element.textContent.includes('1 eligible')
+      element?.tagName === 'P' && element.textContent?.includes('Checked 1 project:') && element.textContent.includes('1 ready')
     ))).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: 'Run approve' }));
-    await waitFor(() => expect(screen.getByText(/1 successful/)).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and approve' }));
+    await waitFor(() => expect(screen.getByText(/1 completed/)).toBeTruthy());
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({
@@ -76,12 +76,44 @@ describe('BulkProjectReviewPanel', () => {
 
     render(<BulkProjectReviewPanel selectedProjects={[project]} canSubmitBulk={false} canReviewBulk />);
     fireEvent.click(screen.getAllByRole('button', { name: 'Request changes' })[0]);
-    const run = await screen.findByRole('button', { name: 'Run request changes' });
+    const run = await screen.findByRole('button', { name: 'Confirm and request changes' });
     expect((run as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText(/Shared review comment/), { target: { value: 'Please update the accessibility text.' } });
     expect((run as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(run);
-    await waitFor(() => expect(screen.getByText(/1 successful/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/1 completed/)).toBeTruthy());
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({ comments: 'Please update the accessibility text.' });
+  });
+
+  it('states check results in staff language without exposing preflight jargon or raw tokens', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
+      action: 'approve',
+      summary: { total: 4, eligible: 1, blocked: 1, alreadyComplete: 1, invalidOrStale: 1 },
+      items: [
+        { publicId: 'a-ready', title: 'Ready project', status: 'submitted', updatedAt: '2026-08-24T00:00:00.000Z', disposition: 'eligible', reasons: [], additionalReasonCount: 0 },
+        { publicId: 'b-blocked', title: 'Blocked project', status: 'draft', updatedAt: '2026-08-24T00:00:00.000Z', disposition: 'blocked', reasons: [{ code: 'WORKFLOW_TRANSITION_INVALID', message: 'The project cannot be approved yet.' }], additionalReasonCount: 0 },
+        { publicId: 'c-done', title: 'Finished project', status: 'approved', updatedAt: '2026-08-24T00:00:00.000Z', disposition: 'already_complete', reasons: [], additionalReasonCount: 0 },
+        { publicId: 'd-stale', title: 'Stale project', status: 'changes_requested', updatedAt: '2026-08-24T00:00:00.000Z', disposition: 'invalid_or_stale', reasons: [], additionalReasonCount: 0 },
+      ],
+    }), { status: 200 }));
+
+    render(<BulkProjectReviewPanel selectedProjects={[project]} canSubmitBulk={false} canReviewBulk />);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' })[0]);
+
+    const summary = await screen.findByText((_, element) => (
+      element?.tagName === 'P' && element.textContent?.includes('Checked 4 projects:') === true
+    ));
+    expect(summary.textContent).toContain('1 ready');
+    expect(summary.textContent).toContain('1 blocked');
+    expect(summary.textContent).toContain('1 already complete');
+    expect(summary.textContent).toContain('1 needs refresh or cannot continue');
+
+    // Blockers stay visible, but engineering vocabulary and raw tokens do not reach staff copy.
+    expect(screen.getByText('The project cannot be approved yet.')).toBeTruthy();
+    expect(screen.queryByText(/Preflight/i)).toBeNull();
+    expect(screen.queryByText(/invalid or stale/i)).toBeNull();
+    expect(screen.queryByText(/already_complete/)).toBeNull();
+    expect(screen.queryByText(/changes_requested/)).toBeNull();
+    expect(screen.getByText(/Changes requested — Needs refresh or cannot continue/)).toBeTruthy();
   });
 });

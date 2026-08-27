@@ -30,7 +30,7 @@ interface AdminReferenceDatasetSectionProps {
 }
 
 const FIELD_LABELS: Record<string, string> = {
-  publicId: 'Public ID',
+  publicId: 'Project ID',
   title: 'Project title',
   groupName: 'Group name',
   year: 'Academic year',

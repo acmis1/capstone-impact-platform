@@ -33,12 +33,12 @@ export default async function StaffAccessPage() {
         <header className="flex max-w-3xl flex-col gap-2">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Staff access</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Review Admin/CMS access and create governed staff invitations.
+            Review Admin/CMS access and send secure staff invitations.
           </p>
         </header>
         <ErrorState
           title="Access denied"
-          description="Your account cannot manage staff access. The directory and provisioning controls are available only to authorized administrators."
+          description="Your account cannot manage staff access. The staff directory and invitation controls are available only to authorized administrators."
           headingLevel="h2"
         />
       </div>
@@ -73,8 +73,8 @@ export default async function StaffAccessPage() {
           <div className="max-w-3xl">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">Staff access</h1>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Review who can use the Admin/CMS, monitor pending setup, and create governed staff
-              access when provisioning is available.
+              Review who can use the Admin/CMS, monitor pending setup, and invite staff when
+              invitations are available.
             </p>
           </div>
           <Badge variant={provisioningEnabled ? 'success' : 'warning'} className="w-fit">
@@ -123,11 +123,11 @@ export default async function StaffAccessPage() {
       <section aria-labelledby="staff-access-actions-heading" className="flex flex-col gap-4">
         <div className="max-w-3xl">
           <h2 id="staff-access-actions-heading" className="text-lg font-semibold tracking-tight text-foreground">
-            Access creation
+            Staff invitations
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            Invitations are the normal staff onboarding path. Ready-to-use test accounts appear
-            only on verified staging when provisioning is enabled.
+            A secure invitation is the normal way to give someone access. Ready-to-use test
+            accounts appear only in the test environment while invitations are enabled.
           </p>
         </div>
         <div className={testAccountAvailable ? 'grid gap-6 xl:grid-cols-2' : 'max-w-3xl'}>

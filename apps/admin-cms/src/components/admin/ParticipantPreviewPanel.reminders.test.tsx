@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ParticipantPreviewPanel } from './ParticipantPreviewPanel';
 
@@ -70,7 +70,6 @@ describe('ParticipantPreviewPanel reminder workflow', () => {
   });
 
   it('renders immutable history and requests idempotent cancellation by opaque reference', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       success: true, code: 'CANCELLED', message: 'The participant preview reminder was cancelled.',
     }), { status: 200, headers: { 'content-type': 'application/json' } }));
@@ -91,6 +90,15 @@ describe('ParticipantPreviewPanel reminder workflow', () => {
     />);
     expect(screen.getByText('Reviewer User', { exact: false })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel reminder' }));
+
+    // Cancellation is confirmed in an accessible dialog stating its consequences, not window.confirm.
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('Cancel this scheduled reminder?')).toBeTruthy();
+    expect(within(dialog).getByText(/will not be sent/i)).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Keep as is' })).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel reminder' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [, init] = fetchMock.mock.calls[0];
     expect(init?.method).toBe('DELETE');

@@ -30,9 +30,11 @@ export function DashboardMetricsSummary({ metrics }: DashboardMetricsSummaryProp
       icon: FolderKanban,
     },
     {
-      label: 'Public eligible',
+      // Reaching approved or published is a workflow milestone, not proof that a project is ready
+      // to publish: participant confirmation and readiness gates are checked separately.
+      label: 'Approved or published',
       value: metrics.publicEligible,
-      description: 'Approved or published projects',
+      description: 'Projects that have reached approved or published workflow status',
       icon: CheckCircle2,
     },
     {

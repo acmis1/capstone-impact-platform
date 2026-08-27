@@ -281,7 +281,7 @@ export function ProjectFilterBar({
                 type="text"
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Search by title, public ID, partner, or group..."
+                placeholder="Search by title, project ID, partner, or group..."
                 aria-describedby="project-search-hint"
                 maxLength={100}
                 disabled={bulkReviewBusy}
@@ -293,7 +293,7 @@ export function ProjectFilterBar({
             </Button>
           </div>
           <p id="project-search-hint" className="text-xs text-muted-foreground">
-            Matches project title, public ID, industry partner and group name. Select Search to apply.
+            Matches project title, project ID, industry partner and group name. Select Search to apply.
           </p>
         </form>
 
