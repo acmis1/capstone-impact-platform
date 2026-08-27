@@ -6,6 +6,14 @@ import unittest
 from assistive_validation_benchmark.ocr_title_consistency.selector import (
     select_title_candidates as baseline_select,
 )
+from assistive_validation_benchmark.ocr_title_fullpage.__main__ import (
+    MEASUREMENT_CONTROLS,
+    _rejection_reasons,
+)
+from assistive_validation_benchmark.ocr_title_fullpage.capture import (
+    candidate_configuration,
+    capture_repeat,
+)
 from assistive_validation_benchmark.ocr_title_fullpage.corpus import build_calibration_corpus
 from assistive_validation_benchmark.ocr_title_fullpage.evidence import (
     calibration_non_reuse,
@@ -14,6 +22,7 @@ from assistive_validation_benchmark.ocr_title_fullpage.evidence import (
 )
 from assistive_validation_benchmark.ocr_title_fullpage.schema import (
     data_root,
+    evidence_root,
     load_json,
     validate_corpus,
     validate_protocol,
@@ -51,7 +60,8 @@ def _page_body() -> list[dict]:
     ]
 
 
-def _candidate(candidate_id: str, *, threads: int, p50: float, p95: float, eligible: bool = True) -> dict:
+def _candidate(candidate_id: str, *, threads: int | None, p50: float, p95: float, eligible: bool = True) -> dict:
+    effective_threads = 10 if threads is None else threads
     return {
         "candidate_id": candidate_id,
         "configuration": {
@@ -64,7 +74,8 @@ def _candidate(candidate_id: str, *, threads: int, p50: float, p95: float, eligi
         },
         "architecture": "full_page_single_pass",
         "complexity_rank": 0,
-        "effective_cpu_threads": threads,
+        "explicit_cpu_threads": threads,
+        "effective_cpu_threads": effective_threads,
         "worst_repeat_p50_ms": p50,
         "worst_repeat_p95_ms": p95,
         "selection_eligible": eligible,
@@ -117,24 +128,36 @@ class OcrTitleFullpageProtocolTests(unittest.TestCase):
         tracked = validate_corpus(load_json(data_root() / "corpus" / "calibration.json"))
         self.assertEqual(build_calibration_corpus(), tracked)
 
-    def test_measurement_controls_cannot_promote_a_contaminated_repeat(self) -> None:
+    def test_host_load_is_the_only_measurement_rejection_control(self) -> None:
         repeatability = self.protocol["repeatability"]
         self.assertEqual(25.0, repeatability["host_load_control"]["maximum_external_cpu_percent"])
-        self.assertEqual(650.0, repeatability["process_speed_control"]["maximum_ms"])
-        # Both controls are rejection rules, never pass rules: a repeat that failed either one
-        # fails the margin no matter how fast it looked, and neither reaches the preference order.
+        self.assertNotIn("process_speed_control", repeatability)
+        self.assertEqual(("host_load_control",), MEASUREMENT_CONTROLS)
+        self.assertEqual(["host_load_control"], _rejection_reasons({"host_load": {"quiescent": False}}))
+        # Host load is a rejection rule, never a pass rule: it cannot reach candidate preference.
         source = inspect.getsource(score_capture)
         self.assertIn('"host_quiescent": capture["host_load"]["quiescent"] is True', source)
-        self.assertIn('"process_at_full_speed": capture["process_speed"]["at_full_speed"] is True', source)
+        self.assertNotIn("process_speed", source)
+        self.assertNotIn("process_speed", inspect.getsource(capture_repeat))
         preference = inspect.getsource(preferred_candidate)
         self.assertNotIn("host_quiescent", preference)
-        self.assertNotIn("process_at_full_speed", preference)
 
-    def test_the_process_speed_bound_is_twice_the_idle_nominal(self) -> None:
-        control = self.protocol["repeatability"]["process_speed_control"]
-        # The bound comes from the machine's idle reference time, never from an OCR result.
-        self.assertEqual(control["maximum_ms"], control["nominal_ms"] * 2)
-        self.assertTrue(control["measured_before_and_after_each_repeat"])
+    def test_environment_audit_treats_quiet_host_slowdown_as_real_variability(self) -> None:
+        audit = load_json(evidence_root() / "environment-variability-audit.json")
+        self.assertFalse(audit["final_repeat_eligibility"])
+        self.assertEqual(1, audit["independent_control_audit"]["process_speed"]["observed_capture_count"])
+        self.assertFalse(audit["independent_control_audit"]["process_speed"]["retained"])
+        self.assertGreaterEqual(audit["independent_control_audit"]["quiet_host_slow_report_count"], 1)
+
+    def test_candidate_identity_binds_the_thread_setting(self) -> None:
+        configured = candidate_configuration(
+            self.protocol,
+            candidate_id="fullpage-cpu-t4",
+            cpu_threads=4,
+        )
+        self.assertEqual(4, configured["cpu_threads"])
+        with self.assertRaises(ValueError):
+            candidate_configuration(self.protocol, candidate_id="fullpage-cpu-t4", cpu_threads=8)
 
     def test_protocol_forbids_a_cropped_fast_path_and_backend_acceleration(self) -> None:
         fixed = self.protocol["fixed_configuration"]
@@ -158,7 +181,7 @@ class CorrectedSelectionPolicyTests(unittest.TestCase):
 
     def test_unpinned_thread_candidate_is_eligible_and_can_win(self) -> None:
         candidates = [
-            _candidate("fullpage-cpu-default", threads=10, p50=5000.0, p95=6000.0),
+            _candidate("fullpage-cpu-default", threads=None, p50=5000.0, p95=6000.0),
             _candidate("fullpage-cpu-t8", threads=8, p50=5100.0, p95=6500.0),
         ]
         # A candidate with no explicit thread setting and no optimization feature must not be
@@ -171,6 +194,14 @@ class CorrectedSelectionPolicyTests(unittest.TestCase):
             _candidate("fullpage-cpu-t8", threads=8, p50=5300.0, p95=6400.0),
         ]
         self.assertEqual("fullpage-cpu-t8", preferred_candidate(candidates)["candidate_id"])
+
+    def test_exact_latency_tie_prefers_fewer_explicit_threads(self) -> None:
+        candidates = [
+            _candidate("fullpage-cpu-default", threads=None, p50=5000.0, p95=6000.0),
+            _candidate("fullpage-cpu-t8", threads=8, p50=5000.0, p95=6000.0),
+            _candidate("fullpage-cpu-t4", threads=4, p50=5000.0, p95=6000.0),
+        ]
+        self.assertEqual("fullpage-cpu-t4", preferred_candidate(candidates)["candidate_id"])
 
     def test_an_ineligible_candidate_is_never_preferred(self) -> None:
         candidates = [

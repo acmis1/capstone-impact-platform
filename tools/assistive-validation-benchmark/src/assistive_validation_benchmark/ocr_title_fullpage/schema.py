@@ -138,14 +138,29 @@ def validate_protocol(protocol: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("CPU thread candidate set changed")
     if options.get("page_scopes") != ["FULL_PAGE"]:
         raise ValueError("page scope candidate set changed")
+    if protocol.get("bounded_candidates") != [
+        {"candidate_id": "fullpage-cpu-default", "cpu_threads": None},
+        {"candidate_id": "fullpage-cpu-t4", "cpu_threads": 4},
+        {"candidate_id": "fullpage-cpu-t8", "cpu_threads": 8},
+        {"candidate_id": "fullpage-cpu-t10", "cpu_threads": 10},
+    ]:
+        raise ValueError("bounded candidate identities changed")
     repeatability = protocol.get("repeatability") or {}
     if (
         repeatability.get("required_independent_repeats") != 3
         or repeatability.get("fresh_worker_process_per_repeat") is not True
+        or repeatability.get("fresh_model_initialization_per_repeat") is not True
         or repeatability.get("identical_corpus_across_repeats") is not True
+        or repeatability.get("identical_warmup_policy_across_repeats") is not True
         or repeatability.get("every_repeat_must_satisfy_calibration_margin") is not True
     ):
         raise ValueError("calibration repeatability contract changed")
+    if repeatability.get("candidate_order_by_round") != [
+        ["fullpage-cpu-t4", "fullpage-cpu-t8", "fullpage-cpu-t10", "fullpage-cpu-default"],
+        ["fullpage-cpu-t8", "fullpage-cpu-t10", "fullpage-cpu-default", "fullpage-cpu-t4"],
+        ["fullpage-cpu-t10", "fullpage-cpu-default", "fullpage-cpu-t4", "fullpage-cpu-t8"],
+    ]:
+        raise ValueError("candidate order rotation changed")
     host_load = repeatability.get("host_load_control") or {}
     if (
         host_load.get("maximum_external_cpu_percent") != 25.0
@@ -153,16 +168,12 @@ def validate_protocol(protocol: dict[str, Any]) -> dict[str, Any]:
         or host_load.get("precondition_sample_seconds") != 5.0
         or host_load.get("precondition_maximum_wait_seconds") != 900.0
         or host_load.get("maximum_attempts_per_repeat") != 3
+        or host_load.get("independent_of_candidate_quality_and_runtime") is not True
+        or host_load.get("retry_for_quality_or_latency_failure") is not False
     ):
         raise ValueError("host load control changed")
-    process_speed = repeatability.get("process_speed_control") or {}
-    if (
-        process_speed.get("reference_iterations") != 6000000
-        or process_speed.get("nominal_ms") != 325.0
-        or process_speed.get("maximum_ms") != 650.0
-        or process_speed.get("measured_before_and_after_each_repeat") is not True
-    ):
-        raise ValueError("process speed control changed")
+    if "process_speed_control" in repeatability:
+        raise ValueError("unproven process-speed rejection must not govern final repeats")
     selection = protocol.get("selection_rule") or {}
     if selection.get("eligibility") != (
         "a candidate is eligible if and only if it satisfies every quality, safety, operational, "
@@ -172,21 +183,12 @@ def validate_protocol(protocol: dict[str, Any]) -> dict[str, Any]:
     ):
         raise ValueError("candidate eligibility rule changed")
     if selection.get("preference") != [
-        "lowest architectural complexity rank",
         "lowest worst-repeat p95",
         "lowest worst-repeat p50",
-        "fewest effective CPU threads",
+        "fewest explicit CPU threads",
         "candidate identifier",
     ]:
         raise ValueError("candidate preference order changed")
-    if selection.get("complexity_ranks") != {
-        "backend_specific_acceleration": 3,
-        "cropped_region_fast_path": 1,
-        "full_page_single_pass": 0,
-        "high_performance_inference_or_document_vlm": 4,
-        "multi_pass_ocr": 2,
-    }:
-        raise ValueError("architectural complexity ranking changed")
     selector_policy = protocol.get("selector_policy") or {}
     if selector_policy.get("baseline_selector_id") != "top-band-group-prominence-v3@geometry":
         raise ValueError("selector policy baseline changed")

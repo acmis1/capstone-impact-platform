@@ -33,19 +33,17 @@ candidate, which subsequently failed its fresh holdout on exact-title recovery (
 inconsistency precision (87.5%).
 
 **Correction.** In this iteration, eligibility depends only on whether a candidate satisfies
-the prospectively frozen requirements, and preference is lowest architectural complexity first:
+the prospectively frozen requirements. Every bounded candidate is the same full-page,
+single-pass architecture, and the preference order is fixed before final repeats:
 
 ```text
 1. discard any candidate failing any quality, safety, operational, security, provisioning
    or repeated-stability requirement, on any required repeat;
-2. among the remaining candidates, prefer the lowest architectural complexity rank;
-3. break ties by lowest worst-repeat p95, then lowest worst-repeat p50, then fewest
-   effective CPU threads, then candidate identifier.
+2. among the remaining candidates, prefer lowest worst-repeat p95;
+3. break ties by lowest worst-repeat p50, then fewer explicit CPU threads, then candidate
+   identifier. The provider-default diagnostic sorts after explicit thread counts on an exact
+   latency tie but remains fully eligible and can win on either latency metric.
 ```
-
-Complexity ranks are frozen in the protocol: `full_page_single_pass` 0,
-`cropped_region_fast_path` 1, `multi_pass_ocr` 2, `backend_specific_acceleration` 3,
-`high_performance_inference_or_document_vlm` 4.
 
 The historical module `assistive_validation_benchmark.ocr_title_latency` is **not** edited.
 This is a new versioned module, `assistive_validation_benchmark.ocr_title_fullpage`, with its
@@ -105,6 +103,10 @@ Iteration 2 calibration and fresh holdout, Iteration 3 calibration and fresh hol
 Iteration 4 calibration, the PR #213 title calibration and consumed holdout, and the PR #215
 optimization calibration and consumed holdout — 12 corpora, 466 historical cases.
 Result: **0 prohibited reuse**, and no duplicate within the new corpus.
+
+The invalid pre-freeze v1 holdout is not a historical raw corpus in the current tree. Its 64
+irreversible metadata-title, visible-title, full-reference and case-signature fingerprints are
+checked separately. Calibration also reports **0 prohibited reuse** against those fingerprints.
 
 ---
 
@@ -166,11 +168,11 @@ independent repeats**. Each repeat starts a fresh worker process, initializes th
 normally, runs the same warmup policy, processes the complete 45-case corpus, regenerates and
 re-rasterizes its own assets, and records the exact environment and runtime identity.
 
-### Measurement controls
+### Measurement control
 
-Two controls make a latency measurement valid. Both are declared before the measurements they
-govern, apply identically to all four candidates, and are **rejection rules only**: a repeat
-that fails either can never satisfy the calibration margin, and neither is consulted by the
+One independent control makes a latency measurement environmentally valid. It is frozen before
+the final repeats, applies identically to all four candidates, and is a **rejection rule only**:
+it never inspects quality, p50, p95 or any other candidate result and is not consulted by the
 preference order. A rejected measurement is an *attempt*, not a repeat — it is preserved in
 `rejected-measurement-attempts.json` and the repeat is measured again, up to three attempts.
 Excluding a candidate because the workstation misbehaved would be the same error class the
@@ -187,8 +189,8 @@ converged on a p50 near 12.5 s, while a concurrently running Next.js dev server 
 tooling held roughly two cores. A measurement in that state characterises the host, not the
 candidate.
 
-External CPU load is therefore a controlled variable, declared before any candidate was
-measured and applied identically to all four:
+External CPU load is therefore the controlled variable, declared before the final repeats and
+applied identically to all four:
 
 * before a repeat starts, external utilisation is sampled and the runner waits, up to fifteen
   minutes, until it is at or below **25%**;
@@ -201,26 +203,24 @@ External load is `system-wide CPU utilisation − this benchmark process's own s
 Candidates are also interleaved by repeat cycle, and the order rotates each cycle, so no
 candidate's three repeats are blocked together and none keeps the same position in the cycle.
 
-### Process-speed control
+### Environmental-variability audit
 
-External CPU utilisation does not capture every way a measurement can be invalid. A second
-controlled sweep produced a repeat of the eight-thread candidate in which **every** stage was
-about 2.4× slower than the same candidate's other two repeats — p50 12,665 ms against 5,076 and
-5,189 ms, and `model_initialization_ms` 11,938 ms against 4,926 and 5,387 ms, i.e. before any
-OCR ran — while its mean external CPU (17.7%) was marginally *lower* than the fast repeat's
-(18.0%). The whole process ran at a fraction of the machine's normal speed, and no external-load
-metric could see it.
+The exploratory evidence contains 21 reports: 14 in the fast regime (p50 5,076–6,740 ms) and
+7 at or above 10 seconds (p50 10,052–13,190 ms). Crucially, the eight-thread candidate produced
+a p50 of 12,665 ms while the independent external-load signal passed at 17.7%. That attempt is
+therefore genuine runtime variability, not an environmentally rejected measurement.
 
-Each repeat therefore also times a fixed in-process integer loop, before and after the run:
+A fixed in-process integer-loop reference was explored after this slowdown was observed, but it
+was present in only one later fast capture. There is no prospective evidence that it separates
+the quiet-host slow regime from ordinary runs. The process-speed rejection mechanism is
+therefore removed rather than engineered into the final protocol. Unexplained slow repeats
+stand as candidate failures and may not be retried.
 
-* the reference is 6,000,000 iterations, best of three timings;
-* the machine's idle nominal is ~325 ms, measured independently of any OCR result;
-* the bound is **650 ms**, twice that nominal, so ordinary variation passes and a process
-  running at half speed does not.
-
-This detects the condition directly rather than inferring a cause, so it holds whatever slows a
-process down — scheduling, power state, memory pressure or contention that CPU utilisation
-misses.
+The compact exploratory audit is tracked as
+`environment-variability-audit.json` (SHA-256
+`8ebcd3458d2423c17bb12db84339baebe410a4d7103da46bbbbcc7d1ff7c085a`).
+Every underlying report is identified by path and hash and is explicitly ineligible as a final
+repeat.
 
 ### Requirements
 
@@ -254,6 +254,8 @@ zero material false automatic agreements, p50 ≤ 10 s, p95 ≤ 20 s, cold start
 Tracked under `docs/assistive-validation/evidence/ocr-title-fullpage-calibration/`:
 
 * `selector-decision.json` — the pre-registered selector diagnostic and its decision;
+* `environment-variability-audit.json` — the compact audit of all exploratory timing regimes;
+* `rejected-measurement-attempts.json` — any final attempt rejected only by external host load;
 * `<candidate>-repeat-NN-capture.json` / `-report.json` — every preserved repeat;
 * `<candidate>-aggregate.json` — the per-candidate repeat aggregation;
 * `candidate-comparison.json` — the bounded comparison across all candidates;

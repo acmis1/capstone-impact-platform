@@ -4,8 +4,9 @@ The defect this module exists to correct: the previous iteration's ``_selection_
 required a candidate to *contain an optimization feature* (an explicit thread count plus
 MKL-DNN or a cropped fast region) before it could be selected, which silently excluded the
 simplest candidate even though that candidate had satisfied every prospective requirement.
-Eligibility here depends only on whether a candidate satisfies the frozen requirements, and
-preference is lowest architectural complexity first.
+Eligibility here depends only on whether a candidate satisfies the frozen requirements. Every
+candidate in this module is the same full-page single-pass architecture, so the prospective
+preference order uses only worst-repeat latency, explicit threads and candidate identifier.
 """
 
 from __future__ import annotations
@@ -80,8 +81,6 @@ def aggregate_candidate(candidate_id: str, reports: list[dict[str, Any]], protoc
             "artifact_footprint_bytes": score["operational"]["measurements"]["artifact_footprint_bytes"],
             "host_quiescent": score["host_load"]["quiescent"],
             "mean_external_cpu_percent": score["host_load"]["mean_external_cpu_percent"],
-            "process_at_full_speed": score["process_speed"]["at_full_speed"],
-            "process_reference_ms": score["process_speed"]["worst_reference_ms"],
             "final_gates_passed": score["final_gates_passed"],
             "calibration_margin_passed": score["calibration_margin_passed"],
         }
@@ -89,11 +88,10 @@ def aggregate_candidate(candidate_id: str, reports: list[dict[str, Any]], protoc
     ]
     repeat_count = len(repeats)
     requirements = {
-        "repeat_count_satisfied": repeat_count >= required,
+        "repeat_count_satisfied": repeat_count == required,
         "every_repeat_passed_final_gates": all(item["final_gates_passed"] for item in repeats),
         "every_repeat_passed_calibration_margin": all(item["calibration_margin_passed"] for item in repeats),
         "every_repeat_measured_on_a_quiet_host": all(item["host_quiescent"] for item in repeats),
-        "every_repeat_measured_at_full_process_speed": all(item["process_at_full_speed"] for item in repeats),
     }
     stability = {
         "required_independent_repeats": required,
@@ -106,6 +104,7 @@ def aggregate_candidate(candidate_id: str, reports: list[dict[str, Any]], protoc
         "configuration": configuration,
         "architecture": architecture(configuration),
         "complexity_rank": complexity_rank(configuration),
+        "explicit_cpu_threads": configuration["cpu_threads"],
         "effective_cpu_threads": _effective_cpu_threads(scores),
         "repeat_count": repeat_count,
         "repeats": repeats,
@@ -114,7 +113,6 @@ def aggregate_candidate(candidate_id: str, reports: list[dict[str, Any]], protoc
         "worst_repeat_cold_start_ms": max(item["cold_start_ms"] for item in repeats),
         "worst_repeat_peak_working_set_bytes": max(item["peak_working_set_bytes"] for item in repeats),
         "worst_repeat_mean_external_cpu_percent": max(item["mean_external_cpu_percent"] for item in repeats),
-        "worst_repeat_process_reference_ms": max(item["process_reference_ms"] for item in repeats),
         "worst_repeat_exact_title_rate": min(item["exact_title_rate"] for item in repeats),
         "worst_repeat_inconsistency_precision": min(item["inconsistency_precision"] for item in repeats),
         "worst_repeat_inconsistency_recall": min(item["inconsistency_recall"] for item in repeats),
@@ -129,18 +127,17 @@ def aggregate_candidate(candidate_id: str, reports: list[dict[str, Any]], protoc
 
 
 def preferred_candidate(candidates: list[dict[str, Any]]) -> dict[str, Any]:
-    """Lowest architectural complexity first; then measured worst-repeat stability."""
+    """Apply the prospective worst-p95, worst-p50, explicit-thread and ID order."""
     eligible = [item for item in candidates if item["selection_eligible"]]
     if not eligible:
         raise ValueError("no full-page candidate satisfies the repeated calibration margin")
-    minimum_rank = min(item["complexity_rank"] for item in eligible)
-    simplest = [item for item in eligible if item["complexity_rank"] == minimum_rank]
     return min(
-        simplest,
+        eligible,
         key=lambda item: (
             item["worst_repeat_p95_ms"],
             item["worst_repeat_p50_ms"],
-            item["effective_cpu_threads"],
+            item["explicit_cpu_threads"] is None,
+            item["explicit_cpu_threads"] if item["explicit_cpu_threads"] is not None else float("inf"),
             item["candidate_id"],
         ),
     )

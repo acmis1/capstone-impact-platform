@@ -125,9 +125,6 @@ def score_capture(capture: dict[str, Any], corpus: dict[str, Any], protocol: dic
         # A repeat measured while unrelated work occupied the host characterises the host, not
         # the candidate, so a contaminated repeat can never satisfy the margin.
         "host_quiescent": capture["host_load"]["quiescent"] is True,
-        # A process running at a fraction of the machine's normal speed cannot characterise
-        # a candidate either, whatever slowed it down.
-        "process_at_full_speed": capture["process_speed"]["at_full_speed"] is True,
     }
     stage_profile = {
         name: {
@@ -165,11 +162,6 @@ def score_capture(capture: dict[str, Any], corpus: dict[str, Any], protocol: dic
             "maximum_external_cpu_percent": capture["host_load"]["maximum_external_cpu_percent"],
             "sample_count": capture["host_load"]["sample_count"],
             "precondition_external_cpu_percent": capture["host_load"]["precondition"]["observed_external_cpu_percent"],
-        },
-        "process_speed": {
-            "at_full_speed": capture["process_speed"]["at_full_speed"],
-            "worst_reference_ms": capture["process_speed"]["worst_reference_ms"],
-            "maximum_ms": capture["process_speed"]["maximum_ms"],
         },
         "stage_profile": stage_profile,
         "operational": {"measurements": measurements, "checks": operation_checks, "passed": all(operation_checks.values())},

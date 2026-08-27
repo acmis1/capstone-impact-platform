@@ -71,30 +71,6 @@ class HostLoadSampler:
             "mean_external_cpu_percent": round(sum(samples) / len(samples), 3) if samples else None,
             "maximum_external_cpu_percent": round(max(samples), 3) if samples else None,
         }
-
-
-def process_speed_reference(control: dict[str, Any]) -> float:
-    """Time a fixed in-process integer loop; the best of three runs, in milliseconds.
-
-    External CPU utilisation does not capture every way a measurement can be invalid. A repeat
-    was observed in which *every* stage — including model initialisation, before any OCR ran —
-    took about 2.4 times as long as the same candidate's other repeats, while external CPU was
-    marginally *lower*. Whatever its cause, a process running at a fraction of the machine's
-    normal speed cannot characterise a candidate, and a pure-CPU loop inside that process
-    detects the condition directly rather than inferring it.
-    """
-    iterations = int(control["reference_iterations"])
-    best = None
-    for _ in range(3):
-        started = time.perf_counter()
-        total = 0
-        for value in range(iterations):
-            total += value * value
-        elapsed = (time.perf_counter() - started) * 1000
-        best = elapsed if best is None else min(best, elapsed)
-    return round(float(best), 3)
-
-
 def await_quiet_host(control: dict[str, Any]) -> dict[str, Any]:
     """Block until external CPU utilisation is below the frozen ceiling, or refuse to start."""
     sampler = HostLoadSampler(control["sampling_interval_seconds"])

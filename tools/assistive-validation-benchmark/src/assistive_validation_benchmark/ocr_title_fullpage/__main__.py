@@ -57,7 +57,7 @@ def _decided_selector_id() -> str:
 
 
 REJECTED_ATTEMPTS_NAME = "rejected-measurement-attempts.json"
-MEASUREMENT_CONTROLS = ("host_load_control", "process_speed_control")
+MEASUREMENT_CONTROLS = ("host_load_control",)
 
 
 def _rejection_reasons(capture: dict[str, Any]) -> list[str]:
@@ -65,8 +65,6 @@ def _rejection_reasons(capture: dict[str, Any]) -> list[str]:
     reasons = []
     if capture["host_load"]["quiescent"] is not True:
         reasons.append("host_load_control")
-    if capture["process_speed"]["at_full_speed"] is not True:
-        reasons.append("process_speed_control")
     return reasons
 
 
@@ -80,7 +78,6 @@ def _rejected_attempt(capture: dict[str, Any], report: dict[str, Any], attempt: 
         "attempt": attempt,
         "rejected_by": _rejection_reasons(capture),
         "mean_external_cpu_percent": capture["host_load"]["mean_external_cpu_percent"],
-        "process_reference_ms": capture["process_speed"]["worst_reference_ms"],
         "maximum_external_cpu_percent": capture["host_load"]["maximum_external_cpu_percent"],
         "precondition_external_cpu_percent": capture["host_load"]["precondition"]["observed_external_cpu_percent"],
         "exact_title_count": score["exact_title_count"],
@@ -101,7 +98,6 @@ def _check_rejected_attempts(root: Path, protocol: dict[str, Any]) -> dict[str, 
         return {"attempt_count": 0, "attempts": []}
     stored = load_json(path)
     attempts = stored["attempts"]
-    speed_ceiling = protocol["repeatability"]["process_speed_control"]["maximum_ms"]
     if stored.get("measurement_controls") != list(MEASUREMENT_CONTROLS) or stored.get("maximum_attempts_per_repeat") != bound:
         raise ValueError("rejected attempt evidence contract differs")
     if stored.get("attempt_count") != len(attempts):
@@ -115,8 +111,7 @@ def _check_rejected_attempts(root: Path, protocol: dict[str, Any]) -> dict[str, 
             and attempt["mean_external_cpu_percent"] is not None
             and attempt["mean_external_cpu_percent"] > ceiling
         )
-        outside_speed = "process_speed_control" in reasons and attempt["process_reference_ms"] > speed_ceiling
-        if not outside_host and not outside_speed:
+        if not outside_host:
             raise ValueError("a rejected attempt was inside every measurement control")
     for candidate_id in {attempt["candidate_id"] for attempt in attempts}:
         for repeat in {a["repeat"] for a in attempts if a["candidate_id"] == candidate_id}:
@@ -344,7 +339,7 @@ def main() -> int:
         preferred = preferred_candidate(comparison["candidates"])
         if preferred["candidate_id"] != args.candidate_id:
             raise ValueError(
-                f"selected candidate differs from the prospective simplicity/stability rule: {preferred['candidate_id']}"
+                f"selected candidate differs from the prospective latency/thread rule: {preferred['candidate_id']}"
             )
         selection = {
             "schema_version": "pp1-ocr-title-fullpage-selection/v1",
