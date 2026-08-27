@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import unittest
 
 from assistive_validation_benchmark.ocr_title_consistency.selector import (
@@ -13,6 +14,7 @@ from assistive_validation_benchmark.ocr_title_fullpage.schema import (
     validate_corpus,
     validate_protocol,
 )
+from assistive_validation_benchmark.ocr_title_fullpage.scoring import score_capture
 from assistive_validation_benchmark.ocr_title_fullpage.selection import (
     architecture,
     complexity_rank,
@@ -88,6 +90,15 @@ class OcrTitleFullpageProtocolTests(unittest.TestCase):
     def test_tracked_corpus_matches_the_deterministic_source(self) -> None:
         tracked = validate_corpus(load_json(data_root() / "corpus" / "calibration.json"))
         self.assertEqual(build_calibration_corpus(), tracked)
+
+    def test_host_load_control_cannot_promote_a_contaminated_repeat(self) -> None:
+        control = self.protocol["repeatability"]["host_load_control"]
+        self.assertEqual(25.0, control["maximum_external_cpu_percent"])
+        # The control is a rejection rule, never a pass rule: a repeat whose external load
+        # exceeded the ceiling fails the margin no matter how fast it looked.
+        source = inspect.getsource(score_capture)
+        self.assertIn('"host_quiescent": capture["host_load"]["quiescent"] is True', source)
+        self.assertNotIn("host_quiescent", inspect.getsource(preferred_candidate))
 
     def test_protocol_forbids_a_cropped_fast_path_and_backend_acceleration(self) -> None:
         fixed = self.protocol["fixed_configuration"]

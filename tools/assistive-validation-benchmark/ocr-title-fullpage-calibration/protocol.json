@@ -47,8 +47,15 @@
     "worker_concurrency": 1
   },
   "bounded_options": {
-    "cpu_threads": [null, 4, 8, 10],
-    "page_scopes": ["FULL_PAGE"]
+    "cpu_threads": [
+      null,
+      4,
+      8,
+      10
+    ],
+    "page_scopes": [
+      "FULL_PAGE"
+    ]
   },
   "excluded_architectures": {
     "cropped_region_fast_path": "The PR #215 36% title crop introduced false fast-path acceptance; no crop of any ratio is part of this candidate family.",
@@ -76,7 +83,11 @@
     "normalization": "Unicode NFKC, casefold, Unicode dash/quote folding, bounded punctuation-to-space, whitespace collapse",
     "classifier": "deterministic-title-safety-v1",
     "semantic_similarity_may_agree": false,
-    "outcomes": ["AGREES", "REVIEW", "MISMATCH"],
+    "outcomes": [
+      "AGREES",
+      "REVIEW",
+      "MISMATCH"
+    ],
     "classification": "NON_BLOCKING"
   },
   "quality_gates": {
@@ -113,7 +124,15 @@
     "identical_corpus_across_repeats": true,
     "identical_warmup_policy_across_repeats": true,
     "every_repeat_must_satisfy_calibration_margin": true,
-    "rationale": "Earlier iterations showed substantial runtime variation between separate experiments, so no candidate may be selected from a single lucky timing run."
+    "rationale": "Earlier iterations showed substantial runtime variation between separate experiments, so no candidate may be selected from a single lucky timing run.",
+    "host_load_control": {
+      "maximum_external_cpu_percent": 25.0,
+      "sampling_interval_seconds": 1.0,
+      "precondition_sample_seconds": 5.0,
+      "precondition_maximum_wait_seconds": 900.0,
+      "metric": "system-wide CPU utilisation minus this benchmark process's own share",
+      "rationale": "This benchmark runs on a shared developer workstation. A repeat measured while an unrelated workload occupies the CPU characterises the host rather than the candidate, so external load is sampled before and throughout every repeat and a contaminated repeat can never satisfy the calibration margin."
+    }
   },
   "selection_rule": {
     "eligibility": "a candidate is eligible if and only if it satisfies every quality, safety, operational, security and provisioning requirement and the stronger calibration margin on every required repeat; eligibility never depends on whether a candidate contains an optimization feature",

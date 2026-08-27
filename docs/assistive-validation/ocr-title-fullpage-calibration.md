@@ -166,6 +166,35 @@ independent repeats**. Each repeat starts a fresh worker process, initializes th
 normally, runs the same warmup policy, processes the complete 45-case corpus, regenerates and
 re-rasterizes its own assets, and records the exact environment and runtime identity.
 
+### Host-load control
+
+This benchmark runs on a shared developer workstation (an i5-12600K, 10 cores / 16 threads)
+that also hosts unrelated development work. An uncontrolled first attempt made that visible:
+after roughly forty minutes, every candidate — 4, 8, 10 and provider-default threads alike —
+converged on a p50 near 12.5 s, while a concurrently running Next.js dev server and its MCP
+tooling held roughly two cores. A measurement in that state characterises the host, not the
+candidate.
+
+External CPU load is therefore a controlled variable, declared before any candidate was
+measured and applied identically to all four:
+
+* before a repeat starts, external utilisation is sampled and the runner waits, up to fifteen
+  minutes, until it is at or below **25%**;
+* throughout the repeat, external utilisation is sampled once a second and summarised into the
+  capture;
+* a repeat whose mean external utilisation exceeds the ceiling is recorded and marked
+  contaminated, and **a contaminated repeat can never satisfy the calibration margin** — so the
+  control cannot be used to promote a failing run.
+
+External load is `system-wide CPU utilisation − this benchmark process's own share`. The
+uncontrolled first attempt is reported in section 6 alongside the controlled results; it is not
+tracked as candidate evidence, because it was produced under the superseded protocol.
+
+Candidates are also interleaved by repeat cycle, and the order rotates each cycle, so no
+candidate's three repeats are blocked together and none keeps the same position in the cycle.
+
+### Requirements
+
 The corpus never changes between repeats, and a candidate is eligible only if **every** repeat
 satisfies the full calibration margin:
 
@@ -176,6 +205,7 @@ satisfies the full calibration margin:
 * material false automatic agreements = 0
 * p50 ≤ 7,500 ms, p95 ≤ 15,000 ms, cold start ≤ 30,000 ms
 * memory, artifact-footprint, per-case timeout, offline and provisioning gates pass
+* the repeat was measured on a quiet host
 
 Final gates are unchanged from PR #213/#215 and are not weakened here: exact title ≥ 95%,
 inconsistency precision ≥ 98%, inconsistency recall ≥ 95%, automatic-agreement precision 100%,

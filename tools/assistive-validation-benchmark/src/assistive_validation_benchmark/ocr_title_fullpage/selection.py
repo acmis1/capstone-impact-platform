@@ -78,18 +78,24 @@ def aggregate_candidate(candidate_id: str, reports: list[dict[str, Any]], protoc
             "maximum_case_runtime_ms": score["operational"]["measurements"]["maximum_case_runtime_ms"],
             "peak_working_set_bytes": score["operational"]["measurements"]["peak_working_set_bytes"],
             "artifact_footprint_bytes": score["operational"]["measurements"]["artifact_footprint_bytes"],
+            "host_quiescent": score["host_load"]["quiescent"],
+            "mean_external_cpu_percent": score["host_load"]["mean_external_cpu_percent"],
             "final_gates_passed": score["final_gates_passed"],
             "calibration_margin_passed": score["calibration_margin_passed"],
         }
         for score in scores
     ]
     repeat_count = len(repeats)
-    stability = {
-        "required_independent_repeats": required,
-        "observed_repeats": repeat_count,
+    requirements = {
         "repeat_count_satisfied": repeat_count >= required,
         "every_repeat_passed_final_gates": all(item["final_gates_passed"] for item in repeats),
         "every_repeat_passed_calibration_margin": all(item["calibration_margin_passed"] for item in repeats),
+        "every_repeat_measured_on_a_quiet_host": all(item["host_quiescent"] for item in repeats),
+    }
+    stability = {
+        "required_independent_repeats": required,
+        "observed_repeats": repeat_count,
+        **requirements,
     }
     return {
         "candidate_id": candidate_id,
@@ -104,6 +110,7 @@ def aggregate_candidate(candidate_id: str, reports: list[dict[str, Any]], protoc
         "worst_repeat_p95_ms": max(item["p95_ms"] for item in repeats),
         "worst_repeat_cold_start_ms": max(item["cold_start_ms"] for item in repeats),
         "worst_repeat_peak_working_set_bytes": max(item["peak_working_set_bytes"] for item in repeats),
+        "worst_repeat_mean_external_cpu_percent": max(item["mean_external_cpu_percent"] for item in repeats),
         "worst_repeat_exact_title_rate": min(item["exact_title_rate"] for item in repeats),
         "worst_repeat_inconsistency_precision": min(item["inconsistency_precision"] for item in repeats),
         "worst_repeat_inconsistency_recall": min(item["inconsistency_recall"] for item in repeats),
@@ -112,8 +119,8 @@ def aggregate_candidate(candidate_id: str, reports: list[dict[str, Any]], protoc
             item["material_false_automatic_agreements"] for item in repeats
         ),
         "stability": stability,
-        "selection_eligible": all(stability.values()),
-        "ineligibility_reasons": sorted(key for key, value in stability.items() if value is False),
+        "selection_eligible": all(requirements.values()),
+        "ineligibility_reasons": sorted(key for key, value in requirements.items() if not value),
     }
 
 

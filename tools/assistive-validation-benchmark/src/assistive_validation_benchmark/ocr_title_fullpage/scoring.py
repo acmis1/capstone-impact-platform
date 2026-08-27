@@ -122,6 +122,9 @@ def score_capture(capture: dict[str, Any], corpus: dict[str, Any], protocol: dic
         and measurements["cold_start_ms"] <= margin["cold_start_ms_maximum"],
         "p50": measurements["p50_ms"] is not None and measurements["p50_ms"] <= margin["p50_ms_maximum"],
         "p95": measurements["p95_ms"] is not None and measurements["p95_ms"] <= margin["p95_ms_maximum"],
+        # A repeat measured while unrelated work occupied the host characterises the host, not
+        # the candidate, so a contaminated repeat can never satisfy the margin.
+        "host_quiescent": capture["host_load"]["quiescent"] is True,
     }
     stage_profile = {
         name: {
@@ -153,6 +156,13 @@ def score_capture(capture: dict[str, Any], corpus: dict[str, Any], protocol: dic
         "review_count": review_count,
         "review_rate": _ratio(review_count, len(records)),
         "model_initialization_ms": capture["model_initialization_ms"],
+        "host_load": {
+            "quiescent": capture["host_load"]["quiescent"],
+            "mean_external_cpu_percent": capture["host_load"]["mean_external_cpu_percent"],
+            "maximum_external_cpu_percent": capture["host_load"]["maximum_external_cpu_percent"],
+            "sample_count": capture["host_load"]["sample_count"],
+            "precondition_external_cpu_percent": capture["host_load"]["precondition"]["observed_external_cpu_percent"],
+        },
         "stage_profile": stage_profile,
         "operational": {"measurements": measurements, "checks": operation_checks, "passed": all(operation_checks.values())},
         "provisioning": capture["provisioning"],

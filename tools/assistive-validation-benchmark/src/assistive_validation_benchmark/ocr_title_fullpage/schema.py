@@ -146,6 +146,14 @@ def validate_protocol(protocol: dict[str, Any]) -> dict[str, Any]:
         or repeatability.get("every_repeat_must_satisfy_calibration_margin") is not True
     ):
         raise ValueError("calibration repeatability contract changed")
+    host_load = repeatability.get("host_load_control") or {}
+    if (
+        host_load.get("maximum_external_cpu_percent") != 25.0
+        or host_load.get("sampling_interval_seconds") != 1.0
+        or host_load.get("precondition_sample_seconds") != 5.0
+        or host_load.get("precondition_maximum_wait_seconds") != 900.0
+    ):
+        raise ValueError("host load control changed")
     selection = protocol.get("selection_rule") or {}
     if selection.get("eligibility") != (
         "a candidate is eligible if and only if it satisfies every quality, safety, operational, "
