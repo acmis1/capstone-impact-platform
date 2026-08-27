@@ -46,7 +46,14 @@ export interface PublicFeedHistoryView {
   versions: PublicFeedHistoryListItem[];
   detail: PublicFeedHistoryDetail | null;
   deploymentStatuses: PublicFeedDeploymentStatus[];
-  blockingOperation: { kind: string; state: string; failureCode: string | null; updatedAt: string } | null;
+  blockingOperation: {
+    kind: string;
+    state: string;
+    failureCode: string | null;
+    updatedAt: string;
+    leaseExpiresAt: string;
+    storageUncertaintyUntil: string | null;
+  } | null;
 }
 
 export const PUBLIC_FEED_HISTORY_PAGE_SIZE = 50;
@@ -80,7 +87,8 @@ export async function readPublicFeedHistory(
       .range(offset, offset + PUBLIC_FEED_HISTORY_PAGE_SIZE),
     selection,
     supabase.from('projects').select('public_id,title,status,deleted_at').is('deleted_at', null),
-    supabase.from('public_feed_operations').select('kind,state,failure_code,updated_at')
+    supabase.from('public_feed_operations')
+      .select('kind,state,failure_code,updated_at,lease_expires_at,storage_uncertainty_until')
       .in('state', ['RESERVED', 'PREPARED', 'WRITE_STARTED', 'CANDIDATE_OBSERVED', 'DB_FINALIZED', 'RECOVERY_REQUIRED'])
       .limit(1).maybeSingle(),
   ]);
@@ -191,6 +199,9 @@ export async function readPublicFeedHistory(
       kind: String(blockingResult.data.kind), state: String(blockingResult.data.state),
       failureCode: blockingResult.data.failure_code === null ? null : String(blockingResult.data.failure_code),
       updatedAt: String(blockingResult.data.updated_at),
+      leaseExpiresAt: String(blockingResult.data.lease_expires_at),
+      storageUncertaintyUntil: blockingResult.data.storage_uncertainty_until === null
+        ? null : String(blockingResult.data.storage_uncertainty_until),
     } : null,
   };
 }
