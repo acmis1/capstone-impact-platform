@@ -158,6 +158,19 @@ describe('assistive persistence contract - findings', () => {
     expect(persisted.scoreValue).toBeNull();
   });
 
+  it('routes language suggestions through the frozen language evidence builder', () => {
+    const languageResult = checkResult({
+      checkType: 'LANGUAGE_SUGGESTION',
+      outcome: 'REVIEW',
+      reasonCode: 'LANGUAGE_SPELLING',
+      affectedField: 'summary',
+      origin: 'LOCAL_LANGUAGE_PROVIDER',
+      lexicalScore: null,
+    });
+    expect(() => toPersistedAssistiveFinding(languageResult))
+      .toThrow('Use toPersistedLanguageFindings for language suggestions.');
+  });
+
   it('rejects a half-present score pair', () => {
     for (const override of [
       { scoreKind: 'LEXICAL_SIMILARITY', scoreValue: null },

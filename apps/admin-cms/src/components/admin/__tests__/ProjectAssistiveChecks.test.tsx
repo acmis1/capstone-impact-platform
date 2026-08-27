@@ -83,6 +83,41 @@ const duplicateFinding = (): AssistiveInspectionFinding => ({
   createdAt: '2026-08-21T09:00:00.000Z',
 });
 
+const languageFinding = (
+  suggestions: string[] = ['receive', 'review'],
+  reasonCode: 'LANGUAGE_SPELLING' | 'LANGUAGE_GRAMMAR' = 'LANGUAGE_SPELLING',
+): AssistiveInspectionFinding => ({
+  findingId: '77777777-7777-4777-8777-777777777777',
+  ordinal: 3,
+  checkType: 'LANGUAGE_SUGGESTION',
+  outcome: 'REVIEW',
+  classification: 'NON_BLOCKING',
+  reasonCode,
+  affectedField: 'summary',
+  origin: 'LOCAL_LANGUAGE_PROVIDER',
+  scoreKind: null,
+  scoreValue: null,
+  evidence: {
+    version: 'assistive-finding-evidence/v3',
+    startOffset: 4,
+    endOffset: 11,
+    offsetUnit: 'UNICODE_CODE_POINTS',
+    originalSourceSpan: '<b>typo',
+    contextExcerpt: 'The <b>typo remains literal.',
+    languageCategory: reasonCode === 'LANGUAGE_SPELLING' ? 'TYPOS' : 'GRAMMAR',
+    ruleId: 'MORFOLOGIK_RULE_EN_AU',
+    providerId: 'LANGUAGETOOL',
+    providerVersion: '6.6',
+    suggestions,
+    explanation: 'LanguageTool identified a possible language issue.',
+    inputHash: 'a'.repeat(64),
+    pipelineVersion: 'assistive-deterministic-checks/v3',
+    policySha256: '3984b958741a5103791524d48ba262a81ef829695ddc122a728c12cc3e689148',
+  },
+  disposition: 'UNREVIEWED',
+  createdAt: '2026-08-27T09:00:00.000Z',
+});
+
 const sampleInspection = (overrides: Partial<AssistiveInspectionView> = {}): AssistiveInspectionView => ({
   runId: RUN_ID,
   runStatus: 'COMPLETED',
@@ -333,6 +368,41 @@ describe('ProjectAssistiveChecks Component', () => {
     expect(screen.queryByRole('button', { name: /Apply to draft/i })).toBeNull();
     expect(screen.getByRole('button', { name: /Mark reviewed/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Ignore/i })).toBeTruthy();
+  });
+
+  it('renders language evidence as literal text with one explicit control per bounded suggestion', () => {
+    renderWithNavigation(
+      <ProjectAssistiveChecks
+        publicId={PUBLIC_ID}
+        canEditMetadata={true}
+        canReview={true}
+        initialInspection={sampleInspection({ findings: [languageFinding()] })}
+      />,
+    );
+    expect(screen.getByText('Spelling and grammar')).toBeTruthy();
+    expect(screen.getByText('<b>typo')).toBeTruthy();
+    expect(document.querySelector('b')).toBeNull();
+    expect(screen.getByText(/LanguageTool 6.6 · rule MORFOLOGIK_RULE_EN_AU/i)).toBeTruthy();
+    const receive = screen.getByRole('button', { name: 'Apply “receive” to draft' });
+    const review = screen.getByRole('button', { name: 'Apply “review” to draft' });
+    expect(receive.hasAttribute('disabled')).toBe(true);
+    expect(review.hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByText(/confidence/i)).toBeNull();
+  });
+
+  it('renders a grammar finding without inventing an automatic replacement', () => {
+    renderWithNavigation(
+      <ProjectAssistiveChecks
+        publicId={PUBLIC_ID}
+        canEditMetadata={true}
+        canReview={true}
+        initialInspection={sampleInspection({ findings: [languageFinding([], 'LANGUAGE_GRAMMAR')] })}
+      />,
+    );
+
+    expect(screen.getByText(/No safe automatic replacement was provided/i)).toBeTruthy();
+    expect(screen.queryByLabelText('Language suggestions')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Apply .* to draft/i })).toBeNull();
   });
 
   it('records reviewer disposition without exposing staff UUIDs', async () => {

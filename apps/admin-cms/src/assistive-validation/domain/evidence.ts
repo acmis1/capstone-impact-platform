@@ -13,7 +13,10 @@ export const ASSISTIVE_EVIDENCE_LIMITS = {
 } as const;
 
 export const assistiveCheckResultSchema = z.object({
-  checkType: z.enum(['TITLE_CONSISTENCY', 'FORMATTING', 'EXTRACTION_INFORMATION', 'DUPLICATE_SHORTLIST']),
+  checkType: z.enum([
+    'TITLE_CONSISTENCY', 'FORMATTING', 'EXTRACTION_INFORMATION', 'DUPLICATE_SHORTLIST',
+    'LANGUAGE_SUGGESTION',
+  ]),
   outcome: z.enum(['AGREES', 'REVIEW', 'MISMATCH', 'NOT_EVALUATED', 'INFORMATION']),
   classification: z.literal('NON_BLOCKING'),
   reasonCode: z.enum([
@@ -23,9 +26,13 @@ export const assistiveCheckResultSchema = z.object({
     'EXTRACTION_FAILED', 'MISSING_GEOMETRY', 'SUSPICIOUS_CONTROL_CHARACTERS',
     'LEADING_OR_TRAILING_WHITESPACE', 'REPEATED_WHITESPACE',
     'EXACT_OR_NORMALIZED_DUPLICATE_PRESENT', 'LEXICAL_DUPLICATE_SHORTLIST',
+    'LANGUAGE_SPELLING', 'LANGUAGE_GRAMMAR', 'LANGUAGE_PUNCTUATION',
+    'LANGUAGE_CAPITALIZATION', 'LANGUAGE_REPEATED_WORD',
   ]),
-  affectedField: z.enum(['title', 'extraction_text', 'project_content']),
-  origin: z.enum(['PHASE_1_EXTRACTION', 'DETERMINISTIC_HELPER']),
+  affectedField: z.enum([
+    'title', 'summary', 'background', 'solution', 'extraction_text', 'project_content',
+  ]),
+  origin: z.enum(['PHASE_1_EXTRACTION', 'DETERMINISTIC_HELPER', 'LOCAL_LANGUAGE_PROVIDER']),
   evidenceExcerpt: boundedPlainText(ASSISTIVE_EVIDENCE_LIMITS.excerpt).nullable(),
   pageNumber: z.number().int().min(1).max(10).nullable(),
   boundingBox: phase1BoundingBoxSchema.nullable(),

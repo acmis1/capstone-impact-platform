@@ -18,6 +18,7 @@ export const ASSISTIVE_JOB_FAILURE_CODES = [
   'MEDIA_INVALID', 'INPUT_UNAVAILABLE', 'WORKER_UNAVAILABLE', 'WORKER_TIMEOUT',
   'WORKER_CRASHED', 'EXTRACTION_CONTRACT_REJECTED', 'EXTRACTION_FAILED',
   'DETERMINISTIC_CONTRACT_REJECTED', 'OCR_REQUIRED', 'OCR_PROVIDER_UNAVAILABLE',
+  'LANGUAGE_PROVIDER_UNAVAILABLE', 'OCR_AND_LANGUAGE_INCOMPLETE',
   'IDENTITY_CONFLICT', 'INTERNAL_FAILURE',
 ] as const;
 
@@ -126,7 +127,10 @@ export const assistiveFinalizeInputSchema = z.object({
   claimToken: z.uuid(),
   inputHash: assistiveInputHashSchema,
   status: z.enum(['COMPLETED', 'PARTIAL']),
-  completionCode: z.enum(['OCR_REQUIRED', 'OCR_PROVIDER_UNAVAILABLE']).nullable(),
+  completionCode: z.enum([
+    'OCR_REQUIRED', 'OCR_PROVIDER_UNAVAILABLE', 'LANGUAGE_PROVIDER_UNAVAILABLE',
+    'OCR_AND_LANGUAGE_INCOMPLETE',
+  ]).nullable(),
   findings: z.array(persistedAssistiveFindingSchema).min(1).max(50),
 }).strict().superRefine((value, context) => {
   if ((value.status === 'COMPLETED') !== (value.completionCode === null)) {

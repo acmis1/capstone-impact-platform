@@ -8,6 +8,7 @@ import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEn
 
 const DB_CONTAINER = 'supabase_db_capstone-impact-platform';
 const PIPELINE = 'assistive-deterministic-checks/v1';
+const LANGUAGE_PIPELINE = 'assistive-deterministic-checks/v3';
 const FINDING = {
   checkType: 'FORMATTING',
   outcome: 'INFORMATION',
@@ -29,6 +30,21 @@ const FINDING = {
     explanation: 'Synthetic bounded Phase 4 runtime finding.',
   },
 };
+
+const languageFinding = (inputHash: string) => ({
+  checkType: 'LANGUAGE_SUGGESTION', outcome: 'REVIEW', classification: 'NON_BLOCKING',
+  reasonCode: 'LANGUAGE_SPELLING', affectedField: 'summary', origin: 'LOCAL_LANGUAGE_PROVIDER',
+  scoreKind: null, scoreValue: null,
+  evidence: {
+    version: 'assistive-finding-evidence/v3', startOffset: 2, endOffset: 9,
+    offsetUnit: 'UNICODE_CODE_POINTS', originalSourceSpan: 'recieve',
+    contextExcerpt: 'A recieve update.', languageCategory: 'TYPOS',
+    ruleId: 'MORFOLOGIK_RULE_EN_AU', providerId: 'LANGUAGETOOL', providerVersion: '6.6',
+    suggestions: ['receive'], explanation: 'Review this possible spelling issue.',
+    inputHash, pipelineVersion: LANGUAGE_PIPELINE,
+    policySha256: '3984b958741a5103791524d48ba262a81ef829695ddc122a728c12cc3e689148',
+  },
+});
 
 function hash(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -103,7 +119,7 @@ async function main(): Promise<void> {
     const snapshotsBefore = psql('SELECT count(*) FROM public.published_snapshots;');
 
     await scenario(1, 'migrations 0031-0033 and all three assistive tables are live', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '43');
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '44');
       assert.equal(
         psql("SELECT string_agg(table_name, ',' ORDER BY table_name) FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'assistive_validation_%';"),
         'assistive_validation_findings,assistive_validation_jobs,assistive_validation_runs',
@@ -384,7 +400,89 @@ async function main(): Promise<void> {
       assert.equal((afterFailure.run as Record<string, unknown>).runId, legacyRunId);
     });
 
-    await scenario(20, 'health reports bounded queue, active, lease, and cancellation counts', async () => {
+    await scenario(20, 'v3 language evidence enforces run identity and persists closed bounded fields', async () => {
+      const inputHash = hash(`${prefix}:language`);
+      assert.equal((await rpc('enqueue_assistive_validation_run', {
+        p_project_id: projectId, p_actor_admin_id: actorId, p_input_hash: inputHash,
+        p_pipeline_version: LANGUAGE_PIPELINE,
+      })).resultCode, 'ENQUEUED');
+      const claim = await rpc('claim_next_assistive_validation_job', {
+        p_worker_id: crypto.randomUUID(), p_lease_seconds: 180,
+      });
+      assert.equal(claim.inputHash, inputHash);
+      assert.equal((await rpc('advance_assistive_validation_job_stage', {
+        p_job_id: claim.jobId, p_claim_token: claim.claimToken,
+      })).resultCode, 'ADVANCED');
+      assert.equal((await rpc('finalize_assistive_validation_job', {
+        p_job_id: claim.jobId, p_claim_token: claim.claimToken,
+        p_input_hash: inputHash, p_status: 'COMPLETED', p_completion_code: null,
+        p_findings: [languageFinding(hash(`${prefix}:wrong-language-identity`))],
+      })).resultCode, 'VALIDATION_FAILED');
+      const base = languageFinding(inputHash);
+      const malformed = [
+        { ...base, evidence: { ...base.evidence, endOffset: 10 } },
+        { ...base, evidence: { ...base.evidence, contextExcerpt: 'x'.repeat(501) } },
+        { ...base, evidence: { ...base.evidence, suggestions: [] } },
+        { ...base, evidence: { ...base.evidence, suggestions: ['receive', 'received', 'receiver', 'receives'] } },
+        { ...base, evidence: { ...base.evidence, suggestions: ['   '] } },
+        { ...base, evidence: { ...base.evidence, ruleId: 'invalid rule' } },
+        { ...base, evidence: { ...base.evidence, providerId: 'REMOTE_PROVIDER' } },
+        { ...base, evidence: { ...base.evidence, rawProviderResponse: 'forbidden' } },
+      ];
+      for (const finding of malformed) {
+        assert.equal((await rpc('finalize_assistive_validation_job', {
+          p_job_id: claim.jobId, p_claim_token: claim.claimToken,
+          p_input_hash: inputHash, p_status: 'COMPLETED', p_completion_code: null,
+          p_findings: [finding],
+        })).resultCode, 'VALIDATION_FAILED');
+      }
+      const grammarWithoutReplacement = {
+        ...base,
+        reasonCode: 'LANGUAGE_GRAMMAR',
+        evidence: {
+          ...base.evidence,
+          languageCategory: 'GRAMMAR', ruleId: 'SUBJECT_VERB_AGREEMENT', suggestions: [],
+        },
+      };
+      assert.equal((await rpc('finalize_assistive_validation_job', {
+        p_job_id: claim.jobId, p_claim_token: claim.claimToken,
+        p_input_hash: inputHash, p_status: 'COMPLETED', p_completion_code: null,
+        p_findings: [base, grammarWithoutReplacement],
+      })).resultCode, 'FINALIZED');
+      assert.equal(
+        psql(`SELECT check_type || ':' || affected_field || ':' || (evidence ->> 'providerVersion') || ':' || (evidence ->> 'offsetUnit') FROM public.assistive_validation_findings WHERE run_id = '${claim.runId}'::uuid AND reason_code = 'LANGUAGE_SPELLING';`),
+        'LANGUAGE_SUGGESTION:summary:6.6:UNICODE_CODE_POINTS',
+      );
+      assert.equal(
+        psql(`SELECT count(*)::text || ':' || count(*) FILTER (WHERE reason_code = 'LANGUAGE_GRAMMAR' AND pg_catalog.jsonb_array_length(evidence -> 'suggestions') = 0)::text FROM public.assistive_validation_findings WHERE run_id = '${claim.runId}'::uuid;`),
+        '2:1',
+      );
+    });
+
+    await scenario(21, 'language-provider degradation preserves other findings as PARTIAL', async () => {
+      const inputHash = hash(`${prefix}:language-partial`);
+      assert.equal((await rpc('enqueue_assistive_validation_run', {
+        p_project_id: projectId, p_actor_admin_id: actorId, p_input_hash: inputHash,
+        p_pipeline_version: LANGUAGE_PIPELINE,
+      })).resultCode, 'ENQUEUED');
+      const claim = await rpc('claim_next_assistive_validation_job', {
+        p_worker_id: crypto.randomUUID(), p_lease_seconds: 180,
+      });
+      assert.equal((await rpc('advance_assistive_validation_job_stage', {
+        p_job_id: claim.jobId, p_claim_token: claim.claimToken,
+      })).resultCode, 'ADVANCED');
+      assert.equal((await rpc('finalize_assistive_validation_job', {
+        p_job_id: claim.jobId, p_claim_token: claim.claimToken,
+        p_input_hash: inputHash, p_status: 'PARTIAL',
+        p_completion_code: 'LANGUAGE_PROVIDER_UNAVAILABLE', p_findings: [FINDING],
+      })).resultCode, 'FINALIZED');
+      assert.equal(
+        psql(`SELECT status || ':' || failure_code FROM public.assistive_validation_runs WHERE id = '${claim.runId}'::uuid;`),
+        'PARTIAL:LANGUAGE_PROVIDER_UNAVAILABLE',
+      );
+    });
+
+    await scenario(22, 'health reports bounded queue, active, lease, and cancellation counts', async () => {
       const health = await rpc('get_assistive_validation_job_health');
       assert.equal(health.resultCode, 'HEALTHY');
       for (const field of ['queuedCount', 'activeCount', 'expiredLeaseCount', 'cancellationPendingCount']) {
@@ -393,7 +491,7 @@ async function main(): Promise<void> {
       }
     });
 
-    await scenario(21, 'all surviving run/job rows remain one-to-one and lifecycle-coherent', () => {
+    await scenario(23, 'all surviving run/job rows remain one-to-one and lifecycle-coherent', () => {
       assert.equal(
         psql(`SELECT count(*) FROM public.assistive_validation_runs r LEFT JOIN public.assistive_validation_jobs j ON j.run_id = r.id WHERE r.project_id = '${projectId}'::uuid AND (j.id IS NULL OR NOT ((r.status = 'QUEUED' AND j.status = 'QUEUED') OR (r.status = 'RUNNING' AND j.status IN ('EXTRACTING','CHECKING')) OR (r.status IN ('PARTIAL','COMPLETED','FAILED','CANCELLED','SUPERSEDED') AND r.status = j.status)));`),
         '0',
@@ -404,7 +502,7 @@ async function main(): Promise<void> {
       );
     });
 
-    await scenario(22, 'coordination created no authoritative workflow or publication side effect', () => {
+    await scenario(24, 'coordination created no authoritative workflow or publication side effect', () => {
       assert.equal(psql(`SELECT to_jsonb(p)::text FROM public.projects p WHERE p.id = '${projectId}'::uuid;`), projectBefore);
       assert.equal(psql(`SELECT count(*) FROM public.approval_records WHERE project_id = '${projectId}'::uuid;`), approvalBefore);
       assert.equal(psql(`SELECT count(*) FROM public.validation_flags WHERE project_id = '${projectId}'::uuid;`), flagsBefore);
@@ -418,7 +516,7 @@ async function main(): Promise<void> {
       if (actorId) assert.ifError((await service.from('admin_users').delete().eq('id', actorId)).error);
       assert.equal(psql(`SELECT count(*) FROM public.projects WHERE public_id = '2026-${prefix}';`), '0');
       assert.equal(psql(`SELECT count(*) FROM public.admin_users WHERE email = '${actorEmail}';`), '0');
-      console.log('PASS: Scenario 23 - all verifier-owned fixtures were removed');
+      console.log('PASS: Scenario 25 - all verifier-owned fixtures were removed');
       passed += 1;
     } catch (error) {
       cleanupFailure = error;

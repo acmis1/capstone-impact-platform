@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import {
+  ASSISTIVE_EVIDENCE_LIMITS,
   assistiveCheckResultSchema,
   sanitizeAssistivePlainText,
   type AssistiveCheckResult,
@@ -24,11 +25,14 @@ import {
  * Identity of the deterministic evaluation that produced a run. It is part of the run's uniqueness
  * key, so bumping it is how a changed algorithm earns a new durable run for unchanged content.
  */
-export const ASSISTIVE_PIPELINE_VERSION = 'assistive-deterministic-checks/v2';
+export const ASSISTIVE_PIPELINE_VERSION = 'assistive-deterministic-checks/v3';
 
 /** Version tag stored inside every persisted evidence object. */
 export const ASSISTIVE_FINDING_EVIDENCE_VERSION = 'assistive-finding-evidence/v1';
 export const ASSISTIVE_DUPLICATE_EVIDENCE_VERSION = 'assistive-finding-evidence/v2';
+export const ASSISTIVE_LANGUAGE_EVIDENCE_VERSION = 'assistive-finding-evidence/v3';
+export const ASSISTIVE_LANGUAGE_POLICY_SHA256 =
+  '3984b958741a5103791524d48ba262a81ef829695ddc122a728c12cc3e689148';
 
 export const ASSISTIVE_PERSISTENCE_LIMITS = {
   findingsPerRun: 50,
@@ -194,9 +198,42 @@ const persistedAssistiveEvidenceV2Schema = persistedAssistiveEvidenceV1Schema.ex
   });
 });
 
+const languageEvidenceText = (maximum: number) => z.string()
+  .refine((value) => Array.from(value).length <= maximum, `Must contain at most ${maximum} Unicode code points.`)
+  .refine((value) => !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value), 'Must be plain text.');
+
+export const persistedAssistiveEvidenceV3Schema = z.object({
+  version: z.literal(ASSISTIVE_LANGUAGE_EVIDENCE_VERSION),
+  startOffset: z.number().int().min(0).max(DUPLICATE_SHORTLIST_LIMITS.background),
+  endOffset: z.number().int().min(0).max(DUPLICATE_SHORTLIST_LIMITS.background),
+  offsetUnit: z.literal('UNICODE_CODE_POINTS'),
+  originalSourceSpan: languageEvidenceText(ASSISTIVE_EVIDENCE_LIMITS.value),
+  contextExcerpt: languageEvidenceText(ASSISTIVE_EVIDENCE_LIMITS.excerpt),
+  languageCategory: languageEvidenceText(64).regex(/^[A-Z][A-Z0-9_]*$/),
+  ruleId: languageEvidenceText(100).regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/),
+  providerId: z.literal('LANGUAGETOOL'),
+  providerVersion: z.literal('6.6'),
+  suggestions: z.array(languageEvidenceText(100).refine((value) => value.trim().length > 0))
+    .max(3)
+    .refine((values) => new Set(values).size === values.length, 'Suggestions must be unique.'),
+  explanation: languageEvidenceText(ASSISTIVE_EVIDENCE_LIMITS.explanation)
+    .refine((value) => value.length > 0, 'Explanation must not be empty.'),
+  inputHash: assistiveInputHashSchema,
+  pipelineVersion: z.literal(ASSISTIVE_PIPELINE_VERSION),
+  policySha256: z.literal(ASSISTIVE_LANGUAGE_POLICY_SHA256),
+}).strict().superRefine((evidence, context) => {
+  if (evidence.endOffset < evidence.startOffset) {
+    context.addIssue({ code: 'custom', path: ['endOffset'], message: 'End offset must not precede start offset.' });
+  }
+  if (Array.from(evidence.originalSourceSpan).length !== evidence.endOffset - evidence.startOffset) {
+    context.addIssue({ code: 'custom', path: ['originalSourceSpan'], message: 'Source span length must match canonical offsets.' });
+  }
+});
+
 export const persistedAssistiveEvidenceSchema = z.discriminatedUnion('version', [
   persistedAssistiveEvidenceV1Schema,
   persistedAssistiveEvidenceV2Schema,
+  persistedAssistiveEvidenceV3Schema,
 ]);
 
 export type PersistedAssistiveEvidence = z.infer<typeof persistedAssistiveEvidenceSchema>;
@@ -224,8 +261,12 @@ export const persistedAssistiveFindingSchema = z.object({
     context.addIssue({ code: 'custom', message: 'Persisted evidence exceeds the bounded size.' });
   }
   const isDuplicate = finding.checkType === 'DUPLICATE_SHORTLIST';
-  if (isDuplicate !== (finding.evidence.version === ASSISTIVE_DUPLICATE_EVIDENCE_VERSION)) {
-    context.addIssue({ code: 'custom', message: 'Duplicate shortlist findings require evidence v2, and other findings require v1.' });
+  const isLanguage = finding.checkType === 'LANGUAGE_SUGGESTION';
+  const expectedEvidenceVersion = isDuplicate
+    ? ASSISTIVE_DUPLICATE_EVIDENCE_VERSION
+    : isLanguage ? ASSISTIVE_LANGUAGE_EVIDENCE_VERSION : ASSISTIVE_FINDING_EVIDENCE_VERSION;
+  if (finding.evidence.version !== expectedEvidenceVersion) {
+    context.addIssue({ code: 'custom', message: 'Finding type and evidence version are incoherent.' });
   }
   if (isDuplicate && (finding.scoreKind !== null || finding.scoreValue !== null)) {
     context.addIssue({ code: 'custom', message: 'A shortlist must not carry an ambiguous finding-level score.' });
@@ -235,6 +276,28 @@ export const persistedAssistiveFindingSchema = z.object({
   }
   if (!isDuplicate && ['EXACT_OR_NORMALIZED_DUPLICATE_PRESENT', 'LEXICAL_DUPLICATE_SHORTLIST'].includes(finding.reasonCode)) {
     context.addIssue({ code: 'custom', message: 'Duplicate shortlist reasons cannot be used by other checks.' });
+  }
+  const languageReasons = [
+    'LANGUAGE_SPELLING', 'LANGUAGE_GRAMMAR', 'LANGUAGE_PUNCTUATION',
+    'LANGUAGE_CAPITALIZATION', 'LANGUAGE_REPEATED_WORD',
+  ];
+  if (isLanguage) {
+    if (finding.outcome !== 'REVIEW' || finding.classification !== 'NON_BLOCKING'
+      || finding.origin !== 'LOCAL_LANGUAGE_PROVIDER'
+      || !['title', 'summary', 'background', 'solution'].includes(finding.affectedField)
+      || !languageReasons.includes(finding.reasonCode)
+      || finding.scoreKind !== null || finding.scoreValue !== null) {
+      context.addIssue({ code: 'custom', message: 'Language suggestion metadata is incoherent.' });
+    }
+    if (finding.reasonCode === 'LANGUAGE_SPELLING'
+      && finding.evidence.version === ASSISTIVE_LANGUAGE_EVIDENCE_VERSION
+      && finding.evidence.suggestions.length === 0) {
+      context.addIssue({ code: 'custom', path: ['evidence', 'suggestions'], message: 'A spelling finding requires at least one suggestion.' });
+    }
+  } else if (languageReasons.includes(finding.reasonCode)
+    || finding.origin === 'LOCAL_LANGUAGE_PROVIDER'
+    || ['summary', 'background', 'solution'].includes(finding.affectedField)) {
+    context.addIssue({ code: 'custom', message: 'Language-only metadata cannot be used by another finding type.' });
   }
   if (isDuplicate && finding.evidence.version === ASSISTIVE_DUPLICATE_EVIDENCE_VERSION) {
     const hasExactOrNormalized = shortlistHasExactOrNormalizedMatch(finding.evidence.duplicateCandidates);
@@ -363,6 +426,9 @@ export type StoredAssistiveFinding = z.infer<typeof storedAssistiveFindingSchema
 export function toPersistedAssistiveFinding(result: AssistiveCheckResult): PersistedAssistiveFinding {
   if (result.checkType === 'DUPLICATE_SHORTLIST') {
     throw new Error('Use toPersistedDuplicateShortlistFinding for duplicate results.');
+  }
+  if (result.checkType === 'LANGUAGE_SUGGESTION') {
+    throw new Error('Use toPersistedLanguageFindings for language suggestions.');
   }
   return persistedAssistiveFindingSchema.parse({
     checkType: result.checkType,

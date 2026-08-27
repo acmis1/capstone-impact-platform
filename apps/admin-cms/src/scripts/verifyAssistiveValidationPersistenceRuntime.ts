@@ -254,8 +254,8 @@ async function main(): Promise<void> {
     // ---------------------------------------------------------------------
     // Schema, constraints, RLS and privileges
     // ---------------------------------------------------------------------
-    await scenario(1, 'Local Supabase applied exactly 43 migrations from zero', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '43');
+    await scenario(1, 'Local Supabase applied exactly 44 migrations from zero', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '44');
     });
 
     await scenario(2, 'both assistive tables exist and a finding cannot restate run identity', () => {
@@ -308,6 +308,7 @@ async function main(): Promise<void> {
         'check_assistive_finding_evidence_keys', 'check_assistive_finding_evidence_object',
         'check_assistive_finding_evidence_page_number', 'check_assistive_finding_evidence_size',
         'check_assistive_finding_evidence_values', 'check_assistive_finding_evidence_version',
+        'check_assistive_finding_language_coherence',
         'check_assistive_finding_ordinal', 'check_assistive_finding_origin',
         'check_assistive_finding_outcome',
         'check_assistive_finding_reason_code', 'check_assistive_finding_score_kind',
@@ -367,12 +368,12 @@ async function main(): Promise<void> {
       );
     });
 
-    await scenario(9, 'Phase 3 findings retain no trigger-driven mutation path', () => {
+    await scenario(9, 'the only finding trigger guards v3 run identity', () => {
       assert.equal(
-        psql(`SELECT count(*) FROM pg_catalog.pg_trigger tg
+        psql(`SELECT pg_catalog.string_agg(tg.tgname, ',' ORDER BY tg.tgname) FROM pg_catalog.pg_trigger tg
               JOIN pg_catalog.pg_class t ON t.oid = tg.tgrelid
               WHERE NOT tg.tgisinternal AND t.relname = 'assistive_validation_findings';`),
-        '0',
+        'assistive_language_finding_identity_guard',
       );
     });
 
@@ -524,6 +525,7 @@ async function main(): Promise<void> {
 
     await scenario(18, 'field-level malformed evidence is rejected by the service-role RPC', async () => {
       const base = phase2Findings()[0];
+      if (base.evidence.version !== 'assistive-finding-evidence/v1') throw new Error('Expected v1 evidence');
       const box = base.evidence.boundingBox!;
       const malformedEvidence = [
         { ...base.evidence, evidenceExcerpt: 'x'.repeat(501) },
@@ -877,7 +879,9 @@ async function main(): Promise<void> {
         }
         return '';
       };
-      const complete = { ...phase2Findings()[0].evidence, explanation: 'direct insert probe' };
+      const sourceEvidence = phase2Findings()[0].evidence;
+      if (sourceEvidence.version !== 'assistive-finding-evidence/v1') throw new Error('Expected v1 evidence');
+      const complete = { ...sourceEvidence, explanation: 'direct insert probe' };
       const box = complete.boundingBox!;
       const missingPageNumber: Record<string, unknown> = { ...complete };
       delete missingPageNumber.pageNumber;
