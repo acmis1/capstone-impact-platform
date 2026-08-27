@@ -13,6 +13,7 @@ const MAX_STDERR_BYTES = 16 * 1024;
 const STAGING_PREFIX = 'capstone-assistive-';
 
 export type WorkerPulseResult = 'CONTINUE' | 'CANCEL' | 'CLAIM_LOST';
+export type AssistiveOcrProviderSelection = 'NONE' | 'TESSERACT' | 'PADDLE_TITLE';
 export type WorkerProcessFailureCode =
   | 'WORKER_UNAVAILABLE'
   | 'WORKER_TIMEOUT'
@@ -34,12 +35,14 @@ export interface PythonWorkerOptions {
   timeoutMs?: number;
   pulseIntervalMs?: number;
   tesseractExecutable?: string;
+  /** Operator-provisioned PP-OCRv6 Small model root; absent means the provider stays unavailable. */
+  paddleModelsDir?: string;
 }
 
 export interface AssistiveWorkerRunInput {
   content: Buffer;
   documentType: AssistiveDocumentType;
-  ocrProvider?: 'NONE' | 'TESSERACT';
+  ocrProvider?: AssistiveOcrProviderSelection;
   rasterDpi?: number | null;
   onPulse?: () => Promise<WorkerPulseResult>;
 }
@@ -138,6 +141,9 @@ export class PythonAssistiveWorkerProcess implements AssistiveWorkerRunner {
       ];
       if (input.ocrProvider === 'TESSERACT' && this.options.tesseractExecutable) {
         args.push('--tesseract-executable', this.options.tesseractExecutable);
+      }
+      if (input.ocrProvider === 'PADDLE_TITLE' && this.options.paddleModelsDir) {
+        args.push('--paddle-models-dir', this.options.paddleModelsDir);
       }
       const child = spawn(this.executable, args, {
         cwd: this.workerRoot,

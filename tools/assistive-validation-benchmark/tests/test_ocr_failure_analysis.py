@@ -450,8 +450,10 @@ class StoredDiagnosticEvidenceTests(unittest.TestCase):
         )
         self.assertIn("ocr_failure_analysis check-report", workflow)
         self.assertNotIn("ocr_failure_analysis check-boundary", workflow)
-        self.assertIn("Confirm benchmark PR did not change production paths", workflow)
+        self.assertIn("Enforce the one-time READY-gated production boundary", workflow)
+        self.assertIn("ocr_title_fullpage_holdout_v2 check-result", workflow)
         self.assertIn("apps/assistive-worker", workflow)
+        self.assertIn("apps/admin-cms/src/scripts/runAssistiveCoordinator.ts", workflow)
         self.assertIn("infra/supabase", workflow)
 
     def test_stored_diagnostic_report_does_not_carry_ocr_transcripts(self) -> None:

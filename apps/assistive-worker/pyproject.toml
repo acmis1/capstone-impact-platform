@@ -12,6 +12,13 @@ dependencies = [
   "pypdfium2==5.13.0",
 ]
 
+[project.optional-dependencies]
+paddle-title = [
+  "paddleocr==3.7.0",
+  "paddlepaddle==3.3.0",
+  "paddlex[ocr-core]==3.7.2",
+]
+
 [project.scripts]
 capstone-assistive-extract = "capstone_assistive_worker.cli:main"
 capstone-assistive-task = "capstone_assistive_worker.task_cli:main"

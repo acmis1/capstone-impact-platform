@@ -17,9 +17,6 @@ paddle = [
   "paddleocr==3.7.0",
   "paddlepaddle==3.3.0",
   "paddlex[ocr-core]==3.7.2",
-  # Host resource measurement for the sealed one-shot preflight and the repeated latency
-  # calibration's host-load control. Never imported by the weight-free CI replay path.
-  "psutil>=5.9",
 ]
 
 [project.scripts]
