@@ -7,7 +7,11 @@ from assistive_validation_benchmark.ocr_title_consistency.selector import (
     select_title_candidates as baseline_select,
 )
 from assistive_validation_benchmark.ocr_title_fullpage.corpus import build_calibration_corpus
-from assistive_validation_benchmark.ocr_title_fullpage.evidence import calibration_non_reuse
+from assistive_validation_benchmark.ocr_title_fullpage.evidence import (
+    calibration_non_reuse,
+    exposed_fingerprint_reuse,
+    load_exposed_fingerprint_manifest,
+)
 from assistive_validation_benchmark.ocr_title_fullpage.schema import (
     data_root,
     load_json,
@@ -86,6 +90,28 @@ class OcrTitleFullpageProtocolTests(unittest.TestCase):
         reuse = calibration_non_reuse(corpus)
         self.assertTrue(reuse["passed"])
         self.assertEqual(0, reuse["prohibited_reuse_count"])
+        self.assertEqual(64, reuse["exposed_invalid_holdout"]["fingerprint_case_count"])
+
+    def test_exposed_holdout_manifest_is_irreversible_and_reuse_is_rejected(self) -> None:
+        manifest = load_exposed_fingerprint_manifest()
+        self.assertFalse(manifest["fingerprint_algorithm"]["raw_content_retained"])
+        self.assertEqual(63, manifest["corpus"]["scored_case_count"])
+        self.assertEqual(64, len(manifest["records"]))
+        record = next(item for item in manifest["records"] if item["visible_title_sha256"] is not None)
+        reuse = exposed_fingerprint_reuse(
+            [
+                {
+                    "case_id": "future-reuse-probe",
+                    "metadata_title_sha256": record["metadata_title_sha256"],
+                    "visible_title_sha256": record["visible_title_sha256"],
+                    "full_reference_sha256": record["full_reference_sha256"],
+                    "case_signature_sha256": record["case_signature_sha256"],
+                }
+            ],
+            manifest,
+        )
+        self.assertEqual(4, reuse["prohibited_reuse_count"])
+        self.assertTrue(all(case_ids == ["future-reuse-probe"] for case_ids in reuse["reuse_case_ids"].values()))
 
     def test_tracked_corpus_matches_the_deterministic_source(self) -> None:
         tracked = validate_corpus(load_json(data_root() / "corpus" / "calibration.json"))
