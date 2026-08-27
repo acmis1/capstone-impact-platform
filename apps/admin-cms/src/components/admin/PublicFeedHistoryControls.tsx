@@ -27,17 +27,29 @@ interface Preparation {
   expiresAt: string;
 }
 
+/**
+ * Staff-facing outcome. `text` always says what happened, whether anything changed, and what to do
+ * next; any raw backend code stays under progressive disclosure rather than in the primary copy.
+ */
+interface Outcome {
+  text: string;
+  code?: string | null;
+}
+
 export function PublicFeedHistoryControls(props: {
   canPublish: boolean;
   historyActive: boolean;
   rollbackAvailable: boolean;
   targetVersionNumber: number | null;
   targetIsCurrent: boolean;
+  /** True only when the backend proved an earlier action failed (`RECOVERY_REQUIRED`). */
   recoveryAvailable: boolean;
+  /** True while an ordinary publishing action is still running; never implies recovery. */
+  publishingInProgress?: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
-  const [message, setMessage] = React.useState<string | null>(null);
+  const [message, setMessage] = React.useState<Outcome | null>(null);
   const [preparation, setPreparation] = React.useState<Preparation | null>(null);
   const [acknowledgement, setAcknowledgement] = React.useState('');
 
@@ -49,10 +61,15 @@ export function PublicFeedHistoryControls(props: {
     try {
       const response = await fetch('/api/public-feed/activation', { method: 'POST' });
       const body = await response.json() as { success?: boolean; code?: string };
-      setMessage(body.success ? 'Showcase publishing is active.' : `Setup stopped: ${body.code || 'ACTIVATION_FAILED'}.`);
+      setMessage(body.success
+        ? { text: 'Showcase publishing is now set up. You can publish projects from their project page.' }
+        : {
+          text: 'Showcase publishing could not be set up. Nothing was published or changed. Try again, and ask an administrator for help if it keeps stopping.',
+          code: body.code || 'ACTIVATION_FAILED',
+        });
       if (body.success) router.refresh();
     } catch {
-      setMessage('Showcase publishing setup could not be completed.');
+      setMessage({ text: 'Showcase publishing could not be set up. Nothing was published or changed. Check your connection and try again.' });
     } finally {
       setPending(false);
     }
@@ -71,12 +88,15 @@ export function PublicFeedHistoryControls(props: {
       });
       const body = await response.json() as { success?: boolean; code?: string; result?: Preparation };
       if (!body.success || !body.result) {
-        setMessage(`Rollback preparation stopped: ${body.code || 'PREPARATION_FAILED'}.`);
+        setMessage({
+          text: 'The restore could not be prepared. Nothing was published or changed.',
+          code: body.code || 'PREPARATION_FAILED',
+        });
       } else {
         setPreparation(body.result);
       }
     } catch {
-      setMessage('Rollback preparation could not be completed.');
+      setMessage({ text: 'The restore could not be prepared. Nothing was published or changed. Check your connection and try again.' });
     } finally {
       setPending(false);
     }
@@ -96,15 +116,18 @@ export function PublicFeedHistoryControls(props: {
       });
       const body = await response.json() as { success?: boolean; code?: string };
       if (body.success) {
-        setMessage('Rollback completed successfully.');
+        setMessage({ text: 'The earlier version was restored.' });
         setPreparation(null);
         setAcknowledgement('');
         router.refresh();
       } else {
-        setMessage(`Rollback stopped: ${body.code || 'ROLLBACK_FAILED'}.`);
+        setMessage({
+          text: 'The restore did not finish. Check the publishing status on this page before trying again.',
+          code: body.code || 'ROLLBACK_FAILED',
+        });
       }
     } catch {
-      setMessage('Rollback could not be completed.');
+      setMessage({ text: 'The restore did not finish. Check the publishing status on this page before trying again.' });
     } finally {
       setPending(false);
     }
@@ -117,19 +140,34 @@ export function PublicFeedHistoryControls(props: {
       const response = await fetch('/api/public-feed/recovery', { method: 'POST' });
       const body = await response.json() as { success?: boolean; code?: string };
       setMessage(body.success
-        ? 'Publishing status was safely recovered.'
-        : `Recovery remains blocked: ${body.code || 'RECOVERY_FAILED'}.`);
+        ? { text: 'Publishing status was safely recovered. Publishing is available again.' }
+        : {
+          text: 'Publishing is still paused. No showcase content was changed. Wait a few minutes and try again — if it stays paused, an administrator needs to review it.',
+          code: body.code || 'RECOVERY_FAILED',
+        });
       if (body.success) router.refresh();
     } catch {
-      setMessage('Publishing recovery could not be completed.');
+      setMessage({ text: 'Publishing is still paused. No showcase content was changed. Check your connection and try again.' });
     } finally {
       setPending(false);
     }
   }
 
+  const outcome = message ? (
+    <div className="flex flex-col gap-1.5">
+      <p role="status" className="text-sm font-medium leading-relaxed text-foreground">{message.text}</p>
+      {message.code && (
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
+          <p className="mt-1 font-mono">{message.code}</p>
+        </details>
+      )}
+    </div>
+  ) : null;
+
   // If history is active, no recovery needed, and rollback is not being shown, return minimal/advanced controls
   if (props.historyActive && !props.recoveryAvailable && !props.rollbackAvailable) {
-    return message ? <p role="status" className="text-sm font-medium text-foreground">{message}</p> : null;
+    return outcome;
   }
 
   return (
@@ -160,8 +198,13 @@ export function PublicFeedHistoryControls(props: {
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
             Showcase publishing needs to be set up before projects can be published.
           </p>
+          {props.publishingInProgress && (
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Another publishing action is currently running. Wait for it to finish before setting up showcase publishing.
+            </p>
+          )}
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={activate} disabled={pending}>
+            <Button type="button" onClick={activate} disabled={pending || props.publishingInProgress === true}>
               {pending ? 'Setting up…' : 'Set up showcase publishing'}
             </Button>
           </div>
@@ -220,7 +263,7 @@ export function PublicFeedHistoryControls(props: {
         </details>
       )}
 
-      {message && <p role="status" className="text-sm font-medium text-foreground">{message}</p>}
+      {outcome}
     </div>
   );
 }

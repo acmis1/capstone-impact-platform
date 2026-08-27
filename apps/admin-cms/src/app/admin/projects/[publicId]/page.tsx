@@ -404,7 +404,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               </h1>
               <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-sm">
                 <div className="flex min-w-0 items-baseline gap-1.5">
-                  <dt className="text-muted-foreground">Public ID</dt>
+                  <dt className="text-muted-foreground">Project ID</dt>
                   <dd className="min-w-0 break-all rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
                     {project.publicId}
                   </dd>
@@ -904,10 +904,9 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             <div className={`flex items-start gap-2.5 p-4 ${PROJECT_DETAIL_SURFACE_CLASSES.context}`}>
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-foreground-subtle" aria-hidden="true" />
               <p className="text-sm leading-relaxed">
-                <strong className="font-semibold text-foreground">Review staging sandbox.</strong> Live
-                showcase publishing is disabled and external integrations stay disconnected.
-                Publishing controls appear only when the server runtime identity matches the configured
-                Local or test showcase target.
+                <strong className="font-semibold text-foreground">Test environment.</strong> Changes
+                here affect test data and test publishing only. The live public showcase is not
+                changed.
               </p>
             </div>
           </aside>

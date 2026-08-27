@@ -290,7 +290,7 @@ describe('PR2A Guided Import Workflow Components', () => {
       expect(await screen.findByText('1. Match projects using:')).toBeTruthy();
 
       // Verify humanized field labels exist in options and raw camelCase is not displayed as option text
-      expect(screen.getAllByRole('option', { name: 'Public ID' }).length).toBeGreaterThan(0);
+      expect(screen.getAllByRole('option', { name: 'Project ID' }).length).toBeGreaterThan(0);
       expect(screen.getAllByRole('option', { name: 'Project title' }).length).toBeGreaterThan(0);
       expect(screen.getAllByRole('option', { name: 'Group name' }).length).toBeGreaterThan(0);
       expect(screen.getAllByRole('option', { name: 'Academic year' }).length).toBeGreaterThan(0);

@@ -238,7 +238,7 @@ export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTablePro
               data-slot="card-title"
               className="text-base font-semibold leading-tight tracking-tight text-foreground"
             >
-              Provisioning incidents
+              Invitations that did not complete
             </h2>
             <CardDescription className="max-w-3xl">
               These attempts did not create usable access. Cleanup and attention states remain
@@ -248,7 +248,7 @@ export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTablePro
           <CardContent className="p-0 sm:p-0">
             <div className="hidden xl:block">
               <table className="w-full table-fixed border-collapse text-sm">
-                <caption className="sr-only">Staff provisioning attempts that did not complete</caption>
+                <caption className="sr-only">Staff invitations that did not complete</caption>
                 <colgroup>
                   <col className="w-[18%]" />
                   <col className="w-[23%]" />
@@ -290,7 +290,7 @@ export function StaffDirectoryTable({ staff, incidents }: StaffDirectoryTablePro
               </table>
             </div>
 
-            <ul aria-label="Staff provisioning incidents" className="divide-y divide-border/70 xl:hidden">
+            <ul aria-label="Staff invitations that did not complete" className="divide-y divide-border/70 xl:hidden">
               {incidents.map((incident, index) => (
                 <li key={`${incident.email}-${index}`} className="p-5 sm:p-6">
                   <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

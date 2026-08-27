@@ -559,12 +559,20 @@ describe('project detail workspace information architecture', () => {
     expect(asideSource).not.toContain('sticky');
     expect(asideSource).toContain('Project record');
     expect(asideSource).toContain('Import origin');
-    expect(asideSource).toContain('Review staging sandbox');
+    expect(asideSource).toContain('Test environment.');
+    expect(asideSource).not.toContain('server runtime identity');
+    expect(asideSource).not.toContain('staging sandbox');
   });
 
   it('keeps the unsaved-edit navigation guard on the back link', () => {
     expect(pageSource).toContain('<ProjectMetadataNavigationProvider>');
     expect(pageSource).toContain('<GuardedProjectBackLink');
+  });
+
+  it('labels the project identifier as a Project ID in the staff-facing header', () => {
+    const headerSource = pageSource.slice(pageSource.indexOf('<header'), pageSource.indexOf('</header>'));
+    expect(headerSource).toContain('>Project ID</dt>');
+    expect(headerSource).not.toContain('Public ID');
   });
 
   it('does not truncate project identifiers', () => {

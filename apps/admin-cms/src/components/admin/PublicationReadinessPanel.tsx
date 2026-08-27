@@ -169,6 +169,45 @@ export function deriveReadinessChecklist(readiness: PublicationReadinessResult):
   return { approved, confirmed, detailsMatch };
 }
 
+const CHECKLIST_STATE_LABELS: Record<ChecklistItemState, string> = {
+  passed: 'Passed',
+  failed: 'Needs attention',
+  unverified: 'Not yet verified',
+};
+
+const CHECKLIST_STATE_GLYPHS: Record<ChecklistItemState, string> = {
+  passed: '✓',
+  failed: '✕',
+  unverified: '○',
+};
+
+const CHECKLIST_STATE_CLASSES: Record<ChecklistItemState, string> = {
+  passed: 'font-bold text-success',
+  failed: 'font-bold text-destructive',
+  unverified: 'text-muted-foreground',
+};
+
+/**
+ * Checklist state is carried by a real text label, not by an `aria-label` on a generic span:
+ * `aria-label` is not reliably exposed on elements without a role. The glyph is decorative and
+ * hidden from assistive technology, so state is never communicated by colour or shape alone.
+ */
+function ChecklistItem({ state, children }: { state: ChecklistItemState; children: React.ReactNode }) {
+  return (
+    <li className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+      <span className="flex min-w-0 items-start gap-2">
+        <span className={`${CHECKLIST_STATE_CLASSES[state]} leading-6`} aria-hidden="true">
+          {CHECKLIST_STATE_GLYPHS[state]}
+        </span>
+        <span className={state === 'passed' ? 'text-foreground' : 'text-muted-foreground'}>{children}</span>
+      </span>
+      <span className={`shrink-0 text-xs font-semibold leading-6 ${CHECKLIST_STATE_CLASSES[state]}`}>
+        {CHECKLIST_STATE_LABELS[state]}
+      </span>
+    </li>
+  );
+}
+
 export function PublicationReadinessPanel({ readiness }: PublicationReadinessPanelProps) {
   if (!readiness) {
     return (
@@ -195,50 +234,15 @@ export function PublicationReadinessPanel({ readiness }: PublicationReadinessPan
       <div className="rounded-lg border border-border bg-card p-3.5">
         <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Publication requirements</h5>
         <ul className="mt-2.5 space-y-2 text-sm">
-          <li className="flex items-center gap-2">
-            {checklist.approved === 'passed' && (
-              <span className="font-bold text-success" aria-label="Passed">✓</span>
-            )}
-            {checklist.approved === 'failed' && (
-              <span className="font-bold text-destructive" aria-label="Not passed">✕</span>
-            )}
-            {checklist.approved === 'unverified' && (
-              <span className="text-muted-foreground" aria-label="Not yet verified">○</span>
-            )}
-            <span className={checklist.approved === 'passed' ? 'text-foreground' : 'text-muted-foreground'}>
-              Project approved
-            </span>
-          </li>
-          <li className="flex items-center gap-2">
-            {checklist.confirmed === 'passed' && (
-              <span className="font-bold text-success" aria-label="Passed">✓</span>
-            )}
-            {checklist.confirmed === 'failed' && (
-              <span className="font-bold text-destructive" aria-label="Not passed">✕</span>
-            )}
-            {checklist.confirmed === 'unverified' && (
-              <span className="text-muted-foreground" aria-label="Not yet verified">○</span>
-            )}
-            <span className={checklist.confirmed === 'passed' ? 'text-foreground' : 'text-muted-foreground'}>
-              {checklist.confirmed === 'passed' && readiness.confirmedAt
-                ? `Participant confirmation received (${new Date(readiness.confirmedAt).toLocaleDateString()})`
-                : 'Participant confirmation received'}
-            </span>
-          </li>
-          <li className="flex items-center gap-2">
-            {checklist.detailsMatch === 'passed' && (
-              <span className="font-bold text-success" aria-label="Passed">✓</span>
-            )}
-            {checklist.detailsMatch === 'failed' && (
-              <span className="font-bold text-destructive" aria-label="Not passed">✕</span>
-            )}
-            {checklist.detailsMatch === 'unverified' && (
-              <span className="text-muted-foreground" aria-label="Not yet verified">○</span>
-            )}
-            <span className={checklist.detailsMatch === 'passed' ? 'text-foreground' : 'text-muted-foreground'}>
-              Project details and media match confirmation
-            </span>
-          </li>
+          <ChecklistItem state={checklist.approved}>Project approved</ChecklistItem>
+          <ChecklistItem state={checklist.confirmed}>
+            {checklist.confirmed === 'passed' && readiness.confirmedAt
+              ? `Participant confirmation received (${new Date(readiness.confirmedAt).toLocaleDateString()})`
+              : 'Participant confirmation received'}
+          </ChecklistItem>
+          <ChecklistItem state={checklist.detailsMatch}>
+            Project details and media match confirmation
+          </ChecklistItem>
         </ul>
       </div>
 

@@ -61,7 +61,7 @@ describe('DashboardMetricsSummary', () => {
 
     const pairs: Array<[string, string, string]> = [
       ['Total projects', '128', 'All non-deleted project records'],
-      ['Public eligible', '34', 'Approved or published projects'],
+      ['Approved or published', '34', 'Projects that have reached approved or published workflow status'],
       ['In review', '7', 'Projects with In review status'],
       ['Archived', '12', 'Projects with Archived status'],
     ];
@@ -125,6 +125,15 @@ describe('DashboardMetricsSummary', () => {
     expect(tableSource).toContain('border-b border-border bg-muted/40');
     expect(tableSource).toContain('divide-y divide-border');
     expect(tableSource).toContain('rounded-lg border border-border bg-card p-4');
+  });
+
+  it('calls the project identifier a project ID in staff-facing search copy', () => {
+    const filterBarSource = fs.readFileSync(path.resolve(__dirname, './ProjectFilterBar.tsx'), 'utf-8');
+
+    expect(filterBarSource).toContain('Search by title, project ID, partner, or group...');
+    expect(filterBarSource).toContain('Matches project title, project ID, industry partner and group name.');
+    expect(filterBarSource).not.toContain('public ID');
+    expect(filterBarSource).not.toContain('Public ID');
   });
 });
 

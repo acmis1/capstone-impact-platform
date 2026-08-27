@@ -8,6 +8,7 @@ import {
   BulkReviewPreflightResponse,
 } from '../../projects/bulkProjectReview';
 import type { ProjectIndexRow } from './projectDashboardHelpers';
+import { bulkDispositionLabel, bulkOutcomeLabel, bulkStatusLabel } from './bulkReviewPresentation';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 
@@ -22,14 +23,6 @@ function actionLabel(action: BulkReviewAction): string {
   if (action === 'submit_for_review') return 'Submit for review';
   if (action === 'request_changes') return 'Request changes';
   return 'Approve';
-}
-
-function dispositionLabel(value: string): string {
-  return value.replace(/_/g, ' ');
-}
-
-function statusLabel(value: string | null): string {
-  return value ? value.replace(/_/g, ' ') : 'status unavailable';
 }
 
 export function BulkProjectReviewPanel({
@@ -112,7 +105,7 @@ export function BulkProjectReviewPanel({
       setExecution(data as BulkReviewExecutionResponse);
       setPreflight(null);
     } catch {
-      setError('The bulk workflow action could not be completed. No raw system details were returned.');
+      setError('The action could not be completed for the selected projects. Check the project list before trying again.');
     } finally {
       inFlight.current = false;
       setLoading(false);
@@ -134,7 +127,7 @@ export function BulkProjectReviewPanel({
             Review selected projects
           </h3>
           <p className="text-sm text-muted-foreground">
-            {selectedProjects.length} project{selectedProjects.length === 1 ? '' : 's'} selected. Actions are checked on the server before they run.
+            {selectedProjects.length} project{selectedProjects.length === 1 ? '' : 's'} selected. Every action is checked first, and you confirm before anything changes.
           </p>
         </div>
         <ClipboardCheck className="size-5 text-muted-foreground" aria-hidden="true" />
@@ -162,15 +155,16 @@ export function BulkProjectReviewPanel({
       </div>
 
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {loading && <p role="status" className="text-sm text-muted-foreground">Checking or applying the selected workflow action...</p>}
+      {loading && <p role="status" className="text-sm text-muted-foreground">Checking the selected projects…</p>}
 
       {preflight && activeAction && (
         <div className="flex flex-col gap-3 border-t border-border pt-3">
           <p className="text-sm text-foreground">
-            Preflight: <strong>{preflight.summary.eligible}</strong> eligible,{' '}
+            Checked {preflight.summary.total} project{preflight.summary.total === 1 ? '' : 's'}:{' '}
+            <strong>{preflight.summary.eligible}</strong> ready,{' '}
             <strong>{preflight.summary.blocked}</strong> blocked,{' '}
             <strong>{preflight.summary.alreadyComplete}</strong> already complete,{' '}
-            <strong>{preflight.summary.invalidOrStale}</strong> invalid or stale.
+            <strong>{preflight.summary.invalidOrStale}</strong> needs refresh or cannot continue.
           </p>
           {activeAction === 'request_changes' && (
             <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground" htmlFor="bulk-review-comments">
@@ -189,17 +183,17 @@ export function BulkProjectReviewPanel({
           <div className="flex flex-wrap gap-2">
             <Button type="button" disabled={loading || preflight.summary.eligible === 0 || (activeAction === 'request_changes' && !comments.trim())} onClick={execute}>
               {loading ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
-              Run {actionLabel(activeAction).toLowerCase()}
+              Confirm and {actionLabel(activeAction).toLowerCase()}
             </Button>
             <Button type="button" variant="ghost" disabled={loading} onClick={() => setPreflight(null)}>
               Cancel
             </Button>
           </div>
-          <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto text-sm" aria-label="Bulk preflight details">
+          <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto text-sm" aria-label="Checked project details">
             {preflight.items.map((item) => (
               <li key={item.publicId} className="flex flex-col gap-1 border-t border-border pt-2 first:border-0 first:pt-0">
                 <span className="font-medium text-foreground">{item.title} <span className="font-mono text-xs text-muted-foreground">({item.publicId})</span></span>
-                <span className="text-muted-foreground">Status: {statusLabel(item.status)} - {dispositionLabel(item.disposition)}</span>
+                <span className="text-muted-foreground">Status: {bulkStatusLabel(item.status)} — {bulkDispositionLabel(item.disposition)}</span>
                 {item.reasons.map((reason, reasonIndex) => <span key={`${item.publicId}-${reason.code}-${reasonIndex}`} className="text-destructive">{reason.message}</span>)}
               </li>
             ))}
@@ -210,16 +204,16 @@ export function BulkProjectReviewPanel({
       {execution && (
         <div ref={resultRef} tabIndex={-1} className="flex flex-col gap-3 border-t border-border pt-3 focus-visible:outline-none" role="status">
           <p className="text-sm font-medium text-foreground">
-            Completed: {execution.summary.successful} successful, {execution.summary.blocked} blocked,{' '}
-            {execution.summary.alreadyComplete} already complete, {execution.summary.invalidOrStale} invalid or stale,{' '}
-            {execution.summary.failed} failed.
+            Finished: {execution.summary.successful} completed, {execution.summary.blocked} blocked,{' '}
+            {execution.summary.alreadyComplete} already complete, {execution.summary.invalidOrStale} needs refresh or cannot continue,{' '}
+            {execution.summary.failed} did not complete.
           </p>
-          <ul className="flex flex-col gap-2 text-sm" aria-label="Bulk workflow results">
+          <ul className="flex flex-col gap-2 text-sm" aria-label="Review results">
             {execution.items.map((item) => (
               <li key={item.publicId} className="flex flex-wrap items-center gap-2">
                 {item.outcome === 'successful' ? <CheckCircle2 className="size-4 text-success" aria-hidden="true" /> : <XCircle className="size-4 text-muted-foreground" aria-hidden="true" />}
                 <span className="font-mono text-xs text-muted-foreground">{item.publicId}</span>
-                <span className="text-foreground">{statusLabel(item.status)} - {dispositionLabel(item.outcome)}</span>
+                <span className="text-foreground">{bulkStatusLabel(item.status)} — {bulkOutcomeLabel(item.outcome)}</span>
                 {item.reasons[0] && <span className="text-muted-foreground">{item.reasons[0].message}</span>}
               </li>
             ))}

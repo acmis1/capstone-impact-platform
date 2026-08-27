@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ParticipantPreviewPanel } from './ParticipantPreviewPanel';
 
@@ -191,8 +191,7 @@ describe('ParticipantPreviewPanel core workflow', () => {
     expect(body).toEqual({ isCorrectionReissue: false, sendEmail: true });
   });
 
-  it('requires window.confirm before revoking active preview via DELETE', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('requires an explicit accessible confirmation before revoking active preview via DELETE', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       success: true,
       revokedAt: '2026-08-16T10:00:00.000Z',
@@ -209,7 +208,13 @@ describe('ParticipantPreviewPanel core workflow', () => {
     const revokeBtn = screen.getByRole('button', { name: 'Revoke preview' });
     fireEvent.click(revokeBtn);
 
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringMatching(/Revoke this participant preview/i));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('Revoke this participant preview?')).toBeTruthy();
+    expect(within(dialog).getByText(/stops working immediately/i)).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Keep as is' })).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Revoke preview' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/projects/2026-agri-iot/participant-preview');
@@ -218,7 +223,6 @@ describe('ParticipantPreviewPanel core workflow', () => {
   });
 
   it('does not revoke if user cancels confirmation', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     const fetchMock = vi.spyOn(globalThis, 'fetch');
 
     render(<ParticipantPreviewPanel
@@ -229,14 +233,22 @@ describe('ParticipantPreviewPanel core workflow', () => {
       }}
     />);
 
-    const revokeBtn = screen.getByRole('button', { name: 'Revoke preview' });
-    fireEvent.click(revokeBtn);
+    const trigger = screen.getByRole('button', { name: 'Revoke preview' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = await screen.findByRole('alertdialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep as is' }));
 
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     expect(fetchMock).not.toHaveBeenCalled();
+
+    // Keyboard focus returns to the control that opened the dialog, never to the document body.
+    await waitFor(() => expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Revoke preview' }),
+    ));
   });
 
-  it('requires window.confirm before starting correction resolution via POST', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('requires an explicit accessible confirmation before starting correction resolution via POST', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       success: true,
       resolutionStartedAt: '2026-08-16T10:00:00.000Z',
@@ -258,7 +270,14 @@ describe('ParticipantPreviewPanel core workflow', () => {
     const resolveBtn = screen.getByRole('button', { name: 'Start correction resolution' });
     fireEvent.click(resolveBtn);
 
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringMatching(/Start correction resolution/i));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('Start resolving the requested changes?')).toBeTruthy();
+    // The consequence is stated in ordinary words, never as a raw status token.
+    expect(within(dialog).getByText(/Changes requested/)).toBeTruthy();
+    expect(within(dialog).queryByText(/changes_requested/)).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Start resolving changes' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/projects/2026-agri-iot/participant-preview/correction-resolution');
@@ -299,5 +318,55 @@ describe('ParticipantPreviewPanel core workflow', () => {
     await waitFor(() => expect(writeTextMock).toHaveBeenCalledWith(generatedUrl));
     expect(await screen.findByText('Copied!')).toBeTruthy();
     expect(screen.getByText('Preview link copied to clipboard')).toBeTruthy();
+  });
+
+  it('explains a failed email in ordinary words and keeps the raw failure code under technical details', () => {
+    render(<ParticipantPreviewPanel
+      {...BASE_PROPS}
+      initialActivePreview={{
+        createdAt: '2026-08-16T08:00:00.000Z',
+        expiresAt: '2026-08-23T08:00:00.000Z',
+      }}
+      notification={{
+        kind: 'initial',
+        recipient: 'contact@example.edu',
+        status: 'failed',
+        requestedAt: '2026-08-16T08:00:00.000Z',
+        sentAt: null,
+        failureCode: 'RECIPIENT_REJECTED',
+      }}
+    />);
+
+    expect(screen.getByText(/The email was not delivered/i)).toBeTruthy();
+    const code = screen.getByText('RECIPIENT_REJECTED');
+    expect(code.closest('details')).toBeTruthy();
+    expect(within(code.closest('details') as HTMLElement).getByText('Technical details')).toBeTruthy();
+  });
+
+  it('names the reminder recipient field in ordinary words rather than as a snapshot', () => {
+    render(<ParticipantPreviewPanel
+      {...BASE_PROPS}
+      initialActivePreview={{
+        createdAt: '2026-08-16T08:00:00.000Z',
+        expiresAt: '2099-08-23T08:00:00.000Z',
+      }}
+      reminders={[{
+        reference: '123e4567-e89b-42d3-a456-426614174000',
+        previewCreatedAt: '2026-08-16T08:00:00.000Z',
+        previewExpiresAt: '2099-08-23T08:00:00.000Z',
+        currentPreview: true,
+        recipient: 'contact@example.edu',
+        scheduledFor: '2099-08-20T02:30:00.000Z',
+        scheduledBy: 'Reviewer User',
+        status: 'scheduled',
+        skipReason: null,
+        triggeredAt: null,
+        cancelledAt: null,
+        delivery: null,
+      }]}
+    />);
+
+    expect(screen.getByText('Email recipient at scheduling time:')).toBeTruthy();
+    expect(screen.queryByText('Recipient snapshot:')).toBeNull();
   });
 });
