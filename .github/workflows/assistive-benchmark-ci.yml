@@ -222,6 +222,24 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_title_consistency check-calibration-evidence
 
+      # Issue #214's latency evidence is replayed without Paddle or model weights. These
+      # checks cover corpus novelty, deterministic rendering, score arithmetic, bounded
+      # candidate comparison and the prospective stability-based selection.
+      - name: Validate PP1 OCR title-latency calibration and non-reuse
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency check-calibration
+
+      - name: Prove PP1 OCR title-latency renderer determinism
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_title_latency generate-calibration --output-dir artifacts/ocr-title-latency-repeat-a
+          python -m assistive_validation_benchmark.ocr_title_latency generate-calibration --output-dir artifacts/ocr-title-latency-repeat-b
+          cmp artifacts/ocr-title-latency-repeat-a/generation.json artifacts/ocr-title-latency-repeat-b/generation.json
+
+      - name: Recompute PP1 OCR title-latency candidate evidence without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency check-evidence
+
       - name: Verify PP1 OCR title-consistency candidate freeze
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_title_consistency check-freeze

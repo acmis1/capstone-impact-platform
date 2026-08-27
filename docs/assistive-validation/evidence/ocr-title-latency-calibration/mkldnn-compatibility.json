@@ -1,0 +1,61 @@
+{
+  "schema_version": "pp1-ocr-title-latency-backend-compatibility/v1",
+  "candidate": {
+    "backend": "MKL-DNN/oneDNN",
+    "device": "cpu",
+    "model": "PP-OCRv6 Small",
+    "runtime": {
+      "paddleocr": "3.7.0",
+      "paddlepaddle": "3.3.0",
+      "paddlex": "3.7.2"
+    }
+  },
+  "environment": {
+    "operating_system": "Windows",
+    "architecture": "AMD64",
+    "physical_cpu_count": 10,
+    "logical_cpu_count": 16
+  },
+  "attempts": [
+    {
+      "id": "documented-compatibility-arguments",
+      "configuration": {
+        "enable_mkldnn": true,
+        "mkldnn_cache_capacity": 10,
+        "cpu_threads": 4,
+        "engine": null
+      },
+      "phase": "first warmup detection",
+      "scored_cases_executed": 0,
+      "result": "UNSUPPORTED_RUNTIME_FAILURE"
+    },
+    {
+      "id": "paddlex-exposed-legacy-ir",
+      "configuration": {
+        "enable_mkldnn": true,
+        "mkldnn_cache_capacity": 10,
+        "cpu_threads": 4,
+        "engine": "paddle_static",
+        "engine_config": {
+          "enable_new_ir": false
+        }
+      },
+      "phase": "first warmup detection",
+      "scored_cases_executed": 0,
+      "result": "UNSUPPORTED_RUNTIME_FAILURE"
+    }
+  ],
+  "exception": {
+    "type": "NotImplementedError",
+    "message": "ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]",
+    "source": "paddle/fluid/framework/new_executor/instruction/onednn/onednn_instruction.cc:118"
+  },
+  "thread_matrix": {
+    "prospective_values": [4, 8, 10, 12],
+    "stopped_after_shared_backend_preflight": true,
+    "reason": "The backend fails before scored capture independently of thread-count performance."
+  },
+  "decision": "MKLDNN_NOT_DEPLOYABLE_ON_CURRENT_WINDOWS_RUNTIME",
+  "hpi_decision": "NOT_EVALUATED_WINDOWS_NATIVE_SUPPORT_INAPPLICABLE",
+  "fallback_backend": "normal local Paddle CPU inference with deterministic title-region fast path and full-page fallback"
+}
