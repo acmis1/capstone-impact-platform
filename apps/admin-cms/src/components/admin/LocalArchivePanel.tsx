@@ -141,7 +141,9 @@ export function LocalArchivePanel({
           title={state.success === 'ALREADY_COMPLETED'
             ? (isStaging ? 'Already removed from test showcase' : 'Already removed from local showcase')
             : (isStaging ? 'Removed from test showcase' : 'Removed from local showcase')}
-          description="This project has been archived and is no longer shown on the test showcase."
+          description={isStaging
+            ? 'This project has been archived and is no longer shown on the test showcase.'
+            : 'This project has been archived and is no longer shown in the local test showcase.'}
         />
       )}
     </div>

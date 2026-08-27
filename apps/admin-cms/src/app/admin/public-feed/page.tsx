@@ -17,13 +17,15 @@ function formatTimestamp(value: string): string {
   return new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(value));
 }
 
-function translateOperation(operation: string, mode?: string | null): string {
-  let label = operation;
-  if (operation === 'baseline') label = 'Initial setup';
-  else if (operation === 'publication') label = 'Published';
-  else if (operation === 'removal') label = 'Removed';
-  else if (operation === 'rollback') label = 'Restored';
-  return mode ? `${label} · ${mode.replaceAll('_', ' ')}` : label;
+export function translateOperation(operation: string, mode?: string | null): string {
+  if (operation === 'baseline') return 'Initial setup';
+  if (operation === 'removal') return 'Removed';
+  if (operation === 'rollback') return 'Restored';
+  if (operation === 'publication') {
+    if (mode === 'deployment_reconciliation') return 'Showcase status repaired';
+    return 'Published';
+  }
+  return 'Showcase update';
 }
 
 export default async function PublicFeedHistoryPage({
@@ -53,8 +55,8 @@ export default async function PublicFeedHistoryPage({
     && isLocalPublicFeedRollbackAvailable(env.supabaseUrl, process.env);
 
   const projectsOnShowcaseCount = view.deploymentStatuses.filter((s) => s.deployed).length;
-  const latestActivityTimestamp = view.versions.length > 0 ? formatTimestamp(view.versions[0].createdAt) : null;
-  const hasDivergedProjects = view.deploymentStatuses.some((s) => s.lifecycleStatus === 'published' && !s.deployed);
+  const divergedProjectsCount = view.deploymentStatuses.filter((s) => s.lifecycleStatus === 'published' && !s.deployed).length;
+  const hasDivergedProjects = divergedProjectsCount > 0;
 
   return (
     <div className="flex flex-col gap-8">
@@ -97,8 +99,14 @@ export default async function PublicFeedHistoryPage({
           <dd className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{projectsOnShowcaseCount}</dd>
         </div>
         <div className="px-5 py-4">
-          <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest activity</dt>
-          <dd className="mt-1 text-sm font-medium text-foreground">{latestActivityTimestamp ?? 'None recorded'}</dd>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status alignment</dt>
+          <dd className="mt-1 text-sm font-medium text-foreground">
+            {view.blockingOperation
+              ? 'Recovery required'
+              : hasDivergedProjects
+                ? `${divergedProjectsCount} ${divergedProjectsCount === 1 ? 'project needs repair' : 'projects need repair'}`
+                : 'All projects in sync'}
+          </dd>
         </div>
       </dl>
 
@@ -193,6 +201,7 @@ export default async function PublicFeedHistoryPage({
           <details className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
             <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
             <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div><dt className="font-medium text-muted-foreground">Publication mode</dt><dd className="mt-0.5 font-mono text-foreground">{view.detail.publicationMode ?? 'standard'}</dd></div>
               <div><dt className="font-medium text-muted-foreground">Relationship</dt><dd className="mt-0.5 text-foreground">{view.detail.previousVersionNumber ? `After version ${view.detail.previousVersionNumber}` : 'Initial baseline'}</dd></div>
               <div><dt className="font-medium text-muted-foreground">Rollback origin</dt><dd className="mt-0.5 text-foreground">{view.detail.restoredFromVersionNumber ? `Restored version ${view.detail.restoredFromVersionNumber}` : 'Not a rollback'}</dd></div>
               <div><dt className="font-medium text-muted-foreground">Affected project</dt><dd className="mt-0.5 text-foreground">{view.detail.affectedPublicId ? `${view.detail.affectedPublicId}${view.detail.affectedTitle ? ` — ${view.detail.affectedTitle}` : ''}` : 'Deployment-wide'}</dd></div>

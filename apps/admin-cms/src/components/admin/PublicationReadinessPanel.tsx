@@ -108,6 +108,67 @@ function getPresentation(readiness: PublicationReadinessResult): ReadinessPresen
   }
 }
 
+export type ChecklistItemState = 'passed' | 'failed' | 'unverified';
+
+export interface ReadinessChecklistData {
+  approved: ChecklistItemState;
+  confirmed: ChecklistItemState;
+  detailsMatch: ChecklistItemState;
+}
+
+const APPROVED_CODES = new Set([
+  'READY',
+  'PROJECT_SNAPSHOT_STALE',
+  'MEDIA_SNAPSHOT_STALE',
+  'NO_ACTIVE_PREVIEW',
+  'PREVIEW_NOT_CONFIRMED',
+  'CORRECTED_PREVIEW_AWAITING_CONFIRMATION',
+]);
+
+const CONFIRMED_CODES = new Set([
+  'READY',
+  'PROJECT_SNAPSHOT_STALE',
+  'MEDIA_SNAPSHOT_STALE',
+]);
+
+const UNCONFIRMED_CODES = new Set([
+  'NO_ACTIVE_PREVIEW',
+  'PREVIEW_NOT_CONFIRMED',
+  'CORRECTED_PREVIEW_AWAITING_CONFIRMATION',
+]);
+
+const STALE_CODES = new Set([
+  'PROJECT_SNAPSHOT_STALE',
+  'MEDIA_SNAPSHOT_STALE',
+]);
+
+export function deriveReadinessChecklist(readiness: PublicationReadinessResult): ReadinessChecklistData {
+  const { resultCode, ready, confirmedAt } = readiness;
+
+  let approved: ChecklistItemState = 'unverified';
+  if (APPROVED_CODES.has(resultCode)) {
+    approved = 'passed';
+  } else if (resultCode === 'INVALID_PROJECT_STATE') {
+    approved = 'failed';
+  }
+
+  let confirmed: ChecklistItemState = 'unverified';
+  if (CONFIRMED_CODES.has(resultCode) && Boolean(confirmedAt)) {
+    confirmed = 'passed';
+  } else if (UNCONFIRMED_CODES.has(resultCode)) {
+    confirmed = 'failed';
+  }
+
+  let detailsMatch: ChecklistItemState = 'unverified';
+  if (resultCode === 'READY' && ready) {
+    detailsMatch = 'passed';
+  } else if (STALE_CODES.has(resultCode)) {
+    detailsMatch = 'failed';
+  }
+
+  return { approved, confirmed, detailsMatch };
+}
+
 export function PublicationReadinessPanel({ readiness }: PublicationReadinessPanelProps) {
   if (!readiness) {
     return (
@@ -121,12 +182,7 @@ export function PublicationReadinessPanel({ readiness }: PublicationReadinessPan
   }
 
   const presentation = getPresentation(readiness);
-
-  const isApproved = readiness.resultCode !== 'INVALID_PROJECT_STATE';
-  const isConfirmed = Boolean(readiness.confirmedAt);
-  const isNotStale = readiness.resultCode !== 'PROJECT_SNAPSHOT_STALE'
-    && readiness.resultCode !== 'MEDIA_SNAPSHOT_STALE'
-    && readiness.resultCode !== 'CORRECTION_UNRESOLVED';
+  const checklist = deriveReadinessChecklist(readiness);
 
   return (
     <div className="flex flex-col gap-4 text-xs sm:text-sm">
@@ -140,24 +196,48 @@ export function PublicationReadinessPanel({ readiness }: PublicationReadinessPan
         <h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Publication requirements</h5>
         <ul className="mt-2.5 space-y-2 text-sm">
           <li className="flex items-center gap-2">
-            <span className={isApproved ? 'text-success font-bold' : 'text-muted-foreground'}>
-              {isApproved ? '✓' : '○'}
+            {checklist.approved === 'passed' && (
+              <span className="font-bold text-success" aria-label="Passed">✓</span>
+            )}
+            {checklist.approved === 'failed' && (
+              <span className="font-bold text-destructive" aria-label="Not passed">✕</span>
+            )}
+            {checklist.approved === 'unverified' && (
+              <span className="text-muted-foreground" aria-label="Not yet verified">○</span>
+            )}
+            <span className={checklist.approved === 'passed' ? 'text-foreground' : 'text-muted-foreground'}>
+              Project approved
             </span>
-            <span className={isApproved ? 'text-foreground' : 'text-muted-foreground'}>Project approved</span>
           </li>
           <li className="flex items-center gap-2">
-            <span className={isConfirmed ? 'text-success font-bold' : 'text-muted-foreground'}>
-              {isConfirmed ? '✓' : '○'}
-            </span>
-            <span className={isConfirmed ? 'text-foreground' : 'text-muted-foreground'}>
-              {isConfirmed ? `Participant confirmation received (${new Date(readiness.confirmedAt!).toLocaleDateString()})` : 'Participant confirmation received'}
+            {checklist.confirmed === 'passed' && (
+              <span className="font-bold text-success" aria-label="Passed">✓</span>
+            )}
+            {checklist.confirmed === 'failed' && (
+              <span className="font-bold text-destructive" aria-label="Not passed">✕</span>
+            )}
+            {checklist.confirmed === 'unverified' && (
+              <span className="text-muted-foreground" aria-label="Not yet verified">○</span>
+            )}
+            <span className={checklist.confirmed === 'passed' ? 'text-foreground' : 'text-muted-foreground'}>
+              {checklist.confirmed === 'passed' && readiness.confirmedAt
+                ? `Participant confirmation received (${new Date(readiness.confirmedAt).toLocaleDateString()})`
+                : 'Participant confirmation received'}
             </span>
           </li>
           <li className="flex items-center gap-2">
-            <span className={isNotStale && readiness.ready ? 'text-success font-bold' : 'text-muted-foreground'}>
-              {isNotStale && readiness.ready ? '✓' : '○'}
+            {checklist.detailsMatch === 'passed' && (
+              <span className="font-bold text-success" aria-label="Passed">✓</span>
+            )}
+            {checklist.detailsMatch === 'failed' && (
+              <span className="font-bold text-destructive" aria-label="Not passed">✕</span>
+            )}
+            {checklist.detailsMatch === 'unverified' && (
+              <span className="text-muted-foreground" aria-label="Not yet verified">○</span>
+            )}
+            <span className={checklist.detailsMatch === 'passed' ? 'text-foreground' : 'text-muted-foreground'}>
+              Project details and media match confirmation
             </span>
-            <span className={isNotStale && readiness.ready ? 'text-foreground' : 'text-muted-foreground'}>Project details and media match confirmation</span>
           </li>
         </ul>
       </div>

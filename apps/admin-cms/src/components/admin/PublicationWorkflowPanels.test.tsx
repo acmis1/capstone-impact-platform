@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { LocalArchivePanel } from './LocalArchivePanel';
 import { PublicationPreparationPanel } from './PublicationPreparationPanel';
-import { PublicationReadinessPanel } from './PublicationReadinessPanel';
+import { PublicationReadinessPanel, deriveReadinessChecklist } from './PublicationReadinessPanel';
+import { translateOperation } from '../../app/admin/public-feed/page';
 import type { PublicationReadinessResult } from '../../domain/publicationReadiness';
 
 const refresh = vi.fn();
@@ -45,7 +46,15 @@ describe('PublicationReadinessPanel', () => {
     ['NO_ACTIVE_PREVIEW', 'Participant preview required'],
     ['PREVIEW_NOT_CONFIRMED', 'Waiting for participant confirmation'],
     ['CORRECTION_UNRESOLVED', 'Participant correction requires resolution'],
+    ['CORRECTED_PREVIEW_AWAITING_CONFIRMATION', 'Corrected preview awaiting confirmation'],
     ['PROJECT_SNAPSHOT_STALE', 'Project information changed after confirmation'],
+    ['MEDIA_SNAPSHOT_STALE', 'Project media changed after confirmation'],
+    ['INVALID_PROJECT_STATE', 'Project must be approved'],
+    ['PROJECT_NOT_FOUND', 'Project unavailable'],
+    ['READINESS_PERMISSION_DENIED', 'Publishing permission required'],
+    ['INVALID_SELECTION', 'Readiness check unavailable'],
+    ['INVALID_PRIVATE_BUCKET', 'Readiness check unavailable'],
+    ['READINESS_UNAVAILABLE', 'Readiness check unavailable'],
   ])('presents %s as a blocking state', (resultCode, expectedText) => {
     render(<PublicationReadinessPanel readiness={{ ready: false, resultCode, blockers: ['Authoritative blocker'] }} />);
     expect(screen.getByText(expectedText)).toBeTruthy();
@@ -58,12 +67,75 @@ describe('PublicationReadinessPanel', () => {
     expect(screen.getByText('Ready to publish')).toBeTruthy();
     expect(screen.getByText(/^Confirmed \d/)).toBeTruthy();
     expect(screen.getByText('Project approved')).toBeTruthy();
+    expect(screen.getByText('Project details and media match confirmation')).toBeTruthy();
   });
 
   it('places technical result codes behind technical disclosure', () => {
     render(<PublicationReadinessPanel readiness={{ ready: true, resultCode: 'READY', blockers: [], confirmedAt: PLAN.confirmedAt }} />);
     expect(screen.getByText('Technical details')).toBeTruthy();
     expect(screen.getByText('READY')).toBeTruthy();
+  });
+
+  describe('deriveReadinessChecklist authoritative state mapping', () => {
+    it.each<[
+      PublicationReadinessResult['resultCode'],
+      boolean,
+      string | undefined,
+      'passed' | 'failed' | 'unverified',
+      'passed' | 'failed' | 'unverified',
+      'passed' | 'failed' | 'unverified'
+    ]>([
+      // [resultCode, ready, confirmedAt, expectedApproved, expectedConfirmed, expectedDetailsMatch]
+      ['READY', true, '2026-08-16T08:00:00.000Z', 'passed', 'passed', 'passed'],
+      ['PROJECT_SNAPSHOT_STALE', false, '2026-08-16T08:00:00.000Z', 'passed', 'passed', 'failed'],
+      ['MEDIA_SNAPSHOT_STALE', false, '2026-08-16T08:00:00.000Z', 'passed', 'passed', 'failed'],
+      ['NO_ACTIVE_PREVIEW', false, undefined, 'passed', 'failed', 'unverified'],
+      ['PREVIEW_NOT_CONFIRMED', false, undefined, 'passed', 'failed', 'unverified'],
+      ['CORRECTED_PREVIEW_AWAITING_CONFIRMATION', false, undefined, 'passed', 'failed', 'unverified'],
+      ['INVALID_PROJECT_STATE', false, undefined, 'failed', 'unverified', 'unverified'],
+      ['CORRECTION_UNRESOLVED', false, '2026-08-16T08:00:00.000Z', 'unverified', 'unverified', 'unverified'],
+      ['PROJECT_NOT_FOUND', false, undefined, 'unverified', 'unverified', 'unverified'],
+      ['READINESS_PERMISSION_DENIED', false, undefined, 'unverified', 'unverified', 'unverified'],
+      ['INVALID_SELECTION', false, undefined, 'unverified', 'unverified', 'unverified'],
+      ['INVALID_PRIVATE_BUCKET', false, undefined, 'unverified', 'unverified', 'unverified'],
+      ['READINESS_UNAVAILABLE', false, undefined, 'unverified', 'unverified', 'unverified'],
+    ])('maps %s to approved=%s, confirmed=%s, detailsMatch=%s', (
+      resultCode, ready, confirmedAt, expectedApproved, expectedConfirmed, expectedDetailsMatch,
+    ) => {
+      const checklist = deriveReadinessChecklist({
+        ready,
+        resultCode,
+        blockers: [],
+        confirmedAt,
+      });
+      expect(checklist.approved).toBe(expectedApproved);
+      expect(checklist.confirmed).toBe(expectedConfirmed);
+      expect(checklist.detailsMatch).toBe(expectedDetailsMatch);
+    });
+
+    it('proves CORRECTION_UNRESOLVED cannot accidentally render a green Project approved check', () => {
+      render(<PublicationReadinessPanel readiness={{
+        ready: false,
+        resultCode: 'CORRECTION_UNRESOLVED',
+        blockers: ['Participant correction must be resolved'],
+        confirmedAt: PLAN.confirmedAt,
+      }} />);
+      // Should show '○' unverified for Project approved, NOT '✓'
+      const passedTicks = screen.queryAllByLabelText('Passed');
+      expect(passedTicks).toHaveLength(0);
+      const unverifiedItems = screen.getAllByLabelText('Not yet verified');
+      expect(unverifiedItems.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('proves permission denied and unavailable states do not fabricate positive facts', () => {
+      render(<PublicationReadinessPanel readiness={{
+        ready: false,
+        resultCode: 'READINESS_PERMISSION_DENIED',
+        blockers: ['Permission denied'],
+      }} />);
+      expect(screen.queryAllByLabelText('Passed')).toHaveLength(0);
+      expect(screen.getAllByLabelText('Not yet verified')).toHaveLength(3);
+    });
   });
 });
 
@@ -191,10 +263,11 @@ describe('LocalArchivePanel', () => {
       body: JSON.stringify({ archiveReason: 'Synthetic test archive' }),
     }));
     expect(await screen.findByText('Removed from local showcase')).toBeTruthy();
+    expect(screen.getByText('This project has been archived and is no longer shown in the local test showcase.')).toBeTruthy();
     expect(refresh).toHaveBeenCalledOnce();
   });
 
-  it('identifies an already-completed archive', async () => {
+  it('identifies an already-completed archive with target-specific description', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, result: { resultCode: 'ALREADY_COMPLETED' } }) });
     vi.stubGlobal('fetch', fetchMock);
     render(<LocalArchivePanel publicId={PLAN.publicId} />);
@@ -202,6 +275,7 @@ describe('LocalArchivePanel', () => {
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: /Remove from local showcase/i }));
     expect(await screen.findByText('Already removed from local showcase')).toBeTruthy();
+    expect(screen.getByText('This project has been archived and is no longer shown in the local test showcase.')).toBeTruthy();
   });
 
   it('uses the dedicated governed staging archive route and human-first labels', async () => {
@@ -224,6 +298,7 @@ describe('LocalArchivePanel', () => {
       body: JSON.stringify({ archiveReason: 'Retire staging entry' }),
     }));
     expect(await screen.findByText('Removed from test showcase')).toBeTruthy();
+    expect(screen.getByText('This project has been archived and is no longer shown on the test showcase.')).toBeTruthy();
     expect(refresh).toHaveBeenCalledOnce();
   });
 
@@ -254,5 +329,17 @@ describe('LocalArchivePanel', () => {
     expect(screen.getByText(/No removal was attempted/i)).toBeTruthy();
     expect(screen.queryByLabelText(/Reason for removal/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /Remove from test showcase/i })).toBeNull();
+  });
+});
+
+describe('translateOperation', () => {
+  it('translates known operations and modes into plain-language staff activity descriptions', () => {
+    expect(translateOperation('baseline', null)).toBe('Initial setup');
+    expect(translateOperation('removal', null)).toBe('Removed');
+    expect(translateOperation('rollback', null)).toBe('Restored');
+    expect(translateOperation('publication', 'normal')).toBe('Published');
+    expect(translateOperation('publication', 'deployment_reconciliation')).toBe('Showcase status repaired');
+    expect(translateOperation('publication', null)).toBe('Published');
+    expect(translateOperation('publication', 'unknown_future_mode')).toBe('Published');
   });
 });
