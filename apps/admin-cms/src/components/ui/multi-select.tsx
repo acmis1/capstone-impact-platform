@@ -147,6 +147,9 @@ export function MultiSelect({
             collisionPadding={16}
             className={cn(
               'z-50 w-[var(--radix-popover-trigger-width)] min-w-[16rem] max-w-[calc(100vw-2rem)]',
+              // Never taller than the space Radix reports, so the panel cannot spill out of the
+              // viewport on short screens; the option list absorbs the difference by scrolling.
+              'flex flex-col max-h-[var(--radix-popover-content-available-height)]',
               'overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-md',
               'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
               'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -155,7 +158,7 @@ export function MultiSelect({
           >
             {/* Search filter, kept outside the option group so that group exposes options only. */}
             {options.length >= 4 && (
-              <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+              <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
                 <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <label htmlFor={searchId} className="sr-only">
                   Search {lowerLabel}
@@ -188,7 +191,7 @@ export function MultiSelect({
             <div
               role="group"
               aria-label={label}
-              className="flex max-h-60 flex-col gap-0.5 overflow-y-auto p-1.5"
+              className="flex min-h-0 max-h-60 flex-1 flex-col gap-0.5 overflow-y-auto p-1.5"
             >
               {filteredOptions.length === 0 ? (
                 <p className="p-3 text-center text-xs text-muted-foreground">
@@ -232,7 +235,7 @@ export function MultiSelect({
               )}
             </div>
 
-            <div className="flex items-center justify-between border-t border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+            <div className="flex shrink-0 items-center justify-between border-t border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
               <span>
                 {value.length} of {options.length} selected
               </span>

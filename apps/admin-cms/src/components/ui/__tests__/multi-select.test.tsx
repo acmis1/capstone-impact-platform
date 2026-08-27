@@ -74,6 +74,18 @@ describe('MultiSelect accessible structure', () => {
     expect(within(group).getAllByRole('checkbox')).toHaveLength(sampleOptions.length);
   });
 
+  it('bounds the popup to the height Radix reports as available', () => {
+    renderMultiSelect();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Disciplines:/ }));
+    const panel = screen.getByRole('dialog', { name: 'Disciplines options' });
+
+    // Without this bound the panel can be taller than the space above and below the trigger and
+    // spill out of the viewport on short screens; the option list absorbs the difference instead.
+    expect(panel.className).toContain('max-h-[var(--radix-popover-content-available-height)]');
+    expect(screen.getByRole('group', { name: 'Disciplines' }).className).toContain('overflow-y-auto');
+  });
+
   it('labels the search field and keeps it outside the option group', () => {
     renderMultiSelect();
 

@@ -426,7 +426,7 @@ describe('PR2A Guided Import Workflow Components', () => {
 
     it('claims automatic recognition and offers Use these matches only for the pristine suggestion', async () => {
       stubInspection([{ name: 'Sheet1', headers: STANDARD_HEADERS }]);
-      const { onConfigured } = checkSpreadsheet();
+      checkSpreadsheet();
 
       expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
       const useMatches = screen.getByRole('button', { name: 'Use these matches' }) as HTMLButtonElement;
@@ -477,7 +477,7 @@ describe('PR2A Guided Import Workflow Components', () => {
 
     it('restores the automatic presentation when the exact automatic mapping is put back by hand', async () => {
       stubInspection([{ name: 'Sheet1', headers: STANDARD_HEADERS }]);
-      const { onConfigured } = checkSpreadsheet();
+      checkSpreadsheet();
 
       expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
       openManualMatching();
