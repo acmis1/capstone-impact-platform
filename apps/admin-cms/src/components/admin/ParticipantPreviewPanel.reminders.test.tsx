@@ -104,4 +104,35 @@ describe('ParticipantPreviewPanel reminder workflow', () => {
     expect(init?.method).toBe('DELETE');
     expect(JSON.parse(String(init?.body))).toEqual({ reference });
   });
+
+  it.each([
+    ['failed' as const, 'The reminder was not delivered'],
+    ['delivery_unknown' as const, 'The reminder may or may not have been delivered'],
+  ])('keeps the existing preview unchanged when reminder delivery is %s', (status, expected) => {
+    render(<ParticipantPreviewPanel
+      {...BASE_PROPS}
+      reminders={[{
+        reference: '123e4567-e89b-42d3-a456-426614174001',
+        previewCreatedAt: '2026-08-13T00:00:00.000Z',
+        previewExpiresAt: '2099-08-20T00:00:00.000Z',
+        currentPreview: true,
+        recipient: 'participant@capstone.invalid',
+        scheduledFor: '2099-08-14T02:30:00.000Z',
+        scheduledBy: 'Reviewer User',
+        status: 'triggered', skipReason: null, triggeredAt: '2099-08-14T02:30:00.000Z', cancelledAt: null,
+        delivery: {
+          status,
+          requestedAt: '2099-08-14T02:30:00.000Z', sentAt: null, failureCode: 'MAIL_TRANSPORT_RESULT',
+        },
+      }]}
+    />);
+
+    expect(screen.getByText(new RegExp(expected, 'i'))).toBeTruthy();
+    expect(screen.getByText(/The existing preview is unchanged/i)).toBeTruthy();
+    expect(screen.getByText(/another reminder only if it is still eligible/i)).toBeTruthy();
+    expect(screen.queryByText(/participant has not received this preview link/i)).toBeNull();
+    expect(screen.queryByText(/revoke this preview|generate a new one|reissue/i)).toBeNull();
+    const rawCode = screen.getByText('MAIL_TRANSPORT_RESULT');
+    expect(rawCode.closest('details')).toBeTruthy();
+  });
 });

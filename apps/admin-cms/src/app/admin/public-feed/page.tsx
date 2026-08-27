@@ -99,7 +99,15 @@ export default async function PublicFeedHistoryPage({
     active: view.active,
     blockingOperation: view.blockingOperation,
     divergedProjectsCount,
+    now: new Date(),
   });
+  const repairUnavailableReason = publishingHealth.activity === 'IN_PROGRESS'
+    ? 'Wait for the current publishing action to finish, then refresh before repairing.'
+    : publishingHealth.activity === 'RECOVERY_AVAILABLE'
+      ? 'Recover publishing status before repairing.'
+      : publishingHealth.activity === 'RECOVERY_WAIT'
+        ? 'Wait until publishing can be safely recovered, then refresh before repairing.'
+        : null;
   // Audit evidence stays available but only opens on its own when a version was deliberately chosen.
   const versionExplicitlySelected = selectedVersion !== undefined;
 
@@ -125,17 +133,25 @@ export default async function PublicFeedHistoryPage({
         </div>
       </header>
 
-      {publishingHealth.recoveryRequired && view.blockingOperation && (
+      {(publishingHealth.recoveryAvailable || publishingHealth.recoveryWaiting) && view.blockingOperation && (
         <section aria-labelledby="publishing-attention-status" className="rounded-xl border border-warning/40 bg-warning/5 p-5 shadow-xs">
           <h2 id="publishing-attention-status" className="font-semibold text-foreground">Publishing needs attention</h2>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            A previous publishing action did not finish cleanly. Publishing is paused until it is safely recovered.
+            {publishingHealth.recoveryAvailable
+              ? 'An earlier publishing action stopped after its safety window expired. Recover publishing status to complete its durable intent safely or clear an abandoned pre-write action.'
+              : publishingHealth.attentionReason === 'SAFETY_WINDOW_ACTIVE'
+                ? `Publishing recovery cannot start while the current lease or Storage safety window is active.${publishingHealth.retryAt ? ` Wait until after ${formatTimestamp(publishingHealth.retryAt)}, then refresh.` : ' Wait, then refresh.'}`
+                : 'Publishing is blocked by a state or timing value that cannot be safely interpreted. Refresh the page; if it remains, ask an administrator to review it. Recovery is not available until takeover safety can be verified.'}
           </p>
           <details className="mt-3 text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
-            <p className="mt-1 font-mono">
+            <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical details</summary>
+            <p className="mt-1 break-all font-mono">
               {view.blockingOperation.kind} is {view.blockingOperation.state.toLowerCase().replaceAll('_', ' ')}.
               {view.blockingOperation.failureCode ? ` Recovery code: ${view.blockingOperation.failureCode}.` : ''}
+              {' '}Lease expires: {view.blockingOperation.leaseExpiresAt}.
+              {view.blockingOperation.storageUncertaintyUntil
+                ? ` Storage uncertainty until: ${view.blockingOperation.storageUncertaintyUntil}.`
+                : ''}
             </p>
           </details>
         </section>
@@ -148,9 +164,10 @@ export default async function PublicFeedHistoryPage({
             {publishingInProgressDescription()}
           </p>
           <details className="mt-3 text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
-            <p className="mt-1 font-mono">
+            <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical details</summary>
+            <p className="mt-1 break-all font-mono">
               {view.blockingOperation.kind} is {view.blockingOperation.state.toLowerCase().replaceAll('_', ' ')}.
+              {' '}Lease expires: {view.blockingOperation.leaseExpiresAt}.
             </p>
           </details>
         </section>
@@ -178,7 +195,7 @@ export default async function PublicFeedHistoryPage({
 
       {/* Progressive Disclosure for Technical Evidence */}
       <details className="rounded-xl border border-border-structural bg-card p-4 text-sm text-muted-foreground shadow-xs">
-        <summary className="cursor-pointer text-sm font-semibold text-foreground">Advanced publishing details</summary>
+        <summary className="cursor-pointer rounded-sm text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Advanced publishing details</summary>
         <dl className="mt-3 grid gap-3 sm:grid-cols-3">
           <div>
             <dt className="text-xs font-medium text-muted-foreground">Current version</dt>
@@ -198,8 +215,7 @@ export default async function PublicFeedHistoryPage({
       <PublicFeedHistoryControls
         canPublish={canPublish} historyActive={view.active} rollbackAvailable={rollbackAvailable}
         targetVersionNumber={view.detail?.versionNumber ?? null} targetIsCurrent={view.detail?.current ?? false}
-        recoveryAvailable={publishingHealth.recoveryRequired}
-        publishingInProgress={publishingHealth.publishingInProgress}
+        publishingActivity={publishingHealth.activity}
       />
 
       {/* Publishing Activity Table */}
@@ -256,7 +272,7 @@ export default async function PublicFeedHistoryPage({
           aria-labelledby="activity-detail-heading"
           className="rounded-xl border border-border-structural bg-card p-5 shadow-xs"
         >
-          <summary className="cursor-pointer">
+          <summary className="cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
             <span id="activity-detail-heading" className="text-lg font-semibold text-foreground">Activity details</span>
             <span className="mt-1 block text-sm text-muted-foreground">{describeActivity(view.detail)}</span>
           </summary>
@@ -270,7 +286,7 @@ export default async function PublicFeedHistoryPage({
           </div>
 
           <details className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
+            <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical details</summary>
             <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div><dt className="font-medium text-muted-foreground">Version</dt><dd className="mt-0.5 font-mono text-foreground">v{view.detail.versionNumber}</dd></div>
               <div><dt className="font-medium text-muted-foreground">Publication mode</dt><dd className="mt-0.5 font-mono text-foreground">{view.detail.publicationMode ?? 'standard'}</dd></div>
@@ -317,7 +333,8 @@ export default async function PublicFeedHistoryPage({
 
         {hasDivergedProjects && (
           <div className="rounded-lg border border-warning/40 bg-warning/5 p-4 text-sm text-foreground shadow-xs">
-            <strong className="font-semibold text-warning">Publishing status needs attention:</strong> One or more projects are marked as published in the CMS but are missing from the current published data. Use &ldquo;Repair showcase status&rdquo; to resolve.
+            <strong className="font-semibold text-warning">Publishing status needs attention:</strong> One or more projects are marked as published in the CMS but are missing from the current published data.{' '}
+            {repairUnavailableReason ?? 'Use “Repair showcase status” to resolve.'}
           </div>
         )}
 
@@ -348,7 +365,10 @@ export default async function PublicFeedHistoryPage({
                   </td>
                   <td className="px-4 py-3">
                     {canPublish && item.lifecycleStatus === 'published' && !item.deployed ? (
-                      <DeploymentReconciliationButton publicId={item.publicId} />
+                      <DeploymentReconciliationButton
+                        publicId={item.publicId}
+                        unavailableReason={repairUnavailableReason}
+                      />
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}

@@ -2,51 +2,113 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyPublishingActivity,
   derivePublishingHealth,
-  PUBLISHING_IN_PROGRESS_STATES,
-  PUBLISHING_RECOVERY_REQUIRED_STATE,
+  PUBLISHING_BLOCKING_STATES,
 } from './publishingHealthPresentation';
 
-const ACTIVE_AND_ALIGNED = { active: true, divergedProjectsCount: 0 };
+const NOW = new Date('2026-08-27T12:00:00.000Z');
+const LIVE = '2026-08-27T12:02:00.000Z';
+const EXPIRED = '2026-08-27T11:59:59.000Z';
+const LIVE_FENCE = '2026-08-27T12:01:00.000Z';
+const EXPIRED_FENCE = '2026-08-27T11:59:00.000Z';
+
+function operation(
+  state: string,
+  leaseExpiresAt = LIVE,
+  storageUncertaintyUntil: string | null = null,
+) {
+  return { state, leaseExpiresAt, storageUncertaintyUntil };
+}
+
+const ACTIVE_AND_ALIGNED = { active: true, divergedProjectsCount: 0, now: NOW };
 
 describe('classifyPublishingActivity', () => {
-  it('treats no blocking operation as idle', () => {
-    expect(classifyPublishingActivity(null)).toBe('idle');
-    expect(classifyPublishingActivity(undefined)).toBe('idle');
+  it('treats no blocking operation as idle at a fixed reference time', () => {
+    expect(classifyPublishingActivity(null, NOW)).toBe('IDLE');
+    expect(classifyPublishingActivity(undefined, NOW)).toBe('IDLE');
   });
 
-  it('treats only RECOVERY_REQUIRED as recovery', () => {
-    expect(classifyPublishingActivity({ state: PUBLISHING_RECOVERY_REQUIRED_STATE })).toBe('recovery_required');
+  it.each(PUBLISHING_BLOCKING_STATES)(
+    'treats %s with a future lease as in progress, except explicit recovery attention',
+    (state) => {
+      expect(classifyPublishingActivity(operation(state), NOW)).toBe(
+        state === 'RECOVERY_REQUIRED' ? 'RECOVERY_WAIT' : 'IN_PROGRESS',
+      );
+    },
+  );
+
+  it.each(PUBLISHING_BLOCKING_STATES)(
+    'treats expired %s as recoverable when no Storage fence is active',
+    (state) => {
+      expect(classifyPublishingActivity(operation(state, EXPIRED, EXPIRED_FENCE), NOW))
+        .toBe('RECOVERY_AVAILABLE');
+    },
+  );
+
+  it.each(PUBLISHING_BLOCKING_STATES)(
+    'waits for the Storage uncertainty fence after an expired %s lease',
+    (state) => {
+      expect(classifyPublishingActivity(operation(state, EXPIRED, LIVE_FENCE), NOW))
+        .toBe('RECOVERY_WAIT');
+    },
+  );
+
+  it('keeps RECOVERY_REQUIRED unavailable while either its lease or fence is live', () => {
+    expect(classifyPublishingActivity(operation('RECOVERY_REQUIRED', LIVE, EXPIRED_FENCE), NOW))
+      .toBe('RECOVERY_WAIT');
+    expect(classifyPublishingActivity(operation('RECOVERY_REQUIRED', EXPIRED, LIVE_FENCE), NOW))
+      .toBe('RECOVERY_WAIT');
+    expect(classifyPublishingActivity(operation('RECOVERY_REQUIRED', EXPIRED, EXPIRED_FENCE), NOW))
+      .toBe('RECOVERY_AVAILABLE');
   });
 
-  it.each(PUBLISHING_IN_PROGRESS_STATES)('treats %s as a running publishing action, not recovery', (state) => {
-    expect(classifyPublishingActivity({ state })).toBe('in_progress');
-  });
-
-  it('treats an unrecognized blocking state as in progress rather than claiming an unproven failure', () => {
-    expect(classifyPublishingActivity({ state: 'SOME_FUTURE_STATE' })).toBe('in_progress');
+  it('fails safe for unknown states and malformed timing without offering recovery', () => {
+    expect(classifyPublishingActivity(operation('SOME_FUTURE_STATE', EXPIRED), NOW)).toBe('RECOVERY_WAIT');
+    expect(classifyPublishingActivity(operation('PREPARED', 'not-a-time'), NOW)).toBe('RECOVERY_WAIT');
+    expect(classifyPublishingActivity(operation('WRITE_STARTED', EXPIRED, 'not-a-time'), NOW))
+      .toBe('RECOVERY_WAIT');
   });
 });
 
 describe('derivePublishingHealth', () => {
-  it('reports recovery presentation only for RECOVERY_REQUIRED', () => {
-    const health = derivePublishingHealth({
-      ...ACTIVE_AND_ALIGNED,
-      blockingOperation: { state: PUBLISHING_RECOVERY_REQUIRED_STATE },
-    });
-    expect(health.recoveryRequired).toBe(true);
-    expect(health.publishingInProgress).toBe(false);
-    expect(health.badgeLabel).toBe('Needs attention');
-    expect(health.summaryLabel).toBe('Needs attention');
-    expect(health.healthLabel).toBe('Needs attention');
+  it('allows setup only when publishing history is inactive and there is no blocker', () => {
+    const idle = derivePublishingHealth({ ...ACTIVE_AND_ALIGNED, active: false, blockingOperation: null });
+    expect(idle.activity).toBe('IDLE');
+    expect(idle.setupAvailable).toBe(true);
+    expect(idle.badgeLabel).toBe('Setup required');
   });
 
-  it.each(PUBLISHING_IN_PROGRESS_STATES)('reports %s as publishing in progress without offering recovery', (state) => {
-    const health = derivePublishingHealth({ ...ACTIVE_AND_ALIGNED, blockingOperation: { state } });
-    expect(health.recoveryRequired).toBe(false);
-    expect(health.publishingInProgress).toBe(true);
-    expect(health.badgeLabel).toBe('Publishing in progress');
-    expect(health.summaryLabel).toBe('Publishing in progress');
-    expect(health.healthLabel).toBe('Publishing in progress');
+  it.each([
+    operation('RESERVED', LIVE),
+    operation('RESERVED', EXPIRED),
+    operation('RECOVERY_REQUIRED', LIVE),
+    operation('RECOVERY_REQUIRED', EXPIRED),
+  ])('suppresses setup for inactive history with blocker %#', (blockingOperation) => {
+    const health = derivePublishingHealth({
+      ...ACTIVE_AND_ALIGNED,
+      active: false,
+      blockingOperation,
+    });
+    expect(health.hasBlockingOperation).toBe(true);
+    expect(health.setupAvailable).toBe(false);
+    expect(health.badgeLabel).not.toBe('Setup required');
+  });
+
+  it('allows repair for divergence only while the writer is idle', () => {
+    expect(derivePublishingHealth({
+      ...ACTIVE_AND_ALIGNED,
+      divergedProjectsCount: 1,
+      blockingOperation: null,
+    }).repairAvailable).toBe(true);
+    expect(derivePublishingHealth({
+      ...ACTIVE_AND_ALIGNED,
+      divergedProjectsCount: 1,
+      blockingOperation: operation('WRITE_STARTED', LIVE),
+    }).repairAvailable).toBe(false);
+    expect(derivePublishingHealth({
+      ...ACTIVE_AND_ALIGNED,
+      divergedProjectsCount: 1,
+      blockingOperation: operation('PREPARED', EXPIRED),
+    }).repairAvailable).toBe(false);
   });
 
   it('reports no issues when publishing is active, idle and aligned', () => {
@@ -57,16 +119,11 @@ describe('derivePublishingHealth', () => {
   });
 
   it('counts projects needing repair in singular and plural', () => {
-    expect(derivePublishingHealth({ active: true, blockingOperation: null, divergedProjectsCount: 1 }).healthLabel)
-      .toBe('1 project needs repair');
-    expect(derivePublishingHealth({ active: true, blockingOperation: null, divergedProjectsCount: 3 }).healthLabel)
-      .toBe('3 projects need repair');
-  });
-
-  it('reports setup required when publishing is inactive and nothing is running', () => {
-    const health = derivePublishingHealth({ active: false, blockingOperation: null, divergedProjectsCount: 0 });
-    expect(health.badgeLabel).toBe('Setup required');
-    expect(health.summaryLabel).toBe('Setup required');
-    expect(health.recoveryRequired).toBe(false);
+    expect(derivePublishingHealth({
+      ...ACTIVE_AND_ALIGNED, blockingOperation: null, divergedProjectsCount: 1,
+    }).healthLabel).toBe('1 project needs repair');
+    expect(derivePublishingHealth({
+      ...ACTIVE_AND_ALIGNED, blockingOperation: null, divergedProjectsCount: 3,
+    }).healthLabel).toBe('3 projects need repair');
   });
 });

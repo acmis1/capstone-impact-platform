@@ -1,85 +1,143 @@
 /**
  * Presentation-only derivation for the showcase publishing surfaces.
  *
- * `public_feed_operations` rows block a second concurrent publishing action in several states, but
- * only `RECOVERY_REQUIRED` proves that an earlier action failed and left publishing paused. Every
- * other blocking state describes a publishing action that is still running normally. The staff-
- * facing header badge, top summary, alerts, controls, and publishing-health card all read from this
- * single derivation so they cannot disagree.
- *
- * No backend state, contract, or semantics change here: `blockingOperation.state` remains the
- * source of truth and is only translated into staff-readable presentation.
+ * Every non-terminal public-feed operation blocks the single canonical writer. Whether staff
+ * should wait or may request recovery is determined by its durable lease and Storage uncertainty
+ * fence, never by `updatedAt`. The recovery endpoint remains the final authority and rechecks the
+ * same database contract before claiming anything.
  */
 
-/** Blocking states that describe a publishing action that is still running. */
-export const PUBLISHING_IN_PROGRESS_STATES = [
+export const PUBLISHING_BLOCKING_STATES = [
   'RESERVED',
   'PREPARED',
   'WRITE_STARTED',
   'CANDIDATE_OBSERVED',
   'DB_FINALIZED',
+  'RECOVERY_REQUIRED',
 ] as const;
 
-/** The only blocking state that proves recovery is required. */
-export const PUBLISHING_RECOVERY_REQUIRED_STATE = 'RECOVERY_REQUIRED';
-
-export type PublishingActivity = 'idle' | 'in_progress' | 'recovery_required';
+export type PublishingActivity =
+  | 'IDLE'
+  | 'IN_PROGRESS'
+  | 'RECOVERY_WAIT'
+  | 'RECOVERY_AVAILABLE';
 
 export interface BlockingOperationView {
   kind: string;
   state: string;
   failureCode: string | null;
   updatedAt: string;
+  leaseExpiresAt: string;
+  storageUncertaintyUntil: string | null;
 }
 
-/**
- * Classifies a blocking operation. An unrecognized state is treated as an in-flight operation
- * rather than as recovery: claiming a failure that has not been proven would be untruthful, and
- * the operation still blocks a concurrent publish either way.
- */
+export type PublishingAttentionReason =
+  | 'SAFETY_WINDOW_ACTIVE'
+  | 'UNKNOWN_BLOCKING_STATE'
+  | 'TIMING_UNAVAILABLE';
+
+interface PublishingActivityDerivation {
+  activity: PublishingActivity;
+  attentionReason: PublishingAttentionReason | null;
+  retryAt: string | null;
+}
+
+function parseInstant(value: string): number | null {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function derivePublishingActivity(
+  blockingOperation: Pick<BlockingOperationView, 'state' | 'leaseExpiresAt' | 'storageUncertaintyUntil'> | null | undefined,
+  now: Date,
+): PublishingActivityDerivation {
+  if (!blockingOperation) {
+    return { activity: 'IDLE', attentionReason: null, retryAt: null };
+  }
+
+  if (!(PUBLISHING_BLOCKING_STATES as readonly string[]).includes(blockingOperation.state)) {
+    return { activity: 'RECOVERY_WAIT', attentionReason: 'UNKNOWN_BLOCKING_STATE', retryAt: null };
+  }
+
+  const nowMs = now.getTime();
+  const leaseMs = parseInstant(blockingOperation.leaseExpiresAt);
+  const fenceMs = blockingOperation.storageUncertaintyUntil === null
+    ? null
+    : parseInstant(blockingOperation.storageUncertaintyUntil);
+  if (!Number.isFinite(nowMs) || leaseMs === null
+      || (blockingOperation.storageUncertaintyUntil !== null && fenceMs === null)) {
+    return { activity: 'RECOVERY_WAIT', attentionReason: 'TIMING_UNAVAILABLE', retryAt: null };
+  }
+
+  if (leaseMs > nowMs) {
+    if (blockingOperation.state !== 'RECOVERY_REQUIRED') {
+      return { activity: 'IN_PROGRESS', attentionReason: null, retryAt: blockingOperation.leaseExpiresAt };
+    }
+    const retryMs = Math.max(leaseMs, fenceMs ?? leaseMs);
+    return {
+      activity: 'RECOVERY_WAIT',
+      attentionReason: 'SAFETY_WINDOW_ACTIVE',
+      retryAt: new Date(retryMs).toISOString(),
+    };
+  }
+
+  if (fenceMs !== null && fenceMs > nowMs) {
+    return {
+      activity: 'RECOVERY_WAIT',
+      attentionReason: 'SAFETY_WINDOW_ACTIVE',
+      retryAt: blockingOperation.storageUncertaintyUntil,
+    };
+  }
+
+  return { activity: 'RECOVERY_AVAILABLE', attentionReason: null, retryAt: null };
+}
+
 export function classifyPublishingActivity(
-  blockingOperation: Pick<BlockingOperationView, 'state'> | null | undefined,
+  blockingOperation: Pick<BlockingOperationView, 'state' | 'leaseExpiresAt' | 'storageUncertaintyUntil'> | null | undefined,
+  now: Date,
 ): PublishingActivity {
-  if (!blockingOperation) return 'idle';
-  return blockingOperation.state === PUBLISHING_RECOVERY_REQUIRED_STATE
-    ? 'recovery_required'
-    : 'in_progress';
+  return derivePublishingActivity(blockingOperation, now).activity;
 }
 
 export interface PublishingHealthInput {
   active: boolean;
-  blockingOperation: Pick<BlockingOperationView, 'state'> | null | undefined;
+  blockingOperation: Pick<BlockingOperationView, 'state' | 'leaseExpiresAt' | 'storageUncertaintyUntil'> | null | undefined;
   divergedProjectsCount: number;
+  now: Date;
 }
 
-export interface PublishingHealthPresentation {
-  activity: PublishingActivity;
-  /** True only for `RECOVERY_REQUIRED`; gates all recovery wording and the recovery control. */
-  recoveryRequired: boolean;
-  /** True while an ordinary publishing action is still running. */
+export interface PublishingHealthPresentation extends PublishingActivityDerivation {
+  recoveryAvailable: boolean;
+  recoveryWaiting: boolean;
   publishingInProgress: boolean;
+  hasBlockingOperation: boolean;
+  setupAvailable: boolean;
+  repairAvailable: boolean;
   badgeLabel: string;
   badgeVariant: 'success' | 'warning' | 'information';
-  /** "Publishing status" summary card value. */
   summaryLabel: string;
-  /** "Publishing health" summary card value. */
   healthLabel: string;
 }
 
 export function derivePublishingHealth(input: PublishingHealthInput): PublishingHealthPresentation {
-  const activity = classifyPublishingActivity(input.blockingOperation);
-  const recoveryRequired = activity === 'recovery_required';
-  const publishingInProgress = activity === 'in_progress';
-
+  const activity = derivePublishingActivity(input.blockingOperation, input.now);
+  const recoveryAvailable = activity.activity === 'RECOVERY_AVAILABLE';
+  const recoveryWaiting = activity.activity === 'RECOVERY_WAIT';
+  const publishingInProgress = activity.activity === 'IN_PROGRESS';
+  const hasBlockingOperation = activity.activity !== 'IDLE';
   const repairLabel = input.divergedProjectsCount === 1
     ? '1 project needs repair'
     : `${input.divergedProjectsCount} projects need repair`;
 
-  if (recoveryRequired) {
+  if (recoveryAvailable || recoveryWaiting) {
     return {
-      activity,
-      recoveryRequired,
+      ...activity,
+      recoveryAvailable,
+      recoveryWaiting,
       publishingInProgress,
+      hasBlockingOperation,
+      setupAvailable: false,
+      repairAvailable: false,
       badgeLabel: 'Needs attention',
       badgeVariant: 'warning',
       summaryLabel: 'Needs attention',
@@ -89,9 +147,13 @@ export function derivePublishingHealth(input: PublishingHealthInput): Publishing
 
   if (publishingInProgress) {
     return {
-      activity,
-      recoveryRequired,
+      ...activity,
+      recoveryAvailable,
+      recoveryWaiting,
       publishingInProgress,
+      hasBlockingOperation,
+      setupAvailable: false,
+      repairAvailable: false,
       badgeLabel: 'Publishing in progress',
       badgeVariant: 'information',
       summaryLabel: 'Publishing in progress',
@@ -100,12 +162,15 @@ export function derivePublishingHealth(input: PublishingHealthInput): Publishing
   }
 
   const healthLabel = input.divergedProjectsCount > 0 ? repairLabel : 'No issues';
-
   if (!input.active) {
     return {
-      activity,
-      recoveryRequired,
+      ...activity,
+      recoveryAvailable,
+      recoveryWaiting,
       publishingInProgress,
+      hasBlockingOperation,
+      setupAvailable: true,
+      repairAvailable: false,
       badgeLabel: 'Setup required',
       badgeVariant: 'warning',
       summaryLabel: 'Setup required',
@@ -114,9 +179,13 @@ export function derivePublishingHealth(input: PublishingHealthInput): Publishing
   }
 
   return {
-    activity,
-    recoveryRequired,
+    ...activity,
+    recoveryAvailable,
+    recoveryWaiting,
     publishingInProgress,
+    hasBlockingOperation,
+    setupAvailable: false,
+    repairAvailable: input.divergedProjectsCount > 0,
     badgeLabel: 'Publishing ready',
     badgeVariant: 'success',
     summaryLabel: 'Ready',
@@ -124,10 +193,6 @@ export function derivePublishingHealth(input: PublishingHealthInput): Publishing
   };
 }
 
-/**
- * Staff-readable description of a still-running publishing action. The raw state stays available
- * under progressive disclosure rather than in the primary copy.
- */
 export function publishingInProgressDescription(): string {
-  return 'Another publishing action is currently running. Wait for it to finish before starting a new publish or removal.';
+  return 'Another publishing action has a live lease and is still running. Wait for it to finish, then refresh before starting another publishing action.';
 }
