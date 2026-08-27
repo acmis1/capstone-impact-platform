@@ -131,7 +131,7 @@ export function assistiveChecksReducer(
       return {
         ...state,
         actionInFlight: 'idle',
-        feedback: action.success ? { message: action.message, type: 'success' } : null,
+        feedback: { message: action.message, type: action.success ? 'success' : 'warning' },
       };
     case 'APPLY_FAILED':
       return { ...state, actionInFlight: 'idle', feedback: null, error: action.error };
@@ -152,6 +152,8 @@ export function formatCheckType(checkType: string): string {
       return 'Document extraction';
     case 'DUPLICATE_SHORTLIST':
       return 'Similar projects';
+    case 'LANGUAGE_SUGGESTION':
+      return 'Spelling and grammar';
     default:
       return checkType.replace(/_/g, ' ').toLowerCase();
   }
@@ -265,6 +267,10 @@ export function formatFailureCode(code: AssistiveJobFailureCode | string | null)
       return 'OCR text extraction is required for this scanned document or image, but OCR has not run.';
     case 'OCR_PROVIDER_UNAVAILABLE':
       return 'OCR text extraction is required, but no OCR provider is configured in this environment.';
+    case 'LANGUAGE_PROVIDER_UNAVAILABLE':
+      return 'Local spelling and grammar suggestions were unavailable; the other assistive checks completed.';
+    case 'OCR_AND_LANGUAGE_INCOMPLETE':
+      return 'OCR evaluation and local language suggestions could not both complete; the remaining checks completed.';
     case 'IDENTITY_CONFLICT':
       return 'A result conflict occurred during job processing.';
     case 'INTERNAL_FAILURE':
@@ -280,6 +286,12 @@ export function formatPartialNoticeDescription(failureCode: AssistiveJobFailureC
   if (failureCode === 'OCR_PROVIDER_UNAVAILABLE') {
     return 'Some document content could not be evaluated because the configured OCR capability is unavailable. Native text, when available, was checked.';
   }
+  if (failureCode === 'LANGUAGE_PROVIDER_UNAVAILABLE') {
+    return 'Local spelling and grammar suggestions were unavailable. Document, title, formatting, and duplicate checks still completed.';
+  }
+  if (failureCode === 'OCR_AND_LANGUAGE_INCOMPLETE') {
+    return 'OCR evaluation and local language suggestions could not both complete. Other checks still completed.';
+  }
   return 'Some document content could not be evaluated in this environment. Native text, when available, was checked.';
 }
 
@@ -293,8 +305,25 @@ export function isFindingEligibleToApply(
   if (staleState !== 'CURRENT') return false;
   if (finding.checkType !== 'TITLE_CONSISTENCY') return false;
   if (finding.outcome === 'AGREES') return false;
+  if (finding.evidence.version !== 'assistive-finding-evidence/v1') return false;
   const candidate = finding.evidence.candidateValue;
   if (!candidate || candidate.trim().length === 0) return false;
   if (candidate.length > PROJECT_METADATA_LIMITS.title) return false;
   return true;
+}
+
+export function isLanguageFindingEligibleToApply(
+  finding: AssistiveInspectionFinding,
+  staleState: AssistiveStaleState,
+  canEditMetadata: boolean,
+  canApplyHandler: boolean,
+): boolean {
+  if (!canEditMetadata || !canApplyHandler || staleState !== 'CURRENT') return false;
+  if (finding.checkType !== 'LANGUAGE_SUGGESTION'
+    || finding.outcome !== 'REVIEW'
+    || !['title', 'summary', 'background', 'solution'].includes(finding.affectedField)
+    || finding.evidence.version !== 'assistive-finding-evidence/v3') return false;
+  return finding.evidence.offsetUnit === 'UNICODE_CODE_POINTS'
+    && finding.evidence.endOffset >= finding.evidence.startOffset
+    && finding.evidence.suggestions.length > 0;
 }

@@ -51,7 +51,7 @@ describe('assistive job service and response contracts', () => {
         title: 'Title', summary: 'Summary', background: '', solution: '',
         documentType: 'PDF', content: PDF, duplicateCorpusSha256: hashDuplicateCorpus([]),
       }).inputHash,
-      'assistive-deterministic-checks/v2',
+      'assistive-deterministic-checks/v3',
     );
   });
 

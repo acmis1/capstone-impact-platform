@@ -28,9 +28,9 @@ const RUNTIME_SCRIPTS: Record<string, string> = {
 };
 
 /**
- * The three migrations this branch contributes. Everything else in the tree is already on `main`,
- * so removing exactly these three reproduces a `main` database, and re-adding them reproduces the
- * upgrade an existing deployment would actually perform.
+ * The three public-ledger migrations this verifier exercises. Removing them reproduces the
+ * pre-ledger schema while retaining later independent migrations; restoring them tests the
+ * forward public-ledger upgrade without rewriting repository history.
  */
 const STREAM_K_MIGRATIONS = [
   '20260824180000_public_feed_deployment_ledger.sql',
@@ -38,7 +38,7 @@ const STREAM_K_MIGRATIONS = [
   '20260825030000_public_feed_taxonomy_operation_guard.sql',
 ];
 
-const MAIN_MIGRATION_COUNT = 40;
+const MAIN_MIGRATION_COUNT = 41;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -168,12 +168,12 @@ function verifyMainUpgrade(workdir: string): void {
     )::text;`);
   const headAbsentBefore = psql("SELECT to_regclass('public.public_feed_head') IS NULL;");
   assert.equal(headAbsentBefore, 't');
-  console.log('PASS: disposable stack provisioned at exactly the 40 migrations on main');
+  console.log('PASS: disposable stack provisioned at exactly 41 migrations before Stream K');
 
   restoreMigrations(workdir, STREAM_K_MIGRATIONS);
   runSupabase('migrate', workdir, '');
 
-  assert.equal(appliedCount(), '43', 'The upgraded database is not exactly 43 migrations.');
+  assert.equal(appliedCount(), '44', 'The upgraded database is not exactly 44 migrations.');
   assert.equal(
     psql(
       'SELECT count(*) FROM supabase_migrations.schema_migrations'

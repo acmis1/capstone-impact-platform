@@ -8,6 +8,7 @@ Phase 5 of the PP1 AI/OCR assistive validation subsystem introduces the producti
 Assistive validation is strictly **advisory** and **non-blocking**:
 - Assistive findings **never** directly mutate project status, workflow gates, publication readiness, or database records.
 - "Apply to draft" populates the in-browser `ProjectMetadataEditor` form draft and marks the form dirty; persistence occurs only when staff explicitly clicks **Save metadata**, invoking the authoritative `saveProjectMetadataAction` audit pipeline.
+- Phase 7 language findings use the same browser-only boundary for one selected replacement. The editor rechecks the stored Unicode-code-point source span against the current draft before changing only that span; stale or mismatched evidence is refused.
 - Finding dispositions (`REVIEWED`, `IGNORED`) are editorial tracking records, not project approvals.
 - Assistive status labels never use misleading terminology (e.g. "AI approved", "validation passed", "blocking").
 

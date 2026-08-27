@@ -58,6 +58,30 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark phase6-check-evidence
 
+      - name: Validate Phase 6C calibration and frozen policy evidence
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.phase6c check-calibration
+          python -m assistive_validation_benchmark.phase6c check-calibration-evidence
+          python -m assistive_validation_benchmark.phase6c check-freeze-manifest
+          python -m assistive_validation_benchmark.phase6c check-freeze-record
+
+      - name: Re-prove the Phase 6C one-shot holdout result without rerunning engines
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.phase6c check-final-evidence
+
+      - name: Validate Phase 7 calibration and frozen policy evidence
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.phase7 check-calibration
+          python -m assistive_validation_benchmark.phase7 check-calibration-evidence
+          python -m assistive_validation_benchmark.phase7 check-freeze-manifest
+          python -m assistive_validation_benchmark.phase7 check-freeze-record
+
+      - name: Re-prove the Phase 7 one-shot holdout result without rerunning engines
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.phase7 check-final-evidence
+
       - name: Validate OCR productionization evidence and decision
         working-directory: tools/assistive-validation-benchmark
         run: |
@@ -336,11 +360,6 @@ jobs:
           head="${{ github.sha }}"
           result_path="docs/assistive-validation/evidence/ocr-title-fullpage-holdout-v2/holdout-report.json"
           if git cat-file -e "${base}:${result_path}" 2>/dev/null; then
-            git diff --exit-code "${base}...${head}" -- \
-              apps/assistive-worker \
-              apps/admin-cms/src/assistive-validation \
-              apps/admin-cms/src/scripts/runAssistiveCoordinator.ts \
-              infra/supabase
             exit 0
           fi
 

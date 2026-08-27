@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { AssistiveValidationCoordinator } from '../assistive-validation/services/assistiveCoordinator';
 import { getAssistiveWorkerHealth } from '../assistive-validation/services/assistiveJobService';
 import { PythonAssistiveWorkerProcess } from '../assistive-validation/services/pythonWorkerProcess';
+import { LocalLanguageToolProcess } from '../assistive-validation/services/languageToolProcess';
 import { SupabaseAssistiveJobRepository } from '../assistive-validation/repositories/assistiveJobRepository';
 import { SupabaseAssistiveInputRepository } from '../assistive-validation/repositories/assistiveInputRepository';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
@@ -34,6 +35,14 @@ if (args.length > 1 || (args.length === 1 && !allowedModes.has(args[0]))) {
   // The frozen provider is opt-in through an operator-provisioned local model directory.
   const paddleModelsDir = process.env.CAPSTONE_ASSISTIVE_PADDLE_MODELS_DIR?.trim() || undefined;
   const worker = new PythonAssistiveWorkerProcess({ paddleModelsDir });
+  const languageToolArchive = process.env.CAPSTONE_ASSISTIVE_LANGUAGETOOL_ARCHIVE?.trim() || undefined;
+  const languageToolJar = process.env.CAPSTONE_ASSISTIVE_LANGUAGETOOL_JAR?.trim() || undefined;
+  if (Boolean(languageToolArchive) !== Boolean(languageToolJar)) {
+    throw new Error('Both local LanguageTool artifact paths must be configured together.');
+  }
+  const languageProvider = languageToolArchive && languageToolJar
+    ? new LocalLanguageToolProcess({ archivePath: languageToolArchive, jarPath: languageToolJar })
+    : null;
   const coordinator = new AssistiveValidationCoordinator(
     jobs,
     inputs,
@@ -41,6 +50,7 @@ if (args.length > 1 || (args.length === 1 && !allowedModes.has(args[0]))) {
     worker,
     randomUUID(),
     paddleModelsDir ? 'PADDLE_TITLE' : 'NONE',
+    languageProvider,
   );
   let stopping = false;
   process.once('SIGINT', () => { stopping = true; });
@@ -48,13 +58,18 @@ if (args.length > 1 || (args.length === 1 && !allowedModes.has(args[0]))) {
 
   const run = async () => {
     if (mode === '--health') {
-      const [database, python] = await Promise.all([getAssistiveWorkerHealth(jobs), worker.health()]);
-      const healthy = database.resultCode === 'HEALTHY' && python;
+      const [database, python, language] = await Promise.all([
+        getAssistiveWorkerHealth(jobs),
+        worker.health(),
+        languageProvider?.health() ?? Promise.resolve(true),
+      ]);
+      const healthy = database.resultCode === 'HEALTHY' && python && language;
       console.log(JSON.stringify({
         schemaVersion: 'assistive-coordinator-health/v1',
         status: healthy ? 'OK' : 'UNHEALTHY',
         database: database.resultCode,
         python: python ? 'OK' : 'UNHEALTHY',
+        language: languageProvider ? (language ? 'OK' : 'UNHEALTHY') : 'DISABLED',
       }));
       if (!healthy) process.exitCode = 1;
       return;

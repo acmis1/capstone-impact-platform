@@ -19,12 +19,17 @@ import {
 } from '../ui/alert-dialog';
 import {
   MetadataOption,
+  PROJECT_METADATA_LIMITS,
   ProjectMetadataActionResult,
   ProjectMetadataView,
   projectMetadataInputSchema,
 } from '../../projects/projectMetadata';
 import { editorCanSubmit, isMetadataDirty } from './projectMetadataEditorState';
-import { TitleSuggestionHandler, useProjectMetadataNavigation } from './ProjectMetadataNavigation';
+import {
+  type LanguageDraftSuggestion,
+  type TitleSuggestionHandler,
+  useProjectMetadataNavigation,
+} from './ProjectMetadataNavigation';
 import { invokeProjectMetadataSave } from './projectMetadataEditorController';
 import { PROJECT_DETAIL_SURFACE_CLASSES } from './projectDetailSurfaceStyles';
 import { PencilLine } from 'lucide-react';
@@ -55,7 +60,9 @@ export function ProjectMetadataEditor({
   headingLevel: Heading = 'h2',
 }: Props) {
   const router = useRouter();
-  const { setDirty, registerTitleSuggestionHandler } = useProjectMetadataNavigation();
+  const {
+    setDirty, registerTitleSuggestionHandler, registerLanguageSuggestionHandler,
+  } = useProjectMetadataNavigation();
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [initial, setInitial] = useState(initialMetadata);
   const [draft, setDraft] = useState(initialMetadata);
@@ -135,6 +142,7 @@ export function ProjectMetadataEditor({
   useEffect(() => {
     if (!canEdit || protectedNotice) {
       registerTitleSuggestionHandler(null);
+      registerLanguageSuggestionHandler(null);
       return;
     }
     const handler: TitleSuggestionHandler = (suggestedTitle) => {
@@ -152,12 +160,56 @@ export function ProjectMetadataEditor({
       applyTitleDirectly(suggestedTitle);
       return Promise.resolve('applied');
     };
+    const languageHandler = (suggestion: LanguageDraftSuggestion): boolean => {
+      if (suggestion.offsetUnit !== 'UNICODE_CODE_POINTS'
+        || !Number.isInteger(suggestion.startOffset)
+        || !Number.isInteger(suggestion.endOffset)
+        || suggestion.startOffset < 0
+        || suggestion.endOffset < suggestion.startOffset) return false;
+      const currentDraft = draftRef.current;
+      const currentInitial = initialRef.current;
+      const source = currentDraft[suggestion.field];
+      if (source !== currentInitial[suggestion.field]) return false;
+      const codePoints = Array.from(source);
+      if (suggestion.endOffset > codePoints.length
+        || codePoints.slice(suggestion.startOffset, suggestion.endOffset).join('') !== suggestion.originalSourceSpan) {
+        return false;
+      }
+      const nextValue = [
+        ...codePoints.slice(0, suggestion.startOffset),
+        ...Array.from(suggestion.replacement),
+        ...codePoints.slice(suggestion.endOffset),
+      ].join('');
+      const nextDraft = { ...currentDraft, [suggestion.field]: nextValue };
+      if (nextValue.length > PROJECT_METADATA_LIMITS[suggestion.field]
+        || (['title', 'summary'].includes(suggestion.field) && nextValue.trim().length === 0)) return false;
+      setMode('edit');
+      setDraft(nextDraft);
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[suggestion.field];
+        return next;
+      });
+      setNotice({ kind: 'affirm', message: 'Language suggestion applied to the draft. Review it and select Save changes to persist the change.' });
+      requestAnimationFrame(() => {
+        const input = document.getElementById(`metadata-${suggestion.field}`);
+        input?.focus();
+        const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+        input?.scrollIntoView?.({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
+      });
+      return true;
+    };
     registerTitleSuggestionHandler(handler);
+    registerLanguageSuggestionHandler(languageHandler);
     return () => {
       registerTitleSuggestionHandler(null);
+      registerLanguageSuggestionHandler(null);
       settlePendingSuggestion('cancelled');
     };
-  }, [canEdit, protectedNotice, registerTitleSuggestionHandler, applyTitleDirectly, settlePendingSuggestion]);
+  }, [
+    canEdit, protectedNotice, registerTitleSuggestionHandler, registerLanguageSuggestionHandler,
+    applyTitleDirectly, settlePendingSuggestion,
+  ]);
 
   const cancel = () => {
     if (dirty) {

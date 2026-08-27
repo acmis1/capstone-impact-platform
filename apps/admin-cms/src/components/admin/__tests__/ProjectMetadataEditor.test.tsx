@@ -52,6 +52,7 @@ function TestContainer({
   canEdit = true,
   projectStatus = 'draft',
   suggestedTitle = 'Suggested New Title',
+  languageOriginal = 'short',
   metadata = initialMetadata,
   disciplines = [
     { id: 'disc-1', name: 'Software Engineering' },
@@ -66,17 +67,22 @@ function TestContainer({
   canEdit?: boolean;
   projectStatus?: string;
   suggestedTitle?: string;
+  languageOriginal?: string;
   metadata?: ProjectMetadataView;
   disciplines?: { id: string; name: string }[];
   industryCategories?: { id: string; name: string }[];
   saveAction?: (input: unknown) => Promise<ProjectMetadataActionResult>;
 }) {
-  const { applyTitleSuggestion, canApplyTitleSuggestion, dirty } = useProjectMetadataNavigation();
+  const {
+    applyTitleSuggestion, canApplyTitleSuggestion,
+    applyLanguageSuggestion, canApplyLanguageSuggestion, dirty,
+  } = useProjectMetadataNavigation();
   const [outcome, setOutcome] = React.useState('IDLE');
   return (
     <div>
       <div data-testid="dirty-indicator">{dirty ? 'DIRTY' : 'CLEAN'}</div>
       <div data-testid="can-apply">{canApplyTitleSuggestion ? 'CAN_APPLY' : 'CANNOT_APPLY'}</div>
+      <div data-testid="can-apply-language">{canApplyLanguageSuggestion ? 'CAN_APPLY' : 'CANNOT_APPLY'}</div>
       <div data-testid="suggestion-outcome">{outcome}</div>
       <button
         type="button"
@@ -87,6 +93,17 @@ function TestContainer({
         }}
       >
         Apply Suggestion
+      </button>
+      <button
+        type="button"
+        data-testid="trigger-language-suggestion-btn"
+        onClick={() => applyLanguageSuggestion({
+          field: 'summary', startOffset: 2, endOffset: 7,
+          offsetUnit: 'UNICODE_CODE_POINTS', originalSourceSpan: languageOriginal,
+          replacement: 'concise',
+        })}
+      >
+        Apply language suggestion
       </button>
 
       <ProjectMetadataEditor
@@ -422,5 +439,51 @@ describe('ProjectMetadataEditor Title Suggestion and Form Integration', () => {
       expect(screen.getByText('Project information')).toBeTruthy();
       expect(screen.getByTestId('dirty-indicator').textContent).toBe('CLEAN');
     });
+  });
+
+  it('applies one code-point span to the browser draft, focuses the field, and does not auto-save', async () => {
+    render(
+      <ProjectMetadataNavigationProvider>
+        <TestContainer />
+      </ProjectMetadataNavigationProvider>,
+    );
+    expect(screen.getByTestId('can-apply-language').textContent).toBe('CAN_APPLY');
+    fireEvent.click(screen.getByTestId('trigger-language-suggestion-btn'));
+    const summary = await screen.findByLabelText(/Short summary/i) as HTMLTextAreaElement;
+    expect(summary.value).toBe('A concise summary of the project.');
+    await waitFor(() => expect(document.activeElement).toBe(summary));
+    expect(screen.getByTestId('dirty-indicator').textContent).toBe('DIRTY');
+    expect(screen.getByText(/Language suggestion applied to the draft/i).getAttribute('role')).toBe('status');
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeTruthy();
+  });
+
+  it('refuses a language suggestion when the current draft span no longer matches', async () => {
+    render(
+      <ProjectMetadataNavigationProvider>
+        <TestContainer languageOriginal="wrong" />
+      </ProjectMetadataNavigationProvider>,
+    );
+    fireEvent.click(screen.getByTestId('trigger-language-suggestion-btn'));
+    expect(screen.getByText('Project information')).toBeTruthy();
+    expect(screen.getByTestId('dirty-indicator').textContent).toBe('CLEAN');
+    expect(screen.queryByLabelText(/Short summary/i)).toBeNull();
+  });
+
+  it('refuses a language suggestion when the inspected field has any unsaved edit', () => {
+    render(
+      <ProjectMetadataNavigationProvider>
+        <TestContainer />
+      </ProjectMetadataNavigationProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Edit project information/i }));
+    const summary = screen.getByLabelText(/Short summary/i) as HTMLTextAreaElement;
+    const edited = `${summary.value} Staff note outside the inspected span.`;
+    fireEvent.change(summary, { target: { value: edited } });
+
+    fireEvent.click(screen.getByTestId('trigger-language-suggestion-btn'));
+
+    expect(summary.value).toBe(edited);
+    expect(screen.getByTestId('dirty-indicator').textContent).toBe('DIRTY');
+    expect(screen.queryByText(/Language suggestion applied to the draft/i)).toBeNull();
   });
 });

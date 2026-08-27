@@ -29,12 +29,24 @@ export type TitleSuggestionOutcome = 'applied' | 'cancelled' | 'unavailable';
 
 export type TitleSuggestionHandler = (title: string) => Promise<'applied' | 'cancelled'>;
 
+export interface LanguageDraftSuggestion {
+  field: 'title' | 'summary' | 'background' | 'solution';
+  startOffset: number;
+  endOffset: number;
+  offsetUnit: 'UNICODE_CODE_POINTS';
+  originalSourceSpan: string;
+  replacement: string;
+}
+
 interface NavigationContextValue {
   dirty: boolean;
   setDirty: (dirty: boolean) => void;
   registerTitleSuggestionHandler: (handler: TitleSuggestionHandler | null) => void;
   canApplyTitleSuggestion: boolean;
   applyTitleSuggestion: (title: string) => Promise<TitleSuggestionOutcome>;
+  registerLanguageSuggestionHandler: (handler: ((suggestion: LanguageDraftSuggestion) => boolean) | null) => void;
+  canApplyLanguageSuggestion: boolean;
+  applyLanguageSuggestion: (suggestion: LanguageDraftSuggestion) => boolean;
 }
 
 const MetadataNavigationContext = createContext<NavigationContextValue | null>(null);
@@ -43,6 +55,8 @@ export function ProjectMetadataNavigationProvider({ children }: { children: Reac
   const [dirty, setDirty] = useState(false);
   const [canApplyTitleSuggestion, setCanApplyTitleSuggestion] = useState(false);
   const titleHandlerRef = useRef<TitleSuggestionHandler | null>(null);
+  const [canApplyLanguageSuggestion, setCanApplyLanguageSuggestion] = useState(false);
+  const languageHandlerRef = useRef<((suggestion: LanguageDraftSuggestion) => boolean) | null>(null);
 
   // Browser-native protection stays for actual browser/tab/window unload only. In-app navigation
   // is guarded by the accessible AlertDialog below, never by window.confirm.
@@ -68,13 +82,29 @@ export function ProjectMetadataNavigationProvider({ children }: { children: Reac
     return handler(title);
   }, []);
 
+  const registerLanguageSuggestionHandler = useCallback((handler: ((suggestion: LanguageDraftSuggestion) => boolean) | null) => {
+    languageHandlerRef.current = handler;
+    setCanApplyLanguageSuggestion(handler !== null);
+  }, []);
+
+  const applyLanguageSuggestion = useCallback((suggestion: LanguageDraftSuggestion) => {
+    if (!languageHandlerRef.current) return false;
+    return languageHandlerRef.current(suggestion);
+  }, []);
+
   const value = useMemo(() => ({
     dirty,
     setDirty,
     registerTitleSuggestionHandler,
     canApplyTitleSuggestion,
     applyTitleSuggestion,
-  }), [dirty, registerTitleSuggestionHandler, canApplyTitleSuggestion, applyTitleSuggestion]);
+    registerLanguageSuggestionHandler,
+    canApplyLanguageSuggestion,
+    applyLanguageSuggestion,
+  }), [
+    dirty, registerTitleSuggestionHandler, canApplyTitleSuggestion, applyTitleSuggestion,
+    registerLanguageSuggestionHandler, canApplyLanguageSuggestion, applyLanguageSuggestion,
+  ]);
 
   return <MetadataNavigationContext.Provider value={value}>{children}</MetadataNavigationContext.Provider>;
 }
