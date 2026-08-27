@@ -99,7 +99,19 @@ jobs:
             docs/assistive-validation/ocr-productionization-iteration2-calibration.md \
             docs/assistive-validation/evidence/ocr-productionization-iteration2-calibration.json \
             tools/assistive-validation-benchmark/ocr-productionization \
-            tools/assistive-validation-benchmark/ocr-iteration2-calibration
+            tools/assistive-validation-benchmark/ocr-iteration2-calibration \
+            tools/assistive-validation-benchmark/src/assistive_validation_benchmark/ocr_title_consistency \
+            tools/assistive-validation-benchmark/src/assistive_validation_benchmark/ocr_title_consistency_holdout \
+            tools/assistive-validation-benchmark/src/assistive_validation_benchmark/ocr_title_latency \
+            tools/assistive-validation-benchmark/src/assistive_validation_benchmark/ocr_title_latency_holdout \
+            tools/assistive-validation-benchmark/ocr-title-consistency-calibration \
+            tools/assistive-validation-benchmark/ocr-title-consistency-holdout \
+            tools/assistive-validation-benchmark/ocr-title-latency-calibration \
+            tools/assistive-validation-benchmark/ocr-title-latency-holdout \
+            docs/assistive-validation/evidence/ocr-title-consistency-calibration \
+            docs/assistive-validation/evidence/ocr-title-consistency-holdout \
+            docs/assistive-validation/evidence/ocr-title-latency-calibration \
+            docs/assistive-validation/evidence/ocr-title-latency-holdout
 
       - name: Prove OCR productionization corpus byte determinism
         working-directory: tools/assistive-validation-benchmark
@@ -263,6 +275,46 @@ jobs:
       - name: Re-prove the final PP1 OCR title-latency holdout result without OCR
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_title_latency_holdout check-result
+
+      # The corrected full-page iteration replaces PR #215's candidate-selection policy without
+      # editing its module or evidence. These steps replay corpus novelty, deterministic
+      # rendering, the pre-registered selector decision, all three calibration repeats per
+      # candidate, the corrected eligibility/preference rule and the freeze chronology. As with
+      # every other OCR step here, no Paddle runtime, model weight, inference or network is used.
+      - name: Prove the superseded PP1 OCR title-latency selection policy was not rewritten
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python - <<'PY'
+          import inspect, sys
+          from assistive_validation_benchmark.ocr_title_latency import __main__ as historical
+          source = inspect.getsource(historical._selection_eligible)
+          if "enable_mkldnn" not in source or "fast_region_ratio" not in source:
+              sys.exit("historical title-latency selection rule was modified")
+          print("historical _selection_eligible() intact:\n" + source)
+          PY
+
+      - name: Validate PP1 OCR full-page title calibration and historical non-reuse
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_fullpage check-calibration
+
+      - name: Prove PP1 OCR full-page title renderer determinism
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_title_fullpage generate-calibration --output-dir artifacts/ocr-title-fullpage-repeat-a
+          python -m assistive_validation_benchmark.ocr_title_fullpage generate-calibration --output-dir artifacts/ocr-title-fullpage-repeat-b
+          cmp artifacts/ocr-title-fullpage-repeat-a/generation.json artifacts/ocr-title-fullpage-repeat-b/generation.json
+
+      - name: Recompute the PP1 OCR full-page selector decision without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_fullpage check-selector-decision
+
+      - name: Recompute PP1 OCR full-page repeated calibration evidence and selection
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_fullpage check-evidence
+
+      - name: Verify the PP1 OCR full-page candidate freeze and its holdout-absent checkpoint
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_fullpage check-freeze
 
       - name: Generate deterministic synthetic corpus smoke fixture
         working-directory: tools/assistive-validation-benchmark
