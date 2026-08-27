@@ -134,6 +134,14 @@
       "rationale": "This benchmark runs on a shared developer workstation. A repeat measured while an unrelated workload occupies the CPU characterises the host rather than the candidate, so external load is sampled before and throughout every repeat and a contaminated repeat can never satisfy the calibration margin.",
       "maximum_attempts_per_repeat": 3,
       "rejected_attempt_handling": "A measurement whose host-load control failed is a rejected attempt, not a repeat. It is preserved as evidence and the repeat is measured again, up to the attempt bound, so a host artefact can never exclude a candidate the way the superseded eligibility rule excluded one. Only the host-load control may trigger a re-measurement; a repeat that failed on any candidate metric stands as recorded."
+    },
+    "process_speed_control": {
+      "reference": "fixed in-process integer loop, best of three timings",
+      "reference_iterations": 6000000,
+      "nominal_ms": 325.0,
+      "maximum_ms": 650.0,
+      "measured_before_and_after_each_repeat": true,
+      "rationale": "External CPU utilisation does not capture every way a measurement can be invalid. A repeat was observed in which every stage, including model initialisation before any OCR ran, took about 2.4 times as long as the same candidate's other repeats while external CPU was marginally lower. The bound is twice the machine's idle nominal reference time, measured independently of any OCR result, and a repeat outside it is a rejected attempt rather than a repeat."
     }
   },
   "selection_rule": {

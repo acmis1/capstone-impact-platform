@@ -11,7 +11,7 @@ from typing import Any
 from ..engines import current_process_peak_memory
 from ..ocr_iteration3.capture import verify_small_candidate
 from ..ocr_productionization.offline import enable_offline_guard
-from .host_load import HostLoadSampler, await_quiet_host
+from .host_load import HostLoadSampler, await_quiet_host, process_speed_reference
 from .pipeline import PaddleStageProfiler, make_paddle, run_case
 from .renderer import generate_assets
 from .schema import CAPTURE_SCHEMA
@@ -57,7 +57,9 @@ def capture_repeat(
     if repeat < 1:
         raise ValueError("calibration repeat index must be one-based")
     host_control = protocol["repeatability"]["host_load_control"]
+    speed_control = protocol["repeatability"]["process_speed_control"]
     precondition = await_quiet_host(host_control)
+    speed_before = process_speed_reference(speed_control)
     assets_dir = run_dir / "corpus"
     generation = generate_assets(corpus, assets_dir)
     provisioning = verify_small_candidate(protocol, models_dir)
@@ -100,6 +102,15 @@ def capture_repeat(
             )
         except Exception as error:
             failures.append({"case_id": case["id"], "error_type": type(error).__name__, "message": str(error)[:300]})
+    speed_after = process_speed_reference(speed_control)
+    process_speed = {
+        "reference_ms_before": speed_before,
+        "reference_ms_after": speed_after,
+        "worst_reference_ms": max(speed_before, speed_after),
+        "maximum_ms": speed_control["maximum_ms"],
+        "at_full_speed": max(speed_before, speed_after) <= speed_control["maximum_ms"],
+        "control": speed_control,
+    }
     host_load = {**sampler.stop(), "precondition": precondition, "control": host_control}
     host_load["quiescent"] = (
         host_load["mean_external_cpu_percent"] is not None
@@ -127,6 +138,7 @@ def capture_repeat(
         },
         "worker_concurrency": 1,
         "host_load": host_load,
+        "process_speed": process_speed,
         "generation": generation,
         "provisioning": provisioning,
         "model_initialization_ms": model_initialization_ms,

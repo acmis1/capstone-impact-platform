@@ -57,6 +57,17 @@ def _decided_selector_id() -> str:
 
 
 REJECTED_ATTEMPTS_NAME = "rejected-measurement-attempts.json"
+MEASUREMENT_CONTROLS = ("host_load_control", "process_speed_control")
+
+
+def _rejection_reasons(capture: dict[str, Any]) -> list[str]:
+    """Which measurement control invalidated this capture. Never a candidate metric."""
+    reasons = []
+    if capture["host_load"]["quiescent"] is not True:
+        reasons.append("host_load_control")
+    if capture["process_speed"]["at_full_speed"] is not True:
+        reasons.append("process_speed_control")
+    return reasons
 
 
 def _rejected_attempt(capture: dict[str, Any], report: dict[str, Any], attempt: int) -> dict[str, Any]:
@@ -67,8 +78,9 @@ def _rejected_attempt(capture: dict[str, Any], report: dict[str, Any], attempt: 
         "candidate_id": capture["candidate_id"],
         "repeat": capture["repeat"],
         "attempt": attempt,
-        "rejected_by": "host_load_control",
+        "rejected_by": _rejection_reasons(capture),
         "mean_external_cpu_percent": capture["host_load"]["mean_external_cpu_percent"],
+        "process_reference_ms": capture["process_speed"]["worst_reference_ms"],
         "maximum_external_cpu_percent": capture["host_load"]["maximum_external_cpu_percent"],
         "precondition_external_cpu_percent": capture["host_load"]["precondition"]["observed_external_cpu_percent"],
         "exact_title_count": score["exact_title_count"],
@@ -89,15 +101,23 @@ def _check_rejected_attempts(root: Path, protocol: dict[str, Any]) -> dict[str, 
         return {"attempt_count": 0, "attempts": []}
     stored = load_json(path)
     attempts = stored["attempts"]
-    if stored.get("rejected_by") != "host_load_control" or stored.get("maximum_attempts_per_repeat") != bound:
+    speed_ceiling = protocol["repeatability"]["process_speed_control"]["maximum_ms"]
+    if stored.get("measurement_controls") != list(MEASUREMENT_CONTROLS) or stored.get("maximum_attempts_per_repeat") != bound:
         raise ValueError("rejected attempt evidence contract differs")
     if stored.get("attempt_count") != len(attempts):
         raise ValueError("rejected attempt count differs from the recorded attempts")
     for attempt in attempts:
-        if attempt["rejected_by"] != "host_load_control":
-            raise ValueError("a repeat was re-measured for a reason other than the host-load control")
-        if attempt["mean_external_cpu_percent"] is not None and attempt["mean_external_cpu_percent"] <= ceiling:
-            raise ValueError("a rejected attempt was inside the host-load ceiling")
+        reasons = attempt["rejected_by"]
+        if not reasons or any(reason not in MEASUREMENT_CONTROLS for reason in reasons):
+            raise ValueError("a repeat was re-measured for a reason other than a measurement control")
+        outside_host = (
+            "host_load_control" in reasons
+            and attempt["mean_external_cpu_percent"] is not None
+            and attempt["mean_external_cpu_percent"] > ceiling
+        )
+        outside_speed = "process_speed_control" in reasons and attempt["process_reference_ms"] > speed_ceiling
+        if not outside_host and not outside_speed:
+            raise ValueError("a rejected attempt was inside every measurement control")
     for candidate_id in {attempt["candidate_id"] for attempt in attempts}:
         for repeat in {a["repeat"] for a in attempts if a["candidate_id"] == candidate_id}:
             same = [a for a in attempts if a["candidate_id"] == candidate_id and a["repeat"] == repeat]
@@ -269,8 +289,8 @@ def main() -> int:
         # here under the current protocol, so a protocol amendment made between measuring and
         # recording never silently invalidates a raw capture.
         stored = _report(captured, corpus, protocol)
-        if captured["host_load"]["quiescent"] is not False:
-            raise ValueError("only a measurement the host-load control rejected may be recorded as an attempt")
+        if not _rejection_reasons(captured):
+            raise ValueError("only a measurement a control rejected may be recorded as an attempt")
         bound = protocol["repeatability"]["host_load_control"]["maximum_attempts_per_repeat"]
         path = root / REJECTED_ATTEMPTS_NAME
         root.mkdir(parents=True, exist_ok=True)
@@ -288,7 +308,7 @@ def main() -> int:
         )
         path.write_bytes(canonical_json_bytes({
             "schema_version": "pp1-ocr-title-fullpage-rejected-attempts/v1",
-            "rejected_by": "host_load_control",
+            "measurement_controls": list(MEASUREMENT_CONTROLS),
             "maximum_attempts_per_repeat": bound,
             "attempt_count": len(attempts),
             "attempts": attempts,

@@ -91,14 +91,24 @@ class OcrTitleFullpageProtocolTests(unittest.TestCase):
         tracked = validate_corpus(load_json(data_root() / "corpus" / "calibration.json"))
         self.assertEqual(build_calibration_corpus(), tracked)
 
-    def test_host_load_control_cannot_promote_a_contaminated_repeat(self) -> None:
-        control = self.protocol["repeatability"]["host_load_control"]
-        self.assertEqual(25.0, control["maximum_external_cpu_percent"])
-        # The control is a rejection rule, never a pass rule: a repeat whose external load
-        # exceeded the ceiling fails the margin no matter how fast it looked.
+    def test_measurement_controls_cannot_promote_a_contaminated_repeat(self) -> None:
+        repeatability = self.protocol["repeatability"]
+        self.assertEqual(25.0, repeatability["host_load_control"]["maximum_external_cpu_percent"])
+        self.assertEqual(650.0, repeatability["process_speed_control"]["maximum_ms"])
+        # Both controls are rejection rules, never pass rules: a repeat that failed either one
+        # fails the margin no matter how fast it looked, and neither reaches the preference order.
         source = inspect.getsource(score_capture)
         self.assertIn('"host_quiescent": capture["host_load"]["quiescent"] is True', source)
-        self.assertNotIn("host_quiescent", inspect.getsource(preferred_candidate))
+        self.assertIn('"process_at_full_speed": capture["process_speed"]["at_full_speed"] is True', source)
+        preference = inspect.getsource(preferred_candidate)
+        self.assertNotIn("host_quiescent", preference)
+        self.assertNotIn("process_at_full_speed", preference)
+
+    def test_the_process_speed_bound_is_twice_the_idle_nominal(self) -> None:
+        control = self.protocol["repeatability"]["process_speed_control"]
+        # The bound comes from the machine's idle reference time, never from an OCR result.
+        self.assertEqual(control["maximum_ms"], control["nominal_ms"] * 2)
+        self.assertTrue(control["measured_before_and_after_each_repeat"])
 
     def test_protocol_forbids_a_cropped_fast_path_and_backend_acceleration(self) -> None:
         fixed = self.protocol["fixed_configuration"]

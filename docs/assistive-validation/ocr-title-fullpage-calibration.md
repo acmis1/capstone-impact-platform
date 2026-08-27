@@ -166,6 +166,18 @@ independent repeats**. Each repeat starts a fresh worker process, initializes th
 normally, runs the same warmup policy, processes the complete 45-case corpus, regenerates and
 re-rasterizes its own assets, and records the exact environment and runtime identity.
 
+### Measurement controls
+
+Two controls make a latency measurement valid. Both are declared before the measurements they
+govern, apply identically to all four candidates, and are **rejection rules only**: a repeat
+that fails either can never satisfy the calibration margin, and neither is consulted by the
+preference order. A rejected measurement is an *attempt*, not a repeat — it is preserved in
+`rejected-measurement-attempts.json` and the repeat is measured again, up to three attempts.
+Excluding a candidate because the workstation misbehaved would be the same error class the
+coordinator's audit found, so only a measurement control may trigger a re-measurement; a repeat
+that failed on any candidate metric stands as recorded, and `check-evidence` refuses evidence
+in which a repeat was re-measured for any other reason.
+
 ### Host-load control
 
 This benchmark runs on a shared developer workstation (an i5-12600K, 10 cores / 16 threads)
@@ -182,22 +194,33 @@ measured and applied identically to all four:
   minutes, until it is at or below **25%**;
 * throughout the repeat, external utilisation is sampled once a second and summarised into the
   capture;
-* a repeat whose mean external utilisation exceeds the ceiling is recorded and marked
-  contaminated, and **a contaminated repeat can never satisfy the calibration margin** — so the
-  control cannot be used to promote a failing run;
-* a contaminated measurement is a *rejected attempt*, not a repeat: it is preserved in
-  `rejected-measurement-attempts.json` and the repeat is measured again, up to three attempts.
-  Excluding a candidate because the workstation was busy would be the same error class the
-  coordinator's audit found, so only the host-load control may trigger a re-measurement. A
-  repeat that failed on any candidate metric stands as recorded, and `check-evidence` refuses
-  evidence in which a repeat was re-measured for any other reason.
+* a repeat whose mean external utilisation exceeds the ceiling is rejected.
 
-External load is `system-wide CPU utilisation − this benchmark process's own share`. The
-uncontrolled first attempt is reported in section 6 alongside the controlled results; it is not
-tracked as candidate evidence, because it was produced under the superseded protocol.
+External load is `system-wide CPU utilisation − this benchmark process's own share`.
 
 Candidates are also interleaved by repeat cycle, and the order rotates each cycle, so no
 candidate's three repeats are blocked together and none keeps the same position in the cycle.
+
+### Process-speed control
+
+External CPU utilisation does not capture every way a measurement can be invalid. A second
+controlled sweep produced a repeat of the eight-thread candidate in which **every** stage was
+about 2.4× slower than the same candidate's other two repeats — p50 12,665 ms against 5,076 and
+5,189 ms, and `model_initialization_ms` 11,938 ms against 4,926 and 5,387 ms, i.e. before any
+OCR ran — while its mean external CPU (17.7%) was marginally *lower* than the fast repeat's
+(18.0%). The whole process ran at a fraction of the machine's normal speed, and no external-load
+metric could see it.
+
+Each repeat therefore also times a fixed in-process integer loop, before and after the run:
+
+* the reference is 6,000,000 iterations, best of three timings;
+* the machine's idle nominal is ~325 ms, measured independently of any OCR result;
+* the bound is **650 ms**, twice that nominal, so ordinary variation passes and a process
+  running at half speed does not.
+
+This detects the condition directly rather than inferring a cause, so it holds whatever slows a
+process down — scheduling, power state, memory pressure or contention that CPU utilisation
+misses.
 
 ### Requirements
 

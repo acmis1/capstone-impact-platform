@@ -155,6 +155,14 @@ def validate_protocol(protocol: dict[str, Any]) -> dict[str, Any]:
         or host_load.get("maximum_attempts_per_repeat") != 3
     ):
         raise ValueError("host load control changed")
+    process_speed = repeatability.get("process_speed_control") or {}
+    if (
+        process_speed.get("reference_iterations") != 6000000
+        or process_speed.get("nominal_ms") != 325.0
+        or process_speed.get("maximum_ms") != 650.0
+        or process_speed.get("measured_before_and_after_each_repeat") is not True
+    ):
+        raise ValueError("process speed control changed")
     selection = protocol.get("selection_rule") or {}
     if selection.get("eligibility") != (
         "a candidate is eligible if and only if it satisfies every quality, safety, operational, "
