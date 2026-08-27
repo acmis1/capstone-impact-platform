@@ -176,6 +176,12 @@ class Phase7EvidenceTests(unittest.TestCase):
         decisions = derive_decisions(engines, self.policy)
         self.assertEqual(decisions["harper"]["decision"], "LANGUAGE_PROVIDER_DEFERRED")
         self.assertEqual(decisions["languagetool"]["decision"], "LANGUAGE_PROVIDER_DEFERRED")
+        comparator_only = copy.deepcopy(self.report["engines"])
+        comparator_only["languagetool"]["evaluation"]["policy"]["recall"] = 0.10
+        self.assertEqual(
+            derive_decisions(comparator_only, self.policy)["harper"]["decision"],
+            "LANGUAGE_PROVIDER_DEFERRED",
+        )
 
 
 class Phase7FreezeAndHoldoutTests(unittest.TestCase):

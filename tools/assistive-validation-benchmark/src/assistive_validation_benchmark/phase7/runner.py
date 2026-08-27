@@ -188,8 +188,11 @@ def preflight_candidate_runtime(
 
 def derive_decisions(engines: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
     scoring = policy["scoring"]
+    calibration_candidate = policy["calibration_gates"]["candidate"]
     quality: dict[str, tuple[float, float, int, float]] = {}
     for name, engine in engines.items():
+        if name != calibration_candidate:
+            continue
         metrics = engine["evaluation"]["policy"]
         if metrics["precision"] >= scoring["precision_gate"] and metrics["recall"] >= scoring["recall_gate"]:
             quality[name] = (
@@ -203,7 +206,9 @@ def derive_decisions(engines: dict[str, Any], policy: dict[str, Any]) -> dict[st
     for name in ("harper", "languagetool"):
         metrics = engines[name]["evaluation"]["policy"]
         decision = "READY_FOR_LANGUAGE_INTEGRATION" if name == winner else "LANGUAGE_PROVIDER_DEFERRED"
-        if metrics["precision"] < scoring["precision_gate"]:
+        if name != calibration_candidate:
+            reason = "Comparator did not clear the frozen overall calibration recall margin and is not final-eligible."
+        elif metrics["precision"] < scoring["precision_gate"]:
             reason = (
                 f"Holdout precision {metrics['precision']:.1%} fails the frozen "
                 f"{scoring['precision_gate']:.1%} gate."

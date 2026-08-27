@@ -38,6 +38,8 @@ def frozen_paths(tool_root: Path) -> list[Path]:
         tool_root / "phase6" / "harper_runner.mjs",
         tool_root / "phase6" / "corpus" / "manifest.json",
         tool_root / "phase6" / "history" / "superseded-holdout-texts.json",
+        tool_root / "phase6c" / "corpus" / "calibration.json",
+        tool_root / "phase6c" / "corpus" / "holdout.json",
         tool_root / "corpus" / "manifest.json",
         source_root / "engines.py",
         source_root / "phase6" / "corpus.py",

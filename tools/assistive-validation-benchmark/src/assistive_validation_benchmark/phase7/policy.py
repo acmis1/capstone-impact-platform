@@ -364,7 +364,20 @@ def apply_finding_policy(
     retained: list[dict[str, Any]] = []
     filtered: list[dict[str, Any]] = []
     text = case["source_text"]
-    for finding in findings:
+    for raw_finding in findings:
+        bounded_replacements: list[str] = []
+        for raw in raw_finding.get("replacements", []):
+            replacement = str(raw)
+            if (
+                replacement
+                and len(replacement) <= EXPECTED_CORRECTION_PLAUSIBILITY["maximum_suggestion_code_points"]
+                and not any(ord(character) < 32 for character in replacement)
+                and replacement not in bounded_replacements
+            ):
+                bounded_replacements.append(replacement)
+            if len(bounded_replacements) == EXPECTED_CORRECTION_PLAUSIBILITY["maximum_retained_suggestions"]:
+                break
+        finding = {**raw_finding, "replacements": bounded_replacements}
         start, end = int(finding["start"]), int(finding["end"])
         token = text[start:end]
         reason: str | None = None

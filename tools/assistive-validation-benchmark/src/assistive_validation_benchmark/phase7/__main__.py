@@ -173,6 +173,8 @@ def main(argv: list[str] | None = None) -> int:
             verified = verify_freeze_commit(tool_root(), record["policy_freeze_commit_sha"], freeze)
             result = {"valid": True, **verified}
         elif args.command == "generate-holdout":
+            if args.output.exists():
+                raise ValueError("Final Phase 7 holdout already exists and cannot be overwritten")
             freeze = load_freeze_manifest(paths["freeze_manifest"], tool_root())
             record = validate_freeze_record(
                 json.loads(paths["freeze_record"].read_text(encoding="utf-8")), freeze
