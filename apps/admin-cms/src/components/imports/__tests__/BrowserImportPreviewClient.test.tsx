@@ -130,7 +130,7 @@ describe('PR2A Guided Import Workflow Components', () => {
     it('renders all 5 sequential steps and distinguishes completed, current, and upcoming', () => {
       render(<ImportWorkflowGuide currentStep={3} />);
 
-      expect(screen.getByText('Reference file')).toBeTruthy();
+      expect(screen.getByText('School spreadsheet')).toBeTruthy();
       expect(screen.getByText('Project folder')).toBeTruthy();
       expect(screen.getByText('Check files')).toBeTruthy();
       expect(screen.getByText('Confirm & save')).toBeTruthy();
@@ -142,7 +142,7 @@ describe('PR2A Guided Import Workflow Components', () => {
       expect(currentItem?.textContent).toContain('current step');
 
       // Steps 1 and 2 are completed (no aria-current, marked completed for assistive tech)
-      const step1Item = screen.getByText('Reference file').closest('li');
+      const step1Item = screen.getByText('School spreadsheet').closest('li');
       expect(step1Item?.getAttribute('aria-current')).toBeNull();
       expect(step1Item?.textContent).toContain('completed');
       const step2Item = screen.getByText('Project folder').closest('li');
@@ -245,14 +245,14 @@ describe('PR2A Guided Import Workflow Components', () => {
       const onConfigured = vi.fn();
       render(<AdminReferenceDatasetSection onMappingConfigured={onConfigured} />);
 
-      expect(screen.getByText('Admin Reference file')).toBeTruthy();
+      expect(screen.getByText('School reference spreadsheet')).toBeTruthy();
       expect(
         screen.getByText(/Use the School's reference spreadsheet to match and cross-check/i)
       ).toBeTruthy();
     });
 
-    it('humanizes all canonical field option labels', async () => {
-      // Mock successful inspection to render mapping selects
+    it('humanizes all canonical field option labels and shows automatic recognition when standard headers match', async () => {
+      // Mock successful inspection with standard headers
       const fakeInspection = {
         success: true,
         worksheets: [
@@ -260,7 +260,7 @@ describe('PR2A Guided Import Workflow Components', () => {
             name: 'Sheet1',
             rowCount: 10,
             columnCount: 5,
-            headers: ['ColA', 'ColB', 'ColC', 'ColD', 'ColE'],
+            headers: ['Group Name', 'Project Title', 'Program', 'Academic Year', 'Participant Contact Email'],
           },
         ],
       };
@@ -276,18 +276,43 @@ describe('PR2A Guided Import Workflow Components', () => {
       const onConfigured = vi.fn();
       render(<AdminReferenceDatasetSection onMappingConfigured={onConfigured} />);
 
-      // Upload file and click inspect
-      const input = screen.getByLabelText(/Choose Admin Reference spreadsheet/i);
+      // Upload file and click check
+      const input = screen.getByLabelText(/Choose School reference spreadsheet/i);
       const file = new File(['test'], 'reference.xlsx', {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
       fireEvent.change(input, { target: { files: [file] } });
 
-      const inspectButton = screen.getByRole('button', { name: /Inspect reference file/i });
-      fireEvent.click(inspectButton);
+      const checkButton = screen.getByRole('button', { name: /Check spreadsheet/i });
+      fireEvent.click(checkButton);
 
-      // Wait for mappings to render
-      expect(await screen.findByText('1. Match projects using:')).toBeTruthy();
+      // Wait for automatic recognition box to render
+      expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Use these matches' })).toBeTruthy();
+
+      // Click "Use these matches"
+      fireEvent.click(screen.getByRole('button', { name: 'Use these matches' }));
+
+      expect(screen.getByText('Matches confirmed')).toBeTruthy();
+      expect(onConfigured).toHaveBeenCalledWith(
+        expect.objectContaining({
+          referenceFile: file,
+          mappingConfig: expect.objectContaining({
+            worksheet: 'Sheet1',
+            matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Group Name' }],
+            comparisonMappings: [
+              { canonicalField: 'title', referenceColumn: 'Project Title' },
+              { canonicalField: 'program', referenceColumn: 'Program' },
+            ],
+          }),
+        })
+      );
+
+      // Open manual column matching to inspect options
+      const changeMatchingBtn = screen.getByRole('button', { name: /Change column matching/i });
+      fireEvent.click(changeMatchingBtn);
+
+      expect(screen.getByText('1. Match projects using:')).toBeTruthy();
 
       // Verify humanized field labels exist in options and raw camelCase is not displayed as option text
       expect(screen.getAllByRole('option', { name: 'Project ID' }).length).toBeGreaterThan(0);
@@ -307,20 +332,67 @@ describe('PR2A Guided Import Workflow Components', () => {
       expect(screen.queryByRole('option', { name: 'industryPartner' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'participantContactEmail' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'teamMembers' })).toBeNull();
+    });
 
-      // Verify accurate unconfirmed text
-      expect(
-        screen.getByText(/Mapping not confirmed — confirm the mapping before preparing projects for import\./i)
-      ).toBeTruthy();
+    it('invalidates confirmation when worksheet changes or a column dropdown is changed', async () => {
+      const fakeInspection = {
+        success: true,
+        worksheets: [
+          {
+            name: 'Sheet1',
+            rowCount: 10,
+            columnCount: 3,
+            headers: ['Group Name', 'Project Title', 'Program'],
+          },
+          {
+            name: 'Sheet2',
+            rowCount: 5,
+            columnCount: 3,
+            headers: ['Team Name', 'Official Title', 'Degree Program'],
+          },
+        ],
+      };
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => fakeInspection,
+        })
+      );
+
+      const onConfigured = vi.fn();
+      render(<AdminReferenceDatasetSection onMappingConfigured={onConfigured} />);
+
+      const input = screen.getByLabelText(/Choose School reference spreadsheet/i);
+      const file = new File(['test'], 'reference.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      fireEvent.change(input, { target: { files: [file] } });
+      fireEvent.click(screen.getByRole('button', { name: /Check spreadsheet/i }));
+
+      expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
+
+      // Confirm
+      fireEvent.click(screen.getByRole('button', { name: 'Use these matches' }));
+      expect(screen.getByText('Matches confirmed')).toBeTruthy();
+
+      // Change worksheet -> should unconfirm
+      const worksheetSelect = screen.getByLabelText('Worksheet:');
+      fireEvent.change(worksheetSelect, { target: { value: 'Sheet2' } });
+
+      expect(screen.queryByText('Matches confirmed')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Use these matches' })).toBeTruthy();
+      expect(onConfigured).toHaveBeenLastCalledWith(null);
     });
   });
 
   describe('BrowserImportPreviewClient Presentation Hierarchy & Copy', () => {
-    it('renders Admin Reference section before folder selection controls and sets initial step to Step 1', () => {
+    it('renders School Reference section before folder selection controls and sets initial step to Step 1', () => {
       render(<BrowserImportPreviewClient />);
 
-      // Admin Reference heading exists before folder selection
-      const refHeading = screen.getByRole('heading', { name: 'Admin Reference file' });
+      // School Reference heading exists before folder selection
+      const refHeading = screen.getByRole('heading', { name: 'School reference spreadsheet' });
       expect(refHeading).toBeTruthy();
 
       // Folder selection heading and button exist
@@ -332,11 +404,8 @@ describe('PR2A Guided Import Workflow Components', () => {
       const position = refHeading.compareDocumentPosition(folderHeading);
       expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-      // Step 1 (Reference file) is initially active because the Admin Reference is REQUIRED,
-      // not optional: prepareBrowserImportCommitIntentClient returns MISSING_ADMIN_REFERENCE
-      // when the preview carries no Admin Reference reconciliation result, so no selection can
-      // be prepared or staged until a mapping is confirmed.
-      const step1 = screen.getByText('Reference file').closest('li');
+      // Step 1 (School spreadsheet) is initially active because the Reference spreadsheet is REQUIRED
+      const step1 = screen.getByText('School spreadsheet').closest('li');
       expect(step1?.getAttribute('aria-current')).toBe('step');
     });
 

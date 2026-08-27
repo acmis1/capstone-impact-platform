@@ -2,6 +2,16 @@
 
 import Link from 'next/link';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog';
 
 interface NavigationContextValue {
   dirty: boolean;
@@ -20,7 +30,12 @@ export function ProjectMetadataNavigationProvider({ children }: { children: Reac
   const titleHandlerRef = useRef<((title: string) => boolean) | null>(null);
 
   useEffect(() => {
-    const protect = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = ''; } };
+    const protect = (event: BeforeUnloadEvent) => {
+      if (dirty) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
     window.addEventListener('beforeunload', protect);
     return () => window.removeEventListener('beforeunload', protect);
   }, [dirty]);
@@ -38,7 +53,7 @@ export function ProjectMetadataNavigationProvider({ children }: { children: Reac
   const value = useMemo(() => ({
     dirty,
     setDirty,
-    confirmDiscard: () => !dirty || window.confirm('Discard your unsaved metadata changes?'),
+    confirmDiscard: () => !dirty || (typeof window !== 'undefined' && typeof window.confirm === 'function' ? window.confirm('Discard your unsaved project information changes?') : true),
     registerTitleSuggestionHandler,
     canApplyTitleSuggestion,
     applyTitleSuggestion,
@@ -53,7 +68,58 @@ export function useProjectMetadataNavigation() {
   return context;
 }
 
-export function GuardedProjectBackLink({ href, children, className, style }: { href: string; children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
-  const { confirmDiscard } = useProjectMetadataNavigation();
-  return <Link href={href} className={className} style={style} onClick={(event) => { if (!confirmDiscard()) event.preventDefault(); }}>{children}</Link>;
+export function GuardedProjectBackLink({
+  href,
+  children,
+  className,
+  style,
+}: {
+  href: string;
+  children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const { dirty, confirmDiscard } = useProjectMetadataNavigation();
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (dirty) {
+      event.preventDefault();
+      confirmDiscard();
+      setShowConfirm(true);
+    }
+  };
+
+  const handleDiscard = () => {
+    setShowConfirm(false);
+    if (typeof window !== 'undefined') {
+      window.location.assign(href);
+    }
+  };
+
+  return (
+    <>
+      <Link href={href} className={className} style={style} onClick={handleClick}>
+        {children}
+      </Link>
+      <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes in project information. If you leave now, your edits will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowConfirm(false)}>
+              Keep editing
+            </AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleDiscard}>
+              Discard changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
 }

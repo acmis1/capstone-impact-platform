@@ -417,7 +417,7 @@ export function ProjectAssistiveChecks({
         {state.readUnavailable && !state.inspection && !isJobActive && (
           <div className="rounded-lg border border-border bg-surface-inset p-4 text-sm text-muted-foreground">
             <p className="font-medium text-foreground">Assistive checks are temporarily unavailable.</p>
-            <p className="mt-1 text-xs">Could not load historical check results. You can still review and edit metadata below.</p>
+            <p className="mt-1 text-xs">Could not load historical check results. You can still review and edit project information below.</p>
           </div>
         )}
 

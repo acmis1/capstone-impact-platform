@@ -8,10 +8,10 @@ import {
   ProjectMetadataNavigationProvider,
   useProjectMetadataNavigation,
 } from '../ProjectMetadataNavigation';
-import type { ProjectMetadataView } from '../../../projects/projectMetadata';
+import type { ProjectMetadataActionResult, ProjectMetadataView } from '../../../projects/projectMetadata';
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
 
 const initialMetadata: ProjectMetadataView = {
@@ -33,10 +33,12 @@ function TestContainer({
   canEdit = true,
   projectStatus = 'draft',
   suggestedTitle = 'Suggested New Title',
+  saveAction = vi.fn().mockResolvedValue({ ok: true, metadata: initialMetadata } as ProjectMetadataActionResult),
 }: {
   canEdit?: boolean;
   projectStatus?: string;
   suggestedTitle?: string;
+  saveAction?: (input: unknown) => Promise<ProjectMetadataActionResult>;
 }) {
   const { applyTitleSuggestion, canApplyTitleSuggestion, dirty } = useProjectMetadataNavigation();
   return (
@@ -54,11 +56,17 @@ function TestContainer({
       <ProjectMetadataEditor
         initialMetadata={initialMetadata}
         programs={[{ id: 'prog-1', name: 'Bachelor of Software Engineering' }]}
-        disciplines={[{ id: 'disc-1', name: 'Software Engineering' }]}
-        industryCategories={[{ id: 'cat-1', name: 'Information Technology' }]}
+        disciplines={[
+          { id: 'disc-1', name: 'Software Engineering' },
+          { id: 'disc-2', name: 'Computer Science' },
+        ]}
+        industryCategories={[
+          { id: 'cat-1', name: 'Information Technology' },
+          { id: 'cat-2', name: 'Healthcare' },
+        ]}
         canEdit={canEdit}
         projectStatus={projectStatus}
-        saveAction={vi.fn()}
+        saveAction={saveAction}
       />
     </div>
   );
@@ -66,12 +74,11 @@ function TestContainer({
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  window.confirm = vi.fn().mockReturnValue(true);
 });
 
 afterEach(cleanup);
 
-describe('ProjectMetadataEditor Title Suggestion Integration', () => {
+describe('ProjectMetadataEditor Title Suggestion and Form Integration', () => {
   it('registers the suggestion handler when canEdit is true and project is editable', () => {
     render(
       <ProjectMetadataNavigationProvider>
@@ -109,17 +116,11 @@ describe('ProjectMetadataEditor Title Suggestion Integration', () => {
       const titleInput = screen.getByLabelText(/Project title/i) as HTMLInputElement;
       expect(titleInput.value).toBe('AI & Smart Cities');
       expect(
-        screen.getByText(/Suggestion applied to the draft. Review it and select Save metadata/i),
+        screen.getByText(/Suggestion applied to the draft. Review it and select Save changes/i),
       ).toBeTruthy();
     });
   });
 
-  /**
-   * Edit mode renders a failure notice as the form's error description, with an assertive alert and
-   * destructive styling. Applying a suggestion is a confirmation, so it must not borrow that
-   * channel: doing so tells a staff member their successful action failed, and mislabels the whole
-   * form as invalid to assistive technology.
-   */
   it('announces an applied suggestion as status, not as a form error', async () => {
     render(
       <ProjectMetadataNavigationProvider>
@@ -139,7 +140,7 @@ describe('ProjectMetadataEditor Title Suggestion Integration', () => {
     expect(form?.getAttribute('aria-describedby')).toBeNull();
   });
 
-  it('prompts with window.confirm if the title draft was already modified with unsaved changes', async () => {
+  it('opens in-app AlertDialog if the title draft was already modified with unsaved changes', async () => {
     render(
       <ProjectMetadataNavigationProvider>
         <TestContainer canEdit={true} projectStatus="draft" suggestedTitle="Suggested Title 2" />
@@ -147,7 +148,7 @@ describe('ProjectMetadataEditor Title Suggestion Integration', () => {
     );
 
     // Enter edit mode manually and change title
-    const editBtn = screen.getByRole('button', { name: /Edit metadata/i });
+    const editBtn = screen.getByRole('button', { name: /Edit project information/i });
     fireEvent.click(editBtn);
 
     const titleInput = screen.getByLabelText(/Project title/i) as HTMLInputElement;
@@ -157,8 +158,86 @@ describe('ProjectMetadataEditor Title Suggestion Integration', () => {
     const triggerBtn = screen.getByTestId('trigger-suggestion-btn');
     fireEvent.click(triggerBtn);
 
-    expect(window.confirm).toHaveBeenCalledWith(
-      'You have unsaved changes in Project title. Replace it with the suggestion?',
+    // Verify in-app AlertDialog is shown
+    expect(screen.getByText('Replace unsaved title?')).toBeTruthy();
+    expect(
+      screen.getByText(/You have unsaved changes in Project title/i)
+    ).toBeTruthy();
+
+    // Click "Replace title"
+    const replaceBtn = screen.getByRole('button', { name: 'Replace title' });
+    fireEvent.click(replaceBtn);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText(/Project title/i) as HTMLInputElement).value).toBe(
+        'Suggested Title 2'
+      );
+    });
+  });
+
+  it('integrates MultiSelect and allows adding/removing discipline chips without native multiple select', async () => {
+    render(
+      <ProjectMetadataNavigationProvider>
+        <TestContainer canEdit={true} projectStatus="draft" />
+      </ProjectMetadataNavigationProvider>,
     );
+
+    const editBtn = screen.getByRole('button', { name: /Edit project information/i });
+    fireEvent.click(editBtn);
+
+    // Verify initial chip is present
+    expect(screen.getByText('Software Engineering')).toBeTruthy();
+
+    // Open multi-select dropdown for Disciplines
+    const combobox = screen.getByRole('combobox', { name: /Disciplines, 1 selected/i });
+    fireEvent.click(combobox);
+
+    // Select "Computer Science"
+    const csOption = screen.getByRole('option', { name: /Computer Science/i });
+    fireEvent.click(csOption);
+
+    // Verify both are selected
+    expect(screen.getByTestId('dirty-indicator').textContent).toBe('DIRTY');
+    expect(screen.getByText('2 disciplines selected')).toBeTruthy();
+    expect(screen.getAllByText('Computer Science').length).toBeGreaterThan(0);
+
+    // Remove Software Engineering via chip
+    const removeBtn = screen.getByRole('button', { name: 'Remove Software Engineering' });
+    fireEvent.click(removeBtn);
+
+    expect(screen.queryByRole('button', { name: 'Remove Software Engineering' })).toBeNull();
+    expect(screen.getByText('1 disciplines selected')).toBeTruthy();
+  });
+
+  it('prompts with AlertDialog when canceling dirty changes, and discards changes on confirmation', async () => {
+    render(
+      <ProjectMetadataNavigationProvider>
+        <TestContainer canEdit={true} projectStatus="draft" />
+      </ProjectMetadataNavigationProvider>,
+    );
+
+    const editBtn = screen.getByRole('button', { name: /Edit project information/i });
+    fireEvent.click(editBtn);
+
+    const titleInput = screen.getByLabelText(/Project title/i) as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: 'Modified Title Before Discard' } });
+
+    expect(screen.getByTestId('dirty-indicator').textContent).toBe('DIRTY');
+
+    // Click Cancel
+    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+    fireEvent.click(cancelBtn);
+
+    // Verify Discard changes dialog appears
+    expect(screen.getByText('Discard unsaved changes?')).toBeTruthy();
+
+    // Confirm discard
+    const discardBtn = screen.getByRole('button', { name: 'Discard changes' });
+    fireEvent.click(discardBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Project information')).toBeTruthy();
+      expect(screen.getByTestId('dirty-indicator').textContent).toBe('CLEAN');
+    });
   });
 });
