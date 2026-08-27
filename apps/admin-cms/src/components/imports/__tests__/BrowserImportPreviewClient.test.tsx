@@ -130,7 +130,7 @@ describe('PR2A Guided Import Workflow Components', () => {
     it('renders all 5 sequential steps and distinguishes completed, current, and upcoming', () => {
       render(<ImportWorkflowGuide currentStep={3} />);
 
-      expect(screen.getByText('Reference file')).toBeTruthy();
+      expect(screen.getByText('School spreadsheet')).toBeTruthy();
       expect(screen.getByText('Project folder')).toBeTruthy();
       expect(screen.getByText('Check files')).toBeTruthy();
       expect(screen.getByText('Confirm & save')).toBeTruthy();
@@ -142,7 +142,7 @@ describe('PR2A Guided Import Workflow Components', () => {
       expect(currentItem?.textContent).toContain('current step');
 
       // Steps 1 and 2 are completed (no aria-current, marked completed for assistive tech)
-      const step1Item = screen.getByText('Reference file').closest('li');
+      const step1Item = screen.getByText('School spreadsheet').closest('li');
       expect(step1Item?.getAttribute('aria-current')).toBeNull();
       expect(step1Item?.textContent).toContain('completed');
       const step2Item = screen.getByText('Project folder').closest('li');
@@ -245,14 +245,14 @@ describe('PR2A Guided Import Workflow Components', () => {
       const onConfigured = vi.fn();
       render(<AdminReferenceDatasetSection onMappingConfigured={onConfigured} />);
 
-      expect(screen.getByText('Admin Reference file')).toBeTruthy();
+      expect(screen.getByText('School reference spreadsheet')).toBeTruthy();
       expect(
         screen.getByText(/Use the School's reference spreadsheet to match and cross-check/i)
       ).toBeTruthy();
     });
 
-    it('humanizes all canonical field option labels', async () => {
-      // Mock successful inspection to render mapping selects
+    it('humanizes all canonical field option labels and shows automatic recognition when standard headers match', async () => {
+      // Mock successful inspection with standard headers
       const fakeInspection = {
         success: true,
         worksheets: [
@@ -260,7 +260,7 @@ describe('PR2A Guided Import Workflow Components', () => {
             name: 'Sheet1',
             rowCount: 10,
             columnCount: 5,
-            headers: ['ColA', 'ColB', 'ColC', 'ColD', 'ColE'],
+            headers: ['Group Name', 'Project Title', 'Program', 'Academic Year', 'Participant Contact Email'],
           },
         ],
       };
@@ -276,18 +276,43 @@ describe('PR2A Guided Import Workflow Components', () => {
       const onConfigured = vi.fn();
       render(<AdminReferenceDatasetSection onMappingConfigured={onConfigured} />);
 
-      // Upload file and click inspect
-      const input = screen.getByLabelText(/Choose Admin Reference spreadsheet/i);
+      // Upload file and click check
+      const input = screen.getByLabelText(/Choose School reference spreadsheet/i);
       const file = new File(['test'], 'reference.xlsx', {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
       fireEvent.change(input, { target: { files: [file] } });
 
-      const inspectButton = screen.getByRole('button', { name: /Inspect reference file/i });
-      fireEvent.click(inspectButton);
+      const checkButton = screen.getByRole('button', { name: /Check spreadsheet/i });
+      fireEvent.click(checkButton);
 
-      // Wait for mappings to render
-      expect(await screen.findByText('1. Match projects using:')).toBeTruthy();
+      // Wait for automatic recognition box to render
+      expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Use these matches' })).toBeTruthy();
+
+      // Click "Use these matches"
+      fireEvent.click(screen.getByRole('button', { name: 'Use these matches' }));
+
+      expect(screen.getByText('Matches confirmed')).toBeTruthy();
+      expect(onConfigured).toHaveBeenCalledWith(
+        expect.objectContaining({
+          referenceFile: file,
+          mappingConfig: expect.objectContaining({
+            worksheet: 'Sheet1',
+            matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Group Name' }],
+            comparisonMappings: [
+              { canonicalField: 'title', referenceColumn: 'Project Title' },
+              { canonicalField: 'program', referenceColumn: 'Program' },
+            ],
+          }),
+        })
+      );
+
+      // Open manual column matching to inspect options
+      const changeMatchingBtn = screen.getByRole('button', { name: /Change column matching/i });
+      fireEvent.click(changeMatchingBtn);
+
+      expect(screen.getByText('1. Match projects using:')).toBeTruthy();
 
       // Verify humanized field labels exist in options and raw camelCase is not displayed as option text
       expect(screen.getAllByRole('option', { name: 'Project ID' }).length).toBeGreaterThan(0);
@@ -307,20 +332,267 @@ describe('PR2A Guided Import Workflow Components', () => {
       expect(screen.queryByRole('option', { name: 'industryPartner' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'participantContactEmail' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'teamMembers' })).toBeNull();
+    });
 
-      // Verify accurate unconfirmed text
+    it('invalidates confirmation when worksheet changes or a column dropdown is changed', async () => {
+      const fakeInspection = {
+        success: true,
+        worksheets: [
+          {
+            name: 'Sheet1',
+            rowCount: 10,
+            columnCount: 3,
+            headers: ['Group Name', 'Project Title', 'Program'],
+          },
+          {
+            name: 'Sheet2',
+            rowCount: 5,
+            columnCount: 3,
+            headers: ['GroupName', 'Official Title', 'Degree Program'],
+          },
+        ],
+      };
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => fakeInspection,
+        })
+      );
+
+      const onConfigured = vi.fn();
+      render(<AdminReferenceDatasetSection onMappingConfigured={onConfigured} />);
+
+      const input = screen.getByLabelText(/Choose School reference spreadsheet/i);
+      const file = new File(['test'], 'reference.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      fireEvent.change(input, { target: { files: [file] } });
+      fireEvent.click(screen.getByRole('button', { name: /Check spreadsheet/i }));
+
+      expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
+
+      // Confirm
+      fireEvent.click(screen.getByRole('button', { name: 'Use these matches' }));
+      expect(screen.getByText('Matches confirmed')).toBeTruthy();
+
+      // Change worksheet -> should unconfirm
+      const worksheetSelect = screen.getByLabelText('Worksheet:');
+      fireEvent.change(worksheetSelect, { target: { value: 'Sheet2' } });
+
+      expect(screen.queryByText('Matches confirmed')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Use these matches' })).toBeTruthy();
+      expect(onConfigured).toHaveBeenLastCalledWith(null);
+    });
+  });
+
+  describe('AdminReferenceDatasetSection automatic versus manual column matching', () => {
+    const STANDARD_HEADERS = ['Group Name', 'Project Title', 'Program', 'Academic Year'];
+
+    function stubInspection(worksheets: Array<{ name: string; headers: string[] }>) {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            success: true,
+            worksheets: worksheets.map((sheet) => ({
+              name: sheet.name,
+              rowCount: 10,
+              columnCount: sheet.headers.length,
+              headers: sheet.headers,
+            })),
+          }),
+        })
+      );
+    }
+
+    function checkSpreadsheet() {
+      const onConfigured = vi.fn();
+      render(<AdminReferenceDatasetSection onMappingConfigured={onConfigured} />);
+      const input = screen.getByLabelText(/Choose School reference spreadsheet/i);
+      const file = new File(['test'], 'reference.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      fireEvent.change(input, { target: { files: [file] } });
+      fireEvent.click(screen.getByRole('button', { name: /Check spreadsheet/i }));
+      return { file, onConfigured };
+    }
+
+    function openManualMatching() {
+      fireEvent.click(screen.getByRole('button', { name: /Change column matching/i }));
+    }
+
+    it('claims automatic recognition and offers Use these matches only for the pristine suggestion', async () => {
+      stubInspection([{ name: 'Sheet1', headers: STANDARD_HEADERS }]);
+      checkSpreadsheet();
+
+      expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
+      const useMatches = screen.getByRole('button', { name: 'Use these matches' }) as HTMLButtonElement;
+      expect(useMatches.disabled).toBe(false);
+      expect(screen.queryByText('Review your column matching')).toBeNull();
+    });
+
+    it('withdraws the automatic claim and the confirmation when a project field is changed by hand', async () => {
+      stubInspection([{ name: 'Sheet1', headers: STANDARD_HEADERS }]);
+      const { onConfigured } = checkSpreadsheet();
+
+      expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Use these matches' }));
+      expect(screen.getByText('Matches confirmed')).toBeTruthy();
+
+      openManualMatching();
+      fireEvent.change(screen.getByLabelText('Match field 1 project field'), {
+        target: { value: 'year' },
+      });
+
+      // The mappings on screen are no longer what the matcher proposed, so nothing may still be
+      // presented as recognised automatically.
+      expect(screen.queryByText('Columns recognised automatically')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Use these matches' })).toBeNull();
+      expect(screen.queryByText('Matches confirmed')).toBeNull();
+      expect(screen.getByText('Review your column matching')).toBeTruthy();
+      expect(onConfigured).toHaveBeenLastCalledWith(null);
+      expect((screen.getByRole('button', { name: 'Confirm column matching' }) as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('withdraws the automatic claim when a spreadsheet column is changed by hand', async () => {
+      stubInspection([{ name: 'Sheet1', headers: STANDARD_HEADERS }]);
+      const { onConfigured } = checkSpreadsheet();
+
+      expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Use these matches' }));
+
+      openManualMatching();
+      fireEvent.change(screen.getByLabelText('Match field 1 spreadsheet column'), {
+        target: { value: 'Academic Year' },
+      });
+
+      expect(screen.queryByText('Columns recognised automatically')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Use these matches' })).toBeNull();
+      expect(screen.getByText('Review your column matching')).toBeTruthy();
+      expect(onConfigured).toHaveBeenLastCalledWith(null);
+    });
+
+    it('restores the automatic presentation when the exact automatic mapping is put back by hand', async () => {
+      stubInspection([{ name: 'Sheet1', headers: STANDARD_HEADERS }]);
+      checkSpreadsheet();
+
+      expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
+      openManualMatching();
+
+      fireEvent.change(screen.getByLabelText('Match field 1 spreadsheet column'), {
+        target: { value: 'Academic Year' },
+      });
+      expect(screen.queryByText('Columns recognised automatically')).toBeNull();
+
+      fireEvent.change(screen.getByLabelText('Match field 1 spreadsheet column'), {
+        target: { value: 'Group Name' },
+      });
+
+      expect(screen.getByText('Columns recognised automatically')).toBeTruthy();
+      expect(screen.getByText('Column matching')).toBeTruthy();
+      expect(screen.queryByText('Review your column matching')).toBeNull();
+    });
+
+    it('offers no clickable confirmation while a required column is unresolved, and confirms once completed', async () => {
+      stubInspection([{ name: 'Sheet1', headers: ['Group Name', 'Academic Year'] }]);
+      const { file, onConfigured } = checkSpreadsheet();
+
       expect(
-        screen.getByText(/Mapping not confirmed — confirm the mapping before preparing projects for import\./i)
+        await screen.findByText(/We could not confidently match all required columns/i)
       ).toBeTruthy();
+      expect(screen.queryByText('Columns recognised automatically')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Use these matches' })).toBeNull();
+
+      const confirmButton = screen.getByRole('button', { name: 'Confirm column matching' }) as HTMLButtonElement;
+      expect(confirmButton.disabled).toBe(true);
+      expect(
+        screen.getByText(/Column matching not confirmed — confirm the matches before preparing projects for import./i)
+      ).toBeTruthy();
+
+      fireEvent.change(screen.getByLabelText('Comparison field 1 spreadsheet column'), {
+        target: { value: 'Group Name' },
+      });
+      fireEvent.change(screen.getByLabelText('Comparison field 2 spreadsheet column'), {
+        target: { value: 'Academic Year' },
+      });
+
+      const readyButton = screen.getByRole('button', { name: 'Confirm column matching' }) as HTMLButtonElement;
+      expect(readyButton.disabled).toBe(false);
+      fireEvent.click(readyButton);
+
+      expect(screen.getByText('Column matching confirmed')).toBeTruthy();
+      expect(onConfigured).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          referenceFile: file,
+          mappingConfig: expect.objectContaining({
+            worksheet: 'Sheet1',
+            matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Group Name' }],
+            comparisonMappings: [
+              { canonicalField: 'title', referenceColumn: 'Group Name' },
+              { canonicalField: 'program', referenceColumn: 'Academic Year' },
+            ],
+          }),
+        })
+      );
+    });
+
+    it('resets a manually edited configuration and re-derives it when the worksheet changes', async () => {
+      stubInspection([
+        { name: 'Sheet1', headers: STANDARD_HEADERS },
+        { name: 'Sheet2', headers: ['GroupName', 'Official Title', 'Degree Program'] },
+      ]);
+      const { onConfigured } = checkSpreadsheet();
+
+      expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Use these matches' }));
+      openManualMatching();
+      fireEvent.change(screen.getByLabelText('Match field 1 project field'), {
+        target: { value: 'year' },
+      });
+      expect(screen.getByText('Review your column matching')).toBeTruthy();
+
+      fireEvent.change(screen.getByLabelText('Worksheet:'), { target: { value: 'Sheet2' } });
+
+      expect(screen.queryByText('Review your column matching')).toBeNull();
+      expect(screen.getByText('Columns recognised automatically')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Use these matches' })).toBeTruthy();
+      expect(screen.queryByText('Matches confirmed')).toBeNull();
+      expect(onConfigured).toHaveBeenLastCalledWith(null);
+    });
+
+    it('clears the previous mapping identity when the spreadsheet file is replaced', async () => {
+      stubInspection([{ name: 'Sheet1', headers: STANDARD_HEADERS }]);
+      const { onConfigured } = checkSpreadsheet();
+
+      expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Use these matches' }));
+      expect(screen.getByText('Matches confirmed')).toBeTruthy();
+
+      const replacement = new File(['other'], 'other-reference.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      fireEvent.change(screen.getByLabelText(/Choose School reference spreadsheet/i), {
+        target: { files: [replacement] },
+      });
+
+      expect(screen.queryByText('Columns recognised automatically')).toBeNull();
+      expect(screen.queryByText('Matches confirmed')).toBeNull();
+      expect(screen.queryByText('Column matching')).toBeNull();
+      expect(screen.queryByLabelText('Worksheet:')).toBeNull();
+      expect(screen.getByRole('button', { name: /Check spreadsheet/i })).toBeTruthy();
+      expect(onConfigured).toHaveBeenLastCalledWith(null);
     });
   });
 
   describe('BrowserImportPreviewClient Presentation Hierarchy & Copy', () => {
-    it('renders Admin Reference section before folder selection controls and sets initial step to Step 1', () => {
+    it('renders School Reference section before folder selection controls and sets initial step to Step 1', () => {
       render(<BrowserImportPreviewClient />);
 
-      // Admin Reference heading exists before folder selection
-      const refHeading = screen.getByRole('heading', { name: 'Admin Reference file' });
+      // School Reference heading exists before folder selection
+      const refHeading = screen.getByRole('heading', { name: 'School reference spreadsheet' });
       expect(refHeading).toBeTruthy();
 
       // Folder selection heading and button exist
@@ -332,11 +604,8 @@ describe('PR2A Guided Import Workflow Components', () => {
       const position = refHeading.compareDocumentPosition(folderHeading);
       expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-      // Step 1 (Reference file) is initially active because the Admin Reference is REQUIRED,
-      // not optional: prepareBrowserImportCommitIntentClient returns MISSING_ADMIN_REFERENCE
-      // when the preview carries no Admin Reference reconciliation result, so no selection can
-      // be prepared or staged until a mapping is confirmed.
-      const step1 = screen.getByText('Reference file').closest('li');
+      // Step 1 (School spreadsheet) is initially active because the Reference spreadsheet is REQUIRED
+      const step1 = screen.getByText('School spreadsheet').closest('li');
       expect(step1?.getAttribute('aria-current')).toBe('step');
     });
 
