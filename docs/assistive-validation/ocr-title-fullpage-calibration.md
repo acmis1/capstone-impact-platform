@@ -245,7 +245,44 @@ zero material false automatic agreements, p50 ≤ 10 s, p95 ≤ 20 s, cold start
 
 ## 6. Results
 
-<!-- RESULTS -->
+All twelve prospectively scheduled measurements were accepted on their first attempt. No
+environmental attempt was rejected, and no quality or latency result was re-measured. Every
+repeat recovered all 44 visible titles exactly, classified all 17 inconsistent cases with
+precision and recall 1.0, kept automatic-agreement precision at 1.0, and produced zero
+material false automatic agreements.
+
+| Candidate | Repeat | p50 (ms) | p95 (ms) | Cold start (ms) | Peak RSS (bytes) | Mean external CPU | Margin |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `fullpage-cpu-t4` | 1 | 4,573.8 | 5,638.7 | 9,124.0 | 1,080,131,584 | 17.88% | pass |
+| `fullpage-cpu-t8` | 1 | 4,669.8 | 5,871.8 | 9,157.7 | 1,078,521,856 | 16.70% | pass |
+| `fullpage-cpu-t10` | 1 | 4,900.6 | 6,048.0 | 9,040.1 | 1,082,175,488 | 15.00% | pass |
+| `fullpage-cpu-default` | 1 | 4,852.6 | 6,109.2 | 9,074.6 | 1,086,410,752 | 14.88% | pass |
+| `fullpage-cpu-t8` | 2 | 4,736.4 | 5,896.3 | 8,823.5 | 1,078,820,864 | 17.55% | pass |
+| `fullpage-cpu-t10` | 2 | 4,878.4 | 6,048.3 | 9,130.1 | 1,078,636,544 | 13.87% | pass |
+| `fullpage-cpu-default` | 2 | 4,905.4 | 6,104.5 | 9,039.3 | 1,080,508,416 | 14.45% | pass |
+| `fullpage-cpu-t4` | 2 | 4,362.0 | 5,429.0 | 8,623.3 | 1,075,339,264 | 15.00% | pass |
+| `fullpage-cpu-t10` | 3 | 4,925.9 | 6,130.6 | 9,032.9 | 1,079,357,440 | 14.48% | pass |
+| `fullpage-cpu-default` | 3 | 4,841.0 | 6,071.5 | 8,973.2 | 1,084,821,504 | 14.92% | pass |
+| `fullpage-cpu-t4` | 3 | 4,429.7 | 5,406.7 | 8,603.4 | 1,077,133,312 | 15.09% | pass |
+| `fullpage-cpu-t8` | 3 | 4,601.2 | 5,732.1 | 8,757.5 | 1,084,194,816 | 14.50% | pass |
+
+The provider-default candidate resolved to 10 effective CPU threads in every repeat. All four
+candidates are selection-eligible. Applying the frozen preference rule gives:
+
+| Rank | Candidate | Worst-repeat p95 (ms) | Worst-repeat p50 (ms) |
+|---:|---|---:|---:|
+| 1 | `fullpage-cpu-t4` | 5,638.7 | 4,573.8 |
+| 2 | `fullpage-cpu-t8` | 5,896.3 | 4,736.4 |
+| 3 | `fullpage-cpu-default` | 6,109.2 | 4,905.4 |
+| 4 | `fullpage-cpu-t10` | 6,130.6 | 4,925.9 |
+
+**Calibration decision: `fullpage-cpu-t4` qualifies and is selected.** The result permits a
+dedicated candidate-freeze commit and, only after that commit exists, creation of a new
+independent holdout. It does not itself permit production integration.
+
+The canonical comparison SHA-256 is
+`d3137f428680a7e0bb1fb1b2dd3f3599d36601c157eb3f75adf6352fde9dc40e`; the selection
+SHA-256 is `784b8f1cee58f4a0774c31acc24a8bb9689b50c85723dd1109211b9548064d4e`.
 
 ---
 
@@ -255,7 +292,8 @@ Tracked under `docs/assistive-validation/evidence/ocr-title-fullpage-calibration
 
 * `selector-decision.json` — the pre-registered selector diagnostic and its decision;
 * `environment-variability-audit.json` — the compact audit of all exploratory timing regimes;
-* `rejected-measurement-attempts.json` — any final attempt rejected only by external host load;
+* `rejected-measurement-attempts.json`, when present — attempts rejected only by external
+  host load (none were rejected in the final experiment);
 * `<candidate>-repeat-NN-capture.json` / `-report.json` — every preserved repeat;
 * `<candidate>-aggregate.json` — the per-candidate repeat aggregation;
 * `candidate-comparison.json` — the bounded comparison across all candidates;
