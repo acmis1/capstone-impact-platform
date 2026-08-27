@@ -17,6 +17,7 @@ MAX_TASK_BYTES = 4096
 class OcrProviderSelection(str, Enum):
     NONE = "NONE"
     TESSERACT = "TESSERACT"
+    PADDLE_TITLE = "PADDLE_TITLE"
 
 
 class TaskErrorCode(str, Enum):

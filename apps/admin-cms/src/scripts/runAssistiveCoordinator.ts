@@ -31,13 +31,16 @@ if (args.length > 1 || (args.length === 1 && !allowedModes.has(args[0]))) {
   });
   const jobs = new SupabaseAssistiveJobRepository(client);
   const inputs = new SupabaseAssistiveInputRepository(client);
-  const worker = new PythonAssistiveWorkerProcess();
+  // The frozen provider is opt-in through an operator-provisioned local model directory.
+  const paddleModelsDir = process.env.CAPSTONE_ASSISTIVE_PADDLE_MODELS_DIR?.trim() || undefined;
+  const worker = new PythonAssistiveWorkerProcess({ paddleModelsDir });
   const coordinator = new AssistiveValidationCoordinator(
     jobs,
     inputs,
     'project-drafts-private',
     worker,
     randomUUID(),
+    paddleModelsDir ? 'PADDLE_TITLE' : 'NONE',
   );
   let stopping = false;
   process.once('SIGINT', () => { stopping = true; });

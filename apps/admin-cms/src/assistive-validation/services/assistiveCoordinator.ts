@@ -13,7 +13,11 @@ import { rankDuplicateCandidates } from '../duplicate-detection/duplicateRanker'
 import type { AssistiveJobGateway } from '../repositories/assistiveJobRepository';
 import type { AssistiveInputGateway } from '../repositories/assistiveInputRepository';
 import { loadAssistiveInput } from './assistiveInputService';
-import { WorkerProcessError, type AssistiveWorkerRunner } from './pythonWorkerProcess';
+import {
+  WorkerProcessError,
+  type AssistiveOcrProviderSelection,
+  type AssistiveWorkerRunner,
+} from './pythonWorkerProcess';
 
 const LEASE_SECONDS = 120;
 
@@ -58,6 +62,8 @@ export class AssistiveValidationCoordinator {
     private readonly privateBucket: string,
     private readonly worker: AssistiveWorkerRunner,
     private readonly workerId: string,
+    /** OCR remains explicitly operator-selected; native PDF extraction still runs first. */
+    private readonly ocrProvider: AssistiveOcrProviderSelection = 'NONE',
   ) {}
 
   async runOnce(): Promise<CoordinatorResult> {
@@ -83,7 +89,8 @@ export class AssistiveValidationCoordinator {
       task = await this.worker.run({
         content: initial.content,
         documentType: initial.documentType,
-        ocrProvider: 'NONE',
+        ocrProvider: this.ocrProvider,
+        rasterDpi: this.ocrProvider === 'PADDLE_TITLE' ? 180 : null,
         onPulse: async () => {
           const pulse = await mutate(this.jobs, this.jobs.heartbeat(
             claim.jobId,

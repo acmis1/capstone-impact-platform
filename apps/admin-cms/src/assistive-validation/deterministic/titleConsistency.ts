@@ -1,6 +1,7 @@
 import type { AssistiveCheckResult } from '../domain/evidence';
 import { ASSISTIVE_EVIDENCE_LIMITS, createAssistiveCheckResult, sanitizeAssistivePlainText } from '../domain/evidence';
 import type { Phase1ExtractionResult } from '../domain/extractionContract';
+import { normalizeFrozenTitle, selectOcrTitleCandidates } from './ocrTitleSelector';
 import { extractTitleCandidates, type TitleCandidate } from './titleCandidates';
 import { normalizeTitle } from './normalization';
 
@@ -101,16 +102,35 @@ export function evaluateTitleConsistency(
       : 'OCR is required but has not run; title consistency was not evaluated.', null, null, null);
   }
   if (!metadataTitle?.trim()) return baseResult('NOT_EVALUATED', 'METADATA_TITLE_ABSENT', 'Metadata title is absent; existing authoritative validation owns that requirement.', null, null, null);
-  const candidates = extractTitleCandidates(extraction);
-  if (candidates.length === 0) return baseResult('NOT_EVALUATED', 'NO_CREDIBLE_TITLE_CANDIDATE', 'Completed extraction did not provide a credible title candidate.', metadataTitle, null, null);
+  const fromOcr = extraction.source === 'OCR';
+  const candidates = fromOcr ? selectOcrTitleCandidates(extraction) : extractTitleCandidates(extraction);
+  const provenance = fromOcr ? ` ${providerEvidence(extraction)}` : '';
+  const explain = (text: string) => `${text}${provenance}`.slice(0, ASSISTIVE_EVIDENCE_LIMITS.explanation);
+  if (candidates.length === 0) return baseResult('NOT_EVALUATED', 'NO_CREDIBLE_TITLE_CANDIDATE', explain('Completed extraction did not provide a credible title candidate.'), metadataTitle, null, null);
   const candidate = candidates[0];
   const score = lexicalScore(metadataTitle, candidate.text);
-  if (independentAmbiguity(candidates)) return baseResult('REVIEW', 'AMBIGUOUS_TITLE_CANDIDATES', 'Multiple independent title candidates are similarly prominent; staff review is required.', metadataTitle, candidate, score);
   const normalizedCandidate = normalizeTitle(candidate.text);
-  if (normalizeTitle(metadataTitle) === normalizedCandidate) return baseResult('AGREES', 'NORMALIZED_EXACT_MATCH', 'Title matches by deterministic normalized equality.', metadataTitle, candidate, score);
-  if ((policy.allowedCandidateTitles ?? []).some((title) => normalizeTitle(title) === normalizedCandidate)) {
-    return baseResult('AGREES', 'EXPLICIT_POLICY_MATCH', 'Title matches an explicitly supplied policy value.', metadataTitle, candidate, score);
+  // The frozen OCR classifier settles normalized exact equality before ambiguity.
+  if (fromOcr && normalizeFrozenTitle(metadataTitle) === normalizeFrozenTitle(candidate.text)) {
+    return baseResult('AGREES', 'NORMALIZED_EXACT_MATCH', explain('Title matches by deterministic normalized equality.'), metadataTitle, candidate, score);
   }
-  if (isMaterialMismatch(metadataTitle, candidate.text)) return baseResult('MISMATCH', 'MATERIAL_TOKEN_DIFFERENCE', 'Document title contains a material token difference; it remains non-blocking.', metadataTitle, candidate, score);
-  return baseResult('REVIEW', 'POSSIBLE_OCR_OR_SPELLING_VARIANT', 'Title is not an exact normalized match and may reflect OCR or spelling variation; staff review is required.', metadataTitle, candidate, score);
+  if (independentAmbiguity(candidates)) return baseResult('REVIEW', 'AMBIGUOUS_TITLE_CANDIDATES', explain('Multiple independent title candidates are similarly prominent; staff review is required.'), metadataTitle, candidate, score);
+  if (normalizeTitle(metadataTitle) === normalizedCandidate) return baseResult('AGREES', 'NORMALIZED_EXACT_MATCH', explain('Title matches by deterministic normalized equality.'), metadataTitle, candidate, score);
+  if ((policy.allowedCandidateTitles ?? []).some((title) => normalizeTitle(title) === normalizedCandidate)) {
+    return baseResult('AGREES', 'EXPLICIT_POLICY_MATCH', explain('Title matches an explicitly supplied policy value.'), metadataTitle, candidate, score);
+  }
+  if (isMaterialMismatch(metadataTitle, candidate.text)) return baseResult('MISMATCH', 'MATERIAL_TOKEN_DIFFERENCE', explain('Document title contains a material token difference; it remains non-blocking.'), metadataTitle, candidate, score);
+  return baseResult('REVIEW', 'POSSIBLE_OCR_OR_SPELLING_VARIANT', explain('Title is not an exact normalized match and may reflect OCR or spelling variation; staff review is required.'), metadataTitle, candidate, score);
+}
+
+function providerEvidence(extraction: Phase1ExtractionResult): string {
+  const provider = extraction.provider;
+  if (!provider) return 'Poster text was recognised by an unnamed local OCR provider.';
+  const parts = [
+    provider.provider_id,
+    provider.model_version,
+    provider.provider_version,
+    provider.runtime_version,
+  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  return `Poster text was recognised by ${parts.join(', ')}.`;
 }

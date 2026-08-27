@@ -1,0 +1,201 @@
+{
+  "schema_version": "pp1-ocr-title-fullpage-protocol/v1",
+  "phase": "CALIBRATION_ONLY",
+  "issue": "acmis1/capstone-impact-platform#214",
+  "objective": "Determine whether the simplest full-page PP-OCRv6 Small title provider already satisfies the frozen PP1 title-consistency requirement, using a corrected candidate-selection policy and repeated calibration stability evidence.",
+  "audit_correction": {
+    "superseded_module": "assistive_validation_benchmark.ocr_title_latency",
+    "defect": "The historical _selection_eligible() rule required a candidate to contain an optimization feature (an explicit CPU thread count plus MKL-DNN or a cropped fast region) before it could be selected. A complexity-rank-0 full-page candidate that satisfied every prospective requirement was therefore excluded from selection.",
+    "correction": "Eligibility depends only on whether a candidate satisfies the prospectively frozen requirements. Among passing full-page candidates, preference is lowest worst-repeat p95, lowest worst-repeat p50, fewer explicit CPU threads, then candidate identifier.",
+    "historical_evidence_treatment": "PR #213 and PR #215 modules, corpora, evidence and consumed holdouts are immutable and are never rerun, reinterpreted or tuned against."
+  },
+  "candidate": {
+    "engine": "paddle-small",
+    "provider_id": "paddleocr-local",
+    "model_family": "PP-OCRv6 Small",
+    "detection_model": "PP-OCRv6_small_det",
+    "recognition_model": "PP-OCRv6_small_rec",
+    "detection_archive_sha256": "bfb7c1e59f0faa6b540ebdca93aea3f4b1f2477805b389fbee117820d68fe9f5",
+    "recognition_archive_sha256": "da460f968ce9f88325ac3a34fa302077d6e9b0dcefb16ba3137cd7796f879d06",
+    "detection_tree_sha256": "8af984562965b7be9bd5d1c8acb52f6d0bf37de475947b520d876ed8640eb29a",
+    "recognition_tree_sha256": "0ee2c443863549fabdb1120d7a58df5e8afa0d67bce0827b75529f105c993eae",
+    "artifact_footprint_bytes": 31481281,
+    "runtime": {
+      "paddleocr": "3.7.0",
+      "paddlepaddle": "3.3.0",
+      "paddlex": "3.7.2"
+    },
+    "license": "Apache-2.0",
+    "official_sources": [
+      "https://www.paddleocr.ai/main/en/version3.x/pipeline_usage/OCR.html",
+      "https://www.paddleocr.ai/latest/en/version3.x/inference_deployment/local_inference/inference_engine.html",
+      "https://github.com/PaddlePaddle/PaddleOCR/releases/tag/v3.7.0"
+    ]
+  },
+  "fixed_configuration": {
+    "page_scope": "FULL_PAGE",
+    "fast_region_ratio": null,
+    "device": "cpu",
+    "raster_dpi": 180,
+    "max_input_dimension": 1920,
+    "mkldnn_cache_capacity": 10,
+    "enable_mkldnn": false,
+    "enable_hpi": false,
+    "use_doc_orientation_classify": false,
+    "use_doc_unwarping": false,
+    "use_textline_orientation": false,
+    "worker_concurrency": 1
+  },
+  "bounded_options": {
+    "cpu_threads": [
+      null,
+      4,
+      8,
+      10
+    ],
+    "page_scopes": [
+      "FULL_PAGE"
+    ]
+  },
+  "bounded_candidates": [
+    {
+      "candidate_id": "fullpage-cpu-default",
+      "cpu_threads": null
+    },
+    {
+      "candidate_id": "fullpage-cpu-t4",
+      "cpu_threads": 4
+    },
+    {
+      "candidate_id": "fullpage-cpu-t8",
+      "cpu_threads": 8
+    },
+    {
+      "candidate_id": "fullpage-cpu-t10",
+      "cpu_threads": 10
+    }
+  ],
+  "excluded_architectures": {
+    "cropped_region_fast_path": "The PR #215 36% title crop introduced false fast-path acceptance; no crop of any ratio is part of this candidate family.",
+    "multi_pass_ocr": "One OCR pass per case keeps the measured latency attributable and the provider simple.",
+    "backend_specific_acceleration": "MKL-DNN is already recorded as not deployable on the supported native Windows runtime (Paddle/oneDNN executor incompatibility).",
+    "high_performance_inference_or_document_vlm": "HPI is not appropriate for the supported native Windows environment and must not become a new deployment dependency."
+  },
+  "selector_policy": {
+    "baseline_selector_id": "top-band-group-prominence-v3@geometry",
+    "permitted_selector_ids": [
+      "top-band-group-prominence-v3@geometry",
+      "top-band-typography-consistent-group-prominence-v4@geometry"
+    ],
+    "decision_rule": "keep the merged baseline selector unless the new calibration corpus demonstrates a generalizable defect; otherwise adopt the smallest permitted alternative that removes it",
+    "improvement_constraints": [
+      "geometry and typography evidence only",
+      "metadata-blind during candidate extraction and ranking",
+      "deterministic and explainable",
+      "no case identifier, consumed holdout wording, project title or learned coordinate"
+    ],
+    "decided_by": "one diagnostic OCR pass over the new calibration corpus, replayed through every permitted selector before any candidate repeat is measured"
+  },
+  "title_contract": {
+    "metadata_blind_candidate_extraction": true,
+    "normalization": "Unicode NFKC, casefold, Unicode dash/quote folding, bounded punctuation-to-space, whitespace collapse",
+    "classifier": "deterministic-title-safety-v1",
+    "semantic_similarity_may_agree": false,
+    "outcomes": [
+      "AGREES",
+      "REVIEW",
+      "MISMATCH"
+    ],
+    "classification": "NON_BLOCKING"
+  },
+  "quality_gates": {
+    "all_scored_cases_must_execute": true,
+    "automatic_agreement_precision_target": 1.0,
+    "exact_title_rate_minimum": 0.95,
+    "inconsistency_precision_minimum": 0.98,
+    "inconsistency_recall_minimum": 0.95,
+    "material_false_automatic_agreements_maximum": 0
+  },
+  "calibration_margin": {
+    "automatic_agreement_precision_target": 1.0,
+    "cold_start_ms_maximum": 30000,
+    "exact_title_rate_minimum": 1.0,
+    "inconsistency_precision_minimum": 1.0,
+    "inconsistency_recall_minimum": 1.0,
+    "material_false_automatic_agreements_maximum": 0,
+    "p50_ms_maximum": 7500,
+    "p95_ms_maximum": 15000
+  },
+  "operational_gates": {
+    "artifact_footprint_bytes_maximum": 1073741824,
+    "cold_start_ms_maximum": 30000,
+    "p50_ms_maximum": 10000,
+    "p95_ms_maximum": 20000,
+    "peak_working_set_bytes_maximum": 4294967296,
+    "per_case_timeout_seconds": 90,
+    "worker_concurrency_maximum": 1
+  },
+  "repeatability": {
+    "required_independent_repeats": 3,
+    "fresh_worker_process_per_repeat": true,
+    "fresh_model_initialization_per_repeat": true,
+    "identical_corpus_across_repeats": true,
+    "identical_warmup_policy_across_repeats": true,
+    "every_repeat_must_satisfy_calibration_margin": true,
+    "rationale": "Earlier iterations showed substantial runtime variation between separate experiments, so no candidate may be selected from a single lucky timing run.",
+    "candidate_order_by_round": [
+      [
+        "fullpage-cpu-t4",
+        "fullpage-cpu-t8",
+        "fullpage-cpu-t10",
+        "fullpage-cpu-default"
+      ],
+      [
+        "fullpage-cpu-t8",
+        "fullpage-cpu-t10",
+        "fullpage-cpu-default",
+        "fullpage-cpu-t4"
+      ],
+      [
+        "fullpage-cpu-t10",
+        "fullpage-cpu-default",
+        "fullpage-cpu-t4",
+        "fullpage-cpu-t8"
+      ]
+    ],
+    "host_load_control": {
+      "maximum_external_cpu_percent": 25.0,
+      "sampling_interval_seconds": 1.0,
+      "precondition_sample_seconds": 5.0,
+      "precondition_maximum_wait_seconds": 900.0,
+      "metric": "system-wide CPU utilisation minus this benchmark process's own share",
+      "rationale": "This benchmark runs on a shared developer workstation. A repeat measured while an unrelated workload occupies the CPU characterises the host rather than the candidate, so external load is sampled before and throughout every repeat and a contaminated repeat can never satisfy the calibration margin.",
+      "independent_of_candidate_quality_and_runtime": true,
+      "maximum_attempts_per_repeat": 3,
+      "retry_for_quality_or_latency_failure": false,
+      "rejected_attempt_handling": "A measurement whose host-load control failed is a rejected attempt, not a repeat. It is preserved as evidence and the repeat is measured again, up to the attempt bound, so a host artefact can never exclude a candidate the way the superseded eligibility rule excluded one. Only the host-load control may trigger a re-measurement; a repeat that failed on any candidate metric stands as recorded."
+    }
+  },
+  "selection_rule": {
+    "eligibility": "a candidate is eligible if and only if it satisfies every quality, safety, operational, security and provisioning requirement and the stronger calibration margin on every required repeat; eligibility never depends on whether a candidate contains an optimization feature",
+    "preference": [
+      "lowest worst-repeat p95",
+      "lowest worst-repeat p50",
+      "fewest explicit CPU threads",
+      "candidate identifier"
+    ]
+  },
+  "security": {
+    "network_during_inference": "denied process-wide before model construction",
+    "download_during_capture": false,
+    "cloud_inference": false,
+    "model_paths": "explicit operator-provisioned local directories with frozen tree hashes",
+    "worker_concurrency": 1
+  },
+  "holdout_contract": {
+    "holdout_must_not_exist_during_calibration": true,
+    "winner_must_meet_every_calibration_margin_on_every_repeat": true,
+    "fresh_holdout_requires_later_freeze_and_seal": true,
+    "stop_before_holdout_if_no_candidate_qualifies": true
+  }
+}

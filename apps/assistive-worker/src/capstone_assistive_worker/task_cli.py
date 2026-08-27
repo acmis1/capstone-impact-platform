@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, Mapping
 
+from .ocr.paddle_title import PaddleTitleOcrProvider
 from .ocr.tesseract import TesseractProvider
 from .service import extract_staged_document
 from .task_contract import (
@@ -25,6 +26,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run one bounded assistive extraction task")
     parser.add_argument("--staging-root", type=Path)
     parser.add_argument("--tesseract-executable", type=Path)
+    parser.add_argument("--paddle-models-dir", type=Path)
     parser.add_argument("--health", action="store_true")
     return parser
 
@@ -115,6 +117,8 @@ def main(argv: list[str] | None = None) -> int:
         provider = None
         if task.ocr_provider is OcrProviderSelection.TESSERACT:
             provider = TesseractProvider(executable=args.tesseract_executable)
+        elif task.ocr_provider is OcrProviderSelection.PADDLE_TITLE:
+            provider = PaddleTitleOcrProvider(models_dir=args.paddle_models_dir)
         extraction = extract_staged_document(
             allowed_root=args.staging_root,
             relative_path=task.relative_path,

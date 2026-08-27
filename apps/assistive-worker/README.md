@@ -20,7 +20,20 @@ Core operation requires only PDFium (`pypdfium2`) and Pillow. No OCR engine is r
   --relative-path poster.pdf
 ```
 
-Tesseract is an optional local executable adapter and is used only when the caller explicitly passes `--ocr-provider tesseract`. It is not the production default. Paddle/PP-OCR is not implemented in Phase 1 because production model provisioning and redistribution have not been decided.
+Tesseract remains an optional local executable adapter. The production title provider is an
+explicitly selected PP-OCRv6 Small adapter; it is not installed with the core worker because
+generic CI and native extraction do not need Paddle. Install its exact qualified runtime with:
+
+```powershell
+.venv\Scripts\python -m pip install -e ".[paddle-title]"
+```
+
+Model weights are provisioned separately and never downloaded by the worker. Set
+`CAPSTONE_ASSISTIVE_PADDLE_MODELS_DIR` on the Node coordinator to a directory containing the
+qualified `PP-OCRv6_small_det_infer` and `PP-OCRv6_small_rec_infer` trees. The coordinator then
+selects `PADDLE_TITLE`; otherwise OCR remains disabled and scanned input degrades to partial.
+See [`ocr-title-fullpage-production.md`](../../docs/assistive-validation/ocr-title-fullpage-production.md)
+for the frozen configuration, hashes, safety boundary, and failure behavior.
 
 Phase 4 adds a one-task process contract used by the trusted Node coordinator. The coordinator
 passes a fixed staging root as an argument and one strict `assistive-worker-task/v1` object on

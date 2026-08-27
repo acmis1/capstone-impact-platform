@@ -96,6 +96,19 @@ describe('assistive coordinator', () => {
     expect(submitted.findings[0].classification).toBe('NON_BLOCKING');
   });
 
+  it('passes the exact frozen provider selection and raster DPI to the asynchronous worker', async () => {
+    const inputHash = currentHash(PDF);
+    const jobs = jobGateway(inputHash);
+    const selected = worker();
+    const coordinator = new AssistiveValidationCoordinator(
+      jobs, inputGateway([PDF, PDF]), 'private', selected, WORKER_ID, 'PADDLE_TITLE',
+    );
+    await expect(coordinator.runOnce()).resolves.toEqual({ outcome: 'FINALIZED', runId: RUN_ID });
+    expect(selected.run).toHaveBeenCalledWith(expect.objectContaining({
+      ocrProvider: 'PADDLE_TITLE', rasterDpi: 180,
+    }));
+  });
+
   it('supersedes instead of finalizing when authoritative input changes during work', async () => {
     const changed = Buffer.from('%PDF-1.5\n', 'ascii');
     const inputHash = currentHash(PDF);
