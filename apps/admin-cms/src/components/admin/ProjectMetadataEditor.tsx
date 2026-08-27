@@ -24,7 +24,7 @@ import {
   projectMetadataInputSchema,
 } from '../../projects/projectMetadata';
 import { editorCanSubmit, isMetadataDirty } from './projectMetadataEditorState';
-import { useProjectMetadataNavigation } from './ProjectMetadataNavigation';
+import { TitleSuggestionHandler, useProjectMetadataNavigation } from './ProjectMetadataNavigation';
 import { invokeProjectMetadataSave } from './projectMetadataEditorController';
 import { PROJECT_DETAIL_SURFACE_CLASSES } from './projectDetailSurfaceStyles';
 import { PencilLine } from 'lucide-react';
@@ -64,6 +64,10 @@ export function ProjectMetadataEditor({
   const [notice, setNotice] = useState<{ kind: 'affirm' | 'blocker'; message: string } | null>(null);
   const [pendingSuggestion, setPendingSuggestion] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
+  // Resolver for the in-flight assistive title suggestion. It settles only once the human has
+  // decided, so a caller can never treat "confirmation pending" as "applied".
+  const pendingResolveRef = useRef<((outcome: 'applied' | 'cancelled') => void) | null>(null);
 
   const inFlight = useRef(false);
   const summaryRef = useRef<HTMLParagraphElement>(null);
@@ -107,6 +111,12 @@ export function ProjectMetadataEditor({
     });
   };
 
+  const settlePendingSuggestion = useCallback((outcome: 'applied' | 'cancelled') => {
+    const resolve = pendingResolveRef.current;
+    pendingResolveRef.current = null;
+    resolve?.(outcome);
+  }, []);
+
   const applyTitleDirectly = useCallback((titleToApply: string) => {
     setMode('edit');
     setDraft((prev) => ({ ...prev, title: titleToApply }));
@@ -127,19 +137,27 @@ export function ProjectMetadataEditor({
       registerTitleSuggestionHandler(null);
       return;
     }
-    const handler = (suggestedTitle: string): boolean => {
+    const handler: TitleSuggestionHandler = (suggestedTitle) => {
       const currentDraft = draftRef.current;
       const currentInitial = initialRef.current;
       if (currentDraft.title !== currentInitial.title && currentDraft.title !== suggestedTitle) {
-        setPendingSuggestion(suggestedTitle);
-        return true;
+        // An unsaved title would be overwritten: ask first, and keep the promise pending until the
+        // human chooses. Any suggestion still awaiting a decision is superseded, never applied.
+        settlePendingSuggestion('cancelled');
+        return new Promise<'applied' | 'cancelled'>((resolve) => {
+          pendingResolveRef.current = resolve;
+          setPendingSuggestion(suggestedTitle);
+        });
       }
       applyTitleDirectly(suggestedTitle);
-      return true;
+      return Promise.resolve('applied');
     };
     registerTitleSuggestionHandler(handler);
-    return () => registerTitleSuggestionHandler(null);
-  }, [canEdit, protectedNotice, registerTitleSuggestionHandler, applyTitleDirectly]);
+    return () => {
+      registerTitleSuggestionHandler(null);
+      settlePendingSuggestion('cancelled');
+    };
+  }, [canEdit, protectedNotice, registerTitleSuggestionHandler, applyTitleDirectly, settlePendingSuggestion]);
 
   const cancel = () => {
     if (dirty) {
@@ -412,7 +430,10 @@ export function ProjectMetadataEditor({
       <AlertDialog
         open={pendingSuggestion !== null}
         onOpenChange={(open) => {
-          if (!open) setPendingSuggestion(null);
+          if (!open) {
+            setPendingSuggestion(null);
+            settlePendingSuggestion('cancelled');
+          }
         }}
       >
         <AlertDialogContent>
@@ -423,16 +444,24 @@ export function ProjectMetadataEditor({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPendingSuggestion(null)}>
+            <AlertDialogCancel
+              onClick={() => {
+                setPendingSuggestion(null);
+                settlePendingSuggestion('cancelled');
+              }}
+            >
               Keep current title
             </AlertDialogCancel>
             <AlertDialogAction
               variant="default"
               onClick={() => {
-                if (pendingSuggestion) {
-                  const titleToApply = pendingSuggestion;
-                  setPendingSuggestion(null);
+                const titleToApply = pendingSuggestion;
+                setPendingSuggestion(null);
+                if (titleToApply !== null) {
                   applyTitleDirectly(titleToApply);
+                  settlePendingSuggestion('applied');
+                } else {
+                  settlePendingSuggestion('cancelled');
                 }
               }}
             >

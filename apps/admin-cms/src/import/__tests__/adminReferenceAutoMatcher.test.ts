@@ -3,8 +3,10 @@ import {
   normalizeSpreadsheetHeader,
   matchSpreadsheetHeaders,
   deriveDefaultReferenceMappings,
+  referenceMappingSetsEqual,
   CANONICAL_FIELD_ALIASES,
 } from '../adminReferenceAutoMatcher';
+import { COLUMN_DEFINITIONS } from '../projectDetailsWorkbookContract';
 
 describe('adminReferenceAutoMatcher', () => {
   describe('normalizeSpreadsheetHeader', () => {
@@ -45,10 +47,10 @@ describe('adminReferenceAutoMatcher', () => {
 
     // Fixture C: Supported aliases justified by repository contracts
     it('Fixture C: matches legitimate synonyms justified by repository contracts', () => {
-      const headers = ['Team Name', 'Official Title', 'Degree Program', 'Academic Year', 'Team Roster'];
+      const headers = ['GroupName', 'Official Title', 'Degree Program', 'Academic Year', 'Team Roster'];
       const result = matchSpreadsheetHeaders(headers);
 
-      expect(result.matched.groupName).toBe('Team Name');
+      expect(result.matched.groupName).toBe('GroupName');
       expect(result.matched.title).toBe('Official Title');
       expect(result.matched.program).toBe('Degree Program');
       expect(result.matched.year).toBe('Academic Year');
@@ -81,7 +83,7 @@ describe('adminReferenceAutoMatcher', () => {
 
     // Fixture F: Unrelated columns (CRITICAL: prove old first/second/third fallback is gone)
     it('Fixture F: does not map unrelated columns merely by position', () => {
-      const headers = ['Student Number', 'Campus', 'Submission Date'];
+      const headers = ['Record Number', 'Campus', 'Submission Date'];
       const result = matchSpreadsheetHeaders(headers);
 
       expect(result.matched.groupName).toBeUndefined();
@@ -150,7 +152,82 @@ describe('adminReferenceAutoMatcher', () => {
     });
   });
 
-  describe('alias dictionary documentation and sanity check', () => {
+  describe('alias dictionary evidence', () => {
+    // Canonical fields whose aliases are published in the staff workbook column contract. The
+    // workbook contract maps its single "Study program" column onto both internal program fields.
+    const CONTRACT_INTERNAL_FIELD: Record<string, string> = {
+      title: 'title',
+      groupName: 'groupName',
+      year: 'year',
+      program: 'program',
+      studyProgram: 'program',
+      academicSupervisor: 'academicSupervisor',
+      industryPartner: 'industryPartner',
+      participantContactEmail: 'participantContactEmail',
+      teamMembers: 'teamMembers',
+    };
+
+    // Header spellings that are not in the workbook contract but do appear verbatim in committed
+    // School reference workbook fixtures, with the fixture that establishes each one.
+    const FIXTURE_EVIDENCE: Record<string, string[]> = {
+      // fixtures/syntheticImportPackages.ts reference workbook header, plus this application's
+      // own staff-facing "Project ID" label for the same field.
+      publicId: ['project id', 'public id', 'public_id'],
+      // browserImportPreview.test.ts and adminReferenceClientBoundary.test.ts.
+      title: ['official project title', 'official title'],
+      // browserImportMetadataStage.test.ts.
+      year: ['academic year'],
+      // browserImportPreview.test.ts.
+      program: ['degree program'],
+      studyProgram: ['degree program'],
+      // adminReferenceReconciliation.test.ts.
+      teamMembers: ['team roster'],
+    };
+
+    it('includes every alias the staff workbook column contract already publishes', () => {
+      for (const [canonicalField, internalField] of Object.entries(CONTRACT_INTERNAL_FIELD)) {
+        const definition = COLUMN_DEFINITIONS.find((column) => column.internalField === internalField);
+        expect(definition).toBeDefined();
+        for (const alias of definition!.aliases) {
+          expect(CANONICAL_FIELD_ALIASES[canonicalField]).toContain(alias);
+        }
+      }
+    });
+
+    it('carries no alias beyond the workbook contract and committed fixture headers', () => {
+      for (const [canonicalField, aliases] of Object.entries(CANONICAL_FIELD_ALIASES)) {
+        const internalField = CONTRACT_INTERNAL_FIELD[canonicalField];
+        const contractAliases =
+          COLUMN_DEFINITIONS.find((column) => column.internalField === internalField)?.aliases ?? [];
+        const fixtureAliases = FIXTURE_EVIDENCE[canonicalField] ?? [];
+        for (const alias of aliases) {
+          expect({
+            canonicalField,
+            alias,
+            supported: contractAliases.includes(alias) || fixtureAliases.includes(alias),
+          }).toEqual({ canonicalField, alias, supported: true });
+        }
+      }
+    });
+
+    it('rejects invented synonyms that no contract or fixture supports', () => {
+      const unsupportedHeaders = [
+        'Team/Group Name',
+        'Team Name',
+        'Group',
+        'Study Programme',
+        'Programme',
+        'Partner',
+      ];
+      const result = matchSpreadsheetHeaders(unsupportedHeaders);
+
+      expect(result.matched).toEqual({});
+      expect(result.ambiguous).toEqual({});
+      expect(result.unmatched).toContain('groupName');
+      expect(result.unmatched).toContain('program');
+      expect(result.unmatched).toContain('industryPartner');
+    });
+
     it('contains all canonical matchable and comparable fields', () => {
       const expectedFields = [
         'publicId',
@@ -168,6 +245,55 @@ describe('adminReferenceAutoMatcher', () => {
         expect(CANONICAL_FIELD_ALIASES[field]).toBeDefined();
         expect(CANONICAL_FIELD_ALIASES[field].length).toBeGreaterThan(0);
       }
+    });
+  });
+
+  describe('referenceMappingSetsEqual', () => {
+    const automatic = {
+      matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Group Name' }],
+      comparisonMappings: [
+        { canonicalField: 'title', referenceColumn: 'Project Title' },
+        { canonicalField: 'program', referenceColumn: 'Program' },
+      ],
+    };
+
+    it('treats a structurally identical configuration as equal', () => {
+      expect(
+        referenceMappingSetsEqual(automatic, {
+          matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Group Name' }],
+          comparisonMappings: [
+            { canonicalField: 'title', referenceColumn: 'Project Title' },
+            { canonicalField: 'program', referenceColumn: 'Program' },
+          ],
+        }),
+      ).toBe(true);
+    });
+
+    it('detects a changed spreadsheet column', () => {
+      expect(
+        referenceMappingSetsEqual(automatic, {
+          ...automatic,
+          matchMappings: [{ canonicalField: 'groupName', referenceColumn: 'Academic Year' }],
+        }),
+      ).toBe(false);
+    });
+
+    it('detects a changed project field', () => {
+      expect(
+        referenceMappingSetsEqual(automatic, {
+          ...automatic,
+          matchMappings: [{ canonicalField: 'year', referenceColumn: 'Group Name' }],
+        }),
+      ).toBe(false);
+    });
+
+    it('detects an added or removed mapping row', () => {
+      expect(
+        referenceMappingSetsEqual(automatic, {
+          ...automatic,
+          comparisonMappings: [{ canonicalField: 'title', referenceColumn: 'Project Title' }],
+        }),
+      ).toBe(false);
     });
   });
 });

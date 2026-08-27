@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 import { MultiSelect, MultiSelectOption } from '../multi-select';
 
 const sampleOptions: MultiSelectOption[] = [
@@ -14,180 +14,164 @@ const sampleOptions: MultiSelectOption[] = [
 
 afterEach(cleanup);
 
-describe('MultiSelect component', () => {
-  it('renders with placeholder when no values are selected', () => {
-    render(
-      <MultiSelect
-        id="test-disciplines"
-        label="Disciplines"
-        options={sampleOptions}
-        value={[]}
-        onChange={vi.fn()}
-      />
-    );
+function renderMultiSelect(overrides: Partial<React.ComponentProps<typeof MultiSelect>> = {}) {
+  const onChange = overrides.onChange ?? vi.fn();
+  render(
+    <MultiSelect
+      id="test-disciplines"
+      label="Disciplines"
+      options={sampleOptions}
+      value={[]}
+      {...overrides}
+      onChange={onChange}
+    />
+  );
+  return { onChange };
+}
 
-    const trigger = screen.getByRole('combobox', { name: /Disciplines, 0 selected/i });
-    expect(trigger).toBeTruthy();
-    expect(screen.getByText('Select disciplines…')).toBeTruthy();
+describe('MultiSelect accessible structure', () => {
+  it('gives the trigger a truthful accessible name that states the selection count', () => {
+    renderMultiSelect({ value: [] });
+
+    expect(screen.getByRole('button', { name: 'Disciplines: None selected' })).toBeTruthy();
+
+    cleanup();
+    renderMultiSelect({ value: ['disc-1', 'disc-2'] });
+
+    expect(screen.getByRole('button', { name: 'Disciplines: 2 selected' })).toBeTruthy();
   });
 
-  it('renders selected chips when initial values are provided', () => {
-    render(
-      <MultiSelect
-        id="test-disciplines"
-        label="Disciplines"
-        options={sampleOptions}
-        value={['disc-1', 'disc-2']}
-        onChange={vi.fn()}
-      />
-    );
+  it('opens a dialog popup rather than a listbox, and never emits listbox or option roles', () => {
+    renderMultiSelect({ value: ['disc-1'] });
 
-    expect(screen.getByText('2 disciplines selected')).toBeTruthy();
-    expect(screen.getByText('Computer Science')).toBeTruthy();
-    expect(screen.getByText('Software Engineering')).toBeTruthy();
-  });
-
-  it('opens popup when clicked and shows option list with checkboxes', () => {
-    render(
-      <MultiSelect
-        id="test-disciplines"
-        label="Disciplines"
-        options={sampleOptions}
-        value={['disc-1']}
-        onChange={vi.fn()}
-      />
-    );
-
-    const trigger = screen.getByRole('combobox');
+    const trigger = screen.getByRole('button', { name: /^Disciplines:/ });
+    expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
     fireEvent.click(trigger);
 
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByRole('listbox', { name: 'Disciplines' })).toBeTruthy();
+    const panel = screen.getByRole('dialog', { name: 'Disciplines options' });
+    expect(panel).toBeTruthy();
+    expect(trigger.getAttribute('aria-controls')).toBe(panel.getAttribute('id'));
 
-    const csOption = screen.getByRole('option', { name: /Computer Science/i });
-    expect(csOption.getAttribute('aria-selected')).toBe('true');
-
-    const seOption = screen.getByRole('option', { name: /Software Engineering/i });
-    expect(seOption.getAttribute('aria-selected')).toBe('false');
+    // A listbox may not contain a search field, a clear-search button or a footer action, so this
+    // popup does not claim listbox semantics at all.
+    expect(screen.queryAllByRole('listbox')).toHaveLength(0);
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
   });
 
-  it('calls onChange with updated IDs when an option is selected', () => {
-    const onChange = vi.fn();
-    render(
-      <MultiSelect
-        id="test-disciplines"
-        label="Disciplines"
-        options={sampleOptions}
-        value={['disc-1']}
-        onChange={onChange}
-      />
-    );
+  it('exposes every selectable value as a real checkbox carrying its own checked state', () => {
+    renderMultiSelect({ value: ['disc-1'] });
 
-    fireEvent.click(screen.getByRole('combobox'));
-    const seOption = screen.getByRole('option', { name: /Software Engineering/i });
-    fireEvent.click(seOption);
+    fireEvent.click(screen.getByRole('button', { name: /^Disciplines:/ }));
+    const group = screen.getByRole('group', { name: 'Disciplines' });
 
+    const selected = within(group).getByRole('checkbox', { name: 'Computer Science' }) as HTMLInputElement;
+    const unselected = within(group).getByRole('checkbox', { name: 'Software Engineering' }) as HTMLInputElement;
+
+    // Selection is carried by native checked state, not by colour alone.
+    expect(selected.checked).toBe(true);
+    expect(unselected.checked).toBe(false);
+    expect(within(group).getAllByRole('checkbox')).toHaveLength(sampleOptions.length);
+  });
+
+  it('labels the search field and keeps it outside the option group', () => {
+    renderMultiSelect();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Disciplines:/ }));
+    const search = screen.getByLabelText('Search disciplines');
+    const group = screen.getByRole('group', { name: 'Disciplines' });
+
+    expect(search).toBeTruthy();
+    expect(group.contains(search)).toBe(false);
+  });
+
+  it('names the selected chips and their removal buttons', () => {
+    renderMultiSelect({ value: ['disc-1', 'disc-2'] });
+
+    const chips = screen.getByRole('list', { name: 'Selected disciplines' });
+    expect(within(chips).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(chips).getByRole('button', { name: 'Remove Computer Science' })).toBeTruthy();
+    expect(within(chips).getByRole('button', { name: 'Remove Software Engineering' })).toBeTruthy();
+  });
+});
+
+describe('MultiSelect selection behaviour', () => {
+  it('adds a value with a single activation and no modifier key', () => {
+    const { onChange } = renderMultiSelect({ value: ['disc-1'] });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Disciplines:/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Software Engineering' }));
+
+    expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith(['disc-1', 'disc-2']);
   });
 
-  it('calls onChange with removed ID when a selected option is deselected in popup', () => {
-    const onChange = vi.fn();
-    render(
-      <MultiSelect
-        id="test-disciplines"
-        label="Disciplines"
-        options={sampleOptions}
-        value={['disc-1', 'disc-2']}
-        onChange={onChange}
-      />
-    );
+  it('removes a value when its checkbox is unchecked', () => {
+    const { onChange } = renderMultiSelect({ value: ['disc-1', 'disc-2'] });
 
-    fireEvent.click(screen.getByRole('combobox'));
-    const csOption = screen.getByRole('option', { name: /Computer Science/i });
-    fireEvent.click(csOption);
+    fireEvent.click(screen.getByRole('button', { name: /^Disciplines:/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Computer Science' }));
 
     expect(onChange).toHaveBeenCalledWith(['disc-2']);
   });
 
-  it('removes option via chip remove button without opening popup', () => {
-    const onChange = vi.fn();
-    render(
-      <MultiSelect
-        id="test-disciplines"
-        label="Disciplines"
-        options={sampleOptions}
-        value={['disc-1', 'disc-2']}
-        onChange={onChange}
-      />
-    );
+  it('removes a value from its chip without opening the popup', () => {
+    const { onChange } = renderMultiSelect({ value: ['disc-1', 'disc-2'] });
 
-    const removeBtn = screen.getByRole('button', { name: 'Remove Computer Science' });
-    fireEvent.click(removeBtn);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Computer Science' }));
 
     expect(onChange).toHaveBeenCalledWith(['disc-2']);
-    // Popup was not opened
-    expect(screen.getByRole('combobox').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('button', { name: /^Disciplines:/ }).getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('filters options when typing in the search box', () => {
-    render(
-      <MultiSelect
-        id="test-disciplines"
-        label="Disciplines"
-        options={sampleOptions}
-        value={[]}
-        onChange={vi.fn()}
-      />
-    );
+  it('filters the option group from the search field and can clear the search', () => {
+    renderMultiSelect();
 
-    fireEvent.click(screen.getByRole('combobox'));
-    const searchInput = screen.getByLabelText(/Search disciplines/i);
-    fireEvent.change(searchInput, { target: { value: 'cyber' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Disciplines:/ }));
+    fireEvent.change(screen.getByLabelText('Search disciplines'), { target: { value: 'cyber' } });
 
-    expect(screen.getByRole('option', { name: /Cybersecurity/i })).toBeTruthy();
-    expect(screen.queryByRole('option', { name: /Computer Science/i })).toBeNull();
+    expect(screen.getByRole('checkbox', { name: 'Cybersecurity' })).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: 'Computer Science' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+
+    expect(screen.getByRole('checkbox', { name: 'Computer Science' })).toBeTruthy();
   });
 
-  it('clears all selections when Clear all is clicked', () => {
-    const onChange = vi.fn();
-    render(
-      <MultiSelect
-        id="test-disciplines"
-        label="Disciplines"
-        options={sampleOptions}
-        value={['disc-1', 'disc-2']}
-        onChange={onChange}
-      />
-    );
+  it('clears every selection from the footer action', () => {
+    const { onChange } = renderMultiSelect({ value: ['disc-1', 'disc-2'] });
 
-    fireEvent.click(screen.getByRole('combobox'));
-    const clearBtn = screen.getByRole('button', { name: /Clear all/i });
-    fireEvent.click(clearBtn);
+    fireEvent.click(screen.getByRole('button', { name: /^Disciplines:/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
 
     expect(onChange).toHaveBeenCalledWith([]);
   });
 
-  it('respects disabled state', () => {
-    const onChange = vi.fn();
-    render(
-      <MultiSelect
-        id="test-disciplines"
-        label="Disciplines"
-        options={sampleOptions}
-        value={['disc-1']}
-        disabled={true}
-        onChange={onChange}
-      />
-    );
+  it('closes on Escape and returns focus to the trigger', async () => {
+    renderMultiSelect({ value: ['disc-1'] });
 
-    const trigger = screen.getByRole('combobox');
-    expect(trigger.hasAttribute('disabled')).toBe(true);
+    const trigger = screen.getByRole('button', { name: /^Disciplines:/ });
+    fireEvent.click(trigger);
+    expect(screen.getByRole('dialog', { name: 'Disciplines options' })).toBeTruthy();
 
-    // Remove button should not be rendered when disabled
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Disciplines options' })).toBeNull();
+    });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(trigger);
+    });
+  });
+
+  it('respects the disabled state', () => {
+    renderMultiSelect({ value: ['disc-1'], disabled: true });
+
+    expect(screen.getByRole('button', { name: /^Disciplines:/ }).hasAttribute('disabled')).toBe(true);
     expect(screen.queryByRole('button', { name: 'Remove Computer Science' })).toBeNull();
   });
 
-  it('applies aria-invalid when invalid', () => {
+  it('applies aria-invalid and aria-describedby to the trigger', () => {
     render(
       <MultiSelect
         id="test-disciplines"
@@ -196,10 +180,12 @@ describe('MultiSelect component', () => {
         value={[]}
         onChange={vi.fn()}
         aria-invalid={true}
+        aria-describedby="metadata-disciplines-error"
       />
     );
 
-    const trigger = screen.getByRole('combobox');
+    const trigger = screen.getByRole('button', { name: /^Disciplines:/ });
     expect(trigger.getAttribute('aria-invalid')).toBe('true');
+    expect(trigger.getAttribute('aria-describedby')).toBe('metadata-disciplines-error');
   });
 });

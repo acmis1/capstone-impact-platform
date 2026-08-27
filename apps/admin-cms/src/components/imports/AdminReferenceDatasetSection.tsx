@@ -20,7 +20,9 @@ import {
 } from '../../import/adminReferenceSharedContract';
 import {
   deriveDefaultReferenceMappings,
+  referenceMappingSetsEqual,
   HeaderMatchResult,
+  ReferenceMappingSet,
 } from '../../import/adminReferenceAutoMatcher';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
@@ -61,6 +63,10 @@ export function AdminReferenceDatasetSection({
   const [inspectError, setInspectError] = useState<string | null>(null);
   const [inspectionResult, setInspectionResult] = useState<AdminReferenceInspectionResult | null>(null);
   const [autoMatchResult, setAutoMatchResult] = useState<HeaderMatchResult | null>(null);
+  // Snapshot of the mappings the deterministic matcher proposed, kept separately from the mappings
+  // currently on screen so a manual edit can never keep being presented as an automatic result.
+  const [automaticSuggestion, setAutomaticSuggestion] = useState<ReferenceMappingSet | null>(null);
+  const [isAutomaticComplete, setIsAutomaticComplete] = useState(false);
   const [isManualExpanded, setIsManualExpanded] = useState(false);
 
   const [selectedWorksheet, setSelectedWorksheet] = useState<string>('');
@@ -79,18 +85,40 @@ export function AdminReferenceDatasetSection({
     onMappingConfigured(null);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    setSelectedFile(file);
-    setInspectionResult(null);
+  /** Re-derives the automatic suggestion for a worksheet and adopts it as the current mapping. */
+  const applyAutomaticDerivation = (headers: string[]) => {
+    const derivation = deriveDefaultReferenceMappings(headers);
+    setAutoMatchResult(derivation.matchResult);
+    setAutomaticSuggestion({
+      matchMappings: derivation.matchMappings,
+      comparisonMappings: derivation.comparisonMappings,
+    });
+    setIsAutomaticComplete(derivation.isAllRequiredMatched);
+    setMatchMappings(derivation.matchMappings);
+    setComparisonMappings(derivation.comparisonMappings);
+    setIsManualExpanded(!derivation.isAllRequiredMatched);
+  };
+
+  /** Clears every trace of a previous workbook's matching identity. */
+  const clearMappingIdentity = () => {
     setAutoMatchResult(null);
-    setInspectError(null);
+    setAutomaticSuggestion(null);
+    setIsAutomaticComplete(false);
     setIsManualExpanded(false);
     setMatchMappings([{ canonicalField: 'groupName', referenceColumn: '' }]);
     setComparisonMappings([
       { canonicalField: 'title', referenceColumn: '' },
       { canonicalField: 'program', referenceColumn: '' },
     ]);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setSelectedFile(file);
+    setInspectionResult(null);
+    setInspectError(null);
+    setSelectedWorksheet('');
+    clearMappingIdentity();
     unconfirm();
   };
 
@@ -113,19 +141,14 @@ export function AdminReferenceDatasetSection({
       if (!res.ok || !json?.success) {
         setInspectError('The reference spreadsheet could not be checked. Check the file and try again.');
         setInspectionResult(null);
-        setAutoMatchResult(null);
+        clearMappingIdentity();
       } else {
         const result: AdminReferenceInspectionResult = json;
         setInspectionResult(result);
         if (result.worksheets.length > 0) {
           const firstSheet = result.worksheets[0];
           setSelectedWorksheet(firstSheet.name);
-
-          const derivation = deriveDefaultReferenceMappings(firstSheet.headers);
-          setAutoMatchResult(derivation.matchResult);
-          setMatchMappings(derivation.matchMappings);
-          setComparisonMappings(derivation.comparisonMappings);
-          setIsManualExpanded(!derivation.isAllRequiredMatched);
+          applyAutomaticDerivation(firstSheet.headers);
         }
       }
     } catch {
@@ -143,12 +166,7 @@ export function AdminReferenceDatasetSection({
     unconfirm();
 
     const targetSheet = inspectionResult?.worksheets.find((w) => w.name === sheetName);
-    const headers = targetSheet?.headers || [];
-    const derivation = deriveDefaultReferenceMappings(headers);
-    setAutoMatchResult(derivation.matchResult);
-    setMatchMappings(derivation.matchMappings);
-    setComparisonMappings(derivation.comparisonMappings);
-    setIsManualExpanded(!derivation.isAllRequiredMatched);
+    applyAutomaticDerivation(targetSheet?.headers || []);
   };
 
   const handleAddMatchMapping = () => {
@@ -230,12 +248,17 @@ export function AdminReferenceDatasetSection({
 
   const isControlDisabled = disabled || isInspecting;
 
-  const isAllRequiredAutoMatched = Boolean(
-    autoMatchResult &&
-      autoMatchResult.matched.groupName &&
-      autoMatchResult.matched.title &&
-      (autoMatchResult.matched.program || autoMatchResult.matched.studyProgram)
-  );
+  // A configuration counts as automatic only while it is still exactly what the matcher proposed.
+  // Any manual edit makes this false, which withdraws both the automatic claim and the
+  // "Use these matches" action. Restoring the automatic mapping by hand makes it true again.
+  const isPristineAutomatic =
+    automaticSuggestion !== null &&
+    referenceMappingSetsEqual({ matchMappings, comparisonMappings }, automaticSuggestion);
+  const showAutomaticBanner = isAutomaticComplete && isPristineAutomatic;
+  const showUnresolvedNotice =
+    automaticSuggestion !== null && !isAutomaticComplete && isPristineAutomatic;
+  const isManuallyEdited = automaticSuggestion !== null && !isPristineAutomatic;
+  const showManualSection = isManualExpanded || !showAutomaticBanner;
 
   return (
     <Card className="border-border-structural">
@@ -321,7 +344,7 @@ export function AdminReferenceDatasetSection({
             </div>
 
             {/* Confident Auto-Match Presentation */}
-            {isAllRequiredAutoMatched && (
+            {showAutomaticBanner && (
               <div className="rounded-lg border border-success/30 bg-success/5 p-3.5 flex flex-col gap-3">
                 <div className="flex items-center gap-2 text-foreground font-semibold text-xs sm:text-sm">
                   <CheckCircle2 className="h-4 w-4 text-success shrink-0" aria-hidden="true" />
@@ -357,7 +380,7 @@ export function AdminReferenceDatasetSection({
                     size="sm"
                     variant={isConfirmed ? 'outline' : 'default'}
                     onClick={handleConfirmMapping}
-                    disabled={isControlDisabled || isConfirmed}
+                    disabled={isControlDisabled || isConfirmed || !isConfigValid}
                     className="font-semibold"
                   >
                     {isConfirmed ? (
@@ -388,7 +411,7 @@ export function AdminReferenceDatasetSection({
             )}
 
             {/* Incomplete or Ambiguous Auto-Match Notice */}
-            {!isAllRequiredAutoMatched && autoMatchResult && (
+            {showUnresolvedNotice && autoMatchResult && (
               <div className="p-3.5 rounded-lg bg-warning/10 border border-warning/30 text-xs flex flex-col gap-2">
                 <div className="flex items-center gap-1.5 font-semibold text-warning-strong">
                   <AlertCircle className="h-4 w-4 text-warning shrink-0" aria-hidden="true" />
@@ -403,8 +426,18 @@ export function AdminReferenceDatasetSection({
             )}
 
             {/* Progressive Disclosure Manual Matching Area */}
-            {(isManualExpanded || !isAllRequiredAutoMatched) && (
+            {showManualSection && (
               <div className="flex flex-col gap-4 pt-2 border-t border-border">
+                <div className="flex flex-col gap-1">
+                  <p className="text-xs sm:text-sm font-semibold text-foreground">
+                    {isManuallyEdited ? 'Review your column matching' : 'Column matching'}
+                  </p>
+                  {isManuallyEdited && (
+                    <p className="text-xs text-muted-foreground">
+                      You changed the column matching, so it is no longer the automatic suggestion. Review it and confirm it below.
+                    </p>
+                  )}
+                </div>
                 {/* Composite Match Mappings */}
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between">

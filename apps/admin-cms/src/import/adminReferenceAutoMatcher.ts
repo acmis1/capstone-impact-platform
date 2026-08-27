@@ -19,18 +19,45 @@ export function normalizeSpreadsheetHeader(header: string): string {
 }
 
 /**
- * Contract-backed alias dictionary mapping canonical project fields to legitimate synonym strings.
- * All alias entries are normalized before comparison. Sourced strictly from repository contracts.
+ * Alias dictionary for deterministic header matching.
+ *
+ * Every entry is backed by existing repository evidence of exactly two kinds:
+ *
+ * (a) the published accepted-alias table for staff spreadsheets in
+ *     `projectDetailsWorkbookContract.ts` (mirrored in
+ *     `docs/project-details-workbook-contract.md`); and
+ * (b) header spellings that already appear in committed School reference workbook fixtures,
+ *     cited per entry below.
+ *
+ * Nothing here is a guessed or invented synonym. Comparison stays exact after normalization -
+ * no fuzzy similarity and no positional inference - so any header not listed here stays
+ * unresolved and a human decides.
  */
 export const CANONICAL_FIELD_ALIASES: Record<string, string[]> = {
+  // (b) `Public ID` is the reference-workbook header in `fixtures/syntheticImportPackages.ts`;
+  //     `Project ID` is this application's own staff-facing label for the field. `public_id`
+  //     normalizes to `public id`.
   publicId: ['project id', 'public id', 'public_id'],
+  // (a) `project title`, `title`.
+  // (b) `Official Project Title` in `browserImportPreview.test.ts` and
+  //     `adminReferenceClientBoundary.test.ts`; `Official Title` in the import client fixtures.
   title: ['project title', 'title', 'official project title', 'official title'],
-  groupName: ['group name', 'groupname', 'group', 'team name', 'team/group name'],
-  year: ['project year', 'academic year', 'year'],
-  program: ['study program', 'studyprogram', 'program', 'degree program', 'study programme', 'programme'],
-  studyProgram: ['study program', 'studyprogram', 'program', 'degree program', 'study programme', 'programme'],
+  // (a) `group name`, `groupname`.
+  groupName: ['group name', 'groupname'],
+  // (a) `project year`, `projectyear`, `year`.
+  // (b) `Academic Year` in `browserImportMetadataStage.test.ts`.
+  year: ['project year', 'projectyear', 'year', 'academic year'],
+  // (a) `study program`, `studyprogram`, `program`.
+  // (b) `Degree Program` in `browserImportPreview.test.ts`.
+  program: ['study program', 'studyprogram', 'program', 'degree program'],
+  // Same evidence as `program`: the workbook contract maps that one staff column onto both the
+  // `program` and `studyProgram` internal fields.
+  studyProgram: ['study program', 'studyprogram', 'program', 'degree program'],
+  // (a) `academic supervisor`, `academicsupervisor`, `supervisor`.
   academicSupervisor: ['academic supervisor', 'academicsupervisor', 'supervisor'],
-  industryPartner: ['industry partner', 'industrypartner', 'partner'],
+  // (a) `industry partner`, `industrypartner`.
+  industryPartner: ['industry partner', 'industrypartner'],
+  // (a) all seven aliases published for the participant contact email column.
   participantContactEmail: [
     'participant contact email',
     'participantcontactemail',
@@ -40,6 +67,8 @@ export const CANONICAL_FIELD_ALIASES: Record<string, string[]> = {
     'group email',
     'contact email',
   ],
+  // (a) `team members`, `teammembers`, `participants`.
+  // (b) `Team Roster` in `adminReferenceReconciliation.test.ts`.
   teamMembers: ['team members', 'teammembers', 'participants', 'team roster'],
 };
 
@@ -138,6 +167,39 @@ export function matchSpreadsheetHeaders(headers: string[]): HeaderMatchResult {
     unmatched,
     ambiguous,
   };
+}
+
+export interface ReferenceMapping {
+  canonicalField: string;
+  referenceColumn: string;
+}
+
+export interface ReferenceMappingSet {
+  matchMappings: ReferenceMapping[];
+  comparisonMappings: ReferenceMapping[];
+}
+
+/**
+ * Deterministic structural comparison of two mapping configurations, order included.
+ *
+ * The import UI uses this to decide whether the mappings currently on screen are still exactly the
+ * automatic suggestion, or have been edited by hand. Restoring the automatic mapping by hand
+ * compares equal again, so the configuration is reclassified as automatic rather than staying
+ * permanently marked as manual.
+ */
+export function referenceMappingSetsEqual(a: ReferenceMappingSet, b: ReferenceMappingSet): boolean {
+  const sameList = (left: ReferenceMapping[], right: ReferenceMapping[]) =>
+    left.length === right.length &&
+    left.every(
+      (mapping, index) =>
+        mapping.canonicalField === right[index].canonicalField &&
+        mapping.referenceColumn === right[index].referenceColumn,
+    );
+
+  return (
+    sameList(a.matchMappings, b.matchMappings) &&
+    sameList(a.comparisonMappings, b.comparisonMappings)
+  );
 }
 
 export interface AutoMatchDerivation {
