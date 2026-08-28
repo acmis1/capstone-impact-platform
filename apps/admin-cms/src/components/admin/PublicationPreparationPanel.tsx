@@ -80,29 +80,33 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
     <div className="mt-5 flex flex-col gap-4 border-t border-border pt-5 text-xs sm:text-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h4 className="text-sm font-semibold text-foreground">Publication preparation plan</h4>
-          <p className="mt-1 text-sm text-muted-foreground">Create evidence for a publication review. Generating a plan does not publish anything.</p>
+          <h4 className="text-sm font-semibold text-foreground">Review before publishing</h4>
+          <p className="mt-1 text-sm text-muted-foreground">Review the project and confirmed details before publishing to the showcase. Reviewing does not publish anything.</p>
         </div>
         <Button type="button" onClick={generate} disabled={pending} isLoading={state.operation === 'planning'}>
           <FileCheck2 aria-hidden="true" />
-          {state.operation === 'planning' ? 'Generating plan' : 'Generate publication plan'}
+          {state.operation === 'planning' ? 'Reviewing publication…' : 'Review publication'}
         </Button>
       </div>
 
-      {state.error && <Alert variant="destructive" title="Action unavailable" description={state.error} />}
+      {state.error && <Alert variant="destructive" title="Review unavailable" description={state.error} />}
 
       {state.plan && (
-        <Alert variant="success" icon={CheckCircle2} title="Preparation only — nothing has been published.">
+        <Alert variant="success" icon={CheckCircle2} title="Ready to publish">
+          <p className="text-sm text-foreground">Review complete. Nothing has been published yet.</p>
           <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-            <div><dt className="font-medium text-foreground">Confirmed participant snapshot</dt><dd className="font-mono text-muted-foreground break-all">{state.plan.confirmedPreviewId}</dd></div>
-            <div><dt className="font-medium text-foreground">Confirmation time</dt><dd className="text-muted-foreground">{new Date(state.plan.confirmedAt).toLocaleString()}</dd></div>
-            <div><dt className="font-medium text-foreground">Records prepared</dt><dd className="text-muted-foreground">{state.plan.recordCount}</dd></div>
+            <div>
+              <dt className="font-medium text-foreground">Participant confirmation time</dt>
+              <dd className="text-muted-foreground">{new Date(state.plan.confirmedAt).toLocaleString()}</dd>
+            </div>
           </dl>
           <details className="mt-3 text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground">Technical evidence</summary>
+            <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
             <dl className="mt-2 space-y-1">
-              <div><dt className="inline font-medium text-foreground">Project:</dt> <dd className="inline font-mono break-all">{state.plan.publicId}</dd></div>
-              <div><dt className="inline font-medium text-foreground">SHA-256:</dt> <dd className="inline font-mono break-all">{state.plan.feedHash}</dd></div>
+              <div><dt className="inline font-medium text-foreground">Review artifact record count:</dt> <dd className="inline">{state.plan.recordCount}</dd></div>
+              <div><dt className="inline font-medium text-foreground">Project ID:</dt> <dd className="inline font-mono break-all">{state.plan.publicId}</dd></div>
+              <div><dt className="inline font-medium text-foreground">Snapshot ID:</dt> <dd className="inline font-mono break-all">{state.plan.confirmedPreviewId}</dd></div>
+              <div><dt className="inline font-medium text-foreground">SHA-256 hash:</dt> <dd className="inline font-mono break-all">{state.plan.feedHash}</dd></div>
             </dl>
           </details>
         </Alert>
@@ -111,33 +115,63 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
       {shouldShowPublicationExecution(canPrepare, executionTarget, state) && (
         <div className="flex flex-col gap-4 border-t border-border pt-5">
           <div>
-            <div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-warning" aria-hidden="true" /><h4 className="text-sm font-semibold text-foreground">{isStaging ? 'Staging showcase publication' : 'Local test publication'}</h4></div>
+            <div className="flex items-center gap-2">
+              <FlaskConical className="h-4 w-4 text-warning" aria-hidden="true" />
+              <h4 className="text-sm font-semibold text-foreground">{isStaging ? 'Publish to test showcase' : 'Publish to local test showcase'}</h4>
+            </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {isStaging
-                ? 'This action writes the non-production staging public feed consumed by the Duda TEST showcase. It does not publish the live Impact site.'
-                : 'This test action publishes only to the disposable Local Supabase environment. It does not publish to Duda or the live showcase.'}
+                ? 'This publishes the project for the test showcase. The live public showcase is not changed.'
+                : 'This test action publishes only to the disposable Local Supabase environment. It does not affect the live showcase.'}
             </p>
           </div>
           <label className="flex items-start gap-2 text-sm text-foreground">
-            <input type="checkbox" checked={state.acknowledged} disabled={pending || state.success !== null} onChange={(event) => dispatch({ type: 'ACKNOWLEDGEMENT_CHANGED', acknowledged: event.target.checked })} className="mt-0.5 h-4 w-4 rounded border-input" />
-            <span>{isStaging
-              ? 'I understand this updates only the non-production staging feed for the Duda TEST showcase, not the live Impact site.'
-              : 'I understand this publishes only to the disposable Local Supabase test environment.'}</span>
+            <input
+              type="checkbox"
+              checked={state.acknowledged}
+              disabled={pending || state.success !== null}
+              onChange={(event) => dispatch({ type: 'ACKNOWLEDGEMENT_CHANGED', acknowledged: event.target.checked })}
+              className="mt-0.5 h-4 w-4 rounded border-input"
+            />
+            <span>
+              {isStaging
+                ? 'I understand this publishes the project for the test showcase and does not change the live public showcase.'
+                : 'I understand this publishes only to the disposable Local Supabase test environment.'}
+            </span>
           </label>
-          <div><Button type="button" variant="outline" onClick={execute} disabled={!executionEnabled} isLoading={state.operation === 'executing'}>{state.operation === 'executing' ? (isStaging ? 'Publishing to staging showcase' : 'Executing local publication') : (isStaging ? 'Publish to staging showcase' : 'Execute local publication')}</Button></div>
+          <div>
+            <Button type="button" onClick={execute} disabled={!executionEnabled} isLoading={state.operation === 'executing'}>
+              {state.operation === 'executing'
+                ? (isStaging ? 'Publishing to test showcase…' : 'Publishing to local showcase…')
+                : (isStaging ? 'Publish to test showcase' : 'Publish to local test showcase')}
+            </Button>
+          </div>
         </div>
       )}
 
       {state.success && (
-        <Alert variant="success" title={state.success.resultCode === 'ALREADY_COMPLETED'
-          ? (isStaging ? 'Staging showcase publication was already completed.' : 'Local publication was already completed.')
-          : (isStaging ? 'Staging showcase publication completed.' : 'Local publication completed.')}>
-          <dl className="mt-2 space-y-1 text-sm text-muted-foreground">
-            <div><dt className="inline font-medium text-foreground">Records:</dt> <dd className="inline">{state.success.recordCount}</dd></div>
-            <div><dt className="inline font-medium text-foreground">SHA-256:</dt> <dd className="inline font-mono break-all">{state.success.feedHash}</dd></div>
-            <div><dt className="inline font-medium text-foreground">Snapshot:</dt> <dd className="inline font-mono break-all">{state.success.snapshotId}</dd></div>
-            <div><dt className="inline font-medium text-foreground">Stable public feed:</dt> <dd className="inline break-all"><a className="underline" href={state.success.feedPublicUrl} target="_blank" rel="noopener noreferrer">{state.success.feedPublicUrl}</a></dd></div>
-          </dl>
+        <Alert
+          variant="success"
+          title={state.success.resultCode === 'ALREADY_COMPLETED'
+            ? (isStaging ? 'Already published for test showcase' : 'Already published locally')
+            : (isStaging ? 'Published for test showcase' : 'Published locally')}
+        >
+          <p className="text-sm text-foreground">
+            {isStaging
+              ? 'Publishing completed successfully. Refresh the test showcase to confirm the project appears.'
+              : 'This project is now published in the local test environment.'}
+          </p>
+          <details className="mt-3 text-xs text-muted-foreground">
+            <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
+            <dl className="mt-2 space-y-1">
+              <div><dt className="inline font-medium text-foreground">Published deployment record count:</dt> <dd className="inline">{state.success.recordCount}</dd></div>
+              <div><dt className="inline font-medium text-foreground">SHA-256 hash:</dt> <dd className="inline font-mono break-all">{state.success.feedHash}</dd></div>
+              <div><dt className="inline font-medium text-foreground">Snapshot ID:</dt> <dd className="inline font-mono break-all">{state.success.snapshotId}</dd></div>
+              {state.success.feedPublicUrl && (
+                <div><dt className="inline font-medium text-foreground">Feed URL:</dt> <dd className="inline break-all"><a className="underline" href={state.success.feedPublicUrl} target="_blank" rel="noopener noreferrer">{state.success.feedPublicUrl}</a></dd></div>
+              )}
+            </dl>
+          </details>
         </Alert>
       )}
     </div>

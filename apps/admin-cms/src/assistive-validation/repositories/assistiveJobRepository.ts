@@ -17,7 +17,8 @@ export interface AssistiveJobGateway {
     claimToken: string;
     inputHash: string;
     status: 'COMPLETED' | 'PARTIAL';
-    completionCode: 'OCR_REQUIRED' | 'OCR_PROVIDER_UNAVAILABLE' | null;
+    completionCode: 'OCR_REQUIRED' | 'OCR_PROVIDER_UNAVAILABLE'
+      | 'LANGUAGE_PROVIDER_UNAVAILABLE' | 'OCR_AND_LANGUAGE_INCOMPLETE' | null;
     findings: PersistedAssistiveFinding[];
   }): Promise<unknown>;
 }

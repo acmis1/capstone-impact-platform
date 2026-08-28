@@ -15,6 +15,16 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog';
+import {
   AlertTriangle,
   AlertCircle,
   CheckCircle2,
@@ -86,6 +96,46 @@ interface ReminderMutationResponse {
   message?: string;
 }
 
+/**
+ * A destructive action awaiting explicit confirmation. Consequences are always stated in full and
+ * Cancel is offered alongside the confirming control; the server-side guard for each action is
+ * unchanged and remains the real boundary.
+ */
+interface PendingConfirmation {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  run: () => Promise<void>;
+}
+
+/**
+ * Bounded, staff-readable explanation of an email delivery state. Raw transport failure codes are
+ * never given invented meaning here — they stay under Technical details for diagnostics.
+ */
+function deliveryExplanation(
+  kind: 'initial' | 'reminder',
+  status: string,
+  linkAvailableInSession = false,
+): string | null {
+  if (kind === 'reminder' && status === 'failed') {
+    return 'The reminder was not delivered. The existing preview is unchanged. Send another reminder only if it is still eligible.';
+  }
+  if (kind === 'reminder' && status === 'delivery_unknown') {
+    return 'The reminder may or may not have been delivered. The existing preview is unchanged. Send another reminder only if it is still eligible and appropriate.';
+  }
+  if (status === 'failed') {
+    return linkAvailableInSession
+      ? 'The preview email was not delivered. The preview link is still available in this session and can be copied and shared through the approved process.'
+      : 'The preview email was not delivered. If the preview link is no longer available in this session, revoke this preview and generate a new one before trying email again.';
+  }
+  if (status === 'delivery_unknown') {
+    return linkAvailableInSession
+      ? 'The preview email may or may not have been delivered. It has not been sent again automatically. The preview link is still available in this session and can be copied through the approved process.'
+      : 'The preview email may or may not have been delivered. It has not been sent again automatically. If a new email is needed and the preview link is no longer available in this session, revoke this preview and generate a new one.';
+  }
+  return null;
+}
+
 function toLocalDateTimeInputValue(value: string): string | undefined {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return undefined;
@@ -127,7 +177,14 @@ export function ParticipantPreviewPanel({
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [scheduledFor, setScheduledFor] = useState('');
   const [reminderNotice, setReminderNotice] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null);
   const inFlightRef = useRef(false);
+  /**
+   * The control that opened the confirmation. The dialog is controlled rather than trigger-driven,
+   * so keyboard focus is returned here explicitly when the dialog closes; without this, dismissing
+   * with Escape would drop focus to the document body.
+   */
+  const confirmationTriggerRef = useRef<HTMLElement | null>(null);
 
   if (!stateAvailable) {
     return (
@@ -185,7 +242,12 @@ export function ParticipantPreviewPanel({
       setJustGeneratedUrl(data.previewUrl || null);
       setActivePreview({ createdAt: data.createdAt || '', expiresAt: data.expiresAt || '' });
       setPreviewResponseState({ type: 'unresponded' });
-      setDeliveryNotice(data.notification?.message ?? null);
+      const deliveryStatus = data.notification?.status;
+      setDeliveryNotice(deliveryStatus === 'DELIVERY_FAILED'
+        ? deliveryExplanation('initial', 'failed', Boolean(data.previewUrl))
+        : deliveryStatus === 'DELIVERY_UNKNOWN'
+          ? deliveryExplanation('initial', 'delivery_unknown', Boolean(data.previewUrl))
+          : data.notification?.message ?? null);
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred while generating the preview.');
@@ -197,9 +259,6 @@ export function ParticipantPreviewPanel({
 
   const handleStartResolution = async () => {
     if (!canResolveCorrection || inFlightRef.current || pending) return;
-    if (!window.confirm('Start correction resolution? This will revoke the current preview link and move the project status back to changes_requested so metadata can be edited.')) {
-      return;
-    }
     inFlightRef.current = true;
     setPending(true);
     setError(null);
@@ -227,9 +286,6 @@ export function ParticipantPreviewPanel({
 
   const handleRevoke = async () => {
     if (!canManage || inFlightRef.current || pending) return;
-    if (!window.confirm('Revoke this participant preview? The current link will stop working immediately.')) {
-      return;
-    }
     inFlightRef.current = true;
     setPending(true);
     setError(null);
@@ -306,7 +362,6 @@ export function ParticipantPreviewPanel({
 
   const handleCancelReminder = async (reference: string) => {
     if (!canManage || inFlightRef.current || pending) return;
-    if (!window.confirm('Cancel this future participant preview reminder?')) return;
     inFlightRef.current = true;
     setPending(true);
     setError(null);
@@ -337,7 +392,46 @@ export function ParticipantPreviewPanel({
     }
   };
 
-  // Determine current resolution state if any
+  const openConfirmation = (next: PendingConfirmation) => {
+    confirmationTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setConfirmation(next);
+  };
+
+  /** Clears the dialog and returns keyboard focus to the control that opened it, when it still exists. */
+  const closeConfirmation = () => {
+    setConfirmation(null);
+    const trigger = confirmationTriggerRef.current;
+    confirmationTriggerRef.current = null;
+    if (!trigger) return;
+    window.requestAnimationFrame(() => {
+      if (document.contains(trigger)) trigger.focus();
+    });
+  };
+
+  const confirmRevoke = () => openConfirmation({
+    title: 'Revoke this participant preview?',
+    description: 'The preview link stops working immediately and the participant can no longer open it. '
+      + 'The link cannot be recovered — you would need to generate a new preview to share this project again.',
+    confirmLabel: 'Revoke preview',
+    run: handleRevoke,
+  });
+
+  const confirmStartResolution = () => openConfirmation({
+    title: 'Start resolving the requested changes?',
+    description: 'The current preview link is revoked immediately, and the project returns to Changes requested '
+      + 'so its information can be edited. The project must then be approved again before a corrected preview can be sent.',
+    confirmLabel: 'Start resolving changes',
+    run: handleStartResolution,
+  });
+
+  const confirmCancelReminder = (reference: string) => openConfirmation({
+    title: 'Cancel this scheduled reminder?',
+    description: 'The scheduled reminder email will not be sent. The participant preview link itself is not affected, '
+      + 'and you can schedule a new reminder afterwards.',
+    confirmLabel: 'Cancel reminder',
+    run: () => handleCancelReminder(reference),
+  });
+
   const resStatus = resolutionStatus?.status;
   const isInProgress = resStatus === 'in_progress' || (projectStatus === 'changes_requested' && resolutionStatus?.status === 'in_progress');
 
@@ -386,13 +480,13 @@ export function ParticipantPreviewPanel({
             </span>
           )}
           {emailDeliveryEnabled && !participantContactEmail && (
-            <span className="text-xs text-muted-foreground italic">
+            <span className="text-sm text-muted-foreground">
               No participant contact email is recorded for this project, so the link cannot be emailed.
             </span>
           )}
           {!emailDeliveryEnabled && (
-            <span className="text-xs text-muted-foreground italic">
-              Email delivery is not enabled on this server.
+            <span className="text-sm text-muted-foreground">
+              Email delivery is not enabled in this environment.
             </span>
           )}
         </div>
@@ -401,9 +495,9 @@ export function ParticipantPreviewPanel({
   };
 
   return (
-    <div className="space-y-4 text-xs sm:text-sm">
+    <div className="space-y-4 text-sm">
       {!canManage && (
-        <p className="text-xs text-muted-foreground italic">
+        <p className="text-sm text-muted-foreground">
           You can view participant confirmation status, but you do not have permission to manage preview links or reminders.
         </p>
       )}
@@ -441,7 +535,7 @@ export function ParticipantPreviewPanel({
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
             <span>Preview link generated</span>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             This is the only time the full link is shown. It cannot be recovered later — copy it now.
           </p>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -491,7 +585,7 @@ export function ParticipantPreviewPanel({
                 type="button"
                 variant="destructive"
                 size="sm"
-                onClick={handleRevoke}
+                onClick={confirmRevoke}
                 disabled={pending}
               >
                 {pending ? 'Revoking…' : 'Revoke preview'}
@@ -499,7 +593,7 @@ export function ParticipantPreviewPanel({
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <dl className="space-y-2">
               <div>
                 <dt className="text-muted-foreground font-medium">Created</dt>
@@ -537,7 +631,7 @@ export function ParticipantPreviewPanel({
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={handleStartResolution}
+                        onClick={confirmStartResolution}
                         disabled={pending}
                         className="mt-1 border-border-strong font-semibold"
                       >
@@ -546,7 +640,7 @@ export function ParticipantPreviewPanel({
                     )}
                   </div>
                 ) : (
-                  <span className="text-muted-foreground italic text-xs">Not yet responded by the participant.</span>
+                  <span className="text-sm text-muted-foreground">Not yet responded by the participant.</span>
                 )}
               </div>
             </div>
@@ -555,7 +649,7 @@ export function ParticipantPreviewPanel({
           <div className="pt-3 border-t border-border space-y-2" role="status">
             <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">Email delivery</h4>
             {notification ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-muted/40 p-3 rounded-md border border-border">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm bg-muted/40 p-3 rounded-md border border-border">
                 <div>
                   <span className="text-muted-foreground">Status: </span>
                   <span className="font-semibold text-foreground">{participantPreviewNotificationStatusLabel(notification.status)}</span>
@@ -574,21 +668,22 @@ export function ParticipantPreviewPanel({
                     <span className="text-foreground">{formatParticipantPreviewDate(notification.sentAt)}</span>
                   </div>
                 )}
-                {notification.failureCode && (
-                  <div className="sm:col-span-2 text-destructive-strong">
-                    <span className="font-semibold">Reason: </span>
-                    <span>{notification.failureCode}</span>
+                {deliveryExplanation(notification.kind, notification.status, Boolean(justGeneratedUrl)) && (
+                  <div
+                    className={`mt-1 font-medium sm:col-span-2 ${notification.status === 'failed' ? 'text-destructive-strong' : 'text-warning-strong'}`}
+                  >
+                    {deliveryExplanation(notification.kind, notification.status, Boolean(justGeneratedUrl))}
                   </div>
                 )}
-                {notification.status === 'delivery_unknown' && (
-                  <div className="mt-1 font-medium text-warning-strong sm:col-span-2">
-                    The message may or may not have reached the participant. It has not been sent again
-                    automatically. Revoke this preview and issue a new one if you need to be certain.
-                  </div>
+                {notification.failureCode && (
+                  <details className="sm:col-span-2 text-muted-foreground">
+                    <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical details</summary>
+                    <span className="mt-1 block font-mono text-foreground">{notification.failureCode}</span>
+                  </details>
                 )}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground italic">
+              <p className="text-sm text-muted-foreground">
                 This preview was generated without email delivery. Its secure link is intentionally not
                 stored and cannot be recovered for later sending — revoke it and generate a new preview
                 to email a link.
@@ -600,7 +695,7 @@ export function ParticipantPreviewPanel({
             <div className="pt-3 border-t border-border space-y-2.5">
               <div>
                 <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">Schedule reminder</h4>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="text-sm text-muted-foreground mt-0.5">
                   Reminder emails contain no secure link. The participant must use the link from the
                   original preview email.
                 </p>
@@ -630,9 +725,9 @@ export function ParticipantPreviewPanel({
                   </span>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground italic">
+                <p className="text-sm text-muted-foreground">
                   {!reminderSchedulingEnabled
-                    ? 'Reminder scheduling is not enabled on this server.'
+                    ? 'Reminder scheduling is not enabled in this environment.'
                     : notification?.status !== 'sent'
                       ? 'A confirmed successful original preview email is required.'
                       : !currentContactMatchesInitial
@@ -653,24 +748,24 @@ export function ParticipantPreviewPanel({
             <span>Correction resolution in progress</span>
           </div>
           {resolutionStatus?.comment && (
-            <div className="text-xs text-foreground bg-background p-2.5 rounded border border-border whitespace-pre-wrap">
+            <div className="text-sm text-foreground bg-background p-2.5 rounded border border-border whitespace-pre-wrap">
               <strong className="text-foreground">Participant comment:</strong> {resolutionStatus.comment}
             </div>
           )}
           {projectStatus === 'changes_requested' ? (
-            <p className="text-xs text-muted-foreground italic">
-              Project is currently in <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-foreground">changes_requested</code>. Update project metadata in Review & Edit Project Information, then use the review actions to re-approve the project before issuing a corrected preview.
+            <p className="text-sm text-muted-foreground">
+              The project is currently marked <strong className="font-semibold text-foreground">Changes requested</strong>. Update the project information in Review &amp; Edit Project Information, then use the review actions to approve the project again before issuing a corrected preview.
             </p>
           ) : projectStatus === 'approved' && canResolveCorrection ? (
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-success flex items-center gap-1.5">
+              <p className="text-sm font-semibold text-success flex items-center gap-1.5">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
                 <span>Project re-approved! You may now issue a corrected participant preview.</span>
               </p>
               {renderGenerateActions(true, 'Generate corrected participant preview')}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground italic">
+            <p className="text-sm text-muted-foreground">
               Correction resolution is active.
             </p>
           )}
@@ -694,12 +789,12 @@ export function ParticipantPreviewPanel({
         canManage ? (
           renderGenerateActions(false, 'Generate participant preview')
         ) : (
-          <p className="text-xs text-muted-foreground italic">
+          <p className="text-sm text-muted-foreground">
             No active participant preview link has been generated.
           </p>
         )
       ) : (
-        <p className="text-xs text-muted-foreground italic">
+        <p className="text-sm text-muted-foreground">
           Available once the project reaches the approved state.
         </p>
       )}
@@ -726,7 +821,7 @@ export function ParticipantPreviewPanel({
                       type="button"
                       variant="destructive"
                       size="sm"
-                      onClick={() => handleCancelReminder(reminder.reference)}
+                      onClick={() => confirmCancelReminder(reminder.reference)}
                       disabled={pending}
                       className="h-7 px-2.5 text-xs"
                     >
@@ -736,7 +831,7 @@ export function ParticipantPreviewPanel({
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground pt-1">
                   <div><span className="text-foreground font-medium">Scheduled for:</span> {formatParticipantPreviewDate(reminder.scheduledFor)}</div>
-                  <div><span className="text-foreground font-medium">Recipient snapshot:</span> {reminder.recipient}</div>
+                  <div><span className="text-foreground font-medium">Email recipient at scheduling time:</span> {reminder.recipient}</div>
                   <div><span className="text-foreground font-medium">Scheduled by:</span> {reminder.scheduledBy}</div>
                   <div><span className="text-foreground font-medium">Preview expires:</span> {formatParticipantPreviewDate(reminder.previewExpiresAt)}</div>
                   {reminder.triggeredAt && <div><span className="text-foreground font-medium">Triggered:</span> {formatParticipantPreviewDate(reminder.triggeredAt)}</div>}
@@ -747,7 +842,15 @@ export function ParticipantPreviewPanel({
                       <span className="text-foreground font-medium">Delivery:</span>{' '}
                       {participantPreviewNotificationStatusLabel(reminder.delivery.status)}
                       {reminder.delivery.sentAt ? ` on ${formatParticipantPreviewDate(reminder.delivery.sentAt)}` : ''}
-                      {reminder.delivery.failureCode ? ` (${reminder.delivery.failureCode})` : ''}
+                      {deliveryExplanation('reminder', reminder.delivery.status) && (
+                        <span className="mt-1 block text-foreground">{deliveryExplanation('reminder', reminder.delivery.status)}</span>
+                      )}
+                      {reminder.delivery.failureCode && (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical details</summary>
+                          <span className="mt-1 block font-mono">{reminder.delivery.failureCode}</span>
+                        </details>
+                      )}
                     </div>
                   )}
                 </div>
@@ -756,6 +859,29 @@ export function ParticipantPreviewPanel({
           </div>
         </div>
       )}
+
+      <AlertDialog open={confirmation !== null} onOpenChange={(open) => { if (!open) closeConfirmation(); }}>
+        {confirmation && (
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{confirmation.title}</AlertDialogTitle>
+              <AlertDialogDescription>{confirmation.description}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep as is</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  const run = confirmation.run;
+                  closeConfirmation();
+                  void run();
+                }}
+              >
+                {confirmation.confirmLabel}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        )}
+      </AlertDialog>
     </div>
   );
 }

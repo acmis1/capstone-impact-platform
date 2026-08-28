@@ -14,15 +14,132 @@ const SNAPSHOT_MEDIA_KEYS = new Set([
   'galleryPosition',
 ]);
 
+const MAX_POLICY_PATH_DECODE_PASSES = 3;
+
+const STORAGE_API_PATH_MARKER = '/storage/v1/';
+const PRIVATE_ACCESS_QUERY_KEYS = new Set([
+  'token',
+  'jwt',
+  'apikey',
+  'api_key',
+  'access_token',
+  'authorization',
+]);
+const PRIVATE_ACCESS_TEXT_PATTERN = /(?:^|[?&#;])(?:token|jwt|apikey|api_key|access_token|authorization)(?:=|&|$)/i;
+const PUBLIC_URL_FORBIDDEN_CHARACTERS = /[\u0000-\u0020\u007f<>"'`]/;
+
+interface PercentEncodingState {
+  hasPercent: boolean;
+  hasEncodedByte: boolean;
+  hasMalformedPercent: boolean;
+}
+
+function inspectPercentEncoding(value: string): PercentEncodingState {
+  let hasPercent = false;
+  let hasEncodedByte = false;
+  let hasMalformedPercent = false;
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] !== '%') continue;
+    hasPercent = true;
+    if (/^[0-9a-f]{2}$/i.test(value.slice(index + 1, index + 3))) {
+      hasEncodedByte = true;
+      index += 2;
+    } else {
+      hasMalformedPercent = true;
+    }
+  }
+
+  return { hasPercent, hasEncodedByte, hasMalformedPercent };
+}
+
 /**
- * Validates that a public snapshot URL is a legitimate, public-safe, absolute HTTP(S) URL.
- * Rejects malformed URLs, relative paths, non-http(s) schemes (javascript:, data:, etc.),
- * private draft paths (/drafts/), authenticated/signed storage endpoints, and references
- * to the private ingestion bucket.
+ * Bounded, explicit path canonicalization for URL policy decisions.
+ *
+ * A private identifier can survive inside `URL.pathname` in percent-encoded form, so a raw
+ * `pathname.includes(...)` check alone is bypassable. Policy markers are therefore matched against
+ * the raw path and against a bounded number of decoded forms. This is deliberately not an unbounded
+ * recursive decoder: at most `MAX_POLICY_PATH_DECODE_PASSES` passes run. Malformed encoding in the
+ * original path fails closed, as does another complete encoded layer beyond the fixed budget. A
+ * literal percent produced by decoding `%25` is not itself treated as a malformed extra layer.
+ *
+ * Returns lower-cased candidate forms, or `null` when the URL must be rejected.
  */
-function isPublicSafeUrl(urlStr: string): { valid: boolean; reason?: string } {
+export function canonicalPathForms(pathname: string): string[] | null {
+  let current = String(pathname);
+  const forms = [current.toLowerCase()];
+  for (let pass = 0; pass < MAX_POLICY_PATH_DECODE_PASSES; pass += 1) {
+    const encoding = inspectPercentEncoding(current);
+    if (!encoding.hasPercent) return forms;
+    if (encoding.hasMalformedPercent) {
+      // A malformed escape received from the URL is invalid. After at least one successful decode,
+      // a lone malformed-looking percent is instead the literal character produced by `%25`.
+      // Mixed valid and malformed forms still fail closed because a hidden layer remains.
+      return pass > 0 && !encoding.hasEncodedByte ? forms : null;
+    }
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(current);
+    } catch {
+      return null;
+    }
+    if (decoded === current) return forms;
+    current = decoded;
+    forms.push(current.toLowerCase());
+  }
+  return inspectPercentEncoding(current).hasEncodedByte ? null : forms;
+}
+
+/**
+ * Finds credential-like query or fragment keys after URL parsing and canonical key casing.
+ * This is used only for Storage object URLs; ordinary external sites retain unrestricted queries.
+ */
+function containsPrivateAccessMaterial(parsed: URL): boolean {
+  for (const key of parsed.searchParams.keys()) {
+    if (PRIVATE_ACCESS_QUERY_KEYS.has(key.toLowerCase())) return true;
+  }
+
+  const queryAndFragment = [parsed.search, parsed.hash.slice(1)];
+  for (const value of queryAndFragment) {
+    let current = value;
+    for (let pass = 0; pass <= MAX_POLICY_PATH_DECODE_PASSES; pass += 1) {
+      if (PRIVATE_ACCESS_TEXT_PATTERN.test(current)) return true;
+      if (!current.includes('%')) break;
+      try {
+        const decoded = decodeURIComponent(current);
+        if (decoded === current) break;
+        current = decoded;
+      } catch {
+        break;
+      }
+    }
+  }
+
+  return false;
+}
+
+function hasPathSegment(pathname: string, segment: string): boolean {
+  return pathname.split('/').includes(segment);
+}
+
+function hasStorageObjectRoute(pathname: string, route: 'sign' | 'authenticated'): boolean {
+  const marker = `/storage/v1/object/${route}`;
+  return pathname === marker || pathname.endsWith(marker) || pathname.includes(`${marker}/`);
+}
+
+/**
+ * One structural public URL policy for every active URL-bearing feed field.
+ *
+ * All URLs must be absolute credential-free HTTP(S). Storage object URLs are identified from the
+ * canonical parsed path, never arbitrary host/query text, then rejected when they expose signed or
+ * authenticated routes, private draft paths/buckets, or private-access query/fragment material.
+ */
+function isPublicSafeUrl(urlStr: unknown): { valid: boolean; reason?: string } {
   if (typeof urlStr !== 'string' || urlStr.trim() === '') {
     return { valid: false, reason: 'URL must be a non-empty string.' };
+  }
+  if (urlStr.trim() !== urlStr || PUBLIC_URL_FORBIDDEN_CHARACTERS.test(urlStr)) {
+    return { valid: false, reason: 'URL contains whitespace or unsafe delimiter characters.' };
   }
   let parsed: URL;
   try {
@@ -33,19 +150,95 @@ function isPublicSafeUrl(urlStr: string): { valid: boolean; reason?: string } {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return { valid: false, reason: `URL protocol "${parsed.protocol}" is not public-safe (must be http: or https:).` };
   }
-  if (urlStr.includes('/drafts/')) {
+  if (parsed.username || parsed.password || !parsed.hostname) {
+    return { valid: false, reason: 'URL must not contain embedded credentials.' };
+  }
+  const pathForms = canonicalPathForms(parsed.pathname);
+  if (!pathForms) {
+    return { valid: false, reason: 'URL path contains malformed or unresolvable percent-encoding.' };
+  }
+
+  const isStorageObjectUrl = pathForms.some((form) => form.includes(STORAGE_API_PATH_MARKER));
+  if (!isStorageObjectUrl) return { valid: true };
+
+  if (pathForms.some((form) => hasPathSegment(form, 'drafts'))) {
     return { valid: false, reason: 'URL contains private draft path segment "/drafts/".' };
   }
-  if (urlStr.includes(STORAGE_POLICIES.privateIngestionBucket)) {
+  if (
+    pathForms.some((form) => hasPathSegment(form, STORAGE_POLICIES.privateIngestionBucket))
+  ) {
     return { valid: false, reason: `URL references private storage bucket "${STORAGE_POLICIES.privateIngestionBucket}".` };
   }
   if (
-    parsed.pathname.includes('/storage/v1/object/sign/') ||
-    parsed.pathname.includes('/storage/v1/object/authenticated/')
+    pathForms.some(
+      (form) =>
+        hasStorageObjectRoute(form, 'sign') ||
+        hasStorageObjectRoute(form, 'authenticated'),
+    )
   ) {
     return { valid: false, reason: 'URL references private or signed storage endpoint.' };
   }
+  if (containsPrivateAccessMaterial(parsed)) {
+    return { valid: false, reason: 'Supabase Storage URL contains private-access credential material.' };
+  }
   return { valid: true };
+}
+
+const REQUIRED_ACTIVE_URL_FIELDS = ['poster', 'posterPdf'] as const;
+const OPTIONAL_ACTIVE_URL_FIELDS = ['videoUrl', 'demoUrl', 'repositoryUrl'] as const;
+const EXTERNAL_LINK_KEYS = new Set(['label', 'url']);
+
+/** Validates every active href/src candidate before a canonical artifact can be accepted. */
+function validateActivePublicUrls(record: Record<string, unknown>, prefix: string, errors: string[]): void {
+  REQUIRED_ACTIVE_URL_FIELDS.forEach((field) => {
+    const value = record[field];
+    if (value === undefined || value === null) return;
+    if (typeof value !== 'string') {
+      errors.push(`${prefix} Type error: "${field}" must be a string URL or an empty string.`);
+      return;
+    }
+    if (!value) return;
+    const safety = isPublicSafeUrl(value);
+    if (!safety.valid) {
+      errors.push(`${prefix} URL field "${field}" is not public-safe: ${safety.reason}`);
+    }
+  });
+
+  OPTIONAL_ACTIVE_URL_FIELDS.forEach((field) => {
+    const value = record[field];
+    if (value === undefined) return;
+    const safety = isPublicSafeUrl(value);
+    if (!safety.valid) {
+      errors.push(`${prefix} URL field "${field}" is not public-safe: ${safety.reason}`);
+    }
+  });
+
+  if (record.externalLinks === undefined) return;
+  if (!Array.isArray(record.externalLinks)) {
+    errors.push(`${prefix} Type error: "externalLinks" must be an array.`);
+    return;
+  }
+
+  record.externalLinks.forEach((untypedLink, index) => {
+    const linkPrefix = `${prefix} External link [${index}]`;
+    if (!untypedLink || typeof untypedLink !== 'object' || Array.isArray(untypedLink)) {
+      errors.push(`${linkPrefix} is not a valid object.`);
+      return;
+    }
+    const link = untypedLink as Record<string, unknown>;
+    Object.keys(link).forEach((key) => {
+      if (!EXTERNAL_LINK_KEYS.has(key)) {
+        errors.push(`${linkPrefix} contains unknown field: "${key}".`);
+      }
+    });
+    if (typeof link.label !== 'string') {
+      errors.push(`${linkPrefix} is missing a valid "label".`);
+    }
+    const safety = isPublicSafeUrl(link.url);
+    if (!safety.valid) {
+      errors.push(`${linkPrefix} URL is not public-safe: ${safety.reason}`);
+    }
+  });
 }
 
 /**
@@ -267,8 +460,8 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
       }
       
       // Type checks for required fields
-      if (field === 'id' && !Number.isInteger(val)) {
-        errors.push(`${prefix} Type error: "id" must be an integer.`);
+      if (field === 'id' && (!Number.isSafeInteger(val) || Number(val) <= 0)) {
+        errors.push(`${prefix} Type error: "id" must be an integer within the positive safe routing range.`);
       }
       if (field === 'teamMembers' && !Array.isArray(val)) {
         errors.push(`${prefix} Type error: "teamMembers" must be a string array.`);
@@ -302,6 +495,9 @@ export function validatePublicFeed(feed: unknown[]): FeedValidationResult {
         }
       }
     });
+
+    // Every value that can become href/src is checked at the authoritative server boundary.
+    validateActivePublicUrls(record, prefix, errors);
 
     // 3b. Structured snapshot media. Every published snapshot image must reach the public feed
     // paired with a usable text alternative, and the pairing must be exact — an image described by

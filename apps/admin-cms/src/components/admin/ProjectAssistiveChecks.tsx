@@ -42,6 +42,7 @@ import {
   initialAssistiveChecksUiState,
   isAssistiveRunActive,
   isFindingEligibleToApply,
+  isLanguageFindingEligibleToApply,
 } from './projectAssistiveChecksState';
 import { useProjectMetadataNavigation } from './ProjectMetadataNavigation';
 
@@ -72,7 +73,10 @@ export function ProjectAssistiveChecks({
     readUnavailable: initialReadFailed,
   });
 
-  const { canApplyTitleSuggestion, applyTitleSuggestion } = useProjectMetadataNavigation();
+  const {
+    canApplyTitleSuggestion, applyTitleSuggestion,
+    canApplyLanguageSuggestion, applyLanguageSuggestion,
+  } = useProjectMetadataNavigation();
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPollingRef = useRef(false);
@@ -236,22 +240,54 @@ export function ProjectAssistiveChecks({
     }
   };
 
-  const handleApplyToDraft = (candidateText: string) => {
+  // Reports success only once the metadata editor draft has actually changed. When the editor asks
+  // a human to confirm replacing an unsaved title, this stays in the "applying" state until they
+  // decide: a pending confirmation is never reported as an applied suggestion.
+  const handleApplyToDraft = async (candidateText: string) => {
     dispatch({ type: 'APPLY_STARTED' });
-    const applied = applyTitleSuggestion(candidateText);
-    if (applied) {
+    const outcome = await applyTitleSuggestion(candidateText);
+    if (!isMountedRef.current) return;
+    if (outcome === 'applied') {
       dispatch({
         type: 'APPLY_COMPLETED',
         message: 'Suggestion applied to the metadata editor draft.',
         success: true,
       });
-    } else {
+    } else if (outcome === 'cancelled') {
       dispatch({
         type: 'APPLY_COMPLETED',
-        message: 'Could not apply suggestion to draft.',
+        message: 'Suggestion not applied. The current title was kept.',
         success: false,
       });
+    } else {
+      dispatch({
+        type: 'APPLY_FAILED',
+        error: 'Could not apply the suggestion: the project information editor is not available for editing.',
+      });
     }
+  };
+
+  const handleApplyLanguageToDraft = (
+    finding: AssistiveInspectionFinding,
+    replacement: string,
+  ) => {
+    if (finding.evidence.version !== 'assistive-finding-evidence/v3') return;
+    dispatch({ type: 'APPLY_STARTED' });
+    const applied = applyLanguageSuggestion({
+      field: finding.affectedField as 'title' | 'summary' | 'background' | 'solution',
+      startOffset: finding.evidence.startOffset,
+      endOffset: finding.evidence.endOffset,
+      offsetUnit: finding.evidence.offsetUnit,
+      originalSourceSpan: finding.evidence.originalSourceSpan,
+      replacement,
+    });
+    dispatch({
+      type: 'APPLY_COMPLETED',
+      message: applied
+        ? 'Language suggestion applied to the metadata editor draft.'
+        : 'Could not apply suggestion because the draft no longer matches this source span.',
+      success: applied,
+    });
   };
 
   const handleCopyText = async (textToCopy: string, findingId: string) => {
@@ -330,7 +366,7 @@ export function ProjectAssistiveChecks({
               isLoading={state.actionInFlight === 'running'}
               title={
                 !canExecute
-                  ? 'Running assistive checks is not available in this environment.'
+                  ? 'Assistive checks are temporarily unavailable because the processing worker is not ready.'
                   : state.inspection
                   ? 'Re-evaluate project metadata against poster document evidence.'
                   : 'Start assistive checks.'
@@ -355,7 +391,7 @@ export function ProjectAssistiveChecks({
       {/* Execution Environment Notice if unavailable */}
       {!canExecute && (
         <div className="mt-3 text-xs text-muted-foreground">
-          Running assistive checks is not available in this environment. Historical findings remain viewable.
+          Assistive checks are temporarily unavailable because the processing worker is not ready. Historical findings remain viewable.
         </div>
       )}
 
@@ -417,7 +453,7 @@ export function ProjectAssistiveChecks({
         {state.readUnavailable && !state.inspection && !isJobActive && (
           <div className="rounded-lg border border-border bg-surface-inset p-4 text-sm text-muted-foreground">
             <p className="font-medium text-foreground">Assistive checks are temporarily unavailable.</p>
-            <p className="mt-1 text-xs">Could not load historical check results. You can still review and edit metadata below.</p>
+            <p className="mt-1 text-xs">Could not load historical check results. You can still review and edit project information below.</p>
           </div>
         )}
 
@@ -429,7 +465,7 @@ export function ProjectAssistiveChecks({
             description={
               canExecute
                 ? 'Run assistive checks to verify project title consistency and document formatting against uploaded poster evidence.'
-                : 'Running assistive checks is not available in this environment.'
+                : 'Assistive checks are temporarily unavailable because the processing worker is not ready.'
             }
             action={
               <Button
@@ -439,7 +475,7 @@ export function ProjectAssistiveChecks({
                 isLoading={state.actionInFlight === 'running'}
                 title={
                   !canExecute
-                    ? 'Running assistive checks is not available in this environment.'
+                    ? 'Assistive checks are temporarily unavailable because the processing worker is not ready.'
                     : 'Run checks now'
                 }
               >
@@ -522,11 +558,27 @@ export function ProjectAssistiveChecks({
                     canEditMetadata,
                     canApplyTitleSuggestion,
                   );
+                  const canApplyLanguage = isLanguageFindingEligibleToApply(
+                    finding,
+                    state.inspection!.staleState,
+                    canEditMetadata,
+                    canApplyLanguageSuggestion,
+                  );
                   const isCopied = state.copiedFindingId === finding.findingId && state.copyStatus === 'copied';
                   const isCopyFailed = state.copiedFindingId === finding.findingId && state.copyStatus === 'failed';
                   const duplicateCandidates = finding.evidence.version === 'assistive-finding-evidence/v2'
                     ? finding.evidence.duplicateCandidates
                     : [];
+                  const legacyEvidence = finding.evidence.version === 'assistive-finding-evidence/v1'
+                    ? finding.evidence
+                    : null;
+                  const languageEvidence = finding.evidence.version === 'assistive-finding-evidence/v3'
+                    ? finding.evidence
+                    : null;
+                  const copyableText = languageEvidence?.originalSourceSpan
+                    || legacyEvidence?.candidateValue
+                    || legacyEvidence?.evidenceExcerpt
+                    || '';
 
                   return (
                     <li
@@ -598,19 +650,19 @@ export function ProjectAssistiveChecks({
                       )}
 
                       {/* Title Candidate Comparison Block */}
-                      {finding.checkType === 'TITLE_CONSISTENCY' && finding.evidence.candidateValue && (
+                      {finding.checkType === 'TITLE_CONSISTENCY' && legacyEvidence?.candidateValue && (
                         <div className="mt-3 rounded-md border border-border bg-surface-inset p-3 text-xs sm:text-sm">
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <div>
                               <span className="font-semibold text-foreground">Current metadata title:</span>
                               <p className="mt-1 break-words font-mono text-muted-foreground">
-                                {finding.evidence.metadataValue || '(none)'}
+                                {legacyEvidence.metadataValue || '(none)'}
                               </p>
                             </div>
                             <div>
                               <span className="font-semibold text-foreground">Document candidate title:</span>
                               <p className="mt-1 break-words font-mono font-medium text-foreground">
-                                {finding.evidence.candidateValue}
+                                {legacyEvidence.candidateValue}
                               </p>
                             </div>
                           </div>
@@ -624,8 +676,8 @@ export function ProjectAssistiveChecks({
                               <div className="mt-1 font-mono text-[11px]">
                                 <p>Lexical similarity score: {finding.scoreValue.toFixed(2)}</p>
                                 <p className="text-[10px] text-muted-foreground">Diagnostic evidence only — not confidence or accuracy.</p>
-                                {finding.evidence.pageNumber && (
-                                  <p>Candidate located on page {finding.evidence.pageNumber}</p>
+                                {legacyEvidence.pageNumber && (
+                                  <p>Candidate located on page {legacyEvidence.pageNumber}</p>
                                 )}
                               </div>
                             </details>
@@ -634,17 +686,62 @@ export function ProjectAssistiveChecks({
                       )}
 
                       {/* Excerpt Block for other findings */}
-                      {finding.checkType !== 'TITLE_CONSISTENCY' && finding.evidence.evidenceExcerpt && (
+                      {finding.checkType !== 'TITLE_CONSISTENCY' && legacyEvidence?.evidenceExcerpt && (
                         <div className="mt-3 rounded-md border border-border bg-surface-inset p-3 text-xs">
                           <span className="font-semibold text-foreground">Document excerpt:</span>
                           <blockquote className="mt-1 break-words font-mono text-muted-foreground whitespace-pre-wrap">
-                            {finding.evidence.evidenceExcerpt}
+                            {legacyEvidence.evidenceExcerpt}
                           </blockquote>
-                          {finding.evidence.pageNumber && (
+                          {legacyEvidence.pageNumber && (
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Page {finding.evidence.pageNumber}
+                              Page {legacyEvidence.pageNumber}
                             </p>
                           )}
+                        </div>
+                      )}
+
+                      {languageEvidence && (
+                        <div className="mt-3 rounded-md border border-border bg-surface-inset p-3 text-xs sm:p-4 sm:text-sm">
+                          <p className="font-semibold text-foreground">
+                            {finding.affectedField.charAt(0).toUpperCase() + finding.affectedField.slice(1)} source span
+                          </p>
+                          <blockquote className="mt-1 break-words font-mono text-muted-foreground whitespace-pre-wrap">
+                            {languageEvidence.originalSourceSpan || '(insert at this position)'}
+                          </blockquote>
+                          <p className="mt-2 break-words text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                            Context: {languageEvidence.contextExcerpt}
+                          </p>
+                          {languageEvidence.suggestions.length > 0 ? (
+                            <div className="mt-3 flex flex-wrap gap-2" aria-label="Language suggestions">
+                              {languageEvidence.suggestions.map((suggestion) => (
+                              <Button
+                                key={suggestion}
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={!canApplyLanguage || state.actionInFlight !== 'idle'}
+                                onClick={() => handleApplyLanguageToDraft(finding, suggestion)}
+                                title={state.inspection!.staleState !== 'CURRENT'
+                                  ? 'Cannot apply a suggestion from an outdated run.'
+                                  : `Apply this suggestion to the ${finding.affectedField} draft.`}
+                              >
+                                Apply “{suggestion}” to draft
+                              </Button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-xs text-muted-foreground">
+                              No safe automatic replacement was provided. Review this issue directly in the metadata editor.
+                            </p>
+                          )}
+                          <details className="mt-3 border-t border-border pt-2 text-xs text-muted-foreground">
+                            <summary className="cursor-pointer font-medium hover:text-foreground">Technical diagnostic details</summary>
+                            <div className="mt-1 font-mono text-[11px]">
+                              <p>LanguageTool {languageEvidence.providerVersion} · rule {languageEvidence.ruleId}</p>
+                              <p>Offsets: {languageEvidence.startOffset}–{languageEvidence.endOffset} Unicode code points</p>
+                              <p className="text-[10px] text-muted-foreground">Assistive evidence only — staff review remains authoritative.</p>
+                            </div>
+                          </details>
                         </div>
                       )}
 
@@ -652,7 +749,7 @@ export function ProjectAssistiveChecks({
                       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
                         {/* Copy & Apply Draft Actions */}
                         <div className="flex flex-wrap items-center gap-2">
-                          {(finding.evidence.candidateValue || finding.evidence.evidenceExcerpt) && (
+                          {copyableText && (
                             <div className="flex flex-wrap items-center gap-2">
                               <Button
                                 type="button"
@@ -660,7 +757,7 @@ export function ProjectAssistiveChecks({
                                 size="sm"
                                 onClick={() =>
                                   handleCopyText(
-                                    finding.evidence.candidateValue || finding.evidence.evidenceExcerpt || '',
+                                    copyableText,
                                     finding.findingId,
                                   )
                                 }
@@ -692,13 +789,13 @@ export function ProjectAssistiveChecks({
                             </div>
                           )}
 
-                          {finding.checkType === 'TITLE_CONSISTENCY' && finding.evidence.candidateValue && (
+                          {finding.checkType === 'TITLE_CONSISTENCY' && legacyEvidence?.candidateValue && (
                             <Button
                               type="button"
                               variant="secondary"
                               size="sm"
                               disabled={!canApply || state.actionInFlight !== 'idle'}
-                              onClick={() => handleApplyToDraft(finding.evidence.candidateValue!)}
+                              onClick={() => { void handleApplyToDraft(legacyEvidence.candidateValue!); }}
                               title={
                                 !canEditMetadata
                                   ? 'Your role cannot edit project metadata.'

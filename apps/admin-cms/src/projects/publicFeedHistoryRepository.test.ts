@@ -44,7 +44,7 @@ function createSupabaseStub(tables: Record<string, Row[]>): SupabaseClient {
   } as unknown as SupabaseClient;
 }
 
-function historyStub(): SupabaseClient {
+function historyStub(blockingOperation?: Row): SupabaseClient {
   const versions = Array.from({ length: 125 }, (_, index) => {
     const versionNumber = index + 1;
     return {
@@ -66,7 +66,7 @@ function historyStub(): SupabaseClient {
       version_id: version.id, ordinal: 0, public_id: 'synthetic-project',
     })),
     projects: [{ public_id: 'synthetic-project', title: 'Synthetic project', status: 'published', deleted_at: null }],
-    public_feed_operations: [],
+    public_feed_operations: blockingOperation ? [blockingOperation] : [],
     admin_users: [{ id: 'admin', full_name: 'Synthetic Admin', email: 'admin@example.invalid' }],
   });
 }
@@ -113,6 +113,22 @@ describe('public feed history pagination', () => {
       versionNumber: 105,
       previousVersionNumber: 104,
       restoredFromVersionNumber: 1,
+    });
+  });
+
+  it('projects durable lease and Storage fence timestamps for presentation decisions', async () => {
+    const view = await readPublicFeedHistory(historyStub({
+      kind: 'publication', state: 'WRITE_STARTED', failure_code: null,
+      updated_at: '2026-08-27T11:58:00.000Z',
+      lease_expires_at: '2026-08-27T12:00:00.000Z',
+      storage_uncertainty_until: '2026-08-27T12:01:00.000Z',
+    }));
+
+    expect(view.blockingOperation).toEqual({
+      kind: 'publication', state: 'WRITE_STARTED', failureCode: null,
+      updatedAt: '2026-08-27T11:58:00.000Z',
+      leaseExpiresAt: '2026-08-27T12:00:00.000Z',
+      storageUncertaintyUntil: '2026-08-27T12:01:00.000Z',
     });
   });
 });

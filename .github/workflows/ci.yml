@@ -64,6 +64,10 @@ jobs:
       - name: Vitest Unit & Security Tests
         run: npm run test:admin
 
+      - name: Duda Current-Feed Chrome Contract Harness
+        if: runner.os == 'Linux'
+        run: npm --prefix Prototype run test:duda-current-feed-browser
+
       - name: TypeScript Typecheck
         run: npm run typecheck:admin
 
@@ -193,10 +197,10 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify forty-four migrations and local integrity
+      - name: Verify forty-six migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 44
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 46
 
       - name: Verify multi-image gallery position invariant against the real schema
         run: npm run verify:gallery-constraint-runtime --workspace=apps/admin-cms
@@ -278,6 +282,9 @@ jobs:
 
       - name: Verify assistive duplicate shortlist Migration 0033 runtime behavior
         run: npm run verify:assistive-duplicate-shortlist-runtime --workspace=apps/admin-cms
+
+      - name: Verify assistive worker heartbeat runtime behavior
+        run: npm run verify:assistive-worker-heartbeat-runtime --workspace=apps/admin-cms
 
       - name: Verify bulk project review workflow runtime behavior
         run: npm run verify:bulk-project-review-runtime --workspace=apps/admin-cms

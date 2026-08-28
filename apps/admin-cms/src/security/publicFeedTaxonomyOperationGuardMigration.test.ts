@@ -19,8 +19,11 @@ function activeStateLists(source: string): string[][] {
 describe('public-feed taxonomy operation guard migration', () => {
   it('is a new forward migration and leaves both earlier Stream K migrations byte-identical', () => {
     const files = fs.readdirSync(migrations).filter((name) => name.endsWith('.sql')).sort();
-    expect(files.at(-2)).toBe('20260825030000_public_feed_taxonomy_operation_guard.sql');
-    expect(files).toHaveLength(44);
+    expect(files.at(-4)).toBe('20260825030000_public_feed_taxonomy_operation_guard.sql');
+    expect(files.at(-3)).toBe('20260826090000_public_feed_activation_authority_guard.sql');
+    expect(files.at(-2)).toBe('20260828090000_assistive_language_findings.sql');
+    expect(files.at(-1)).toBe('20260828120000_assistive_worker_heartbeat.sql');
+    expect(files).toHaveLength(46);
 
     const historicalMigrations = [
       '20260824180000_public_feed_deployment_ledger.sql',

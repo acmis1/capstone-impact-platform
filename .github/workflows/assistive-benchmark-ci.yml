@@ -58,6 +58,30 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark phase6-check-evidence
 
+      - name: Validate Phase 6C calibration and frozen policy evidence
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.phase6c check-calibration
+          python -m assistive_validation_benchmark.phase6c check-calibration-evidence
+          python -m assistive_validation_benchmark.phase6c check-freeze-manifest
+          python -m assistive_validation_benchmark.phase6c check-freeze-record
+
+      - name: Re-prove the Phase 6C one-shot holdout result without rerunning engines
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.phase6c check-final-evidence
+
+      - name: Validate Phase 7 calibration and frozen policy evidence
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.phase7 check-calibration
+          python -m assistive_validation_benchmark.phase7 check-calibration-evidence
+          python -m assistive_validation_benchmark.phase7 check-freeze-manifest
+          python -m assistive_validation_benchmark.phase7 check-freeze-record
+
+      - name: Re-prove the Phase 7 one-shot holdout result without rerunning engines
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.phase7 check-final-evidence
+
       - name: Validate OCR productionization evidence and decision
         working-directory: tools/assistive-validation-benchmark
         run: |
@@ -99,7 +123,19 @@ jobs:
             docs/assistive-validation/ocr-productionization-iteration2-calibration.md \
             docs/assistive-validation/evidence/ocr-productionization-iteration2-calibration.json \
             tools/assistive-validation-benchmark/ocr-productionization \
-            tools/assistive-validation-benchmark/ocr-iteration2-calibration
+            tools/assistive-validation-benchmark/ocr-iteration2-calibration \
+            tools/assistive-validation-benchmark/src/assistive_validation_benchmark/ocr_title_consistency \
+            tools/assistive-validation-benchmark/src/assistive_validation_benchmark/ocr_title_consistency_holdout \
+            tools/assistive-validation-benchmark/src/assistive_validation_benchmark/ocr_title_latency \
+            tools/assistive-validation-benchmark/src/assistive_validation_benchmark/ocr_title_latency_holdout \
+            tools/assistive-validation-benchmark/ocr-title-consistency-calibration \
+            tools/assistive-validation-benchmark/ocr-title-consistency-holdout \
+            tools/assistive-validation-benchmark/ocr-title-latency-calibration \
+            tools/assistive-validation-benchmark/ocr-title-latency-holdout \
+            docs/assistive-validation/evidence/ocr-title-consistency-calibration \
+            docs/assistive-validation/evidence/ocr-title-consistency-holdout \
+            docs/assistive-validation/evidence/ocr-title-latency-calibration \
+            docs/assistive-validation/evidence/ocr-title-latency-holdout
 
       - name: Prove OCR productionization corpus byte determinism
         working-directory: tools/assistive-validation-benchmark
@@ -169,6 +205,147 @@ jobs:
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark.ocr_iteration2_fresh_holdout check-result-evidence
 
+      - name: Validate OCR Iteration 3 calibration corpus and historical non-reuse
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration3 check-calibration
+
+      - name: Prove OCR Iteration 3 renderer and calibration byte determinism
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_iteration3 generate-calibration --output-dir artifacts/ocr3-repeat-a
+          python -m assistive_validation_benchmark.ocr_iteration3 generate-calibration --output-dir artifacts/ocr3-repeat-b
+          cmp artifacts/ocr3-repeat-a/generation.json artifacts/ocr3-repeat-b/generation.json
+
+      - name: Recompute OCR Iteration 3 candidate evidence without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_iteration3 check-calibration-evidence
+          python -m assistive_validation_benchmark.ocr_iteration3 check-calibration-evidence \
+            --capture ../../docs/assistive-validation/evidence/ocr-iteration3/candidate-a-repeat-capture.json \
+            --report ../../docs/assistive-validation/evidence/ocr-iteration3/candidate-a-repeat-report.json
+          python -m assistive_validation_benchmark.ocr_iteration3 check-candidate-b-evidence
+          python -m assistive_validation_benchmark.ocr_iteration3 check-calibration-decision
+
+      # The Iteration 3 one-shot is consumed. This revalidates the seal and state, re-scores
+      # the preserved capture, and requires exact equality with the deferred final report.
+      # It performs no OCR, loads no Paddle runtime, and must never invoke the one-shot runner.
+      - name: Re-prove the final OCR Iteration 3 holdout result without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration3 check-holdout-result
+
+      # Iteration 4 stopped at calibration because the unscored warmup exceeded the frozen
+      # timeout. This recomputes the independent-corpus, non-reuse, arithmetic, operational,
+      # offline and deferred-decision evidence without installing Paddle or loading the VLM.
+      - name: Re-prove the OCR Iteration 4 calibration deferral without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_iteration4 check-calibration-evidence
+
+      # PP1's title-only candidate evidence is intentionally replayed without installing
+      # Paddle or loading model weights. These checks cover corpus novelty, deterministic
+      # rendering, frozen arithmetic, both preserved calibration attempts and the decision.
+      - name: Validate PP1 OCR title-consistency calibration and non-reuse
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_consistency check-calibration
+
+      - name: Prove PP1 OCR title-consistency renderer determinism
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_title_consistency generate-calibration --output-dir artifacts/ocr-title-repeat-a
+          python -m assistive_validation_benchmark.ocr_title_consistency generate-calibration --output-dir artifacts/ocr-title-repeat-b
+          cmp artifacts/ocr-title-repeat-a/generation.json artifacts/ocr-title-repeat-b/generation.json
+
+      - name: Recompute PP1 OCR title-consistency calibration evidence without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_consistency check-calibration-evidence
+
+      # Issue #214's latency evidence is replayed without Paddle or model weights. These
+      # checks cover corpus novelty, deterministic rendering, score arithmetic, bounded
+      # candidate comparison and the prospective stability-based selection.
+      - name: Validate PP1 OCR title-latency calibration and non-reuse
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency check-calibration
+
+      - name: Prove PP1 OCR title-latency renderer determinism
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_title_latency generate-calibration --output-dir artifacts/ocr-title-latency-repeat-a
+          python -m assistive_validation_benchmark.ocr_title_latency generate-calibration --output-dir artifacts/ocr-title-latency-repeat-b
+          cmp artifacts/ocr-title-latency-repeat-a/generation.json artifacts/ocr-title-latency-repeat-b/generation.json
+
+      - name: Recompute PP1 OCR title-latency candidate evidence without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency check-evidence
+
+      - name: Verify PP1 OCR title-latency candidate freeze
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency check-freeze
+
+      - name: Verify PP1 OCR title-consistency candidate freeze
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_consistency check-freeze
+
+      # The one authorised fresh holdout run is consumed. This validates the seal, consumed
+      # state, stored hashes and exact frozen rescoring without Paddle, model files or OCR.
+      - name: Re-prove the final PP1 OCR title-consistency holdout result without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_consistency_holdout check-result
+
+      # The Issue #214 holdout is also one-shot. These commands validate its frozen seal,
+      # consumed state, score arithmetic and decision without loading Paddle or model files.
+      - name: Verify PP1 OCR title-latency holdout seal without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency_holdout check-seal --allow-consumed
+
+      - name: Re-prove the final PP1 OCR title-latency holdout result without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_latency_holdout check-result
+
+      # The corrected full-page iteration replaces PR #215's candidate-selection policy without
+      # editing its module or evidence. These steps replay corpus novelty, deterministic
+      # rendering, the pre-registered selector decision, all three calibration repeats per
+      # candidate, the corrected eligibility/preference rule and the freeze chronology. As with
+      # every other OCR step here, no Paddle runtime, model weight, inference or network is used.
+      - name: Prove the superseded PP1 OCR title-latency selection policy was not rewritten
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python - <<'PY'
+          import inspect, sys
+          from assistive_validation_benchmark.ocr_title_latency import __main__ as historical
+          source = inspect.getsource(historical._selection_eligible)
+          if "enable_mkldnn" not in source or "fast_region_ratio" not in source:
+              sys.exit("historical title-latency selection rule was modified")
+          print("historical _selection_eligible() intact:\n" + source)
+          PY
+
+      - name: Validate PP1 OCR full-page title calibration and historical non-reuse
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_fullpage check-calibration
+
+      - name: Prove PP1 OCR full-page title renderer determinism
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_title_fullpage generate-calibration --output-dir artifacts/ocr-title-fullpage-repeat-a
+          python -m assistive_validation_benchmark.ocr_title_fullpage generate-calibration --output-dir artifacts/ocr-title-fullpage-repeat-b
+          cmp artifacts/ocr-title-fullpage-repeat-a/generation.json artifacts/ocr-title-fullpage-repeat-b/generation.json
+
+      - name: Recompute the PP1 OCR full-page selector decision without OCR
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_fullpage check-selector-decision
+
+      - name: Recompute PP1 OCR full-page repeated calibration evidence and selection
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_fullpage check-evidence
+
+      - name: Verify the PP1 OCR full-page candidate freeze and its holdout-absent checkpoint
+        working-directory: tools/assistive-validation-benchmark
+        run: python -m assistive_validation_benchmark.ocr_title_fullpage check-freeze
+
+      - name: Verify the consumed PP1 OCR full-page v2 seal and one-shot result
+        working-directory: tools/assistive-validation-benchmark
+        run: |
+          python -m assistive_validation_benchmark.ocr_title_fullpage_holdout_v2 check-seal --allow-consumed > /dev/null
+          python -m assistive_validation_benchmark.ocr_title_fullpage_holdout_v2 check-result > /dev/null
+
       - name: Generate deterministic synthetic corpus smoke fixture
         working-directory: tools/assistive-validation-benchmark
         run: python -m assistive_validation_benchmark generate --output-dir artifacts/ci-corpus
@@ -176,10 +353,45 @@ jobs:
       - name: Confirm generated/model artifacts remain untracked
         run: git diff --exit-code -- . ':!docs/assistive-validation/evidence/phase-0-report.json'
 
-      - name: Confirm benchmark PR did not change production paths
+      - name: Enforce the one-time READY-gated production boundary
         if: github.event_name == 'pull_request'
         run: |
-          git diff --exit-code "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" -- \
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.sha }}"
+          result_path="docs/assistive-validation/evidence/ocr-title-fullpage-holdout-v2/holdout-report.json"
+          if git cat-file -e "${base}:${result_path}" 2>/dev/null; then
+            exit 0
+          fi
+
+          python -m assistive_validation_benchmark.ocr_title_fullpage_holdout_v2 check-result > /dev/null
+          mapfile -t changed < <(git diff --name-only "${base}...${head}" -- \
             apps/assistive-worker \
             apps/admin-cms/src/assistive-validation \
-            infra/supabase
+            apps/admin-cms/src/scripts/runAssistiveCoordinator.ts \
+            infra/supabase)
+          unexpected=()
+          for path in "${changed[@]}"; do
+            case "${path}" in
+              apps/assistive-worker/README.md|\
+              apps/assistive-worker/pyproject.toml|\
+              apps/assistive-worker/uv.lock|\
+              apps/assistive-worker/src/capstone_assistive_worker/ocr/paddle_title.py|\
+              apps/assistive-worker/src/capstone_assistive_worker/task_cli.py|\
+              apps/assistive-worker/src/capstone_assistive_worker/task_contract.py|\
+              apps/assistive-worker/tests/test_paddle_title_provider.py|\
+              apps/assistive-worker/tests/test_task_contract.py|\
+              apps/admin-cms/src/assistive-validation/__tests__/coordinator.test.ts|\
+              apps/admin-cms/src/assistive-validation/__tests__/ocrTitleSelector.test.ts|\
+              apps/admin-cms/src/assistive-validation/__tests__/pythonWorkerProcess.integration.test.ts|\
+              apps/admin-cms/src/assistive-validation/deterministic/ocrTitleSelector.ts|\
+              apps/admin-cms/src/assistive-validation/deterministic/titleConsistency.ts|\
+              apps/admin-cms/src/assistive-validation/services/assistiveCoordinator.ts|\
+              apps/admin-cms/src/assistive-validation/services/pythonWorkerProcess.ts|\
+              apps/admin-cms/src/scripts/runAssistiveCoordinator.ts) ;;
+              *) unexpected+=("${path}") ;;
+            esac
+          done
+          if (( ${#unexpected[@]} )); then
+            printf 'Unexpected production path in the one-time READY-gated integration:\n%s\n' "${unexpected[@]}"
+            exit 1
+          fi

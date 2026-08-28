@@ -87,6 +87,23 @@ describe.skipIf(!enabled)('Node-to-Python assistive task boundary', () => {
     expect(result.extraction?.ocr_state).toBe('REQUIRED_NOT_RUN');
   });
 
+  it('passes explicit Paddle selection and models path without a shell and degrades safely', async () => {
+    const result = await expectStagingCleanup(() => worker({
+      paddleModelsDir: join(tmpdir(), 'capstone-unprovisioned-paddle-models'),
+    }).run({
+      content,
+      documentType: 'PNG',
+      ocrProvider: 'PADDLE_TITLE',
+      rasterDpi: 180,
+    }));
+    expect(result.error).toBeNull();
+    expect(result.extraction).toMatchObject({
+      status: 'OCR_REQUIRED',
+      ocr_state: 'UNAVAILABLE',
+      provider: { provider_id: 'paddleocr-local' },
+    });
+  });
+
   it('accepts only the coherent structured TASK_EXECUTION_FAILED result for exit 1', async () => {
     const result = await expectStagingCleanup(() => shimWorker('execution-failed').run({
       content,

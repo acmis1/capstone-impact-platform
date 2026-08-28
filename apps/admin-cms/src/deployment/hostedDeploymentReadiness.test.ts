@@ -154,17 +154,17 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches the exact repository migration inventory and keeps every historical migration byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
 
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(44);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(46);
 
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
-      // Only the correction migration is new relative to the reviewed origin/main baseline.
-      // Every one of the existing 43 migrations must stay byte-identical to main.
+      // Only the activation-authority migration is new relative to origin/main.
+      // Every current-main migration must stay byte-identical.
       const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.filter(
         (migration) => migration !== '20260826090000_public_feed_activation_authority_guard.sql',
       );
 
-      expect(historicalMigrations).toHaveLength(43);
+      expect(historicalMigrations).toHaveLength(45);
 
       expect(() =>
         execFileSync(
@@ -192,7 +192,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       );
 
       expect([...ALL_REQUIRED_TABLES].sort()).toEqual([...new Set(createdTables)].sort());
-      expect(ALL_REQUIRED_TABLES).toHaveLength(36);
+      expect(ALL_REQUIRED_TABLES).toHaveLength(37);
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_runs');
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_findings');
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_jobs');
@@ -208,7 +208,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches every final service-role application RPC signature and isolates the one internal helper', () => {
       const contracts = migrationServiceRoleContracts();
       expect(contracts.application.map(contractKey).sort()).toEqual(REQUIRED_RPC_SIGNATURES.map(contractKey).sort());
-      expect(contracts.application).toHaveLength(72);
+      expect(contracts.application).toHaveLength(74);
       expect(REQUIRED_RPC_NAMES).toContain('persist_assistive_validation_run');
       expect(REQUIRED_RPC_NAMES).toContain('record_assistive_finding_disposition');
       expect(REQUIRED_RPC_NAMES).toContain('claim_next_assistive_validation_job');
@@ -336,7 +336,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const inspected = inspectPostgrestOpenApi(openApiDocument());
       expect(inspected?.publicRelations).toEqual([...ALL_REQUIRED_TABLES].sort());
       expect(inspected?.rpcNames).toEqual([...REQUIRED_RPC_NAMES].sort());
-      expect(inspected?.rpcSignatures).toHaveLength(71);
+      expect(inspected?.rpcSignatures).toHaveLength(73);
       expect(inspected?.rpcSignatures.some((signature) => signature.name === 'execute_controlled_publication')).toBe(false);
     });
 

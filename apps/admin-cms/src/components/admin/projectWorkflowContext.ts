@@ -23,8 +23,8 @@ export interface ProjectWorkflowContextInput {
   canResolveParticipantCorrection: boolean;
   /** Existing page-level publication-preparation authority. */
   canPreparePublication: boolean;
-  /** Existing page-level local archive availability and authority. */
-  canExecuteLocalArchive: boolean;
+  /** Existing page-level governed archive availability and authority. */
+  canExecuteArchive: boolean;
   /** `null` when the participant preview subsystem could not be read. */
   participantResponse: 'unresponded' | 'confirmed' | 'correction_requested' | null;
   hasActivePreview: boolean;
@@ -150,10 +150,10 @@ export function deriveProjectWorkflowContext(input: ProjectWorkflowContextInput)
       summary: input.pendingRemovalFromPublic
         ? 'This project is published and is marked for removal from the showcase.'
         : 'This project is published to the showcase.',
-      decision: input.canExecuteLocalArchive
+      decision: input.canExecuteArchive
         ? input.pendingRemovalFromPublic
-          ? 'A showcase removal is pending for this project. The controlled local lifecycle action is available below.'
-          : 'No review transition is available from this status. The controlled local lifecycle action is available below.'
+          ? 'A showcase removal is pending for this project. The controlled lifecycle action is available below.'
+          : 'No review transition is available from this status. The controlled lifecycle action is available below.'
         : 'No review transition is available from this status. Archive or removal requires authorized staff in a supported environment.',
     };
   }

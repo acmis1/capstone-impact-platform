@@ -11,6 +11,7 @@ import {
   SupabaseAssistiveInputRepository,
   SupabaseAssistiveJobRepository,
   SupabaseAssistiveValidationRepository,
+  SupabaseAssistiveWorkerHeartbeatRepository,
   assistiveInspectionResponseSchema,
   type AssistiveInspectionView,
   type AssistiveRecordableDisposition,
@@ -65,11 +66,16 @@ export async function runAssistiveChecksAction(publicIdInput: unknown): Promise<
       return { ok: false, code: 'PERMISSION_DENIED', message: 'You do not have permission to view this project.' };
     }
 
-    if (!isAssistiveExecutionAvailable()) {
+    const env = getServerEnv();
+    const supabase = createSupabaseAdminClient();
+    if (!await isAssistiveExecutionAvailable(
+      env.supabaseUrl,
+      new SupabaseAssistiveWorkerHeartbeatRepository(supabase, process.env.RENDER_GIT_COMMIT ?? ''),
+    )) {
       return {
         ok: false,
         code: 'EXECUTION_UNAVAILABLE',
-        message: 'Running assistive checks is not available in this environment.',
+        message: 'Assistive checks are temporarily unavailable because the processing worker is not ready.',
       };
     }
 
@@ -78,13 +84,11 @@ export async function runAssistiveChecksAction(publicIdInput: unknown): Promise<
       return { ok: false, code: 'VALIDATION_FAILED', message: 'Invalid project identifier.' };
     }
 
-    const supabase = createSupabaseAdminClient();
     const projectId = await resolveProjectDbId(supabase, publicIdParsed.data);
     if (!projectId) {
       return { ok: false, code: 'PROJECT_NOT_FOUND', message: 'Project not found.' };
     }
 
-    const env = getServerEnv();
     const result = await enqueueAssistiveValidation(
       new SupabaseAssistiveJobRepository(supabase),
       new SupabaseAssistiveInputRepository(supabase),

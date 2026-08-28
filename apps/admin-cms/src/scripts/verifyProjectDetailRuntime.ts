@@ -364,7 +364,7 @@ async function run(): Promise<void> {
       if (response.status !== 200 || response.url.includes('/login')) throw new Error(`Authenticated project navigation failed: ${project.publicId}`);
       if (body.includes('Project Details Unavailable')) throw new Error(`Project detail fallback rendered: ${project.publicId}`);
       if (!body.includes(project.title)
-        || !body.includes('Public ID')
+        || !body.includes('Project ID')
         || !body.includes('Review status:')
         || !body.includes('Project information')
         || !body.includes('Public showcase content')) {

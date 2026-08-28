@@ -13,7 +13,15 @@ import { rankDuplicateCandidates } from '../duplicate-detection/duplicateRanker'
 import type { AssistiveJobGateway } from '../repositories/assistiveJobRepository';
 import type { AssistiveInputGateway } from '../repositories/assistiveInputRepository';
 import { loadAssistiveInput } from './assistiveInputService';
-import { WorkerProcessError, type AssistiveWorkerRunner } from './pythonWorkerProcess';
+import {
+  WorkerProcessError,
+  type AssistiveOcrProviderSelection,
+  type AssistiveWorkerRunner,
+} from './pythonWorkerProcess';
+import {
+  LanguageProviderControlError,
+  type AssistiveLanguageProvider,
+} from './languageToolProcess';
 
 const LEASE_SECONDS = 120;
 
@@ -58,6 +66,10 @@ export class AssistiveValidationCoordinator {
     private readonly privateBucket: string,
     private readonly worker: AssistiveWorkerRunner,
     private readonly workerId: string,
+    /** OCR remains explicitly operator-selected; native PDF extraction still runs first. */
+    private readonly ocrProvider: AssistiveOcrProviderSelection = 'NONE',
+    /** Language suggestions are opt-in and remain non-authoritative. */
+    private readonly languageProvider: AssistiveLanguageProvider | null = null,
   ) {}
 
   async runOnce(): Promise<CoordinatorResult> {
@@ -83,7 +95,8 @@ export class AssistiveValidationCoordinator {
       task = await this.worker.run({
         content: initial.content,
         documentType: initial.documentType,
-        ocrProvider: 'NONE',
+        ocrProvider: this.ocrProvider,
+        rasterDpi: this.ocrProvider === 'PADDLE_TITLE' ? 180 : null,
         onPulse: async () => {
           const pulse = await mutate(this.jobs, this.jobs.heartbeat(
             claim.jobId,
@@ -134,6 +147,39 @@ export class AssistiveValidationCoordinator {
       return failClaim(this.jobs, claim, 'DETERMINISTIC_CONTRACT_REJECTED');
     }
 
+    let languageUnavailable = false;
+    if (this.languageProvider) {
+      try {
+        const language = await this.languageProvider.check({
+          project: initial.currentProject,
+          inputHash: claim.inputHash,
+          onPulse: async () => {
+            const result = await mutate(this.jobs, this.jobs.heartbeat(
+              claim.jobId,
+              claim.claimToken,
+              LEASE_SECONDS,
+            ));
+            if (result.resultCode === 'CANCELLED') return 'CANCEL';
+            if (result.resultCode === 'CLAIM_LOST') return 'CLAIM_LOST';
+            return 'CONTINUE';
+          },
+        });
+        if (language.status === 'UNAVAILABLE') {
+          languageUnavailable = true;
+        } else {
+          findings.push(...language.findings.slice(0, 50 - findings.length));
+        }
+      } catch (error) {
+        if (error instanceof LanguageProviderControlError) {
+          return {
+            outcome: error.code === 'CANCELLED' ? 'CANCELLED' : 'CLAIM_LOST',
+            runId: claim.runId,
+          };
+        }
+        languageUnavailable = true;
+      }
+    }
+
     let current;
     try {
       current = await loadAssistiveInput(this.inputs, claim.projectId, this.privateBucket);
@@ -145,9 +191,12 @@ export class AssistiveValidationCoordinator {
       return supersededOutcome(result.resultCode, claim.runId);
     }
 
-    const partialCode = extraction.status === 'OCR_REQUIRED'
+    const ocrPartialCode = extraction.status === 'OCR_REQUIRED'
       ? (extraction.ocr_state === 'UNAVAILABLE' ? 'OCR_PROVIDER_UNAVAILABLE' : 'OCR_REQUIRED')
       : null;
+    const partialCode = languageUnavailable
+      ? (ocrPartialCode === null ? 'LANGUAGE_PROVIDER_UNAVAILABLE' : 'OCR_AND_LANGUAGE_INCOMPLETE')
+      : ocrPartialCode;
     const finalized = await mutate(this.jobs, this.jobs.finalize({
       jobId: claim.jobId,
       claimToken: claim.claimToken,

@@ -64,6 +64,12 @@ export function isPrivateAssetPresent(assets: ImportBatchReviewMediaAssetInput[]
   );
 }
 
+export function countPrivateAssets(assets: ImportBatchReviewMediaAssetInput[], assetType: string): number {
+  return assets.filter(
+    (asset) => asset.assetType === assetType && asset.publicUrl === null && asset.isPublicApproved === false
+  ).length;
+}
+
 /**
  * Server-authoritative readiness derivation for submitting an imported project into the
  * administrative review workflow. Mirrors the blocking checks re-derived inside the
@@ -158,7 +164,7 @@ export function computeProjectReviewReadiness(input: ImportBatchReviewProjectInp
     }
   }
 
-  if (!input.snapshots || input.snapshots.length === 0) {
+  if (snapshotAssets.length === 0) {
     warnings.push('Snapshot gallery is empty.');
   }
   if (input.validationWarnings) {

@@ -440,6 +440,68 @@ function failSecondMediaUpload(client: SupabaseClient, publicId: string) {
   };
 }
 
+type FeedWriteFault = 'commit_then_error' | 'reject_then_unavailable' | 'reject_with_baseline';
+
+/** Faults only the canonical feed upload while preserving the real disposable database client. */
+function withFeedWriteFault(client: SupabaseClient, fault: FeedWriteFault): SupabaseClient {
+  let feedWriteAttempted = false;
+  const storage = {
+    from(bucket: string) {
+      const real = client.storage.from(bucket);
+      return new Proxy(real, {
+        get(target, property, receiver) {
+          if (property === 'upload') {
+            return async (objectPath: string, content: unknown, options: unknown) => {
+              if (bucket !== feedBucket || objectPath !== feedPath) {
+                return target.upload(objectPath, content as never, options as never);
+              }
+              feedWriteAttempted = true;
+              if (fault === 'commit_then_error') {
+                const committed = await target.upload(objectPath, content as never, options as never);
+                assert.equal(committed.error, null, committed.error?.message);
+              }
+              return { data: null, error: { message: 'Synthetic caught write outcome' } };
+            };
+          }
+          if (property === 'download') {
+            return async (objectPath: string) => {
+              if (bucket === feedBucket && objectPath === feedPath && feedWriteAttempted
+                  && fault === 'reject_then_unavailable') {
+                return { data: null, error: { message: 'Synthetic observation unavailable' } };
+              }
+              return target.download(objectPath);
+            };
+          }
+          const value = Reflect.get(target, property, receiver);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    },
+  };
+  return new Proxy(client, {
+    get(target, property, receiver) {
+      if (property === 'storage') return storage;
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+function removeWithClient(
+  client: SupabaseClient,
+  publicId: string,
+  archiveReason: string,
+) {
+  return executeControlledPublicRemoval({
+    permissions: ['projects.archive'], publicId, archiveReason,
+    dependencies: {
+      supabase: client, adminId, feedBucket, feedPath,
+      assertExecutionEnvironment: () => undefined,
+      listProjects: async () => [project(publicId)],
+    },
+  });
+}
+
 async function publicMediaCount(client: SupabaseClient, publicId: string): Promise<number> {
   const result = await client.storage.from(publicAssetsBucket).list(`published/${publicId}`, { limit: 100 });
   if (result.error) return 0;
@@ -615,7 +677,7 @@ async function main(): Promise<void> {
   const anon = createClient(local.API_URL!, local.ANON_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
   const ledger = new SupabasePublicFeedLedgerRepositoryCore(client);
 
-  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '44');
+  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '46');
   assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version IN ('20260824180000','20260824183000','20260825030000');"), '3');
   assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260826090000';"), '1');
   assert.equal(psql("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('public_feed_operations','public_feed_versions','public_feed_version_members','public_feed_head','feed_rollback_preparations','public_feed_operation_events');"), '6');
@@ -975,7 +1037,7 @@ async function main(): Promise<void> {
     permissions: ['projects.archive'], publicId: traffic.publicId, archiveReason: 'Runtime removal',
     dependencies: {
       supabase: client, adminId, feedBucket, feedPath,
-      assertDisposableLocalEnvironment: () => undefined, listProjects: async () => [traffic],
+      assertExecutionEnvironment: () => undefined, listProjects: async () => [traffic],
     },
   });
   await assertCompleted(removal, 'controlled removal');
@@ -1363,7 +1425,7 @@ async function main(): Promise<void> {
     permissions: ['projects.archive'], publicId: traffic.publicId, archiveReason: 'Create empty rollback target',
     dependencies: {
       supabase: client, adminId, feedBucket, feedPath,
-      assertDisposableLocalEnvironment: () => undefined,
+      assertExecutionEnvironment: () => undefined,
       listProjects: async () => [project(traffic.publicId, 'archived')],
     },
   }), 'remove rollback-restored archived member');
@@ -1371,7 +1433,7 @@ async function main(): Promise<void> {
     permissions: ['projects.archive'], publicId: medical.publicId, archiveReason: 'Create empty rollback target',
     dependencies: {
       supabase: client, adminId, feedBucket, feedPath,
-      assertDisposableLocalEnvironment: () => undefined, listProjects: async () => [medical],
+      assertExecutionEnvironment: () => undefined, listProjects: async () => [medical],
     },
   }), 'remove final member');
   head = await ledger.getHead();
@@ -1519,7 +1581,7 @@ async function main(): Promise<void> {
     permissions: ['projects.archive'], publicId: crashPublicId, archiveReason: 'Restore rollback baseline',
     dependencies: {
       supabase: client, adminId, feedBucket, feedPath,
-      assertDisposableLocalEnvironment: () => undefined,
+      assertExecutionEnvironment: () => undefined,
       listProjects: async () => [project(crashPublicId)],
     },
   }), 'remove media crash fixture');
@@ -1528,7 +1590,7 @@ async function main(): Promise<void> {
       permissions: ['projects.archive'], publicId, archiveReason: 'Restore rollback baseline',
       dependencies: {
         supabase: client, adminId, feedBucket, feedPath,
-        assertDisposableLocalEnvironment: () => undefined,
+        assertExecutionEnvironment: () => undefined,
         listProjects: async () => [project(publicId)],
       },
     }), `remove ${publicId}`);
@@ -1544,6 +1606,86 @@ async function main(): Promise<void> {
   assert.equal(zeroRollback.resultCode, 'COMPLETED', JSON.stringify(zeroRollback));
   assert.deepEqual((await exactStored(client)).feed, []);
 
+  const publishFaultTarget = async (publicId: string) => {
+    await createReadyPublicationProject(client, publicId);
+    await assertCompleted(await executeControlledPublication({
+      permissions: ['projects.publish'], publicId,
+      privateBucket, publicAssetsBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath,
+      dependencies: createControlledPublicationDependencies({
+        supabase: client, supabaseUrl: runtimeApiUrl, publicId, adminId,
+        privateBucket, publicFeedBucket: feedBucket, publicFeedPath: feedPath,
+        executionTarget: 'local',
+      }),
+    }), `publish ${publicId}`);
+  };
+
+  const caughtCommittedId = '186-caught-committed';
+  await publishFaultTarget(caughtCommittedId);
+  const caughtCommitted = await removeWithClient(
+    withFeedWriteFault(client, 'commit_then_error'),
+    caughtCommittedId,
+    'Caught committed outcome',
+  );
+  await assertCompleted(caughtCommitted, 'caught committed write observation');
+  assert.equal((await exactStored(client)).feed.some(({ publicId }) => publicId === caughtCommittedId), false);
+
+  const unavailableObservationId = '186-caught-observation-unavailable';
+  const unavailableReason = 'Caught unavailable observation';
+  await publishFaultTarget(unavailableObservationId);
+  const unavailableOutcome = await removeWithClient(
+    withFeedWriteFault(client, 'reject_then_unavailable'),
+    unavailableObservationId,
+    unavailableReason,
+  );
+  assert.equal(unavailableOutcome.resultCode, 'RECOVERY_REQUIRED', JSON.stringify(unavailableOutcome));
+  const unavailableOperationId = psql(`SELECT id::text FROM public.public_feed_operations
+    WHERE public_id=${sqlLiteral(unavailableObservationId)} AND state='RECOVERY_REQUIRED';`);
+  assert.ok(unavailableOperationId);
+  assert.equal(psql(`SELECT observed_storage_hash IS NULL FROM public.public_feed_operations
+    WHERE id=${sqlLiteral(unavailableOperationId)}::uuid;`), 't');
+  assert.equal(
+    (await removeWithClient(client, unavailableObservationId, unavailableReason)).resultCode,
+    'RECOVERY_REQUIRED',
+  );
+  psql(`UPDATE public.public_feed_operations SET lease_expires_at=pg_catalog.now()-interval '1 second'
+    WHERE id=${sqlLiteral(unavailableOperationId)}::uuid;`);
+  for (const mismatch of [
+    { publicId: 'different-public-id', archiveReason: unavailableReason },
+    { publicId: unavailableObservationId, archiveReason: 'Different archive reason' },
+  ]) {
+    const refused = await executePublicFeedWriter({
+      supabase: client, adminId, kind: 'removal', ...mismatch,
+      feedBucket, feedPath, recoveryOperationId: unavailableOperationId,
+      prepareCandidate: async () => { throw new Error('RECOVERY_ARTIFACT_MUST_BE_DURABLE'); },
+    });
+    assert.equal(refused.resultCode, 'RECOVERY_REQUIRED', JSON.stringify(refused));
+  }
+  const unavailableRecovery = await recoverPublicFeedOperation(historyDependencies(client, []));
+  assert.equal(unavailableRecovery.resultCode, 'COMPLETED', JSON.stringify(unavailableRecovery));
+  assert.equal((await exactStored(client)).feed.some(({ publicId }) => publicId === unavailableObservationId), false);
+
+  const baselineObservedId = '186-caught-baseline-observed';
+  const baselineReason = 'Caught baseline observation';
+  await publishFaultTarget(baselineObservedId);
+  const baselineBeforeFault = await exactStored(client);
+  const baselineOutcome = await removeWithClient(
+    withFeedWriteFault(client, 'reject_with_baseline'),
+    baselineObservedId,
+    baselineReason,
+  );
+  assert.equal(baselineOutcome.resultCode, 'RECOVERY_REQUIRED', JSON.stringify(baselineOutcome));
+  assert.equal((await exactStored(client)).content, baselineBeforeFault.content);
+  const baselineOperationId = psql(`SELECT id::text FROM public.public_feed_operations
+    WHERE public_id=${sqlLiteral(baselineObservedId)} AND state='RECOVERY_REQUIRED';`);
+  assert.ok(baselineOperationId);
+  assert.equal(psql(`SELECT observed_storage_hash FROM public.public_feed_operations
+    WHERE id=${sqlLiteral(baselineOperationId)}::uuid;`), baselineBeforeFault.feedHash);
+  psql(`UPDATE public.public_feed_operations SET lease_expires_at=pg_catalog.now()-interval '1 second'
+    WHERE id=${sqlLiteral(baselineOperationId)}::uuid;`);
+  const baselineRecovery = await recoverPublicFeedOperation(historyDependencies(client, []));
+  assert.equal(baselineRecovery.resultCode, 'COMPLETED', JSON.stringify(baselineRecovery));
+
+  // Genuine uncaught process death retains the existing lease and uncertainty-fence behavior.
   const responseLossPublicId = '186-response-loss-target';
   await createReadyPublicationProject(client, responseLossPublicId);
   const postZeroRollback = await executeControlledPublication({
@@ -1665,7 +1807,7 @@ async function main(): Promise<void> {
   const memberHash = psql(`SELECT record_hash FROM public.public_feed_version_members WHERE version_id=${sqlLiteral(firstVersionId)}::uuid ORDER BY ordinal LIMIT 1;`);
   assert.equal(memberHash, trafficArtifact.members[0].recordHash);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
-  console.log('Public feed ledger runtime verification passed: fresh 44-migration schema, durable activation authority through pre-write recovery, real overlapping READ COMMITTED/REPEATABLE READ/SERIALIZABLE proof, unrelated-draft nonblocking proof, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, stale-owner fencing, grants, and immutable history.');
+  console.log('Public feed ledger runtime verification passed: fresh 46-migration schema, durable activation authority through pre-write recovery, real overlapping READ COMMITTED/REPEATABLE READ/SERIALIZABLE proof, unrelated-draft nonblocking proof, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, stale-owner fencing, grants, and immutable history.');
 }
 
 main().catch((error: unknown) => {

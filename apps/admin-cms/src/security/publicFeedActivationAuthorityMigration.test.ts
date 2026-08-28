@@ -9,10 +9,16 @@ const migrationName = '20260826090000_public_feed_activation_authority_guard.sql
 const source = fs.readFileSync(path.join(migrations, migrationName), 'utf8').replace(/\r\n/g, '\n');
 
 describe('public-feed activation authority migration', () => {
-  it('is the sole new forward migration after the reviewed 43-migration baseline', () => {
+  it('is the sole new migration relative to current main', () => {
     const files = fs.readdirSync(migrations).filter((name) => name.endsWith('.sql')).sort();
-    expect(files).toHaveLength(44);
-    expect(files.at(-1)).toBe(migrationName);
+    expect(files).toHaveLength(46);
+    expect(files).toContain(migrationName);
+
+    expect(() => execFileSync('git', [
+      'diff', '--exit-code', 'origin/main', '--',
+      ...files.filter((file) => file !== migrationName)
+        .map((file) => `infra/supabase/migrations/${file}`),
+    ], { cwd: root, stdio: 'pipe' })).not.toThrow();
 
     for (const historical of [
       '20260824180000_public_feed_deployment_ledger.sql',

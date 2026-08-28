@@ -8,7 +8,7 @@ import {
   ImportBatchRow,
   ImportBatchReviewProjectRow,
 } from '../../../../repositories/ImportBatchRepositoryCore';
-import { computeReadinessForImportBatchRow, isPrivateAssetPresent } from '../../../../import/importBatchReviewReadiness';
+import { computeReadinessForImportBatchRow, countPrivateAssets, isPrivateAssetPresent } from '../../../../import/importBatchReviewReadiness';
 import { requireAdmin } from '../../../../auth/requireAdmin';
 import { hasPermission } from '../../../../auth/permissions';
 import { Button } from '../../../../components/ui/button';
@@ -93,6 +93,7 @@ export default async function ImportBatchDetailPage({
     }));
     const posterPresent = isPrivateAssetPresent(mediaAssets, 'poster_image');
     const posterPdfPresent = isPrivateAssetPresent(mediaAssets, 'poster_pdf');
+    const snapshotCount = countPrivateAssets(mediaAssets, 'snapshot_image');
     return {
       publicId: row.public_id,
       title: row.title || '(untitled)',
@@ -103,6 +104,7 @@ export default async function ImportBatchDetailPage({
       warnings: readiness.warnings,
       posterPresent,
       posterPdfPresent,
+      snapshotCount,
     };
   });
 

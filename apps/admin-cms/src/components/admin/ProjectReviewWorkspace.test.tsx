@@ -4,7 +4,7 @@ import React from 'react';
 import fs from 'node:fs';
 import path from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { cleanup, render, screen, fireEvent, within } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Layers } from 'lucide-react';
 import { ProjectDetailMacroSection, ProjectReviewSection } from './ProjectReviewSection';
@@ -17,9 +17,16 @@ import {
 } from './ProjectMetadataNavigation';
 import type { AuditHistoryView } from '../../projects/projectDetailAuxiliaryData';
 
+const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: routerPush, refresh: vi.fn() }),
+}));
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  routerPush.mockReset();
 });
 
 describe('ProjectReviewSection layout primitive', () => {
@@ -180,19 +187,8 @@ describe('Project Detail macro navigation', () => {
   });
 
   it('keeps same-page anchors outside the dirty-navigation guard while Back remains guarded', () => {
-    function DirtyStateControl() {
-      const { setDirty } = useProjectMetadataNavigation();
-      return <button type="button" onClick={() => setDirty(true)}>Mark project information dirty</button>;
-    }
-
-    const confirmDiscard = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    render(
-      <ProjectMetadataNavigationProvider>
-        <ProjectDetailSectionNavigation />
-        <DirtyStateControl />
-        <GuardedProjectBackLink href="/admin">Back to projects</GuardedProjectBackLink>
-      </ProjectMetadataNavigationProvider>
-    );
+    const nativeConfirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderGuardedBackLink();
 
     fireEvent.click(screen.getByRole('button', { name: 'Mark project information dirty' }));
     const beforeUnload = new Event('beforeunload', { cancelable: true });
@@ -200,10 +196,103 @@ describe('Project Detail macro navigation', () => {
     expect(beforeUnload.defaultPrevented).toBe(true);
 
     fireEvent.click(screen.getByRole('link', { name: 'Content and media' }));
-    expect(confirmDiscard).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(routerPush).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('link', { name: 'Back to projects' }));
-    expect(confirmDiscard).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByRole('alertdialog')).toHaveLength(1);
+    expect(nativeConfirm).not.toHaveBeenCalled();
+  });
+});
+
+function DirtyStateControl() {
+  const { setDirty } = useProjectMetadataNavigation();
+  return <button type="button" onClick={() => setDirty(true)}>Mark project information dirty</button>;
+}
+
+function renderGuardedBackLink() {
+  return render(
+    <ProjectMetadataNavigationProvider>
+      <ProjectDetailSectionNavigation />
+      <DirtyStateControl />
+      <GuardedProjectBackLink href="/admin">Back to projects</GuardedProjectBackLink>
+    </ProjectMetadataNavigationProvider>
+  );
+}
+
+describe('GuardedProjectBackLink in-app discard confirmation', () => {
+  it('navigates immediately with no confirmation while project information is clean', () => {
+    const nativeConfirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderGuardedBackLink();
+
+    const backLink = screen.getByRole('link', { name: 'Back to projects' });
+    expect(backLink.getAttribute('href')).toBe('/admin');
+    fireEvent.click(backLink);
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(nativeConfirm).not.toHaveBeenCalled();
+  });
+
+  it('opens exactly one accessible dialog and never window.confirm when dirty', () => {
+    const nativeConfirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderGuardedBackLink();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark project information dirty' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Back to projects' }));
+
+    expect(nativeConfirm).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('alertdialog')).toHaveLength(1);
+    expect(screen.getByText('Discard unsaved changes?')).toBeTruthy();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('performs zero navigation and returns focus to Back when Keep editing is chosen', async () => {
+    renderGuardedBackLink();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark project information dirty' }));
+    const backLink = screen.getByRole('link', { name: 'Back to projects' });
+    fireEvent.click(backLink);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(routerPush).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement).toBe(backLink));
+  });
+
+  it('performs zero navigation and returns focus to Back when the dialog is dismissed with Escape', async () => {
+    renderGuardedBackLink();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark project information dirty' }));
+    const backLink = screen.getByRole('link', { name: 'Back to projects' });
+    fireEvent.click(backLink);
+    expect(screen.getAllByRole('alertdialog')).toHaveLength(1);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(routerPush).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement).toBe(backLink));
+  });
+
+  it('navigates exactly once when Discard changes is chosen', async () => {
+    const nativeConfirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderGuardedBackLink();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark project information dirty' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Back to projects' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(routerPush).toHaveBeenCalledTimes(1);
+    expect(routerPush).toHaveBeenCalledWith('/admin');
+    expect(nativeConfirm).not.toHaveBeenCalled();
+
+    // The dirty flag is cleared before navigating, so the browser-native unload prompt cannot add
+    // a second confirmation on top of the choice the user just made.
+    const beforeUnload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(beforeUnload);
+    expect(beforeUnload.defaultPrevented).toBe(false);
   });
 });
 
@@ -524,7 +613,13 @@ describe('project detail workspace information architecture', () => {
     ]) {
       expect(pageSource).toContain(capability);
     }
-    expect(pageSource).toMatch(/canExecuteLocalArchive,\s*participantResponse:/);
+    expect(pageSource).toMatch(/canExecuteArchive: archiveExecutionTarget === 'local' \|\| archiveExecutionTarget === 'staging',\s*participantResponse:/);
+  });
+
+  it('shows a bounded unavailable archive state only for a declared staging runtime', () => {
+    expect(pageSource).toMatch(/isStagingRuntimeEnvironment\(\)\s*\? 'staging-unavailable'/);
+    expect(pageSource).toMatch(/\? 'staging'\s*: isStagingRuntimeEnvironment\(\)/);
+    expect(pageSource).not.toContain("archiveExecutionTarget = 'staging-unavailable'");
   });
 
   it('keeps technical details and change history available rather than removed', () => {
@@ -553,12 +648,20 @@ describe('project detail workspace information architecture', () => {
     expect(asideSource).not.toContain('sticky');
     expect(asideSource).toContain('Project record');
     expect(asideSource).toContain('Import origin');
-    expect(asideSource).toContain('Review staging sandbox');
+    expect(asideSource).toContain('Test environment.');
+    expect(asideSource).not.toContain('server runtime identity');
+    expect(asideSource).not.toContain('staging sandbox');
   });
 
   it('keeps the unsaved-edit navigation guard on the back link', () => {
     expect(pageSource).toContain('<ProjectMetadataNavigationProvider>');
     expect(pageSource).toContain('<GuardedProjectBackLink');
+  });
+
+  it('labels the project identifier as a Project ID in the staff-facing header', () => {
+    const headerSource = pageSource.slice(pageSource.indexOf('<header'), pageSource.indexOf('</header>'));
+    expect(headerSource).toContain('>Project ID</dt>');
+    expect(headerSource).not.toContain('Public ID');
   });
 
   it('does not truncate project identifiers', () => {

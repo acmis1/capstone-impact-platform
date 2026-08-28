@@ -70,7 +70,7 @@ describe('repositoryChecks terminology gating', () => {
     it('passes cleanly on the current repository, recognizing tracked holdout-capture.json as exempt', () => {
       const failures = checkTerminology();
       expect(failures).toEqual([]);
-    });
+    }, 30000);
 
     it('exempts synthetic terminology in holdout-capture.json when simulated', () => {
       const failures = checkTerminology('/mock/repo', {

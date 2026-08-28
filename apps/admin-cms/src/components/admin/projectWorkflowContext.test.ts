@@ -13,7 +13,7 @@ const baseInput: ProjectWorkflowContextInput = {
   canManageParticipantPreview: false,
   canResolveParticipantCorrection: false,
   canPreparePublication: false,
-  canExecuteLocalArchive: false,
+  canExecuteArchive: false,
   participantResponse: 'unresponded',
   hasActivePreview: false,
   publicationReadiness: null,
@@ -160,10 +160,10 @@ describe('project workflow orientation context', () => {
     expect(context.decision).not.toMatch(/share a participant preview/i);
   });
 
-  it('surfaces a pending showcase removal only as a local lifecycle action when it is available', () => {
-    const context = derive({ status: 'published', allowedActions: [], pendingRemovalFromPublic: true, canExecuteLocalArchive: true });
+  it('surfaces a pending showcase removal only as a governed lifecycle action when it is available', () => {
+    const context = derive({ status: 'published', allowedActions: [], pendingRemovalFromPublic: true, canExecuteArchive: true });
     expect(context.summary).toMatch(/marked for removal/i);
-    expect(context.decision).toMatch(/local lifecycle action is available below/i);
+    expect(context.decision).toMatch(/controlled lifecycle action is available below/i);
   });
 
   it('does not recommend local archive when it is unavailable', () => {

@@ -828,7 +828,75 @@ describe('Browser Import Preview Suite', () => {
       expect(derived.warning).toBeDefined();
     });
 
-    it('37. Case-insensitive canonical filename recognition', async () => {
+    it('37. Supports JPEG and WEBP gallery extensions through canonical MIME derivation', async () => {
+      const makePackageJson = (groupName: string) => Buffer.from(JSON.stringify({
+        title: `${groupName} gallery`,
+        summary: `${groupName} project summary`,
+        year: '2026',
+        program: 'Computer Science',
+        studyProgram: 'Computer Science',
+        discipline: 'Software Engineering',
+        groupName,
+        teamMembers: ['Lead'],
+        layoutConfig: {
+          templateId: 'poster_showcase',
+          featuredMedia: 'poster',
+        },
+      }));
+
+      const jpegBuf = makePackageJson('JPEG');
+      const webpBuf = makePackageJson('WebP');
+
+      const descJpegJson = makeDesc('root/pkg-jpeg/project.json', jpegBuf.length, 'application/octet-stream');
+      const descJpegPng = makeDesc('root/pkg-jpeg/poster.png', 500, 'application/octet-stream');
+      const descJpegPdf = makeDesc('root/pkg-jpeg/poster.pdf', 500, 'application/octet-stream');
+      const descJpegSnapshot = makeDesc('root/pkg-jpeg/snapshot-1.jpg', 500, 'application/octet-stream');
+
+      const descWebpJson = makeDesc('root/pkg-webp/project.json', webpBuf.length, 'application/octet-stream');
+      const descWebpPng = makeDesc('root/pkg-webp/poster.png', 500, 'application/octet-stream');
+      const descWebpPdf = makeDesc('root/pkg-webp/poster.pdf', 500, 'application/octet-stream');
+      const descWebpSnapshot = makeDesc('root/pkg-webp/snapshot-2.webp', 500, 'application/octet-stream');
+
+      const manifest: SelectionManifest = {
+        selectedRootName: 'root',
+        fileCount: 8,
+        declaredTotalBytes: jpegBuf.length + webpBuf.length + 6 * 500,
+        ignoredSystemFilesCount: 0,
+        descriptors: [
+          descJpegJson,
+          descJpegPng,
+          descJpegPdf,
+          descJpegSnapshot,
+          descWebpJson,
+          descWebpPng,
+          descWebpPdf,
+          descWebpSnapshot,
+        ],
+      };
+
+      const uploads = new Map<string, Buffer>([
+        [descJpegJson.uploadKey, jpegBuf],
+        [descWebpJson.uploadKey, webpBuf],
+      ]);
+
+      const res = await parseBrowserImportPreview(manifest, uploads);
+      expect(res.batch.packageCount).toBe(2);
+
+      const jpegPkg = res.batch.packages.find((pkg) => pkg.packagePath === 'root/pkg-jpeg');
+      const webpPkg = res.batch.packages.find((pkg) => pkg.packagePath === 'root/pkg-webp');
+
+      expect(jpegPkg).toBeDefined();
+      expect(webpPkg).toBeDefined();
+
+      expect(jpegPkg?.status).not.toBe('invalid');
+      expect(webpPkg?.status).not.toBe('invalid');
+      expect(jpegPkg?.filePresence.snapshotPresent).toBe(true);
+      expect(webpPkg?.filePresence.snapshotPresent).toBe(true);
+      expect(jpegPkg?.errors).toHaveLength(0);
+      expect(webpPkg?.errors).toHaveLength(0);
+    });
+
+    it('38. Case-insensitive canonical filename recognition', async () => {
       const xlsxBuf = await buildTestWorkbookBuffer();
       const descXlsx = makeDesc(
         'solar-monitor/project-details.xlsx',

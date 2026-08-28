@@ -1,0 +1,119 @@
+{
+  "schema_version": "pp1-ocr-title-latency-protocol/v1",
+  "protocol_version": "pp1-ocr-title-latency-v1",
+  "phase": "CALIBRATION_ONLY",
+  "scope": {
+    "production_capability": "extract bounded local poster/image title evidence for deterministic comparison with authoritative metadata",
+    "metadata_blind_region_selection": true,
+    "historical_holdout_status": "CLOSED_CONSUMED_NOT_REUSABLE",
+    "excluded": [
+      "full document transcription",
+      "semantic title identity",
+      "metadata mutation",
+      "approval, publication, archive, Duda, public-feed, browser, shell, or hosted-service authority"
+    ]
+  },
+  "candidate": {
+    "engine": "paddle-small",
+    "provider_id": "paddleocr-local",
+    "model_family": "PP-OCRv6 Small",
+    "detection_model": "PP-OCRv6_small_det",
+    "recognition_model": "PP-OCRv6_small_rec",
+    "detection_archive_sha256": "bfb7c1e59f0faa6b540ebdca93aea3f4b1f2477805b389fbee117820d68fe9f5",
+    "recognition_archive_sha256": "da460f968ce9f88325ac3a34fa302077d6e9b0dcefb16ba3137cd7796f879d06",
+    "detection_tree_sha256": "8af984562965b7be9bd5d1c8acb52f6d0bf37de475947b520d876ed8640eb29a",
+    "recognition_tree_sha256": "0ee2c443863549fabdb1120d7a58df5e8afa0d67bce0827b75529f105c993eae",
+    "artifact_footprint_bytes": 31481281,
+    "runtime": {"paddleocr": "3.7.0", "paddlepaddle": "3.3.0", "paddlex": "3.7.2"},
+    "license": "Apache-2.0",
+    "official_sources": [
+      "https://www.paddleocr.ai/main/en/version3.x/pipeline_usage/OCR.html",
+      "https://www.paddleocr.ai/latest/en/version3.x/inference_deployment/local_inference/inference_engine.html",
+      "https://www.paddleocr.ai/v3.0.2/en/version3.x/deployment/high_performance_inference.html",
+      "https://github.com/PaddlePaddle/PaddleOCR/releases/tag/v3.7.0"
+    ]
+  },
+  "fixed_configuration": {
+    "device": "cpu",
+    "raster_dpi": 180,
+    "max_input_dimension": 1920,
+    "mkldnn_cache_capacity": 10,
+    "use_doc_orientation_classify": false,
+    "use_doc_unwarping": false,
+    "use_textline_orientation": false,
+    "enable_hpi": false,
+    "worker_concurrency": 1
+  },
+  "bounded_options": {
+    "cpu_threads": [4, 8, 10, 12],
+    "fast_region_ratios": [0.3, 0.36],
+    "raster_dimensions": [1920, 1600, 1440],
+    "enable_mkldnn": [false, true],
+    "enable_hpi": [false]
+  },
+  "fast_path_contract": {
+    "policy": "top-image-region-first-with-metadata-blind-credibility-and-full-page-fallback/v1",
+    "minimum_candidate_prominence": 30.0,
+    "minimum_recognition_confidence": 0.9,
+    "crop_boundary_margin_pixels": 4,
+    "ambiguity_prominence_ratio": 0.82,
+    "minimum_tokens": 2,
+    "maximum_tokens": 14,
+    "reject_all_uppercase_candidate": true,
+    "reject_any_prominent_uppercase_candidate": true,
+    "fallback": "normal full-page PP-OCRv6 Small using the same model/runtime configuration"
+  },
+  "title_contract": {
+    "selector": "top-band-group-prominence-v3@geometry",
+    "normalization": "Unicode NFKC, casefold, Unicode dash/quote folding, bounded punctuation-to-space, whitespace collapse",
+    "classifier": "deterministic-title-safety-v1",
+    "semantic_similarity_may_agree": false,
+    "outcomes": ["AGREES", "REVIEW", "MISMATCH"],
+    "classification": "NON_BLOCKING"
+  },
+  "quality_gates": {
+    "all_scored_cases_must_execute": true,
+    "automatic_agreement_precision_target": 1.0,
+    "exact_title_rate_minimum": 0.95,
+    "inconsistency_precision_minimum": 0.98,
+    "inconsistency_recall_minimum": 0.95,
+    "material_false_automatic_agreements_maximum": 0
+  },
+  "calibration_margin": {
+    "automatic_agreement_precision_target": 1.0,
+    "exact_title_rate_minimum": 1.0,
+    "false_fast_path_acceptances_maximum": 0,
+    "inconsistency_precision_minimum": 1.0,
+    "inconsistency_recall_minimum": 1.0,
+    "material_false_automatic_agreements_maximum": 0,
+    "p50_ms_maximum": 7500,
+    "p95_ms_maximum": 15000
+  },
+  "operational_gates": {
+    "artifact_footprint_bytes_maximum": 1073741824,
+    "cold_start_ms_maximum": 30000,
+    "p50_ms_maximum": 10000,
+    "p95_ms_maximum": 20000,
+    "peak_working_set_bytes_maximum": 4294967296,
+    "per_case_timeout_seconds": 90,
+    "worker_concurrency_maximum": 1
+  },
+  "security": {
+    "network_during_inference": "denied process-wide before model construction",
+    "download_during_capture": false,
+    "cloud_inference": false,
+    "model_paths": "explicit operator-provisioned local directories with frozen tree hashes",
+    "worker_concurrency": 1
+  },
+  "candidate_selection_order": [
+    "MKL-DNN plus bounded threads",
+    "MKL-DNN plus deterministic title-region fast path and fallback",
+    "bounded raster adjustment only if required",
+    "officially supported HPI only if deployable and necessary"
+  ],
+  "holdout_contract": {
+    "holdout_must_not_exist_during_calibration": true,
+    "winner_must_meet_every_calibration_margin": true,
+    "fresh_holdout_requires_later_freeze_and_seal": true
+  }
+}

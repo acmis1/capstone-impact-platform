@@ -28,14 +28,14 @@ const RUNTIME_SCRIPTS: Record<string, string> = {
 };
 
 /**
- * The sole correction migration. Removing exactly this file reproduces the reviewed 43-migration
- * PR baseline; restoring it proves the exact forward-only 43 -> 44 upgrade.
+ * The sole correction migration. Removing exactly this file reproduces current main's
+ * 45-migration state; restoring it proves the supported forward-only 45 -> 46 upgrade.
  */
 const CORRECTION_MIGRATIONS = [
   '20260826090000_public_feed_activation_authority_guard.sql',
 ];
 
-const REVIEWED_BASE_MIGRATION_COUNT = 43;
+const CURRENT_MAIN_MIGRATION_COUNT = 45;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -128,13 +128,13 @@ function verifyCorrectionUpgrade(workdir: string): void {
 
   assert.equal(
     baselineFiles.length,
-    REVIEWED_BASE_MIGRATION_COUNT,
-    'The reviewed baseline is not exactly 43 files.',
+    CURRENT_MAIN_MIGRATION_COUNT,
+    'The current-main baseline is not exactly 45 files.',
   );
   assert.equal(
     appliedCount(),
-    String(REVIEWED_BASE_MIGRATION_COUNT),
-    'The provisioned baseline is not exactly the reviewed PR head.',
+    String(CURRENT_MAIN_MIGRATION_COUNT),
+    'The provisioned baseline is not exactly current main.',
   );
   assert.equal(psql("SELECT to_regclass('public.public_feed_operations') IS NOT NULL;"), 't');
   assert.equal(psql("SELECT to_regclass('public.public_feed_head') IS NOT NULL;"), 't');
@@ -187,12 +187,12 @@ function verifyCorrectionUpgrade(workdir: string): void {
         WHERE ma.id='18600000-0000-4000-8000-000000000014'::uuid)
     )::text;`);
   assert.equal(psql('SELECT count(*) FROM public.public_feed_head;'), '0');
-  console.log('PASS: disposable stack provisioned at the exact reviewed 43-migration baseline');
+  console.log('PASS: disposable stack provisioned at the exact current-main 45-migration baseline');
 
   restoreMigrations(workdir, CORRECTION_MIGRATIONS);
   runSupabase('migrate', workdir, '');
 
-  assert.equal(appliedCount(), '44', 'The upgraded database is not exactly 44 migrations.');
+  assert.equal(appliedCount(), '46', 'The upgraded database is not exactly 46 migrations.');
   assert.equal(
     psql(
       'SELECT count(*) FROM supabase_migrations.schema_migrations'
@@ -247,7 +247,7 @@ function verifyCorrectionUpgrade(workdir: string): void {
       'media', (SELECT pg_catalog.to_jsonb(ma) FROM public.media_assets ma
         WHERE ma.id='18600000-0000-4000-8000-000000000014'::uuid)
     )::text;`), preservedBefore);
-  console.log('PASS: exact 43 -> 44 activation-authority upgrade preserved project, taxonomy, and media data');
+  console.log('PASS: exact current-main 45 -> 46 activation-authority upgrade preserved project, taxonomy, and media data');
 
   // End-of-sequence composition. The deployment-ledger migrations carry earlier timestamps than the
   // final merged gallery migration, so the composed database must still end on the merged gallery

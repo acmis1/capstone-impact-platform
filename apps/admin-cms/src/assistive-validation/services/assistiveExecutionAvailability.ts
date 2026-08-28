@@ -1,19 +1,30 @@
 import { isLoopbackUrl } from '../../local-development/localEnvironmentFile';
 import { getServerEnv } from '../../lib/env';
+import { isVerifiedStagingRuntime, type StagingRuntimeEnvironment } from '../../security/stagingRuntimeIdentity';
+import type { AssistiveWorkerHeartbeatGateway } from '../repositories/assistiveWorkerHeartbeatRepository';
+import { hasCompatibleAssistiveWorker } from './assistiveWorkerHeartbeat';
 
 /**
  * Checks whether assistive validation execution is supported in the current environment.
  *
- * Current Architecture Boundary (PP1 Phase 5):
- * The Phase 4 asynchronous coordinator and worker execution run strictly on local loopback infrastructure.
- * Hosted Admin/CMS environments can read historical/persisted assistive results, but cannot enqueue
- * active jobs because no hosted worker daemon is deployed.
+ * Local execution remains available on loopback. Hosted execution fails closed unless this is the
+ * explicitly enabled, verified staging target and a compatible dedicated worker heartbeat is fresh.
  */
-export function isAssistiveExecutionAvailable(supabaseUrl?: string): boolean {
+export async function isAssistiveExecutionAvailable(
+  supabaseUrl?: string,
+  heartbeatGateway?: AssistiveWorkerHeartbeatGateway,
+  env: StagingRuntimeEnvironment = process.env,
+): Promise<boolean> {
   try {
     const url = supabaseUrl ?? getServerEnv().NEXT_PUBLIC_SUPABASE_URL;
     if (!url) return false;
-    return isLoopbackUrl(url);
+    if (isLoopbackUrl(url)) return true;
+    if (env.CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED !== 'true'
+        || !heartbeatGateway
+        || !isVerifiedStagingRuntime({ ...env, NEXT_PUBLIC_SUPABASE_URL: url })) {
+      return false;
+    }
+    return await hasCompatibleAssistiveWorker(heartbeatGateway);
   } catch {
     return false;
   }

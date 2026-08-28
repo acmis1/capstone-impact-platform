@@ -1,6 +1,10 @@
 import 'server-only';
-import { SupabaseClient } from '@supabase/supabase-js';
-import { createSupabaseAdminClientCore } from './adminCore';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ServerEnv } from '../env';
+import {
+  createSupabaseAdminClientCore,
+  createSupabaseAdminClientCoreForServerEnv,
+} from './adminCore';
 
 /**
  * ⚠️ WARNING: SECURE SERVER-ONLY SUPABASE ADMIN FACTORY
@@ -12,4 +16,15 @@ import { createSupabaseAdminClientCore } from './adminCore';
  */
 export function createSupabaseAdminClient(): SupabaseClient {
   return createSupabaseAdminClientCore();
+}
+
+/**
+ * Mutation-bound factory: the caller supplies the same resolved snapshot it already verified.
+ * This deliberately bypasses the process-wide cached singleton so target A can never satisfy a
+ * request whose immutable environment snapshot was verified for target B.
+ */
+export function createSupabaseAdminClientForServerEnv(
+  serverEnv: Pick<ServerEnv, 'supabaseUrl' | 'supabaseDatabaseAdminKey'>,
+): SupabaseClient {
+  return createSupabaseAdminClientCoreForServerEnv(serverEnv);
 }

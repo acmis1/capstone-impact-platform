@@ -92,9 +92,9 @@ describe('StaffDirectoryTable', () => {
   it('retains all three provisioning outcomes with plain-language follow-up context', () => {
     render(<StaffDirectoryTable staff={staff.slice(0, 1)} incidents={incidents} />);
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Provisioning incidents' })).toBeDefined();
-    expect(screen.getByRole('region', { name: 'Provisioning incidents' }).className).toContain('border-warning/30');
-    const mobileIncidents = screen.getByRole('list', { name: /Staff provisioning incidents/i });
+    expect(screen.getByRole('heading', { level: 2, name: 'Invitations that did not complete' })).toBeDefined();
+    expect(screen.getByRole('region', { name: 'Invitations that did not complete' }).className).toContain('border-warning/30');
+    const mobileIncidents = screen.getByRole('list', { name: /Staff invitations that did not complete/i });
     expect(within(mobileIncidents).getByText('Cleanup in progress')).toBeDefined();
     expect(within(mobileIncidents).getByText('Needs attention')).toBeDefined();
     expect(within(mobileIncidents).getByText('Stopped safely')).toBeDefined();
@@ -128,6 +128,6 @@ describe('StaffDirectoryTable', () => {
     render(<StaffDirectoryTable staff={[]} incidents={[]} />);
 
     expect(screen.getByRole('heading', { level: 3, name: 'No staff accounts' })).toBeDefined();
-    expect(screen.queryByRole('region', { name: 'Provisioning incidents' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Invitations that did not complete' })).toBeNull();
   });
 });

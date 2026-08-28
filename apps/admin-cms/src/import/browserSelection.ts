@@ -21,6 +21,10 @@ export function deriveMimeType(fileName: string, rawMimeType: string): { mimeTyp
     expectedMime = 'application/json';
   } else if (lowerName.endsWith('.png')) {
     expectedMime = 'image/png';
+  } else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
+    expectedMime = 'image/jpeg';
+  } else if (lowerName.endsWith('.webp')) {
+    expectedMime = 'image/webp';
   } else if (lowerName.endsWith('.pdf')) {
     expectedMime = 'application/pdf';
   }

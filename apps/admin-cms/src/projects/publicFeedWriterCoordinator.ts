@@ -286,6 +286,40 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
     }
   };
 
+  /**
+   * A caught write error after WRITE_STARTED is different from an uncaught process death: this
+   * worker knows the request outcome is uncertain and can durably park the exact bound operation.
+   * An exact read of the candidate removes that ambiguity and lets normal forward completion
+   * continue; every other observed or unavailable state requires explicit operator recovery.
+   */
+  const reconcileCaughtWriteError = async (
+    operationId: string,
+    candidate: VerifiedPublicFeedArtifact,
+  ): Promise<'CANDIDATE_CONFIRMED' | 'RECOVERY_REQUIRED'> => {
+    let observed: VerifiedPublicFeedArtifact | null = null;
+    try {
+      observed = await verifyStorage(storage, params.feedBucket, params.feedPath);
+      if (observed?.content === candidate.content) return 'CANDIDATE_CONFIRMED';
+    } catch { /* an unavailable observation is itself ambiguous */ }
+
+    try {
+      const recovery = await ledger.requireRecovery(
+        operationId, epoch, ownerToken, params.adminId,
+        'STORAGE_WRITE_OUTCOME_UNCERTAIN',
+        observed?.feedHash ?? null,
+        observed?.recordCount ?? null,
+      );
+      if (recovery.resultCode === 'RECOVERY_REQUIRED') return 'RECOVERY_REQUIRED';
+    } catch { /* the transition response may be lost after commit */ }
+
+    try {
+      if ((await ledger.getOperation(operationId))?.state === 'RECOVERY_REQUIRED') {
+        return 'RECOVERY_REQUIRED';
+      }
+    } catch { /* keep the operator-facing result fail closed */ }
+    return 'RECOVERY_REQUIRED';
+  };
+
   try {
     if (params.legacyActivationTarget && params.kind !== 'activation') {
       throw new Error('LEGACY_BASELINE_SCOPE_INVALID');
@@ -439,7 +473,9 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
         try {
           await deadline(storage.writeExact(params.feedBucket, params.feedPath, candidate.bytes));
         } catch {
-          return { resultCode: 'PUBLICATION_IN_PROGRESS' };
+          if (await reconcileCaughtWriteError(operation.id, candidate) === 'RECOVERY_REQUIRED') {
+            return { resultCode: 'RECOVERY_REQUIRED' };
+          }
         }
         const observedBytes = await observeOperationStorage(
           storage, params.feedBucket, params.feedPath, baseline,
@@ -539,9 +575,9 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
         try {
           await deadline(storage.writeExact(params.feedBucket, params.feedPath, candidate.bytes));
         } catch {
-          // The request may have committed. Durable WRITE_STARTED plus its uncertainty fence is
-          // intentionally left authoritative for a later exact-read reconciliation.
-          return { resultCode: 'PUBLICATION_IN_PROGRESS' };
+          if (await reconcileCaughtWriteError(operation.id, candidate) === 'RECOVERY_REQUIRED') {
+            return { resultCode: 'RECOVERY_REQUIRED' };
+          }
         }
       }
       operation = await ledger.getOperation(operation.id);
@@ -584,7 +620,9 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
         try {
           await deadline(storage.writeExact(params.feedBucket, params.feedPath, candidate.bytes));
         } catch {
-          return { resultCode: 'PUBLICATION_IN_PROGRESS' };
+          if (await reconcileCaughtWriteError(operation.id, candidate) === 'RECOVERY_REQUIRED') {
+            return { resultCode: 'RECOVERY_REQUIRED' };
+          }
         }
         const observedBytes = await observeOperationStorage(
           storage, params.feedBucket, params.feedPath, baseline,

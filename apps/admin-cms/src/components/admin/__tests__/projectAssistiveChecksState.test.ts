@@ -11,6 +11,7 @@ import {
   formatPartialNoticeDescription,
   initialAssistiveChecksUiState,
   isFindingEligibleToApply,
+  isLanguageFindingEligibleToApply,
 } from '../projectAssistiveChecksState';
 
 const RUN_ID = '22222222-2222-4222-8222-222222222222';
@@ -152,6 +153,16 @@ describe('assistiveChecksReducer', () => {
     expect(state.actionInFlight).toBe('idle');
     expect(state.feedback?.message).toBe('Suggestion applied.');
 
+    state = assistiveChecksReducer(state, {
+      type: 'APPLY_COMPLETED',
+      message: 'The draft changed; run checks again before applying this suggestion.',
+      success: false,
+    });
+    expect(state.feedback).toEqual({
+      message: 'The draft changed; run checks again before applying this suggestion.',
+      type: 'warning',
+    });
+
     state = assistiveChecksReducer(state, { type: 'COPY_FEEDBACK', findingId: FINDING_ID, status: 'copied' });
     expect(state.copiedFindingId).toBe(FINDING_ID);
     expect(state.copyStatus).toBe('copied');
@@ -207,6 +218,11 @@ describe('formatting and presentation helpers', () => {
 });
 
 describe('isFindingEligibleToApply canonical bounds', () => {
+  const v1Evidence = () => {
+    const evidence = sampleFinding().evidence;
+    if (evidence.version !== 'assistive-finding-evidence/v1') throw new Error('Expected v1 evidence');
+    return evidence;
+  };
   it('allows applying when finding is title consistency, current run, candidate <= 200 chars, and staff has edit authority', () => {
     const finding = sampleFinding();
     const eligible = isFindingEligibleToApply(finding, 'CURRENT', true, true);
@@ -216,7 +232,7 @@ describe('isFindingEligibleToApply canonical bounds', () => {
   it('allows applying for exact 200-character candidate title', () => {
     const finding = sampleFinding({
       evidence: {
-        ...sampleFinding().evidence,
+        ...v1Evidence(),
         candidateValue: 'A'.repeat(200),
       },
     });
@@ -227,7 +243,7 @@ describe('isFindingEligibleToApply canonical bounds', () => {
   it('forbids applying for 201-character candidate title (authoritative limit 200)', () => {
     const finding = sampleFinding({
       evidence: {
-        ...sampleFinding().evidence,
+        ...v1Evidence(),
         candidateValue: 'A'.repeat(201),
       },
     });
@@ -238,7 +254,7 @@ describe('isFindingEligibleToApply canonical bounds', () => {
   it('forbids applying for blank or whitespace-only candidate title', () => {
     const finding = sampleFinding({
       evidence: {
-        ...sampleFinding().evidence,
+        ...v1Evidence(),
         candidateValue: '   ',
       },
     });
@@ -268,5 +284,28 @@ describe('isFindingEligibleToApply canonical bounds', () => {
     const finding = sampleFinding({ checkType: 'FORMATTING' });
     const eligible = isFindingEligibleToApply(finding, 'CURRENT', true, true);
     expect(eligible).toBe(false);
+  });
+});
+
+describe('isLanguageFindingEligibleToApply', () => {
+  const languageFinding = (): AssistiveInspectionFinding => ({
+    ...sampleFinding(),
+    checkType: 'LANGUAGE_SUGGESTION', outcome: 'REVIEW', reasonCode: 'LANGUAGE_SPELLING',
+    affectedField: 'summary', origin: 'LOCAL_LANGUAGE_PROVIDER', scoreKind: null, scoreValue: null,
+    evidence: {
+      version: 'assistive-finding-evidence/v3', startOffset: 2, endOffset: 9,
+      offsetUnit: 'UNICODE_CODE_POINTS', originalSourceSpan: 'recieve', contextExcerpt: 'A recieve error.',
+      languageCategory: 'LANGUAGE_SPELLING', ruleId: 'MORFOLOGIK_RULE_EN_AU',
+      providerId: 'LANGUAGETOOL', providerVersion: '6.6', suggestions: ['receive'],
+      explanation: 'Review this possible spelling issue.', inputHash: 'a'.repeat(64),
+      pipelineVersion: 'assistive-deterministic-checks/v3',
+      policySha256: '3984b958741a5103791524d48ba262a81ef829695ddc122a728c12cc3e689148',
+    },
+  });
+  it('requires current, editable v3 language evidence and a registered draft handler', () => {
+    expect(isLanguageFindingEligibleToApply(languageFinding(), 'CURRENT', true, true)).toBe(true);
+    expect(isLanguageFindingEligibleToApply(languageFinding(), 'STALE', true, true)).toBe(false);
+    expect(isLanguageFindingEligibleToApply(languageFinding(), 'CURRENT', false, true)).toBe(false);
+    expect(isLanguageFindingEligibleToApply(languageFinding(), 'CURRENT', true, false)).toBe(false);
   });
 });

@@ -57,6 +57,8 @@ class TaskContractTests(unittest.TestCase):
             WorkerTask.from_dict(valid_task(ocr_provider="TESSERACT", raster_dpi=201))
         accepted = WorkerTask.from_dict(valid_task(ocr_provider="TESSERACT", raster_dpi=150))
         self.assertEqual(accepted.raster_dpi, 150)
+        frozen = WorkerTask.from_dict(valid_task(ocr_provider="PADDLE_TITLE", raster_dpi=180))
+        self.assertEqual(frozen.raster_dpi, 180)
 
 
 class TaskCliTests(unittest.TestCase):
@@ -104,6 +106,19 @@ class TaskCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(output["extraction"]["status"], "OCR_REQUIRED")
         self.assertEqual(output["extraction"]["ocr_state"], "REQUIRED_NOT_RUN")
+
+    def test_unprovisioned_paddle_title_provider_degrades_to_unavailable(self) -> None:
+        task = valid_task(
+            relative_path="document.png",
+            document_type="PNG",
+            ocr_provider="PADDLE_TITLE",
+            raster_dpi=180,
+        )
+        result, output = self.run_task(task, "valid.png")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(output["extraction"]["status"], "OCR_REQUIRED")
+        self.assertEqual(output["extraction"]["ocr_state"], "UNAVAILABLE")
+        self.assertEqual(output["extraction"]["provider"]["provider_id"], "paddleocr-local")
 
     def test_extraction_failure_stays_inside_the_extraction_contract(self) -> None:
         result, output = self.run_task(valid_task(), "corrupt.pdf")

@@ -54,6 +54,25 @@ async function main(): Promise<void> {
     ['exec', '-i', DB_CONTAINER, 'psql', '-U', 'postgres', '-d', 'postgres', '-At', '-v', 'ON_ERROR_STOP=1', '-c', sql],
     { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
   ).trim();
+  const assertResetReachedExactMigration = (
+    result: ReturnType<typeof runLocalSupabaseCli>,
+    operation: string,
+    expectedCount: number,
+    expectedLatestVersion: string,
+  ): void => {
+    if (result.ok) return;
+    assert.equal(
+      psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'),
+      String(expectedCount),
+      `${operation} failed (${result.failureCategory ?? 'UNKNOWN'}, exit ${result.exitCode ?? 'null'}).`,
+    );
+    assert.equal(
+      psql('SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 1;'),
+      expectedLatestVersion,
+      `${operation} did not reach the exact expected migration head.`,
+    );
+    console.log(`PASS: ${operation} reached the exact database postcondition despite a non-zero CLI result.`);
+  };
 
   let primaryFailure: unknown = null;
   let passed = 0;
@@ -64,9 +83,9 @@ async function main(): Promise<void> {
   };
 
   try {
-    assertCliSuccess(
+    assertResetReachedExactMigration(
       runLocalSupabaseCli('reset', root, { resetVersion: MIGRATION_30_VERSION, skipSeed: true }),
-      'reset through Migration 0030',
+      'reset through Migration 0030', 30, MIGRATION_30_VERSION,
     );
     scenario('database is exactly at Migration 0030 before fixture insertion', () => {
       assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '30');
@@ -148,9 +167,9 @@ async function main(): Promise<void> {
       assert.equal(JSON.parse(findingsBefore).length, 1);
     });
 
-    assertCliSuccess(runLocalSupabaseCli('migration-up', root), 'apply pending Migrations 0031 through 0044');
-    scenario('Migrations 0031 through 0044 apply as the only pending migrations', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '44');
+    assertCliSuccess(runLocalSupabaseCli('migration-up', root), 'apply pending Migrations 0031 through 0046');
+    scenario('Migrations 0031 through 0046 apply as the only pending migrations', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '46');
       assert.equal(psql("SELECT to_regclass('public.assistive_validation_jobs') IS NOT NULL;"), 't');
     });
 
@@ -285,7 +304,10 @@ async function main(): Promise<void> {
     primaryFailure = error;
   } finally {
     try {
-      assertCliSuccess(runLocalSupabaseCli('reset', root), 'restore fresh Migration 0031 database');
+      assertResetReachedExactMigration(
+        runLocalSupabaseCli('reset', root),
+        'restore fresh Migration 0046 database', 46, '20260828120000',
+      );
     } catch (restoreError) {
       if (primaryFailure) throw new AggregateError([primaryFailure, restoreError], 'Upgrade verification and database restoration failed.');
       throw restoreError;

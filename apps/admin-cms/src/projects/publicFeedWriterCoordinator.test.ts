@@ -5,6 +5,7 @@ import { createMockProject } from '../test/projectFixtures';
 import { toPublicFeedRecord } from '../feed/compilePublicFeed';
 import {
   composePublicFeedPublication,
+  composePublicFeedRemoval,
   createPublicFeedArtifact,
   type VerifiedPublicFeedArtifact,
 } from '../feed/publicFeedArtifact';
@@ -42,6 +43,11 @@ const candidate = composePublicFeedPublication(
   baseline,
   createPublicFeedArtifact([toPublicFeedRecord(createMockProject({ publicId: 'target', status: 'published' }))]).feed[0],
 );
+const removalBaseline = createPublicFeedArtifact([
+  toPublicFeedRecord(createMockProject({ publicId: 'deployed', status: 'published' })),
+  toPublicFeedRecord(createMockProject({ publicId: 'target', status: 'published' })),
+]);
+const removalCandidate = composePublicFeedRemoval(removalBaseline, 'target');
 
 type BindParameters = Parameters<SupabasePublicFeedLedgerRepositoryCore['bind']>[0];
 
@@ -172,6 +178,15 @@ function activationOperation(
     baselineRecordCount: baseline.recordCount, baselineFeedContent: baseline.content,
     candidateFeedHash: baseline.feedHash, candidateRecordCount: baseline.recordCount,
     candidateFeedContent: baseline.content, mediaManifest: [],
+    ...overrides,
+  });
+}
+
+function removalParameters(overrides: Record<string, unknown> = {}) {
+  return writerParameters({
+    kind: 'removal', publicationMode: undefined, confirmedPreviewId: undefined,
+    confirmedAt: undefined, privateBucket: undefined, archiveReason: 'Archive target',
+    prepareCandidate: async () => ({ artifact: removalCandidate }),
     ...overrides,
   });
 }
@@ -369,6 +384,19 @@ describe('legacy initial-baseline adoption', () => {
   });
 });
 
+function removalOperationOverrides(): Partial<PublicFeedOperationRecord> {
+  return {
+    kind: 'removal', publicationMode: null, confirmedPreviewId: null, confirmedAt: null,
+    privateMediaBucket: null, archiveReason: 'Archive target', mediaManifest: [],
+    baselineFeedHash: removalBaseline.feedHash,
+    baselineRecordCount: removalBaseline.recordCount,
+    baselineFeedContent: removalBaseline.content,
+    candidateFeedHash: removalCandidate.feedHash,
+    candidateRecordCount: removalCandidate.recordCount,
+    candidateFeedContent: removalCandidate.content,
+  };
+}
+
 describe('canonical public feed writer boundary', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -527,6 +555,80 @@ describe('canonical public feed writer boundary', () => {
 
     expect(result).toMatchObject({ resultCode: 'COMPLETED' });
     expect(afterWriteIntent).toHaveBeenCalledOnce();
+    expect(harness.storage.writeExact).toHaveBeenCalledOnce();
+  });
+
+  it('completes normally when a caught write error can read back the exact committed candidate', async () => {
+    harness.ledger = createLedger('PREPARED');
+    harness.storage = createStorage(baseline);
+    const committedWrite = harness.storage.writeExact as (
+      bucket: string, path: string, bytes: Buffer,
+    ) => Promise<void>;
+    harness.storage.writeExact = vi.fn(async (...args: [string, string, Buffer]) => {
+      await committedWrite(...args);
+      throw new Error('SIMULATED_TIMEOUT_AFTER_COMMIT');
+    });
+
+    await expect(executePublicFeedWriter(writerParameters({
+      afterWriteIntent: async () => undefined,
+    }) as never)).resolves.toMatchObject({ resultCode: 'COMPLETED' });
+    expect(harness.ledger.requireRecovery).not.toHaveBeenCalled();
+  });
+
+  it('parks a caught ambiguous write when the subsequent Storage observation is unavailable', async () => {
+    harness.ledger = createLedger('PREPARED');
+    harness.storage = createStorage(baseline);
+    let writeAttempted = false;
+    harness.storage.writeExact = vi.fn(async () => {
+      writeAttempted = true;
+      throw new Error('SIMULATED_WRITE_FAILURE');
+    });
+    harness.storage.readExact = vi.fn(async () => {
+      if (writeAttempted) throw new Error('SIMULATED_OBSERVATION_UNAVAILABLE');
+      return baseline.bytes;
+    });
+
+    await expect(executePublicFeedWriter(writerParameters({
+      afterWriteIntent: async () => undefined,
+    }) as never)).resolves.toEqual({ resultCode: 'RECOVERY_REQUIRED' });
+    expect(harness.ledger.requireRecovery).toHaveBeenCalledWith(
+      'operation-1', 1, expect.any(String), ADMIN,
+      'STORAGE_WRITE_OUTCOME_UNCERTAIN', null, null,
+    );
+  });
+
+  it('requires explicit exact-intent recovery after a caught removal write leaves the baseline', async () => {
+    harness.ledger = createLedger('PREPARED', removalOperationOverrides());
+    harness.storage = createStorage(removalBaseline);
+    const normalWrite = harness.storage.writeExact;
+    harness.storage.writeExact = vi.fn(async () => { throw new Error('SIMULATED_WRITE_FAILURE'); });
+
+    await expect(executePublicFeedWriter(removalParameters() as never))
+      .resolves.toEqual({ resultCode: 'RECOVERY_REQUIRED' });
+    expect(harness.ledger.requireRecovery).toHaveBeenCalledWith(
+      'operation-1', 1, expect.any(String), ADMIN,
+      'STORAGE_WRITE_OUTCOME_UNCERTAIN', removalBaseline.feedHash, removalBaseline.recordCount,
+    );
+
+    const getOperation = harness.ledger.getOperation as () => Promise<PublicFeedOperationRecord>;
+    harness.ledger.getBlockingOperation = vi.fn(async () => ({
+      ...(await getOperation()),
+      leaseExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+    }));
+    await expect(executePublicFeedWriter(removalParameters() as never))
+      .resolves.toEqual({ resultCode: 'RECOVERY_REQUIRED' });
+    await expect(executePublicFeedWriter(removalParameters({
+      recoveryOperationId: 'operation-1', archiveReason: 'Different reason',
+    }) as never)).resolves.toEqual({ resultCode: 'RECOVERY_REQUIRED' });
+    await expect(executePublicFeedWriter(removalParameters({
+      recoveryOperationId: 'operation-1', publicId: 'different-target',
+    }) as never)).resolves.toEqual({ resultCode: 'RECOVERY_REQUIRED' });
+    expect(harness.ledger.claim).not.toHaveBeenCalled();
+
+    harness.storage.writeExact = normalWrite;
+    await expect(executePublicFeedWriter(removalParameters({
+      recoveryOperationId: 'operation-1',
+    }) as never)).resolves.toMatchObject({ resultCode: 'COMPLETED' });
     expect(harness.storage.writeExact).toHaveBeenCalledOnce();
   });
 

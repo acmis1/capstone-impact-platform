@@ -27,7 +27,7 @@ export interface ControlledPublicRemovalDependencies {
   adminId: string;
   feedBucket: string;
   feedPath: string;
-  assertDisposableLocalEnvironment(): void;
+  assertExecutionEnvironment(): void;
   listProjects(): Promise<Project[]>;
 }
 
@@ -44,7 +44,7 @@ export async function executeControlledPublicRemoval(params: {
 }): Promise<ControlledPublicRemovalResult> {
   const { permissions, publicId, archiveReason, dependencies } = params;
   if (!hasPermission(permissions, 'projects.archive')) return { resultCode: 'PERMISSION_DENIED' };
-  try { dependencies.assertDisposableLocalEnvironment(); }
+  try { dependencies.assertExecutionEnvironment(); }
   catch { return { resultCode: 'EXECUTION_FAILED', failureCode: 'NON_LOCAL_ENVIRONMENT' }; }
 
   try {
@@ -53,7 +53,8 @@ export async function executeControlledPublicRemoval(params: {
     if (targets.length !== 1 || !['published', 'archived'].includes(targets[0].status)) {
       return { resultCode: 'NOT_PUBLISHED' };
     }
-    if (targets[0].status === 'archived') {
+    const target = targets[0];
+    if (target.status === 'archived') {
       const inspected = await inspectPublicFeedHead(
         dependencies.supabase, dependencies.feedBucket, dependencies.feedPath,
       );
@@ -83,6 +84,10 @@ export async function executeControlledPublicRemoval(params: {
       feedBucket: dependencies.feedBucket, feedPath: dependencies.feedPath,
       prepareCandidate: async (baseline) => {
         if (!baseline) throw new Error('HISTORY_NOT_ACTIVE');
+        if (target.status === 'published'
+            && baseline.members.filter((member) => member.publicId === publicId).length !== 1) {
+          throw new Error('CURRENT_FEED_DIVERGED');
+        }
         return { artifact: composePublicFeedRemoval(baseline, publicId) };
       },
     });

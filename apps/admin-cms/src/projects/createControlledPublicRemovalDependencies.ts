@@ -1,7 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
 import type { ControlledPublicRemovalDependencies } from './controlledPublicRemovalService';
-import { isLocalPublicationExecutionAvailable } from './localPublicationExecution';
+import {
+  assertPublicationExecutionTarget,
+  type PublicationExecutionTarget,
+} from './publicationExecutionPolicy';
+import type { StagingRuntimeEnvironment } from '../security/stagingRuntimeIdentity';
 
 export function createControlledPublicRemovalDependencies(params: {
   supabase: SupabaseClient;
@@ -10,6 +14,8 @@ export function createControlledPublicRemovalDependencies(params: {
   adminId: string;
   feedBucket: string;
   feedPath: string;
+  executionTarget: PublicationExecutionTarget;
+  executionEnvironment?: StagingRuntimeEnvironment;
 }): ControlledPublicRemovalDependencies {
   const projects = new SupabaseProjectRepositoryCore(params.supabase);
   return {
@@ -17,11 +23,11 @@ export function createControlledPublicRemovalDependencies(params: {
     adminId: params.adminId,
     feedBucket: params.feedBucket,
     feedPath: params.feedPath,
-    assertDisposableLocalEnvironment: () => {
-      if (!isLocalPublicationExecutionAvailable(params.supabaseUrl)) {
-        throw new Error('NON_LOCAL_ENVIRONMENT');
-      }
-    },
+    assertExecutionEnvironment: () => assertPublicationExecutionTarget({
+      target: params.executionTarget,
+      supabaseUrl: params.supabaseUrl,
+      env: params.executionEnvironment,
+    }),
     listProjects: () => projects.listProjects(),
   };
 }

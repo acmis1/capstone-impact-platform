@@ -238,8 +238,8 @@ async function main(): Promise<void> {
     const approvalBefore = psql(`SELECT count(*) FROM public.approval_records WHERE project_id = '${projectId}'::uuid;`);
     const publicationBefore = psql('SELECT count(*) FROM public.published_snapshots;');
 
-    await scenario(1, 'clean schema has exactly 44 applied migrations', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '44');
+    await scenario(1, 'clean schema has exactly 46 applied migrations', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '46');
     });
     await scenario(2, 'v1 and one-candidate v2 findings satisfy the shared validator', () => {
       assert.equal(validator([v1Finding, duplicateFinding(1)]), true);
@@ -643,7 +643,7 @@ async function main(): Promise<void> {
     await scenario(20, 'the persisted shortlist evidence is sanitized and round-trips through staff inspection', async () => {
       const raw = await rpc('get_project_assistive_validation_inspection', {
         p_project_id: projectId,
-        p_pipeline_version: PIPELINE,
+        p_pipeline_version: ASSISTIVE_PIPELINE_VERSION,
         p_run_id: controlRunId,
       });
       const parsed = assistiveInspectionResponseSchema.safeParse(raw);

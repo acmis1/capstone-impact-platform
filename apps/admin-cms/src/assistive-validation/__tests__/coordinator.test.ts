@@ -8,6 +8,11 @@ import type { AssistiveInputGateway } from '../repositories/assistiveInputReposi
 import { AssistiveValidationCoordinator } from '../services/assistiveCoordinator';
 import type { AssistiveWorkerRunner } from '../services/pythonWorkerProcess';
 import { WorkerProcessError } from '../services/pythonWorkerProcess';
+import {
+  LanguageProviderControlError,
+  type AssistiveLanguageProvider,
+} from '../services/languageToolProcess';
+import { toPersistedLanguageFindings } from '../domain/languagePolicy';
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 const ACTOR_ID = '22222222-2222-4222-8222-222222222222';
@@ -55,7 +60,7 @@ function jobGateway(inputHash: string): AssistiveJobGateway & { finalize: Return
     enqueue: vi.fn(), status: vi.fn(), cancel: vi.fn(), health: vi.fn(),
     claim: vi.fn().mockResolvedValue({
       resultCode: 'CLAIMED', jobId: JOB_ID, runId: RUN_ID, projectId: PROJECT_ID,
-      requestedBy: ACTOR_ID, inputHash, pipelineVersion: 'assistive-deterministic-checks/v2',
+      requestedBy: ACTOR_ID, inputHash, pipelineVersion: 'assistive-deterministic-checks/v3',
       attemptCount: 1, claimToken: TOKEN, leaseUntil: '2026-08-20T00:02:00Z',
     }),
     heartbeat: vi.fn().mockResolvedValue({ resultCode: 'HEARTBEAT', leaseUntil: '2026-08-20T00:03:00Z' }),
@@ -94,6 +99,84 @@ describe('assistive coordinator', () => {
     expect(submitted.completionCode).toBeNull();
     expect(submitted.findings).toHaveLength(1);
     expect(submitted.findings[0].classification).toBe('NON_BLOCKING');
+  });
+
+  it('passes the exact frozen provider selection and raster DPI to the asynchronous worker', async () => {
+    const inputHash = currentHash(PDF);
+    const jobs = jobGateway(inputHash);
+    const selected = worker();
+    const coordinator = new AssistiveValidationCoordinator(
+      jobs, inputGateway([PDF, PDF]), 'private', selected, WORKER_ID, 'PADDLE_TITLE',
+    );
+    await expect(coordinator.runOnce()).resolves.toEqual({ outcome: 'FINALIZED', runId: RUN_ID });
+    expect(selected.run).toHaveBeenCalledWith(expect.objectContaining({
+      ocrProvider: 'PADDLE_TITLE', rasterDpi: 180,
+    }));
+  });
+
+  it('appends bounded language evidence and pulses the durable claim before finalization', async () => {
+    const inputHash = currentHash(PDF);
+    const jobs = jobGateway(inputHash);
+    const language: AssistiveLanguageProvider = {
+      health: vi.fn().mockResolvedValue(true),
+      check: vi.fn().mockImplementation(async ({ onPulse }) => {
+        await onPulse();
+        return {
+          status: 'AVAILABLE' as const,
+          findings: toPersistedLanguageFindings({
+            field: 'summary', source: CURRENT.summary, inputHash,
+            matches: [{
+              offset: 0, length: 7, message: 'Possible spelling mistake found.',
+              ruleId: 'MORFOLOGIK_RULE_EN_AU', categoryId: 'TYPOS', replacements: ['Summery'],
+            }],
+          }),
+        };
+      }),
+    };
+    const coordinator = new AssistiveValidationCoordinator(
+      jobs, inputGateway([PDF, PDF]), 'private', worker(), WORKER_ID, 'NONE', language,
+    );
+    await expect(coordinator.runOnce()).resolves.toEqual({ outcome: 'FINALIZED', runId: RUN_ID });
+    expect(jobs.heartbeat).toHaveBeenCalledWith(JOB_ID, TOKEN, 120);
+    const submitted = vi.mocked(jobs.finalize).mock.calls[0][0];
+    expect(submitted.status).toBe('COMPLETED');
+    expect(submitted.findings.at(-1)).toMatchObject({
+      checkType: 'LANGUAGE_SUGGESTION', affectedField: 'summary',
+      evidence: { inputHash, pipelineVersion: 'assistive-deterministic-checks/v3' },
+    });
+  });
+
+  it.each([
+    ['unavailable result', async () => ({ status: 'UNAVAILABLE' as const })],
+    ['provider crash', async () => { throw new Error('provider crash'); }],
+  ])('preserves existing findings and finalizes PARTIAL on %s', async (_label, check) => {
+    const inputHash = currentHash(PDF);
+    const jobs = jobGateway(inputHash);
+    const language: AssistiveLanguageProvider = { health: vi.fn().mockResolvedValue(false), check };
+    const coordinator = new AssistiveValidationCoordinator(
+      jobs, inputGateway([PDF, PDF]), 'private', worker(), WORKER_ID, 'NONE', language,
+    );
+    await expect(coordinator.runOnce()).resolves.toEqual({ outcome: 'PARTIAL', runId: RUN_ID });
+    const submitted = vi.mocked(jobs.finalize).mock.calls[0][0];
+    expect(submitted).toMatchObject({
+      status: 'PARTIAL', completionCode: 'LANGUAGE_PROVIDER_UNAVAILABLE',
+    });
+    expect(submitted.findings.length).toBeGreaterThan(0);
+  });
+
+  it('returns cancellation without finalizing when the language provider observes cancellation', async () => {
+    const inputHash = currentHash(PDF);
+    const jobs = jobGateway(inputHash);
+    const language: AssistiveLanguageProvider = {
+      health: vi.fn().mockResolvedValue(true),
+      check: vi.fn().mockRejectedValue(new LanguageProviderControlError('CANCELLED')),
+    };
+    const coordinator = new AssistiveValidationCoordinator(
+      jobs, inputGateway([PDF, PDF]), 'private', worker(), WORKER_ID, 'NONE', language,
+    );
+    await expect(coordinator.runOnce()).resolves.toEqual({ outcome: 'CANCELLED', runId: RUN_ID });
+    expect(jobs.finalize).not.toHaveBeenCalled();
+    expect(jobs.fail).not.toHaveBeenCalled();
   });
 
   it('supersedes instead of finalizing when authoritative input changes during work', async () => {
