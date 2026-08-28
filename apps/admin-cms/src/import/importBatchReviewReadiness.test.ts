@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { computeProjectReviewReadiness, ImportBatchReviewProjectInput } from './importBatchReviewReadiness';
+import {
+  computeProjectReviewReadiness,
+  countPrivateAssets,
+  ImportBatchReviewProjectInput,
+} from './importBatchReviewReadiness';
 import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
 
 const baseInput: ImportBatchReviewProjectInput = {
@@ -85,10 +89,42 @@ describe('computeProjectReviewReadiness — validation_flags', () => {
     expect(result.warnings).toContain('New flag warning');
   });
 
-  it('preserves the existing snapshot warning behavior', () => {
+  it('warns when no staged snapshot media is present while keeping the project ready', () => {
     const result = computeProjectReviewReadiness({ ...baseInput, snapshots: [] });
     expect(result.warnings).toContain('Snapshot gallery is empty.');
     expect(result.ready).toBe(true);
+  });
+
+  it('does not warn when a private staged snapshot exists despite an empty legacy snapshots array', () => {
+    const result = computeProjectReviewReadiness({
+      ...baseInput,
+      snapshots: [],
+      mediaAssets: [
+        ...baseInput.mediaAssets,
+        { assetType: 'snapshot_image', isPublicApproved: false, publicUrl: null, altText: 'Project dashboard screenshot.' },
+      ],
+    });
+
+    expect(result.warnings).not.toContain('Snapshot gallery is empty.');
+  });
+
+  it('does not treat legacy snapshots as staged gallery media', () => {
+    const result = computeProjectReviewReadiness({ ...baseInput, snapshots: ['published-snapshot.png'] });
+
+    expect(result.warnings).toContain('Snapshot gallery is empty.');
+    expect(result.ready).toBe(true);
+  });
+
+  it('counts only private staged media for the Import Details summary', () => {
+    const count = countPrivateAssets([
+      { assetType: 'snapshot_image', isPublicApproved: false, publicUrl: null, altText: 'First staged snapshot.' },
+      { assetType: 'snapshot_image', isPublicApproved: false, publicUrl: null, altText: 'Second staged snapshot.' },
+      { assetType: 'snapshot_image', isPublicApproved: true, publicUrl: null, altText: 'Public-approved snapshot.' },
+      { assetType: 'snapshot_image', isPublicApproved: false, publicUrl: 'https://example.com/snapshot.png', altText: 'Public URL snapshot.' },
+      { assetType: 'snapshot_image', isPublicApproved: null, publicUrl: null, altText: 'Inconsistent snapshot.' },
+    ], 'snapshot_image');
+
+    expect(count).toBe(2);
   });
 
   it('blocks submission when poster full text is missing', () => {
