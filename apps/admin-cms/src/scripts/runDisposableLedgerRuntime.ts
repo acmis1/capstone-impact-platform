@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -118,8 +118,8 @@ function routineDefinition(name: string): string {
 
 /**
  * Proves the exact correction upgrade rather than only proving a fresh install. The stack starts
- * at the reviewed 43-migration PR head, preserves synthetic relational data, applies Migration 0044
- * alone, and re-inspects both the new fence and the pre-existing writer protocol.
+ * at current main's 45-migration head, preserves synthetic relational and pre-write operation data,
+ * applies Migration 0046 alone, and re-inspects both the new fence and existing writer protocol.
  */
 function verifyCorrectionUpgrade(workdir: string): void {
   const appliedCount = () => psql('SELECT count(*) FROM supabase_migrations.schema_migrations;');
@@ -143,6 +143,30 @@ function verifyCorrectionUpgrade(workdir: string): void {
   assert.equal(routineCount('guard_public_feed_activation_authority_transition'), '0');
   assert.equal(routineCount('get_project_publication_readiness'), '1');
   assert.equal(routineCount('submit_import_projects_for_review'), '1');
+  const prewriteOperationId = '18600000-0000-4000-8000-000000000016';
+  const emptyFeedHash = createHash('sha256').update('[]').digest('hex');
+  psql(`
+    INSERT INTO public.admin_users(id,email,full_name)
+      VALUES ('18600000-0000-4000-8000-000000000015'::uuid,
+        'migration-upgrade-actor@capstone.test','Migration Upgrade Actor');
+    INSERT INTO public.public_feed_operations(
+      id,operation_key,kind,authorizing_actor_id,baseline_storage_existed,
+      candidate_feed_hash,candidate_record_count,candidate_byte_count,candidate_feed_content,
+      candidate_members,storage_bucket,storage_path,feed_public_url,media_manifest,
+      rollback_capability_requested,state,owner_epoch,owner_token_hash,lease_expires_at
+    ) VALUES (
+      '${prewriteOperationId}'::uuid,'18600000-0000-4000-8000-000000000017'::uuid,
+      'activation','18600000-0000-4000-8000-000000000015'::uuid,false,
+      '${emptyFeedHash}',0,2,'[]','[]'::jsonb,'public-feeds','upgrade/prewrite.json',
+      'https://assets.example.invalid/upgrade/prewrite.json','[]'::jsonb,true,'PREPARED',1,
+      '${'0'.repeat(64)}',pg_catalog.now() + interval '2 minutes'
+    );
+  `);
+  assert.equal(
+    psql(`SELECT state || '|' || storage_request_generation::text
+      FROM public.public_feed_operations WHERE id='${prewriteOperationId}'::uuid;`),
+    'PREPARED|0',
+  );
   psql(`
     INSERT INTO public.disciplines(id,name)
       VALUES ('18600000-0000-4000-8000-000000000011'::uuid,'Upgrade Preserved Discipline');
@@ -228,7 +252,25 @@ function verifyCorrectionUpgrade(workdir: string): void {
   );
   assert.equal(
     psql("SELECT generation::text || '|' || COALESCE(active_activation_operation_id::text,'') FROM public.public_feed_activation_authority WHERE singleton=true;"),
+    `1|${prewriteOperationId}`,
+  );
+  assert.equal(
+    psql(`SELECT activation_authority_generation::text FROM public.public_feed_operations
+      WHERE id='${prewriteOperationId}'::uuid;`),
+    '1',
+  );
+  psql(`UPDATE public.public_feed_operations
+    SET state='FAILED', failure_code='UPGRADE_ADOPTION_VERIFIED', failed_at=pg_catalog.now(),
+        updated_at=pg_catalog.now()
+    WHERE id='${prewriteOperationId}'::uuid;`);
+  assert.equal(
+    psql("SELECT generation::text || '|' || COALESCE(active_activation_operation_id::text,'') FROM public.public_feed_activation_authority WHERE singleton=true;"),
     '1|',
+  );
+  assert.equal(
+    psql(`SELECT state || '|' || activation_authority_generation::text
+      FROM public.public_feed_operations WHERE id='${prewriteOperationId}'::uuid;`),
+    'FAILED|1',
   );
   // Upgrading installs authority, never deployment state: nothing is active and no version exists.
   assert.equal(psql('SELECT count(*) FROM public.public_feed_head;'), '0');
@@ -315,7 +357,7 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
-  // An upgrade run must start from the reviewed 43-migration database; a script run must start
+  // An upgrade run must start from the exact current-main 45-migration database; a script run starts
   // from a fresh full install. Provisioning one stack per invocation keeps both baselines exact.
   const workdir = createWorkdir(upgradeRequested ? CORRECTION_MIGRATIONS : []);
   let networkId = '';

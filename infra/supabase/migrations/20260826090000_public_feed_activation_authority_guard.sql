@@ -47,6 +47,42 @@ ALTER TABLE public.public_feed_operations
   ADD COLUMN activation_authority_generation bigint
     CHECK (activation_authority_generation IS NULL OR activation_authority_generation > 0);
 
+-- Migration 0046 can be introduced while the previous writer protocol has one durable activation
+-- parked before its first Storage write. Adopt that exact operation into generation 1 so recovery
+-- can either advance or terminalize it under the new fence. The existing one-blocking-writer index
+-- should make multiple rows impossible; fail the entire transactional migration if history is
+-- nevertheless corrupt rather than choosing an arbitrary owner.
+DO $$
+DECLARE
+  v_prewrite_count bigint;
+  v_prewrite_operation_id uuid;
+BEGIN
+  SELECT pg_catalog.count(*), (pg_catalog.array_agg(o.id ORDER BY o.created_at, o.id))[1]
+    INTO v_prewrite_count, v_prewrite_operation_id
+    FROM public.public_feed_operations o
+   WHERE o.kind = 'activation'
+     AND o.storage_request_generation = 0
+     AND (
+       o.state = 'PREPARED'
+       OR (o.state = 'RECOVERY_REQUIRED' AND o.recovery_from_state = 'PREPARED')
+     );
+
+  IF v_prewrite_count > 1 THEN
+    RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_UPGRADE_AMBIGUOUS';
+  END IF;
+
+  IF v_prewrite_operation_id IS NOT NULL THEN
+    UPDATE public.public_feed_operations
+       SET activation_authority_generation = 1
+     WHERE id = v_prewrite_operation_id;
+
+    UPDATE public.public_feed_activation_authority
+       SET active_activation_operation_id = v_prewrite_operation_id
+     WHERE singleton = true;
+  END IF;
+END;
+$$;
+
 ALTER TABLE public.public_feed_activation_authority ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.public_feed_project_projection_authority ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.public_feed_discipline_projection_authority ENABLE ROW LEVEL SECURITY;
@@ -199,6 +235,85 @@ BEGIN
       WHERE source.id IS NOT NULL
     ) ids;
 
+  -- Membership changes also advance each currently linked discipline fence. Therefore an older
+  -- discipline transaction cannot miss a newly public reference through its stale snapshot.
+  IF TG_TABLE_NAME = 'projects'
+     AND v_membership_changed
+     AND pg_catalog.cardinality(v_project_ids) > 0
+  THEN
+    SELECT COALESCE(pg_catalog.array_agg(pd.discipline_id ORDER BY pd.discipline_id), ARRAY[]::uuid[])
+      INTO v_related_discipline_ids
+      FROM public.project_disciplines pd
+     WHERE pd.project_id = ANY(v_project_ids);
+    v_discipline_ids := v_discipline_ids || v_related_discipline_ids;
+  END IF;
+
+  SELECT COALESCE(pg_catalog.array_agg(ids.id ORDER BY ids.id), ARRAY[]::uuid[])
+    INTO v_discipline_ids
+    FROM (
+      SELECT DISTINCT source.id
+      FROM pg_catalog.unnest(v_discipline_ids) AS source(id)
+      WHERE source.id IS NOT NULL
+    ) ids;
+
+  IF TG_TABLE_NAME = 'projects' THEN
+    v_relevant := v_old_public OR v_new_public;
+  ELSIF TG_TABLE_NAME = 'media_assets' THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.projects p
+      WHERE p.id = ANY(v_project_ids)
+        AND p.status = 'published'
+        AND p.deleted_at IS NULL
+    ) AND (v_old_media_claimant OR v_new_media_claimant)
+    INTO v_relevant;
+  ELSIF TG_TABLE_NAME = 'project_disciplines' THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.projects p
+      WHERE p.id = ANY(v_project_ids)
+        AND p.status = 'published'
+        AND p.deleted_at IS NULL
+    ) INTO v_relevant;
+  ELSIF TG_TABLE_NAME = 'disciplines' THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.project_disciplines pd
+      JOIN public.projects p ON p.id = pd.project_id
+      WHERE pd.discipline_id = ANY(v_discipline_ids)
+        AND p.status = 'published'
+        AND p.deleted_at IS NULL
+    ) INTO v_relevant;
+  END IF;
+
+  -- Every mutation already known to affect the public projection takes the singleton authority
+  -- before any local fence or referenced-row lock. That one order prevents cycles across
+  -- multi-project updates and discipline delete/cascade workflows. Draft-only work skips the
+  -- singleton entirely and therefore remains concurrent across unrelated projects.
+  IF v_relevant THEN
+    v_generation := NULL;
+    BEGIN
+      SELECT authority.generation
+        INTO v_generation
+        FROM public.public_feed_activation_authority authority
+       WHERE authority.singleton = true
+         AND authority.active_activation_operation_id IS NULL
+       FOR UPDATE NOWAIT;
+    EXCEPTION
+      WHEN lock_not_available THEN
+        RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_LOCKED';
+    END;
+
+    IF v_generation IS NULL THEN
+      RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN';
+    END IF;
+
+    UPDATE public.public_feed_activation_authority
+       SET generation = generation + 1
+     WHERE singleton = true
+     RETURNING generation INTO v_generation;
+  END IF;
+
   -- Child changes lock referenced lookup rows before taking any fence row. This matches foreign-
   -- key ordering and prevents a project/discipline delete from waiting on a fence held by a child
   -- transaction that is itself waiting on the referenced parent row.
@@ -231,27 +346,6 @@ BEGIN
       SET generation = authority.generation + 1;
   END IF;
 
-  -- Membership changes also advance each currently linked discipline fence. Therefore an older
-  -- discipline transaction cannot miss a newly public reference through its stale snapshot.
-  IF TG_TABLE_NAME = 'projects'
-     AND v_membership_changed
-     AND pg_catalog.cardinality(v_project_ids) > 0
-  THEN
-    SELECT COALESCE(pg_catalog.array_agg(pd.discipline_id ORDER BY pd.discipline_id), ARRAY[]::uuid[])
-      INTO v_related_discipline_ids
-      FROM public.project_disciplines pd
-     WHERE pd.project_id = ANY(v_project_ids);
-    v_discipline_ids := v_discipline_ids || v_related_discipline_ids;
-  END IF;
-
-  SELECT COALESCE(pg_catalog.array_agg(ids.id ORDER BY ids.id), ARRAY[]::uuid[])
-    INTO v_discipline_ids
-    FROM (
-      SELECT DISTINCT source.id
-      FROM pg_catalog.unnest(v_discipline_ids) AS source(id)
-      WHERE source.id IS NOT NULL
-    ) ids;
-
   IF pg_catalog.cardinality(v_discipline_ids) > 0 THEN
     INSERT INTO public.public_feed_discipline_projection_authority AS authority(discipline_id, generation)
     SELECT source.id, 1
@@ -261,9 +355,12 @@ BEGIN
       SET generation = authority.generation + 1;
   END IF;
 
-  IF TG_TABLE_NAME = 'projects' THEN
-    v_relevant := v_old_public OR v_new_public;
-  ELSIF TG_TABLE_NAME = 'media_assets' THEN
+  -- At READ COMMITTED a relationship or membership transaction can commit while this trigger
+  -- waits for its local fence. Re-check only initially irrelevant child/lookup changes after that
+  -- fence is current. A newly relevant result aborts instead of inverting the global/local order.
+  -- At REPEATABLE READ and SERIALIZABLE, the same race fails earlier as a write/write conflict on
+  -- the local generation row.
+  IF NOT v_relevant AND TG_TABLE_NAME = 'media_assets' THEN
     SELECT EXISTS (
       SELECT 1
       FROM public.projects p
@@ -272,7 +369,7 @@ BEGIN
         AND p.deleted_at IS NULL
     ) AND (v_old_media_claimant OR v_new_media_claimant)
     INTO v_relevant;
-  ELSIF TG_TABLE_NAME = 'project_disciplines' THEN
+  ELSIF NOT v_relevant AND TG_TABLE_NAME = 'project_disciplines' THEN
     SELECT EXISTS (
       SELECT 1
       FROM public.projects p
@@ -280,7 +377,7 @@ BEGIN
         AND p.status = 'published'
         AND p.deleted_at IS NULL
     ) INTO v_relevant;
-  ELSIF TG_TABLE_NAME = 'disciplines' THEN
+  ELSIF NOT v_relevant AND TG_TABLE_NAME = 'disciplines' THEN
     SELECT EXISTS (
       SELECT 1
       FROM public.project_disciplines pd
@@ -291,17 +388,8 @@ BEGIN
     ) INTO v_relevant;
   END IF;
 
-  IF v_relevant THEN
-    v_generation := NULL;
-    UPDATE public.public_feed_activation_authority
-       SET generation = generation + 1
-     WHERE singleton = true
-       AND active_activation_operation_id IS NULL
-     RETURNING generation INTO v_generation;
-
-    IF v_generation IS NULL THEN
-      RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN';
-    END IF;
+  IF v_relevant AND v_generation IS NULL THEN
+    RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_RELEVANCE_CHANGED';
   END IF;
 
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;

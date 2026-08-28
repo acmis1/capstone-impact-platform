@@ -285,7 +285,8 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       .from('projects')
       .select(PROJECT_WITH_RELATIONS_SELECT)
       .is('deleted_at', null)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('public_id', { ascending: true });
 
     if (error) {
       throw new Error(`Failed to list projects from Supabase: ${error.message}`);

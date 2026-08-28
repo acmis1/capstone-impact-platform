@@ -44,7 +44,10 @@ describe('public-feed activation authority migration', () => {
       expect(source).toContain(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`);
     }
     expect(source).toContain('ADD COLUMN activation_authority_generation bigint');
-    expect(source).not.toMatch(/pg_advisory|FROM public\.public_feed_operations o/);
+    const projectionGuard = source.slice(
+      source.indexOf('CREATE OR REPLACE FUNCTION public.guard_public_feed_activation_projection()'),
+    );
+    expect(projectionGuard).not.toMatch(/pg_advisory|FROM public\.public_feed_operations o/);
   });
 
   it('claims PREPARED and atomically verifies the first write or observation boundary', () => {
@@ -61,19 +64,29 @@ describe('public-feed activation authority migration', () => {
     expect(source).toContain("RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN'");
   });
 
-  it('classifies through per-object write fences before touching global authority', () => {
+  it('adopts the one pre-existing pre-write activation and fails closed on ambiguous history', () => {
+    expect(source).toContain("o.state = 'PREPARED'");
+    expect(source).toContain("o.state = 'RECOVERY_REQUIRED' AND o.recovery_from_state = 'PREPARED'");
+    expect(source).toContain('SET activation_authority_generation = 1');
+    expect(source).toContain('SET active_activation_operation_id = v_prewrite_operation_id');
+    expect(source).toContain("RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_UPGRADE_AMBIGUOUS'");
+  });
+
+  it('takes global authority before local fences for relevant work and never waits into a cycle', () => {
+    const globalFence = source.indexOf('FOR UPDATE NOWAIT');
     const projectFence = source.indexOf(
       'INSERT INTO public.public_feed_project_projection_authority AS authority',
     );
     const disciplineFence = source.indexOf(
       'INSERT INTO public.public_feed_discipline_projection_authority AS authority',
     );
-    const relevance = source.indexOf('IF v_relevant THEN');
+    expect(globalFence).toBeGreaterThan(-1);
     expect(projectFence).toBeGreaterThan(-1);
     expect(disciplineFence).toBeGreaterThan(projectFence);
-    expect(relevance).toBeGreaterThan(disciplineFence);
+    expect(globalFence).toBeLessThan(projectFence);
     expect(source).toContain('SET generation = authority.generation + 1');
-    expect(source).toContain('AND active_activation_operation_id IS NULL');
+    expect(source).toContain("RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_LOCKED'");
+    expect(source).toContain("RAISE EXCEPTION 'PUBLIC_FEED_ACTIVATION_AUTHORITY_RELEVANCE_CHANGED'");
     expect(source).toContain('v_membership_changed');
     expect(source).toContain('FROM public.project_disciplines pd');
     expect(source).toContain('FOR KEY SHARE');

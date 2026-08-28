@@ -100,6 +100,18 @@ function createSequentialMockSupabaseClient(responses: Array<{ data: unknown[]; 
 }
 
 describe('SupabaseProjectRepositoryCore query operations', () => {
+  it('lists lifecycle projects with the unique public ID as a deterministic timestamp tie-breaker', async () => {
+    const mockClient = createSequentialMockSupabaseClient([{ data: [], count: 0 }]);
+    const repo = new SupabaseProjectRepositoryCore(mockClient);
+
+    await repo.listProjects();
+
+    expect(mockClient._executionLogs[0].orders).toEqual([
+      { column: 'created_at', options: { ascending: false } },
+      { column: 'public_id', options: { ascending: true } },
+    ]);
+  });
+
   // ============================================================
   // listProjectsPage
   // ============================================================
