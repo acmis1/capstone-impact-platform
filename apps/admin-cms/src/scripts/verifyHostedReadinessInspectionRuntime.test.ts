@@ -16,7 +16,7 @@ import {
 const source = fs.readFileSync(
   path.join(__dirname, 'verifyHostedReadinessInspectionRuntime.ts'),
   'utf8',
-);
+).replace(/\r\n/g, '\n');
 
 const EXPECTED_PRIVILEGE_HIDDEN_TABLES = [
   'password_recovery_sessions',
