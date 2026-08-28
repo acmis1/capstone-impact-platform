@@ -148,12 +148,11 @@ Record them: the infrastructure template is pinned to digests, never to a tag.
 
 ### 5.3 Create the dedicated database role
 
-Migration 0047 creates `capstone_assistive_dispatcher` without login. An operator enables login and
-sets a password through an interactive `psql` prompt so the value is not placed in source, command
-history, or process arguments:
+Migration 0047 creates `capstone_assistive_dispatcher` with login enabled but no password, so it
+cannot authenticate until an operator sets its password through an interactive `psql` prompt. This
+keeps the value out of source, command history, and process arguments:
 
 ```sql
-ALTER ROLE capstone_assistive_dispatcher WITH LOGIN;
 \password capstone_assistive_dispatcher
 ```
 

@@ -9,12 +9,12 @@
 
 1. **Historical/Paused Staging Origin**: Initial database DDL statements (`0001` through `0006`) were applied manually to the historical paused Supabase instance (`capstone-admin-cms-staging-2026`) using the dashboard SQL Editor. This manual baseline is not the normal state of active staging-v2.
 2. **Active staging-v2 Evidence**: The active project (`capstone-admin-cms-staging-v2-2026`) currently has point-in-time read-only evidence of 46 tracked rows in `supabase_migrations.schema_migrations`, from earliest `20260601035138` through latest `20260828120000`.
-3. **Evidence Boundary**: The repository contains **exactly 46 migrations** defining 37 public application tables, 3 storage buckets, and 74 service-role application RPC signatures across 73 names. The authenticated-only recovery lookup and separately governed helper grants are not service-role application RPC contracts. The active 46-row migration history is evidence of recorded history only; it does not prove exact schema, constraints, grants, or RPC parity.
+3. **Evidence Boundary**: The repository contains **exactly 47 migrations** defining 37 public application tables, 3 non-public execution-control tables, 3 storage buckets, 78 service-role application RPC signatures across 77 names, and 4 non-public dispatcher routines. The authenticated-only recovery lookup and separately governed helper grants are not service-role application RPC contracts. The active 46-row migration history predates Migration 0047 and is evidence of recorded history only; it does not prove exact schema, constraints, grants, or RPC parity.
 4. **Scope of Migration Repair**: `supabase migration repair` modifies **only the tracking history table** (`supabase_migrations.schema_migrations`). It does not alter database tables, columns, constraints, or RPC functions. It is never routine for active staging-v2: it may be considered only if future read-only reconciliation demonstrates a real history mismatch and separate authorization is granted. `supabase db push` remains governed and must not be run casually.
 
 ---
 
-## 2. Expected Repository State (46 Migrations)
+## 2. Expected Repository State (47 Migrations)
 
 ### A. Authoritative Migration Inventory
 
@@ -66,6 +66,7 @@
 | 44 | `20260826090000_public_feed_activation_authority_guard.sql` | Durable activation-authority and projection write fences |
 | 45 | `20260828090000_assistive_language_findings.sql` | Assistive language-finding contract |
 | 46 | `20260828120000_assistive_worker_heartbeat.sql` | Hosted assistive-worker heartbeat and availability contract |
+| 47 | `20260828170000_assistive_execution_control.sql` | Non-public zero-cost executor launch ceiling, reservation fencing, registration, and least-privilege dispatcher contract |
 
 ### B. Expected Tables (37 Total)
 - **Core Relational (13)**: `programs`, `disciplines`, `industry_categories`, `admin_users`, `user_roles`, `import_batches`, `projects`, `project_disciplines`, `project_industry_categories`, `media_assets`, `validation_flags`, `approval_records`, `published_snapshots`
@@ -77,13 +78,18 @@
 - **Notification & Reminder Ledgers (2)**: `participant_preview_notifications`, `participant_preview_reminder_schedules`
 - **Assistive Validation & Worker Operations (4)**: `assistive_validation_runs`, `assistive_validation_findings`, `assistive_validation_jobs`, `assistive_worker_heartbeats`
 
+The separate, non-Data-API `assistive_execution_control` schema contains exactly 3 additional
+tables: `launch_budget_guard`, `launch_reservations`, and `executor_registrations`. Gate 4 compares
+their columns, constraints, forced RLS state, absence of runtime table grants, and dispatcher schema
+grant exactly; they are not part of the 37-table public application inventory.
+
 ### C. Expected Storage Buckets (3 Total)
 - `project-drafts-private`: Private draft uploads and participant package artifacts.
 - `project-public-assets`: Approved public poster and snapshot image assets.
 - `public-feeds`: Schema-validated public JSON showcase feed (`capstones-latest.json`).
 
 ### D. RPC Contract Basis
-The authoritative migration contract contains **74 service-role application RPC signatures across 73 names**. `generate_participant_preview` has distinct overloads. The authenticated-only `get_current_password_recovery_session_state()` lookup is intentionally outside that service-role inventory. Controlled publication/removal and the unified writer protocol remain service-role-only governed contracts. Later `DROP FUNCTION` statements remove obsolete signatures. Exact names, parameters, PostgreSQL types, final grants, and migration bytes are enforced by `hostedDeploymentReadiness.test.ts`.
+The authoritative migration contract contains **78 service-role application RPC signatures across 77 names**. `generate_participant_preview` has distinct overloads. The authenticated-only `get_current_password_recovery_session_state()` lookup and the 4 non-public dispatcher routines are intentionally outside that service-role inventory. Controlled publication/removal and the unified writer protocol remain service-role-only governed contracts. Later `DROP FUNCTION` statements remove obsolete signatures. Exact names, parameters, PostgreSQL types, final grants, and migration bytes are enforced by `hostedDeploymentReadiness.test.ts`; Gate 4 separately compares the dispatcher routines and grants.
 
 ### E. Key Column & Constraint Requirements
 - `projects.participant_contact_email`: Normalized nullable email address (Migration 0023).
@@ -115,7 +121,7 @@ npm run check:admin-deployment-readiness
 Verify the output report:
 - `TARGET_IDENTITY_MATCH = YES`
 - `MIGRATION_HISTORY_READABLE = NO`
-- `REPOSITORY_MIGRATIONS = 46`
+- `REPOSITORY_MIGRATIONS = 47`
 - `HOSTED_RECORDED_MIGRATIONS = <count or UNKNOWN>`
 - `SCHEMA_BASELINE = UNVERIFIED / INCOMPLETE / DRIFT / UNKNOWN`
 - `REQUIRED_RPC_NAMES = PRESENT / INCOMPLETE / UNVERIFIED`
@@ -142,19 +148,59 @@ SELECT version, inserted_at
   FROM supabase_migrations.schema_migrations
  ORDER BY version ASC;
 ```
-Record exact count and missing timestamps against the 46 repository migrations.
+Record exact count and missing timestamps against the 47 repository migrations.
 
 For active staging-v2, the current point-in-time read-only evidence is 46 rows from `20260601035138` through `20260828120000`. Recheck migration alignment for each release candidate and whenever reconciliation is required; this history evidence does not establish exact schema, grant, or RPC parity.
 
 The configured Data API exposes `public`, `graphql_public`, and `storage`, not `supabase_migrations`. Therefore the automated checker truthfully reports `MIGRATION_HISTORY_READABLE = NO` and `HOSTED_RECORDED_MIGRATIONS = UNKNOWN`; this separately governed read-only evidence is mandatory and must not be replaced with a `public.schema_migrations` fallback.
 
 ### Gate 4: Hosted vs Repository Schema Evidence
-Perform read-only inspection of hosted tables, columns, and RPC functions:
-1. Verify all 37 required public application tables, including the 13 core tables and 24 later tables.
-2. Verify presence of `alt_text_public` column in `media_assets`.
-3. Verify presence of `poster_text_public` and `accessibility_text_public` in `projects`.
-4. Verify all 74 service-role application RPC signatures across 73 names, including required overloads and the current publication/assistive contracts.
-5. Verify exact constraints, grants, Row Level Security, and the absence of unexpected schema objects across all existing tables.
+
+Gate 4 uses one evidence model for both sides of the comparison. The expected side is generated
+from the fully migrated repository schema, not from a second hand-maintained DDL specification.
+
+1. Check out the exact reviewed candidate SHA and prove the collector against a disposable Local
+   Supabase stack:
+   ```bash
+   npm run verify:gate4-schema-evidence:disposable
+   ```
+2. Independently review
+   [`gate4-schema-evidence.sql`](./gate4-schema-evidence.sql). It is a single SELECT-only statement
+   over `pg_catalog`, `storage.buckets`, and `supabase_migrations.schema_migrations`. It reads no
+   application rows, Auth identities, or Storage objects and calls no application RPC.
+3. An authorized hosted operator executes that exact reviewed SQL against active staging-v2 and
+   saves the single returned `gate4_evidence` JSON value as the immutable snapshot artifact. Record
+   environment, UTC collection time, operator role, reviewed query SHA, and artifact reference
+   separately; do not add credentials, private connection details, or identities to the artifact.
+4. From the same exact candidate checkout, compare the hosted snapshot:
+   ```bash
+   npm run check:gate4-schema-evidence -- --evidence-file=<snapshot.json> --expected-git-sha=<full-40-hex-reviewed-sha>
+   ```
+   Add `--machine-readable` for deterministic JSON output.
+   The command fails closed if the checkout has tracked staged or unstaged changes; an untracked
+   snapshot artifact is allowed because it is input evidence, not repository contract source.
+
+Required result: `GATE4_CLASSIFICATION=GATE4_MATCH`, with `MIGRATIONS=47/47`, `TABLES=40/40`,
+`RPC_SIGNATURES=78/78`, `RPC_NAMES=77/77`, `DISPATCHER_CONTROL_ROUTINES=4/4`,
+`STORAGE_BUCKETS=3/3`, and match classifications for columns, constraints, RLS, policies, and
+grants. The table total is 37 public application tables plus 3 non-public execution-control tables.
+`canonical_staff_roles(text[])` is compared as a separate helper and must remain `1/1`; it does not
+inflate the application-RPC count.
+
+The comparator fails closed as `EVIDENCE_INVALID` for a missing category, malformed value, or
+duplicate catalog identity. A valid mismatch is `GATE4_DRIFT` and reports missing, unexpected, or
+changed catalog keys without dumping the full snapshot. Covered evidence includes exact public
+table set; all table columns and types/arrays/nullability/identity/generated/default behavior;
+primary, unique, foreign-key, and check constraints; RLS/FORCE RLS and policies; relevant
+table/schema privileges; relevant role structure, including the dedicated dispatcher; exposed and
+non-public function arguments, return types, security mode/configuration and execute grants; Auth
+linkage structure; and complete canonical bucket visibility/limits/MIME configuration.
+
+`GATE4_MATCH` proves only structural parity for the collected database contract at the recorded
+Git SHA. It does not prove application data, Auth identities, Storage object contents, workflow
+behavior, backup/restore, deployment identity, monitoring, or UAT. Migration-history equality is
+necessary but never sufficient. Gate 4 is read-only and does not authorize Gate 6, migration
+repair, `db push`, data changes, Storage changes, or any other hosted mutation.
 
 ---
 
@@ -165,13 +211,13 @@ Evaluate empirical evidence from Gates 1–4 to determine the required path:
 ```mermaid
 flowchart TD
     G[Gates 1-4 Evidence] --> C{Schema & History State}
-    C -->|All 46 migrations applied & history matches| PA[Path A: Ready for Deployment Decision]
+    C -->|All 47 migrations applied & history matches| PA[Path A: Ready for Deployment Decision]
     C -->|Read-only evidence shows history mismatch| PB[Path B: Phased Reconciliation & Push]
     C -->|Unexpected column/table drift| PC[Path C: Drift Resolution Required]
     C -->|Target mismatch or unauthorized| PD[Path D: Stop & Abort]
 ```
 
-- **Path A (Full Match / Ready)**: All 46 migrations, 37 public application tables, 74 service-role application RPC signatures across 73 names, exact constraints/grants, and absence of unexpected schema objects are verified by combined automated and governed manual evidence. Proceed directly to Gate 7 verification.
+- **Path A (Full Match / Ready)**: All 47 migrations, 37 public application tables, 3 non-public execution-control tables, 78 service-role application RPC signatures across 77 names, 4 dispatcher routines, exact constraints/grants, and absence of unexpected schema objects are verified by combined automated and governed manual evidence. Proceed directly to Gate 7 verification.
 - **Path B (Phased Reconciliation / Conditional)**: Future read-only evidence shows a real history mismatch or missing forward migration; any repair or migration application requires separate authorization. Proceed to Gate 6 only after that authorization.
 - **Path C (Drift Detected)**: Unrecognized columns, conflicting constraint names, or manual schema changes detected. STOP. Document drift and formulate an explicit resolution plan.
 - **Path D (Abort)**: Target identity mismatch or lack of operator authorization. STOP immediately.
@@ -184,7 +230,7 @@ flowchart TD
 > **EXPLICIT PROJECT-OWNER APPROVAL REQUIRED**
 > The commands below modify database tables or migration tracking records. They must never be executed autonomously.
 
-These mutating gates are conditional and are not routine maintenance for active staging-v2. Its current point-in-time evidence already records all 46 migration rows. Do not use migration repair merely to make a count match; first obtain future read-only evidence of a real history mismatch and separate authorization.
+These mutating gates are conditional and are not routine maintenance for active staging-v2. Its current point-in-time evidence records the first 46 migration rows; Migration 0047 is a pending governed forward migration, not a tracking-history defect. Do not use migration repair merely to make a count match; first obtain read-only evidence of a real history mismatch and separate authorization.
 
 ### Gate 6: Separately Authorized Reconciliation & Migration
 

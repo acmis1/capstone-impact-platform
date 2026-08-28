@@ -208,6 +208,9 @@ jobs:
           npm run supabase:verify:local
           test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 47
 
+      - name: Verify exact Gate 4 schema evidence from the migrated Local catalog
+        run: npm run check:gate4-schema-evidence:local --workspace=apps/admin-cms -- --local-self-check
+
       - name: Verify multi-image gallery position invariant against the real schema
         run: npm run verify:gallery-constraint-runtime --workspace=apps/admin-cms
 

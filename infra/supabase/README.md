@@ -38,6 +38,7 @@ npm run supabase:seed:buckets
 npm run supabase:env:local
 npm run supabase:users:local
 npm run supabase:verify:local
+npm run verify:gate4-schema-evidence:disposable
 ```
 
 Clean up when finished:
@@ -53,6 +54,7 @@ npm run supabase:stop
 * **[Contributor Guide](../../CONTRIBUTING.md):** Authoritative developer onboarding standards, toolchain contract, and security rules.
 * **[Local Development Guide](./local-development.md):** Complete local environment setup, seed fixtures, synthetic staff credentials, and acceptance checklist.
 * **[Staging Reconciliation Runbook](./staging-reconciliation-runbook.md):** 7-gate procedure to verify, back up, reconcile, and validate hosted database schema and migration tracking tables.
+* **[Gate 4 SELECT-only evidence query](./gate4-schema-evidence.sql):** Exact structural catalog snapshot used unchanged for migrated Local expectations and authorized hosted evidence capture. It never reads application/Auth/Storage-object content or invokes application RPCs.
 * **[Key Migration Governance](./key-migration-governance.md):** Standards for modern server key preference (`SUPABASE_SECRET_KEY` over legacy `SUPABASE_SERVICE_ROLE_KEY`) and secret rotation policies.
 * **[Staff Lifecycle Design](./staff-lifecycle-design.md):** Governance design for staff provisioning, role modification, emergency offboarding, and audit attribution.
 * **[Password Recovery Setup](./password-recovery-setup.md):** Local Mailpit verification, hosted Auth URL/template requirements, PKCE fallback, and recovery-session security boundaries.

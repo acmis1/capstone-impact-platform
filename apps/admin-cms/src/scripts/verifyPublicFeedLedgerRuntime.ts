@@ -719,7 +719,7 @@ async function main(): Promise<void> {
   const anon = createClient(local.API_URL!, local.ANON_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
   const ledger = new SupabasePublicFeedLedgerRepositoryCore(client);
 
-  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '46');
+  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '47');
   assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version IN ('20260824180000','20260824183000','20260825030000');"), '3');
   assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260826090000';"), '1');
   assert.equal(psql("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('public_feed_operations','public_feed_versions','public_feed_version_members','public_feed_head','feed_rollback_preparations','public_feed_operation_events');"), '6');

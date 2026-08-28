@@ -63,7 +63,7 @@ async function main(): Promise<void> {
   /**
    * Runs SQL over a real authenticated connection as the dedicated dispatcher role, which is the
    * exact path the deployed dispatcher uses. A temporary password is granted for the duration of
-   * this disposable Local verification and revoked in the cleanup block.
+   * this disposable Local verification and cleared in the cleanup block.
    */
   const dispatcherPassword = `probe_${crypto.randomBytes(12).toString('hex')}`;
   const dispatcherSql = (sql: string): { ok: boolean; value: string } => {
@@ -176,9 +176,9 @@ async function main(): Promise<void> {
 
     resetReservations();
     psql("DELETE FROM assistive_execution_control.executor_registrations WHERE environment = 'staging';");
-    // The migration creates the dispatcher role without login. Grant a disposable password so the
+    // The migration leaves the LOGIN role without a password. Grant a disposable password so the
     // privilege checks below exercise the real authenticated connection path.
-    psql(`ALTER ROLE ${DISPATCHER_ROLE} WITH LOGIN PASSWORD '${dispatcherPassword}';`);
+    psql(`ALTER ROLE ${DISPATCHER_ROLE} WITH PASSWORD '${dispatcherPassword}';`);
 
     await scenario(1, 'fresh schema applies exactly 47 migrations and installs the control schema', () => {
       assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '47');
@@ -579,7 +579,7 @@ async function main(): Promise<void> {
     primaryFailure = error;
   } finally {
     try {
-      psql(`ALTER ROLE ${DISPATCHER_ROLE} WITH NOLOGIN PASSWORD NULL;`);
+      psql(`ALTER ROLE ${DISPATCHER_ROLE} WITH PASSWORD NULL;`);
       resetReservations();
       psql("DELETE FROM assistive_execution_control.executor_registrations WHERE environment = 'staging';");
       if (projectId) {

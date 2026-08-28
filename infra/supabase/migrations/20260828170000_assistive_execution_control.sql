@@ -25,8 +25,10 @@ REVOKE ALL ON SCHEMA assistive_execution_control FROM PUBLIC;
 -- ---------------------------------------------------------------------------
 -- 1. Dedicated least-privilege dispatcher role.
 --
--- Created without LOGIN. An operator enables login and sets a password out of band, so no
--- credential ever enters this repository. The role receives USAGE on this schema and EXECUTE on
+-- Created with LOGIN but no password. An operator sets a password out of band, so no credential
+-- ever enters this repository and the role cannot authenticate until provisioned. Keeping LOGIN
+-- as reviewed schema state also lets Gate 4 compare the Local and hosted role attributes exactly.
+-- The role receives USAGE on this schema and EXECUTE on
 -- exactly four execution-control functions: no table privileges, no public-schema usage, no
 -- project data, no workflow or publication routine, and no service-role credential.
 -- ---------------------------------------------------------------------------
@@ -37,19 +39,19 @@ BEGIN
     SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'capstone_assistive_dispatcher'
   ) THEN
     CREATE ROLE capstone_assistive_dispatcher
-      NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS
+      LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS
       CONNECTION LIMIT 4;
   END IF;
 END
 $$;
 
--- Re-asserted narrowly. LOGIN is deliberately untouched so replaying this migration cannot revoke
--- an operator's provisioned password. Only attributes a non-superuser owner may change are listed:
+-- Re-asserted narrowly. LOGIN does not change an operator's provisioned password. Only attributes
+-- a non-superuser owner may change are listed:
 -- SUPERUSER, REPLICATION, and BYPASSRLS can never be granted by this migration's executing role,
 -- so their absence is already guaranteed by the CREATE above and is asserted by the runtime
 -- verifier rather than re-issued here.
 ALTER ROLE capstone_assistive_dispatcher
-  NOINHERIT NOCREATEDB NOCREATEROLE CONNECTION LIMIT 4;
+  LOGIN NOINHERIT NOCREATEDB NOCREATEROLE CONNECTION LIMIT 4;
 
 GRANT USAGE ON SCHEMA assistive_execution_control TO capstone_assistive_dispatcher;
 

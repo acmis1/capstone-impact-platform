@@ -27,7 +27,7 @@ Use one copy per candidate release. Leave every item unchecked until its stated 
 
 - [ ] Repository migration count/latest/full manifest match the candidate. Evidence: ____
 - [ ] Hosted migration history was inspected and compared with the candidate. Evidence: ____
-- [ ] Exact required tables, functions, constraints, grants, RLS, Auth foundation, and Storage buckets were verified through the governed reconciliation gates. Evidence: ____
+- [ ] `npm run check:gate4-schema-evidence -- --evidence-file=<snapshot.json> --expected-git-sha=<sha>` returned `GATE4_MATCH` for the exact candidate SHA, covering public and execution-control tables, columns, constraints, RLS/policies, schema/table grants, Data API and dispatcher roles, public RPC overloads, non-public dispatcher routines, and Storage bucket configuration. Evidence: ____
 - [ ] No unexpected migration or schema drift remains. Evidence: ____
 - [ ] Any database change has an approved forward migration and compatible application deployment order. Evidence: ____
 
