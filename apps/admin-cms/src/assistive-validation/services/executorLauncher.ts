@@ -14,8 +14,28 @@ import type { LaunchOutcome } from '../domain/executionControlContract';
  * It carries the credential obtained during preparation so that the irreversible step needs no
  * further failure-prone work between the reservation and the request going out.
  */
+type EnvironmentVarForStart = { name?: string; value?: string; secretRef?: string };
+type ResourcesForStart = { cpu?: number; memory?: string; ephemeralStorage?: string };
+type JobExecutionContainerForStart = {
+  name?: string;
+  image?: string;
+  command?: string[];
+  args?: string[];
+  env?: EnvironmentVarForStart[];
+  resources?: ResourcesForStart;
+};
+type JobExecutionTemplateForStart = {
+  containers: JobExecutionContainerForStart[];
+  initContainers?: JobExecutionContainerForStart[];
+};
+type JobTemplateFromGet = {
+  containers?: unknown;
+  initContainers?: unknown;
+  volumes?: unknown;
+};
+
 export type PreparedExecution = {
-  readonly requestBody: unknown;
+  readonly requestBody: JobExecutionTemplateForStart;
   readonly containerName: string;
   readonly credential: string;
 };
@@ -62,32 +82,23 @@ const IDENTITY_API_VERSION = '2019-08-01';
 const RESERVATION_TOKEN_VARIABLE = 'CAPSTONE_ASSISTIVE_RESERVATION_TOKEN';
 const RESERVATION_GENERATION_VARIABLE = 'CAPSTONE_ASSISTIVE_RESERVATION_GENERATION';
 
-type EnvironmentVar = { name?: string; value?: string; secretRef?: string };
-type TemplateContainer = {
-  name?: string;
-  image?: string;
-  command?: string[];
-  args?: string[];
-  env?: EnvironmentVar[];
-  resources?: { cpu?: unknown; memory?: unknown };
-};
-type ExecutionTemplate = {
-  containers?: unknown;
-  [key: string]: unknown;
-};
+const EXECUTION_TEMPLATE_FIELDS = new Set(['containers', 'initContainers']);
+const EXECUTION_CONTAINER_FIELDS = new Set(['name', 'image', 'command', 'args', 'env', 'resources']);
+const ENVIRONMENT_VARIABLE_FIELDS = new Set(['name', 'value', 'secretRef']);
+const RESOURCE_FIELDS = new Set(['cpu', 'memory', 'ephemeralStorage']);
 
 const EXPECTED_WORKER_COMMAND = [
   'npm', 'run', 'run:assistive-worker:on-demand', '--workspace=apps/admin-cms',
 ] as const;
 
-function hasValue(container: TemplateContainer, name: string, expected: string): boolean {
+function hasValue(container: JobExecutionContainerForStart, name: string, expected: string): boolean {
   const matches = (container.env ?? []).filter((entry) => entry.name === name);
   return matches.length === 1
     && matches[0].value === expected
     && matches[0].secretRef === undefined;
 }
 
-function hasSecretReference(container: TemplateContainer, name: string): boolean {
+function hasSecretReference(container: JobExecutionContainerForStart, name: string): boolean {
   const matches = (container.env ?? []).filter((entry) => entry.name === name);
   return matches.length === 1
     && typeof matches[0].secretRef === 'string'
@@ -96,7 +107,7 @@ function hasSecretReference(container: TemplateContainer, name: string): boolean
 }
 
 function isCompleteWorkerTemplate(
-  container: TemplateContainer,
+  container: JobExecutionContainerForStart,
   expectedWorkerInstanceId: string,
 ): boolean {
   return JSON.stringify(container.command) === JSON.stringify(EXPECTED_WORKER_COMMAND)
@@ -108,11 +119,78 @@ function isCompleteWorkerTemplate(
     && hasSecretReference(container, 'SUPABASE_SECRET_KEY');
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasOnlyFields(value: Record<string, unknown>, allowed: ReadonlySet<string>): boolean {
+  return Object.keys(value).every((field) => allowed.has(field));
+}
+
+function isEnvironmentVarForStart(value: unknown): value is EnvironmentVarForStart {
+  return isObject(value)
+    && hasOnlyFields(value, ENVIRONMENT_VARIABLE_FIELDS)
+    && (value.name === undefined || typeof value.name === 'string')
+    && (value.value === undefined || typeof value.value === 'string')
+    && (value.secretRef === undefined || typeof value.secretRef === 'string');
+}
+
+function isResourcesForStart(value: unknown): value is ResourcesForStart {
+  return isObject(value)
+    && hasOnlyFields(value, RESOURCE_FIELDS)
+    && (value.cpu === undefined || typeof value.cpu === 'number')
+    && (value.memory === undefined || typeof value.memory === 'string')
+    && (value.ephemeralStorage === undefined || typeof value.ephemeralStorage === 'string');
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isExecutionContainerForStart(value: unknown): value is JobExecutionContainerForStart {
+  return isObject(value)
+    && hasOnlyFields(value, EXECUTION_CONTAINER_FIELDS)
+    && (value.name === undefined || typeof value.name === 'string')
+    && (value.image === undefined || typeof value.image === 'string')
+    && (value.command === undefined || isStringArray(value.command))
+    && (value.args === undefined || isStringArray(value.args))
+    && (value.env === undefined || (Array.isArray(value.env) && value.env.every(isEnvironmentVarForStart)))
+    && (value.resources === undefined || isResourcesForStart(value.resources));
+}
+
+function projectContainerForStart(
+  container: JobExecutionContainerForStart,
+): JobExecutionContainerForStart {
+  return {
+    ...(container.name === undefined ? {} : { name: container.name }),
+    ...(container.image === undefined ? {} : { image: container.image }),
+    ...(container.command === undefined ? {} : { command: [...container.command] }),
+    ...(container.args === undefined ? {} : { args: [...container.args] }),
+    ...(container.env === undefined ? {} : { env: container.env.map((entry) => ({ ...entry })) }),
+    ...(container.resources === undefined ? {} : { resources: { ...container.resources } }),
+  };
+}
+
+function projectTemplateForStart(template: JobTemplateFromGet): JobExecutionTemplateForStart | null {
+  if (!isObject(template) || !hasOnlyFields(template, EXECUTION_TEMPLATE_FIELDS)) return null;
+  if (!Array.isArray(template.containers) || !template.containers.every(isExecutionContainerForStart)) return null;
+  if (template.initContainers !== undefined
+      && (!Array.isArray(template.initContainers) || !template.initContainers.every(isExecutionContainerForStart))) {
+    return null;
+  }
+  return {
+    containers: template.containers.map(projectContainerForStart),
+    ...(template.initContainers === undefined
+      ? {}
+      : { initContainers: template.initContainers.map(projectContainerForStart) }),
+  };
+}
+
 function withReservationEnvironment(
-  container: TemplateContainer,
+  container: JobExecutionContainerForStart,
   reservationToken: string,
   generation: number,
-): TemplateContainer {
+): JobExecutionContainerForStart {
   const preserved = (container.env ?? []).filter((entry) =>
     entry.name !== RESERVATION_TOKEN_VARIABLE && entry.name !== RESERVATION_GENERATION_VARIABLE);
   return {
@@ -165,7 +243,7 @@ export class AzureContainerAppsJobLauncher implements ExecutorLauncher {
     const token = await this.accessToken();
     if (!token) return { ok: false, reason: 'IDENTITY_TOKEN_UNAVAILABLE' };
 
-    let job: { properties?: { template?: ExecutionTemplate } };
+    let job: { properties?: { template?: JobTemplateFromGet } };
     try {
       const response = await this.fetchImpl(
         `${ARM_SCOPE}${this.jobResourcePath}?api-version=${ARM_API_VERSION}`,
@@ -178,11 +256,20 @@ export class AzureContainerAppsJobLauncher implements ExecutorLauncher {
     }
 
     const template = job.properties?.template;
+    if (!template) {
+      return { ok: false, reason: 'JOB_TEMPLATE_INVALID' };
+    }
     const containers = template?.containers;
     if (!Array.isArray(containers) || containers.length !== 1) {
       return { ok: false, reason: 'JOB_TEMPLATE_INVALID' };
     }
-    const matching = (containers as TemplateContainer[]).filter((container) =>
+    // Jobs - Get returns JobTemplate, while the direct Jobs - Start REST endpoint accepts only
+    // JobExecutionTemplate. Reject unsupported GET-only fields rather than silently dropping them.
+    const executionTemplate = projectTemplateForStart(template);
+    if (!executionTemplate) {
+      return { ok: false, reason: 'JOB_TEMPLATE_UNSUPPORTED_FOR_EXECUTION_OVERRIDE' };
+    }
+    const matching = executionTemplate.containers.filter((container) =>
       typeof container.image === 'string'
       && container.image.endsWith(`@${this.config.expectedImageDigest}`));
     if (matching.length !== 1 || typeof matching[0].name !== 'string' || !matching[0].name) {
@@ -196,9 +283,6 @@ export class AzureContainerAppsJobLauncher implements ExecutorLauncher {
       return { ok: false, reason: 'JOB_TEMPLATE_INVALID' };
     }
 
-    // Azure start overrides replace the whole execution template. Clone precisely that provider
-    // payload after validation so newly supported template fields cannot be silently discarded.
-    const executionTemplate = structuredClone(template) as ExecutionTemplate;
     return {
       ok: true,
       prepared: {
@@ -214,7 +298,7 @@ export class AzureContainerAppsJobLauncher implements ExecutorLauncher {
     reservationToken: string,
     generation: number,
   ): Promise<StartResult> {
-    const body = prepared.requestBody as ExecutionTemplate & { containers: TemplateContainer[] };
+    const body = prepared.requestBody;
     const payload = {
       ...body,
       containers: body.containers.map((container) => container.name === prepared.containerName

@@ -46,7 +46,7 @@ Admin/CMS enqueues one job on the existing PostgreSQL queue          (unchanged)
 DISPATCHER JOB          0.25 vCPU · 0.5 GiB · 15 s timeout · no ingress
   1. verify staging runtime identity
   2. cheap read-only database probe                     ── no work? exit, no cloud traffic at all
-  3. read the complete worker template, validate its deployment SHA and image digest, build override
+  3. read and verify the deployed worker template, then project its Start-compatible execution fields
   4. RESERVE ONE LAUNCH UNIT                            ── the cost fence, before any cloud start
   5. durably mark the reservation as requested          ── point of no refund
   6. request exactly one worker execution, passing the reservation token
@@ -61,6 +61,14 @@ HEAVY WORKER JOB        2.0 vCPU · 4.0 GiB · 600 s timeout · no ingress · sc
 
 The dispatcher is the **only** authorised starter. A "Run now" started from a cloud portal carries
 no reservation token and exits immediately without loading any provider or claiming any queue work.
+
+The dispatcher reads the deployed Azure job template to verify its image, deployment, and worker
+identity. Because it calls the Jobs - Start REST endpoint directly, it projects only that endpoint's
+documented execution-template fields: containers and optional init containers, with each container's
+name, image, command, args, environment, and resources preserved. Template-only features that Start
+cannot represent, including volumes, probes, volume mounts, or any unmodelled template field, fail
+closed before a launch is reserved. If future executor IaC needs one of those features, reevaluate the
+execution-override strategy before deploying it.
 
 There is no public execution endpoint, no worker URL, no health-check path, and no command payload.
 Container Apps jobs do not support ingress at all.

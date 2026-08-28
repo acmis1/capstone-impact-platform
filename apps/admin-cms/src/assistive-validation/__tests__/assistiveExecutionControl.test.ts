@@ -194,8 +194,6 @@ describe('cloud execution adapter', () => {
             { name: 'CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID', value: 'capstone-assistive-worker' },
             { name: 'SUPABASE_SECRET_KEY', secretRef: 'supabase-secret-key' },
           ],
-          probes: [{ type: 'liveness', tcpSocket: { port: 3000 }, initialDelaySeconds: 5 }],
-          volumeMounts: [{ volumeName: 'scratch', mountPath: '/scratch' }],
         }],
         initContainers: [{
           name: 'init',
@@ -203,10 +201,7 @@ describe('cloud execution adapter', () => {
           args: ['--prepare'],
           env: [{ name: 'INIT_SECRET', secretRef: 'init-secret' }],
           resources: { cpu: 0.25 },
-          volumeMounts: [{ volumeName: 'scratch', mountPath: '/scratch' }],
         }],
-        volumes: [{ name: 'scratch', storageType: 'EmptyDir' }],
-        terminationGracePeriodSeconds: 60,
       },
     },
   };
@@ -232,7 +227,7 @@ describe('cloud execution adapter', () => {
     return { impl: impl as unknown as typeof fetch, startBodies };
   }
 
-  it('9. Preserves the complete deployed template and injects only reservation variables', async () => {
+  it('9. Projects the deployed template to the Start contract and injects only reservation variables', async () => {
     const { impl, startBodies } = fetchStub({});
     const adapter = new AzureContainerAppsJobLauncher(launcherConfig, impl);
 
@@ -248,6 +243,36 @@ describe('cloud execution adapter', () => {
       { name: 'CAPSTONE_ASSISTIVE_RESERVATION_GENERATION', value: '12' },
     ];
     expect(startBodies).toEqual([expected]);
+  });
+
+  it.each([
+    ['a top-level volume', (template: typeof jobTemplate & { properties: { template: Record<string, unknown> } }) => {
+      template.properties.template.volumes = [{ name: 'scratch', storageType: 'EmptyDir' }];
+    }],
+    ['a worker probe', (template: typeof jobTemplate) => {
+      (template.properties.template.containers[0] as Record<string, unknown>).probes = [{ type: 'liveness' }];
+    }],
+    ['a worker volume mount', (template: typeof jobTemplate) => {
+      (template.properties.template.containers[0] as Record<string, unknown>).volumeMounts = [
+        { volumeName: 'scratch', mountPath: '/scratch' },
+      ];
+    }],
+    ['an init-container volume mount', (template: typeof jobTemplate) => {
+      (template.properties.template.initContainers[0] as Record<string, unknown>).volumeMounts = [
+        { volumeName: 'scratch', mountPath: '/scratch' },
+      ];
+    }],
+    ['an unknown top-level template field', (template: typeof jobTemplate & { properties: { template: Record<string, unknown> } }) => {
+      template.properties.template.terminationGracePeriodSeconds = 60;
+    }],
+  ])('9a. Fails closed before Start when Get returns %s', async (_label, mutate) => {
+    const unsupported = structuredClone(jobTemplate);
+    mutate(unsupported);
+    const { impl, startBodies } = fetchStub({ read: () => Response.json(unsupported) });
+
+    await expect(new AzureContainerAppsJobLauncher(launcherConfig, impl).prepare())
+      .resolves.toEqual({ ok: false, reason: 'JOB_TEMPLATE_UNSUPPORTED_FOR_EXECUTION_OVERRIDE' });
+    expect(startBodies).toEqual([]);
   });
 
   it('10. Accepts a job-scoped worker identity that deliberately differs from the container name', async () => {
