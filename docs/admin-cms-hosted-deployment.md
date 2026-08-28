@@ -16,7 +16,7 @@ The Capstone platform enforces strict architectural and operational isolation be
 | **Instance Status** | Active / Separate (Never touch) | **ACTIVE_HEALTHY** (Active Target) | **PAUSED / INACTIVE** (Do not modify) |
 | **Region** | `ap-southeast-1` | `ap-southeast-1` | `ap-southeast-1` |
 | **Hosting Service** | Existing Render static/web service | **Separate** Render/Cloud Web Service | — |
-| **Database State** | Prohibited from mutation | Clean 26-migration schema (0001–0026) | Historical manually evolved baseline; migration history untracked |
+| **Database State** | Prohibited from mutation | Tracked 46-migration history through `20260828120000`; exact schema/grant/RPC alignment is independently re-verifiable | Historical manually evolved baseline; migration history untracked |
 
 > [!IMPORTANT]
 > The existing Render service configured for `Prototype/` must **NEVER** be repurposed or pointed to `apps/admin-cms`. The Admin/CMS requires an independent web service with its own environment variables and deployment pipeline. Furthermore, the Prototype Supabase project (`capstone-prototype-recovery-2026`) is completely isolated and must never be targeted by Admin/CMS operations.
@@ -318,22 +318,18 @@ Local publication, staging/test-showcase publication, and live production public
 
 ---
 
-## 5. Current Clean-Staging Lifecycle State vs Historical Reconciliation
+## 5. Current Staging-v2 Evidence vs Historical Reconciliation
 
-### A. Current v2 Clean Staging Environment State
-The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpceeltukbzxpsvinb`) was initialized via clean baseline migration deployment:
-- **Migration Inventory**: Exactly 26 migrations (`0001` through `0026`) applied sequentially and recorded in `supabase_migrations.schema_migrations`.
-- **Relational Schema**: All 23 public application tables and 42 service-role application RPC signatures across 41 names verified.
-- **Storage Buckets**: All 3 buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) created and configured; 0 storage objects.
-- **Administrator Identity**: Initial staging administrator bootstrap completed; single Auth identity linked to `admin_users` profile with verified `admin` role in `user_roles` (`check:admin-auth` classification: `READY_FOR_MANUAL_LOGIN_TEST`).
-- **Next Lifecycle Action**: Standalone Admin/CMS hosted web service deployment and manual authenticated login verification.
+### A. Current Active Staging-v2 Evidence
+The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpceeltukbzxpsvinb`) has the following point-in-time read-only evidence:
+- **Migration History (Gate 3)**: 46 rows are recorded in `supabase_migrations.schema_migrations`, from earliest `20260601035138` through latest `20260828120000`.
+- **Schema, Grants, and RPCs (Gate 4)**: Migration-history count alone does not prove exact schema, constraints, RLS, grants, or RPC parity. Those require a separate governed verification.
+- **Separate Release Gates**: Current Render deployment identity, Auth/Storage readiness, UAT, recovery, monitoring, and release acceptance are independent evidence layers.
 
-The repository now expects 46 migrations, ending at `20260828120000_assistive_worker_heartbeat`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that any newer repository migration is hosted. In particular, the multi-image gallery schema, the bulk-review concurrency gate, the public deployment ledger/head, the unified writer protocol, taxonomy operation guard, rollback capability, assistive-language evidence contract, and hosted-worker heartbeat contract are not established by the historical hosted evidence. Any hosted reconciliation remains a separately authorized operation followed by independent review.
-
-Operators should **NOT** run `supabase migration repair` or replay migrations against this clean v2 environment.
+The active 46-row history is point-in-time evidence and must be rechecked for each release candidate. Operators must **NOT** run `supabase migration repair` as a routine step for active staging-v2. Repair may be considered only if future read-only reconciliation demonstrates a real history mismatch and separate authorization is granted; `supabase db push` remains governed and must not be run casually.
 
 ### B. Legacy Reconciliation Reference
-The procedures detailed in the [staging reconciliation runbook](../infra/supabase/staging-reconciliation-runbook.md) were designed specifically for diagnosing and reconciling the historical drifted staging instance (`fewcbklmbgzglfgedtvt`). That documentation is preserved as an audit trail and fallback procedure, but does not apply to routine maintenance of the clean v2 environment.
+The procedures detailed in the [staging reconciliation runbook](../infra/supabase/staging-reconciliation-runbook.md) were designed specifically for diagnosing and reconciling the historical drifted staging instance (`fewcbklmbgzglfgedtvt`). That documentation is preserved as an audit trail and fallback procedure, but does not apply to routine maintenance of active staging-v2.
 
 ---
 
@@ -353,7 +349,7 @@ The automated checker queries the PostgREST Data API and OpenAPI schema. It inte
 - **RPC Signatures**: OpenAPI metadata proves RPC names, but may collapse or omit full overloaded parameter signatures.
 - **Fail-Closed Design**: The checker deliberately refuses to synthesize `SCHEMA_BASELINE = MATCH` or `READY_FOR_MUTATION_DECISION` without explicit, governed Gate 3/4 manual verification inputs.
 
-Expected automated inspection output on the clean v2 staging target:
+Expected automated inspection output on the active staging-v2 target:
 - `TARGET_IDENTITY_MATCH = YES`
 - `MIGRATION_HISTORY_READABLE = NO`
 - `SCHEMA_BASELINE = UNVERIFIED`
@@ -364,12 +360,11 @@ Expected automated inspection output on the clean v2 staging target:
 - `MANUAL_EVIDENCE_REQUIRED = YES`
 - `DEPLOYMENT_CLASSIFICATION = MANUAL_EVIDENCE_REQUIRED`
 
-### B. Governed Staged Activation Evidence (Clean v2 Baseline)
-The active staging environment (`capstone-admin-cms-staging-v2-2026`) was cleared through the governed activation process (Groups D–F), providing the independent contract evidence that automated inspection cannot synthesize:
-- **Migration History (Gate 3)**: All 26 migrations in the recorded hosted baseline (`0001` through `0026`) were applied sequentially and verified in remote migration history via the Supabase CLI (`supabase migration list --linked`). Repository migration `0027` was added later and is not part of this hosted evidence.
-- **Schema & Grants (Gate 4)**: Exact 23 public tables, 42 service-role application RPC signatures across 41 names, and least-privilege Data API grants verified against migration definitions.
-- **Storage Infrastructure (Group E)**: All 3 Storage buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) created and configured; 0 storage objects.
-- **Administrator Auth Linkage (Group F)**: Single Auth identity linked to `admin_users` profile with `admin` role in `user_roles`.
+### B. Governed Evidence Boundary
+The active staging-v2 migration history is a separate Gate 3 evidence layer from the Gate 4 schema, grant, RLS, and RPC verification that may be required for a release:
+- **Migration History (Gate 3)**: The current point-in-time record is 46 rows through `20260828120000`, beginning at `20260601035138`.
+- **Schema & Grants (Gate 4)**: Exact alignment remains independently re-verifiable; matching migration-history count is not schema/grant/RPC parity.
+- **Other Gates**: Storage, Auth, deployment identity, UAT, recovery, monitoring, and release acceptance require their own evidence.
 
 Auth readiness is verified via:
 
@@ -384,7 +379,7 @@ Expected output:
 - `recognized_role_assignments = 1` (Role: `admin`)
 - `error_codes = NONE`
 
-With both automated object detection and governed activation evidence complete, the clean v2 environment is verified and cleared for standalone Admin/CMS web service deployment.
+Migration-history evidence alone does not clear the active staging-v2 environment for standalone Admin/CMS deployment. Combine current automated inspection with separately governed Gate 3/4 evidence and the independent deployment, UAT, recovery, monitoring, and release gates.
 
 ### C. Safe Deployment SHA Verification and Acceptance Boundary
 

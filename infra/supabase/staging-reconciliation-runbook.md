@@ -7,10 +7,10 @@
 
 ## 1. Context & Governance Baseline
 
-1. **Historical Staging Origin**: Initial database DDL statements (`0001` through `0006`) were applied manually to the isolated hosted Supabase instance (`capstone-admin-cms-staging-2026`) using the dashboard SQL Editor.
-2. **Migration Tracking State**: Because early migrations were manually applied, remote migration tracking (`supabase_migrations.schema_migrations`) may be unpopulated or contain legacy version numbers. Running `supabase db push` without prior reconciliation risks re-executing DDL against existing tables (`relation already exists`).
-3. **Repository State vs Hosted State**: The repository contains **exactly 46 migrations** defining 37 public application tables, 3 storage buckets, and 74 service-role application RPC signatures across 73 names. The authenticated-only recovery lookup and separately governed helper grants are not service-role application RPC contracts. The recorded hosted baseline contains 26 migrations; every later repository migration remains unverified on hosted staging until separately authorized reconciliation and post-apply evidence.
-4. **Scope of Migration Repair**: `supabase migration repair` modifies **only the tracking history table** (`supabase_migrations.schema_migrations`). It does not alter database tables, columns, constraints, or RPC functions.
+1. **Historical/Paused Staging Origin**: Initial database DDL statements (`0001` through `0006`) were applied manually to the historical paused Supabase instance (`capstone-admin-cms-staging-2026`) using the dashboard SQL Editor. This manual baseline is not the normal state of active staging-v2.
+2. **Active staging-v2 Evidence**: The active project (`capstone-admin-cms-staging-v2-2026`) currently has point-in-time read-only evidence of 46 tracked rows in `supabase_migrations.schema_migrations`, from earliest `20260601035138` through latest `20260828120000`.
+3. **Evidence Boundary**: The repository contains **exactly 46 migrations** defining 37 public application tables, 3 storage buckets, and 74 service-role application RPC signatures across 73 names. The authenticated-only recovery lookup and separately governed helper grants are not service-role application RPC contracts. The active 46-row migration history is evidence of recorded history only; it does not prove exact schema, constraints, grants, or RPC parity.
+4. **Scope of Migration Repair**: `supabase migration repair` modifies **only the tracking history table** (`supabase_migrations.schema_migrations`). It does not alter database tables, columns, constraints, or RPC functions. It is never routine for active staging-v2: it may be considered only if future read-only reconciliation demonstrates a real history mismatch and separate authorization is granted. `supabase db push` remains governed and must not be run casually.
 
 ---
 
@@ -144,6 +144,8 @@ SELECT version, inserted_at
 ```
 Record exact count and missing timestamps against the 46 repository migrations.
 
+For active staging-v2, the current point-in-time read-only evidence is 46 rows from `20260601035138` through `20260828120000`. Recheck migration alignment for each release candidate and whenever reconciliation is required; this history evidence does not establish exact schema, grant, or RPC parity.
+
 The configured Data API exposes `public`, `graphql_public`, and `storage`, not `supabase_migrations`. Therefore the automated checker truthfully reports `MIGRATION_HISTORY_READABLE = NO` and `HOSTED_RECORDED_MIGRATIONS = UNKNOWN`; this separately governed read-only evidence is mandatory and must not be replaced with a `public.schema_migrations` fallback.
 
 ### Gate 4: Hosted vs Repository Schema Evidence
@@ -164,13 +166,13 @@ Evaluate empirical evidence from Gates 1–4 to determine the required path:
 flowchart TD
     G[Gates 1-4 Evidence] --> C{Schema & History State}
     C -->|All 46 migrations applied & history matches| PA[Path A: Ready for Deployment Decision]
-    C -->|Hosted baseline predates current manifest| PB[Path B: Phased Reconciliation & Push]
+    C -->|Read-only evidence shows history mismatch| PB[Path B: Phased Reconciliation & Push]
     C -->|Unexpected column/table drift| PC[Path C: Drift Resolution Required]
     C -->|Target mismatch or unauthorized| PD[Path D: Stop & Abort]
 ```
 
 - **Path A (Full Match / Ready)**: All 46 migrations, 37 public application tables, 74 service-role application RPC signatures across 73 names, exact constraints/grants, and absence of unexpected schema objects are verified by combined automated and governed manual evidence. Proceed directly to Gate 7 verification.
-- **Path B (Phased Reconciliation / Staging Standard)**: Hosted migration evidence predates the current manifest; every missing forward migration requires separately authorized application. Proceed to Gate 6.
+- **Path B (Phased Reconciliation / Conditional)**: Future read-only evidence shows a real history mismatch or missing forward migration; any repair or migration application requires separate authorization. Proceed to Gate 6 only after that authorization.
 - **Path C (Drift Detected)**: Unrecognized columns, conflicting constraint names, or manual schema changes detected. STOP. Document drift and formulate an explicit resolution plan.
 - **Path D (Abort)**: Target identity mismatch or lack of operator authorization. STOP immediately.
 
@@ -182,10 +184,12 @@ flowchart TD
 > **EXPLICIT PROJECT-OWNER APPROVAL REQUIRED**
 > The commands below modify database tables or migration tracking records. They must never be executed autonomously.
 
+These mutating gates are conditional and are not routine maintenance for active staging-v2. Its current point-in-time evidence already records all 46 migration rows. Do not use migration repair merely to make a count match; first obtain future read-only evidence of a real history mismatch and separate authorization.
+
 ### Gate 6: Separately Authorized Reconciliation & Migration
 
-#### Step 6.1: Repair Tracking History for Existing Baseline (Conditional)
-If hosted database already has early migrations 0001–0006 applied manually:
+#### Step 6.1: Repair Tracking History for a Historical Baseline (Conditional)
+The following example applies to the historical paused staging instance (`capstone-admin-cms-staging-2026`) when its manually applied baseline is confirmed. For any target, including active staging-v2, `supabase migration repair` may be considered only after future read-only reconciliation demonstrates a real history mismatch and separate authorization is granted. Do not run it on active staging-v2 based on the old manual-repair background or its current 46-row evidence.
 ```bash
 # REQUIRES EXPLICIT AUTHORIZATION
 # Mark migrations 0001-0006 as applied in tracking table
@@ -198,7 +202,7 @@ supabase migration repair --status applied 20260719165119 --workdir infra
 ```
 
 #### Step 6.2: Apply Missing Forward Migrations (Conditional)
-Once baseline tracking is aligned, apply forward migrations in deterministic sequence:
+Only when future read-only evidence demonstrates genuinely missing repository migrations, and after separate authorization and a reviewed mutation plan, apply forward migrations in deterministic sequence:
 ```bash
 # REQUIRES EXPLICIT AUTHORIZATION
 supabase db push --workdir infra
