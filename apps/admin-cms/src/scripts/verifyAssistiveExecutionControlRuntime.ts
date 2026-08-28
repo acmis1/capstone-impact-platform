@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
+import { runLocalSupabaseCli } from '../local-development/safeSupabaseCli';
 import {
   LAUNCH_LIMIT_PER_ROLLING_WINDOW,
   LAUNCH_WINDOW_DAYS,
@@ -29,6 +30,7 @@ const DISPATCHER_ROLE = 'capstone_assistive_dispatcher';
 const DISPATCHER_ID = 'runtime-dispatcher-01';
 const WORKER_ID = 'runtime-worker-01';
 const LEASE_SECONDS = 900;
+const PREVIOUS_MIGRATION_VERSION = '20260828120000';
 
 
 function hash(value: string): string {
@@ -132,6 +134,7 @@ async function main(): Promise<void> {
   );
 
   const prefix = `execution-control-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const upgradeProjectId = crypto.randomUUID();
   let actorId = '';
   let projectId = '';
   let passed = 0;
@@ -152,6 +155,33 @@ async function main(): Promise<void> {
   )::text;`);
 
   try {
+    const resetToPrevious = runLocalSupabaseCli('reset', root, {
+      resetVersion: PREVIOUS_MIGRATION_VERSION,
+      skipSeed: true,
+    });
+    assert.equal(
+      resetToPrevious.ok,
+      true,
+      `Reset through Migration 0046 failed (${resetToPrevious.failureCategory ?? 'UNKNOWN'}).`,
+    );
+    assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '46');
+    assert.equal(psql("SELECT to_regnamespace('assistive_execution_control') IS NULL;"), 't');
+    psql(`INSERT INTO public.projects (
+      id, public_id, title, summary, status, year, program_name, discipline, group_name, team_members
+    ) VALUES (
+      '${upgradeProjectId}'::uuid, '2026-${prefix}-upgrade', 'Synthetic 0046 Upgrade Project',
+      'Proves Migration 0047 preserves existing project data.', 'draft', 2026,
+      'Synthetic Software Engineering', 'Software Engineering', 'Synthetic Upgrade Group',
+      ARRAY['Synthetic Member']::text[]
+    );`);
+    const upgradeProjectBefore = psql(`SELECT to_jsonb(p)::text FROM public.projects AS p WHERE p.id = '${upgradeProjectId}'::uuid;`);
+    const migrationUp = runLocalSupabaseCli('migration-up', root);
+    assert.equal(
+      migrationUp.ok,
+      true,
+      `Migration 0046 to 0047 failed (${migrationUp.failureCategory ?? 'UNKNOWN'}).`,
+    );
+
     const actor = await service.from('admin_users').insert({
       email: `${prefix}@capstone.test`,
       full_name: 'Synthetic Execution Control Operator',
@@ -180,8 +210,12 @@ async function main(): Promise<void> {
     // privilege checks below exercise the real authenticated connection path.
     psql(`ALTER ROLE ${DISPATCHER_ROLE} WITH PASSWORD '${dispatcherPassword}';`);
 
-    await scenario(1, 'fresh schema applies exactly 47 migrations and installs the control schema', () => {
+    await scenario(1, 'Migration 0046 to 0047 preserves project data and installs the control schema', () => {
       assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '47');
+      assert.equal(
+        psql(`SELECT to_jsonb(p)::text FROM public.projects AS p WHERE p.id = '${upgradeProjectId}'::uuid;`),
+        upgradeProjectBefore,
+      );
       assert.equal(
         psql("SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'assistive_execution_control';"),
         '1',
@@ -586,6 +620,7 @@ async function main(): Promise<void> {
         psql(`DELETE FROM public.assistive_validation_runs WHERE project_id = '${projectId}'::uuid;`);
         psql(`DELETE FROM public.projects WHERE id = '${projectId}'::uuid;`);
       }
+      psql(`DELETE FROM public.projects WHERE id = '${upgradeProjectId}'::uuid;`);
       if (actorId) {
         psql(`DELETE FROM public.user_roles WHERE user_id = '${actorId}'::uuid;`);
         psql(`DELETE FROM public.admin_users WHERE id = '${actorId}'::uuid;`);

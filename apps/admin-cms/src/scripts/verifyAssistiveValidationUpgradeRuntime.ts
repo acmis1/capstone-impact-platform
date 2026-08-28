@@ -306,7 +306,7 @@ async function main(): Promise<void> {
     try {
       assertResetReachedExactMigration(
         runLocalSupabaseCli('reset', root),
-        'restore fresh Migration 0046 database', 46, '20260828120000',
+        'restore fresh Migration 0047 database', 47, '20260828170000',
       );
     } catch (restoreError) {
       if (primaryFailure) throw new AggregateError([primaryFailure, restoreError], 'Upgrade verification and database restoration failed.');
