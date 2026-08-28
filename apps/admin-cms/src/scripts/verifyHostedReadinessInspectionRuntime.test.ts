@@ -19,6 +19,9 @@ const source = fs.readFileSync(
 ).replace(/\r\n/g, '\n');
 
 const EXPECTED_PRIVILEGE_HIDDEN_TABLES = [
+  'public_feed_activation_authority',
+  'public_feed_project_projection_authority',
+  'public_feed_discipline_projection_authority',
   'password_recovery_sessions',
   'assistive_validation_runs',
   'assistive_validation_findings',

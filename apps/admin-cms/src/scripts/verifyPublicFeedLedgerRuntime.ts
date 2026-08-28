@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Project } from '../domain/project';
 import { parseSupabaseCliEnv, isLoopbackUrl } from '../local-development/localEnvironmentFile';
 import { createMockProject } from '../test/projectFixtures';
-import { toPublicFeedRecord } from '../feed/compilePublicFeed';
+import { compilePublicFeed } from '../feed/compilePublicFeed';
 import {
   composePublicFeedRemoval,
   createPublicFeedArtifact,
@@ -18,7 +18,6 @@ import { executeControlledPublication } from '../projects/controlledPublicationS
 import { createControlledPublicationDependencies } from '../projects/createControlledPublicationDependencies';
 import { executeControlledPublicRemoval } from '../projects/controlledPublicRemovalService';
 import {
-  activatePublicFeedHistory,
   executePublicFeedRollback,
   preparePublicFeedRollback,
   recoverPublicFeedOperation,
@@ -31,6 +30,7 @@ import {
   type PublicFeedOperationState,
 } from '../repositories/SupabasePublicFeedLedgerRepositoryCore';
 import { SupabaseParticipantPreviewRepositoryCore } from '../repositories/SupabaseParticipantPreviewRepositoryCore';
+import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
 import { SupabasePublicationExecutionRepositoryCore } from '../repositories/SupabasePublicationExecutionRepositoryCore';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -97,6 +97,132 @@ function expectOperationGuardRejection(sql: string, marker: string): void {
   }
 }
 
+interface InteractivePsqlSession {
+  child: ChildProcessWithoutNullStreams;
+  stdout: string;
+  stderr: string;
+}
+
+function startInteractivePsqlSession(): InteractivePsqlSession {
+  const session: InteractivePsqlSession = {
+    child: spawn('docker', [
+      'exec', '-i', databaseContainer(), 'psql', '-X', '-q', '-U', 'postgres', '-d', 'postgres',
+      '-v', 'ON_ERROR_STOP=0', '-At',
+    ], { stdio: ['pipe', 'pipe', 'pipe'] }),
+    stdout: '',
+    stderr: '',
+  };
+  session.child.stdout.on('data', (chunk: Buffer | string) => { session.stdout += chunk.toString(); });
+  session.child.stderr.on('data', (chunk: Buffer | string) => { session.stderr += chunk.toString(); });
+  return session;
+}
+
+function sendPsql(session: InteractivePsqlSession, sql: string): void {
+  assert.equal(session.child.stdin.destroyed, false, `psql stdin closed early: ${session.stderr}`);
+  session.child.stdin.write(`${sql}\n`);
+}
+
+async function waitForPsqlMarker(
+  session: InteractivePsqlSession,
+  marker: string,
+  timeoutMs = 7_000,
+): Promise<void> {
+  if (session.stdout.includes(marker)) return;
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      session.child.stdout.off('data', inspect);
+      session.child.off('exit', exited);
+      if (error) reject(error); else resolve();
+    };
+    const inspect = () => {
+      if (session.stdout.includes(marker)) finish();
+    };
+    const exited = (code: number | null) => finish(new Error(
+      `psql exited before ${marker} (code ${String(code)}): ${session.stderr}`,
+    ));
+    const timer = setTimeout(() => finish(new Error(
+      `Timed out waiting for ${marker}. stdout=${session.stdout} stderr=${session.stderr}`,
+    )), timeoutMs);
+    session.child.stdout.on('data', inspect);
+    session.child.once('exit', exited);
+    inspect();
+  });
+}
+
+async function closePsqlSession(session: InteractivePsqlSession): Promise<void> {
+  if (session.child.exitCode !== null) return;
+  sendPsql(session, '\\q');
+  session.child.stdin.end();
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      session.child.kill();
+      reject(new Error(`Timed out closing psql session: ${session.stderr}`));
+    }, 5_000);
+    session.child.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+async function beginSnapshotTransaction(
+  isolation: 'READ COMMITTED' | 'REPEATABLE READ' | 'SERIALIZABLE',
+  marker: string,
+): Promise<InteractivePsqlSession> {
+  const session = startInteractivePsqlSession();
+  sendPsql(session, `BEGIN ISOLATION LEVEL ${isolation};`);
+  sendPsql(session, "SET LOCAL statement_timeout='5s';");
+  sendPsql(session, "SET LOCAL lock_timeout='3s';");
+  sendPsql(session, 'SELECT count(*) FROM public.projects;');
+  sendPsql(session, `SELECT ${sqlLiteral(marker)};`);
+  await waitForPsqlMarker(session, marker);
+  return session;
+}
+
+async function finishRejectedMutation(
+  session: InteractivePsqlSession,
+  sql: string,
+  marker: string,
+  expected: RegExp,
+): Promise<void> {
+  sendPsql(session, sql);
+  sendPsql(session, 'ROLLBACK;');
+  sendPsql(session, `SELECT ${sqlLiteral(marker)};`);
+  await waitForPsqlMarker(session, marker);
+  assert.match(session.stderr, expected, `${marker}: ${session.stderr}`);
+  await closePsqlSession(session);
+}
+
+async function commitInteractiveMutation(
+  session: InteractivePsqlSession,
+  sql: string,
+  mutationMarker: string,
+  commitMarker: string,
+): Promise<void> {
+  sendPsql(session, sql);
+  sendPsql(session, `SELECT ${sqlLiteral(mutationMarker)};`);
+  await waitForPsqlMarker(session, mutationMarker);
+  assert.equal(session.stderr, '', `${mutationMarker}: ${session.stderr}`);
+  sendPsql(session, 'COMMIT;');
+  sendPsql(session, `SELECT ${sqlLiteral(commitMarker)};`);
+  await waitForPsqlMarker(session, commitMarker);
+  await closePsqlSession(session);
+}
+
+function expectActivationGuardRejection(sql: string, marker: string): void {
+  try {
+    psql(sql);
+    assert.fail(`${marker} unexpectedly succeeded.`);
+  } catch (error) {
+    const stderr = String((error as { stderr?: unknown }).stderr ?? '');
+    assert.match(stderr, /PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN/, `${marker}: ${stderr}`);
+  }
+}
+
 function assertLoopbackBindings(): void {
   const containerNames = execFileSync('docker', [
     'ps', '--filter', `label=com.supabase.cli.project=${projectId}`, '--format', '{{.Names}}',
@@ -124,6 +250,20 @@ function project(publicId: string, status: 'published' | 'archived' = 'published
 
 async function uploadExact(client: SupabaseClient, artifact: VerifiedPublicFeedArtifact): Promise<void> {
   const result = await client.storage.from(feedBucket).upload(feedPath, artifact.bytes, {
+    contentType: 'application/json', upsert: true,
+  });
+  assert.equal(result.error, null, result.error?.message);
+}
+
+function preGalleryBytes(artifact: VerifiedPublicFeedArtifact): Buffer {
+  return Buffer.from(JSON.stringify(artifact.feed.map((record) => ({
+    ...record,
+    snapshotMedia: record.snapshotMedia.map(({ url, altText }) => ({ url, altText })),
+  })), null, 2));
+}
+
+async function uploadLegacyBaseline(client: SupabaseClient, bytes: Buffer): Promise<void> {
+  const result = await client.storage.from(feedBucket).upload(feedPath, bytes, {
     contentType: 'application/json', upsert: true,
   });
   assert.equal(result.error, null, result.error?.message);
@@ -537,8 +677,9 @@ async function main(): Promise<void> {
   const anon = createClient(local.API_URL!, local.ANON_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
   const ledger = new SupabasePublicFeedLedgerRepositoryCore(client);
 
-  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '45');
+  assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '46');
   assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version IN ('20260824180000','20260824183000','20260825030000');"), '3');
+  assert.equal(psql("SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version='20260826090000';"), '1');
   assert.equal(psql("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('public_feed_operations','public_feed_versions','public_feed_version_members','public_feed_head','feed_rollback_preparations','public_feed_operation_events');"), '6');
   assert.equal(psql("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='public_feed_operations' AND column_name IN ('owner_token_hash','recovery_from_state')"), '2');
   assert.equal(psql("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='public_feed_operations' AND column_name IN ('owner_token','execution_token')"), '0');
@@ -552,6 +693,18 @@ async function main(): Promise<void> {
   );
   assert.equal(
     psql("SELECT pg_catalog.has_function_privilege('service_role','public.guard_active_public_feed_taxonomy()','EXECUTE');"),
+    'f',
+  );
+  assert.equal(
+    psql("SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid WHERE NOT t.tgisinternal AND t.tgname IN ('guard_public_feed_activation_authority_transition','guard_projects_during_public_feed_activation','guard_snapshot_media_during_public_feed_activation','guard_project_disciplines_during_public_feed_activation','guard_discipline_lookup_during_public_feed_activation');"),
+    '5',
+  );
+  assert.equal(
+    psql("SELECT p.prosecdef::text || '|' || COALESCE(pg_catalog.array_to_string(p.proconfig, ','),'') FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='guard_public_feed_activation_projection';"),
+    'true|search_path=""',
+  );
+  assert.equal(
+    psql("SELECT pg_catalog.has_function_privilege('service_role','public.guard_public_feed_activation_projection()','EXECUTE');"),
     'f',
   );
   const preservedPublicId = process.env.CAPSTONE_VERIFY_PRESERVED_PUBLIC_ID?.trim();
@@ -576,15 +729,449 @@ async function main(): Promise<void> {
   });
   assert.equal((legacy.data as { resultCode?: string })?.resultCode, 'LEDGER_PROTOCOL_REQUIRED');
 
-  const traffic = project('2026-traffic-engine');
-  const trafficArtifact = createPublicFeedArtifact([toPublicFeedRecord(traffic)]);
-  await uploadExact(client, trafficArtifact);
-  const activation = await activatePublicFeedHistory(historyDependencies(client, [traffic]));
+  const activationFixture = {
+    projectId: 'e0000000-0000-0000-0000-000000000001',
+    disciplineId: 'b0000000-0000-0000-0000-000000000001',
+    snapshotId: 'f0000000-0000-0000-0000-000000000003',
+  };
+  const draftConcurrencyFixture = {
+    first: 'e1000000-0000-4000-8000-000000000001',
+    second: 'e1000000-0000-4000-8000-000000000002',
+  };
+  const relevanceFlipFixture = {
+    projectId: 'e2000000-0000-4000-8000-000000000001',
+    mediaId: 'f2000000-0000-4000-8000-000000000001',
+    disciplineId: 'b2000000-0000-4000-8000-000000000001',
+    publicId: '203-relevance-flip',
+    snapshotUrl: 'https://assets.example.invalid/203-relevance-flip/snapshot-1.png',
+  };
+  psql(`
+    INSERT INTO public.projects(id,public_id,title,slug,year,status,snapshots) VALUES
+      (${sqlLiteral(draftConcurrencyFixture.first)}::uuid,'203-draft-concurrency-a',
+       'Draft concurrency A','203-draft-concurrency-a',2026,'draft',ARRAY[]::text[]),
+      (${sqlLiteral(draftConcurrencyFixture.second)}::uuid,'203-draft-concurrency-b',
+       'Draft concurrency B','203-draft-concurrency-b',2026,'draft',ARRAY[]::text[]);
+    INSERT INTO public.disciplines(id,name) VALUES
+      (${sqlLiteral(relevanceFlipFixture.disciplineId)}::uuid,'Relevance Flip Discipline');
+    INSERT INTO public.projects(
+      id,public_id,title,slug,summary,background,solution,year,program_name,study_program,
+      discipline,industry,industry_partner,academic_supervisor,group_name,team_members,
+      poster_url,poster_pdf_url,poster_text_public,accessibility_text_public,snapshots,
+      external_links,citations,layout_config,status,created_at
+    ) VALUES (
+      ${sqlLiteral(relevanceFlipFixture.projectId)}::uuid,
+      ${sqlLiteral(relevanceFlipFixture.publicId)},'Relevance Flip Project',
+      ${sqlLiteral(relevanceFlipFixture.publicId)},'Synthetic public summary.',
+      'Synthetic public background.','Synthetic public solution.',2026,
+      'Bachelor of Software Engineering','Bachelor of Software Engineering',
+      'Software Engineering','Technology','Synthetic Partner','Synthetic Supervisor',
+      'Synthetic Relevance Group',ARRAY['Synthetic Member']::text[],'','',
+      'Synthetic poster text.','Synthetic accessible text.',
+      ARRAY[${sqlLiteral(relevanceFlipFixture.snapshotUrl)}]::text[],
+      '[]'::jsonb,ARRAY[]::text[],'{}'::jsonb,'draft','2026-08-20T00:00:00Z'::timestamptz
+    );
+    INSERT INTO public.media_assets(
+      id,project_id,asset_type,file_name,storage_bucket,storage_path,mime_type,file_size_bytes,
+      public_storage_bucket,public_storage_path,public_url,is_public_approved,
+      gallery_position,alt_text_public
+    ) VALUES (
+      ${sqlLiteral(relevanceFlipFixture.mediaId)}::uuid,
+      ${sqlLiteral(relevanceFlipFixture.projectId)}::uuid,'snapshot_image','snapshot-1.png',
+      'project-drafts-private','drafts/203-relevance-flip/snapshot_image/snapshot-1.png',
+      'image/png',12,'project-public-assets',
+      'published/203-relevance-flip/snapshot_image/snapshot-1.png',
+      ${sqlLiteral(relevanceFlipFixture.snapshotUrl)},true,1,'Relevance flip snapshot.'
+    );
+    UPDATE public.projects SET created_at='2026-08-20T00:00:00Z'::timestamptz
+      WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;
+  `);
+
+  // Establish snapshots while the project is still draft and the discipline is unreferenced.
+  // Separate committed changes then make both dependencies public/relevant without touching the
+  // media or discipline rows the stale sessions will later try to update.
+  const repeatableDraftRelevance = await beginSnapshotTransaction(
+    'REPEATABLE READ', 'RR_DRAFT_RELEVANCE_SNAPSHOT_READY',
+  );
+  const repeatableDisciplineRelevance = await beginSnapshotTransaction(
+    'REPEATABLE READ', 'RR_DISCIPLINE_RELEVANCE_SNAPSHOT_READY',
+  );
+  psql(`
+    UPDATE public.projects SET status='published'
+      WHERE id=${sqlLiteral(relevanceFlipFixture.projectId)}::uuid;
+    INSERT INTO public.project_disciplines(project_id,discipline_id) VALUES (
+      ${sqlLiteral(relevanceFlipFixture.projectId)}::uuid,
+      ${sqlLiteral(relevanceFlipFixture.disciplineId)}::uuid
+    );
+  `);
+
+  // Hold singleton authority in one real session. A second published-project update and a
+  // discipline delete/cascade both fail immediately at NOWAIT instead of holding a different local
+  // row and entering the historical global/local deadlock cycle. The owner then updates the second
+  // published project and commits successfully.
+  const orderedOwner = await beginSnapshotTransaction('READ COMMITTED', 'LOCK_ORDER_OWNER_READY');
+  sendPsql(orderedOwner, `UPDATE public.projects SET title=title || ' ordered-owner'
+    WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`);
+  sendPsql(orderedOwner, `SELECT 'LOCK_ORDER_OWNER_HOLDS_GLOBAL';`);
+  await waitForPsqlMarker(orderedOwner, 'LOCK_ORDER_OWNER_HOLDS_GLOBAL');
+  assert.equal(orderedOwner.stderr, '');
+
+  const competingProject = await beginSnapshotTransaction('READ COMMITTED', 'LOCK_ORDER_PROJECT_READY');
+  await finishRejectedMutation(
+    competingProject,
+    `UPDATE public.projects SET title=title || ' competing-owner'
+      WHERE id=${sqlLiteral(relevanceFlipFixture.projectId)}::uuid;`,
+    'LOCK_ORDER_PROJECT_REJECTED', /PUBLIC_FEED_ACTIVATION_AUTHORITY_LOCKED/i,
+  );
+  const competingCascade = await beginSnapshotTransaction('READ COMMITTED', 'LOCK_ORDER_CASCADE_READY');
+  await finishRejectedMutation(
+    competingCascade,
+    `DELETE FROM public.disciplines WHERE id=${sqlLiteral(relevanceFlipFixture.disciplineId)}::uuid;`,
+    'LOCK_ORDER_CASCADE_REJECTED', /PUBLIC_FEED_ACTIVATION_AUTHORITY_LOCKED/i,
+  );
+
+  sendPsql(orderedOwner, `UPDATE public.projects SET title=title || ' ordered-owner'
+    WHERE id=${sqlLiteral(relevanceFlipFixture.projectId)}::uuid;`);
+  sendPsql(orderedOwner, `SELECT 'LOCK_ORDER_OWNER_UPDATED_SECOND';`);
+  await waitForPsqlMarker(orderedOwner, 'LOCK_ORDER_OWNER_UPDATED_SECOND');
+  assert.equal(orderedOwner.stderr, '');
+  sendPsql(orderedOwner, 'COMMIT;');
+  sendPsql(orderedOwner, `SELECT 'LOCK_ORDER_OWNER_COMMITTED';`);
+  await waitForPsqlMarker(orderedOwner, 'LOCK_ORDER_OWNER_COMMITTED');
+  await closePsqlSession(orderedOwner);
+  assert.equal(
+    psql(`SELECT count(*) FROM public.projects WHERE id IN (
+      ${sqlLiteral(activationFixture.projectId)}::uuid,
+      ${sqlLiteral(relevanceFlipFixture.projectId)}::uuid
+    ) AND title LIKE '% ordered-owner';`),
+    '2',
+  );
+  assert.equal(
+    psql(`SELECT count(*) FROM public.disciplines
+      WHERE id=${sqlLiteral(relevanceFlipFixture.disciplineId)}::uuid;`),
+    '1',
+  );
+
+  // READ COMMITTED work that finishes before PREPARED advances authority normally and is included
+  // in the candidate compiled afterward.
+  const readCommittedBeforePrepared = await beginSnapshotTransaction(
+    'READ COMMITTED', 'RC_BEFORE_PREPARED_READY',
+  );
+  await commitInteractiveMutation(
+    readCommittedBeforePrepared,
+    `UPDATE public.projects SET title=title || ' RC-before-PREPARED'
+      WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`,
+    'RC_BEFORE_PREPARED_MUTATED',
+    'RC_BEFORE_PREPARED_COMMITTED',
+  );
+
+  const activationSnapshotBefore = psql(`SELECT alt_text_public || '|' || gallery_position::text
+    FROM public.media_assets WHERE id=${sqlLiteral(activationFixture.snapshotId)}::uuid;`);
+  const activationDisciplineBefore = psql(`SELECT name FROM public.disciplines
+    WHERE id=${sqlLiteral(activationFixture.disciplineId)}::uuid;`);
+  const projectRepository = new SupabaseProjectRepositoryCore(client);
+  const activationProjects = await projectRepository.listProjects();
+  const publishedProjects = activationProjects.filter((candidate) => candidate.status === 'published');
+  assert.equal(publishedProjects.length, 2);
+  assert.deepEqual(
+    publishedProjects.map((candidate) => candidate.publicId),
+    ['2026-traffic-engine', relevanceFlipFixture.publicId],
+    'Equal created_at values did not use the persisted unique public_id tie-breaker.',
+  );
+  const traffic = publishedProjects.find(
+    (candidate) => candidate.publicId === '2026-traffic-engine',
+  ) as ReturnType<typeof project> | undefined;
+  assert.ok(traffic);
+  const relevanceProject = publishedProjects.find(
+    (candidate) => candidate.publicId === relevanceFlipFixture.publicId,
+  ) as ReturnType<typeof project> | undefined;
+  assert.ok(relevanceProject);
+  const activationPublicIds = [traffic.publicId, relevanceProject.publicId];
+  const trafficArtifact = createPublicFeedArtifact(compilePublicFeed(activationProjects));
+  const trafficLegacyBytes = preGalleryBytes(trafficArtifact);
+  const trafficLegacyHash = createHash('sha256').update(trafficLegacyBytes).digest('hex');
+  await uploadLegacyBaseline(client, trafficLegacyBytes);
+
+  // Bind candidate A, then force a third observed Storage state so the exact PREPARED candidate
+  // parks in RECOVERY_REQUIRED before any write intent. This is the reviewed pre-write recovery
+  // interleaving, not a sequential mock.
+  const activationToken = token();
+  const activationReservation = await ledger.reserve({
+    operationKey: randomUUID(), kind: 'activation', mode: null, adminId,
+    publicId: null, ownerToken: activationToken, storageBucket: feedBucket, storagePath: feedPath,
+    rollbackCapability: true,
+  });
+  assert.equal(activationReservation.resultCode, 'OPERATION_RESERVED');
+  const activationOperationId = String(activationReservation.operationId);
+  const activationEpoch = Number(activationReservation.ownerEpoch);
+  const incompatibleActivationOwner = await ledger.reserve({
+    operationKey: randomUUID(), kind: 'activation', mode: null, adminId,
+    publicId: null, ownerToken: token(), storageBucket: feedBucket, storagePath: feedPath,
+    rollbackCapability: true,
+  });
+  assert.equal(incompatibleActivationOwner.resultCode, 'PUBLICATION_IN_PROGRESS');
+
+  // These real database transactions establish old snapshots before PREPARED. They remain open
+  // on distinct PostgreSQL connections while activation binds candidate A.
+  const repeatableScalar = await beginSnapshotTransaction(
+    'REPEATABLE READ', 'RR_SCALAR_SNAPSHOT_READY',
+  );
+  const repeatableMedia = await beginSnapshotTransaction(
+    'REPEATABLE READ', 'RR_MEDIA_SNAPSHOT_READY',
+  );
+  const repeatableDiscipline = await beginSnapshotTransaction(
+    'REPEATABLE READ', 'RR_DISCIPLINE_SNAPSHOT_READY',
+  );
+  const repeatableRecovery = await beginSnapshotTransaction(
+    'REPEATABLE READ', 'RR_RECOVERY_SNAPSHOT_READY',
+  );
+  const serializableScalar = await beginSnapshotTransaction(
+    'SERIALIZABLE', 'SERIALIZABLE_SCALAR_SNAPSHOT_READY',
+  );
+
+  const activationBound = await ledger.bind({
+    operationId: activationOperationId, epoch: activationEpoch, token: activationToken,
+    actorId: adminId, baselineVersionId: null, baselineStorageExisted: true,
+    baselineHash: trafficLegacyHash, baselineCount: trafficArtifact.recordCount,
+    baselineContent: trafficLegacyBytes.toString('utf8'),
+    candidateHash: trafficArtifact.feedHash, candidateCount: trafficArtifact.recordCount,
+    candidateContent: trafficArtifact.content, candidateMembers: trafficArtifact.members,
+    feedPublicUrl: `${runtimeApiUrl}/storage/v1/object/public/${feedBucket}/${feedPath}`,
+    mediaManifest: [],
+  });
+  assert.equal(activationBound.resultCode, 'ARTIFACT_BOUND');
+  assert.equal(
+    psql(`SELECT (o.activation_authority_generation=a.generation)::text || '|'
+      || (a.active_activation_operation_id=o.id)::text
+      FROM public.public_feed_operations o
+      CROSS JOIN public.public_feed_activation_authority a
+      WHERE o.id=${sqlLiteral(activationOperationId)}::uuid AND a.singleton=true;`),
+    'true|true',
+  );
+  const boundActivationGeneration = psql(`SELECT generation::text
+    FROM public.public_feed_activation_authority WHERE singleton=true;`);
+  expectActivationGuardRejection(
+    `BEGIN;
+      UPDATE public.public_feed_activation_authority SET generation=generation+1
+        WHERE singleton=true;
+      UPDATE public.public_feed_operations
+        SET state='FAILED',failure_code='STALE_GENERATION_RELEASE',failed_at=pg_catalog.now()
+        WHERE id=${sqlLiteral(activationOperationId)}::uuid;
+     COMMIT;`,
+    'Stale activation generation release',
+  );
+  assert.equal(
+    psql(`SELECT generation::text || '|' || active_activation_operation_id::text
+      FROM public.public_feed_activation_authority WHERE singleton=true;`),
+    `${boundActivationGeneration}|${activationOperationId}`,
+  );
+  assert.equal(
+    psql(`SELECT state FROM public.public_feed_operations
+      WHERE id=${sqlLiteral(activationOperationId)}::uuid;`),
+    'PREPARED',
+  );
+
+  const staleSnapshotFailure = /could not serialize access due to concurrent update|could not serialize access due to read\/write dependencies/i;
+  await Promise.all([
+    finishRejectedMutation(
+      repeatableScalar,
+      `UPDATE public.projects SET title='RR stale scalar mutation'
+        WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`,
+      'RR_SCALAR_REJECTED', staleSnapshotFailure,
+    ),
+    finishRejectedMutation(
+      repeatableMedia,
+      `UPDATE public.media_assets
+        SET alt_text_public='RR stale media mutation.', gallery_position=3
+        WHERE id=${sqlLiteral(activationFixture.snapshotId)}::uuid;`,
+      'RR_MEDIA_REJECTED', staleSnapshotFailure,
+    ),
+    finishRejectedMutation(
+      repeatableDiscipline,
+      `UPDATE public.disciplines SET name='RR stale discipline mutation'
+        WHERE id=${sqlLiteral(activationFixture.disciplineId)}::uuid;`,
+      'RR_DISCIPLINE_REJECTED', staleSnapshotFailure,
+    ),
+    finishRejectedMutation(
+      serializableScalar,
+      `UPDATE public.projects SET summary='Serializable stale scalar mutation'
+        WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`,
+      'SERIALIZABLE_SCALAR_REJECTED', staleSnapshotFailure,
+    ),
+    finishRejectedMutation(
+      repeatableDraftRelevance,
+      `UPDATE public.media_assets SET alt_text_public='RR stale draft relevance mutation.'
+        WHERE id=${sqlLiteral(relevanceFlipFixture.mediaId)}::uuid;`,
+      'RR_DRAFT_RELEVANCE_REJECTED', staleSnapshotFailure,
+    ),
+    finishRejectedMutation(
+      repeatableDisciplineRelevance,
+      `UPDATE public.disciplines SET name='RR stale relationship relevance mutation'
+        WHERE id=${sqlLiteral(relevanceFlipFixture.disciplineId)}::uuid;`,
+      'RR_DISCIPLINE_RELEVANCE_REJECTED', staleSnapshotFailure,
+    ),
+  ]);
+
+  // A READ COMMITTED writer that starts after PREPARED sees the durable claim and is explicitly
+  // refused rather than waiting for application-side operation visibility.
+  const readCommittedAfterPrepared = await beginSnapshotTransaction(
+    'READ COMMITTED', 'RC_AFTER_PREPARED_READY',
+  );
+  await finishRejectedMutation(
+    readCommittedAfterPrepared,
+    `UPDATE public.projects SET title='RC mutation after PREPARED'
+      WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`,
+    'RC_AFTER_PREPARED_REJECTED', /PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN/i,
+  );
+
+  // Both draft transactions cross their UPDATE statements before either commits. If draft work
+  // still took activation-global authority, the second marker would hit the bounded lock timeout.
+  const draftA = await beginSnapshotTransaction('READ COMMITTED', 'DRAFT_A_READY');
+  const draftB = await beginSnapshotTransaction('READ COMMITTED', 'DRAFT_B_READY');
+  await Promise.all([
+    commitInteractiveMutation(
+      draftA,
+      `UPDATE public.projects SET title=title || ' concurrent'
+        WHERE id=${sqlLiteral(draftConcurrencyFixture.first)}::uuid;`,
+      'DRAFT_A_MUTATED', 'DRAFT_A_COMMITTED',
+    ),
+    commitInteractiveMutation(
+      draftB,
+      `UPDATE public.projects SET title=title || ' concurrent'
+        WHERE id=${sqlLiteral(draftConcurrencyFixture.second)}::uuid;`,
+      'DRAFT_B_MUTATED', 'DRAFT_B_COMMITTED',
+    ),
+  ]);
+  assert.equal(
+    psql(`SELECT count(*) FROM public.projects WHERE id IN (
+      ${sqlLiteral(draftConcurrencyFixture.first)}::uuid,
+      ${sqlLiteral(draftConcurrencyFixture.second)}::uuid
+    ) AND status='draft' AND title LIKE '% concurrent';`),
+    '2',
+  );
+
+  const publicationTransition = await beginSnapshotTransaction(
+    'READ COMMITTED', 'DRAFT_TO_PUBLISHED_READY',
+  );
+  await finishRejectedMutation(
+    publicationTransition,
+    `UPDATE public.projects SET status='published'
+      WHERE id=${sqlLiteral(draftConcurrencyFixture.first)}::uuid;`,
+    'DRAFT_TO_PUBLISHED_REJECTED', /PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN/i,
+  );
+  assert.equal(
+    psql(`SELECT status FROM public.projects WHERE id=${sqlLiteral(draftConcurrencyFixture.first)}::uuid;`),
+    'draft',
+  );
+
+  const thirdStorageState = createPublicFeedArtifact([
+    { ...trafficArtifact.feed[0], title: 'Unexpected third Storage state' },
+  ]);
+  await uploadExact(client, thirdStorageState);
+  psql(`UPDATE public.public_feed_operations SET lease_expires_at=pg_catalog.now()-interval '1 second'
+    WHERE id=${sqlLiteral(activationOperationId)}::uuid;`);
+  const parked = await executePublicFeedWriter({
+    supabase: client, adminId, kind: 'activation', feedBucket, feedPath,
+    rollbackCapability: true, legacyActivationTarget: trafficArtifact,
+    recoveryOperationId: activationOperationId,
+    prepareCandidate: async () => { throw new Error('RECOVERY_ARTIFACT_MUST_BE_DURABLE'); },
+  });
+  assert.equal(parked.resultCode, 'RECOVERY_REQUIRED', JSON.stringify(parked));
+  assert.equal(
+    psql(`SELECT state || '|' || recovery_from_state || '|' || storage_request_generation::text
+      FROM public.public_feed_operations WHERE id=${sqlLiteral(activationOperationId)}::uuid;`),
+    'RECOVERY_REQUIRED|PREPARED|0',
+  );
+
+  // The transaction that established its snapshot before PREPARED is released only after the
+  // operation is parked in PREPARED recovery. Its stale scalar mutation still fails closed.
+  await finishRejectedMutation(
+    repeatableRecovery,
+    `UPDATE public.projects SET background='RR stale recovery mutation'
+      WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`,
+    'RR_RECOVERY_REJECTED', staleSnapshotFailure,
+  );
+
+  // Lifecycle drift remains refused while the raw baseline is restored for explicit recovery.
+  const preRecoveryMutation = await client.from('projects')
+    .update({ title: 'Stale lifecycle mutation' }).eq('id', activationFixture.projectId);
+  assert.ok(preRecoveryMutation.error, 'PREPARED recovery allowed lifecycle drift.');
+  assert.match(String(preRecoveryMutation.error?.message ?? ''), /PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN/);
+  await uploadLegacyBaseline(client, trafficLegacyBytes);
+
+  // The coordinator's final application proof runs first. Separate service-role/PostgREST
+  // transactions then try representative scalar, media alt/position, and discipline mutations
+  // before mark_public_feed_write_started. The database fence must reject each exact interleaving.
+  let finalAuthorityValidated = false;
+  const activation = await executePublicFeedWriter({
+    supabase: client, adminId, kind: 'activation', feedBucket, feedPath,
+    rollbackCapability: true, legacyActivationTarget: trafficArtifact,
+    recoveryOperationId: activationOperationId,
+    prepareCandidate: async () => { throw new Error('RECOVERY_ARTIFACT_MUST_BE_DURABLE'); },
+    validateBeforeWriteIntent: async () => {
+      const current = createPublicFeedArtifact(
+        compilePublicFeed(await projectRepository.listProjects()),
+      );
+      assert.equal(current.content, trafficArtifact.content);
+      finalAuthorityValidated = true;
+
+      expectActivationGuardRejection(
+        `UPDATE public.projects SET title='Mutation after final validation'
+          WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`,
+        'Raw SQL project scalar after final activation validation',
+      );
+
+      const media = await client.from('media_assets').update({
+        alt_text_public: 'Mutation after final validation.', gallery_position: 3,
+      }).eq('id', activationFixture.snapshotId);
+      assert.ok(media.error, 'Snapshot identity crossed final activation validation.');
+      assert.match(String(media.error?.message ?? ''), /PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN/);
+
+      const taxonomy = await client.from('disciplines')
+        .update({ name: 'Mutation after final validation' }).eq('id', activationFixture.disciplineId);
+      assert.ok(taxonomy.error, 'Discipline lookup crossed final activation validation.');
+      assert.match(String(taxonomy.error?.message ?? ''), /PUBLIC_FEED_ACTIVATION_AUTHORITY_FROZEN/);
+    },
+  });
+  assert.equal(finalAuthorityValidated, true);
   assert.equal(activation.resultCode, 'COMPLETED', JSON.stringify(activation));
+  assert.equal(
+    psql("SELECT active_activation_operation_id IS NULL FROM public.public_feed_activation_authority WHERE singleton=true;"),
+    't',
+  );
+  console.log(
+    'PASS: overlapping READ COMMITTED, REPEATABLE READ and SERIALIZABLE activation-authority '
+      + 'transactions failed closed, including stale draft/relationship relevance flips; '
+      + 'published multi-row and discipline-cascade contention avoided global/local deadlock; '
+      + 'unrelated draft transactions crossed concurrently; incompatible owners and stale '
+      + 'generations failed closed; PREPARED recovery retained and released exact authority.',
+  );
   let head = await ledger.getHead();
   assert.ok(head?.rollbackEnabled);
   assert.equal(head.currentVersion.operation, 'baseline');
+  assert.equal(head.currentVersion.versionNumber, 1);
+  assert.equal(head.currentVersion.artifactContent, trafficArtifact.content);
+  assert.equal(head.currentVersion.feedHash, trafficArtifact.feedHash);
+  assert.notEqual(head.currentVersion.artifactContent, thirdStorageState.content);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
+  assert.equal(
+    psql("SELECT baseline_feed_hash || '|' || candidate_feed_hash || '|' || state FROM public.public_feed_operations WHERE kind='activation';"),
+    `${trafficLegacyHash}|${trafficArtifact.feedHash}|COMPLETED`,
+  );
+  assert.equal(psql('SELECT count(*) FROM public.public_feed_versions;'), '1');
+  assert.equal(psql('SELECT count(*) FROM public.public_feed_head WHERE singleton=true AND generation=1;'), '1');
+  assert.equal(
+    psql(`SELECT title FROM public.projects WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`),
+    traffic.title,
+  );
+  assert.equal(
+    psql(`SELECT alt_text_public || '|' || gallery_position::text FROM public.media_assets
+      WHERE id=${sqlLiteral(activationFixture.snapshotId)}::uuid;`),
+    activationSnapshotBefore,
+  );
+  assert.equal(
+    psql(`SELECT name FROM public.disciplines WHERE id=${sqlLiteral(activationFixture.disciplineId)}::uuid;`),
+    activationDisciplineBefore,
+  );
 
   const medical = project('186-rollback-publication');
   const confirmedDiscipline = 'Taxonomy Discipline B';
@@ -603,7 +1190,10 @@ async function main(): Promise<void> {
     }),
   });
   await assertCompleted(publication, 'rollback-fixture normal publication');
-  assert.deepEqual((await exactStored(client)).feed.map(({ publicId }) => publicId), [traffic.publicId, medical.publicId]);
+  assert.deepEqual(
+    (await exactStored(client)).feed.map(({ publicId }) => publicId),
+    [...activationPublicIds, medical.publicId],
+  );
 
   const removal = await executeControlledPublicRemoval({
     permissions: ['projects.archive'], publicId: traffic.publicId, archiveReason: 'Runtime removal',
@@ -626,16 +1216,16 @@ async function main(): Promise<void> {
   assert.equal(Number(psql('SELECT count(*) FROM public.public_feed_versions;')), versionCountBeforeNoChange);
 
   const preparation = await preparePublicFeedRollback(historyDependencies(client, [
-    project(traffic.publicId, 'archived'), medical,
+    project(traffic.publicId, 'archived'), relevanceProject, medical,
   ]), 1);
   assert.equal(preparation.resultCode, 'PREPARED', JSON.stringify(preparation));
   if (preparation.resultCode !== 'PREPARED') throw new Error('ROLLBACK_PREPARATION_FAILED');
   const rollback = await executePublicFeedRollback(
-    historyDependencies(client, [project(traffic.publicId, 'archived'), medical]),
+    historyDependencies(client, [project(traffic.publicId, 'archived'), relevanceProject, medical]),
     preparation.preparationHandle, preparation.requiredAcknowledgement,
   );
   assert.equal(rollback.resultCode, 'COMPLETED', JSON.stringify(rollback));
-  assert.deepEqual((await exactStored(client)).feed.map(({ publicId }) => publicId), [traffic.publicId]);
+  assert.deepEqual((await exactStored(client)).feed.map(({ publicId }) => publicId), activationPublicIds);
 
   const feedBeforeReconciliation = await exactStored(client);
   const medicalProjectId = psql(`SELECT id FROM public.projects WHERE public_id=${sqlLiteral(medical.publicId)};`);
@@ -945,7 +1535,10 @@ async function main(): Promise<void> {
   assert.equal(head.currentVersion.affectedPublicId, medical.publicId);
   const reconciledFeed = await exactStored(client);
   assert.equal(reconciledFeed.content, head.currentVersion.artifactContent);
-  assert.deepEqual(reconciledFeed.feed.map(({ publicId }) => publicId), [traffic.publicId, medical.publicId]);
+  assert.deepEqual(
+    reconciledFeed.feed.map(({ publicId }) => publicId),
+    [...activationPublicIds, medical.publicId],
+  );
   assert.equal(
     psql(`SELECT count(*) FROM public.public_feed_version_members WHERE version_id=(SELECT current_version_id FROM public.public_feed_head WHERE singleton=true) AND public_id=${sqlLiteral(medical.publicId)};`),
     '1',
@@ -1001,6 +1594,14 @@ async function main(): Promise<void> {
       listProjects: async () => [project(traffic.publicId, 'archived')],
     },
   }), 'remove rollback-restored archived member');
+  await assertCompleted(await executeControlledPublicRemoval({
+    permissions: ['projects.archive'], publicId: relevanceProject.publicId, archiveReason: 'Create empty rollback target',
+    dependencies: {
+      supabase: client, adminId, feedBucket, feedPath,
+      assertExecutionEnvironment: () => undefined,
+      listProjects: async () => [relevanceProject],
+    },
+  }), 'remove relevance-flip activation member');
   await assertCompleted(await executeControlledPublicRemoval({
     permissions: ['projects.archive'], publicId: medical.publicId, archiveReason: 'Create empty rollback target',
     dependencies: {
@@ -1143,7 +1744,9 @@ async function main(): Promise<void> {
   assert.equal((await exactStored(client)).feedHash, feedBeforeCrash, 'A crashed promotion changed the canonical feed.');
   assert.ok(await client.storage.from(publicAssetsBucket).download(preservedPath).then((result) => result.data !== null),
     'Recovery deleted a public object that predated the operation.');
-  const crashRecovery = await recoverPublicFeedOperation(historyDependencies(client, [traffic, medical]));
+  const crashRecovery = await recoverPublicFeedOperation(
+    historyDependencies(client, [traffic, relevanceProject, medical]),
+  );
   assert.equal(crashRecovery.resultCode, 'COMPLETED', JSON.stringify(crashRecovery));
   assert.equal(await publicMediaCount(client, crashPublicId), 2, 'Recovery did not complete the bound media manifest.');
   assert.ok((await exactStored(client)).feed.some(({ publicId }) => publicId === crashPublicId));
@@ -1318,7 +1921,9 @@ async function main(): Promise<void> {
   const held = await ledger.requireRecovery(recovery.id, recovery.epoch, recovery.ownerToken, adminId, 'SIMULATED_RESPONSE_LOSS', recovery.baseline.feedHash, recovery.baseline.recordCount);
   assert.equal(held.resultCode, 'RECOVERY_REQUIRED');
   assert.equal((await ledger.getOperation(recovery.id))?.recoveryFromState, 'DB_FINALIZED');
-  const recovered = await recoverPublicFeedOperation(historyDependencies(client, [traffic, medical]));
+  const recovered = await recoverPublicFeedOperation(
+    historyDependencies(client, [traffic, relevanceProject, medical]),
+  );
   assert.equal(recovered.resultCode, 'COMPLETED', JSON.stringify(recovered));
   assert.equal(Number(psql('SELECT count(*) FROM public.public_feed_versions;')), versionsBeforeRecovery);
 
@@ -1379,7 +1984,7 @@ async function main(): Promise<void> {
   const memberHash = psql(`SELECT record_hash FROM public.public_feed_version_members WHERE version_id=${sqlLiteral(firstVersionId)}::uuid ORDER BY ordinal LIMIT 1;`);
   assert.equal(memberHash, trafficArtifact.members[0].recordHash);
   assert.equal((await exactStored(client)).content, head.currentVersion.artifactContent);
-  console.log('Public feed ledger runtime verification passed: fresh 45-migration schema, exact Storage/head, activation, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, concurrency, stale-owner fencing, grants, and immutable history.');
+  console.log('Public feed ledger runtime verification passed: fresh 46-migration schema, durable activation authority through pre-write recovery, real overlapping READ COMMITTED/REPEATABLE READ/SERIALIZABLE proof, unrelated-draft nonblocking proof, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, stale-owner fencing, grants, and immutable history.');
 }
 
 main().catch((error: unknown) => {

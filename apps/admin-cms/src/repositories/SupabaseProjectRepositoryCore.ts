@@ -112,6 +112,17 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
     }
   >();
 
+  // Count public-approved snapshot URL claims before validating any claimant's descriptive data.
+  // A malformed claimant must not disappear early and let another row silently become the unique
+  // authority for the same URL.
+  const claimCountByUrl = new Map<string, number>();
+  for (const asset of row.media_assets) {
+    if (asset.asset_type !== 'snapshot_image' || asset.is_public_approved !== true) continue;
+    const url = typeof asset.public_url === 'string' ? asset.public_url : '';
+    if (url === '') continue;
+    claimCountByUrl.set(url, (claimCountByUrl.get(url) ?? 0) + 1);
+  }
+
   for (const asset of row.media_assets) {
     if (asset.asset_type !== 'snapshot_image') continue;
     if (asset.is_public_approved !== true) continue;
@@ -130,6 +141,7 @@ function mapSnapshotMedia(row: DatabaseProjectRow): Project['snapshotMedia'] {
 
     if (
       url === '' ||
+      claimCountByUrl.get(url) !== 1 ||
       altText === '' ||
       typeof galleryPosition !== 'number' ||
       !Number.isInteger(galleryPosition) ||
@@ -273,7 +285,8 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       .from('projects')
       .select(PROJECT_WITH_RELATIONS_SELECT)
       .is('deleted_at', null)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('public_id', { ascending: true });
 
     if (error) {
       throw new Error(`Failed to list projects from Supabase: ${error.message}`);

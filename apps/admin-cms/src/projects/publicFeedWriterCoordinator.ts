@@ -2,9 +2,13 @@ import { randomBytes, randomUUID } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   createPublicFeedArtifact,
+  PublicFeedArtifactError,
   verifyPublicFeedArtifact,
   type VerifiedPublicFeedArtifact,
 } from '../feed/publicFeedArtifact';
+import {
+  verifyLegacyPublicFeedBaseline,
+} from '../feed/legacyPublicFeedBaseline';
 import {
   SupabasePublicFeedLedgerRepositoryCore,
   type PublicFeedOperationKind,
@@ -50,12 +54,18 @@ export interface PublicFeedWriterParameters {
   feedBucket: string;
   feedPath: string;
   rollbackCapability?: boolean;
+  /**
+   * Exact current-contract lifecycle projection that may upgrade the sole supported pre-gallery
+   * baseline shape. Honored only for a fresh activation with no ledger head; never browser-derived.
+   */
+  legacyActivationTarget?: VerifiedPublicFeedArtifact;
   /** Explicit operator authorization to claim one blocking RECOVERY_REQUIRED operation. */
   recoveryOperationId?: string;
   prepareCandidate(baseline: VerifiedPublicFeedArtifact | null): Promise<PreparedPublicFeedCandidate>;
   /**
-   * Read-only re-validation of the bound media manifest. Invoked immediately before write intent,
-   * while failure is still free: throwing here fails the operation with zero external side effects.
+   * Read-only re-validation of every mutable authority behind the bound candidate. Invoked before
+   * the first durable write/observation boundary, while failure is still free. Pre-write recovery
+   * receives the same check; recovery after WRITE_STARTED deliberately does not.
    */
   validateBeforeWriteIntent?(manifest: PublicationMediaBinding[]): Promise<void>;
   /**
@@ -116,6 +126,49 @@ async function verifyStorage(
   return bytes ? verifyPublicFeedArtifact(bytes) : null;
 }
 
+type ObservedPublicFeedBaseline = Pick<
+  VerifiedPublicFeedArtifact,
+  'content' | 'bytes' | 'feedHash' | 'recordCount'
+>;
+
+interface ActivationStorageBaseline {
+  observed: ObservedPublicFeedBaseline;
+  current: VerifiedPublicFeedArtifact;
+}
+
+async function verifyActivationStorageBaseline(
+  storage: PublicFeedStorageBoundary,
+  bucket: string,
+  path: string,
+  legacyTarget: VerifiedPublicFeedArtifact | undefined,
+): Promise<ActivationStorageBaseline | null> {
+  const bytes = await storage.readExact(bucket, path);
+  if (!bytes) return null;
+  try {
+    const artifact = verifyPublicFeedArtifact(bytes);
+    return { observed: artifact, current: artifact };
+  } catch (error) {
+    if (!legacyTarget || !(error instanceof PublicFeedArtifactError)
+        || error.code !== 'ARTIFACT_CONTRACT_INVALID') {
+      throw error;
+    }
+    const legacy = verifyLegacyPublicFeedBaseline(bytes, legacyTarget);
+    return { observed: legacy, current: legacy.upgradedArtifact };
+  }
+}
+
+async function observeOperationStorage(
+  storage: PublicFeedStorageBoundary,
+  bucket: string,
+  path: string,
+  baseline: ObservedPublicFeedBaseline | null,
+): Promise<ObservedPublicFeedBaseline | null> {
+  const bytes = await storage.readExact(bucket, path);
+  if (!bytes) return null;
+  if (baseline && bytes.compare(baseline.bytes) === 0) return baseline;
+  return verifyPublicFeedArtifact(bytes);
+}
+
 function artifactFromOperation(operation: PublicFeedOperationRecord): VerifiedPublicFeedArtifact {
   if (operation.candidateFeedContent === null || operation.candidateFeedHash === null
       || operation.candidateRecordCount === null) {
@@ -173,13 +226,25 @@ function bindsSameIntent(
   return explicitRecovery ? semanticMatch : semanticMatch && blocking.authorizingActorId === params.adminId;
 }
 
-function baselineFromOperation(operation: PublicFeedOperationRecord): VerifiedPublicFeedArtifact | null {
+function baselineFromOperation(
+  operation: PublicFeedOperationRecord,
+  candidate: VerifiedPublicFeedArtifact,
+): ObservedPublicFeedBaseline | null {
   if (!operation.baselineStorageExisted) return null;
   if (operation.baselineFeedContent === null || operation.baselineFeedHash === null
       || operation.baselineRecordCount === null) {
     throw new Error('BOUND_BASELINE_UNAVAILABLE');
   }
-  const artifact = verifyPublicFeedArtifact(operation.baselineFeedContent);
+  let artifact: ObservedPublicFeedBaseline;
+  try {
+    artifact = verifyPublicFeedArtifact(operation.baselineFeedContent);
+  } catch (error) {
+    if (operation.kind !== 'activation' || !(error instanceof PublicFeedArtifactError)
+        || error.code !== 'ARTIFACT_CONTRACT_INVALID') {
+      throw error;
+    }
+    artifact = verifyLegacyPublicFeedBaseline(operation.baselineFeedContent, candidate);
+  }
   if (artifact.feedHash !== operation.baselineFeedHash || artifact.recordCount !== operation.baselineRecordCount) {
     throw new Error('BOUND_BASELINE_INVALID');
   }
@@ -256,6 +321,9 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
   };
 
   try {
+    if (params.legacyActivationTarget && params.kind !== 'activation') {
+      throw new Error('LEGACY_BASELINE_SCOPE_INVALID');
+    }
     const blocking = await ledger.getBlockingOperation();
     if (blocking) {
       const explicitRecovery = params.recoveryOperationId === blocking.id;
@@ -301,16 +369,21 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
     }
 
     let candidate: VerifiedPublicFeedArtifact;
-    let baseline: VerifiedPublicFeedArtifact | null;
+    let baseline: ObservedPublicFeedBaseline | null;
     let mediaManifest: PublicationMediaBinding[];
 
     if (operation.state === 'RESERVED') {
       const head = await ledger.getHead();
-      const stored = await verifyStorage(storage, params.feedBucket, params.feedPath);
+      let candidateBaseline: VerifiedPublicFeedArtifact | null;
       if (params.kind === 'activation') {
         if (head) throw new Error('STALE_BASELINE');
-        baseline = stored;
+        const stored = await verifyActivationStorageBaseline(
+          storage, params.feedBucket, params.feedPath, params.legacyActivationTarget,
+        );
+        baseline = stored?.observed ?? null;
+        candidateBaseline = stored?.current ?? null;
       } else {
+        const stored = await verifyStorage(storage, params.feedBucket, params.feedPath);
         if (!head) return { resultCode: 'HISTORY_NOT_ACTIVE' };
         if (!stored || stored.content !== head.currentVersion.artifactContent
             || stored.feedHash !== head.currentVersion.feedHash
@@ -327,9 +400,10 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
           return { resultCode: 'RECOVERY_REQUIRED' };
         }
         baseline = stored;
+        candidateBaseline = stored;
       }
 
-      const prepared = await params.prepareCandidate(baseline);
+      const prepared = await params.prepareCandidate(candidateBaseline);
       candidate = prepared.artifact;
       mediaManifest = prepared.mediaManifest ?? [];
       try {
@@ -354,9 +428,14 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
         && operation.candidateFeedContent === null) {
       return { resultCode: 'RECOVERY_REQUIRED' };
     } else {
-      baseline = baselineFromOperation(operation);
       candidate = artifactFromOperation(operation);
+      baseline = baselineFromOperation(operation, candidate);
       mediaManifest = operation.mediaManifest ?? [];
+    }
+
+    if (params.legacyActivationTarget && operation.state === 'PREPARED'
+        && candidate.content !== params.legacyActivationTarget.content) {
+      throw new Error('LEGACY_UPGRADE_TARGET_MISMATCH');
     }
 
     // A bound manifest is part of the operation's durable intent. Refusing to advance without a
@@ -371,7 +450,12 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
           || operation.candidateFeedContent === null) {
         return { resultCode: 'RECOVERY_REQUIRED' };
       }
-      const stored = await verifyStorage(storage, params.feedBucket, params.feedPath);
+      const stored = await observeOperationStorage(
+        storage, params.feedBucket, params.feedPath, baseline,
+      );
+      if (operation.storageRequestGeneration === 0 && params.validateBeforeWriteIntent) {
+        await params.validateBeforeWriteIntent(mediaManifest);
+      }
       if (stored?.content === candidate.content) {
         const observed = await ledger.observeCandidate(
           operation.id, epoch, ownerToken, params.adminId, candidate.feedHash, candidate.recordCount,
@@ -393,7 +477,9 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
             return { resultCode: 'RECOVERY_REQUIRED' };
           }
         }
-        const observedBytes = await verifyStorage(storage, params.feedBucket, params.feedPath);
+        const observedBytes = await observeOperationStorage(
+          storage, params.feedBucket, params.feedPath, baseline,
+        );
         if (!observedBytes || observedBytes.content !== candidate.content) {
           return { resultCode: 'RECOVERY_REQUIRED' };
         }
@@ -420,8 +506,26 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
           : { resultCode: 'EXECUTION_FAILED', failureCode: 'LEASE_RENEWAL_REJECTED' };
       }
 
-      const currentStored = await verifyStorage(storage, params.feedBucket, params.feedPath);
-      if (currentStored?.content === candidate.content && mediaManifest.length === 0) {
+      const currentStored = await observeOperationStorage(
+        storage, params.feedBucket, params.feedPath, baseline,
+      );
+      const candidateAlreadyStored = currentStored?.content === candidate.content
+        && mediaManifest.length === 0;
+      const baselineMatches = baseline === null
+        ? currentStored === null
+        : currentStored?.content === baseline.content;
+      if (!candidateAlreadyStored && !baselineMatches) {
+        await ledger.requireRecovery(operation.id, epoch, ownerToken, params.adminId, 'UNEXPECTED_STORAGE_STATE', currentStored?.feedHash ?? null, currentStored?.recordCount ?? null);
+        return { resultCode: 'RECOVERY_REQUIRED' };
+      }
+
+      // This is the final application-side proof before either form of durable authority: a
+      // Storage write needs WRITE_STARTED, while an already-exact candidate can move directly to
+      // CANDIDATE_OBSERVED. The database activation fence makes this proof atomic with that state
+      // transition even for direct service-role mutations.
+      if (params.validateBeforeWriteIntent) await params.validateBeforeWriteIntent(mediaManifest);
+
+      if (candidateAlreadyStored) {
         try {
           const observed = await ledger.observeCandidate(
             operation.id, epoch, ownerToken, params.adminId, candidate.feedHash, candidate.recordCount,
@@ -432,17 +536,6 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
           if (!reloaded || reloaded.state !== 'CANDIDATE_OBSERVED') throw error;
         }
       } else {
-        const baselineMatches = baseline === null ? currentStored === null : currentStored?.content === baseline.content;
-        if (!baselineMatches) {
-          await ledger.requireRecovery(operation.id, epoch, ownerToken, params.adminId, 'UNEXPECTED_STORAGE_STATE', currentStored?.feedHash ?? null, currentStored?.recordCount ?? null);
-          return { resultCode: 'RECOVERY_REQUIRED' };
-        }
-
-        // Last pre-intent gate. Everything that this operation is about to expose is re-read and
-        // re-checked while failure is still free; a throw here reaches the PREPARED failure path
-        // below with zero task-created public objects in existence.
-        if (params.validateBeforeWriteIntent) await params.validateBeforeWriteIntent(mediaManifest);
-
         let started: Record<string, unknown>;
         try {
           started = await ledger.markWriteStarted(operation.id, epoch, ownerToken, params.adminId);
@@ -492,7 +585,9 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
     }
 
     if (operation.state === 'WRITE_STARTED') {
-      const stored = await verifyStorage(storage, params.feedBucket, params.feedPath);
+      const stored = await observeOperationStorage(
+        storage, params.feedBucket, params.feedPath, baseline,
+      );
       if (stored?.content === candidate.content) {
         // The canonical feed is already exact, but a crash mid-promotion can still leave part of
         // the bound manifest unpublished. Replaying it is idempotent and completes the operation.
@@ -529,7 +624,9 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
             return { resultCode: 'RECOVERY_REQUIRED' };
           }
         }
-        const observedBytes = await verifyStorage(storage, params.feedBucket, params.feedPath);
+        const observedBytes = await observeOperationStorage(
+          storage, params.feedBucket, params.feedPath, baseline,
+        );
         if (!observedBytes || observedBytes.content !== candidate.content) {
           await ledger.requireRecovery(operation.id, epoch, ownerToken, params.adminId, 'CANDIDATE_NOT_OBSERVED', observedBytes?.feedHash ?? null, observedBytes?.recordCount ?? null);
           return { resultCode: 'RECOVERY_REQUIRED' };
@@ -569,7 +666,9 @@ export async function executePublicFeedWriter(params: PublicFeedWriterParameters
     }
 
     if (operation.state === 'DB_FINALIZED') {
-      const stored = await verifyStorage(storage, params.feedBucket, params.feedPath);
+      const stored = await observeOperationStorage(
+        storage, params.feedBucket, params.feedPath, baseline,
+      );
       if (!stored || stored.content !== candidate.content) {
         await ledger.requireRecovery(operation.id, epoch, ownerToken, params.adminId, 'POST_FINALIZATION_STORAGE_MISMATCH', stored?.feedHash ?? null, stored?.recordCount ?? null);
         return { resultCode: 'RECOVERY_REQUIRED' };

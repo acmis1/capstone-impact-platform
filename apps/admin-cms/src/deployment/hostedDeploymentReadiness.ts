@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 45;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 46;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -51,6 +51,7 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260824183000_public_feed_writer_protocol.sql',
   '20260825025000_multi_image_gallery_review_submission.sql',
   '20260825030000_public_feed_taxonomy_operation_guard.sql',
+  '20260826090000_public_feed_activation_authority_guard.sql',
   '20260828090000_assistive_language_findings.sql',
   '20260828120000_assistive_worker_heartbeat.sql',
 ] as const;
@@ -91,6 +92,9 @@ export const REQUIRED_PUBLICATION_TABLES = [
   'public_feed_head',
   'feed_rollback_preparations',
   'public_feed_operation_events',
+  'public_feed_activation_authority',
+  'public_feed_project_projection_authority',
+  'public_feed_discipline_projection_authority',
 ] as const;
 
 export const REQUIRED_STAFF_TABLES = ['staff_provisioning_requests'] as const;

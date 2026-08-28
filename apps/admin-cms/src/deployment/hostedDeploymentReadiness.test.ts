@@ -154,17 +154,17 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches the exact repository migration inventory and keeps every historical migration byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
 
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(45);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(46);
 
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
-      // Only this branch's worker-heartbeat migration is new relative to origin/main.
-      // Every inherited migration must stay byte-identical to main.
+      // Only the activation-authority migration is new relative to origin/main.
+      // Every current-main migration must stay byte-identical.
       const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.filter(
-        (migration) => migration !== '20260828120000_assistive_worker_heartbeat.sql',
+        (migration) => migration !== '20260826090000_public_feed_activation_authority_guard.sql',
       );
 
-      expect(historicalMigrations).toHaveLength(44);
+      expect(historicalMigrations).toHaveLength(45);
 
       expect(() =>
         execFileSync(
@@ -192,12 +192,15 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       );
 
       expect([...ALL_REQUIRED_TABLES].sort()).toEqual([...new Set(createdTables)].sort());
-      expect(ALL_REQUIRED_TABLES).toHaveLength(34);
+      expect(ALL_REQUIRED_TABLES).toHaveLength(37);
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_runs');
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_findings');
       expect(ALL_REQUIRED_TABLES).toContain('assistive_validation_jobs');
       expect(ALL_REQUIRED_TABLES).toContain('publication_attempts');
       expect(ALL_REQUIRED_TABLES).toContain('public_removal_attempts');
+      expect(ALL_REQUIRED_TABLES).toContain('public_feed_activation_authority');
+      expect(ALL_REQUIRED_TABLES).toContain('public_feed_project_projection_authority');
+      expect(ALL_REQUIRED_TABLES).toContain('public_feed_discipline_projection_authority');
       expect(ALL_REQUIRED_TABLES).not.toContain('participant_preview_tokens');
       expect(ALL_REQUIRED_TABLES).toContain('password_recovery_sessions');
     });

@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPublicFeedArtifact } from '../feed/publicFeedArtifact';
+import { toPublicFeedRecord } from '../feed/compilePublicFeed';
+import { createMockProject } from '../test/projectFixtures';
 
 const mocks = vi.hoisted(() => ({
   executePublicFeedWriter: vi.fn(),
@@ -11,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   getRollbackPreparation: vi.fn(),
   getVersionById: vi.fn(),
   getVersionByOperationId: vi.fn(),
+  getHead: vi.fn(),
+  inspectPublicFeedHead: vi.fn(),
 }));
 
 vi.mock('../repositories/SupabasePublicFeedLedgerRepositoryCore', () => ({
@@ -22,15 +26,17 @@ vi.mock('../repositories/SupabasePublicFeedLedgerRepositoryCore', () => ({
     getRollbackPreparation = mocks.getRollbackPreparation;
     getVersionById = mocks.getVersionById;
     getVersionByOperationId = mocks.getVersionByOperationId;
+    getHead = mocks.getHead;
   },
 }));
 
 vi.mock('./publicFeedWriterCoordinator', () => ({
   executePublicFeedWriter: mocks.executePublicFeedWriter,
-  inspectPublicFeedHead: vi.fn(),
+  inspectPublicFeedHead: mocks.inspectPublicFeedHead,
 }));
 
 import {
+  activatePublicFeedHistory,
   executePublicFeedRollback,
   recoverPublicFeedOperation,
   type PublicFeedHistoryServiceDependencies,
@@ -94,6 +100,71 @@ function targetVersion(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe('activatePublicFeedHistory', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getHead.mockResolvedValue(null);
+    mocks.executePublicFeedWriter.mockResolvedValue({
+      resultCode: 'COMPLETED', versionNumber: 1,
+      feedHash: TARGET.feedHash, recordCount: TARGET.recordCount,
+    });
+  });
+
+  it('derives the only legacy upgrade target from the server lifecycle projection', async () => {
+    const project = createMockProject({ publicId: 'published-project', status: 'published' });
+    const listProjects = vi.fn(async () => [project]);
+    const result = await activatePublicFeedHistory(dependencies({
+      listProjects,
+    }));
+
+    expect(result.resultCode).toBe('COMPLETED');
+    const parameters = mocks.executePublicFeedWriter.mock.calls[0][0];
+    const projection = createPublicFeedArtifact([toPublicFeedRecord(project)]);
+    expect(parameters).toMatchObject({
+      kind: 'activation', legacyActivationTarget: expect.objectContaining({ content: projection.content }),
+      feedBucket: 'public-feed', feedPath: 'feed.json',
+    });
+    await expect(parameters.prepareCandidate(projection)).resolves.toEqual({ artifact: projection });
+    await expect(parameters.validateBeforeWriteIntent([])).resolves.toBeUndefined();
+    expect(listProjects).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails the last pre-write authority check when lifecycle state drifts after binding', async () => {
+    const before = createMockProject({ publicId: 'published-project', status: 'published' });
+    const after = createMockProject({
+      publicId: 'published-project', status: 'published', title: 'Changed after binding',
+    });
+    const listProjects = vi.fn()
+      .mockResolvedValueOnce([before])
+      .mockResolvedValueOnce([after]);
+
+    await activatePublicFeedHistory(dependencies({ listProjects }));
+    const parameters = mocks.executePublicFeedWriter.mock.calls[0][0];
+
+    await expect(parameters.validateBeforeWriteIntent([]))
+      .rejects.toThrowError('LIFECYCLE_STORAGE_MISMATCH');
+  });
+
+  it('keeps an existing strict head idempotent without compiling a replacement projection', async () => {
+    const head = {
+      generation: 1, rollbackEnabled: false,
+      currentVersion: targetVersion(),
+    };
+    const listProjects = vi.fn();
+    mocks.getHead.mockResolvedValue(head);
+    mocks.inspectPublicFeedHead.mockResolvedValue({
+      head, artifact: TARGET, publicUrl: 'https://example.com/feed.json',
+    });
+
+    await expect(activatePublicFeedHistory(dependencies({ listProjects }))).resolves.toEqual({
+      resultCode: 'ALREADY_ACTIVE', versionNumber: 1,
+      feedHash: TARGET.feedHash, recordCount: TARGET.recordCount,
+    });
+    expect(listProjects).not.toHaveBeenCalled();
+    expect(mocks.executePublicFeedWriter).not.toHaveBeenCalled();
+  });
+});
 
 describe('recoverPublicFeedOperation', () => {
   beforeEach(() => {

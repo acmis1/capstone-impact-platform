@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SupabaseProjectRepositoryCore } from './SupabaseProjectRepositoryCore';
 import { ProjectListQuery, AllowedSortField } from '../domain/projectQuery';
+import type { DatabaseProjectRow } from './SupabaseProjectRepositoryCore';
 
 interface OrderCall {
   column: string;
@@ -99,6 +100,18 @@ function createSequentialMockSupabaseClient(responses: Array<{ data: unknown[]; 
 }
 
 describe('SupabaseProjectRepositoryCore query operations', () => {
+  it('lists lifecycle projects with the unique public ID as a deterministic timestamp tie-breaker', async () => {
+    const mockClient = createSequentialMockSupabaseClient([{ data: [], count: 0 }]);
+    const repo = new SupabaseProjectRepositoryCore(mockClient);
+
+    await repo.listProjects();
+
+    expect(mockClient._executionLogs[0].orders).toEqual([
+      { column: 'created_at', options: { ascending: false } },
+      { column: 'public_id', options: { ascending: true } },
+    ]);
+  });
+
   // ============================================================
   // listProjectsPage
   // ============================================================
@@ -402,5 +415,113 @@ describe('SupabaseProjectRepositoryCore query operations', () => {
     const log = mockClient._executionLogs[0];
     expect(log.isCol).toBe('deleted_at');
     expect(log.isVal).toBeNull();
+  });
+});
+
+describe('SupabaseProjectRepositoryCore public snapshot authority', () => {
+  function map(row: Partial<DatabaseProjectRow>) {
+    const repo = new SupabaseProjectRepositoryCore({} as never);
+    return repo.mapDbToDomain({
+      id: 'project-id', public_id: 'project-a', snapshots: [], ...row,
+    });
+  }
+
+  it('pairs by exact project-scoped public URL and carries the database gallery position', () => {
+    const first = 'https://example.com/project-a/first.png';
+    const second = 'https://example.com/project-a/second.png';
+    const project = map({
+      snapshots: [first, second],
+      media_assets: [
+        { asset_type: 'snapshot_image', public_url: second, alt_text_public: 'Second.', gallery_position: 2, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: first, alt_text_public: 'First.', gallery_position: 1, is_public_approved: true },
+      ],
+    });
+
+    expect(project.snapshotMedia).toEqual([
+      { url: first, altText: 'First.', galleryPosition: 1 },
+      { url: second, altText: 'Second.', galleryPosition: 2 },
+    ]);
+  });
+
+  it('omits a duplicated public URL instead of selecting an ambiguous media authority', () => {
+    const duplicated = 'https://example.com/project-a/duplicated.png';
+    const project = map({
+      snapshots: [duplicated],
+      media_assets: [
+        { asset_type: 'snapshot_image', public_url: duplicated, alt_text_public: 'First claim.', gallery_position: 1, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: duplicated, alt_text_public: 'Second claim.', gallery_position: 2, is_public_approved: true },
+      ],
+    });
+
+    expect(project.snapshotMedia).toEqual([]);
+  });
+
+  it.each([
+    [
+      'invalid-alt then valid',
+      [
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: null, gallery_position: 1, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: 'Valid claim.', gallery_position: 2, is_public_approved: true },
+      ],
+    ],
+    [
+      'valid then invalid-alt',
+      [
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: 'Valid claim.', gallery_position: 2, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: null, gallery_position: 1, is_public_approved: true },
+      ],
+    ],
+    [
+      'invalid-position then valid',
+      [
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: 'Malformed position.', gallery_position: null, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: 'Valid claim.', gallery_position: 2, is_public_approved: true },
+      ],
+    ],
+    [
+      'valid then invalid-position',
+      [
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: 'Valid claim.', gallery_position: 2, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: 'https://example.com/project-a/shared.png', alt_text_public: 'Malformed position.', gallery_position: null, is_public_approved: true },
+      ],
+    ],
+  ])('fails closed for duplicate authority with %s row order', (_label, mediaAssets) => {
+    const duplicated = 'https://example.com/project-a/shared.png';
+    const project = map({ snapshots: [duplicated], media_assets: mediaAssets });
+
+    expect(project.snapshotMedia).toEqual([]);
+  });
+
+  it('fails closed when three public-approved rows claim the same snapshot URL', () => {
+    const duplicated = 'https://example.com/project-a/three-claims.png';
+    const project = map({
+      snapshots: [duplicated],
+      media_assets: [
+        { asset_type: 'snapshot_image', public_url: duplicated, alt_text_public: null, gallery_position: 1, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: duplicated, alt_text_public: 'Valid claim.', gallery_position: 2, is_public_approved: true },
+        { asset_type: 'snapshot_image', public_url: duplicated, alt_text_public: 'Third claim.', gallery_position: 3, is_public_approved: true },
+      ],
+    });
+
+    expect(project.snapshotMedia).toEqual([]);
+  });
+
+  it('keeps URL authority project-scoped when another project claims the same URL', () => {
+    const shared = 'https://example.com/shared-across-projects.png';
+    const first = map({
+      public_id: 'project-a', snapshots: [shared],
+      media_assets: [
+        { asset_type: 'snapshot_image', public_url: shared, alt_text_public: 'Project A.', gallery_position: 1, is_public_approved: true },
+      ],
+    });
+    const second = map({
+      public_id: 'project-b', snapshots: [shared],
+      media_assets: [
+        { asset_type: 'snapshot_image', public_url: shared, alt_text_public: 'Project B.', gallery_position: 2, is_public_approved: true },
+      ],
+    });
+
+    expect(first.snapshotMedia).toEqual([{ url: shared, altText: 'Project A.', galleryPosition: 1 }]);
+    expect(second.snapshotMedia).toEqual([{ url: shared, altText: 'Project B.', galleryPosition: 2 }]);
   });
 });

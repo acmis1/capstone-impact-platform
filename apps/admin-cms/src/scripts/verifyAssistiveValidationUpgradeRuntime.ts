@@ -167,9 +167,9 @@ async function main(): Promise<void> {
       assert.equal(JSON.parse(findingsBefore).length, 1);
     });
 
-    assertCliSuccess(runLocalSupabaseCli('migration-up', root), 'apply pending Migrations 0031 through 0045');
-    scenario('Migrations 0031 through 0045 apply as the only pending migrations', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '45');
+    assertCliSuccess(runLocalSupabaseCli('migration-up', root), 'apply pending Migrations 0031 through 0046');
+    scenario('Migrations 0031 through 0046 apply as the only pending migrations', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '46');
       assert.equal(psql("SELECT to_regclass('public.assistive_validation_jobs') IS NOT NULL;"), 't');
     });
 
@@ -306,7 +306,7 @@ async function main(): Promise<void> {
     try {
       assertResetReachedExactMigration(
         runLocalSupabaseCli('reset', root),
-        'restore fresh Migration 0045 database', 45, '20260828120000',
+        'restore fresh Migration 0046 database', 46, '20260828120000',
       );
     } catch (restoreError) {
       if (primaryFailure) throw new AggregateError([primaryFailure, restoreError], 'Upgrade verification and database restoration failed.');

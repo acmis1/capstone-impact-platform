@@ -197,10 +197,10 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify forty-five migrations and local integrity
+      - name: Verify forty-six migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 45
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 46
 
       - name: Verify multi-image gallery position invariant against the real schema
         run: npm run verify:gallery-constraint-runtime --workspace=apps/admin-cms

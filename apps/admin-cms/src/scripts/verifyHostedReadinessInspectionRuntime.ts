@@ -15,6 +15,9 @@ import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEn
 const repoRoot = path.resolve(__dirname, '../../../..');
 
 const EXPECTED_PRIVILEGE_HIDDEN_TABLES = [
+  'public_feed_activation_authority',
+  'public_feed_project_projection_authority',
+  'public_feed_discipline_projection_authority',
   'password_recovery_sessions',
   'assistive_validation_runs',
   'assistive_validation_findings',
@@ -55,7 +58,7 @@ async function main(): Promise<void> {
   const openApiDocument = await fetchPostgrestOpenApi(apiUrl, serviceRoleKey, auditedFetch);
   const evaluation = await checkHostedDeploymentReadinessWithClient(client, { openApiDocument });
 
-  assert.equal(ALL_REQUIRED_TABLES.length, 34);
+  assert.equal(ALL_REQUIRED_TABLES.length, 37);
   assert.equal(ALL_REQUIRED_TABLES.includes('publication_attempts'), true);
   assert.equal(ALL_REQUIRED_TABLES.includes('participant_preview_tokens' as never), false);
   assert.equal(
@@ -65,7 +68,7 @@ async function main(): Promise<void> {
   );
   assert.equal(evaluation.missingTables.length, 0);
   // Every table whose privileges are fully revoked is invisible to PostgREST by design, so the
-  // recovery ledger and assistive tables are correctly reported as needing manual evidence.
+  // Activation authority, recovery provenance, and assistive tables require manual evidence.
   assert.deepEqual(evaluation.unverifiedTables, EXPECTED_PRIVILEGE_HIDDEN_TABLES);
   assert.equal(
     evaluation.requiredRpcNames,
