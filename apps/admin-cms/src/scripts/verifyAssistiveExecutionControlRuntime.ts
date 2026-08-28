@@ -157,7 +157,6 @@ async function main(): Promise<void> {
   try {
     const resetToPrevious = runLocalSupabaseCli('reset', root, {
       resetVersion: PREVIOUS_MIGRATION_VERSION,
-      skipSeed: true,
     });
     assert.equal(
       resetToPrevious.ok,
