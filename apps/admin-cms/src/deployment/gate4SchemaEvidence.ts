@@ -813,7 +813,7 @@ export function validateCurrentRepositoryGate4Contract(
   )).sort();
   const requiredDispatcherRoutineSignatures = [
     'inspect_assistive_launch_eligibility():',
-    'mark_assistive_launch_start_requested(uuid,bigint):p_reservation_token,p_generation',
+    'mark_assistive_launch_requested(uuid,bigint):p_reservation_token,p_generation',
     'record_assistive_launch_outcome(uuid,bigint,text,text):p_reservation_token,p_generation,p_outcome,p_execution_reference',
     'reserve_assistive_launch(text,text,text,integer):p_dispatcher_instance_id,p_deployment_version,p_image_digest,p_lease_seconds',
   ].sort();
