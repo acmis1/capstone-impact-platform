@@ -133,6 +133,12 @@ describe('PR2B1 Core Project Review Experience Components', () => {
   });
 
   describe('ProjectValidationSummary', () => {
+    const invalidPrivateApprovalMedia = {
+      posterImage: { rowCount: 1, validPrivateCount: 0 },
+      posterPdf: { rowCount: 1, validPrivateCount: 0 },
+      snapshotMedia: [{ galleryPosition: 1, validPrivate: false, altText: 'Snapshot 1' }],
+    };
+
     it('renders blocking errors and compliance warnings without emoji', () => {
       const invalidProject: Project = {
         ...mockProject,
@@ -155,7 +161,7 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       expect(screen.queryByText(/❌/)).toBeNull();
     });
 
-    it('renders validation passed indicator when approved/published with no blocking errors', () => {
+    it('renders validation passed indicator when approved with no blocking errors', () => {
       const readyProject: Project = {
         ...mockProject,
         status: 'approved',
@@ -171,6 +177,50 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       expect(screen.getByText(/This project has no blocking validation issues/i)).toBeTruthy();
       expect(screen.queryByText(/Ready for publication/i)).toBeNull();
       expect(screen.queryByText(/Publication ready/i)).toBeNull();
+    });
+
+    it.each(['submitted', 'in_review'] as const)('keeps private staged-media approval blockers for %s projects', (status) => {
+      render(<ProjectValidationSummary project={{ ...mockProject, status }} approvalMedia={invalidPrivateApprovalMedia} />);
+
+      expect(screen.getByText(/Poster image in staged project media is invalid\. Approval blocked\./i)).toBeTruthy();
+      expect(screen.getByText(/Poster PDF in staged project media is invalid\. Approval blocked\./i)).toBeTruthy();
+      expect(screen.getByText(/Snapshot gallery in staged project media is invalid\. Approval blocked\./i)).toBeTruthy();
+    });
+
+    it('does not render pre-approval media blockers for published projects', () => {
+      render(<ProjectValidationSummary project={{ ...mockProject, status: 'published' }} approvalMedia={invalidPrivateApprovalMedia} />);
+
+      expect(screen.getByText(/Approval validation was completed before publication/i)).toBeTruthy();
+      expect(screen.queryByText(/Approval blocked/i)).toBeNull();
+      expect(screen.queryByText(/Poster image in staged project media is invalid/i)).toBeNull();
+      expect(screen.queryByText(/Poster PDF in staged project media is invalid/i)).toBeNull();
+      expect(screen.queryByText(/Snapshot gallery in staged project media is invalid/i)).toBeNull();
+      expect(screen.queryByText(/Validation needs attention/i)).toBeNull();
+    });
+
+    it('does not render pre-approval media blockers for archived projects', () => {
+      render(<ProjectValidationSummary project={{ ...mockProject, status: 'archived' }} approvalMedia={invalidPrivateApprovalMedia} />);
+
+      expect(screen.getByText(/Approval validation is not applicable in the archived state/i)).toBeTruthy();
+      expect(screen.queryByText(/Approval blocked/i)).toBeNull();
+      expect(screen.queryByText(/Poster image in staged project media is invalid/i)).toBeNull();
+      expect(screen.queryByText(/Poster PDF in staged project media is invalid/i)).toBeNull();
+      expect(screen.queryByText(/Snapshot gallery in staged project media is invalid/i)).toBeNull();
+      expect(screen.queryByText(/Validation needs attention/i)).toBeNull();
+    });
+
+    it('keeps layout validation active after publication', () => {
+      render(<ProjectValidationSummary
+        project={{
+          ...mockProject,
+          status: 'published',
+          layoutConfig: { ...mockProject.layoutConfig, templateId: 'unsupported_template' },
+        }}
+        approvalMedia={invalidPrivateApprovalMedia}
+      />);
+
+      expect(screen.getByText(/Invalid layout templateId "unsupported_template"/i)).toBeTruthy();
+      expect(screen.queryByText(/Approval blocked/i)).toBeNull();
     });
   });
 

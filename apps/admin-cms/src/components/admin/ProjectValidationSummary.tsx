@@ -11,11 +11,12 @@ interface ProjectValidationSummaryProps {
 }
 
 export function ProjectValidationSummary({ project, approvalMedia }: ProjectValidationSummaryProps) {
-  const validation = validateProjectForApproval(project, approvalMedia);
+  const isPostPublication = project.status === 'published' || project.status === 'archived';
+  const validation = isPostPublication ? null : validateProjectForApproval(project, approvalMedia);
 
   // Custom staging checks based on the prompt requirements
-  const localErrors: string[] = [...validation.errors];
-  const localWarnings: string[] = [...validation.warnings];
+  const localErrors: string[] = validation ? [...validation.errors] : [];
+  const localWarnings: string[] = validation ? [...validation.warnings] : [];
 
   // Check invalid layout template
   const allowedTemplates = ['poster_showcase', 'technical_detail', 'media_rich'];
@@ -24,17 +25,27 @@ export function ProjectValidationSummary({ project, approvalMedia }: ProjectVali
     localErrors.push(`[Layout] Invalid layout templateId "${templateId}". Supported: ${allowedTemplates.join(', ')}.`);
   }
 
-  // Missing poster full text and accessibility text are blocking errors, raised by
-  // validateProjectForApproval above — they are not quality suggestions and are never listed
-  // among the acknowledgeable warnings.
+  // Pre-approval errors are not meaningful after media has been promoted. Layout remains an
+  // independent check in every lifecycle state.
 
-  const isEligible = project.status === 'approved' || project.status === 'published';
+  const isEligible = project.status === 'approved';
   const hasBlockingErrors = localErrors.length > 0;
   const showReadyMessage = isEligible && !hasBlockingErrors;
+  const lifecycleMessage = project.status === 'published'
+    ? 'Approval validation was completed before publication. Current public media state is governed by the showcase publishing workflow.'
+    : project.status === 'archived'
+      ? 'Approval validation is not applicable in the archived state.'
+      : null;
 
   return (
     <div className="flex flex-col gap-4">
       <h4 className="text-sm font-semibold text-foreground">Compliance and validation</h4>
+
+      {lifecycleMessage && (
+        <div className={`flex items-start gap-2.5 p-3.5 ${PROJECT_DETAIL_SURFACE_CLASSES.context}`}>
+          <div className="text-sm leading-relaxed text-foreground-subtle">{lifecycleMessage}</div>
+        </div>
+      )}
 
       {showReadyMessage && (
         <div className={`flex items-start gap-2.5 p-3.5 ${PROJECT_DETAIL_SURFACE_CLASSES.affirm}`}>
