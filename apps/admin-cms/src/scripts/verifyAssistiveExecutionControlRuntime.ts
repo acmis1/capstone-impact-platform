@@ -10,6 +10,8 @@ import {
   LAUNCH_LIMIT_PER_ROLLING_WINDOW,
   LAUNCH_WINDOW_DAYS,
 } from '../assistive-validation/domain/executionControlContract';
+import { SupabaseAssistiveExecutionControlRepository } from '../assistive-validation/repositories/assistiveExecutionControlRepository';
+import { runOnDemandAssistiveWorker } from '../assistive-validation/services/onDemandAssistiveWorkerLoop';
 
 /**
  * Migration 0047 execution-control runtime verification.
@@ -29,6 +31,7 @@ const OTHER_DIGEST = `sha256:${'d'.repeat(64)}`;
 const DISPATCHER_ROLE = 'capstone_assistive_dispatcher';
 const DISPATCHER_ID = 'runtime-dispatcher-01';
 const WORKER_ID = 'runtime-worker-01';
+const JOB_WORKER_ID = '20000000-0000-4000-8000-000000000001';
 const LEASE_SECONDS = 900;
 const PREVIOUS_MIGRATION_VERSION = '20260828120000';
 
@@ -467,7 +470,87 @@ async function main(): Promise<void> {
       })).resultCode, 'FENCED');
     });
 
-    await scenario(18, 'an expired launch clears the active fence without refunding', () => {
+    await scenario(18, 'the on-demand loop drains multiple Local jobs, settles once, and exits', async () => {
+      resetReservations();
+      const eligibilityQueuedJobs = Number(psql(
+        "SELECT count(*) FROM public.assistive_validation_jobs WHERE status = 'QUEUED';",
+      ));
+      assert.equal(eligibilityQueuedJobs, 1, 'the earlier eligibility queue fixture is missing');
+      for (const [ownedProjectId, suffix] of [[projectId, 'primary'], [upgradeProjectId, 'upgrade']] as const) {
+        assert.equal((await rpc('enqueue_assistive_validation_run', {
+          p_project_id: ownedProjectId,
+          p_actor_admin_id: actorId,
+          p_input_hash: hash(`${prefix}:on-demand:${suffix}`),
+          p_pipeline_version: PIPELINE,
+        })).resultCode, 'ENQUEUED');
+      }
+
+      const reserved = reserve();
+      const drainToken = String(reserved.reservationToken);
+      const drainGeneration = Number(reserved.generation);
+      assert.equal(markRequested(drainToken, drainGeneration).resultCode, 'START_REQUESTED');
+      assert.equal(
+        recordOutcome(drainToken, drainGeneration, 'START_ACCEPTED', 'local-on-demand-drain').resultCode,
+        'OUTCOME_RECORDED',
+      );
+
+      const result = await runOnDemandAssistiveWorker({
+        signal: new AbortController().signal,
+        reservation: { token: drainToken, generation: drainGeneration },
+        identity: {
+          workerInstanceId: WORKER_ID,
+          deploymentVersion: COMMIT,
+          imageDigest: DIGEST,
+        },
+        control: new SupabaseAssistiveExecutionControlRepository(service),
+        createRuntime: () => ({
+          health: async () => true,
+          heartbeat: { publish: async () => undefined },
+          runOnce: async () => {
+            const claimed = await rpc('claim_next_assistive_validation_job', {
+              p_worker_id: JOB_WORKER_ID,
+              p_lease_seconds: 180,
+            });
+            if (claimed.resultCode === 'EMPTY') return { outcome: 'EMPTY' as const };
+            assert.equal(claimed.resultCode, 'CLAIMED');
+            assert.equal((await rpc('record_assistive_validation_job_failure', {
+              p_job_id: claimed.jobId,
+              p_claim_token: claimed.claimToken,
+              p_failure_code: 'MEDIA_INVALID',
+            })).resultCode, 'FAILED');
+            return { outcome: 'FAILED' as const, runId: String(claimed.runId) };
+          },
+        }),
+      });
+
+      assert.deepEqual(result, { outcome: 'DRAINED', processedJobCount: eligibilityQueuedJobs + 2 });
+      assert.equal(
+        psql("SELECT count(*) FROM public.assistive_validation_jobs WHERE status = 'QUEUED';"),
+        '0',
+      );
+      assert.equal(
+        psql(`SELECT count(*) FROM public.assistive_validation_jobs AS j
+               JOIN public.assistive_validation_runs AS r ON r.id = j.run_id
+              WHERE r.project_id IN ('${projectId}'::uuid, '${upgradeProjectId}'::uuid)
+                AND j.status = 'FAILED';`),
+        String(eligibilityQueuedJobs + 2),
+      );
+      assert.equal(
+        psql(`SELECT state || ':' || processed_job_count::text
+                FROM assistive_execution_control.launch_reservations
+               WHERE reservation_token = '${drainToken}'::uuid;`),
+        `COMPLETED:${eligibilityQueuedJobs + 2}`,
+      );
+    });
+
+    assert.equal((await rpc('enqueue_assistive_validation_run', {
+      p_project_id: projectId,
+      p_actor_admin_id: actorId,
+      p_input_hash: hash(`${prefix}:post-drain-budget-fixture`),
+      p_pipeline_version: PIPELINE,
+    })).resultCode, 'ENQUEUED');
+
+    await scenario(19, 'an expired launch clears the active fence without refunding', () => {
       resetReservations();
       const reserved = reserve();
       const expiredToken = String(reserved.reservationToken);
@@ -488,7 +571,7 @@ async function main(): Promise<void> {
       resetReservations();
     });
 
-    await scenario(19, 'the rolling window admits the 40th start and refuses the 41st', () => {
+    await scenario(20, 'the rolling window admits the 40th start and refuses the 41st', () => {
       seedConsumed(LAUNCH_LIMIT_PER_ROLLING_WINDOW - 1, "interval '1 day'");
       assert.equal(consumedInWindow(), 39);
       const allowed = reserve();
@@ -504,7 +587,7 @@ async function main(): Promise<void> {
       assert.equal(probe().resultCode, 'BUDGET_EXHAUSTED');
     });
 
-    await scenario(20, 'a start ageing past the window boundary releases capacity again', () => {
+    await scenario(21, 'a start ageing past the window boundary releases capacity again', () => {
       // Exactly on the boundary the oldest start is still inside the window.
       psql(`UPDATE assistive_execution_control.launch_reservations
             SET reserved_at = pg_catalog.now() - interval '${LAUNCH_WINDOW_DAYS} days' + interval '1 second'
@@ -525,14 +608,14 @@ async function main(): Promise<void> {
       recordOutcome(String(allowed.reservationToken), Number(allowed.generation), 'PRESTART_FAILED', null);
     });
 
-    await scenario(21, 'the rolling window is independent of the PostgreSQL session timezone', () => {
+    await scenario(22, 'the rolling window is independent of the PostgreSQL session timezone', () => {
       const utc = consumedInWindow('UTC');
       assert.equal(consumedInWindow('Pacific/Kiritimati'), utc);
       assert.equal(consumedInWindow('Pacific/Niue'), utc);
       assert.equal(consumedInWindow('Australia/Melbourne'), utc);
     });
 
-    await scenario(22, 'concurrent reservations at the ceiling yield at most one launch', () => {
+    await scenario(23, 'concurrent reservations at the ceiling yield at most one launch', () => {
       resetReservations();
       seedConsumed(LAUNCH_LIMIT_PER_ROLLING_WINDOW - 1, "interval '2 days'");
       const attempts = Array.from({ length: 8 }, (_, index) => `runtime-race-${index}`)
@@ -543,7 +626,7 @@ async function main(): Promise<void> {
       assert.equal(consumedInWindow(), LAUNCH_LIMIT_PER_ROLLING_WINDOW);
     });
 
-    await scenario(23, 'availability reports the rolling window as authority and the month as display', async () => {
+    await scenario(24, 'availability reports the rolling window as authority and the month as display', async () => {
       const availability = await rpc('get_assistive_executor_availability', {
         p_pipeline_version: PIPELINE, p_deployment_version: COMMIT, p_image_digest: DIGEST,
         p_ocr_capability: 'paddle-title/pp-ocrv6-small@3.7.0',
@@ -565,7 +648,7 @@ async function main(): Promise<void> {
       })).resultCode, 'UNAVAILABLE');
     });
 
-    await scenario(24, 'reservation retention is bounded beyond the rolling window', () => {
+    await scenario(25, 'reservation retention is bounded beyond the rolling window', () => {
       resetReservations();
       seedConsumed(1, "interval '91 days'");
       seedConsumed(1, "interval '40 days'");
@@ -584,7 +667,7 @@ async function main(): Promise<void> {
       );
     });
 
-    await scenario(25, 'malformed execution-control input fails closed', () => {
+    await scenario(26, 'malformed execution-control input fails closed', () => {
       for (const call of [
         `'../dispatcher', '${COMMIT}', '${DIGEST}', ${LEASE_SECONDS}`,
         `'${DISPATCHER_ID}', 'latest', '${DIGEST}', ${LEASE_SECONDS}`,
@@ -605,24 +688,16 @@ async function main(): Promise<void> {
       );
     });
 
-    await scenario(26, 'no execution-control operation changed project or publication authority', () => {
+    await scenario(27, 'no execution-control operation changed project or publication authority', () => {
       assert.equal(authorityBefore(), beforeAuthority);
     });
   } catch (error) {
     primaryFailure = error;
   } finally {
     try {
-      psql(`ALTER ROLE ${DISPATCHER_ROLE} WITH PASSWORD NULL;`);
-      resetReservations();
-      psql("DELETE FROM assistive_execution_control.executor_registrations WHERE environment = 'staging';");
-      if (projectId) {
-        psql(`DELETE FROM public.assistive_validation_runs WHERE project_id = '${projectId}'::uuid;`);
-        psql(`DELETE FROM public.projects WHERE id = '${projectId}'::uuid;`);
-      }
-      psql(`DELETE FROM public.projects WHERE id = '${upgradeProjectId}'::uuid;`);
-      if (actorId) {
-        psql(`DELETE FROM public.user_roles WHERE user_id = '${actorId}'::uuid;`);
-        psql(`DELETE FROM public.admin_users WHERE id = '${actorId}'::uuid;`);
+      const restored = runLocalSupabaseCli('reset', root);
+      if (!restored.ok) {
+        throw new Error(`Final Local reset failed (${restored.failureCategory ?? 'UNKNOWN'}).`);
       }
     } catch (cleanupError) {
       if (!primaryFailure) primaryFailure = cleanupError;
