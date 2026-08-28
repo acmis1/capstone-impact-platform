@@ -2,6 +2,8 @@
 
 This runbook covers repository/disposable-Local recovery evidence for the active Admin/CMS. It does not authorize or perform hosted Supabase, Render, Duda, email, public-feed history, or public-feed rollback operations.
 
+The hosted database, Storage, configuration, RPO/RTO, monitoring, Render redeploy/rollback, ownership, and supervised-rehearsal contract is defined in [M6 Operational Readiness and Recovery](m6-operational-readiness.md). A passing run under this document must remain labelled `LOCAL_RECOVERY_MECHANICS_VERIFIED` and `HOSTED_RECOVERY_NOT_YET_REHEARSED`.
+
 ## Current evidence boundary
 
 The repository provides a non-destructive Local recovery drill at:

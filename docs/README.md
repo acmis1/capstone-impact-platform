@@ -24,6 +24,11 @@ When verifying system behavior or planning extensions, information must be refer
 *   **[Public Feed Contract](public-feed-contract.md)**: Formal schema definition, validator fields, compiler defaults, and visual layout config definitions for the public JSON payload (`capstones-latest.json`).
 *   **[Security & Maintainability Plan](security-and-maintainability-plan.md)**: Trust boundaries, authentication foundations, media file isolation, and long-term project maintainability principles.
 *   **[Implementation Backlog](implementation-backlog.md)**: Priority-ranked backlog of planned functional modules, participant confirmation workflows, AI/OCR assist integrations, and handover criteria.
+*   **[M6 Operational Readiness & Recovery](m6-operational-readiness.md)**: Current gap matrix, repository evidence command, backup/restore scope, RPO/RTO, monitoring, incident, and Render redeploy/rollback contracts.
+*   **[M6 Release Acceptance Checklist](m6-release-acceptance-checklist.md)**: Canonical evidence-indexed acceptance gate for source, database, application, workflow, security, recovery, monitoring, documentation, and handover.
+*   **[Admin/CMS Operator Guide](admin-operator-guide.md)**: Routine staff operations, controlled failure handling, authority boundaries, and escalation guidance.
+*   **[Developer Handover Guide](developer-handover-guide.md)**: Source-of-truth, maintenance map, local setup, migrations, release evaluation, deployment, and recovery boundaries.
+*   **[Operational Ownership & Training](operational-handover-and-training.md)**: Role ownership matrix, credential-policy transfer record, escalation acceptance, and KPI-15 unaided routine-task instrument.
 
 ---
 
