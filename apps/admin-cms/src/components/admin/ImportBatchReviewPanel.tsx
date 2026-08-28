@@ -18,6 +18,7 @@ export interface ImportBatchReviewProjectView {
   warnings: string[];
   posterPresent: boolean;
   posterPdfPresent: boolean;
+  snapshotCount: number;
 }
 
 interface ImportBatchReviewPanelProps {
@@ -338,7 +339,7 @@ function ReadinessSummary({ project }: { project: ImportBatchReviewProjectView }
   );
 }
 
-function MediaPresenceSummary({ project }: { project: ImportBatchReviewProjectView }) {
+export function MediaPresenceSummary({ project }: { project: ImportBatchReviewProjectView }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="inline-flex items-center gap-1">
@@ -361,6 +362,15 @@ function MediaPresenceSummary({ project }: { project: ImportBatchReviewProjectVi
           <span className="text-destructive-strong font-medium inline-flex items-center gap-0.5">
             <X className="h-3 w-3" aria-hidden="true" /> Missing
           </span>
+        )}
+      </span>
+      <span className="inline-flex items-center gap-1">
+        Snapshots: {project.snapshotCount > 0 ? (
+          <span className="text-success-strong font-medium inline-flex items-center gap-0.5">
+            <Check className="h-3 w-3" aria-hidden="true" /> {project.snapshotCount} present
+          </span>
+        ) : (
+          <span>None</span>
         )}
       </span>
     </div>
