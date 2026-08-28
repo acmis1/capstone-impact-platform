@@ -149,12 +149,50 @@ For active staging-v2, the current point-in-time read-only evidence is 46 rows f
 The configured Data API exposes `public`, `graphql_public`, and `storage`, not `supabase_migrations`. Therefore the automated checker truthfully reports `MIGRATION_HISTORY_READABLE = NO` and `HOSTED_RECORDED_MIGRATIONS = UNKNOWN`; this separately governed read-only evidence is mandatory and must not be replaced with a `public.schema_migrations` fallback.
 
 ### Gate 4: Hosted vs Repository Schema Evidence
-Perform read-only inspection of hosted tables, columns, and RPC functions:
-1. Verify all 37 required public application tables, including the 13 core tables and 24 later tables.
-2. Verify presence of `alt_text_public` column in `media_assets`.
-3. Verify presence of `poster_text_public` and `accessibility_text_public` in `projects`.
-4. Verify all 74 service-role application RPC signatures across 73 names, including required overloads and the current publication/assistive contracts.
-5. Verify exact constraints, grants, Row Level Security, and the absence of unexpected schema objects across all existing tables.
+
+Gate 4 uses one evidence model for both sides of the comparison. The expected side is generated
+from the fully migrated repository schema, not from a second hand-maintained DDL specification.
+
+1. Check out the exact reviewed candidate SHA and prove the collector against a disposable Local
+   Supabase stack:
+   ```bash
+   npm run verify:gate4-schema-evidence:disposable
+   ```
+2. Independently review
+   [`gate4-schema-evidence.sql`](./gate4-schema-evidence.sql). It is a single SELECT-only statement
+   over `pg_catalog`, `storage.buckets`, and `supabase_migrations.schema_migrations`. It reads no
+   application rows, Auth identities, or Storage objects and calls no application RPC.
+3. An authorized hosted operator executes that exact reviewed SQL against active staging-v2 and
+   saves the single returned `gate4_evidence` JSON value as the immutable snapshot artifact. Record
+   environment, UTC collection time, operator role, reviewed query SHA, and artifact reference
+   separately; do not add credentials, private connection details, or identities to the artifact.
+4. From the same exact candidate checkout, compare the hosted snapshot:
+   ```bash
+   npm run check:gate4-schema-evidence -- --evidence-file=<snapshot.json> --expected-git-sha=<full-40-hex-reviewed-sha>
+   ```
+   Add `--machine-readable` for deterministic JSON output.
+   The command fails closed if the checkout has tracked staged or unstaged changes; an untracked
+   snapshot artifact is allowed because it is input evidence, not repository contract source.
+
+Required result: `GATE4_CLASSIFICATION=GATE4_MATCH`, with `MIGRATIONS=46/46`, `TABLES=37/37`,
+`RPC_SIGNATURES=74/74`, `RPC_NAMES=73/73`, `STORAGE_BUCKETS=3/3`, and match classifications for
+columns, constraints, RLS, policies, and grants. `canonical_staff_roles(text[])` is compared as a
+separate helper and must remain `1/1`; it does not inflate the application-RPC count.
+
+The comparator fails closed as `EVIDENCE_INVALID` for a missing category, malformed value, or
+duplicate catalog identity. A valid mismatch is `GATE4_DRIFT` and reports missing, unexpected, or
+changed catalog keys without dumping the full snapshot. Covered evidence includes exact public
+table set; all table columns and types/arrays/nullability/identity/generated/default behavior;
+primary, unique, foreign-key, and check constraints; RLS/FORCE RLS and policies; relevant
+table/schema privileges; relevant role structure; exposed function arguments, return types,
+security mode/configuration and execute grants; Auth linkage structure; and complete canonical
+bucket visibility/limits/MIME configuration.
+
+`GATE4_MATCH` proves only structural parity for the collected database contract at the recorded
+Git SHA. It does not prove application data, Auth identities, Storage object contents, workflow
+behavior, backup/restore, deployment identity, monitoring, or UAT. Migration-history equality is
+necessary but never sufficient. Gate 4 is read-only and does not authorize Gate 6, migration
+repair, `db push`, data changes, Storage changes, or any other hosted mutation.
 
 ---
 

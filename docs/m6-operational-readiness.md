@@ -28,6 +28,7 @@ Every capability in this package uses exactly one status:
 | Read-only hosted smoke | `IMPLEMENTED_AND_TESTED` | The existing verifier checks health, readiness, login, deployment SHA, redirects, timeouts, and migration expectation using GET/HEAD only. A current accepted hosted run is not recorded by this change. |
 | Current hosted deployment identity | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | Render can expose a valid `RENDER_GIT_COMMIT`; the exact reviewed-versus-deployed comparison still needs a supervised run. This is a separate deployment/release gate from migration-history evidence. |
 | Migration manifest and readiness inspection | `IMPLEMENTED_AND_TESTED` | The repository manifest has 46 migrations, and active staging-v2 has point-in-time evidence of 46 tracked rows from `20260601035138` through `20260828120000`. Exact schema/grant/RPC parity remains independently re-verifiable, and migration alignment must be rechecked for each release candidate. This status describes the repository checker, not full hosted schema acceptance. |
+| Exact Gate 4 schema evidence | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | A repository-owned SELECT-only catalog snapshot and fail-closed comparator cover exact tables, columns, constraints, RLS/policies, schema/table grants, exposed routines, relevant roles, and canonical bucket configuration. The disposable Local 46-migration baseline is the expected contract; a reviewed hosted snapshot still must be collected and compared for the exact release SHA. |
 | Historical staging reconciliation | `DOCUMENTED_ONLY` | The runbook preserves the manual-repair background for the old paused staging instance. Active staging-v2 has separate current history evidence; any future repair consideration requires read-only mismatch evidence and separate authorization. |
 | Local database recovery mechanics | `IMPLEMENTED_AND_TESTED` | The bounded verifier owns, backs up, destroys, restores, verifies, and cleans only its synthetic Local schema. |
 | Local Storage recovery mechanics | `IMPLEMENTED_AND_TESTED` | The same verifier owns and restores only its synthetic Local bucket and verifies canonical buckets remain untouched. |
@@ -82,6 +83,40 @@ Interpretation:
 - `READ_ONLY_HOSTED_CHECK_PASSED`: the bounded public smoke passed for the compared SHA; schema, workflow, recovery, monitoring, and UAT are still separate gates.
 - `READ_ONLY_HOSTED_CHECK_FAILED`: the public hosted evidence failed closed.
 - `REPOSITORY_EVIDENCE_INCOMPLETE`: source identity, manifest, document, or checklist-template evidence is incomplete.
+
+## Exact Gate 4 schema evidence command
+
+First prove that the evidence query and current migration manifest compose on a disposable Local Supabase stack:
+
+```bash
+npm run verify:gate4-schema-evidence:disposable
+```
+
+For hosted acceptance, an authorized operator executes the single SELECT in
+[`infra/supabase/gate4-schema-evidence.sql`](../infra/supabase/gate4-schema-evidence.sql)
+against the intended database and saves the one returned `gate4_evidence` JSON value without
+editing it. The query reads only `pg_catalog`, `storage.buckets`, and
+`supabase_migrations.schema_migrations`; it does not read application rows, Auth identities, or
+Storage object names and does not invoke any application RPC. Compare that file from a checkout of
+the exact reviewed commit:
+
+```bash
+npm run check:gate4-schema-evidence -- --evidence-file=<snapshot.json> --expected-git-sha=<full-40-hex-reviewed-sha>
+npm --silent run check:gate4-schema-evidence -- --evidence-file=<snapshot.json> --expected-git-sha=<full-40-hex-reviewed-sha> --machine-readable
+```
+
+`GATE4_MATCH` proves that the hosted structural evidence exactly matches the fully migrated Local
+catalog for that checkout across the covered dimensions. `GATE4_DRIFT` identifies bounded,
+category-level differences. `EVIDENCE_INVALID` means the snapshot is malformed, incomplete, or
+ambiguous and must never be treated as green. The output records the exact repository SHA used for
+the comparison, and the command rejects tracked staged or unstaged changes so that SHA identifies
+the actual query and comparison source. Migration-history equality alone is insufficient because it cannot prove the final
+columns, constraints, RLS/policies, grants, function overloads/security modes, or bucket settings.
+
+A match does not prove row contents, Auth users, Storage object completeness, application workflow
+behavior, backup/restore, monitoring, deployment identity, or UAT. It does not authorize migration
+application, migration-history repair, data changes, Storage changes, deployment, or any other
+hosted mutation.
 
 ## Releasable build contract
 
