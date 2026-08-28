@@ -43,6 +43,9 @@ jobs:
       - name: Onboarding Documentation Contract Check
         run: npm run check:onboarding-docs
 
+      - name: M6 Operational Readiness Package Check
+        run: npm run check:operational-readiness
+
       - name: Targeted First Contribution Test
         run: npm run test:run --workspace=apps/admin-cms -- src/components/admin-shell/navigation.test.ts
 

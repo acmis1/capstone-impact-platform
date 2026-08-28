@@ -232,10 +232,10 @@ This repository change does not deploy, migrate, or mutate hosted state. After i
 8. Only then set `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED=true` on the separate Admin/CMS web
    service and redeploy that web service. Use synthetic staging projects for acceptance.
 
-At this feature branch, the repository contains 45 migrations. Open PR #204 carries the separate,
-earlier-timestamped `20260826090000_public_feed_activation_authority_guard.sql`; if both streams are
-combined, the composed repository contains 46 migrations. That PR does not alter this worker design,
-and this feature does not alter its public-feed authority.
+The current repository contains 46 migrations ending at
+`20260828120000_assistive_worker_heartbeat.sql`. The separately developed activation-authority
+migration is now part of the current executable manifest. This worker contract does not alter its
+public-feed authority.
 
 #### Start, stop, restart, rotation, and incident response
 
@@ -328,7 +328,7 @@ The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpc
 - **Administrator Identity**: Initial staging administrator bootstrap completed; single Auth identity linked to `admin_users` profile with verified `admin` role in `user_roles` (`check:admin-auth` classification: `READY_FOR_MANUAL_LOGIN_TEST`).
 - **Next Lifecycle Action**: Standalone Admin/CMS hosted web service deployment and manual authenticated login verification.
 
-The repository now expects 45 migrations, ending at `20260828120000_assistive_worker_heartbeat`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that any newer repository migration is hosted. In particular, the multi-image gallery schema, the bulk-review concurrency gate, the public deployment ledger/head, the unified writer protocol, taxonomy operation guard, rollback capability, assistive-language evidence contract, and hosted-worker heartbeat contract are not established by the historical hosted evidence. Any hosted reconciliation remains a separately authorized operation followed by independent review.
+The repository now expects 46 migrations, ending at `20260828120000_assistive_worker_heartbeat`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that any newer repository migration is hosted. In particular, the multi-image gallery schema, the bulk-review concurrency gate, the public deployment ledger/head, the unified writer protocol, taxonomy operation guard, rollback capability, assistive-language evidence contract, and hosted-worker heartbeat contract are not established by the historical hosted evidence. Any hosted reconciliation remains a separately authorized operation followed by independent review.
 
 Operators should **NOT** run `supabase migration repair` or replay migrations against this clean v2 environment.
 
@@ -357,7 +357,7 @@ Expected automated inspection output on the clean v2 staging target:
 - `TARGET_IDENTITY_MATCH = YES`
 - `MIGRATION_HISTORY_READABLE = NO`
 - `SCHEMA_BASELINE = UNVERIFIED`
-- `REQUIRED_TABLE_SET = PRESENT` (All 34 public application tables detected)
+- `REQUIRED_TABLE_SET = PRESENT` (All 37 public application tables detected or the documented privilege-hidden subset separately evidenced)
 - `REQUIRED_RPC_NAMES = PRESENT` (All 73 application RPC names detected; 74 exact signatures including the expected overload)
 - `REQUIRED_STORAGE_BUCKETS = PRESENT` (All 3 buckets detected)
 - `AUTH_FOUNDATION = READY`
@@ -398,3 +398,8 @@ npm run check:admin-hosted-smoke -- --base-url=https://admin-cms-staging.example
 The verifier compares `deploymentCommit.value` to that exact 40-character SHA and reports missing, invalid, and mismatched commit evidence as distinct fail-closed classifications. Do not place a branch name, shortened/fabricated SHA, or untrusted value in the comparison. The command remains GET/HEAD-only and performs no deployment or hosted mutation.
 
 A green hosted smoke result is only an application/configuration/dependency and public-login-surface gate. It does not replace the broader read-only schema-object checker, governed migration/schema/RLS evidence, authenticated smoke tests, stakeholder UAT, publication checks, independent CI review, or a production acceptance decision.
+
+The complete M6 release, backup/restore, RPO/RTO, monitoring, incident, and Render web-service
+redeploy/rollback acceptance contract is in [M6 Operational Readiness and Recovery](m6-operational-readiness.md).
+No Render redeploy or rollback is considered rehearsed until its supervised evidence checklist is
+completed against exact reviewed commits.

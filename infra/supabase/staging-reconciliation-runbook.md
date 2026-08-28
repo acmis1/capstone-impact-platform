@@ -9,12 +9,12 @@
 
 1. **Historical Staging Origin**: Initial database DDL statements (`0001` through `0006`) were applied manually to the isolated hosted Supabase instance (`capstone-admin-cms-staging-2026`) using the dashboard SQL Editor.
 2. **Migration Tracking State**: Because early migrations were manually applied, remote migration tracking (`supabase_migrations.schema_migrations`) may be unpopulated or contain legacy version numbers. Running `supabase db push` without prior reconciliation risks re-executing DDL against existing tables (`relation already exists`).
-3. **Repository State vs Hosted State**: The repository contains **exactly 29 migrations** defining 24 public application tables, 3 storage buckets, and 44 service-role application RPC signatures across 43 names. The authenticated-only recovery lookup and the separate `canonical_staff_roles(text[])` grant are not service-role application RPC contracts. Hosted evidence predates Migration `0027`; migrations `0007` through `0029` remain repository/local-only until separately authorized reconciliation.
+3. **Repository State vs Hosted State**: The repository contains **exactly 46 migrations** defining 37 public application tables, 3 storage buckets, and 74 service-role application RPC signatures across 73 names. The authenticated-only recovery lookup and separately governed helper grants are not service-role application RPC contracts. The recorded hosted baseline contains 26 migrations; every later repository migration remains unverified on hosted staging until separately authorized reconciliation and post-apply evidence.
 4. **Scope of Migration Repair**: `supabase migration repair` modifies **only the tracking history table** (`supabase_migrations.schema_migrations`). It does not alter database tables, columns, constraints, or RPC functions.
 
 ---
 
-## 2. Expected Repository State (29 Migrations)
+## 2. Expected Repository State (46 Migrations)
 
 ### A. Authoritative Migration Inventory
 
@@ -49,15 +49,33 @@
 | 27 | `20260816144917_staging_uat_direct_account_finalization.sql` | Atomic staging UAT staff-account finalization with exact identity ownership and non-admin role enforcement |
 | 28 | `20260817090000_private_media_approval_gate.sql` | Requires exact private poster media before project approval |
 | 29 | `20260819214431_password_recovery_session_provenance.sql` | Durable Auth-session-bound password-recovery provenance and least-privilege RPCs |
+| 30 | `20260820120000_assistive_validation_persistence.sql` | Assistive-validation run/finding persistence |
+| 31 | `20260820160000_assistive_validation_job_coordination.sql` | Assistive job ownership, fencing, and recovery coordination |
+| 32 | `20260821090000_assistive_validation_staff_inspection.sql` | Bounded staff inspection/disposition functions |
+| 33 | `20260821140000_assistive_duplicate_shortlist.sql` | Deterministic duplicate-shortlist evidence |
+| 34 | `20260824050000_multi_image_gallery.sql` | Ordered multi-image gallery foundation |
+| 35 | `20260824055000_snapshot_alt_text_media_identity.sql` | Snapshot alt-text media identity contract |
+| 36 | `20260824060000_multi_image_gallery_approval_gate.sql` | Gallery-aware approval gate |
+| 37 | `20260824070000_multi_image_gallery_participant_preview.sql` | Gallery-aware participant preview evidence |
+| 38 | `20260824080000_multi_image_gallery_publication_readiness.sql` | Gallery-aware publication readiness |
+| 39 | `20260824120000_bulk_project_review_concurrency.sql` | Version-fenced bulk-review wrapper |
+| 40 | `20260824180000_public_feed_deployment_ledger.sql` | Immutable public deployment versions, membership, head, and operations |
+| 41 | `20260824183000_public_feed_writer_protocol.sql` | Unified token/epoch-fenced canonical writer protocol |
+| 42 | `20260825025000_multi_image_gallery_review_submission.sql` | Gallery-aware review-submission gates |
+| 43 | `20260825030000_public_feed_taxonomy_operation_guard.sql` | Taxonomy write guards during public-feed operations |
+| 44 | `20260826090000_public_feed_activation_authority_guard.sql` | Durable activation-authority and projection write fences |
+| 45 | `20260828090000_assistive_language_findings.sql` | Assistive language-finding contract |
+| 46 | `20260828120000_assistive_worker_heartbeat.sql` | Hosted assistive-worker heartbeat and availability contract |
 
-### B. Expected Tables (24 Total)
+### B. Expected Tables (37 Total)
 - **Core Relational (13)**: `programs`, `disciplines`, `industry_categories`, `admin_users`, `user_roles`, `import_batches`, `projects`, `project_disciplines`, `project_industry_categories`, `media_assets`, `validation_flags`, `approval_records`, `published_snapshots`
 - **Import Commit Ledgers (2)**: `browser_import_commits`, `browser_import_media_commits`
 - **Participant Preview & Correction (3)**: `participant_previews`, `participant_preview_confirmations`, `participant_preview_correction_requests`. The SHA-256 token is stored in `participant_previews.token_hash`; there is no `participant_preview_tokens` table.
-- **Publication State (2)**: `publication_attempts`, `public_removal_attempts`
+- **Publication State (11)**: `publication_attempts`, `public_removal_attempts`, `public_feed_operations`, `public_feed_versions`, `public_feed_version_members`, `public_feed_head`, `feed_rollback_preparations`, `public_feed_operation_events`, `public_feed_activation_authority`, `public_feed_project_projection_authority`, `public_feed_discipline_projection_authority`
 - **Staff Lifecycle (1)**: `staff_provisioning_requests`
 - **Auth Session Provenance (1)**: `password_recovery_sessions`
 - **Notification & Reminder Ledgers (2)**: `participant_preview_notifications`, `participant_preview_reminder_schedules`
+- **Assistive Validation & Worker Operations (4)**: `assistive_validation_runs`, `assistive_validation_findings`, `assistive_validation_jobs`, `assistive_worker_heartbeats`
 
 ### C. Expected Storage Buckets (3 Total)
 - `project-drafts-private`: Private draft uploads and participant package artifacts.
@@ -65,7 +83,7 @@
 - `public-feeds`: Schema-validated public JSON showcase feed (`capstones-latest.json`).
 
 ### D. RPC Contract Basis
-The authoritative migration contract contains **44 service-role application RPC signatures across 43 names**. `generate_participant_preview` has distinct five- and six-parameter overloads. The authenticated-only `get_current_password_recovery_session_state()` lookup is intentionally outside that service-role inventory. Controlled publication and removal each use six phase-specific functions; there is no `execute_controlled_publication` or `execute_controlled_public_removal` function. Later `DROP FUNCTION` statements remove obsolete `update_project_metadata` signatures. The exact names, parameter names, and PostgreSQL types are enforced by `hostedDeploymentReadiness.test.ts` against final migration grants and definitions.
+The authoritative migration contract contains **74 service-role application RPC signatures across 73 names**. `generate_participant_preview` has distinct overloads. The authenticated-only `get_current_password_recovery_session_state()` lookup is intentionally outside that service-role inventory. Controlled publication/removal and the unified writer protocol remain service-role-only governed contracts. Later `DROP FUNCTION` statements remove obsolete signatures. Exact names, parameters, PostgreSQL types, final grants, and migration bytes are enforced by `hostedDeploymentReadiness.test.ts`.
 
 ### E. Key Column & Constraint Requirements
 - `projects.participant_contact_email`: Normalized nullable email address (Migration 0023).
@@ -97,7 +115,7 @@ npm run check:admin-deployment-readiness
 Verify the output report:
 - `TARGET_IDENTITY_MATCH = YES`
 - `MIGRATION_HISTORY_READABLE = NO`
-- `REPOSITORY_MIGRATIONS = 26`
+- `REPOSITORY_MIGRATIONS = 46`
 - `HOSTED_RECORDED_MIGRATIONS = <count or UNKNOWN>`
 - `SCHEMA_BASELINE = UNVERIFIED / INCOMPLETE / DRIFT / UNKNOWN`
 - `REQUIRED_RPC_NAMES = PRESENT / INCOMPLETE / UNVERIFIED`
@@ -124,16 +142,16 @@ SELECT version, inserted_at
   FROM supabase_migrations.schema_migrations
  ORDER BY version ASC;
 ```
-Record exact count and missing timestamps against the 27 repository migrations.
+Record exact count and missing timestamps against the 46 repository migrations.
 
 The configured Data API exposes `public`, `graphql_public`, and `storage`, not `supabase_migrations`. Therefore the automated checker truthfully reports `MIGRATION_HISTORY_READABLE = NO` and `HOSTED_RECORDED_MIGRATIONS = UNKNOWN`; this separately governed read-only evidence is mandatory and must not be replaced with a `public.schema_migrations` fallback.
 
 ### Gate 4: Hosted vs Repository Schema Evidence
 Perform read-only inspection of hosted tables, columns, and RPC functions:
-1. Verify presence of 13 core tables vs 10 post-0006 extended tables.
+1. Verify all 37 required public application tables, including the 13 core tables and 24 later tables.
 2. Verify presence of `alt_text_public` column in `media_assets`.
 3. Verify presence of `poster_text_public` and `accessibility_text_public` in `projects`.
-4. Verify all 43 service-role application RPC signatures, including both preview overloads, both six-phase publication/removal protocols, and direct UAT staff-account finalization.
+4. Verify all 74 service-role application RPC signatures across 73 names, including required overloads and the current publication/assistive contracts.
 5. Verify exact constraints, grants, Row Level Security, and the absence of unexpected schema objects across all existing tables.
 
 ---
@@ -145,14 +163,14 @@ Evaluate empirical evidence from Gates 1–4 to determine the required path:
 ```mermaid
 flowchart TD
     G[Gates 1-4 Evidence] --> C{Schema & History State}
-    C -->|All 29 migrations applied & history matches| PA[Path A: Ready for Deployment Decision]
-    C -->|Hosted baseline predates 0027| PB[Path B: Phased Reconciliation & Push]
+    C -->|All 46 migrations applied & history matches| PA[Path A: Ready for Deployment Decision]
+    C -->|Hosted baseline predates current manifest| PB[Path B: Phased Reconciliation & Push]
     C -->|Unexpected column/table drift| PC[Path C: Drift Resolution Required]
     C -->|Target mismatch or unauthorized| PD[Path D: Stop & Abort]
 ```
 
-- **Path A (Full Match / Ready)**: All 29 migrations, 24 public application tables, 44 service-role application RPC signatures, exact constraints/grants, and absence of unexpected schema objects are verified by combined automated and governed manual evidence. Proceed directly to Gate 7 verification.
-- **Path B (Phased Reconciliation / Staging Standard)**: Hosted migration evidence predates Migration `0027`; any missing forward migrations through `0028` require separately authorized application. Proceed to Gate 6.
+- **Path A (Full Match / Ready)**: All 46 migrations, 37 public application tables, 74 service-role application RPC signatures across 73 names, exact constraints/grants, and absence of unexpected schema objects are verified by combined automated and governed manual evidence. Proceed directly to Gate 7 verification.
+- **Path B (Phased Reconciliation / Staging Standard)**: Hosted migration evidence predates the current manifest; every missing forward migration requires separately authorized application. Proceed to Gate 6.
 - **Path C (Drift Detected)**: Unrecognized columns, conflicting constraint names, or manual schema changes detected. STOP. Document drift and formulate an explicit resolution plan.
 - **Path D (Abort)**: Target identity mismatch or lack of operator authorization. STOP immediately.
 
@@ -179,7 +197,7 @@ supabase migration repair --status applied 20260719165118 --workdir infra
 supabase migration repair --status applied 20260719165119 --workdir infra
 ```
 
-#### Step 6.2: Apply Forward Migrations (0007–0028) (Conditional)
+#### Step 6.2: Apply Missing Forward Migrations (Conditional)
 Once baseline tracking is aligned, apply forward migrations in deterministic sequence:
 ```bash
 # REQUIRES EXPLICIT AUTHORIZATION

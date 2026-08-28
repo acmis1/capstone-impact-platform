@@ -163,6 +163,7 @@ Run these from the repository root unless noted. Read-only checks do not change 
 | Typecheck | `npm run typecheck:admin` | `npm run typecheck` | Read-only |
 | Build | `npm run build:admin` | `npm run build` | Local build |
 | Feed contract check | `npm run check:feed` | `npm run check:sample-feed` | Pure offline read-only fixture execution |
+| M6 operational readiness | `npm run check:operational-readiness` | `npm run check:operational-readiness` | Offline repository evidence by default; optional credential-free hosted GET/HEAD smoke |
 
 ### Read-only staging checks
 
@@ -175,6 +176,7 @@ Read-only staging checks require validated staging runtime identity (`CAPSTONE_R
 | Auth check | `npm run check:admin-auth` | `npm run check:staging-auth` | Authorized read-only database check |
 | Import-batch check | `npm run check:admin-imports` | `npm run check:import-batches` | Authorized read-only database check |
 | Deployment readiness check | `npm run check:admin-deployment-readiness` | `npm run check:deployment-readiness` | Authorized GET/HEAD expected-object check; migration history and exact Gate 3/4 schema evidence remain manual |
+| Hosted deployment smoke | `npm run check:admin-hosted-smoke -- --base-url=https://staging.example --expected-commit=<full-sha>` | `npm run check:hosted-smoke -- --base-url=https://staging.example --expected-commit=<full-sha>` | Credential-free public GET/HEAD checks only; no schema or workflow acceptance claim |
 
 ### State-changing staging operations
 
@@ -404,6 +406,7 @@ npm run lint --workspace=apps/admin-cms
 npm run test:admin
 npm run typecheck:admin
 npm run build:admin
+npm run check:operational-readiness
 npm run check:feed
 git diff --check
 ```
@@ -459,3 +462,8 @@ The offline suite covers authentication and authorization helpers, workflow tran
 - [Supabase migration overview](../../infra/supabase/README.md)
 - [Supabase manual apply guide](../../infra/supabase/manual-apply-guide.md)
 - [Staging authentication verification](../../infra/supabase/staging-auth-verification.md)
+- [M6 operational readiness and recovery](../../docs/m6-operational-readiness.md)
+- [M6 release acceptance checklist](../../docs/m6-release-acceptance-checklist.md)
+- [Admin/CMS operator guide](../../docs/admin-operator-guide.md)
+- [Developer handover guide](../../docs/developer-handover-guide.md)
+- [Operational ownership and training](../../docs/operational-handover-and-training.md)

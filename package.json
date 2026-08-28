@@ -29,6 +29,7 @@
     "check:admin-auth": "npm run check:staging-auth --workspace=apps/admin-cms",
     "check:admin-deployment-readiness": "npm run check:deployment-readiness --workspace=apps/admin-cms",
     "check:admin-hosted-smoke": "npm run check:hosted-smoke --workspace=apps/admin-cms --",
+    "check:operational-readiness": "npm run check:operational-readiness --workspace=apps/admin-cms --",
     "check:admin-staging-readiness": "npm run check:staging-readiness --workspace=apps/admin-cms",
     "link:admin-staging": "npm run link:staging-admin --workspace=apps/admin-cms --",
     "supabase:start": "tsx apps/admin-cms/src/scripts/runLocalSupabase.ts start",
