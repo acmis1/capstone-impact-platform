@@ -1,0 +1,43 @@
+FROM node:24.14.1-bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PATH=/opt/capstone/venv/bin:$PATH \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      ca-certificates curl openjdk-17-jre-headless python3 python3-pip python3-venv tar unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/admin-cms/package.json apps/admin-cms/package.json
+COPY apps/assistive-worker apps/assistive-worker
+
+RUN npm ci --ignore-scripts \
+    && python3 -m venv /opt/capstone/venv \
+    && pip install --no-cache-dir './apps/assistive-worker[paddle-title]'
+
+RUN mkdir -p /opt/capstone/artifacts/paddle /opt/capstone/artifacts/languagetool \
+    && curl --fail --location --silent --show-error \
+      https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_small_det_infer.tar \
+      --output /tmp/PP-OCRv6_small_det_infer.tar \
+    && echo 'bfb7c1e59f0faa6b540ebdca93aea3f4b1f2477805b389fbee117820d68fe9f5  /tmp/PP-OCRv6_small_det_infer.tar' | sha256sum --check --strict \
+    && tar -xf /tmp/PP-OCRv6_small_det_infer.tar -C /opt/capstone/artifacts/paddle \
+    && curl --fail --location --silent --show-error \
+      https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_small_rec_infer.tar \
+      --output /tmp/PP-OCRv6_small_rec_infer.tar \
+    && echo 'da460f968ce9f88325ac3a34fa302077d6e9b0dcefb16ba3137cd7796f879d06  /tmp/PP-OCRv6_small_rec_infer.tar' | sha256sum --check --strict \
+    && tar -xf /tmp/PP-OCRv6_small_rec_infer.tar -C /opt/capstone/artifacts/paddle \
+    && curl --fail --location --silent --show-error \
+      https://languagetool.org/download/LanguageTool-6.6.zip \
+      --output /opt/capstone/artifacts/languagetool/LanguageTool-stable.zip \
+    && echo '53600506b399bb5ffe1e4c8dec794fd378212f14aaf38ccef9b6f89314d11631  /opt/capstone/artifacts/languagetool/LanguageTool-stable.zip' | sha256sum --check --strict \
+    && unzip -q /opt/capstone/artifacts/languagetool/LanguageTool-stable.zip -d /opt/capstone/artifacts/languagetool \
+    && echo 'f5279d946d901c90c0bb09cddaa6fdea8b26db9c548145d09041e8d1ac2d2b45  /opt/capstone/artifacts/languagetool/LanguageTool-6.6/languagetool-server.jar' | sha256sum --check --strict \
+    && rm -f /tmp/PP-OCRv6_small_det_infer.tar /tmp/PP-OCRv6_small_rec_infer.tar
+
+COPY . .
+
+CMD ["npm", "run", "run:assistive-worker:hosted", "--workspace=apps/admin-cms"]

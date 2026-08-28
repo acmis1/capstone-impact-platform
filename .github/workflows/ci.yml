@@ -197,10 +197,10 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify forty-four migrations and local integrity
+      - name: Verify forty-five migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 44
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 45
 
       - name: Verify multi-image gallery position invariant against the real schema
         run: npm run verify:gallery-constraint-runtime --workspace=apps/admin-cms
@@ -282,6 +282,9 @@ jobs:
 
       - name: Verify assistive duplicate shortlist Migration 0033 runtime behavior
         run: npm run verify:assistive-duplicate-shortlist-runtime --workspace=apps/admin-cms
+
+      - name: Verify assistive worker heartbeat runtime behavior
+        run: npm run verify:assistive-worker-heartbeat-runtime --workspace=apps/admin-cms
 
       - name: Verify bulk project review workflow runtime behavior
         run: npm run verify:bulk-project-review-runtime --workspace=apps/admin-cms

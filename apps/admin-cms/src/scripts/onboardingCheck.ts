@@ -58,6 +58,7 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260825025000_multi_image_gallery_review_submission.sql',
   '20260825030000_public_feed_taxonomy_operation_guard.sql',
   '20260828090000_assistive_language_findings.sql',
+  '20260828120000_assistive_worker_heartbeat.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {

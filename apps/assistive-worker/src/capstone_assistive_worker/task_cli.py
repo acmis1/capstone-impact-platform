@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, Mapping
 
+from .ocr.contract import OcrAvailabilityState
 from .ocr.paddle_title import PaddleTitleOcrProvider
 from .ocr.tesseract import TesseractProvider
 from .service import extract_staged_document
@@ -83,8 +84,15 @@ def _read_task() -> WorkerTask:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.health:
-        _write_json({"schema_version": "assistive-worker-health/v1", "status": "OK"})
-        return 0
+        provider_ready = args.paddle_models_dir is None or (
+            PaddleTitleOcrProvider(models_dir=args.paddle_models_dir).availability().state
+            is OcrAvailabilityState.AVAILABLE
+        )
+        _write_json({
+            "schema_version": "assistive-worker-health/v1",
+            "status": "OK" if provider_ready else "UNHEALTHY",
+        })
+        return 0 if provider_ready else 1
     if args.staging_root is None:
         _write_json(
             WorkerTaskResult(

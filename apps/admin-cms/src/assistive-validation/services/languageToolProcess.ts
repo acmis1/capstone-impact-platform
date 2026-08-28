@@ -151,6 +151,18 @@ async function pulse(onPulse: AssistiveLanguageProviderInput['onPulse']): Promis
   if (result === 'CLAIM_LOST') throw new LanguageProviderControlError('CLAIM_LOST');
 }
 
+function safeJavaEnvironment(): NodeJS.ProcessEnv {
+  const allowed = [
+    'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR',
+    'HOME', 'LANG', 'LC_ALL', 'JAVA_HOME',
+  ];
+  const env: NodeJS.ProcessEnv = { NODE_ENV: process.env.NODE_ENV };
+  for (const key of allowed) {
+    if (process.env[key] !== undefined) env[key] = process.env[key];
+  }
+  return env;
+}
+
 export class LocalLanguageToolProcess implements AssistiveLanguageProvider {
   private readonly javaCommand: string;
   private readonly startupTimeoutMs: number;
@@ -180,7 +192,9 @@ export class LocalLanguageToolProcess implements AssistiveLanguageProvider {
 
   private async javaIsSupported(): Promise<boolean> {
     return new Promise((resolve) => {
-      const child = spawn(this.javaCommand, ['-version'], { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+      const child = spawn(this.javaCommand, ['-version'], {
+        env: safeJavaEnvironment(), windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'],
+      });
       let output = '';
       const timeout = setTimeout(() => { child.kill(); resolve(false); }, 5_000);
       child.stderr.on('data', (chunk: Buffer) => {
@@ -219,7 +233,8 @@ export class LocalLanguageToolProcess implements AssistiveLanguageProvider {
         '--config', config,
         '--port', String(port),
       ], {
-        cwd: dirname(this.options.jarPath), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+        cwd: dirname(this.options.jarPath), env: safeJavaEnvironment(),
+        windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
       });
       let stderrBytes = 0;
       let stderrOverflow = false;

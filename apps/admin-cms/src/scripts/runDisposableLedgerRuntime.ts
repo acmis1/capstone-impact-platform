@@ -38,7 +38,7 @@ const STREAM_K_MIGRATIONS = [
   '20260825030000_public_feed_taxonomy_operation_guard.sql',
 ];
 
-const MAIN_MIGRATION_COUNT = 41;
+const MAIN_MIGRATION_COUNT = 42;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -130,7 +130,7 @@ function verifyMainUpgrade(workdir: string): void {
   const baselineFiles = fs.readdirSync(path.join(workdir, 'supabase', 'migrations'))
     .filter((name) => name.endsWith('.sql'));
 
-  assert.equal(baselineFiles.length, MAIN_MIGRATION_COUNT, 'The main-only baseline is not exactly 40 files.');
+  assert.equal(baselineFiles.length, MAIN_MIGRATION_COUNT, 'The main-only baseline is not exactly 42 files.');
   assert.equal(appliedCount(), String(MAIN_MIGRATION_COUNT), 'The provisioned baseline is not exactly main.');
   assert.equal(psql("SELECT to_regclass('public.public_feed_operations') IS NULL;"), 't');
   assert.equal(psql("SELECT to_regclass('public.public_feed_head') IS NULL;"), 't');
@@ -168,12 +168,12 @@ function verifyMainUpgrade(workdir: string): void {
     )::text;`);
   const headAbsentBefore = psql("SELECT to_regclass('public.public_feed_head') IS NULL;");
   assert.equal(headAbsentBefore, 't');
-  console.log('PASS: disposable stack provisioned at exactly 41 migrations before Stream K');
+  console.log('PASS: disposable stack provisioned at exactly 42 migrations before Stream K');
 
   restoreMigrations(workdir, STREAM_K_MIGRATIONS);
   runSupabase('migrate', workdir, '');
 
-  assert.equal(appliedCount(), '44', 'The upgraded database is not exactly 44 migrations.');
+  assert.equal(appliedCount(), '45', 'The upgraded database is not exactly 45 migrations.');
   assert.equal(
     psql(
       'SELECT count(*) FROM supabase_migrations.schema_migrations'
@@ -212,7 +212,7 @@ function verifyMainUpgrade(workdir: string): void {
       'industryLink', (SELECT pg_catalog.to_jsonb(pic) FROM public.project_industry_categories pic
         WHERE pic.project_id='18600000-0000-4000-8000-000000000013'::uuid)
     )::text;`), preservedBefore);
-  console.log('PASS: main upgraded forward to the integrated 43-migration deployment ledger with project and taxonomy data preserved');
+  console.log('PASS: main upgraded forward to the integrated 45-migration deployment ledger with project and taxonomy data preserved');
 
   // End-of-sequence composition. The deployment-ledger migrations carry earlier timestamps than the
   // final merged gallery migration, so the composed database must still end on the merged gallery

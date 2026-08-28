@@ -366,7 +366,7 @@ export function ProjectAssistiveChecks({
               isLoading={state.actionInFlight === 'running'}
               title={
                 !canExecute
-                  ? 'Running assistive checks is not available in this environment.'
+                  ? 'Assistive checks are temporarily unavailable because the processing worker is not ready.'
                   : state.inspection
                   ? 'Re-evaluate project metadata against poster document evidence.'
                   : 'Start assistive checks.'
@@ -391,7 +391,7 @@ export function ProjectAssistiveChecks({
       {/* Execution Environment Notice if unavailable */}
       {!canExecute && (
         <div className="mt-3 text-xs text-muted-foreground">
-          Running assistive checks is not available in this environment. Historical findings remain viewable.
+          Assistive checks are temporarily unavailable because the processing worker is not ready. Historical findings remain viewable.
         </div>
       )}
 
@@ -465,7 +465,7 @@ export function ProjectAssistiveChecks({
             description={
               canExecute
                 ? 'Run assistive checks to verify project title consistency and document formatting against uploaded poster evidence.'
-                : 'Running assistive checks is not available in this environment.'
+                : 'Assistive checks are temporarily unavailable because the processing worker is not ready.'
             }
             action={
               <Button
@@ -475,7 +475,7 @@ export function ProjectAssistiveChecks({
                 isLoading={state.actionInFlight === 'running'}
                 title={
                   !canExecute
-                    ? 'Running assistive checks is not available in this environment.'
+                    ? 'Assistive checks are temporarily unavailable because the processing worker is not ready.'
                     : 'Run checks now'
                 }
               >

@@ -16,8 +16,8 @@ describe('assistive language finding migration contract', () => {
   it('is one forward migration after the still-open PR 204 migration timestamp', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(44);
-    expect(files.at(-1)).toBe(filename);
+    expect(files).toHaveLength(45);
+    expect(files.at(-2)).toBe(filename);
     expect(filename.localeCompare('20260826090000_public_feed_activation_authority_guard.sql')).toBeGreaterThan(0);
     expect(() => execFileSync(
       'git',
