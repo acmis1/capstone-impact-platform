@@ -124,145 +124,74 @@ The final line is deterministic. `HOSTED_SMOKE_CLASSIFICATION = READY_FOR_SUPERV
 | `CAPSTONE_STAGING_PUBLICATION_ENABLED` | `false` | Staging showcase publication is absent from the UI and route fails closed. Exact `true` enables it only when the staging runtime identity and expected Supabase host also match. It never enables live production publication. |
 | `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED` | `false` | Hosted assistive enqueue remains disabled. Exact `true` is necessary but insufficient: the web service must also prove the staging target identity and observe a fresh compatible worker heartbeat. |
 
-### E. Dedicated Assistive Worker
+### E. Assistive Execution
 
-#### Selected service shape
+The paid background-worker path described in earlier revisions of this guide is **withdrawn**.
+Render documents no free instance type for background workers, so that shape carried a permanent
+monthly charge and could not be handed to the School at zero cost. Its blueprint has been removed
+from the repository so it cannot be redeployed by accident.
 
-The hosted assistive coordinator is a separate Render **background worker**, not a web service and
-not part of the Next.js request lifecycle. Render documents background workers as continuously
-running services that do not receive inbound traffic. The repository therefore exposes no worker
-URL, health-check path, command endpoint, or arbitrary job payload. The worker polls the existing
-PostgreSQL queue through fixed service-role RPCs and sends outbound requests only to the exact
-verified staging Supabase origin; LanguageTool remains a loopback Java child and PaddleOCR remains
-an offline Python child. See Render's [background-worker](https://render.com/docs/background-workers),
-[service-type](https://render.com/docs/service-types), and [Docker runtime](https://render.com/docs/docker)
-documentation.
+Assistive execution now has two supported profiles, both running the same container image and the
+same application code:
 
-`render.yaml` defines one `capstone-assistive-worker-staging` service with Docker runtime, Singapore
-region, automatic deploys disabled, and a 300-second shutdown window. The `2c-4g` plan provides
-2 CPU and 4 GB RAM. Keep exactly one instance: the coordinator processes one project at a time,
-the frozen Paddle provider uses four CPU threads internally, and horizontal scaling has not been
-capacity-qualified. Render's current plan identifiers and resources are documented in
-[compute plans](https://render.com/docs/compute-plans), while the Blueprint fields are defined in
-the [Blueprint specification](https://render.com/docs/blueprint-spec).
+- **Profile A — zero-cost on-demand executor.** A small scheduled dispatcher reserves one launch
+  unit in the database and then starts a scale-to-zero heavy worker. Bounded by a hard ceiling of
+  40 starts per rolling 31-day window, enforced by database constraint.
+- **Profile B — School-owned continuous worker.** The same image run continuously on School
+  compute. No cloud account, no ceiling, no polling delay.
 
-The sizing decision is deliberately conservative. The frozen full-page Paddle evidence records a
-peak of `1,084,821,504` bytes and the qualified LanguageTool evidence records a peak of
-`846,700,544` bytes. Their conservative sum is `1,931,522,048` bytes (about 1.80 GiB), before the
-Node coordinator, Python/Java launch overlap, container, and operating-system overhead. A 2 GiB
-worker leaves no defensible operational margin. The 4 GB class is therefore the minimum selected
-staging shape even though the providers normally execute sequentially. This is a staging resource
-guardrail, not a throughput or production-capacity claim.
+Deployment, operation, troubleshooting, the launch-ceiling semantics, and the honest statement of
+what the zero-cost profile does *not* promise are all in
+[Zero-Cost Assistive Executor](operations/zero-cost-assistive-executor.md). The infrastructure
+template is documented in
+[the executor infrastructure README](../infra/azure/assistive-executor/README.md).
 
-Render's 4 GB allocation is about 3.73 GiB, leaving about 1.93 GiB beyond the conservative provider
-sum. Node coordinator and container/operating-system overhead were not captured as separate peaks;
-they consume that remaining margin. Provisioning is therefore intentionally based on the summed
-provider evidence plus unallocated process/platform headroom, not an invented Node memory result.
-
-#### Immutable build and runtime identity
-
-`apps/assistive-worker/Dockerfile.hosted` selects the exact Node base version, pinned Python provider
-packages, and Java 17 runtime. During image build it downloads only the exact numbered PP-OCRv6 Small detection and
-recognition archives and LanguageTool 6.6 archive, verifies their frozen SHA-256 values, and embeds
-them in the image. Startup rechecks Paddle runtime versions and model-tree hashes, LanguageTool
-archive/JAR hashes, Java 17+, database queue health, the Render instance identity, and the exact
-40-hex deployment commit before publishing `READY`. A build or startup mismatch fails closed; no
-runtime model download or fallback provider exists.
-
-The worker-only variables are:
+The worker-only environment variables are:
 
 | Variable | Source | Contract |
 | :--- | :--- | :--- |
-| `CAPSTONE_RUNTIME_ENV` | Blueprint fixed value | Exact `staging`. |
-| `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED` | Blueprint fixed value | Exact `true`. |
+| `CAPSTONE_RUNTIME_ENV` | Fixed value | Exact `staging`. |
+| `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED` | Fixed value | Exact `true`. |
+| `CAPSTONE_ASSISTIVE_EXECUTION_MODE` | Fixed value | `CONTINUOUS` or `ON_DEMAND`. |
 | `CAPSTONE_EXPECTED_SUPABASE_HOST` | Operator secret/config | Exact canonical staging hostname. |
 | `CAPSTONE_ASSISTIVE_SUPABASE_URL` | Operator secret/config | Server-only canonical HTTPS staging base URL; never `NEXT_PUBLIC_`. |
-| `SUPABASE_SECRET_KEY` | Render secret | Modern `sb_secret_...` database credential. Legacy service-role JWTs are refused by this worker. |
-| `CAPSTONE_ASSISTIVE_PADDLE_MODELS_DIR` | Blueprint fixed value | `/opt/capstone/artifacts/paddle`. |
-| `CAPSTONE_ASSISTIVE_LANGUAGETOOL_ARCHIVE` | Blueprint fixed value | Exact embedded `LanguageTool-stable.zip`. |
-| `CAPSTONE_ASSISTIVE_LANGUAGETOOL_JAR` | Blueprint fixed value | Exact embedded LanguageTool 6.6 server JAR. |
-| `RENDER_INSTANCE_ID` | Render default variable | Bounded worker identity for heartbeat ownership. |
-| `RENDER_GIT_COMMIT` | Render default variable | Exact deployment version stored with heartbeat evidence. |
+| `SUPABASE_SECRET_KEY` | Platform secret | Modern `sb_secret_...` credential. Legacy service-role JWTs are refused. |
+| `CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID` | Deployment | Bounded worker identity for heartbeat ownership. |
+| `CAPSTONE_DEPLOYMENT_VERSION` | Deployment | Exact 40-hex commit recorded with liveness evidence. |
+| `CAPSTONE_ASSISTIVE_IMAGE_DIGEST` | Deployment | Immutable `sha256:` digest. Required for on-demand execution. |
+| `CAPSTONE_ASSISTIVE_PADDLE_MODELS_DIR` | Fixed value | `/opt/capstone/artifacts/paddle`. |
+| `CAPSTONE_ASSISTIVE_LANGUAGETOOL_ARCHIVE` | Fixed value | Exact embedded `LanguageTool-stable.zip`. |
+| `CAPSTONE_ASSISTIVE_LANGUAGETOOL_JAR` | Fixed value | Exact embedded LanguageTool 6.6 server JAR. |
 
-Provider children receive allowlisted process environments and never inherit Supabase credentials.
+The historical hosting-provider variables remain accepted as aliases for the two identity values, so
+an existing continuous deployment keeps working unchanged.
+
+`apps/assistive-worker/Dockerfile.hosted` selects the exact Node base version, pinned Python provider
+packages, and Java 17 runtime. During image build it downloads only the exact numbered PP-OCRv6 Small
+detection and recognition archives and the LanguageTool 6.6 archive, verifies their frozen SHA-256
+values, and embeds them. Startup rechecks provider versions and hashes, Java 17+, database queue
+health, and the exact deployment identity before publishing `READY`. A build or startup mismatch
+fails closed; no runtime model download or fallback provider exists.
+
+Provider children receive allowlisted process environments and never inherit database credentials.
 Do not add shell commands, configurable executables, model URLs, RPC names, public request handlers,
-or a persistent disk to this service.
+or a persistent disk to either job.
 
-| Deployment command | Exact contract |
-| :--- | :--- |
-| Build | Render performs a Docker build with context `.` and `apps/assistive-worker/Dockerfile.hosted`; there is no separate shell build command. |
-| Start | The image command is `npm run run:assistive-worker:hosted --workspace=apps/admin-cms`. |
-| Health | No HTTP health path exists. The service proves readiness through the service-role heartbeat RPC and Admin consumes only the bounded availability RPC. |
+The database is the health surface for both profiles. There is no HTTP health endpoint, and one must
+not be added merely to satisfy web-service conventions.
 
-#### Heartbeat and Admin truthfulness
+Admin permits staff to enqueue only when the web runtime is the exact verified staging target, its
+hosted flag is exactly `true`, and either a compatible `READY` heartbeat is no more than 60 seconds
+old **or** a compatible on-demand executor is registered with launch capacity remaining. Stale,
+incompatible, malformed, or unreadable evidence disables enqueue and tells staff plainly why.
+Historical findings remain readable throughout.
 
-Migration `20260828120000_assistive_worker_heartbeat.sql` adds one RLS-forced operational table and
-two fixed service-role RPCs. A healthy worker writes `READY` every 15 seconds with its environment,
-pipeline, deployment, OCR, and language identities. Admin permits enqueue only when the web runtime
-is the exact verified staging target, its hosted flag is exactly `true`, and at least one matching
-`READY` heartbeat is no more than 60 seconds old. `STOPPING`, stale, incompatible, malformed, or
-unreadable evidence disables enqueue and shows staff: **“Assistive checks are temporarily
-unavailable because the processing worker is not ready.”** Historical findings remain readable.
+This readiness evidence does not replace job fencing. Claimed jobs retain their 120-second lease,
+rotated claim token, cancellation checks, and two-attempt recovery bound. On `SIGTERM` the worker
+stops claiming, finishes the current fenced operation, publishes `STOPPING`, and exits. If it is
+killed first, Admin reports unavailable after 60 seconds and the job becomes eligible for the
+existing lease recovery after 120 seconds.
 
-This heartbeat does not replace job fencing. Claimed jobs retain their 120-second lease, rotated
-claim token, cancellation checks, and two-attempt recovery bound. On SIGTERM/SIGINT the worker stops
-claiming, finishes the current fenced operation when Render's shutdown window permits, publishes
-`STOPPING`, and exits. If it is killed first, Admin fails unavailable after 60 seconds and the job is
-eligible for the existing lease recovery after 120 seconds. Render recommends handling SIGTERM for
-background workers; see [platform maintenance](https://render.com/docs/platform-maintenance).
-
-#### Manual provisioning after merge
-
-This repository change does not deploy, migrate, or mutate hosted state. After independent review:
-
-1. Confirm the exact merged commit and that all required CI jobs pass.
-2. Obtain separate authorization to reconcile the staging database through this repository's latest
-   migration. Do not start the worker against a database without the heartbeat RPCs.
-3. In Render, create a **new Blueprint** connected to this repository and select the root
-   `render.yaml`. Never reuse the Prototype service or the Admin/CMS web service. Render's manual
-   Blueprint flow is documented in [Infrastructure as Code](https://render.com/docs/infrastructure-as-code).
-4. Confirm `type: worker`, Docker context `.`, the hosted worker Dockerfile, Singapore region,
-   `2c-4g`, one instance, automatic deploys off, and 300-second shutdown delay.
-5. Supply only the three `sync: false` values: expected Supabase host, server-only Supabase URL, and
-   `SUPABASE_SECRET_KEY`. Confirm Render supplies valid `RENDER_INSTANCE_ID` and `RENDER_GIT_COMMIT`.
-6. Manually deploy the exact reviewed commit. A successful build proves archive hashes; a successful
-   startup proves database and provider health. Do not enqueue a test project yet.
-7. Inspect the bounded availability RPC from a governed service-role context. It must report
-   `AVAILABLE`, a positive compatible-worker count, and a recent timestamp.
-8. Only then set `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED=true` on the separate Admin/CMS web
-   service and redeploy that web service. Use synthetic staging projects for acceptance.
-
-The current repository contains 46 migrations ending at
-`20260828120000_assistive_worker_heartbeat.sql`. The separately developed activation-authority
-migration is now part of the current executable manifest. This worker contract does not alter its
-public-feed authority.
-
-#### Start, stop, restart, rotation, and incident response
-
-- **Start/restart:** manually deploy or restart the dedicated worker in Render. Wait for a fresh
-  compatible heartbeat before enabling or resuming staff enqueue.
-- **Stop:** suspend the worker or scale it to zero only during an authorized incident/change window.
-  New enqueue becomes unavailable after `STOPPING` immediately or after 60 seconds if the process
-  cannot publish its final heartbeat. Do not delete or manually rewrite queued jobs.
-- **Deploy/rollback:** automatic deploys remain off. Deploy the exact reviewed commit. A rollback is
-  valid only to a commit with the same pipeline and capability identities and compatible database
-  schema; never roll back a database migration through this service.
-- **Credential rotation:** replace `SUPABASE_SECRET_KEY` in the worker service, manually deploy, and
-  confirm a heartbeat bearing the new `RENDER_GIT_COMMIT`. Never print or copy the value into logs,
-  commands, source, or Admin browser configuration.
-- **Provider/startup failure:** leave Admin enqueue disabled. Check only bounded Render events/logs
-  for build hash failure, `ASSISTIVE_WORKER_PREFLIGHT_FAILED`, or the generic worker failure code.
-  Rebuild the exact commit; do not bypass hashes, widen versions, or enable a fallback provider.
-- **Crash during a job:** confirm the old heartbeat becomes stale, allow the 120-second lease to
-  expire, restart the worker, and observe normal fenced recovery. Do not clear claim tokens or change
-  job rows manually.
-- **Heartbeat/RPC failure:** verify the expected staging hostname, the applied heartbeat migration,
-  and service-role function grants. An unavailable Admin control is correct until these are fixed.
-- **Resource pressure:** keep one instance and inspect Render memory/CPU evidence. Do not reduce below
-  4 GB or raise worker/provider concurrency without a new bounded capacity qualification.
-
-The database heartbeat is the health surface for this background worker. Do not add a public HTTP
-health endpoint merely to satisfy web-service conventions.
 
 ---
 

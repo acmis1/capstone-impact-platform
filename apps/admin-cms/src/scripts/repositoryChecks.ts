@@ -46,6 +46,9 @@ export function checkTerminology(
 
 const yamlFiles = [
   '.github/workflows/ci.yml',
+  '.github/workflows/assistive-worker-ci.yml',
+  '.github/workflows/assistive-benchmark-ci.yml',
+  '.github/workflows/assistive-worker-image.yml',
   '.github/ISSUE_TEMPLATE/bug.yml',
   '.github/ISSUE_TEMPLATE/feature.yml',
   '.github/ISSUE_TEMPLATE/task.yml',

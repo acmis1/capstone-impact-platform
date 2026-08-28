@@ -41,6 +41,19 @@ Use one copy per candidate release. Leave every item unchecked until its stated 
 - [ ] `/login` returned the expected HTML surface. Evidence: ____
 - [ ] Post-deploy hosted smoke passed without credentials or mutation. Evidence: ____
 
+## Zero-cost assistive execution
+
+- [ ] `npm run check:zero-cost` passed on the candidate. Evidence: ____
+- [ ] One execution profile is chosen and recorded: zero-cost on-demand executor, or School-owned continuous worker. Evidence: ____
+- [ ] No paid background worker, dedicated workload profile, paid log workspace, paid registry, or paid network component was introduced. Evidence: ____
+- [ ] Both executor images are pinned by immutable digest, and the deployed digests match the registration. Evidence: ____
+- [ ] The executor was registered for the exact reviewed commit and image digest. Evidence: ____
+- [ ] The dispatcher authenticates as the dedicated least-privilege database role and holds no server secret key. Evidence: ____
+- [ ] The launch ceiling of 40 starts per rolling 31-day window is enforced by database constraint on the target. Evidence: ____
+- [ ] Assistive unavailability was demonstrated not to block import, review, approval, or publication. Evidence: ____
+- [ ] End-to-end assistive latency was measured and compared with the PP1 p95 target, or the profile is explicitly recorded as not yet accepted. Evidence: ____
+- [ ] Third-party redistribution position is settled before any image is published publicly. Evidence: ____
+
 ## Core workflow
 
 Reference the integrated workflow evidence; do not create a competing release-scale harness.

@@ -52,6 +52,9 @@ jobs:
       - name: Repository terminology check
         run: npm run check:terminology
 
+      - name: Zero-cost execution envelope check
+        run: npm run check:zero-cost
+
       - name: GitHub YAML parse check
         run: npm run check:yaml
 
@@ -200,10 +203,10 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify forty-six migrations and local integrity
+      - name: Verify forty-seven migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 46
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 47
 
       - name: Verify multi-image gallery position invariant against the real schema
         run: npm run verify:gallery-constraint-runtime --workspace=apps/admin-cms
@@ -288,6 +291,9 @@ jobs:
 
       - name: Verify assistive worker heartbeat runtime behavior
         run: npm run verify:assistive-worker-heartbeat-runtime --workspace=apps/admin-cms
+
+      - name: Verify assistive execution control Migration 0047 runtime behavior
+        run: npm run verify:assistive-execution-control-runtime --workspace=apps/admin-cms
 
       - name: Verify bulk project review workflow runtime behavior
         run: npm run verify:bulk-project-review-runtime --workspace=apps/admin-cms

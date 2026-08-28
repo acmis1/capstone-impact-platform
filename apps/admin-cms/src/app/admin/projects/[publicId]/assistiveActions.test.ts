@@ -7,7 +7,7 @@ import { createSupabaseAdminClient } from '../../../../lib/supabase/admin';
 import {
   cancelAssistiveValidation,
   enqueueAssistiveValidation,
-  isAssistiveExecutionAvailable,
+  resolveAssistiveExecutionAvailability,
   loadAssistiveInspection,
   recordAssistiveFindingDisposition,
 } from '../../../../assistive-validation';
@@ -36,7 +36,7 @@ vi.mock('../../../../assistive-validation', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../assistive-validation')>();
   return {
     ...actual,
-    isAssistiveExecutionAvailable: vi.fn().mockResolvedValue(true),
+    resolveAssistiveExecutionAvailability: vi.fn().mockResolvedValue({ state: 'READY', canEnqueue: true, message: null }),
     enqueueAssistiveValidation: vi.fn(),
     cancelAssistiveValidation: vi.fn(),
     recordAssistiveFindingDisposition: vi.fn(),
@@ -53,7 +53,7 @@ const ADMIN_ID = 'admin-user-123';
 describe('Assistive Validation Server Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(isAssistiveExecutionAvailable).mockResolvedValue(true);
+    vi.mocked(resolveAssistiveExecutionAvailability).mockResolvedValue({ state: 'READY', canEnqueue: true, message: null });
     vi.mocked(getServerEnv).mockReturnValue({
       SUPABASE_DRAFT_BUCKET: 'capstone-drafts',
     } as unknown as ReturnType<typeof getServerEnv>);
@@ -148,13 +148,29 @@ describe('Assistive Validation Server Actions', () => {
     });
 
     it('rejects when assistive execution is not available in environment', async () => {
-      vi.mocked(isAssistiveExecutionAvailable).mockResolvedValueOnce(false);
+      vi.mocked(resolveAssistiveExecutionAvailability).mockResolvedValueOnce({
+        state: 'TEMPORARILY_UNAVAILABLE',
+        canEnqueue: false,
+        message: 'Assistive checks are temporarily unavailable because the processing worker is not ready.',
+      });
       const result = await runAssistiveChecksAction(PUBLIC_ID);
       expect(result).toEqual({
         ok: false,
         code: 'EXECUTION_UNAVAILABLE',
         message: 'Assistive checks are temporarily unavailable because the processing worker is not ready.',
       });
+    });
+
+    it('distinguishes a reached processing limit from an unready worker', async () => {
+      vi.mocked(resolveAssistiveExecutionAvailability).mockResolvedValueOnce({
+        state: 'BUDGET_REACHED',
+        canEnqueue: false,
+        message: 'Assistive checks have reached their processing limit for now. You can continue '
+          + 'reviewing and editing project information manually.',
+      });
+      const result = await runAssistiveChecksAction(PUBLIC_ID);
+      expect(result).toMatchObject({ ok: false, code: 'EXECUTION_BUDGET_REACHED' });
+      expect(enqueueAssistiveValidation).not.toHaveBeenCalled();
     });
 
     it('enqueues validation and returns runId and status on success', async () => {

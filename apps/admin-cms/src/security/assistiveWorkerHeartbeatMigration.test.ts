@@ -16,11 +16,11 @@ describe('assistive worker heartbeat migration and deployment boundary', () => {
   it('remains byte-identical to current main in the combined migration inventory', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(46);
+    expect(files).toHaveLength(47);
     expect(files).toContain(filename);
     expect(() => execFileSync('git', [
       'diff', '--exit-code', 'origin/main', '--',
-      ...files.filter((file) => file !== '20260826090000_public_feed_activation_authority_guard.sql')
+      ...files.filter((file) => file !== '20260828170000_assistive_execution_control.sql')
         .map((file) => `infra/supabase/migrations/${file}`),
     ], { cwd: root, stdio: 'pipe' })).not.toThrow();
   });
@@ -46,14 +46,19 @@ describe('assistive worker heartbeat migration and deployment boundary', () => {
     expect(compact).toContain('REVOKE ALL ON TABLE public.assistive_worker_heartbeats FROM PUBLIC, anon, authenticated, service_role');
   });
 
-  it('declares a true background worker with no public request endpoint', () => {
-    const blueprint = fs.readFileSync(path.join(root, 'render.yaml'), 'utf8');
-    const entrypoint = fs.readFileSync(path.join(root, 'apps/admin-cms/src/scripts/runHostedAssistiveCoordinator.ts'), 'utf8');
-    expect(blueprint).toMatch(/type:\s*worker/);
-    expect(blueprint).toMatch(/plan:\s*2c-4g/);
-    expect(blueprint).toMatch(/numInstances:\s*1/);
-    expect(blueprint).toMatch(/maxShutdownDelaySeconds:\s*300/);
-    expect(blueprint).not.toMatch(/healthCheckPath|type:\s*web/);
-    expect(entrypoint).not.toMatch(/createServer|listen\(|fetch\s*\(|POST|route/i);
+  it('no longer offers the paid background-worker hosting path', () => {
+    // Render documents no free instance type for background workers, so the blueprint that
+    // declared one is deleted rather than left available to a future maintainer.
+    expect(fs.existsSync(path.join(root, 'render.yaml'))).toBe(false);
+  });
+
+  it('exposes no public request endpoint from any worker entrypoint', () => {
+    for (const entrypointPath of [
+      'apps/admin-cms/src/scripts/runHostedAssistiveCoordinator.ts',
+      'apps/admin-cms/src/scripts/runOnDemandAssistiveCoordinator.ts',
+    ]) {
+      const entrypoint = fs.readFileSync(path.join(root, entrypointPath), 'utf8');
+      expect(entrypoint).not.toMatch(/createServer|listen\(|POST|route/i);
+    }
   });
 });

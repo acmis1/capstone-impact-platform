@@ -238,8 +238,8 @@ async function main(): Promise<void> {
     const approvalBefore = psql(`SELECT count(*) FROM public.approval_records WHERE project_id = '${projectId}'::uuid;`);
     const publicationBefore = psql('SELECT count(*) FROM public.published_snapshots;');
 
-    await scenario(1, 'clean schema has exactly 46 applied migrations', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '46');
+    await scenario(1, 'clean schema has exactly 47 applied migrations', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '47');
     });
     await scenario(2, 'v1 and one-candidate v2 findings satisfy the shared validator', () => {
       assert.equal(validator([v1Finding, duplicateFinding(1)]), true);

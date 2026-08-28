@@ -5,13 +5,14 @@ import { z } from 'zod';
 import {
   cancelAssistiveValidation,
   enqueueAssistiveValidation,
-  isAssistiveExecutionAvailable,
+  resolveAssistiveExecutionAvailability,
   loadAssistiveInspection,
   recordAssistiveFindingDisposition,
   SupabaseAssistiveInputRepository,
   SupabaseAssistiveJobRepository,
   SupabaseAssistiveValidationRepository,
   SupabaseAssistiveWorkerHeartbeatRepository,
+  SupabaseAssistiveExecutionControlRepository,
   assistiveInspectionResponseSchema,
   type AssistiveInspectionView,
   type AssistiveRecordableDisposition,
@@ -68,14 +69,20 @@ export async function runAssistiveChecksAction(publicIdInput: unknown): Promise<
 
     const env = getServerEnv();
     const supabase = createSupabaseAdminClient();
-    if (!await isAssistiveExecutionAvailable(
+    const availability = await resolveAssistiveExecutionAvailability(
       env.supabaseUrl,
-      new SupabaseAssistiveWorkerHeartbeatRepository(supabase, process.env.RENDER_GIT_COMMIT ?? ''),
-    )) {
+      new SupabaseAssistiveWorkerHeartbeatRepository(
+        supabase,
+        process.env.CAPSTONE_DEPLOYMENT_VERSION ?? process.env.RENDER_GIT_COMMIT ?? '',
+      ),
+      new SupabaseAssistiveExecutionControlRepository(supabase),
+    );
+    if (!availability.canEnqueue) {
       return {
         ok: false,
-        code: 'EXECUTION_UNAVAILABLE',
-        message: 'Assistive checks are temporarily unavailable because the processing worker is not ready.',
+        code: availability.state === 'BUDGET_REACHED' ? 'EXECUTION_BUDGET_REACHED' : 'EXECUTION_UNAVAILABLE',
+        message: availability.message
+          ?? 'Assistive checks are temporarily unavailable because the processing worker is not ready.',
       };
     }
 

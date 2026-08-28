@@ -9,7 +9,9 @@ on:
       - 'apps/admin-cms/src/assistive-validation/**'
       - 'infra/supabase/migrations/20260820160000_assistive_validation_job_coordination.sql'
       - 'infra/supabase/migrations/20260828120000_assistive_worker_heartbeat.sql'
-      - 'render.yaml'
+      - 'apps/assistive-worker/Dockerfile.dispatcher'
+      - 'infra/supabase/migrations/20260828170000_assistive_execution_control.sql'
+      - 'infra/azure/assistive-executor/**'
       - 'docs/assistive-validation/phase-1-document-extraction.md'
       - 'docs/assistive-validation/phase-4-async-job-coordination.md'
   pull_request:
@@ -20,7 +22,9 @@ on:
       - 'apps/admin-cms/src/assistive-validation/**'
       - 'infra/supabase/migrations/20260820160000_assistive_validation_job_coordination.sql'
       - 'infra/supabase/migrations/20260828120000_assistive_worker_heartbeat.sql'
-      - 'render.yaml'
+      - 'apps/assistive-worker/Dockerfile.dispatcher'
+      - 'infra/supabase/migrations/20260828170000_assistive_execution_control.sql'
+      - 'infra/azure/assistive-executor/**'
       - 'docs/assistive-validation/phase-1-document-extraction.md'
       - 'docs/assistive-validation/phase-4-async-job-coordination.md'
 

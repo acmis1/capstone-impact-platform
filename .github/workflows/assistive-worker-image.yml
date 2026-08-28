@@ -1,0 +1,81 @@
+name: Assistive Executor Images
+
+# Reproducible build of the two executor images.
+#
+# Manual only, and publishing is opt-in and off by default: a maintainer must deliberately request
+# it after reviewing the third-party redistribution position recorded in
+# docs/handover/third-party-licences.md. A build alone proves the pinned provider artifact hashes
+# and prints the digests the infrastructure template must be pinned to.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_worker:
+        description: Build the heavy assistive worker image
+        type: boolean
+        default: true
+      build_dispatcher:
+        description: Build the scheduled dispatcher image
+        type: boolean
+        default: true
+      publish:
+        description: Publish to the container registry (requires reviewed licence clearance)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build executor images
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: ${{ inputs.publish && 'write' || 'none' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to the container registry
+        if: inputs.publish
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build heavy assistive worker image
+        if: inputs.build_worker
+        uses: docker/build-push-action@v6
+        id: worker
+        with:
+          context: .
+          file: ./apps/assistive-worker/Dockerfile.hosted
+          platforms: linux/amd64
+          provenance: false
+          push: ${{ inputs.publish }}
+          tags: ghcr.io/${{ github.repository }}/capstone-assistive-worker:${{ github.sha }}
+
+      - name: Build scheduled dispatcher image
+        if: inputs.build_dispatcher
+        uses: docker/build-push-action@v6
+        id: dispatcher
+        with:
+          context: .
+          file: ./apps/assistive-worker/Dockerfile.dispatcher
+          platforms: linux/amd64
+          provenance: false
+          push: ${{ inputs.publish }}
+          tags: ghcr.io/${{ github.repository }}/capstone-assistive-dispatcher:${{ github.sha }}
+
+      - name: Report image digests to pin in infrastructure
+        run: |
+          echo "commit: ${{ github.sha }}"
+          echo "worker digest: ${{ steps.worker.outputs.digest }}"
+          echo "dispatcher digest: ${{ steps.dispatcher.outputs.digest }}"
+          echo "Published: ${{ inputs.publish }}"

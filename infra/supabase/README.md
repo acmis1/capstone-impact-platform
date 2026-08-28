@@ -7,7 +7,7 @@ This directory contains the version-controlled database schema migrations, polic
 ## ⚠️ Current Environment & Staging Status
 
 > [!NOTE]
-> * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. The current 46-file timestamped migration manifest through `20260828120000_assistive_worker_heartbeat.sql` is the executable repository baseline and passes its automated manifest contract. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
+> * **Local Development:** Reproducible local Supabase development is verified on Windows with Docker Desktop via CLI 2.109.1. The current 47-file timestamped migration manifest through `20260828170000_assistive_execution_control.sql` is the executable repository baseline and passes its automated manifest contract. macOS and Linux remain unverified; independent human verification remains pending. Local development requires **no** Supabase cloud account or organization membership.
 > * **Active Hosted Staging (`capstone-admin-cms-staging-v2-2026`):** Point-in-time read-only evidence records 46 rows in `supabase_migrations.schema_migrations`, from earliest `20260601035138` through latest `20260828120000`. This migration-history evidence does not by itself prove exact schema, grant, or RPC parity; those remain separate governed checks.
 > * **Historical/Paused Hosted Staging (`capstone-admin-cms-staging-2026`):** This is the environment associated with the old manually evolved migration baseline. Its history must not be confused with the active staging-v2 evidence.
 > * **Corrective Fix:** Migration `0006` corrected the initial administrator bootstrap runtime by replacing `pg_catalog.trim` with PostgreSQL standard `pg_catalog.btrim`.
@@ -71,7 +71,7 @@ npm run supabase:stop
 
 ---
 
-## Selected Migration Inventory (46 Migrations Total)
+## Selected Migration Inventory (47 Migrations Total)
 
 The executable files under `migrations/` and the exact manifest enforced by
 `apps/admin-cms/src/deployment/hostedDeploymentReadiness.ts` are authoritative. The entries below
@@ -104,3 +104,6 @@ highlight major milestones rather than replacing that complete manifest.
 * **[20260824183000_public_feed_writer_protocol.sql](./migrations/20260824183000_public_feed_writer_protocol.sql):** Adds the service-role-only token/epoch-fenced canonical writer protocol for activation, publication, removal, reconciliation, rollback, and explicit forward recovery; adds `public.get_project_reconciliation_readiness` as a separate published-target deployment authority that re-derives participant confirmation, gallery position, and per-image alt-text evidence and is proved again at the final durable pre-write boundary; legacy canonical writer RPCs fail closed.
 * **[20260825030000_public_feed_taxonomy_operation_guard.sql](./migrations/20260825030000_public_feed_taxonomy_operation_guard.sql):** Freezes referenced discipline and industry-category lookup identities during active public-feed operations with narrow `UPDATE`/`DELETE` triggers, while leaving unrelated and newly inserted lookup rows available.
 * **[20260826090000_public_feed_activation_authority_guard.sql](./migrations/20260826090000_public_feed_activation_authority_guard.sql):** Uses durable global generation authority plus project/discipline write fences to keep a bound activation candidate authoritative through its first durable write or observation boundary under PostgreSQL MVCC, including recovery from `PREPARED`, without globally serializing unrelated draft projects.
+* **[20260828090000_assistive_language_findings.sql](./migrations/20260828090000_assistive_language_findings.sql):** Adds bounded local language-suggestion finding evidence to the assistive persistence contract.
+* **[20260828120000_assistive_worker_heartbeat.sql](./migrations/20260828120000_assistive_worker_heartbeat.sql):** Adds bounded liveness evidence for a continuously running assistive worker and the availability lookup Admin consumes.
+* **[20260828170000_assistive_execution_control.sql](./migrations/20260828170000_assistive_execution_control.sql):** Adds the `assistive_execution_control` schema holding pre-start cost fencing for on-demand assistive execution: a serialisation guard whose `CHECK` constraints fix the ceiling at 40 launches per rolling 31-day window with one active execution, launch reservations whose constraint makes a consumed unit releasable only from the single state that proves no start request was transmitted, executor registrations, and the dedicated least-privilege `capstone_assistive_dispatcher` role that can execute four execution-control routines and reach no table, project data, workflow, or publication routine. The schema is not exposed through the Data API and cannot approve or publish anything.

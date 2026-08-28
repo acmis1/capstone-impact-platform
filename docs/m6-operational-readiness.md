@@ -2,7 +2,7 @@
 
 This document is the canonical PP1 M6 operational-readiness contract for the active Admin/CMS. It defines what the repository can prove now, what a supervised hosted rehearsal must prove later, and which decisions remain with the institution. It does not authorize a deployment, hosted mutation, restore, rollback, DNS change, Duda change, email, or secret access.
 
-Executable application code, migrations, and tests on the reviewed commit remain the source of truth. The current package contains 46 migration files ending at `20260828120000_assistive_worker_heartbeat`; `npm run check:operational-readiness` verifies that exact manifest and fails closed when it changes unexpectedly.
+Executable application code, migrations, and tests on the reviewed commit remain the source of truth. The current package contains 47 migration files ending at `20260828170000_assistive_execution_control`; `npm run check:operational-readiness` verifies that exact manifest and fails closed when it changes unexpectedly.
 
 ## Evidence vocabulary
 
@@ -27,7 +27,7 @@ Every capability in this package uses exactly one status:
 | `/api/readiness` dependency readiness | `IMPLEMENTED_AND_TESTED` | Route and tests prove bounded configuration, staging identity, and a Supabase `HEAD` probe; they do not prove schema or workflows. |
 | Read-only hosted smoke | `IMPLEMENTED_AND_TESTED` | The existing verifier checks health, readiness, login, deployment SHA, redirects, timeouts, and migration expectation using GET/HEAD only. A current accepted hosted run is not recorded by this change. |
 | Current hosted deployment identity | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | Render can expose a valid `RENDER_GIT_COMMIT`; the exact reviewed-versus-deployed comparison still needs a supervised run. This is a separate deployment/release gate from migration-history evidence. |
-| Migration manifest and readiness inspection | `IMPLEMENTED_AND_TESTED` | The repository manifest has 46 migrations, and active staging-v2 has point-in-time evidence of 46 tracked rows from `20260601035138` through `20260828120000`. Exact schema/grant/RPC parity remains independently re-verifiable, and migration alignment must be rechecked for each release candidate. This status describes the repository checker, not full hosted schema acceptance. |
+| Migration manifest and readiness inspection | `IMPLEMENTED_AND_TESTED` | The repository manifest has 47 migrations. Active staging-v2 has point-in-time evidence of 46 tracked rows from `20260601035138` through `20260828120000`, so the execution-control migration `20260828170000` is a pending governed forward application there. Exact schema/grant/RPC parity remains independently re-verifiable, and migration alignment must be rechecked for each release candidate. This status describes the repository checker, not full hosted schema acceptance. |
 | Historical staging reconciliation | `DOCUMENTED_ONLY` | The runbook preserves the manual-repair background for the old paused staging instance. Active staging-v2 has separate current history evidence; any future repair consideration requires read-only mismatch evidence and separate authorization. |
 | Local database recovery mechanics | `IMPLEMENTED_AND_TESTED` | The bounded verifier owns, backs up, destroys, restores, verifies, and cleans only its synthetic Local schema. |
 | Local Storage recovery mechanics | `IMPLEMENTED_AND_TESTED` | The same verifier owns and restores only its synthetic Local bucket and verifies canonical buckets remain untouched. |
@@ -253,13 +253,13 @@ Do not include response bodies, headers, tokens, cookies, query strings, user id
 
 ## Render Admin/CMS deployment and rollback runbook
 
-The authoritative application contract is in [Admin/CMS Hosted Staging Deployment](admin-cms-hosted-deployment.md): repository root, `npm ci`, `npm run build:admin`, `npm run start --workspace=apps/admin-cms`, and Render health path `/api/readiness`. The root `render.yaml` currently describes only the assistive background worker; it is not proof of an Admin/CMS web-service Blueprint.
+The authoritative application contract is in [Admin/CMS Hosted Staging Deployment](admin-cms-hosted-deployment.md): repository root, `npm ci`, `npm run build:admin`, `npm run start --workspace=apps/admin-cms`, and Render health path `/api/readiness`. There is no tracked Render Blueprint: the paid assistive background worker is withdrawn and assistive execution is governed by [Zero-Cost Assistive Executor](operations/zero-cost-assistive-executor.md).
 
 ### Pre-deploy gates
 
 1. Record the exact reviewed full SHA, source branch, approval, and clean CI for that SHA.
 2. Run `npm run check:operational-readiness -- --expected-commit=<sha>`.
-3. Record hosted migration history/schema evidence against the exact 46-file manifest; do not infer applied migrations from `/api/readiness`.
+3. Record hosted migration history/schema evidence against the exact 47-file manifest; do not infer applied migrations from `/api/readiness`.
 4. Confirm backup/recovery evidence required by the change and the last known good release.
 5. Confirm environment variable **names**, target identity, secret ownership, and rotation status without exposing values.
 6. Confirm the Render web service uses the Admin/CMS root/commands and `/api/readiness`, not the Prototype service.

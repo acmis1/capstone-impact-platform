@@ -16,12 +16,12 @@ describe('assistive language finding migration contract', () => {
   it('remains byte-identical to current main in the combined migration inventory', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
-    expect(files).toHaveLength(46);
+    expect(files).toHaveLength(47);
     expect(files).toContain(filename);
     expect(() => execFileSync(
       'git',
       ['diff', '--exit-code', 'origin/main', '--', ...files
-        .filter((file) => file !== '20260826090000_public_feed_activation_authority_guard.sql')
+        .filter((file) => file !== '20260828170000_assistive_execution_control.sql')
         .map((file) => `infra/supabase/migrations/${file}`)],
       { cwd: root, stdio: 'pipe' },
     )).not.toThrow();

@@ -22,11 +22,12 @@ import { ProjectMetadataEditor } from '../../../../components/admin/ProjectMetad
 import { GuardedProjectBackLink, ProjectMetadataNavigationProvider } from '../../../../components/admin/ProjectMetadataNavigation';
 import { ProjectAssistiveChecks } from '../../../../components/admin/ProjectAssistiveChecks';
 import {
-  isAssistiveExecutionAvailable,
+  resolveAssistiveExecutionAvailability,
   loadAssistiveInspection,
   SupabaseAssistiveValidationRepository,
   SupabaseAssistiveInputRepository,
   SupabaseAssistiveWorkerHeartbeatRepository,
+  SupabaseAssistiveExecutionControlRepository,
   ASSISTIVE_PIPELINE_VERSION,
   type AssistiveInspectionView,
 } from '../../../../assistive-validation';
@@ -141,6 +142,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let initialAssistiveInspection: AssistiveInspectionView | null = null;
   let initialAssistiveInspectionReadFailed = false;
   let canExecuteAssistiveChecks = false;
+  let assistiveUnavailableMessage: string | undefined;
 
   // Essential dependencies: without the base project or authenticated staff context there is no
   // safe project-detail page to render.
@@ -197,10 +199,16 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       const notificationRepository = new SupabaseParticipantPreviewNotificationRepository();
       const reminderRepository = new SupabaseParticipantPreviewReminderRepository();
       const env = getServerEnv();
-      canExecuteAssistiveChecks = await isAssistiveExecutionAvailable(
+      const assistiveAvailability = await resolveAssistiveExecutionAvailability(
         env.supabaseUrl,
-        new SupabaseAssistiveWorkerHeartbeatRepository(supabase, process.env.RENDER_GIT_COMMIT ?? ''),
+        new SupabaseAssistiveWorkerHeartbeatRepository(
+          supabase,
+          process.env.CAPSTONE_DEPLOYMENT_VERSION ?? process.env.RENDER_GIT_COMMIT ?? '',
+        ),
+        new SupabaseAssistiveExecutionControlRepository(supabase),
       );
+      canExecuteAssistiveChecks = assistiveAvailability.canEnqueue;
+      assistiveUnavailableMessage = assistiveAvailability.message ?? undefined;
       localPublicationExecutionAvailable = canPreparePublicationPlan && isLocalPublicationExecutionAvailable(env.supabaseUrl);
       publicationExecutionTarget = localPublicationExecutionAvailable
         ? 'local'
@@ -555,6 +563,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                 canEditMetadata={canEditMetadata}
                 canReview={canReview}
                 canExecute={canExecuteAssistiveChecks}
+                unavailableMessage={assistiveUnavailableMessage}
                 initialInspection={initialAssistiveInspection}
                 initialReadFailed={initialAssistiveInspectionReadFailed}
                 headingLevel="h3"
