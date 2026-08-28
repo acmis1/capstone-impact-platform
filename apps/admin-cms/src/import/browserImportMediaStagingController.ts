@@ -3,6 +3,7 @@ import {
   isIgnoredSystemFile,
   normalizeRelativePath,
 } from './browserSelection';
+import { MAX_GALLERY_IMAGES, parseGalleryFilePosition } from './galleryConvention';
 import type { SelectionManifest } from './browserImportPreviewContract';
 import type { BrowserImportCommitIntent } from './browserImportCommitIntentContract';
 import {
@@ -16,6 +17,18 @@ import type { AdminReferenceMappingConfig } from './adminReferenceSharedContract
 
 export interface BrowserImportMediaStagingLock {
   current: boolean;
+}
+
+const SUPPORTED_GALLERY_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
+
+function isSupportedGallerySnapshotFile(fileName: string): boolean {
+  const position = parseGalleryFilePosition(fileName);
+  if (position === null || position > MAX_GALLERY_IMAGES) return false;
+
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  if (!extension) return false;
+
+  return SUPPORTED_GALLERY_EXTENSIONS.has(extension);
 }
 
 export interface RunBrowserImportMediaStagingParams {
@@ -130,7 +143,7 @@ export async function runBrowserImportMediaStaging(
         const key = generateUploadKey(norm);
         formData.append(key, file);
       } else if (
-        (lowerName === 'poster.png' || lowerName === 'poster.pdf' || lowerName === 'snapshot-1.png') &&
+        (lowerName === 'poster.png' || lowerName === 'poster.pdf' || isSupportedGallerySnapshotFile(lowerName)) &&
         selectedPackageSet.has(packagePath)
       ) {
         const key = generateUploadKey(norm);
