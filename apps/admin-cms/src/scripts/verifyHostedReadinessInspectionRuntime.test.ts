@@ -18,6 +18,14 @@ const source = fs.readFileSync(
   'utf8',
 );
 
+const EXPECTED_PRIVILEGE_HIDDEN_TABLES = [
+  'password_recovery_sessions',
+  'assistive_validation_runs',
+  'assistive_validation_findings',
+  'assistive_validation_jobs',
+  'assistive_worker_heartbeats',
+];
+
 function assertedLiteral(expression: string): number {
   const marker = `assert.equal(${expression}, `;
   const start = source.indexOf(marker);
@@ -36,10 +44,17 @@ describe('Hosted readiness inspection runtime inventory literals', () => {
     expect(assertedLiteral('ALL_REQUIRED_TABLES.length')).toBe(ALL_REQUIRED_TABLES.length);
   });
 
-  it('reports the same RPC name count in its operator-facing evidence line', () => {
-    const reported = source.match(/console\.log\('(\d+) RPC names recognized/);
-    expect(reported).not.toBeNull();
-    expect(Number(reported![1])).toBe(REQUIRED_RPC_NAMES.length);
+  it('asserts the exact privilege-hidden table contract', () => {
+    expect(source).toContain(
+      `const EXPECTED_PRIVILEGE_HIDDEN_TABLES = [\n${EXPECTED_PRIVILEGE_HIDDEN_TABLES.map((table) => `  '${table}',`).join('\n')}\n] as const;`,
+    );
+    expect(source).toContain('assert.deepEqual(evaluation.unverifiedTables, EXPECTED_PRIVILEGE_HIDDEN_TABLES);');
+  });
+
+  it('derives the operator-facing RPC count from the authoritative inventory', () => {
+    expect(source).toContain(
+      'console.log(`${REQUIRED_RPC_NAMES.length} RPC names recognized; exact overload evidence remains manual.`);',
+    );
   });
 
   it('keeps the exact-equality form rather than a lower bound', () => {
