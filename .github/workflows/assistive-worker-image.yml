@@ -27,27 +27,19 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-only:
     name: Build executor images
+    if: ${{ !inputs.publish }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
-      packages: ${{ inputs.publish && 'write' || 'none' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Authenticate to the container registry
-        if: inputs.publish
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build heavy assistive worker image
         if: inputs.build_worker
@@ -58,7 +50,7 @@ jobs:
           file: ./apps/assistive-worker/Dockerfile.hosted
           platforms: linux/amd64
           provenance: false
-          push: ${{ inputs.publish }}
+          push: false
           tags: ghcr.io/${{ github.repository }}/capstone-assistive-worker:${{ github.sha }}
 
       - name: Build scheduled dispatcher image
@@ -70,7 +62,7 @@ jobs:
           file: ./apps/assistive-worker/Dockerfile.dispatcher
           platforms: linux/amd64
           provenance: false
-          push: ${{ inputs.publish }}
+          push: false
           tags: ghcr.io/${{ github.repository }}/capstone-assistive-dispatcher:${{ github.sha }}
 
       - name: Report image digests to pin in infrastructure
@@ -78,4 +70,57 @@ jobs:
           echo "commit: ${{ github.sha }}"
           echo "worker digest: ${{ steps.worker.outputs.digest }}"
           echo "dispatcher digest: ${{ steps.dispatcher.outputs.digest }}"
-          echo "Published: ${{ inputs.publish }}"
+          echo "Published: false"
+
+  publish:
+    name: Build and publish executor images
+    if: ${{ inputs.publish }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to the container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish heavy assistive worker image
+        if: inputs.build_worker
+        uses: docker/build-push-action@v6
+        id: worker
+        with:
+          context: .
+          file: ./apps/assistive-worker/Dockerfile.hosted
+          platforms: linux/amd64
+          provenance: false
+          push: true
+          tags: ghcr.io/${{ github.repository }}/capstone-assistive-worker:${{ github.sha }}
+
+      - name: Build and publish scheduled dispatcher image
+        if: inputs.build_dispatcher
+        uses: docker/build-push-action@v6
+        id: dispatcher
+        with:
+          context: .
+          file: ./apps/assistive-worker/Dockerfile.dispatcher
+          platforms: linux/amd64
+          provenance: false
+          push: true
+          tags: ghcr.io/${{ github.repository }}/capstone-assistive-dispatcher:${{ github.sha }}
+
+      - name: Report image digests to pin in infrastructure
+        run: |
+          echo "commit: ${{ github.sha }}"
+          echo "worker digest: ${{ steps.worker.outputs.digest }}"
+          echo "dispatcher digest: ${{ steps.dispatcher.outputs.digest }}"
+          echo "Published: true"
