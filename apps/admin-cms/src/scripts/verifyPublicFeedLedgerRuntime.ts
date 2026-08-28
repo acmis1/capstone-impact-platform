@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -32,6 +32,17 @@ import {
 import { SupabaseParticipantPreviewRepositoryCore } from '../repositories/SupabaseParticipantPreviewRepositoryCore';
 import { SupabaseProjectRepositoryCore } from '../repositories/SupabaseProjectRepositoryCore';
 import { SupabasePublicationExecutionRepositoryCore } from '../repositories/SupabasePublicationExecutionRepositoryCore';
+import {
+  closePsqlSession,
+  closeTrackedPsqlSessions,
+  commitInteractiveMutation,
+  finishRejectedMutation,
+  sendPsql,
+  settlePsqlOperations,
+  trackInteractivePsqlSession,
+  waitForPsqlMarker,
+  type InteractivePsqlSession,
+} from './interactivePsqlSession';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
 const workdir = process.env.CAPSTONE_VERIFY_SUPABASE_WORKDIR?.trim();
@@ -45,6 +56,9 @@ const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0
 const PDF_BYTES = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF', 'ascii');
 const CRASH_BOUNDARY_REASON = 'Runtime crash-boundary verification';
 const RESPONSE_LOSS_REASON = 'Committed response-loss verification';
+const DOCKER_COMMAND_TIMEOUT_MS = 30_000;
+const PSQL_COMMAND_TIMEOUT_MS = 45_000;
+const STALE_SNAPSHOT_FAILURE = /could not serialize access due to concurrent update|could not serialize access due to read\/write dependencies/i;
 let runtimeApiUrl = '';
 
 function requireDisposableInputs(): void {
@@ -61,16 +75,19 @@ function databaseContainer(): string {
   const rows = execFileSync('docker', [
     'ps', '--filter', `label=com.supabase.cli.project=${projectId}`,
     '--filter', 'name=supabase_db_', '--format', '{{.Names}}',
-  ], { encoding: 'utf8' }).trim().split(/\r?\n/).filter(Boolean);
+  ], { encoding: 'utf8', timeout: DOCKER_COMMAND_TIMEOUT_MS }).trim().split(/\r?\n/).filter(Boolean);
   assert.equal(rows.length, 1, 'Expected exactly one verifier-owned database container.');
   return rows[0];
 }
 
 function psql(sql: string): string {
   return execFileSync('docker', [
-    'exec', databaseContainer(), 'psql', '-U', 'postgres', '-d', 'postgres',
+    'exec', '-e', 'PGOPTIONS=-c statement_timeout=30000 -c lock_timeout=10000',
+    databaseContainer(), 'psql', '-U', 'postgres', '-d', 'postgres',
     '-v', 'ON_ERROR_STOP=1', '-At', '-c', sql,
-  ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  ], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: PSQL_COMMAND_TIMEOUT_MS,
+  }).trim();
 }
 
 function expectPsqlFailure(sql: string, marker: string): void {
@@ -97,76 +114,12 @@ function expectOperationGuardRejection(sql: string, marker: string): void {
   }
 }
 
-interface InteractivePsqlSession {
-  child: ChildProcessWithoutNullStreams;
-  stdout: string;
-  stderr: string;
-}
-
 function startInteractivePsqlSession(): InteractivePsqlSession {
-  const session: InteractivePsqlSession = {
-    child: spawn('docker', [
-      'exec', '-i', databaseContainer(), 'psql', '-X', '-q', '-U', 'postgres', '-d', 'postgres',
-      '-v', 'ON_ERROR_STOP=0', '-At',
-    ], { stdio: ['pipe', 'pipe', 'pipe'] }),
-    stdout: '',
-    stderr: '',
-  };
-  session.child.stdout.on('data', (chunk: Buffer | string) => { session.stdout += chunk.toString(); });
-  session.child.stderr.on('data', (chunk: Buffer | string) => { session.stderr += chunk.toString(); });
-  return session;
-}
-
-function sendPsql(session: InteractivePsqlSession, sql: string): void {
-  assert.equal(session.child.stdin.destroyed, false, `psql stdin closed early: ${session.stderr}`);
-  session.child.stdin.write(`${sql}\n`);
-}
-
-async function waitForPsqlMarker(
-  session: InteractivePsqlSession,
-  marker: string,
-  timeoutMs = 7_000,
-): Promise<void> {
-  if (session.stdout.includes(marker)) return;
-  await new Promise<void>((resolve, reject) => {
-    let settled = false;
-    const finish = (error?: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      session.child.stdout.off('data', inspect);
-      session.child.off('exit', exited);
-      if (error) reject(error); else resolve();
-    };
-    const inspect = () => {
-      if (session.stdout.includes(marker)) finish();
-    };
-    const exited = (code: number | null) => finish(new Error(
-      `psql exited before ${marker} (code ${String(code)}): ${session.stderr}`,
-    ));
-    const timer = setTimeout(() => finish(new Error(
-      `Timed out waiting for ${marker}. stdout=${session.stdout} stderr=${session.stderr}`,
-    )), timeoutMs);
-    session.child.stdout.on('data', inspect);
-    session.child.once('exit', exited);
-    inspect();
-  });
-}
-
-async function closePsqlSession(session: InteractivePsqlSession): Promise<void> {
-  if (session.child.exitCode !== null) return;
-  sendPsql(session, '\\q');
-  session.child.stdin.end();
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      session.child.kill();
-      reject(new Error(`Timed out closing psql session: ${session.stderr}`));
-    }, 5_000);
-    session.child.once('exit', () => {
-      clearTimeout(timer);
-      resolve();
-    });
-  });
+  return trackInteractivePsqlSession(spawn('docker', [
+    'exec', '-i', '-e', 'PGOPTIONS=-c statement_timeout=30000 -c lock_timeout=10000',
+    databaseContainer(), 'psql', '-X', '-q', '-U', 'postgres', '-d', 'postgres',
+    '-v', 'ON_ERROR_STOP=0', '-At',
+  ], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }));
 }
 
 async function beginSnapshotTransaction(
@@ -174,43 +127,29 @@ async function beginSnapshotTransaction(
   marker: string,
 ): Promise<InteractivePsqlSession> {
   const session = startInteractivePsqlSession();
-  sendPsql(session, `BEGIN ISOLATION LEVEL ${isolation};`);
-  sendPsql(session, "SET LOCAL statement_timeout='5s';");
-  sendPsql(session, "SET LOCAL lock_timeout='3s';");
-  sendPsql(session, 'SELECT count(*) FROM public.projects;');
-  sendPsql(session, `SELECT ${sqlLiteral(marker)};`);
-  await waitForPsqlMarker(session, marker);
-  return session;
-}
-
-async function finishRejectedMutation(
-  session: InteractivePsqlSession,
-  sql: string,
-  marker: string,
-  expected: RegExp,
-): Promise<void> {
-  sendPsql(session, sql);
-  sendPsql(session, 'ROLLBACK;');
-  sendPsql(session, `SELECT ${sqlLiteral(marker)};`);
-  await waitForPsqlMarker(session, marker);
-  assert.match(session.stderr, expected, `${marker}: ${session.stderr}`);
-  await closePsqlSession(session);
-}
-
-async function commitInteractiveMutation(
-  session: InteractivePsqlSession,
-  sql: string,
-  mutationMarker: string,
-  commitMarker: string,
-): Promise<void> {
-  sendPsql(session, sql);
-  sendPsql(session, `SELECT ${sqlLiteral(mutationMarker)};`);
-  await waitForPsqlMarker(session, mutationMarker);
-  assert.equal(session.stderr, '', `${mutationMarker}: ${session.stderr}`);
-  sendPsql(session, 'COMMIT;');
-  sendPsql(session, `SELECT ${sqlLiteral(commitMarker)};`);
-  await waitForPsqlMarker(session, commitMarker);
-  await closePsqlSession(session);
+  try {
+    sendPsql(session, `BEGIN ISOLATION LEVEL ${isolation};`);
+    sendPsql(session, "SET LOCAL statement_timeout='5s';");
+    sendPsql(session, "SET LOCAL lock_timeout='3s';");
+    sendPsql(session, `SELECT ${sqlLiteral(`${marker}_META`)} || '|' || pg_backend_pid()::text
+      || '|' || current_setting('transaction_isolation') || '|' || txid_current_snapshot()::text;`);
+    sendPsql(session, `SELECT ${sqlLiteral(marker)};`);
+    await waitForPsqlMarker(session, marker);
+    const metadata = session.stdout.split(/\r?\n/)
+      .find((line) => line.startsWith(`${marker}_META|`))?.split('|');
+    assert.ok(metadata && metadata.length === 4, `${marker}: missing snapshot metadata: ${session.stdout}`);
+    session.backendPid = Number(metadata[1]);
+    session.isolation = metadata[2];
+    session.snapshot = metadata[3];
+    assert.equal(session.isolation, isolation.toLowerCase());
+    return session;
+  } catch (error) {
+    try { await closePsqlSession(session); }
+    catch (cleanupError) {
+      console.error(`psql cleanup failed after ${marker}: ${String(cleanupError)}`);
+    }
+    throw error;
+  }
 }
 
 function expectActivationGuardRejection(sql: string, marker: string): void {
@@ -223,13 +162,115 @@ function expectActivationGuardRejection(sql: string, marker: string): void {
   }
 }
 
+async function verifyIsolatedStaleDisciplineRelevance(): Promise<void> {
+  const fixture = {
+    projectId: 'e2100000-0000-4000-8000-000000000001',
+    disciplineId: 'b2100000-0000-4000-8000-000000000001',
+  };
+  psql(`
+    INSERT INTO public.disciplines(id,name) VALUES
+      (${sqlLiteral(fixture.disciplineId)}::uuid,'Isolated Relevance Discipline');
+    INSERT INTO public.projects(id,public_id,title,slug,year,status,snapshots) VALUES
+      (${sqlLiteral(fixture.projectId)}::uuid,'231-isolated-relevance',
+       'Isolated relevance project','231-isolated-relevance',2026,'draft',ARRAY[]::text[]);
+  `);
+  assert.equal(
+    psql(`SELECT count(*) FROM public.public_feed_discipline_projection_authority
+      WHERE discipline_id=${sqlLiteral(fixture.disciplineId)}::uuid;`),
+    '0',
+    'A newly inserted unreferenced discipline unexpectedly had a projection fence before the stale snapshot.',
+  );
+  const projectGenerationBefore = Number(psql(`SELECT generation FROM
+    public.public_feed_project_projection_authority
+    WHERE project_id=${sqlLiteral(fixture.projectId)}::uuid;`));
+  const singletonBefore = Number(psql(
+    'SELECT generation FROM public.public_feed_activation_authority WHERE singleton=true;',
+  ));
+  const staleDiscipline = await beginSnapshotTransaction(
+    'REPEATABLE READ', 'ISOLATED_RR_DISCIPLINE_RELEVANCE_SNAPSHOT_READY',
+  );
+
+  psql(`UPDATE public.projects SET status='published'
+    WHERE id=${sqlLiteral(fixture.projectId)}::uuid;`);
+  const projectGenerationAfterPublication = Number(psql(`SELECT generation FROM
+    public.public_feed_project_projection_authority
+    WHERE project_id=${sqlLiteral(fixture.projectId)}::uuid;`));
+  const singletonAfterPublication = Number(psql(
+    'SELECT generation FROM public.public_feed_activation_authority WHERE singleton=true;',
+  ));
+  assert.equal(projectGenerationAfterPublication, projectGenerationBefore + 1);
+  assert.equal(singletonAfterPublication, singletonBefore + 1);
+  assert.equal(
+    psql(`SELECT count(*) FROM public.public_feed_discipline_projection_authority
+      WHERE discipline_id=${sqlLiteral(fixture.disciplineId)}::uuid;`),
+    '0',
+    'Project publication without a relationship unexpectedly advanced the discipline fence.',
+  );
+
+  psql(`INSERT INTO public.project_disciplines(project_id,discipline_id) VALUES (
+    ${sqlLiteral(fixture.projectId)}::uuid,${sqlLiteral(fixture.disciplineId)}::uuid
+  );`);
+  const projectGenerationAfterRelationship = Number(psql(`SELECT generation FROM
+    public.public_feed_project_projection_authority
+    WHERE project_id=${sqlLiteral(fixture.projectId)}::uuid;`));
+  const singletonAfterRelationship = Number(psql(
+    'SELECT generation FROM public.public_feed_activation_authority WHERE singleton=true;',
+  ));
+  const disciplineGenerationAfterRelationship = psql(`SELECT generation::text FROM
+    public.public_feed_discipline_projection_authority
+    WHERE discipline_id=${sqlLiteral(fixture.disciplineId)}::uuid;`);
+  assert.equal(projectGenerationAfterRelationship, projectGenerationAfterPublication + 1);
+  assert.equal(singletonAfterRelationship, singletonAfterPublication + 1);
+  assert.equal(disciplineGenerationAfterRelationship, '1');
+
+  const visibility = 'ISOLATED_RR_DISCIPLINE_RELEVANCE_VISIBILITY|draft|0|0';
+  sendPsql(staleDiscipline, `SELECT
+    'ISOLATED_RR_DISCIPLINE_RELEVANCE_VISIBILITY|' || status || '|'
+    || (SELECT count(*)::text FROM public.project_disciplines
+        WHERE project_id=${sqlLiteral(fixture.projectId)}::uuid) || '|'
+    || (SELECT count(*)::text FROM public.public_feed_discipline_projection_authority
+        WHERE discipline_id=${sqlLiteral(fixture.disciplineId)}::uuid)
+    FROM public.projects WHERE id=${sqlLiteral(fixture.projectId)}::uuid;`);
+  await waitForPsqlMarker(staleDiscipline, visibility);
+  const outcome = await finishRejectedMutation(
+    staleDiscipline,
+    `UPDATE public.disciplines SET name='Isolated stale relationship mutation'
+      WHERE id=${sqlLiteral(fixture.disciplineId)}::uuid;`,
+    'ISOLATED_RR_DISCIPLINE_RELEVANCE_REJECTED',
+    STALE_SNAPSHOT_FAILURE,
+    /40001/,
+  );
+  assert.equal(
+    psql(`SELECT name FROM public.disciplines WHERE id=${sqlLiteral(fixture.disciplineId)}::uuid;`),
+    'Isolated Relevance Discipline',
+    'The isolated stale discipline mutation committed unexpectedly.',
+  );
+  console.log(
+    `PASS: isolated stale discipline relevance backend=${String(staleDiscipline.backendPid)}`
+    + ` snapshot=${String(staleDiscipline.snapshot)} visibility=draft|0|0`
+    + ` generations=discipline:absent->absent->${disciplineGenerationAfterRelationship}`
+    + ` project:${projectGenerationBefore}->${projectGenerationAfterPublication}`
+    + `->${projectGenerationAfterRelationship} sqlstate=${outcome.sqlState}`,
+  );
+
+  psql(`
+    UPDATE public.projects SET status='draft' WHERE id=${sqlLiteral(fixture.projectId)}::uuid;
+    DELETE FROM public.project_disciplines WHERE project_id=${sqlLiteral(fixture.projectId)}::uuid;
+    DELETE FROM public.projects WHERE id=${sqlLiteral(fixture.projectId)}::uuid;
+    DELETE FROM public.disciplines WHERE id=${sqlLiteral(fixture.disciplineId)}::uuid;
+  `);
+}
+
 function assertLoopbackBindings(): void {
   const containerNames = execFileSync('docker', [
     'ps', '--filter', `label=com.supabase.cli.project=${projectId}`, '--format', '{{.Names}}',
-  ], { encoding: 'utf8' }).trim().split(/\r?\n/).filter(Boolean);
+  ], { encoding: 'utf8', timeout: DOCKER_COMMAND_TIMEOUT_MS }).trim().split(/\r?\n/).filter(Boolean);
   assert.ok(containerNames.length > 0);
   for (const container of containerNames) {
-    const raw = execFileSync('docker', ['inspect', '--format', '{{json .NetworkSettings.Ports}}', container], { encoding: 'utf8' }).trim();
+    const raw = execFileSync(
+      'docker', ['inspect', '--format', '{{json .NetworkSettings.Ports}}', container],
+      { encoding: 'utf8', timeout: DOCKER_COMMAND_TIMEOUT_MS },
+    ).trim();
     const ports = JSON.parse(raw) as Record<string, Array<{ HostIp?: string }> | null>;
     for (const bindings of Object.values(ports)) {
       for (const binding of bindings ?? []) assert.equal(binding.HostIp, '127.0.0.1');
@@ -667,6 +708,7 @@ async function main(): Promise<void> {
   const cli = path.resolve(repositoryRoot, 'node_modules/supabase/dist/supabase.js');
   const raw = execFileSync(process.execPath, [cli, 'status', '--workdir', verifierWorkdir, '-o', 'env'], {
     cwd: repositoryRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: DOCKER_COMMAND_TIMEOUT_MS,
     env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: '1' },
   });
   const local = parseSupabaseCliEnv(raw);
@@ -729,6 +771,12 @@ async function main(): Promise<void> {
   });
   assert.equal((legacy.data as { resultCode?: string })?.resultCode, 'LEDGER_PROTOCOL_REQUIRED');
 
+  await verifyIsolatedStaleDisciplineRelevance();
+  if (process.env.CAPSTONE_VERIFY_LEDGER_FOCUS === 'stale-discipline-relevance') {
+    console.log('Focused stale discipline relevance verification passed.');
+    return;
+  }
+
   const activationFixture = {
     projectId: 'e0000000-0000-0000-0000-000000000001',
     disciplineId: 'b0000000-0000-0000-0000-000000000001',
@@ -789,20 +837,67 @@ async function main(): Promise<void> {
   // Establish snapshots while the project is still draft and the discipline is unreferenced.
   // Separate committed changes then make both dependencies public/relevant without touching the
   // media or discipline rows the stale sessions will later try to update.
+  assert.equal(
+    psql(`SELECT count(*) FROM public.public_feed_discipline_projection_authority
+      WHERE discipline_id=${sqlLiteral(relevanceFlipFixture.disciplineId)}::uuid;`),
+    '0',
+  );
+  const relevanceProjectGenerationBefore = Number(psql(`SELECT generation FROM
+    public.public_feed_project_projection_authority
+    WHERE project_id=${sqlLiteral(relevanceFlipFixture.projectId)}::uuid;`));
+  const relevanceSingletonBefore = Number(psql(
+    'SELECT generation FROM public.public_feed_activation_authority WHERE singleton=true;',
+  ));
   const repeatableDraftRelevance = await beginSnapshotTransaction(
     'REPEATABLE READ', 'RR_DRAFT_RELEVANCE_SNAPSHOT_READY',
   );
   const repeatableDisciplineRelevance = await beginSnapshotTransaction(
     'REPEATABLE READ', 'RR_DISCIPLINE_RELEVANCE_SNAPSHOT_READY',
   );
-  psql(`
-    UPDATE public.projects SET status='published'
-      WHERE id=${sqlLiteral(relevanceFlipFixture.projectId)}::uuid;
-    INSERT INTO public.project_disciplines(project_id,discipline_id) VALUES (
-      ${sqlLiteral(relevanceFlipFixture.projectId)}::uuid,
-      ${sqlLiteral(relevanceFlipFixture.disciplineId)}::uuid
-    );
-  `);
+  psql(`UPDATE public.projects SET status='published'
+    WHERE id=${sqlLiteral(relevanceFlipFixture.projectId)}::uuid;`);
+  const relevanceProjectGenerationAfterPublication = Number(psql(`SELECT generation FROM
+    public.public_feed_project_projection_authority
+    WHERE project_id=${sqlLiteral(relevanceFlipFixture.projectId)}::uuid;`));
+  const relevanceSingletonAfterPublication = Number(psql(
+    'SELECT generation FROM public.public_feed_activation_authority WHERE singleton=true;',
+  ));
+  assert.equal(relevanceProjectGenerationAfterPublication, relevanceProjectGenerationBefore + 1);
+  assert.equal(relevanceSingletonAfterPublication, relevanceSingletonBefore + 1);
+  assert.equal(
+    psql(`SELECT count(*) FROM public.public_feed_discipline_projection_authority
+      WHERE discipline_id=${sqlLiteral(relevanceFlipFixture.disciplineId)}::uuid;`),
+    '0',
+  );
+  psql(`INSERT INTO public.project_disciplines(project_id,discipline_id) VALUES (
+    ${sqlLiteral(relevanceFlipFixture.projectId)}::uuid,
+    ${sqlLiteral(relevanceFlipFixture.disciplineId)}::uuid
+  );`);
+  const relevanceProjectGenerationAfterRelationship = Number(psql(`SELECT generation FROM
+    public.public_feed_project_projection_authority
+    WHERE project_id=${sqlLiteral(relevanceFlipFixture.projectId)}::uuid;`));
+  const relevanceSingletonAfterRelationship = Number(psql(
+    'SELECT generation FROM public.public_feed_activation_authority WHERE singleton=true;',
+  ));
+  const relevanceDisciplineGenerationAfterRelationship = psql(`SELECT generation::text FROM
+    public.public_feed_discipline_projection_authority
+    WHERE discipline_id=${sqlLiteral(relevanceFlipFixture.disciplineId)}::uuid;`);
+  assert.equal(
+    relevanceProjectGenerationAfterRelationship,
+    relevanceProjectGenerationAfterPublication + 1,
+  );
+  assert.equal(relevanceSingletonAfterRelationship, relevanceSingletonAfterPublication + 1);
+  assert.equal(relevanceDisciplineGenerationAfterRelationship, '1');
+
+  const staleDisciplineVisibility = 'RR_DISCIPLINE_RELEVANCE_VISIBILITY|draft|0|0';
+  sendPsql(repeatableDisciplineRelevance, `SELECT
+    'RR_DISCIPLINE_RELEVANCE_VISIBILITY|' || status || '|'
+    || (SELECT count(*)::text FROM public.project_disciplines
+        WHERE project_id=${sqlLiteral(relevanceFlipFixture.projectId)}::uuid) || '|'
+    || (SELECT count(*)::text FROM public.public_feed_discipline_projection_authority
+        WHERE discipline_id=${sqlLiteral(relevanceFlipFixture.disciplineId)}::uuid)
+    FROM public.projects WHERE id=${sqlLiteral(relevanceFlipFixture.projectId)}::uuid;`);
+  await waitForPsqlMarker(repeatableDisciplineRelevance, staleDisciplineVisibility);
 
   // Hold singleton authority in one real session. A second published-project update and a
   // discipline delete/cascade both fail immediately at NOWAIT instead of holding a different local
@@ -811,9 +906,10 @@ async function main(): Promise<void> {
   const orderedOwner = await beginSnapshotTransaction('READ COMMITTED', 'LOCK_ORDER_OWNER_READY');
   sendPsql(orderedOwner, `UPDATE public.projects SET title=title || ' ordered-owner'
     WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`);
+  sendPsql(orderedOwner, '\\echo LOCK_ORDER_OWNER_HOLDS_GLOBAL_RESULT :SQLSTATE :ERROR');
   sendPsql(orderedOwner, `SELECT 'LOCK_ORDER_OWNER_HOLDS_GLOBAL';`);
   await waitForPsqlMarker(orderedOwner, 'LOCK_ORDER_OWNER_HOLDS_GLOBAL');
-  assert.equal(orderedOwner.stderr, '');
+  assert.match(orderedOwner.stdout, /LOCK_ORDER_OWNER_HOLDS_GLOBAL_RESULT 00000 false/);
 
   const competingProject = await beginSnapshotTransaction('READ COMMITTED', 'LOCK_ORDER_PROJECT_READY');
   await finishRejectedMutation(
@@ -831,12 +927,15 @@ async function main(): Promise<void> {
 
   sendPsql(orderedOwner, `UPDATE public.projects SET title=title || ' ordered-owner'
     WHERE id=${sqlLiteral(relevanceFlipFixture.projectId)}::uuid;`);
+  sendPsql(orderedOwner, '\\echo LOCK_ORDER_OWNER_UPDATED_SECOND_RESULT :SQLSTATE :ERROR');
   sendPsql(orderedOwner, `SELECT 'LOCK_ORDER_OWNER_UPDATED_SECOND';`);
   await waitForPsqlMarker(orderedOwner, 'LOCK_ORDER_OWNER_UPDATED_SECOND');
-  assert.equal(orderedOwner.stderr, '');
+  assert.match(orderedOwner.stdout, /LOCK_ORDER_OWNER_UPDATED_SECOND_RESULT 00000 false/);
   sendPsql(orderedOwner, 'COMMIT;');
+  sendPsql(orderedOwner, '\\echo LOCK_ORDER_OWNER_COMMITTED_RESULT :SQLSTATE :ERROR');
   sendPsql(orderedOwner, `SELECT 'LOCK_ORDER_OWNER_COMMITTED';`);
   await waitForPsqlMarker(orderedOwner, 'LOCK_ORDER_OWNER_COMMITTED');
+  assert.match(orderedOwner.stdout, /LOCK_ORDER_OWNER_COMMITTED_RESULT 00000 false/);
   await closePsqlSession(orderedOwner);
   assert.equal(
     psql(`SELECT count(*) FROM public.projects WHERE id IN (
@@ -970,46 +1069,57 @@ async function main(): Promise<void> {
     'PREPARED',
   );
 
-  const staleSnapshotFailure = /could not serialize access due to concurrent update|could not serialize access due to read\/write dependencies/i;
-  await Promise.all([
+  const staleOutcomes = await settlePsqlOperations([
     finishRejectedMutation(
       repeatableScalar,
       `UPDATE public.projects SET title='RR stale scalar mutation'
         WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`,
-      'RR_SCALAR_REJECTED', staleSnapshotFailure,
+      'RR_SCALAR_REJECTED', STALE_SNAPSHOT_FAILURE, /40001/,
     ),
     finishRejectedMutation(
       repeatableMedia,
       `UPDATE public.media_assets
         SET alt_text_public='RR stale media mutation.', gallery_position=3
         WHERE id=${sqlLiteral(activationFixture.snapshotId)}::uuid;`,
-      'RR_MEDIA_REJECTED', staleSnapshotFailure,
+      'RR_MEDIA_REJECTED', STALE_SNAPSHOT_FAILURE, /40001/,
     ),
     finishRejectedMutation(
       repeatableDiscipline,
       `UPDATE public.disciplines SET name='RR stale discipline mutation'
         WHERE id=${sqlLiteral(activationFixture.disciplineId)}::uuid;`,
-      'RR_DISCIPLINE_REJECTED', staleSnapshotFailure,
+      'RR_DISCIPLINE_REJECTED', STALE_SNAPSHOT_FAILURE, /40001/,
     ),
     finishRejectedMutation(
       serializableScalar,
       `UPDATE public.projects SET summary='Serializable stale scalar mutation'
         WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`,
-      'SERIALIZABLE_SCALAR_REJECTED', staleSnapshotFailure,
+      'SERIALIZABLE_SCALAR_REJECTED', STALE_SNAPSHOT_FAILURE, /40001/,
     ),
     finishRejectedMutation(
       repeatableDraftRelevance,
       `UPDATE public.media_assets SET alt_text_public='RR stale draft relevance mutation.'
         WHERE id=${sqlLiteral(relevanceFlipFixture.mediaId)}::uuid;`,
-      'RR_DRAFT_RELEVANCE_REJECTED', staleSnapshotFailure,
+      'RR_DRAFT_RELEVANCE_REJECTED', STALE_SNAPSHOT_FAILURE, /40001/,
     ),
     finishRejectedMutation(
       repeatableDisciplineRelevance,
       `UPDATE public.disciplines SET name='RR stale relationship relevance mutation'
         WHERE id=${sqlLiteral(relevanceFlipFixture.disciplineId)}::uuid;`,
-      'RR_DISCIPLINE_RELEVANCE_REJECTED', staleSnapshotFailure,
+      'RR_DISCIPLINE_RELEVANCE_REJECTED', STALE_SNAPSHOT_FAILURE, /40001/,
     ),
   ]);
+  const disciplineRelevanceOutcome = staleOutcomes.find(
+    (outcome) => outcome.marker === 'RR_DISCIPLINE_RELEVANCE_REJECTED',
+  );
+  assert.ok(disciplineRelevanceOutcome);
+  console.log(
+    `PASS: full-group stale discipline relevance backend=${String(repeatableDisciplineRelevance.backendPid)}`
+    + ` snapshot=${String(repeatableDisciplineRelevance.snapshot)} visibility=draft|0|0`
+    + ` generations=discipline:absent->absent->${relevanceDisciplineGenerationAfterRelationship}`
+    + ` project:${relevanceProjectGenerationBefore}->${relevanceProjectGenerationAfterPublication}`
+    + `->${relevanceProjectGenerationAfterRelationship}`
+    + ` sqlstate=${disciplineRelevanceOutcome.sqlState}`,
+  );
 
   // A READ COMMITTED writer that starts after PREPARED sees the durable claim and is explicitly
   // refused rather than waiting for application-side operation visibility.
@@ -1027,7 +1137,7 @@ async function main(): Promise<void> {
   // still took activation-global authority, the second marker would hit the bounded lock timeout.
   const draftA = await beginSnapshotTransaction('READ COMMITTED', 'DRAFT_A_READY');
   const draftB = await beginSnapshotTransaction('READ COMMITTED', 'DRAFT_B_READY');
-  await Promise.all([
+  await settlePsqlOperations([
     commitInteractiveMutation(
       draftA,
       `UPDATE public.projects SET title=title || ' concurrent'
@@ -1088,7 +1198,7 @@ async function main(): Promise<void> {
     repeatableRecovery,
     `UPDATE public.projects SET background='RR stale recovery mutation'
       WHERE id=${sqlLiteral(activationFixture.projectId)}::uuid;`,
-    'RR_RECOVERY_REJECTED', staleSnapshotFailure,
+    'RR_RECOVERY_REJECTED', STALE_SNAPSHOT_FAILURE, /40001/,
   );
 
   // Lifecycle drift remains refused while the raw baseline is restored for explicit recovery.
@@ -1987,7 +2097,19 @@ async function main(): Promise<void> {
   console.log('Public feed ledger runtime verification passed: fresh 46-migration schema, durable activation authority through pre-write recovery, real overlapping READ COMMITTED/REPEATABLE READ/SERIALIZABLE proof, unrelated-draft nonblocking proof, exact pre-gallery baseline adoption into current-contract Storage/version/head, normal publication, multi-image gallery publication, deployment reconciliation of a lifecycle-published target with exact snapshot/alt/position representation and no lifecycle or audit replay, database-enforced refusal of evidence-less reservation, metadata, alt-text, gallery reorder, gallery add and gallery remove drift refused with zero durable, external or lifecycle effects, referenced discipline and industry-category UPDATE/DELETE refusal through raw SQL and PostgREST, unrelated taxonomy mutability, removal, no-change removal, rollback, rollback-to-empty, post-rollback normal publication, target-specific idempotent evidence after later head evolution, pre-intent media authorization and readiness/permission fencing, pre-intent private-source change, media promotion crash with forward recovery and preserved pre-existing objects, committed-response ambiguity, incompatible recovery intent, five crash boundaries, uncertainty fence, explicit phase-safe recovery, stale-owner fencing, grants, and immutable history.');
 }
 
-main().catch((error: unknown) => {
+async function run(): Promise<void> {
+  let primaryError: unknown;
+  try {
+    await main();
+  } catch (error) {
+    primaryError = error;
+    throw error;
+  } finally {
+    await closeTrackedPsqlSessions(primaryError);
+  }
+}
+
+run().catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : 'Public feed ledger runtime verification failed.');
   process.exitCode = 1;
 });

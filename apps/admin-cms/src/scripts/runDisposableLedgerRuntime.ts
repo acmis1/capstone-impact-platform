@@ -21,11 +21,24 @@ import { cleanupDisposableLedgerRuntime } from './disposableLedgerCleanup';
  * what lets this production-critical writer be exercised on every CI run rather than by hand.
  */
 
-const RUNTIME_SCRIPTS: Record<string, string> = {
-  ledger: 'verifyPublicFeedLedgerRuntime.ts',
-  publication: 'verifyControlledPublicationRuntime.ts',
-  removal: 'verifyControlledPublicRemovalRuntime.ts',
+interface RuntimeScript {
+  file: string;
+  environment?: Record<string, string>;
+}
+
+const RUNTIME_SCRIPTS: Record<string, RuntimeScript> = {
+  ledger: { file: 'verifyPublicFeedLedgerRuntime.ts' },
+  'ledger-stale-discipline-relevance': {
+    file: 'verifyPublicFeedLedgerRuntime.ts',
+    environment: { CAPSTONE_VERIFY_LEDGER_FOCUS: 'stale-discipline-relevance' },
+  },
+  publication: { file: 'verifyControlledPublicationRuntime.ts' },
+  removal: { file: 'verifyControlledPublicRemovalRuntime.ts' },
 };
+const DEFAULT_RUNTIME_NAMES = ['ledger', 'publication', 'removal'];
+const DOCKER_COMMAND_TIMEOUT_MS = 30_000;
+const PSQL_COMMAND_TIMEOUT_MS = 45_000;
+const RUNTIME_TIMEOUT_MS = 600_000;
 
 /**
  * The sole correction migration. Removing exactly this file reproduces current main's
@@ -44,10 +57,12 @@ const suffix = randomBytes(4).toString('hex');
 const projectId = `capstone-pp1-ledger-${suffix}`;
 const networkName = `${projectId}-loopback`;
 const requested = process.argv.slice(2).filter((argument) => !argument.startsWith('-'));
-const selected = requested.length > 0 ? requested : Object.keys(RUNTIME_SCRIPTS);
+const selected = requested.length > 0 ? requested : DEFAULT_RUNTIME_NAMES;
 
 function docker(args: string[]): string {
-  return execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  return execFileSync('docker', args, {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: DOCKER_COMMAND_TIMEOUT_MS,
+  }).trim();
 }
 
 function configurePorts(config: string): string {
@@ -94,10 +109,14 @@ function psql(sql: string): string {
   return execFileSync(
     'docker',
     [
-      'exec', '-i', `supabase_db_${projectId}`, 'psql', '-U', 'postgres', '-d', 'postgres',
+      'exec', '-i', '-e', 'PGOPTIONS=-c statement_timeout=30000 -c lock_timeout=10000',
+      `supabase_db_${projectId}`, 'psql', '-U', 'postgres', '-d', 'postgres',
       '-At', '-v', 'ON_ERROR_STOP=1', '-c', sql,
     ],
-    { cwd: repositoryRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    {
+      cwd: repositoryRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: PSQL_COMMAND_TIMEOUT_MS,
+    },
   ).trim();
 }
 
@@ -378,16 +397,22 @@ function main(): void {
       if (!script) throw new Error(`Unknown disposable runtime "${name}".`);
       const runtime = spawnSync(process.execPath, [
         path.join(repositoryRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
-        path.join(__dirname, script),
+        path.join(__dirname, script.file),
       ], {
         cwd: path.join(repositoryRoot, 'apps', 'admin-cms'), stdio: 'inherit',
+        timeout: RUNTIME_TIMEOUT_MS,
+        killSignal: 'SIGTERM',
         env: {
           ...process.env,
           CAPSTONE_VERIFY_DISPOSABLE: '1',
           CAPSTONE_VERIFY_SUPABASE_WORKDIR: workdir,
           CAPSTONE_VERIFY_SUPABASE_PROJECT_ID: projectId,
+          ...script.environment,
         },
       });
+      if (runtime.error) {
+        throw new Error(`Disposable runtime "${name}" failed to terminate: ${runtime.error.message}`);
+      }
       if (runtime.status !== 0) {
         exitCode = runtime.status ?? 1;
         break;
