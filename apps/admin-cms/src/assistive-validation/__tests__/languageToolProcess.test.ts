@@ -51,6 +51,7 @@ const runnableProvider = (requestTimeoutMs = 100) => {
 };
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -84,6 +85,17 @@ describe('local LanguageTool process boundary', () => {
       .resolves.toEqual({ status: 'UNAVAILABLE' });
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0][0]).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v2\/check$/);
+  });
+
+  it('does not pass service credentials to the Java child process', async () => {
+    vi.stubEnv('SUPABASE_SECRET_KEY', 'sb_secret_must-not-reach-java');
+    const provider = runnableProvider();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response()));
+
+    await provider.check({ ...input, onPulse: vi.fn().mockResolvedValue('CONTINUE') });
+
+    const options = vi.mocked(spawn).mock.calls[0][2];
+    expect(options?.env?.SUPABASE_SECRET_KEY).toBeUndefined();
   });
 
   it('fails closed when the provider process has crashed', async () => {

@@ -36,7 +36,7 @@ vi.mock('../../../../assistive-validation', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../../assistive-validation')>();
   return {
     ...actual,
-    isAssistiveExecutionAvailable: vi.fn().mockReturnValue(true),
+    isAssistiveExecutionAvailable: vi.fn().mockResolvedValue(true),
     enqueueAssistiveValidation: vi.fn(),
     cancelAssistiveValidation: vi.fn(),
     recordAssistiveFindingDisposition: vi.fn(),
@@ -53,7 +53,7 @@ const ADMIN_ID = 'admin-user-123';
 describe('Assistive Validation Server Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(isAssistiveExecutionAvailable).mockReturnValue(true);
+    vi.mocked(isAssistiveExecutionAvailable).mockResolvedValue(true);
     vi.mocked(getServerEnv).mockReturnValue({
       SUPABASE_DRAFT_BUCKET: 'capstone-drafts',
     } as unknown as ReturnType<typeof getServerEnv>);
@@ -148,12 +148,12 @@ describe('Assistive Validation Server Actions', () => {
     });
 
     it('rejects when assistive execution is not available in environment', async () => {
-      vi.mocked(isAssistiveExecutionAvailable).mockReturnValueOnce(false);
+      vi.mocked(isAssistiveExecutionAvailable).mockResolvedValueOnce(false);
       const result = await runAssistiveChecksAction(PUBLIC_ID);
       expect(result).toEqual({
         ok: false,
         code: 'EXECUTION_UNAVAILABLE',
-        message: 'Running assistive checks is not available in this environment.',
+        message: 'Assistive checks are temporarily unavailable because the processing worker is not ready.',
       });
     });
 

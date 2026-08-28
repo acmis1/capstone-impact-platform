@@ -122,6 +122,147 @@ The final line is deterministic. `HOSTED_SMOKE_CLASSIFICATION = READY_FOR_SUPERV
 | `PARTICIPANT_PREVIEW_REMINDERS_ENABLED` | `false` | Reminder scheduler disabled. Scheduled reminders are skipped safely. |
 | `STAFF_PROVISIONING_ENABLED` | `false` | New staff invitations and staging-only direct UAT account creation are disabled. Existing pending invitations can still be activated. Direct creation additionally requires exact staging runtime and Supabase-host identity checks. |
 | `CAPSTONE_STAGING_PUBLICATION_ENABLED` | `false` | Staging showcase publication is absent from the UI and route fails closed. Exact `true` enables it only when the staging runtime identity and expected Supabase host also match. It never enables live production publication. |
+| `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED` | `false` | Hosted assistive enqueue remains disabled. Exact `true` is necessary but insufficient: the web service must also prove the staging target identity and observe a fresh compatible worker heartbeat. |
+
+### E. Dedicated Assistive Worker
+
+#### Selected service shape
+
+The hosted assistive coordinator is a separate Render **background worker**, not a web service and
+not part of the Next.js request lifecycle. Render documents background workers as continuously
+running services that do not receive inbound traffic. The repository therefore exposes no worker
+URL, health-check path, command endpoint, or arbitrary job payload. The worker polls the existing
+PostgreSQL queue through fixed service-role RPCs and sends outbound requests only to the exact
+verified staging Supabase origin; LanguageTool remains a loopback Java child and PaddleOCR remains
+an offline Python child. See Render's [background-worker](https://render.com/docs/background-workers),
+[service-type](https://render.com/docs/service-types), and [Docker runtime](https://render.com/docs/docker)
+documentation.
+
+`render.yaml` defines one `capstone-assistive-worker-staging` service with Docker runtime, Singapore
+region, automatic deploys disabled, and a 300-second shutdown window. The `2c-4g` plan provides
+2 CPU and 4 GB RAM. Keep exactly one instance: the coordinator processes one project at a time,
+the frozen Paddle provider uses four CPU threads internally, and horizontal scaling has not been
+capacity-qualified. Render's current plan identifiers and resources are documented in
+[compute plans](https://render.com/docs/compute-plans), while the Blueprint fields are defined in
+the [Blueprint specification](https://render.com/docs/blueprint-spec).
+
+The sizing decision is deliberately conservative. The frozen full-page Paddle evidence records a
+peak of `1,084,821,504` bytes and the qualified LanguageTool evidence records a peak of
+`846,700,544` bytes. Their conservative sum is `1,931,522,048` bytes (about 1.80 GiB), before the
+Node coordinator, Python/Java launch overlap, container, and operating-system overhead. A 2 GiB
+worker leaves no defensible operational margin. The 4 GB class is therefore the minimum selected
+staging shape even though the providers normally execute sequentially. This is a staging resource
+guardrail, not a throughput or production-capacity claim.
+
+Render's 4 GB allocation is about 3.73 GiB, leaving about 1.93 GiB beyond the conservative provider
+sum. Node coordinator and container/operating-system overhead were not captured as separate peaks;
+they consume that remaining margin. Provisioning is therefore intentionally based on the summed
+provider evidence plus unallocated process/platform headroom, not an invented Node memory result.
+
+#### Immutable build and runtime identity
+
+`apps/assistive-worker/Dockerfile.hosted` selects the exact Node base version, pinned Python provider
+packages, and Java 17 runtime. During image build it downloads only the exact numbered PP-OCRv6 Small detection and
+recognition archives and LanguageTool 6.6 archive, verifies their frozen SHA-256 values, and embeds
+them in the image. Startup rechecks Paddle runtime versions and model-tree hashes, LanguageTool
+archive/JAR hashes, Java 17+, database queue health, the Render instance identity, and the exact
+40-hex deployment commit before publishing `READY`. A build or startup mismatch fails closed; no
+runtime model download or fallback provider exists.
+
+The worker-only variables are:
+
+| Variable | Source | Contract |
+| :--- | :--- | :--- |
+| `CAPSTONE_RUNTIME_ENV` | Blueprint fixed value | Exact `staging`. |
+| `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED` | Blueprint fixed value | Exact `true`. |
+| `CAPSTONE_EXPECTED_SUPABASE_HOST` | Operator secret/config | Exact canonical staging hostname. |
+| `CAPSTONE_ASSISTIVE_SUPABASE_URL` | Operator secret/config | Server-only canonical HTTPS staging base URL; never `NEXT_PUBLIC_`. |
+| `SUPABASE_SECRET_KEY` | Render secret | Modern `sb_secret_...` database credential. Legacy service-role JWTs are refused by this worker. |
+| `CAPSTONE_ASSISTIVE_PADDLE_MODELS_DIR` | Blueprint fixed value | `/opt/capstone/artifacts/paddle`. |
+| `CAPSTONE_ASSISTIVE_LANGUAGETOOL_ARCHIVE` | Blueprint fixed value | Exact embedded `LanguageTool-stable.zip`. |
+| `CAPSTONE_ASSISTIVE_LANGUAGETOOL_JAR` | Blueprint fixed value | Exact embedded LanguageTool 6.6 server JAR. |
+| `RENDER_INSTANCE_ID` | Render default variable | Bounded worker identity for heartbeat ownership. |
+| `RENDER_GIT_COMMIT` | Render default variable | Exact deployment version stored with heartbeat evidence. |
+
+Provider children receive allowlisted process environments and never inherit Supabase credentials.
+Do not add shell commands, configurable executables, model URLs, RPC names, public request handlers,
+or a persistent disk to this service.
+
+| Deployment command | Exact contract |
+| :--- | :--- |
+| Build | Render performs a Docker build with context `.` and `apps/assistive-worker/Dockerfile.hosted`; there is no separate shell build command. |
+| Start | The image command is `npm run run:assistive-worker:hosted --workspace=apps/admin-cms`. |
+| Health | No HTTP health path exists. The service proves readiness through the service-role heartbeat RPC and Admin consumes only the bounded availability RPC. |
+
+#### Heartbeat and Admin truthfulness
+
+Migration `20260828120000_assistive_worker_heartbeat.sql` adds one RLS-forced operational table and
+two fixed service-role RPCs. A healthy worker writes `READY` every 15 seconds with its environment,
+pipeline, deployment, OCR, and language identities. Admin permits enqueue only when the web runtime
+is the exact verified staging target, its hosted flag is exactly `true`, and at least one matching
+`READY` heartbeat is no more than 60 seconds old. `STOPPING`, stale, incompatible, malformed, or
+unreadable evidence disables enqueue and shows staff: **“Assistive checks are temporarily
+unavailable because the processing worker is not ready.”** Historical findings remain readable.
+
+This heartbeat does not replace job fencing. Claimed jobs retain their 120-second lease, rotated
+claim token, cancellation checks, and two-attempt recovery bound. On SIGTERM/SIGINT the worker stops
+claiming, finishes the current fenced operation when Render's shutdown window permits, publishes
+`STOPPING`, and exits. If it is killed first, Admin fails unavailable after 60 seconds and the job is
+eligible for the existing lease recovery after 120 seconds. Render recommends handling SIGTERM for
+background workers; see [platform maintenance](https://render.com/docs/platform-maintenance).
+
+#### Manual provisioning after merge
+
+This repository change does not deploy, migrate, or mutate hosted state. After independent review:
+
+1. Confirm the exact merged commit and that all required CI jobs pass.
+2. Obtain separate authorization to reconcile the staging database through this repository's latest
+   migration. Do not start the worker against a database without the heartbeat RPCs.
+3. In Render, create a **new Blueprint** connected to this repository and select the root
+   `render.yaml`. Never reuse the Prototype service or the Admin/CMS web service. Render's manual
+   Blueprint flow is documented in [Infrastructure as Code](https://render.com/docs/infrastructure-as-code).
+4. Confirm `type: worker`, Docker context `.`, the hosted worker Dockerfile, Singapore region,
+   `2c-4g`, one instance, automatic deploys off, and 300-second shutdown delay.
+5. Supply only the three `sync: false` values: expected Supabase host, server-only Supabase URL, and
+   `SUPABASE_SECRET_KEY`. Confirm Render supplies valid `RENDER_INSTANCE_ID` and `RENDER_GIT_COMMIT`.
+6. Manually deploy the exact reviewed commit. A successful build proves archive hashes; a successful
+   startup proves database and provider health. Do not enqueue a test project yet.
+7. Inspect the bounded availability RPC from a governed service-role context. It must report
+   `AVAILABLE`, a positive compatible-worker count, and a recent timestamp.
+8. Only then set `CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED=true` on the separate Admin/CMS web
+   service and redeploy that web service. Use synthetic staging projects for acceptance.
+
+At this feature branch, the repository contains 45 migrations. Open PR #204 carries the separate,
+earlier-timestamped `20260826090000_public_feed_activation_authority_guard.sql`; if both streams are
+combined, the composed repository contains 46 migrations. That PR does not alter this worker design,
+and this feature does not alter its public-feed authority.
+
+#### Start, stop, restart, rotation, and incident response
+
+- **Start/restart:** manually deploy or restart the dedicated worker in Render. Wait for a fresh
+  compatible heartbeat before enabling or resuming staff enqueue.
+- **Stop:** suspend the worker or scale it to zero only during an authorized incident/change window.
+  New enqueue becomes unavailable after `STOPPING` immediately or after 60 seconds if the process
+  cannot publish its final heartbeat. Do not delete or manually rewrite queued jobs.
+- **Deploy/rollback:** automatic deploys remain off. Deploy the exact reviewed commit. A rollback is
+  valid only to a commit with the same pipeline and capability identities and compatible database
+  schema; never roll back a database migration through this service.
+- **Credential rotation:** replace `SUPABASE_SECRET_KEY` in the worker service, manually deploy, and
+  confirm a heartbeat bearing the new `RENDER_GIT_COMMIT`. Never print or copy the value into logs,
+  commands, source, or Admin browser configuration.
+- **Provider/startup failure:** leave Admin enqueue disabled. Check only bounded Render events/logs
+  for build hash failure, `ASSISTIVE_WORKER_PREFLIGHT_FAILED`, or the generic worker failure code.
+  Rebuild the exact commit; do not bypass hashes, widen versions, or enable a fallback provider.
+- **Crash during a job:** confirm the old heartbeat becomes stale, allow the 120-second lease to
+  expire, restart the worker, and observe normal fenced recovery. Do not clear claim tokens or change
+  job rows manually.
+- **Heartbeat/RPC failure:** verify the expected staging hostname, the applied heartbeat migration,
+  and service-role function grants. An unavailable Admin control is correct until these are fixed.
+- **Resource pressure:** keep one instance and inspect Render memory/CPU evidence. Do not reduce below
+  4 GB or raise worker/provider concurrency without a new bounded capacity qualification.
+
+The database heartbeat is the health surface for this background worker. Do not add a public HTTP
+health endpoint merely to satisfy web-service conventions.
 
 ---
 
@@ -187,7 +328,7 @@ The active staging environment (`capstone-admin-cms-staging-v2-2026`, ref `sqkpc
 - **Administrator Identity**: Initial staging administrator bootstrap completed; single Auth identity linked to `admin_users` profile with verified `admin` role in `user_roles` (`check:admin-auth` classification: `READY_FOR_MANUAL_LOGIN_TEST`).
 - **Next Lifecycle Action**: Standalone Admin/CMS hosted web service deployment and manual authenticated login verification.
 
-The repository now expects 44 migrations, ending at `20260828090000_assistive_language_findings`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that any newer repository migration is hosted. In particular, the multi-image gallery schema, the bulk-review concurrency gate, the public deployment ledger/head, the unified writer protocol, taxonomy operation guard, rollback capability, and assistive-language evidence contract are not established by the historical hosted evidence. Any hosted reconciliation remains a separately authorized operation followed by independent review.
+The repository now expects 45 migrations, ending at `20260828120000_assistive_worker_heartbeat`; this is newer than the recorded 26-migration hosted evidence above. That historical evidence must not be treated as proof that any newer repository migration is hosted. In particular, the multi-image gallery schema, the bulk-review concurrency gate, the public deployment ledger/head, the unified writer protocol, taxonomy operation guard, rollback capability, assistive-language evidence contract, and hosted-worker heartbeat contract are not established by the historical hosted evidence. Any hosted reconciliation remains a separately authorized operation followed by independent review.
 
 Operators should **NOT** run `supabase migration repair` or replay migrations against this clean v2 environment.
 
@@ -216,8 +357,8 @@ Expected automated inspection output on the clean v2 staging target:
 - `TARGET_IDENTITY_MATCH = YES`
 - `MIGRATION_HISTORY_READABLE = NO`
 - `SCHEMA_BASELINE = UNVERIFIED`
-- `REQUIRED_TABLE_SET = PRESENT` (All 33 public application tables detected)
-- `REQUIRED_RPC_NAMES = PRESENT` (All 70 application RPC names detected; 71 exact signatures including the expected overload)
+- `REQUIRED_TABLE_SET = PRESENT` (All 34 public application tables detected)
+- `REQUIRED_RPC_NAMES = PRESENT` (All 73 application RPC names detected; 74 exact signatures including the expected overload)
 - `REQUIRED_STORAGE_BUCKETS = PRESENT` (All 3 buckets detected)
 - `AUTH_FOUNDATION = READY`
 - `MANUAL_EVIDENCE_REQUIRED = YES`

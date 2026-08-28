@@ -61,6 +61,12 @@ OCR remains explicit. The production coordinator selects `NONE`; Tesseract is av
 trusted configuration explicitly selects it. No LLM, VLM, embedding, grammar, duplicate-detection,
 or hosted OCR path is present.
 
+The later hosted-staging extension preserves this queue and fencing protocol while selecting the
+already-qualified Paddle title and LanguageTool providers in a dedicated background worker. Its
+deployment, heartbeat, shutdown, and incident contract is documented in
+[Admin/CMS Hosted Staging Deployment Guide](../admin-cms-hosted-deployment.md#e-dedicated-assistive-worker).
+The local commands below remain loopback-only.
+
 ## Migration identity
 
 - Sequence: `0031` (the repository contains exactly 31 migrations)

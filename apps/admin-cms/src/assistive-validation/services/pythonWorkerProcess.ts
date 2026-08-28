@@ -199,11 +199,15 @@ export class PythonAssistiveWorkerProcess implements AssistiveWorkerRunner {
   }
 
   async health(): Promise<boolean> {
-    const child = spawn(this.executable, [
+    const args = [
       ...this.prefixArguments,
       '-m', 'capstone_assistive_worker.task_cli',
       '--health',
-    ], {
+    ];
+    if (this.options.paddleModelsDir) {
+      args.push('--paddle-models-dir', this.options.paddleModelsDir);
+    }
+    const child = spawn(this.executable, args, {
       cwd: this.workerRoot,
       env: safeEnvironment(this.workerRoot),
       shell: false,

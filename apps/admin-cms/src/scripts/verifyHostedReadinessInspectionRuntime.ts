@@ -14,6 +14,14 @@ import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEn
 
 const repoRoot = path.resolve(__dirname, '../../../..');
 
+const EXPECTED_PRIVILEGE_HIDDEN_TABLES = [
+  'password_recovery_sessions',
+  'assistive_validation_runs',
+  'assistive_validation_findings',
+  'assistive_validation_jobs',
+  'assistive_worker_heartbeats',
+] as const;
+
 async function main(): Promise<void> {
   const cli = path.resolve(repoRoot, 'node_modules/.bin/supabase');
   const workdir = path.resolve(repoRoot, 'infra');
@@ -47,7 +55,7 @@ async function main(): Promise<void> {
   const openApiDocument = await fetchPostgrestOpenApi(apiUrl, serviceRoleKey, auditedFetch);
   const evaluation = await checkHostedDeploymentReadinessWithClient(client, { openApiDocument });
 
-  assert.equal(ALL_REQUIRED_TABLES.length, 33);
+  assert.equal(ALL_REQUIRED_TABLES.length, 34);
   assert.equal(ALL_REQUIRED_TABLES.includes('publication_attempts'), true);
   assert.equal(ALL_REQUIRED_TABLES.includes('participant_preview_tokens' as never), false);
   assert.equal(
@@ -57,20 +65,15 @@ async function main(): Promise<void> {
   );
   assert.equal(evaluation.missingTables.length, 0);
   // Every table whose privileges are fully revoked is invisible to PostgREST by design, so the
-  // recovery ledger and all three assistive tables are correctly reported as needing manual evidence.
-  assert.deepEqual(evaluation.unverifiedTables, [
-    'password_recovery_sessions',
-    'assistive_validation_runs',
-    'assistive_validation_findings',
-    'assistive_validation_jobs',
-  ]);
+  // recovery ledger and assistive tables are correctly reported as needing manual evidence.
+  assert.deepEqual(evaluation.unverifiedTables, EXPECTED_PRIVILEGE_HIDDEN_TABLES);
   assert.equal(
     evaluation.requiredRpcNames,
     'PRESENT',
     `RPC name evidence incomplete (missing=${evaluation.missingRpcNames.join(',') || 'none'}).`
   );
   assert.equal(evaluation.missingRpcNames.length, 0);
-  assert.equal(REQUIRED_RPC_NAMES.length, 71);
+  assert.equal(REQUIRED_RPC_NAMES.length, 73);
   assert.equal(
     evaluation.requiredStorageBuckets,
     'PRESENT',
@@ -91,8 +94,10 @@ async function main(): Promise<void> {
   );
 
   console.log('Hosted readiness inspection verified against disposable loopback Supabase.');
-  console.log('23 application tables directly inspected; the four privilege-hidden ledgers require manual schema evidence.');
-  console.log('71 RPC names recognized; exact overload evidence remains manual.');
+  console.log(
+    `${ALL_REQUIRED_TABLES.length - EXPECTED_PRIVILEGE_HIDDEN_TABLES.length} application tables directly inspected; ${EXPECTED_PRIVILEGE_HIDDEN_TABLES.length} privilege-hidden tables require manual schema evidence.`
+  );
+  console.log(`${REQUIRED_RPC_NAMES.length} RPC names recognized; exact overload evidence remains manual.`);
   console.log('Migration history truthfully reported unavailable through the configured Data API.');
   console.log('Zero RPC executions, mutations, identifying rows, or temporary verifier records.');
 }

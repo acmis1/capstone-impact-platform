@@ -255,7 +255,7 @@ describe('ProjectAssistiveChecks Component', () => {
 
     const button = screen.getByRole('button', { name: /Run checks now/i });
     expect(button.hasAttribute('disabled')).toBe(true);
-    expect(screen.getAllByText(/Running assistive checks is not available in this environment/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Assistive checks are temporarily unavailable because the processing worker is not ready/i).length).toBeGreaterThan(0);
   });
 
   it('triggers runAssistiveChecksAction when Run checks button is clicked', async () => {
