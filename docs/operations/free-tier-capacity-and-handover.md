@@ -112,7 +112,7 @@ grant, which is why nothing in this design keeps a web service artificially awak
 | :--- | :--- |
 | Free limit | Actions is free for public repositories on standard runners. Packages usage is free for public packages, and container storage and bandwidth are currently free |
 | Source | `https://docs.github.com/en/billing/concepts/product-billing/github-actions`, `.../github-packages` (verified 2026-08-28) |
-| Caveat | Private packages on the Free plan include only 500 MB of storage — far below a multi-gigabyte worker image. A private registry is therefore **not** a zero-cost option at this image size |
+| Caveat | Private packages on the Free plan include only 500 MB of storage. The verified local worker image is 1,595,460,411 bytes before registry compression, so do not assume it fits: measure its compressed registry storage first |
 | Behaviour when exhausted | Not applicable while the repository and packages remain public |
 | Monitoring | Organisation billing view after any move to private |
 | Institutional owner | Repository owner |

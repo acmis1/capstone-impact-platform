@@ -19,15 +19,27 @@ Related: [Zero-Cost Assistive Executor](../operations/zero-cost-assistive-execut
 
 | Artifact | Source | Where it comes from | Licence position |
 | :--- | :--- | :--- | :--- |
-| PaddleOCR (code) | PaddlePaddle/PaddleOCR | PyPI, at build time | **Apache License 2.0** — the repository's `LICENSE` reads "Apache License, Version 2.0", "Copyright (c) 2016 PaddlePaddle Authors" |
-| PaddlePaddle / PaddleX (code) | PaddlePaddle | PyPI, at build time | **Apache License 2.0** |
-| PP-OCRv6 Small detection and recognition models | `paddle-model-ecology.bj.bcebos.com`, hash-pinned | Downloaded during image build | **Unclear.** The project repository is Apache-2.0, but no separate licence statement accompanies the published inference-model archives, and the project has an open issue about licence clarity |
-| LanguageTool 6.6 | `languagetool.org/download/LanguageTool-6.6.zip`, hash-pinned | Downloaded during image build | **LGPL 2.1 or later** for the core. The project states "The LanguageTool core (this repo) is freely available under the LGPL 2.1 or later" and "Unless otherwise noted, this software … is distributed under the LGPL" |
+| PaddleOCR 3.7.0 (code) | PaddlePaddle/PaddleOCR | PyPI, at build time | **Apache License 2.0** — declared by the upstream repository and installed package metadata |
+| PaddlePaddle 3.3.0 / PaddleX 3.7.2 (code) | PaddlePaddle | PyPI, at build time | **Apache License 2.0** — declared by both upstream repositories and installed package metadata |
+| PP-OCRv6 Small detection and recognition models | `paddle-model-ecology.bj.bcebos.com`, hash-pinned | Downloaded during image build | **Institutional decision required.** PaddleOCR describes the project as Apache-2.0 and an upstream project contributor says its models may be used commercially, but the two exact inference archives contain no model-specific licence, notice, or model card |
+| LanguageTool 6.6 | `languagetool.org/download/LanguageTool-6.6.zip`, hash-pinned | Downloaded during image build | **LGPL 2.1 or later** for the core; the archive also identifies separately licensed dependencies and language resources |
 | LanguageTool bundled dictionaries and data | Inside the same archive | Downloaded during image build | **Various.** The "unless otherwise noted" qualifier means bundled components must be enumerated before public redistribution |
 | Base OS, Node, OpenJDK 17, Python | Official images and Debian packages | Standard image layers | Redistributable under their own established terms, as for any container image |
 
-Sources: the PaddleOCR repository `LICENSE` and README, and the LanguageTool repository README and
-`COPYING.txt`, all read on 2026-08-28.
+Primary sources read on 2026-08-28:
+
+- [PaddleOCR repository and licence](https://github.com/PaddlePaddle/PaddleOCR) and the
+  [model-use discussion](https://github.com/PaddlePaddle/PaddleOCR/discussions/15986);
+- [PaddlePaddle repository and licence](https://github.com/PaddlePaddle/Paddle) and
+  [PaddleX repository and licence](https://github.com/PaddlePaddle/PaddleX);
+- [LanguageTool repository and licence statement](https://github.com/languagetool-org/languagetool),
+  [LanguageTool 6.6 standalone notice](https://github.com/languagetool-org/languagetool/blob/master/languagetool-standalone/README.md),
+  and the [6.6 release checksum announcement](https://forum.languagetool.org/t/ann-languagetool-6-6/11206).
+
+The locally built verification image was also inspected. Its installed package metadata reports the
+versions above. The LanguageTool archive contains `COPYING.txt`, its own README, a third-party
+licence index, and individual notices. Neither extracted PP-OCRv6 Small model tree contains a
+licence, notice, or README.
 
 ---
 
@@ -36,18 +48,20 @@ Sources: the PaddleOCR repository `LICENSE` and README, and the LanguageTool rep
 **Clear.** PaddleOCR, PaddlePaddle, and PaddleX code are Apache-2.0. Redistribution is permitted
 provided the licence text and any `NOTICE` file travel with the distribution.
 
-**Satisfiable with obligations.** LanguageTool 6.6 is LGPL-2.1-or-later. Redistributing the
-unmodified official archive is permitted provided the licence text accompanies it and the
-corresponding source remains available — it is published by the upstream project — and provided
-recipients keep the LGPL's right to replace the library. The image ships the archive unmodified,
-which keeps this straightforward. The bundled dictionaries and data are not all covered by that
-single statement and must be enumerated.
+**Requires a complete notice review.** LanguageTool 6.6 identifies its core as
+LGPL-2.1-or-later. The image retains the hash-verified official ZIP as well as the extracted files,
+including its licence material. Its third-party index lists dependencies under Apache, BSD, CDDL,
+EPL, GPL, LGPL, MIT, CC and other terms and explicitly points to per-language resource notices.
+Those bundled dictionaries and data are not all covered by the core statement and must be
+enumerated before public redistribution. The School must also confirm the applicable source and
+replacement obligations for its chosen distribution method.
 
-**Not clear.** The PP-OCRv6 Small inference-model archives are the gap. They are downloaded from a
-model-distribution endpoint rather than from the source repository, and no model-specific licence or
-model card accompanies them. It is reasonable to read them as covered by the project's Apache-2.0
-licence, but that is an inference, not a published statement, and the project has an open issue
-questioning exactly this.
+**Institutional decision required.** The PP-OCRv6 Small inference-model archives are the remaining
+gap. They are downloaded from a model-distribution endpoint rather than from the source repository,
+and the exact downloaded bytes contain no model-specific licence or model card. The upstream project
+describes PaddleOCR as Apache-2.0 and a project contributor has answered that PaddleOCR models may be
+used commercially. Applying that project-level statement to these exact standalone archive bytes is
+still an inference that the School, as distributor, must accept or resolve explicitly.
 
 ---
 
@@ -60,9 +74,11 @@ input defaults to `false`. Nothing is redistributed by merging this work.
 repository on the School's own host. Every artifact is downloaded from its own upstream, verified
 against a frozen hash, and used locally. This is the licence-safe path and is available today.
 
-**Profile A needs a registry, and at this image size only a public one is free.** Private packages
-on the Free plan include 500 MB of storage; the worker image is several gigabytes. So choosing
-Profile A means choosing public redistribution, which means resolving section 2 first.
+**Profile A needs a registry, and the verified local image is too large to assume a free private
+registry will hold it.** The 2026-08-28 build is 1,595,460,411 bytes before registry compression,
+while private packages on the Free plan include 500 MB of storage. Measure the compressed registry
+storage before treating a private package as viable. The known zero-cost route is a public package,
+which is redistribution and therefore requires section 2 to be resolved first.
 
 ---
 
