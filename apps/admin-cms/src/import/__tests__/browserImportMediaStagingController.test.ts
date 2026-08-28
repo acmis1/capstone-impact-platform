@@ -28,19 +28,36 @@ describe('Browser Import Media Staging Controller Unit Tests', () => {
     ],
   };
 
-  const metaFileA = new File(['{"publicId":"pkg-a"}'], 'project.json', { type: 'application/json' });
-  Object.defineProperty(metaFileA, 'webkitRelativePath', { value: 'root/pkg-a/project.json' });
+  const makeFile = (name: string, relativePath: string, body: string, type: string) => {
+    const file = new File([body], name, { type });
+    Object.defineProperty(file, 'webkitRelativePath', { value: relativePath });
+    return file;
+  };
 
-  const posterFileA = new File(['image bytes a'], 'poster.png', { type: 'image/png' });
-  Object.defineProperty(posterFileA, 'webkitRelativePath', { value: 'root/pkg-a/poster.png' });
+  const metaFileA = makeFile('project.json', 'root/pkg-a/project.json', '{"publicId":"pkg-a"}', 'application/json');
+  const posterFileA = makeFile('poster.png', 'root/pkg-a/poster.png', 'image bytes a', 'image/png');
+  const posterPdfFileA = makeFile('poster.pdf', 'root/pkg-a/poster.pdf', 'pdf bytes', 'application/pdf');
+  const snapshot1FileA = makeFile('snapshot-1.png', 'root/pkg-a/snapshot-1.png', 'snapshot bytes 1', 'image/png');
+  const snapshot2FileA = makeFile('snapshot-2.jpg', 'root/pkg-a/snapshot-2.jpg', 'snapshot bytes 2', 'image/jpeg');
+  const snapshot3WebpFileA = makeFile('snapshot-3.webp', 'root/pkg-a/snapshot-3.webp', 'snapshot bytes 3', 'image/webp');
+  const snapshotUnsupportedFileA = makeFile('snapshot-3.gif', 'root/pkg-a/snapshot-3.gif', 'snapshot bytes 3', 'image/gif');
+  const unselectedSnapshotB = makeFile('snapshot-1.png', 'root/pkg-b/snapshot-1.png', 'other snapshot bytes', 'image/png');
 
-  const metaFileB = new File(['{"publicId":"pkg-b"}'], 'project.json', { type: 'application/json' });
-  Object.defineProperty(metaFileB, 'webkitRelativePath', { value: 'root/pkg-b/project.json' });
+  const metaFileB = makeFile('project.json', 'root/pkg-b/project.json', '{"publicId":"pkg-b"}', 'application/json');
+  const posterFileB = makeFile('poster.png', 'root/pkg-b/poster.png', 'image bytes b', 'image/png');
 
-  const posterFileB = new File(['image bytes b'], 'poster.png', { type: 'image/png' });
-  Object.defineProperty(posterFileB, 'webkitRelativePath', { value: 'root/pkg-b/poster.png' });
-
-  const allFiles = [metaFileA, posterFileA, metaFileB, posterFileB];
+  const allFiles = [
+    metaFileA,
+    posterFileA,
+    posterPdfFileA,
+    snapshot1FileA,
+    snapshot2FileA,
+    snapshot3WebpFileA,
+    snapshotUnsupportedFileA,
+    metaFileB,
+    posterFileB,
+    unselectedSnapshotB,
+  ];
 
   it('1. Enforces synchronous duplicate submission lock and rejects same-tick calls', async () => {
     const lock = { current: false };
@@ -148,8 +165,14 @@ describe('Browser Import Media Staging Controller Unit Tests', () => {
     expect(keys).toContain(generateUploadKey('root/pkg-b/project.json'));
     // Media file for the selected package is attached
     expect(keys).toContain(generateUploadKey('root/pkg-a/poster.png'));
+    expect(keys).toContain(generateUploadKey('root/pkg-a/poster.pdf'));
+    expect(keys).toContain(generateUploadKey('root/pkg-a/snapshot-1.png'));
+    expect(keys).toContain(generateUploadKey('root/pkg-a/snapshot-2.jpg'));
+    expect(keys).toContain(generateUploadKey('root/pkg-a/snapshot-3.webp'));
+    expect(keys).not.toContain(generateUploadKey('root/pkg-a/snapshot-3.gif'));
     // Media file for the unselected package is NOT attached
     expect(keys).not.toContain(generateUploadKey('root/pkg-b/poster.png'));
+    expect(keys).not.toContain(generateUploadKey('root/pkg-b/snapshot-1.png'));
   });
 
   it('2b. Attaches referenceFile and adminReferenceMapping when provided', async () => {
