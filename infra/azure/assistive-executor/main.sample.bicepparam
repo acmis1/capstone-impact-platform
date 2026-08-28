@@ -4,7 +4,9 @@
 
 using './main.bicep'
 
-param location = 'australiaeast'
+// Consumption supports Southeast Asia, which keeps this sample close to the Singapore Supabase
+// data plane. Keep location parameterized for an institution with a different residency need.
+param location = 'southeastasia'
 param environmentName = 'capstone-assistive-executor'
 param dispatcherJobName = 'capstone-assistive-dispatcher'
 param workerJobName = 'capstone-assistive-worker'

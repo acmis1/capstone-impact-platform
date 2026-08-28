@@ -114,7 +114,6 @@ the log destination, the absence of every forbidden resource, digest pinning, si
 configuration, the constrained cadence, and the exact role actions. It runs without any cloud
 toolchain, so it protects the template even on machines that have never seen a cloud CLI.
 
-`az bicep build` and `az deployment group what-if` are operator steps. They require the Azure CLI,
-which is not part of this repository's toolchain, so **template compilation and deployment preview
-against a real subscription remain pending** and must be completed by the deploying operator before
-first use.
+The Ubuntu **Bicep Compilation** CI gate installs the pinned Bicep compiler and runs `az bicep
+build` without login, a subscription, or any deployment. `az deployment group what-if` remains an
+operator step against the intended resource group before first use.

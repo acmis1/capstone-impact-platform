@@ -44,7 +44,7 @@ const dispatcherEnvironment = (overrides: Record<string, string | undefined> = {
   CAPSTONE_ASSISTIVE_SUPABASE_URL: 'https://staging-project.supabase.co',
   CAPSTONE_ASSISTIVE_DISPATCHER_INSTANCE_ID: 'capstone-assistive-dispatcher',
   CAPSTONE_ASSISTIVE_DISPATCHER_DB_URL:
-    'postgresql://capstone_assistive_dispatcher.projectref:secret@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres',
+    'postgresql://capstone_assistive_dispatcher.staging-project:synthetic-password@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres',
   CAPSTONE_DEPLOYMENT_VERSION: COMMIT,
   CAPSTONE_ASSISTIVE_IMAGE_DIGEST: DIGEST,
   CAPSTONE_ASSISTIVE_WORKER_JOB_NAME: 'capstone-assistive-worker',
@@ -198,7 +198,7 @@ describe('provider-neutral execution identity', () => {
 });
 
 describe('dispatcher configuration', () => {
-  it('15. Accepts only the dedicated least-privilege execution-control database role', () => {
+  it('15. Accepts the verified staging session-pooler URL for the dedicated execution-control role', () => {
     expect(getAssistiveDispatcherConfig(dispatcherEnvironment())).toMatchObject({
       dispatcherInstanceId: 'capstone-assistive-dispatcher',
       deploymentVersion: COMMIT,
@@ -207,9 +207,17 @@ describe('dispatcher configuration', () => {
   });
 
   it.each([
-    ['the database owner role', 'postgresql://postgres.projectref:secret@pooler.supabase.com:5432/postgres'],
-    ['the Data API role', 'postgresql://authenticator.projectref:secret@pooler.supabase.com:5432/postgres'],
-    ['a non-PostgreSQL target', 'https://pooler.supabase.com:5432/postgres'],
+    ['a dedicated role for another project', 'postgresql://capstone_assistive_dispatcher.other-project:synthetic-password@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres'],
+    ['the broad postgres role', 'postgresql://postgres.staging-project:synthetic-password@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres'],
+    ['a service-role-like credential', 'postgresql://service_role.staging-project:synthetic-password@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres'],
+    ['the transaction pooler port', 'postgresql://capstone_assistive_dispatcher.staging-project:synthetic-password@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres'],
+    ['a non-Supabase hostname', 'postgresql://capstone_assistive_dispatcher.staging-project:synthetic-password@postgres.example.com:5432/postgres'],
+    ['a deceptive pooler suffix', 'postgresql://capstone_assistive_dispatcher.staging-project:synthetic-password@pooler.supabase.com.attacker.example:5432/postgres'],
+    ['a missing password', 'postgresql://capstone_assistive_dispatcher.staging-project@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres'],
+    ['a wrong database path', 'postgresql://capstone_assistive_dispatcher.staging-project:synthetic-password@aws-0-ap-southeast-2.pooler.supabase.com:5432/other'],
+    ['a non-PostgreSQL scheme', 'https://pooler.supabase.com:5432/postgres'],
+    ['TLS-weakening query options', 'postgresql://capstone_assistive_dispatcher.staging-project:synthetic-password@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres?sslmode=disable'],
+    ['a malformed URL', 'postgresql://%zz'],
   ])('16. Refuses %s', (_label, url) => {
     expect(() => getAssistiveDispatcherConfig(dispatcherEnvironment({
       CAPSTONE_ASSISTIVE_DISPATCHER_DB_URL: url,

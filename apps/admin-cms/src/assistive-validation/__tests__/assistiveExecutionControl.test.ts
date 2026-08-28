@@ -191,12 +191,22 @@ describe('cloud execution adapter', () => {
             { name: 'CAPSTONE_ASSISTIVE_EXECUTION_MODE', value: 'ON_DEMAND' },
             { name: 'CAPSTONE_DEPLOYMENT_VERSION', value: COMMIT },
             { name: 'CAPSTONE_ASSISTIVE_IMAGE_DIGEST', value: DIGEST },
-            { name: 'CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID', value: 'assistive-worker' },
+            { name: 'CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID', value: 'capstone-assistive-worker' },
             { name: 'SUPABASE_SECRET_KEY', secretRef: 'supabase-secret-key' },
           ],
-          probes: [{ type: 'liveness' }],
+          probes: [{ type: 'liveness', tcpSocket: { port: 3000 }, initialDelaySeconds: 5 }],
+          volumeMounts: [{ volumeName: 'scratch', mountPath: '/scratch' }],
         }],
-        initContainers: [{ name: 'init', image: 'ghcr.io/example/init@sha256:cafe', resources: { cpu: 0.25 } }],
+        initContainers: [{
+          name: 'init',
+          image: 'ghcr.io/example/init@sha256:cafe',
+          args: ['--prepare'],
+          env: [{ name: 'INIT_SECRET', secretRef: 'init-secret' }],
+          resources: { cpu: 0.25 },
+          volumeMounts: [{ volumeName: 'scratch', mountPath: '/scratch' }],
+        }],
+        volumes: [{ name: 'scratch', storageType: 'EmptyDir' }],
+        terminationGracePeriodSeconds: 60,
       },
     },
   };
@@ -222,7 +232,7 @@ describe('cloud execution adapter', () => {
     return { impl: impl as unknown as typeof fetch, startBodies };
   }
 
-  it('9. Preserves the deployed template and injects only the reservation variables', async () => {
+  it('9. Preserves the complete deployed template and injects only reservation variables', async () => {
     const { impl, startBodies } = fetchStub({});
     const adapter = new AzureContainerAppsJobLauncher(launcherConfig, impl);
 
@@ -231,26 +241,33 @@ describe('cloud execution adapter', () => {
     if (!prepared.ok) return;
     await adapter.start(prepared.prepared, TOKEN, 12);
 
-    const [body] = startBodies as Array<{ containers: Array<Record<string, unknown>>; initContainers: unknown[] }>;
-    const container = body.containers[0];
-    expect(container.image).toBe(`ghcr.io/example/capstone-assistive-worker@${DIGEST}`);
-    expect(container.command).toEqual(jobTemplate.properties.template.containers[0].command);
-    expect(container.args).toEqual(['--quiet']);
-    expect(container.resources).toEqual({ cpu: 2, memory: '4.0Gi' });
-    expect(body.initContainers).toEqual([
-      { name: 'init', image: 'ghcr.io/example/init@sha256:cafe', resources: { cpu: 0.25 } },
-    ]);
-    expect(container.env).toEqual([
-      { name: 'CAPSTONE_RUNTIME_ENV', value: 'staging' },
-      { name: 'CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED', value: 'true' },
-      { name: 'CAPSTONE_ASSISTIVE_EXECUTION_MODE', value: 'ON_DEMAND' },
-      { name: 'CAPSTONE_DEPLOYMENT_VERSION', value: COMMIT },
-      { name: 'CAPSTONE_ASSISTIVE_IMAGE_DIGEST', value: DIGEST },
-      { name: 'CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID', value: 'assistive-worker' },
-      { name: 'SUPABASE_SECRET_KEY', secretRef: 'supabase-secret-key' },
+    const expected = structuredClone(jobTemplate.properties.template);
+    expected.containers[0].env = [
+      ...expected.containers[0].env,
       { name: 'CAPSTONE_ASSISTIVE_RESERVATION_TOKEN', value: TOKEN },
       { name: 'CAPSTONE_ASSISTIVE_RESERVATION_GENERATION', value: '12' },
-    ]);
+    ];
+    expect(startBodies).toEqual([expected]);
+  });
+
+  it('10. Accepts a job-scoped worker identity that deliberately differs from the container name', async () => {
+    expect(jobTemplate.properties.template.containers[0].name).toBe('assistive-worker');
+    expect(jobTemplate.properties.template.containers[0].env).toContainEqual({
+      name: 'CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID', value: launcherConfig.jobName,
+    });
+    const { impl } = fetchStub({});
+    await expect(new AzureContainerAppsJobLauncher(launcherConfig, impl).prepare())
+      .resolves.toMatchObject({ ok: true });
+  });
+
+  it('10a. Refuses a container-scoped identity in place of the configured job identity', async () => {
+    const drifted = structuredClone(jobTemplate);
+    const workerIdentity = drifted.properties.template.containers[0].env
+      .find((entry) => entry.name === 'CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID');
+    if (workerIdentity) workerIdentity.value = 'assistive-worker';
+    const { impl } = fetchStub({ read: () => Response.json(drifted) });
+    await expect(new AzureContainerAppsJobLauncher(launcherConfig, impl).prepare())
+      .resolves.toEqual({ ok: false, reason: 'JOB_TEMPLATE_INVALID' });
   });
 
   it.each([

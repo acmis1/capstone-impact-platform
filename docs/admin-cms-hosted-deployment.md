@@ -156,7 +156,7 @@ The worker-only environment variables are:
 | `CAPSTONE_EXPECTED_SUPABASE_HOST` | Operator secret/config | Exact canonical staging hostname. |
 | `CAPSTONE_ASSISTIVE_SUPABASE_URL` | Operator secret/config | Server-only canonical HTTPS staging base URL; never `NEXT_PUBLIC_`. |
 | `SUPABASE_SECRET_KEY` | Platform secret | Modern `sb_secret_...` credential. Legacy service-role JWTs are refused. |
-| `CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID` | Deployment | Bounded worker identity for heartbeat ownership. |
+| `CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID` | Deployment | Bounded worker identity for heartbeat ownership. For Azure on-demand execution this is the worker job name, not the container element name; continuous hosts retain their host-scoped identity. |
 | `CAPSTONE_DEPLOYMENT_VERSION` | Deployment | Exact 40-hex commit recorded with liveness evidence. |
 | `CAPSTONE_ASSISTIVE_IMAGE_DIGEST` | Deployment | Immutable `sha256:` digest. Required for on-demand execution. |
 | `CAPSTONE_ASSISTIVE_PADDLE_MODELS_DIR` | Fixed value | `/opt/capstone/artifacts/paddle`. |

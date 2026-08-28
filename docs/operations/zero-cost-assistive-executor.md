@@ -161,7 +161,9 @@ project data access, no workflow or publication routine, and no server secret ke
 
 Build its connection URL against the **shared session-mode pooler on port 5432**, which is the
 IPv4-reachable option on every Supabase tier. The direct connection is IPv6-only unless a paid IPv4
-add-on is purchased, so it must not be used.
+add-on is purchased, so it must not be used. The dispatcher verifies the exact project-qualified
+role, `<project-ref>.pooler.supabase.com` host suffix, port `5432`, `/postgres` database, and a
+non-empty password before opening `pg`; query strings and fragments are refused.
 
 ```text
 postgresql://capstone_assistive_dispatcher.<PROJECT_REF>:<password>@<pooler-host>:5432/postgres
@@ -176,6 +178,9 @@ az deployment group create  --resource-group <rg> --template-file infra/azure/as
 ```
 
 See [the template README](../../infra/azure/assistive-executor/README.md) for every parameter.
+The sample parameter file selects `southeastasia`: the Consumption profile supports that region and
+it is closer to the existing Singapore Supabase staging data plane. `location` remains a parameter
+for an institution with a residency requirement that needs another supported region.
 
 ### 5.5 Register the executor
 

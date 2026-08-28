@@ -71,6 +71,10 @@ type TemplateContainer = {
   env?: EnvironmentVar[];
   resources?: { cpu?: unknown; memory?: unknown };
 };
+type ExecutionTemplate = {
+  containers?: unknown;
+  [key: string]: unknown;
+};
 
 const EXPECTED_WORKER_COMMAND = [
   'npm', 'run', 'run:assistive-worker:on-demand', '--workspace=apps/admin-cms',
@@ -91,27 +95,17 @@ function hasSecretReference(container: TemplateContainer, name: string): boolean
     && matches[0].value === undefined;
 }
 
-function isCompleteWorkerTemplate(container: TemplateContainer): boolean {
+function isCompleteWorkerTemplate(
+  container: TemplateContainer,
+  expectedWorkerInstanceId: string,
+): boolean {
   return JSON.stringify(container.command) === JSON.stringify(EXPECTED_WORKER_COMMAND)
     && container.resources?.cpu === 2
     && (container.resources.memory === '4Gi' || container.resources.memory === '4.0Gi')
     && hasValue(container, 'CAPSTONE_ASSISTIVE_HOSTED_EXECUTION_ENABLED', 'true')
     && hasValue(container, 'CAPSTONE_ASSISTIVE_EXECUTION_MODE', 'ON_DEMAND')
-    && hasValue(container, 'CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID', container.name ?? '')
+    && hasValue(container, 'CAPSTONE_ASSISTIVE_WORKER_INSTANCE_ID', expectedWorkerInstanceId)
     && hasSecretReference(container, 'SUPABASE_SECRET_KEY');
-}
-
-/**
- * Copies exactly the fields the job execution template accepts, so an override preserves the
- * deployed container definition instead of reconstructing a partial one from memory.
- */
-function toExecutionContainer(container: TemplateContainer): TemplateContainer {
-  const projected: TemplateContainer = { name: container.name, image: container.image };
-  if (container.command !== undefined) projected.command = container.command;
-  if (container.args !== undefined) projected.args = container.args;
-  if (container.env !== undefined) projected.env = container.env;
-  if (container.resources !== undefined) projected.resources = container.resources;
-  return projected;
 }
 
 function withReservationEnvironment(
@@ -171,7 +165,7 @@ export class AzureContainerAppsJobLauncher implements ExecutorLauncher {
     const token = await this.accessToken();
     if (!token) return { ok: false, reason: 'IDENTITY_TOKEN_UNAVAILABLE' };
 
-    let job: { properties?: { template?: { containers?: unknown; initContainers?: unknown } } };
+    let job: { properties?: { template?: ExecutionTemplate } };
     try {
       const response = await this.fetchImpl(
         `${ARM_SCOPE}${this.jobResourcePath}?api-version=${ARM_API_VERSION}`,
@@ -183,7 +177,8 @@ export class AzureContainerAppsJobLauncher implements ExecutorLauncher {
       return { ok: false, reason: 'JOB_READ_FAILED' };
     }
 
-    const containers = job.properties?.template?.containers;
+    const template = job.properties?.template;
+    const containers = template?.containers;
     if (!Array.isArray(containers) || containers.length !== 1) {
       return { ok: false, reason: 'JOB_TEMPLATE_INVALID' };
     }
@@ -197,22 +192,19 @@ export class AzureContainerAppsJobLauncher implements ExecutorLauncher {
       return { ok: false, reason: 'JOB_DEPLOYMENT_MISMATCH' };
     }
     if (!hasValue(matching[0], 'CAPSTONE_ASSISTIVE_IMAGE_DIGEST', this.config.expectedImageDigest)
-        || !isCompleteWorkerTemplate(matching[0])) {
+        || !isCompleteWorkerTemplate(matching[0], this.config.jobName)) {
       return { ok: false, reason: 'JOB_TEMPLATE_INVALID' };
     }
 
-    const initContainers = job.properties?.template?.initContainers;
+    // Azure start overrides replace the whole execution template. Clone precisely that provider
+    // payload after validation so newly supported template fields cannot be silently discarded.
+    const executionTemplate = structuredClone(template) as ExecutionTemplate;
     return {
       ok: true,
       prepared: {
         containerName: matching[0].name,
         credential: token,
-        requestBody: {
-          containers: (containers as TemplateContainer[]).map(toExecutionContainer),
-          ...(Array.isArray(initContainers)
-            ? { initContainers: (initContainers as TemplateContainer[]).map(toExecutionContainer) }
-            : {}),
-        },
+        requestBody: executionTemplate,
       },
     };
   }
@@ -222,7 +214,7 @@ export class AzureContainerAppsJobLauncher implements ExecutorLauncher {
     reservationToken: string,
     generation: number,
   ): Promise<StartResult> {
-    const body = prepared.requestBody as { containers: TemplateContainer[]; initContainers?: TemplateContainer[] };
+    const body = prepared.requestBody as ExecutionTemplate & { containers: TemplateContainer[] };
     const payload = {
       ...body,
       containers: body.containers.map((container) => container.name === prepared.containerName
