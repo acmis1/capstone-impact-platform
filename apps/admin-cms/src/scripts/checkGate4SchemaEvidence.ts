@@ -136,6 +136,19 @@ function currentGitSha(repoRoot: string): string {
   return sha;
 }
 
+export function gitStatusShowsCleanTrackedCheckout(status: string): boolean {
+  return status.trim().length === 0;
+}
+
+function requireCleanTrackedCheckout(repoRoot: string): void {
+  const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (!gitStatusShowsCleanTrackedCheckout(status)) throw new Error('REPOSITORY_TRACKED_CHANGES_PRESENT');
+}
+
 function invalidResult(errors: readonly string[]): Gate4ComparisonResult {
   return {
     classification: 'EVIDENCE_INVALID',
@@ -177,6 +190,7 @@ function main(): void {
   }
 
   try {
+    requireCleanTrackedCheckout(repoRoot);
     const repositoryGitSha = currentGitSha(repoRoot);
     if (options.expectedGitSha && options.expectedGitSha !== repositoryGitSha) throw new Error('REPOSITORY_GIT_SHA_MISMATCH');
     const expected = collectLocalGate4Evidence(repoRoot);

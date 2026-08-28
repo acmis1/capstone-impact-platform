@@ -171,6 +171,8 @@ from the fully migrated repository schema, not from a second hand-maintained DDL
    npm run check:gate4-schema-evidence -- --evidence-file=<snapshot.json> --expected-git-sha=<full-40-hex-reviewed-sha>
    ```
    Add `--machine-readable` for deterministic JSON output.
+   The command fails closed if the checkout has tracked staged or unstaged changes; an untracked
+   snapshot artifact is allowed because it is input evidence, not repository contract source.
 
 Required result: `GATE4_CLASSIFICATION=GATE4_MATCH`, with `MIGRATIONS=46/46`, `TABLES=37/37`,
 `RPC_SIGNATURES=74/74`, `RPC_NAMES=73/73`, `STORAGE_BUCKETS=3/3`, and match classifications for

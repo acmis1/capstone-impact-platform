@@ -10,6 +10,7 @@ import {
   parseGate4Evidence,
   type Gate4SchemaEvidence,
 } from './gate4SchemaEvidence';
+import { gitStatusShowsCleanTrackedCheckout } from '../scripts/checkGate4SchemaEvidence';
 
 function exactEvidence(): Gate4SchemaEvidence {
   return {
@@ -252,5 +253,14 @@ describe('Gate 4 hosted SQL safety contract', () => {
     }
     expect(sql).toContain("routine_name = 'canonical_staff_roles'");
     expect(sql).toContain("'application_rpc'");
+  });
+});
+
+describe('Gate 4 exact Git identity guard', () => {
+  it('requires a checkout with no tracked staged or unstaged changes', () => {
+    expect(gitStatusShowsCleanTrackedCheckout('')).toBe(true);
+    expect(gitStatusShowsCleanTrackedCheckout('  \r\n')).toBe(true);
+    expect(gitStatusShowsCleanTrackedCheckout(' M infra/supabase/gate4-schema-evidence.sql\n')).toBe(false);
+    expect(gitStatusShowsCleanTrackedCheckout('M  apps/admin-cms/src/deployment/gate4SchemaEvidence.ts\n')).toBe(false);
   });
 });

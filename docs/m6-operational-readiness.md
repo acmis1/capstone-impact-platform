@@ -109,7 +109,8 @@ npm --silent run check:gate4-schema-evidence -- --evidence-file=<snapshot.json> 
 catalog for that checkout across the covered dimensions. `GATE4_DRIFT` identifies bounded,
 category-level differences. `EVIDENCE_INVALID` means the snapshot is malformed, incomplete, or
 ambiguous and must never be treated as green. The output records the exact repository SHA used for
-the comparison. Migration-history equality alone is insufficient because it cannot prove the final
+the comparison, and the command rejects tracked staged or unstaged changes so that SHA identifies
+the actual query and comparison source. Migration-history equality alone is insufficient because it cannot prove the final
 columns, constraints, RLS/policies, grants, function overloads/security modes, or bucket settings.
 
 A match does not prove row contents, Auth users, Storage object completeness, application workflow
