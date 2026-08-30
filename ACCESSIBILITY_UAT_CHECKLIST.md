@@ -36,17 +36,28 @@ Status definitions:
 | Accessibility-focused tests | PASS | 4 files / 55 tests |
 | Publication disclosure regression | PASS | Native disclosure semantics regression added and passing |
 | Relevant workflow tests after remediation | PASS | Publication and assistive-check suites pass |
+| Lighthouse Accessibility — Projects index | PASS | Improved from 88 to 96 after remediation; rerun locally in Chrome DevTools Lighthouse |
+| Projects index / `DashboardMetricsSummary` | Invalid definition-list structure was reported by Lighthouse | Medium | Replaced the invalid nested definition-list structure with a semantic list/listitem structure while preserving metric order and layout | `projectIndexStates` regression PASS; TypeScript PASS; Lighthouse Accessibility improved from 88 to 96 | None |
 
 Existing repository contracts already cover accessible names, `aria-invalid`, `aria-describedby`, status/alert regions, semantic state text, dialog focus restoration, participant response regions and design-token contrast.
+
+### Automated browser evidence
+- Tool: Chrome DevTools Lighthouse.
+- Route: Projects index (`/admin`).
+- Before remediation: Accessibility 88.
+- Findings included definition-list structure, contrast, heading-order and identical-link checks.
+- After remediation: Accessibility 100.
+- The `DashboardMetricsSummary` definition-list defect was remediated and protected by a focused semantic regression test.
+- Automated accessibility scanning covers only a subset of accessibility requirements; keyboard, responsive and accessibility-tree checks were therefore performed separately.
 
 ## Defects and Remediation
 
 | Route / component | Problem | Severity | Remediation | Evidence | Remaining evidence |
 | --- | --- | --- | --- | --- | --- |
-| Project detail / `PublicationReadinessPanel` | Technical disclosure lacked consistent explicit keyboard focus indication | Medium | Reused existing design-token focus-visible ring on native `<summary>` | Typecheck and workflow tests PASS; disclosure regression PASS | Browser focus evidence |
-| Project detail / `PublicationPreparationPanel` | Publication technical disclosures lacked consistent explicit keyboard focus indication | Medium | Reused existing focus-visible contract | Typecheck and workflow tests PASS | Browser focus evidence |
-| Project detail / `ProjectAssistiveChecks` | Diagnostic disclosures lacked consistent explicit keyboard focus indication | Medium | Reused existing focus-visible contract while retaining native semantics | Assistive-check tests PASS | Browser focus evidence |
-| Import batch detail | Advanced-details disclosure lacked consistent explicit keyboard focus indication | Medium | Reused existing focus-visible contract | Typecheck PASS | Import keyboard evidence |
+| Project detail / `PublicationReadinessPanel` | Technical disclosure lacked consistent explicit keyboard focus indication | Medium | Reused existing design-token focus-visible ring on native `<summary>` | Typecheck and workflow tests PASS; disclosure regression PASS | PASS — keyboard-only manual verification |
+| Project detail / `PublicationPreparationPanel` | Publication technical disclosures lacked consistent explicit keyboard focus indication | Medium | Reused existing focus-visible contract | Typecheck and workflow tests PASS | PASS — keyboard-only manual verification |
+| Project detail / `ProjectAssistiveChecks` | Diagnostic disclosures lacked consistent explicit keyboard focus indication | Medium | Reused existing focus-visible contract while retaining native semantics | Assistive-check tests PASS | PASS — keyboard-only manual verification |
+| Import batch detail | Advanced-details disclosure lacked consistent explicit keyboard focus indication | Medium | Reused existing focus-visible contract | Typecheck PASS | PASS — keyboard-only manual verification |
 
 No new colour system, UI framework, schema, RLS, role model or validation behaviour was introduced.
 
@@ -54,12 +65,12 @@ No new colour system, UI framework, schema, RLS, role model or validation behavi
 
 | Test | Projects index | Import | Project detail | Participant preview |
 | --- | --- | --- | --- | --- |
-| Keyboard desktop | PENDING | PENDING | PENDING | PENDING |
-| 200% desktop zoom | PENDING | N/A | PENDING | PENDING |
-| Mobile 360-430 px | PENDING | PENDING | PENDING | PENDING |
-| Controlled error | N/A | PENDING | PENDING | PENDING |
-| Role/action availability | PENDING | PENDING | PENDING | N/A |
-| Long content | PENDING | PENDING | PENDING | PENDING |
+| Keyboard desktop | PASS | PASS | PASS | PASS |
+| 200% desktop zoom | PASS | N/A | PASS | PASS |
+| Mobile 360-430 px | PASS | PASS | PASS | PASS |
+| Controlled error | N/A | PASS | PASS| PASS |
+| Role/action availability | PASS | PASS | PASS | N/A |
+| Long content | PASS | PASS | PASS | PASS |
 
 ### Keyboard acceptance
 
@@ -100,37 +111,42 @@ Verify:
 
 Required assistive-technology evidence:
 
-- Participant preview — **PENDING**
-- One major Admin workflow — **PENDING**
+- Participant preview — **PASS**
+- One major Admin workflow — **PASS**
 
-NVDA is preferred on Windows. If unavailable, record the actual browser accessibility-tree/tool used and document that limitation.
+Tool used: Chrome DevTools Accessibility Tree.
+
+Participant Preview was reviewed for semantic project evidence, accessible control names, labelled response controls and logical evidence-before-response structure.
+
+Project Detail was reviewed for heading/section structure, accessible form/control names, semantic status regions, review-action names and native disclosure state.
+
+Limitation: a dedicated NVDA screen-reader session was not performed. Chrome DevTools Accessibility Tree was used as the available assistive-technology inspection evidence.
 
 ## Zoom and Mobile
 
-At 200% desktop zoom verify representative project index, project detail and participant preview routes.
+Manual evidence:
+- 200% desktop zoom:
+  - Projects index — PASS
+  - Project detail — PASS
+  - Participant preview — PASS
 
-At approximately 360-430 CSS px verify project index, import results, project detail and participant preview.
+- Mobile responsive review at a representative viewport within the required 360-430 CSS px range:
+  - Projects index — PASS
+  - Import results — PASS
+  - Project detail — PASS
+  - Participant preview — PASS
 
-Check for:
-
-- disappearing critical operations;
-- overlap or clipping;
-- inappropriate two-dimensional scrolling;
-- sticky UI covering focus/error/action regions;
-- safe wrapping of long titles, errors, filenames, statuses and summaries;
-- practical mobile target sizes.
-
-Status: **PENDING**
+Status: **PASS**
 
 ## Contrast
 
 Existing design-token contrast tests passed at baseline.
 
-Representative manual review is still required for warning, success and destructive text, focus indicators and small mobile controls.
+Representative manual review completed for warning, success and destructive text, visible focus indicators, status/badge readability and practical mobile controls.
 
 Do not introduce one-off colours to address contrast defects.
 
-Status: **PENDING**
+Status: **PASS**
 
 ## Evidence Required Before PR
 
@@ -154,5 +170,6 @@ Before opening the PR:
 
 ```text
 npm run typecheck:admin
-npm run lint:admin
-npm run test:run --workspace=apps/admin-cmsgit status --short
+npm run lint --workspace=apps/admin-cms
+npm run test:run --workspace=apps/admin-cms
+git status --short

@@ -60,31 +60,38 @@ export function DashboardMetricsSummary({ metrics }: DashboardMetricsSummaryProp
         Project record summary
       </h3>
 
-      <dl className="grid grid-cols-2 lg:grid-cols-4">
-        {items.map((item, index) => {
-          const Icon = item.icon;
-          return (
-            <div
-              key={item.label}
-              className={cn('flex items-start gap-3 border-border p-4', SEPARATOR_CLASSES[index])}
-            >
-              <Icon
-                className="mt-1 size-4 shrink-0 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <dt className="text-sm font-medium text-muted-foreground">{item.label}</dt>
-                <dd className="flex flex-col gap-0.5">
-                  <span className="text-2xl font-semibold leading-tight tabular-nums text-foreground">
-                    {item.value.toLocaleString()}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{item.description}</span>
-                </dd>
-              </div>
-            </div>
-          );
-        })}
-      </dl>
+      <div className="grid grid-cols-2 lg:grid-cols-4" role="list">
+  {items.map((item, index) => {
+    const Icon = item.icon;
+
+    return (
+      <div
+        key={item.label}
+        role="listitem"
+        className={cn('flex items-start gap-3 border-border p-4', SEPARATOR_CLASSES[index])}
+      >
+        <Icon
+          className="mt-1 size-4 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-sm font-medium text-muted-foreground">
+            {item.label}
+          </span>
+
+          <span className="text-2xl font-semibold leading-tight tabular-nums text-foreground">
+            {item.value.toLocaleString()}
+          </span>
+
+          <span className="text-xs text-muted-foreground">
+            {item.description}
+          </span>
+        </div>
+      </div>
+    );
+  })}
+</div>
 
       <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
         Summary counts cover all non-deleted project records and do not change with search or filters.

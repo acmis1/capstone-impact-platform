@@ -87,31 +87,38 @@ describe('DashboardMetricsSummary', () => {
     ).toBeTruthy();
   });
 
-  it('uses a compact two-by-two mobile grid with semantic row and column dividers', () => {
-    const { container } = render(
-      <DashboardMetricsSummary
-        metrics={{ totalProjects: 128, publicEligible: 34, inReview: 7, archived: 12 }}
-      />,
-    );
+  it('uses a compact two-by-two mobile grid with semantic list structure and dividers', () => {
+  const { container } = render(
+    <DashboardMetricsSummary
+      metrics={{ totalProjects: 128, publicEligible: 34, inReview: 7, archived: 12 }}
+    />,
+  );
 
-    const grid = container.querySelector('dl') as HTMLDListElement;
-    expect(container.querySelector('section')?.className).toContain('border-border-structural');
-    expect(grid.className).toContain('grid-cols-2');
-    expect(grid.className).toContain('lg:grid-cols-4');
+  const grid = screen.getByRole('list');
 
-    const items = [...grid.children] as HTMLElement[];
-    expect(items).toHaveLength(4);
-    expect(items[1].className).toContain('border-l');
-    expect(items[2].className).toContain('border-t');
-    expect(items[2].className).toContain('lg:border-t-0 lg:border-l');
-    expect(items[3].className).toContain('border-t border-l');
-    expect(items[3].className).toContain('lg:border-t-0');
-    for (const item of items) {
-      expect(item.className).toContain('border-border');
-    }
+  expect(container.querySelector('section')?.className).toContain('border-border-structural');
+  expect(grid.className).toContain('grid-cols-2');
+  expect(grid.className).toContain('lg:grid-cols-4');
 
-    expect(screen.getByText(/Summary counts cover/).className).toContain('border-border');
-  });
+  const items = screen.getAllByRole('listitem');
+  expect(items).toHaveLength(4);
+
+  expect(items[1].className).toContain('border-l');
+  expect(items[2].className).toContain('border-t');
+  expect(items[2].className).toContain('lg:border-t-0 lg:border-l');
+  expect(items[3].className).toContain('border-t border-l');
+  expect(items[3].className).toContain('lg:border-t-0');
+
+  for (const item of items) {
+    expect(item.className).toContain('border-border');
+  }
+
+  expect(container.querySelector('dl')).toBeNull();
+  expect(container.querySelector('dt')).toBeNull();
+  expect(container.querySelector('dd')).toBeNull();
+
+  expect(screen.getByText(/Summary counts cover/).className).toContain('border-border');
+});
 
   it('uses structural boundaries only for Projects outer surfaces while retaining internal semantic dividers', () => {
     const filterBarSource = fs.readFileSync(path.resolve(__dirname, './ProjectFilterBar.tsx'), 'utf-8');
