@@ -670,7 +670,7 @@ export function ProjectAssistiveChecks({
                           {/* Technical details disclosure - no percentages or confidence wording */}
                           {finding.scoreValue !== null && (
                             <details className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">
-                              <summary className="cursor-pointer font-medium hover:text-foreground">
+                              <summary className="cursor-pointer rounded-sm font-medium hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
                                 Technical diagnostic details
                               </summary>
                               <div className="mt-1 font-mono text-[11px]">
@@ -735,7 +735,7 @@ export function ProjectAssistiveChecks({
                             </p>
                           )}
                           <details className="mt-3 border-t border-border pt-2 text-xs text-muted-foreground">
-                            <summary className="cursor-pointer font-medium hover:text-foreground">Technical diagnostic details</summary>
+                            <summary className="cursor-pointer rounded-sm font-medium hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical diagnostic details</summary>
                             <div className="mt-1 font-mono text-[11px]">
                               <p>LanguageTool {languageEvidence.providerVersion} · rule {languageEvidence.ruleId}</p>
                               <p>Offsets: {languageEvidence.startOffset}–{languageEvidence.endOffset} Unicode code points</p>

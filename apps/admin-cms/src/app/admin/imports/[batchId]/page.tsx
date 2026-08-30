@@ -245,7 +245,7 @@ export default async function ImportBatchDetailPage({
 
             {/* Native Disclosure for Technical Details */}
             <details className="mt-1 pt-3 border-t border-border group">
-              <summary className="text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer flex items-center justify-between list-none">
+              <summary className="text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer flex items-center justify-between list-none rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
                 <span>Advanced details</span>
                 <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
               </summary>

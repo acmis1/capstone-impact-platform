@@ -101,7 +101,7 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
             </div>
           </dl>
           <details className="mt-3 text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
+            <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical details</summary>
             <dl className="mt-2 space-y-1">
               <div><dt className="inline font-medium text-foreground">Review artifact record count:</dt> <dd className="inline">{state.plan.recordCount}</dd></div>
               <div><dt className="inline font-medium text-foreground">Project ID:</dt> <dd className="inline font-mono break-all">{state.plan.publicId}</dd></div>
@@ -162,7 +162,7 @@ export function PublicationPreparationPanel({ publicId, ready, canPrepare, execu
               : 'This project is now published in the local test environment.'}
           </p>
           <details className="mt-3 text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
+            <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical details</summary>
             <dl className="mt-2 space-y-1">
               <div><dt className="inline font-medium text-foreground">Published deployment record count:</dt> <dd className="inline">{state.success.recordCount}</dd></div>
               <div><dt className="inline font-medium text-foreground">SHA-256 hash:</dt> <dd className="inline font-mono break-all">{state.success.feedHash}</dd></div>

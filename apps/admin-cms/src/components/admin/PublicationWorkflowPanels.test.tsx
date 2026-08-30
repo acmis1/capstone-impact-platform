@@ -70,9 +70,28 @@ describe('PublicationReadinessPanel', () => {
     expect(screen.getByText('Project details and media match confirmation')).toBeTruthy();
   });
 
-  it('places technical result codes behind technical disclosure', () => {
-    render(<PublicationReadinessPanel readiness={{ ready: true, resultCode: 'READY', blockers: [], confirmedAt: PLAN.confirmedAt }} />);
-    expect(screen.getByText('Technical details')).toBeTruthy();
+    it('places technical result codes behind a keyboard-operable native disclosure', () => {
+    render(
+      <PublicationReadinessPanel
+        readiness={{
+          ready: true,
+          resultCode: 'READY',
+          blockers: [],
+          confirmedAt: PLAN.confirmedAt,
+        }}
+      />,
+    );
+
+    const summary = screen.getByText('Technical details');
+    const disclosure = summary.closest('details');
+
+    expect(summary.tagName).toBe('SUMMARY');
+    expect(disclosure).not.toBeNull();
+    expect(disclosure?.hasAttribute('open')).toBe(false);
+
+    fireEvent.click(summary);
+
+    expect(disclosure?.hasAttribute('open')).toBe(true);
     expect(screen.getByText('READY')).toBeTruthy();
   });
 
