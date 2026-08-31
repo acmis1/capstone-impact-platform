@@ -63,7 +63,7 @@ transfer. They are left blank here because inventing them would be a false recor
 | Required final class | B — transfer, or C — recreate under a School organisation | B, or C — recreate and restore |
 | Account / identifier | | |
 | Transferable | Yes — organisation ownership transfer | Yes, with the organisation |
-| Redeployable | Yes | Yes — 47 migrations plus a restored backup reproduce it exactly |
+| Redeployable | Yes | Yes — 48 migrations plus a restored backup reproduce it exactly |
 | Procedure | Transfer to a School-controlled organisation, or create a School organisation and move the project | Transfer with the organisation; or create a project, apply migrations, restore database and storage, re-provision staff, rotate keys |
 | Secret owner | Database / infrastructure maintainer | Database / infrastructure maintainer |
 | Backup owner | N/A | **Operator-driven. Free plans include no automatic backups** |
@@ -143,7 +143,7 @@ transferred or recreated before handover completes.
 
 1. Confirm the institutional accounts and aliases that will own each resource.
 2. Transfer or fork the repository; reconfigure branch protection and code owners.
-3. Transfer or recreate the Supabase organisation and project; apply all 47 migrations; restore data
+3. Transfer or recreate the Supabase organisation and project; apply all 48 migrations; restore data
    if recreating; re-provision staff accounts.
 4. Rotate every credential into School-controlled storage and revoke the previous values.
 5. Transfer or recreate the Admin/CMS hosting service.
