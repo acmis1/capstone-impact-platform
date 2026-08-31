@@ -46,7 +46,12 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
    * This remains meaningful both on a feature branch and after squash-merge to `main`, unlike
    * comparing to `origin/main` (which necessarily contains the migration after merge).
    */
-  function migrationIntroductionBaseline(): { parentCommit: string; files: string[] } {
+  function migrationIntroductionBaseline(): {
+    introductionCommit: string;
+    parentCommit: string;
+    files: string[];
+    introducedFiles: string[];
+  } {
     const introductionCommit = execFileSync('git', [
       'log', '-1', '--diff-filter=A', '--format=%H', '--', migrationRepositoryPath,
     ], { cwd: root, encoding: 'utf8' }).trim();
@@ -66,7 +71,16 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
       .map((entry) => path.posix.basename(entry))
       .sort();
 
-    return { parentCommit, files };
+    const introducedFiles = execFileSync('git', [
+      'diff-tree', '--no-commit-id', '--name-only', '--diff-filter=A', '-r', introductionCommit,
+      '--', 'infra/supabase/migrations/',
+    ], { cwd: root, encoding: 'utf8' })
+      .split('\n')
+      .filter(Boolean)
+      .map((entry) => path.posix.basename(entry))
+      .sort();
+
+    return { introductionCommit, parentCommit, files, introducedFiles };
   }
 
   it('is the newest forward migration and does not renumber or replace anything', () => {
@@ -85,15 +99,30 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
     const baseline = migrationIntroductionBaseline();
     expect(baseline.files).not.toContain(filename);
     expect(files.slice(0, baseline.files.length)).toEqual(baseline.files);
-    expect(files.slice(baseline.files.length)).toContain(filename);
+    expect(baseline.introducedFiles).toEqual([
+      '20260828170000_assistive_execution_control.sql',
+      filename,
+    ]);
+    expect(files.slice(baseline.files.length)).toEqual(baseline.introducedFiles);
   });
 
-  it('leaves every pre-0048 migration byte-identical to its introduction baseline', () => {
+  it('leaves every migration through 0048 byte-identical to its introduction baseline', () => {
     const baseline = migrationIntroductionBaseline();
 
     for (const historical of baseline.files) {
       const repositoryPath = `infra/supabase/migrations/${historical}`;
       const committed = execFileSync('git', ['show', `${baseline.parentCommit}:${repositoryPath}`], {
+        cwd: root,
+        encoding: 'utf8',
+      }).replace(/\r\n/g, '\n');
+      expect(fs.readFileSync(path.join(root, repositoryPath), 'utf8').replace(/\r\n/g, '\n')).toBe(committed);
+    }
+
+    // Migrations introduced in the same squash-merge as 0048 are now historical as well. Pin their
+    // bytes to the introduction commit so a future PR cannot mutate 0047 or 0048 in place.
+    for (const introduced of baseline.introducedFiles) {
+      const repositoryPath = `infra/supabase/migrations/${introduced}`;
+      const committed = execFileSync('git', ['show', `${baseline.introductionCommit}:${repositoryPath}`], {
         cwd: root,
         encoding: 'utf8',
       }).replace(/\r\n/g, '\n');
