@@ -32,6 +32,24 @@ When verifying system behavior or planning extensions, information must be refer
 
 ---
 
+## School Handover Package
+
+*   **[START HERE — School Handover and Operations](handover/README.md)**: The single entry point for a new School owner or technical maintainer. Read this before anything else in this section.
+*   **[Resource Ownership & Transfer Matrix](handover/resource-ownership-matrix.md)**: Every external resource, who owns it today, who must own it finally, and the exact transfer or redeployment procedure. Complements the role matrix above.
+*   **[Environment Matrix](handover/environment-matrix.md)**: Local, disposable test, staging, and School operational environments, with the isolation rules and configuration that separate them.
+*   **[Third-Party Provider Licences](handover/third-party-licences.md)**: What the assistive worker image contains and what must be settled before it is published anywhere public.
+*   **[Architecture Decision Log](architecture-decision-log.md)**: Final architectural decisions and their reasoning, so no future maintainer needs anyone's memory or chat history.
+
+---
+
+## Zero-Cost Operations
+
+*   **[Zero-Cost Assistive Executor](operations/zero-cost-assistive-executor.md)**: Both supported assistive execution profiles, the database-enforced launch ceiling, deployment, day-to-day operation, the failure table, and an honest statement of what the zero-cost profile does not promise.
+*   **[Free-Tier Capacity & Handover](operations/free-tier-capacity-and-handover.md)**: Every free-tier dependency with verified limits and sources, exhaustion behaviour, monitoring, cost-avoidance rules, and the periodic provider-terms review procedure.
+*   **[Executor Infrastructure Template](../infra/azure/assistive-executor/README.md)**: What the executor infrastructure creates, what it deliberately omits, and how to deploy it.
+
+---
+
 ## Infrastructure & Operational Runbooks
 
 *   **[Local Supabase Development Guide](../infra/supabase/local-development.md)**: Reproducible local Supabase setup via Docker and CLI 2.109.1 (Windows with Docker Desktop verified; macOS, Linux, and independent human onboarding pending).

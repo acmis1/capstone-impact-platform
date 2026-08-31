@@ -47,3 +47,28 @@ boundary without running a task with:
 ```
 
 See [`docs/assistive-validation/phase-1-document-extraction.md`](../../docs/assistive-validation/phase-1-document-extraction.md) for extraction and [`docs/assistive-validation/phase-4-async-job-coordination.md`](../../docs/assistive-validation/phase-4-async-job-coordination.md) for coordination, lifecycle, and operator commands.
+
+## Container images
+
+Two images are built from this directory. Both are pinned by immutable digest wherever they are
+deployed; neither is ever referenced by a mutable tag.
+
+| Dockerfile | Contents | Used by |
+| --- | --- | --- |
+| `Dockerfile.hosted` | Node, Python, Java 17, the qualified PP-OCRv6 Small model trees, and LanguageTool 6.6, each verified against a frozen SHA-256 during the build | Both execution profiles: the scale-to-zero heavy worker and the School-owned continuous worker |
+| `Dockerfile.dispatcher` | A single bundled Node entry point and nothing else. No Paddle, no Java, no LanguageTool, no model artifacts | The scheduled dispatcher, which must start quickly inside a 15-second timeout |
+
+The dispatcher deliberately shares no runtime with the worker: it reaches only the execution-control
+database role and the cloud control plane, never project content, and it exposes no inbound
+interface.
+
+Building either image locally requires no registry. Publishing them is a separate, deliberate
+decision — read [`docs/handover/third-party-licences.md`](../../docs/handover/third-party-licences.md)
+first, because the image embeds third-party model and language artifacts.
+
+## Execution profiles
+
+The same worker image runs in two supported profiles: a zero-cost on-demand executor bounded by a
+database-enforced launch ceiling, and a School-owned continuous worker with no ceiling and no cloud
+dependency. Deployment, operation, and troubleshooting for both are in
+[`docs/operations/zero-cost-assistive-executor.md`](../../docs/operations/zero-cost-assistive-executor.md).

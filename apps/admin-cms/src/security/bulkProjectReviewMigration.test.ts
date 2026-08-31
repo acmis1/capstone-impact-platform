@@ -82,7 +82,7 @@ describe('bulk project review concurrency migration contract', () => {
       'utf8',
     );
 
-    expect(migrations).toHaveLength(46);
+    expect(migrations).toHaveLength(48);
     expect(wrapperIndex).toBeGreaterThan(-1);
     // The deployment-ledger stream lands between the bulk-review wrapper and Tan's final gallery
     // submission authority, so the wrapper still precedes it with exactly those two files between.

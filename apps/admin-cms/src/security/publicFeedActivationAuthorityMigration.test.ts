@@ -9,14 +9,19 @@ const migrationName = '20260826090000_public_feed_activation_authority_guard.sql
 const source = fs.readFileSync(path.join(migrations, migrationName), 'utf8').replace(/\r\n/g, '\n');
 
 describe('public-feed activation authority migration', () => {
-  it('is the sole new migration relative to current main', () => {
+  it('leaves every earlier migration byte-identical to current main', () => {
     const files = fs.readdirSync(migrations).filter((name) => name.endsWith('.sql')).sort();
-    expect(files).toHaveLength(46);
+    expect(files).toHaveLength(48);
     expect(files).toContain(migrationName);
 
     expect(() => execFileSync('git', [
       'diff', '--exit-code', 'origin/main', '--',
-      ...files.filter((file) => file !== migrationName)
+      // This migration, the later execution-control migration and the PostgreSQL 17 MAINTAIN
+      // alignment migration are all newer than origin/main; every other file must remain
+      // byte-identical.
+      ...files.filter((file) => file !== migrationName
+        && file !== '20260828170000_assistive_execution_control.sql'
+        && file !== '20260831090000_postgres17_maintain_privilege_alignment.sql')
         .map((file) => `infra/supabase/migrations/${file}`),
     ], { cwd: root, stdio: 'pipe' })).not.toThrow();
 

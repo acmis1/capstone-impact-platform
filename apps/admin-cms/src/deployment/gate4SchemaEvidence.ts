@@ -7,7 +7,14 @@ import {
 
 export const GATE4_EVIDENCE_FORMAT = 'gate4-schema-evidence/v1' as const;
 
-const RELEVANT_ROLES = ['public', 'anon', 'authenticated', 'service_role'] as const;
+const EXECUTION_CONTROL_SCHEMA = 'assistive_execution_control';
+const DISPATCHER_ROLE = 'capstone_assistive_dispatcher';
+const EXECUTION_CONTROL_TABLES = [
+  'executor_registrations',
+  'launch_budget_guard',
+  'launch_reservations',
+] as const;
+const RELEVANT_ROLES = ['public', 'anon', 'authenticated', 'service_role', DISPATCHER_ROLE] as const;
 const MAX_VALIDATION_ERRORS = 50;
 const MAX_REPORTED_DIFFERENCES = 50;
 
@@ -74,7 +81,7 @@ export interface Gate4TableGrantEvidence {
   schema: string;
   table: string;
   role: RelevantRole;
-  privilege: 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'TRUNCATE' | 'REFERENCES' | 'TRIGGER';
+  privilege: 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'TRUNCATE' | 'REFERENCES' | 'TRIGGER' | 'MAINTAIN';
   grantable: boolean;
 }
 
@@ -100,7 +107,7 @@ export interface Gate4FunctionEvidence {
   securityDefiner: boolean;
   configuration: string[];
   executeGrants: Gate4ExecuteGrantEvidence[];
-  classification: 'application_rpc' | 'canonical_helper' | 'other_exposed_routine';
+  classification: 'application_rpc' | 'canonical_helper' | 'dispatcher_control' | 'other_exposed_routine';
 }
 
 export interface Gate4StorageBucketEvidence {
@@ -157,6 +164,7 @@ export interface Gate4EvidenceStats {
   applicationRpcSignatures: number;
   applicationRpcNames: number;
   canonicalStaffRoleHelpers: number;
+  dispatcherControlRoutines: number;
   storageBuckets: number;
 }
 
@@ -461,7 +469,7 @@ export function parseGate4Evidence(input: unknown): ParseResult {
     const row = requireObject(raw, `evidence.roles[${index}]`, errors);
     exactKeys(row, ['name', 'exists', 'canLogin', 'inherits', 'bypassRls', 'superuser'], `evidence.roles[${index}]`, errors);
     return {
-      name: requireEnum(row.name, ['anon', 'authenticated', 'service_role'] as const, `evidence.roles[${index}].name`, errors),
+      name: requireEnum(row.name, ['anon', 'authenticated', 'service_role', DISPATCHER_ROLE] as const, `evidence.roles[${index}].name`, errors),
       exists: requireBoolean(row.exists, `evidence.roles[${index}].exists`, errors),
       canLogin: requireBoolean(row.canLogin, `evidence.roles[${index}].canLogin`, errors),
       inherits: requireBoolean(row.inherits, `evidence.roles[${index}].inherits`, errors),
@@ -552,7 +560,7 @@ export function parseGate4Evidence(input: unknown): ParseResult {
       schema: requireString(row.schema, `evidence.tableGrants[${index}].schema`, errors),
       table: requireString(row.table, `evidence.tableGrants[${index}].table`, errors),
       role: requireEnum(row.role, RELEVANT_ROLES, `evidence.tableGrants[${index}].role`, errors),
-      privilege: requireEnum(row.privilege, ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'] as const, `evidence.tableGrants[${index}].privilege`, errors),
+      privilege: requireEnum(row.privilege, ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN'] as const, `evidence.tableGrants[${index}].privilege`, errors),
       grantable: requireBoolean(row.grantable, `evidence.tableGrants[${index}].grantable`, errors),
     };
   });
@@ -593,7 +601,7 @@ export function parseGate4Evidence(input: unknown): ParseResult {
       securityDefiner: requireBoolean(row.securityDefiner, `evidence.functions[${index}].securityDefiner`, errors),
       configuration: requireStringArray(row.configuration, `evidence.functions[${index}].configuration`, errors),
       executeGrants,
-      classification: requireEnum(row.classification, ['application_rpc', 'canonical_helper', 'other_exposed_routine'] as const, `evidence.functions[${index}].classification`, errors),
+      classification: requireEnum(row.classification, ['application_rpc', 'canonical_helper', 'dispatcher_control', 'other_exposed_routine'] as const, `evidence.functions[${index}].classification`, errors),
     };
   });
 
@@ -698,6 +706,7 @@ export function gate4EvidenceStats(evidence: Gate4SchemaEvidence): Gate4Evidence
     applicationRpcSignatures: applicationRpcs.length,
     applicationRpcNames: new Set(applicationRpcs.map((routine) => routine.name)).size,
     canonicalStaffRoleHelpers: evidence.functions.filter((routine) => routine.classification === 'canonical_helper').length,
+    dispatcherControlRoutines: evidence.functions.filter((routine) => routine.classification === 'dispatcher_control').length,
     storageBuckets: evidence.storageBuckets.length,
   };
 }
@@ -764,9 +773,19 @@ export function validateCurrentRepositoryGate4Contract(
   if (!parsed.ok) return parsed.errors;
   const evidence = canonicalizeEvidence(parsed.evidence);
   const errors: string[] = [];
-  const tableNames = evidence.tables.map((table) => table.name).sort();
+  const tableNames = evidence.tables.filter((table) => table.schema === 'public').map((table) => table.name).sort();
   const requiredTables = [...ALL_REQUIRED_TABLES].sort();
   if (JSON.stringify(tableNames) !== JSON.stringify(requiredTables)) errors.push('Local table set does not match the authoritative 37-table inventory.');
+  const executionControlTables = evidence.tables
+    .filter((table) => table.schema === EXECUTION_CONTROL_SCHEMA)
+    .map((table) => table.name)
+    .sort();
+  if (JSON.stringify(executionControlTables) !== JSON.stringify([...EXECUTION_CONTROL_TABLES].sort())) {
+    errors.push('Local execution-control table set does not match the authoritative three-table inventory.');
+  }
+  if (evidence.tables.some((table) => table.schema !== 'public' && table.schema !== EXECUTION_CONTROL_SCHEMA)) {
+    errors.push('Local Gate 4 evidence contains a table outside the authoritative schemas.');
+  }
   if (JSON.stringify(evidence.migrations) !== JSON.stringify([...repositoryMigrationVersions].sort())) errors.push('Local migration history does not match the repository migration manifest.');
 
   const actualApplication = evidence.functions
@@ -776,7 +795,9 @@ export function validateCurrentRepositoryGate4Contract(
   const requiredApplication = REQUIRED_RPC_SIGNATURES
     .map((routine) => signatureContractKey(routine.name, routine.parameterNames, routine.parameterTypes))
     .sort();
-  if (JSON.stringify(actualApplication) !== JSON.stringify(requiredApplication)) errors.push('Local application RPC signatures do not match the authoritative 74/73 inventory.');
+  if (JSON.stringify(actualApplication) !== JSON.stringify(requiredApplication)) {
+    errors.push(`Local application RPC signatures do not match the authoritative ${REQUIRED_RPC_SIGNATURES.length}/${REQUIRED_RPC_NAMES.length} inventory.`);
+  }
   if (new Set(evidence.functions.filter((routine) => routine.classification === 'application_rpc').map((routine) => routine.name)).size !== REQUIRED_RPC_NAMES.length) {
     errors.push('Local application RPC name count does not match the authoritative inventory.');
   }
@@ -785,10 +806,56 @@ export function validateCurrentRepositoryGate4Contract(
   if (canonicalHelpers.length !== 1 || signatureContractKey(canonicalHelpers[0].name, canonicalHelpers[0].argumentNames, canonicalHelpers[0].argumentTypes) !== 'canonical_staff_roles(text[]):p_roles') {
     errors.push('canonical_staff_roles is missing, duplicated, or incorrectly classified.');
   }
+
+  const dispatcherRoutines = evidence.functions.filter((routine) => routine.classification === 'dispatcher_control');
+  const dispatcherRoutineSignatures = dispatcherRoutines.map((routine) => (
+    signatureContractKey(routine.name, routine.argumentNames, routine.argumentTypes)
+  )).sort();
+  const requiredDispatcherRoutineSignatures = [
+    'inspect_assistive_launch_eligibility():',
+    'mark_assistive_launch_requested(uuid,bigint):p_reservation_token,p_generation',
+    'record_assistive_launch_outcome(uuid,bigint,text,text):p_reservation_token,p_generation,p_outcome,p_execution_reference',
+    'reserve_assistive_launch(text,text,text,integer):p_dispatcher_instance_id,p_deployment_version,p_image_digest,p_lease_seconds',
+  ].sort();
+  if (JSON.stringify(dispatcherRoutineSignatures) !== JSON.stringify(requiredDispatcherRoutineSignatures)) {
+    errors.push('Local dispatcher routine signatures do not match the authoritative four-routine inventory.');
+  }
+  if (dispatcherRoutines.some((routine) => (
+    routine.schema !== EXECUTION_CONTROL_SCHEMA
+      || routine.kind !== 'function'
+      || !routine.securityDefiner
+      || !routine.configuration.some((configuration) => configuration.startsWith('search_path='))
+      || JSON.stringify(routine.executeGrants) !== JSON.stringify([{ role: DISPATCHER_ROLE, grantable: false }])
+  ))) {
+    errors.push('Every dispatcher routine must be a search-path-pinned SECURITY DEFINER function executable only by the dispatcher role.');
+  }
+
   const bucketNames = evidence.storageBuckets.map((bucket) => bucket.id).sort();
   if (JSON.stringify(bucketNames) !== JSON.stringify([...REQUIRED_STORAGE_BUCKETS].sort())) errors.push('Local Storage buckets do not match the authoritative three-bucket inventory.');
-  if (evidence.roles.some((role) => !role.exists)) errors.push('A required Data API role is missing from Local Supabase.');
-  if (evidence.rls.length !== evidence.tables.length || evidence.rls.some((table) => !table.enabled)) errors.push('Every required Local application table must have RLS enabled.');
+  if (evidence.roles.some((role) => !role.exists)) errors.push('A required runtime role is missing from Local Supabase.');
+  const dispatcher = evidence.roles.find((role) => role.name === DISPATCHER_ROLE);
+  if (!dispatcher || !dispatcher.canLogin || dispatcher.inherits || dispatcher.bypassRls || dispatcher.superuser) {
+    errors.push('The dispatcher role must be LOGIN, NOINHERIT, NOBYPASSRLS, and NOSUPERUSER.');
+  }
+  if (evidence.rls.length !== evidence.tables.length || evidence.rls.some((table) => !table.enabled)) {
+    errors.push('Every required Local catalog table must have RLS enabled.');
+  }
+  const executionControlRls = evidence.rls.filter((table) => table.schema === EXECUTION_CONTROL_SCHEMA);
+  if (executionControlRls.length !== EXECUTION_CONTROL_TABLES.length || executionControlRls.some((table) => !table.forced)) {
+    errors.push('Every execution-control table must have forced RLS.');
+  }
+  if (evidence.tableGrants.some((grant) => grant.schema === EXECUTION_CONTROL_SCHEMA)) {
+    errors.push('Execution-control tables must expose no privileges to any relevant runtime role.');
+  }
+  const executionControlSchemaGrants = evidence.schemaGrants.filter((grant) => grant.schema === EXECUTION_CONTROL_SCHEMA);
+  if (JSON.stringify(executionControlSchemaGrants) !== JSON.stringify([{
+    schema: EXECUTION_CONTROL_SCHEMA,
+    role: DISPATCHER_ROLE,
+    privilege: 'USAGE',
+    grantable: false,
+  }])) {
+    errors.push('The execution-control schema must grant only non-grantable USAGE to the dispatcher role.');
+  }
 
   for (const [table, column] of [
     ['projects', 'poster_text_public'],
@@ -831,6 +898,7 @@ export function formatGate4Comparison(result: Gate4ComparisonResult, repositoryG
     `RPC_SIGNATURES=${actual.applicationRpcSignatures}/${expected.applicationRpcSignatures}`,
     `RPC_NAMES=${actual.applicationRpcNames}/${expected.applicationRpcNames}`,
     `CANONICAL_STAFF_ROLES_HELPERS=${actual.canonicalStaffRoleHelpers}/${expected.canonicalStaffRoleHelpers}`,
+    `DISPATCHER_CONTROL_ROUTINES=${actual.dispatcherControlRoutines}/${expected.dispatcherControlRoutines}`,
     `STORAGE_BUCKETS=${actual.storageBuckets}/${expected.storageBuckets}`,
   );
   if (result.totalDifferences > 0) {

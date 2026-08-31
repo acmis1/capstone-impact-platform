@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 46;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 48;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -54,6 +54,8 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260826090000_public_feed_activation_authority_guard.sql',
   '20260828090000_assistive_language_findings.sql',
   '20260828120000_assistive_worker_heartbeat.sql',
+  '20260828170000_assistive_execution_control.sql',
+  '20260831090000_postgres17_maintain_privilege_alignment.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [
@@ -211,6 +213,12 @@ export const REQUIRED_RPC_SIGNATURES = [
   rpc('finalize_assistive_validation_job', ['p_job_id', 'p_claim_token', 'p_input_hash', 'p_status', 'p_completion_code', 'p_findings'], ['uuid', 'uuid', 'text', 'text', 'text', 'jsonb']),
   rpc('upsert_assistive_worker_heartbeat', ['p_worker_instance_id', 'p_environment', 'p_pipeline_version', 'p_deployment_version', 'p_ocr_capability', 'p_language_capability', 'p_health_state'], ['text', 'text', 'text', 'text', 'text', 'text', 'text']),
   rpc('get_assistive_worker_availability', ['p_environment', 'p_pipeline_version', 'p_deployment_version', 'p_ocr_capability', 'p_language_capability', 'p_freshness_seconds'], ['text', 'text', 'text', 'text', 'text', 'integer']),
+  // Migration 0047 execution control. The dispatcher-side routines live in a separate schema that
+  // is never exposed through the Data API, so only these service-role routines appear here.
+  rpc('register_assistive_executor', ['p_deployment_version', 'p_image_digest', 'p_configuration_version', 'p_registration_days'], ['text', 'text', 'text', 'integer']),
+  rpc('claim_assistive_execution_reservation', ['p_reservation_token', 'p_generation', 'p_worker_instance_id', 'p_deployment_version', 'p_image_digest', 'p_execution_mode'], ['uuid', 'bigint', 'text', 'text', 'text', 'text']),
+  rpc('settle_assistive_execution_reservation', ['p_reservation_token', 'p_generation', 'p_outcome', 'p_processed_job_count'], ['uuid', 'bigint', 'text', 'integer']),
+  rpc('get_assistive_executor_availability', ['p_pipeline_version', 'p_deployment_version', 'p_image_digest', 'p_ocr_capability', 'p_language_capability'], ['text', 'text', 'text', 'text', 'text']),
   rpc('reserve_public_feed_operation', ['p_operation_key', 'p_kind', 'p_publication_mode', 'p_admin_id', 'p_public_id', 'p_owner_token', 'p_confirmed_preview_id', 'p_confirmed_at', 'p_private_bucket', 'p_archive_reason', 'p_rollback_preparation_handle', 'p_rollback_acknowledgement', 'p_storage_bucket', 'p_storage_path', 'p_rollback_capability'], ['uuid', 'text', 'text', 'uuid', 'text', 'text', 'uuid', 'timestamptz', 'text', 'text', 'uuid', 'text', 'text', 'text', 'boolean']),
   rpc('bind_public_feed_operation', ['p_operation_id', 'p_owner_epoch', 'p_owner_token', 'p_actor_id', 'p_baseline_version_id', 'p_baseline_storage_existed', 'p_baseline_feed_hash', 'p_baseline_record_count', 'p_baseline_feed_content', 'p_candidate_feed_hash', 'p_candidate_record_count', 'p_candidate_feed_content', 'p_candidate_members', 'p_feed_public_url', 'p_media_manifest'], ['uuid', 'bigint', 'text', 'uuid', 'uuid', 'boolean', 'text', 'integer', 'text', 'text', 'integer', 'text', 'jsonb', 'text', 'jsonb']),
   rpc('renew_public_feed_operation_lease', ['p_operation_id', 'p_owner_epoch', 'p_owner_token', 'p_actor_id'], ['uuid', 'bigint', 'text', 'uuid']),

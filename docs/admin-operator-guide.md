@@ -103,6 +103,30 @@ Archiving changes the project lifecycle. Removing a project from the deployed fe
 
 Hosted rollback of application/database/Storage is not the **Publishing** restore control. Disposable-Local feed restoration only creates a new exact feed version and does not reverse project lifecycle or audit records.
 
+## Assistive Checks
+
+Assistive Checks read the poster document and suggest possible issues: a title that does not match
+the poster, formatting problems, spelling and grammar suggestions, and projects that may be
+duplicates.
+
+They are **suggestions only**. They cannot approve a project, publish anything, or change project
+information on their own. You decide what to accept. The platform works completely without them.
+
+- Open a project and select **Run checks**. Results appear on the same page when processing finishes.
+- Review each finding and either apply it, dismiss it, or leave it. Your decision is recorded.
+- Earlier results stay readable at all times, including while checks are unavailable.
+
+Sometimes the control is disabled and the page explains why:
+
+| What the page says | What it means | What to do |
+| --- | --- | --- |
+| Assistive checks are temporarily unavailable because the processing worker is not ready | Processing is not currently available | Continue reviewing and editing normally. Try again later. Tell the technical maintainer if it lasts more than a working day |
+| Assistive checks have reached their processing limit for now | The platform runs assistive processing a fixed number of times each month to stay within its free allowance | Continue reviewing and editing normally. Tell the technical maintainer if this happens regularly, because the limit may need reviewing |
+
+Neither message blocks any part of your work. You can still import, edit, validate, review, preview,
+approve, and publish. **Never wait for assistive checks before approving a project** — deterministic
+validation and your own review are the authority.
+
 ## Inspect history and failures
 
 - Project history/audit evidence is available on the project detail workflow.

@@ -1,0 +1,36 @@
+# Scheduled dispatcher image.
+#
+# Deliberately separate from the heavy worker image. The dispatcher runs every two minutes inside a
+# 15-second replica timeout, so it must not carry PaddleOCR, LanguageTool, Java, or the model
+# artifacts, and its cold start must stay small. The entry point is bundled to a single file so the
+# runtime layer holds no dependency tree at all.
+#
+# It reaches only the execution-control database role and the cloud control plane, never project
+# content, and it exposes no inbound interface.
+
+FROM node:24.14.1-bookworm-slim AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/admin-cms/package.json apps/admin-cms/package.json
+
+RUN npm ci --ignore-scripts
+
+COPY apps/admin-cms/tsconfig.json apps/admin-cms/tsconfig.json
+COPY apps/admin-cms/src apps/admin-cms/src
+
+RUN npm run build:dispatcher --workspace=apps/admin-cms
+
+FROM node:24.14.1-bookworm-slim
+
+ENV NODE_ENV=production \
+    NPM_CONFIG_UPDATE_NOTIFIER=false
+
+WORKDIR /app
+
+COPY --from=build /app/apps/admin-cms/dist/assistive-dispatcher.cjs ./assistive-dispatcher.cjs
+
+USER node
+
+CMD ["node", "assistive-dispatcher.cjs"]

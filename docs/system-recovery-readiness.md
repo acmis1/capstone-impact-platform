@@ -119,6 +119,31 @@ These smoke checks verify that the ordinary Local application remains usable aft
 
 - If cleanup or state restoration fails, report `LOCAL_ENVIRONMENT_NOT_RESTORED` and stop.
 
+## Assistive execution state is operational but cost-critical
+
+The `assistive_execution_control` schema holds launch reservations, the ceiling guard, and executor
+registrations. None of it is project, review, approval, publication, or public-feed authority, and
+none of it can approve or publish anything. Its reservation history is nevertheless the authority
+for the rolling 31-day cost fence and **must be included in every database backup and restore**.
+
+Never omit, clear, or selectively replace this schema to "recover capacity". Doing so could permit
+more than 40 starts inside the real rolling window even though project data remains correct. If the
+restored reservation history is absent, incomplete, or cannot be proved current:
+
+1. keep the cloud dispatcher suspended and hosted on-demand execution disabled;
+2. do not re-register or manually start the cloud executor;
+3. use the School-owned continuous worker if assistive processing is needed; and
+4. wait a full 31 days from the later of the last reliably known cloud start and the evidence-loss
+   time before establishing a fresh cloud budget history, unless an independently reviewed cloud
+   execution record proves a stricter conservative reconstruction.
+
+After a complete restore, verify the restored rolling-window count first, then re-register the exact
+reviewed executor so Admin can report readiness truthfully:
+`npm run register:assistive-executor -- --deployment-version=<sha> --image-digest=<digest> --configuration-version=<slug>`.
+
+Assistive findings themselves live in the normal assistive persistence tables and are covered by the
+ordinary database backup scope.
+
 ## What this drill does not prove
 
 This bounded verifier is recovery-mechanics evidence, not a production backup system. The following remain required before operational acceptance:

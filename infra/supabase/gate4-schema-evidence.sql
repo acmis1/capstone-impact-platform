@@ -5,7 +5,14 @@
 -- never reads application rows, Auth identities, or Storage object metadata,
 -- and it never invokes an application function.
 WITH relevant_roles(role_name) AS (
-  VALUES ('anon'::text), ('authenticated'::text), ('service_role'::text)
+  VALUES
+    ('anon'::text),
+    ('authenticated'::text),
+    ('service_role'::text),
+    ('capstone_assistive_dispatcher'::text)
+),
+relevant_schemas(schema_name) AS (
+  VALUES ('public'::text), ('assistive_execution_control'::text)
 ),
 role_rows AS (
   SELECT
@@ -28,7 +35,7 @@ table_rows AS (
     END AS relation_kind
   FROM pg_catalog.pg_class AS relation
   JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = relation.relnamespace
-  WHERE namespace.nspname = 'public'
+  WHERE namespace.nspname IN (SELECT schema_name FROM relevant_schemas)
     AND relation.relkind IN ('r', 'p')
 ),
 rls_rows AS (
@@ -39,7 +46,7 @@ rls_rows AS (
     relation.relforcerowsecurity AS forced
   FROM pg_catalog.pg_class AS relation
   JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = relation.relnamespace
-  WHERE namespace.nspname = 'public'
+  WHERE namespace.nspname IN (SELECT schema_name FROM relevant_schemas)
     AND relation.relkind IN ('r', 'p')
 ),
 column_rows AS (
@@ -69,7 +76,7 @@ column_rows AS (
   LEFT JOIN pg_catalog.pg_attrdef AS attribute_default
     ON attribute_default.adrelid = attribute.attrelid
    AND attribute_default.adnum = attribute.attnum
-  WHERE namespace.nspname = 'public'
+  WHERE namespace.nspname IN (SELECT schema_name FROM relevant_schemas)
     AND relation.relkind IN ('r', 'p')
     AND attribute.attnum > 0
     AND NOT attribute.attisdropped
@@ -92,7 +99,7 @@ constraint_rows AS (
   FROM pg_catalog.pg_constraint AS constraint_definition
   JOIN pg_catalog.pg_class AS relation ON relation.oid = constraint_definition.conrelid
   JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = relation.relnamespace
-  WHERE namespace.nspname = 'public'
+  WHERE namespace.nspname IN (SELECT schema_name FROM relevant_schemas)
     AND relation.relkind IN ('r', 'p')
     AND constraint_definition.contype IN ('p', 'u', 'f', 'c')
 ),
@@ -120,7 +127,7 @@ policy_rows AS (
   FROM pg_catalog.pg_policy AS policy
   JOIN pg_catalog.pg_class AS relation ON relation.oid = policy.polrelid
   JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = relation.relnamespace
-  WHERE namespace.nspname = 'public'
+  WHERE namespace.nspname IN (SELECT schema_name FROM relevant_schemas)
     AND relation.relkind IN ('r', 'p')
 ),
 table_grant_rows AS (
@@ -136,9 +143,11 @@ table_grant_rows AS (
     COALESCE(relation.relacl, pg_catalog.acldefault('r', relation.relowner))
   ) AS table_acl
   LEFT JOIN pg_catalog.pg_roles AS grantee_role ON grantee_role.oid = table_acl.grantee
-  WHERE namespace.nspname = 'public'
+  WHERE namespace.nspname IN (SELECT schema_name FROM relevant_schemas)
     AND relation.relkind IN ('r', 'p')
-    AND COALESCE(grantee_role.rolname, 'public') IN ('public', 'anon', 'authenticated', 'service_role')
+    AND COALESCE(grantee_role.rolname, 'public') IN (
+      'public', 'anon', 'authenticated', 'service_role', 'capstone_assistive_dispatcher'
+    )
 ),
 schema_grant_rows AS (
   SELECT
@@ -151,8 +160,10 @@ schema_grant_rows AS (
     COALESCE(namespace.nspacl, pg_catalog.acldefault('n', namespace.nspowner))
   ) AS schema_acl
   LEFT JOIN pg_catalog.pg_roles AS grantee_role ON grantee_role.oid = schema_acl.grantee
-  WHERE namespace.nspname = 'public'
-    AND COALESCE(grantee_role.rolname, 'public') IN ('public', 'anon', 'authenticated', 'service_role')
+  WHERE namespace.nspname IN (SELECT schema_name FROM relevant_schemas)
+    AND COALESCE(grantee_role.rolname, 'public') IN (
+      'public', 'anon', 'authenticated', 'service_role', 'capstone_assistive_dispatcher'
+    )
 ),
 routine_base AS (
   SELECT
@@ -186,14 +197,16 @@ routine_base AS (
       ) AS routine_acl
       LEFT JOIN pg_catalog.pg_roles AS grantee_role ON grantee_role.oid = routine_acl.grantee
       WHERE routine_acl.privilege_type = 'EXECUTE'
-        AND COALESCE(grantee_role.rolname, 'public') IN ('public', 'anon', 'authenticated', 'service_role')
+        AND COALESCE(grantee_role.rolname, 'public') IN (
+          'public', 'anon', 'authenticated', 'service_role', 'capstone_assistive_dispatcher'
+        )
     ), '[]'::jsonb) AS execute_grants
   FROM pg_catalog.pg_proc AS routine
   JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = routine.pronamespace
-  WHERE namespace.nspname = 'public'
+  WHERE namespace.nspname IN (SELECT schema_name FROM relevant_schemas)
     AND routine.prokind IN ('f', 'p')
     AND (
-      routine.proname = 'canonical_staff_roles'
+      (namespace.nspname = 'public' AND routine.proname = 'canonical_staff_roles')
       OR EXISTS (
         SELECT 1
         FROM pg_catalog.aclexplode(
@@ -201,7 +214,9 @@ routine_base AS (
         ) AS relevant_acl
         LEFT JOIN pg_catalog.pg_roles AS relevant_grantee ON relevant_grantee.oid = relevant_acl.grantee
         WHERE relevant_acl.privilege_type = 'EXECUTE'
-          AND COALESCE(relevant_grantee.rolname, 'public') IN ('public', 'anon', 'authenticated', 'service_role')
+          AND COALESCE(relevant_grantee.rolname, 'public') IN (
+            'public', 'anon', 'authenticated', 'service_role', 'capstone_assistive_dispatcher'
+          )
       )
     )
 ),
@@ -209,6 +224,7 @@ routine_rows AS (
   SELECT
     routine_base.*,
     CASE
+      WHEN schema_name = 'assistive_execution_control' THEN 'dispatcher_control'
       WHEN routine_name = 'canonical_staff_roles' THEN 'canonical_helper'
       WHEN execute_grants @> '[{"role":"service_role"}]'::jsonb THEN 'application_rpc'
       ELSE 'other_exposed_routine'
