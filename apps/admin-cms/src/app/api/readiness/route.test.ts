@@ -136,8 +136,8 @@ describe('GET/HEAD /api/readiness', () => {
       dependency: 'reachable',
       deploymentCommit: { state: 'missing' },
       expectedMigrations: {
-        count: 47,
-        latest: "20260828170000_assistive_execution_control",
+        count: 48,
+        latest: "20260831090000_postgres17_maintain_privilege_alignment",
       },
     });
   });

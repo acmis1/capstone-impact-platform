@@ -2,7 +2,7 @@
 
 This document is the canonical PP1 M6 operational-readiness contract for the active Admin/CMS. It defines what the repository can prove now, what a supervised hosted rehearsal must prove later, and which decisions remain with the institution. It does not authorize a deployment, hosted mutation, restore, rollback, DNS change, Duda change, email, or secret access.
 
-Executable application code, migrations, and tests on the reviewed commit remain the source of truth. The current package contains 47 migration files ending at `20260828170000_assistive_execution_control`; `npm run check:operational-readiness` verifies that exact manifest and fails closed when it changes unexpectedly.
+Executable application code, migrations, and tests on the reviewed commit remain the source of truth. The current package contains 48 migration files ending at `20260831090000_postgres17_maintain_privilege_alignment`; `npm run check:operational-readiness` verifies that exact manifest and fails closed when it changes unexpectedly.
 
 ## Evidence vocabulary
 
@@ -27,8 +27,8 @@ Every capability in this package uses exactly one status:
 | `/api/readiness` dependency readiness | `IMPLEMENTED_AND_TESTED` | Route and tests prove bounded configuration, staging identity, and a Supabase `HEAD` probe; they do not prove schema or workflows. |
 | Read-only hosted smoke | `IMPLEMENTED_AND_TESTED` | The existing verifier checks health, readiness, login, deployment SHA, redirects, timeouts, and migration expectation using GET/HEAD only. A current accepted hosted run is not recorded by this change. |
 | Current hosted deployment identity | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | Render can expose a valid `RENDER_GIT_COMMIT`; the exact reviewed-versus-deployed comparison still needs a supervised run. This is a separate deployment/release gate from migration-history evidence. |
-| Migration manifest and readiness inspection | `IMPLEMENTED_AND_TESTED` | The repository manifest has 47 migrations. Active staging-v2 has point-in-time evidence of 46 tracked rows from `20260601035138` through `20260828120000`, so the execution-control migration `20260828170000` is a pending governed forward application there. Exact schema/grant/RPC parity remains independently re-verifiable, and migration alignment must be rechecked for each release candidate. This status describes the repository checker, not full hosted schema acceptance. |
-| Exact Gate 4 schema evidence | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | A repository-owned SELECT-only catalog snapshot and fail-closed comparator cover exact tables, columns, constraints, RLS/policies, schema/table grants, exposed and non-public routines, relevant roles, and canonical bucket configuration. The disposable Local 47-migration feature baseline is the expected contract; a reviewed hosted snapshot still must be collected and compared for the exact release SHA. |
+| Migration manifest and readiness inspection | `IMPLEMENTED_AND_TESTED` | The repository manifest has 48 migrations. Active staging-v2 has point-in-time evidence of 46 tracked rows from `20260601035138` through `20260828120000`, so the execution-control migration `20260828170000` is a pending governed forward application there. Exact schema/grant/RPC parity remains independently re-verifiable, and migration alignment must be rechecked for each release candidate. This status describes the repository checker, not full hosted schema acceptance. |
+| Exact Gate 4 schema evidence | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | A repository-owned SELECT-only catalog snapshot and fail-closed comparator cover exact tables, columns, constraints, RLS/policies, schema/table grants, exposed and non-public routines, relevant roles, and canonical bucket configuration. The disposable Local 48-migration feature baseline is the expected contract; a reviewed hosted snapshot still must be collected and compared for the exact release SHA. |
 | Historical staging reconciliation | `DOCUMENTED_ONLY` | The runbook preserves the manual-repair background for the old paused staging instance. Active staging-v2 has separate current history evidence; any future repair consideration requires read-only mismatch evidence and separate authorization. |
 | Local database recovery mechanics | `IMPLEMENTED_AND_TESTED` | The bounded verifier owns, backs up, destroys, restores, verifies, and cleans only its synthetic Local schema. |
 | Local Storage recovery mechanics | `IMPLEMENTED_AND_TESTED` | The same verifier owns and restores only its synthetic Local bucket and verifies canonical buckets remain untouched. |
@@ -294,7 +294,7 @@ The authoritative application contract is in [Admin/CMS Hosted Staging Deploymen
 
 1. Record the exact reviewed full SHA, source branch, approval, and clean CI for that SHA.
 2. Run `npm run check:operational-readiness -- --expected-commit=<sha>`.
-3. Record hosted migration history/schema evidence against the exact 47-file manifest; do not infer applied migrations from `/api/readiness`.
+3. Record hosted migration history/schema evidence against the exact 48-file manifest; do not infer applied migrations from `/api/readiness`.
 4. Confirm backup/recovery evidence required by the change and the last known good release.
 5. Confirm environment variable **names**, target identity, secret ownership, and rotation status without exposing values.
 6. Confirm the Render web service uses the Admin/CMS root/commands and `/api/readiness`, not the Prototype service.

@@ -14,7 +14,7 @@
 
 ---
 
-## 2. Expected Repository State (47 Migrations)
+## 2. Expected Repository State (48 Migrations)
 
 ### A. Authoritative Migration Inventory
 
@@ -67,6 +67,7 @@
 | 45 | `20260828090000_assistive_language_findings.sql` | Assistive language-finding contract |
 | 46 | `20260828120000_assistive_worker_heartbeat.sql` | Hosted assistive-worker heartbeat and availability contract |
 | 47 | `20260828170000_assistive_execution_control.sql` | Non-public zero-cost executor launch ceiling, reservation fencing, registration, and least-privilege dispatcher contract |
+| 48 | `20260831090000_postgres17_maintain_privilege_alignment.sql` | PostgreSQL 17 MAINTAIN revoked from `service_role` on the five tables whose historical `GRANT ALL` predates the privilege |
 
 ### B. Expected Tables (37 Total)
 - **Core Relational (13)**: `programs`, `disciplines`, `industry_categories`, `admin_users`, `user_roles`, `import_batches`, `projects`, `project_disciplines`, `project_industry_categories`, `media_assets`, `validation_flags`, `approval_records`, `published_snapshots`
@@ -121,7 +122,7 @@ npm run check:admin-deployment-readiness
 Verify the output report:
 - `TARGET_IDENTITY_MATCH = YES`
 - `MIGRATION_HISTORY_READABLE = NO`
-- `REPOSITORY_MIGRATIONS = 47`
+- `REPOSITORY_MIGRATIONS = 48`
 - `HOSTED_RECORDED_MIGRATIONS = <count or UNKNOWN>`
 - `SCHEMA_BASELINE = UNVERIFIED / INCOMPLETE / DRIFT / UNKNOWN`
 - `REQUIRED_RPC_NAMES = PRESENT / INCOMPLETE / UNVERIFIED`
@@ -148,7 +149,7 @@ SELECT version, inserted_at
   FROM supabase_migrations.schema_migrations
  ORDER BY version ASC;
 ```
-Record exact count and missing timestamps against the 47 repository migrations.
+Record exact count and missing timestamps against the 48 repository migrations.
 
 For active staging-v2, the current point-in-time read-only evidence is 46 rows from `20260601035138` through `20260828120000`. Recheck migration alignment for each release candidate and whenever reconciliation is required; this history evidence does not establish exact schema, grant, or RPC parity.
 
@@ -180,12 +181,28 @@ from the fully migrated repository schema, not from a second hand-maintained DDL
    The command fails closed if the checkout has tracked staged or unstaged changes; an untracked
    snapshot artifact is allowed because it is input evidence, not repository contract source.
 
-Required result: `GATE4_CLASSIFICATION=GATE4_MATCH`, with `MIGRATIONS=47/47`, `TABLES=40/40`,
+Required result: `GATE4_CLASSIFICATION=GATE4_MATCH`, with `MIGRATIONS=48/48`, `TABLES=40/40`,
 `RPC_SIGNATURES=78/78`, `RPC_NAMES=77/77`, `DISPATCHER_CONTROL_ROUTINES=4/4`,
 `STORAGE_BUCKETS=3/3`, and match classifications for columns, constraints, RLS, policies, and
 grants. The table total is 37 public application tables plus 3 non-public execution-control tables.
 `canonical_staff_roles(text[])` is compared as a separate helper and must remain `1/1`; it does not
 inflate the application-RPC count.
+
+#### PostgreSQL 17 MAINTAIN drift on the five historical `GRANT ALL` tables
+
+Local Supabase runs PostgreSQL 15; active staging-v2 runs PostgreSQL 17, which added the per-table
+`MAINTAIN` privilege and includes it in `ALL`. Until Migration 48 is applied hosted, a Gate 4
+comparison will therefore truthfully report `service_role` holding `MAINTAIN` on
+`browser_import_commits`, `browser_import_media_commits`, `participant_previews`,
+`participant_preview_confirmations` and `participant_preview_correction_requests` where the
+PostgreSQL 15 expected side does not. That is genuine engine drift, not a collector defect — do not
+filter or normalise `MAINTAIN` out of the evidence to make the comparison match. Applying
+Migration 48 to the PostgreSQL 17 target removes exactly that privilege for exactly that role on
+exactly those five tables and the differences disappear; the other seven privileges are unaffected.
+
+If an authorized operator ever needs to reverse this hardening on PostgreSQL 17+, the narrow manual
+inverse is `GRANT MAINTAIN` on those same five tables to `service_role`. It is a privilege-only
+change and is unrelated to application-data recovery.
 
 The comparator fails closed as `EVIDENCE_INVALID` for a missing category, malformed value, or
 duplicate catalog identity. A valid mismatch is `GATE4_DRIFT` and reports missing, unexpected, or

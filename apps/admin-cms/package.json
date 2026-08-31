@@ -73,6 +73,7 @@
     "verify:assistive-duplicate-shortlist-runtime": "tsx src/scripts/verifyAssistiveDuplicateShortlistRuntime.ts",
     "verify:assistive-worker-heartbeat-runtime": "tsx src/scripts/verifyAssistiveWorkerHeartbeatRuntime.ts",
     "verify:assistive-execution-control-runtime": "tsx src/scripts/verifyAssistiveExecutionControlRuntime.ts",
+    "verify:pg17-maintain-privilege-runtime": "tsx src/scripts/verifyPostgres17MaintainPrivilegeRuntime.ts",
     "run:assistive-worker": "tsx src/scripts/runAssistiveCoordinator.ts --loop",
     "run:assistive-worker-once": "tsx src/scripts/runAssistiveCoordinator.ts --once",
     "assistive-worker:health": "tsx src/scripts/runAssistiveCoordinator.ts --health",

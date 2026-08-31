@@ -49,8 +49,8 @@ const CORRECTION_MIGRATIONS = [
   '20260826090000_public_feed_activation_authority_guard.sql',
 ];
 
-const PRE_CORRECTION_MIGRATION_COUNT = 46;
-const CURRENT_MAIN_MIGRATION_COUNT = 47;
+const PRE_CORRECTION_MIGRATION_COUNT = 47;
+const CURRENT_MAIN_MIGRATION_COUNT = 48;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
