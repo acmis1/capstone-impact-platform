@@ -112,15 +112,33 @@ function sleepMilliseconds(milliseconds: number): void {
 function waitForReadiness(): void {
   const deadline = Date.now() + READINESS_TIMEOUT_MS;
   for (;;) {
-    const probe = spawnSync(
+    // The official postgres image briefly starts a temporary server during initdb. pg_isready can
+    // succeed against that temporary server just before it is stopped and replaced by the final
+    // PID 1 postgres process. Require the entrypoint to have exec'd the final server first, then
+    // prove that final server can execute a SQL statement. This removes the startup race without
+    // sleeping for an arbitrary fixed delay.
+    const pidOne = spawnSync(
       'docker',
-      ['exec', containerName, 'pg_isready', '-U', 'postgres', '-d', 'postgres'],
+      ['exec', containerName, 'cat', '/proc/1/comm'],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000 },
     );
-    if (probe.status === 0) return;
+    if (pidOne.status === 0 && pidOne.stdout.trim() === 'postgres') {
+      const probe = spawnSync(
+        'docker',
+        ['exec', containerName, 'psql', '-U', 'postgres', '-d', 'postgres', '-X', '-At', '-c', 'SELECT 1;'],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000 },
+      );
+      if (probe.status === 0 && probe.stdout.trim() === '1') return;
+    }
     if (Date.now() > deadline) {
-      const logs = docker(['logs', '--tail', '20', containerName], { allowFailure: true });
-      throw new Error(`Disposable PostgreSQL 17 container never became ready: ${logs}`);
+      const logs = spawnSync('docker', ['logs', '--tail', '20', containerName], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 20_000,
+      });
+      throw new Error(
+        `Disposable PostgreSQL 17 container never became ready: ${`${logs.stdout ?? ''}\n${logs.stderr ?? ''}`.trim()}`,
+      );
     }
     sleepMilliseconds(1_000);
   }
