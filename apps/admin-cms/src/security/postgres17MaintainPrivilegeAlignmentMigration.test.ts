@@ -18,6 +18,7 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
   const root = path.resolve(__dirname, '../../../..');
   const migrationsDirectory = path.join(root, 'infra/supabase/migrations');
   const filename = '20260831090000_postgres17_maintain_privilege_alignment.sql';
+  const migrationRepositoryPath = `infra/supabase/migrations/${filename}`;
   const source = fs.readFileSync(path.join(migrationsDirectory, filename), 'utf8').replace(/\r\n/g, '\n');
   const executable = source.split('\n').filter((line) => !line.trim().startsWith('--')).join('\n');
   const compact = executable.replace(/\s+/g, ' ');
@@ -40,6 +41,48 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
     '20260811120000_participant_preview_correction_requests.sql',
   ];
 
+  /**
+   * Resolves the commit immediately before Migration 0048 first entered the checked-out history.
+   * This remains meaningful both on a feature branch and after squash-merge to `main`, unlike
+   * comparing to `origin/main` (which necessarily contains the migration after merge).
+   */
+  function migrationIntroductionBaseline(): {
+    introductionCommit: string;
+    parentCommit: string;
+    files: string[];
+    introducedFiles: string[];
+  } {
+    const introductionCommit = execFileSync('git', [
+      'log', '-1', '--diff-filter=A', '--format=%H', '--', migrationRepositoryPath,
+    ], { cwd: root, encoding: 'utf8' }).trim();
+    expect(introductionCommit).toMatch(/^[a-f0-9]{40}$/);
+
+    const parentCommit = execFileSync('git', ['rev-parse', `${introductionCommit}^`], {
+      cwd: root,
+      encoding: 'utf8',
+    }).trim();
+    expect(parentCommit).toMatch(/^[a-f0-9]{40}$/);
+
+    const files = execFileSync('git', [
+      'ls-tree', '-r', '--name-only', parentCommit, 'infra/supabase/migrations/',
+    ], { cwd: root, encoding: 'utf8' })
+      .split('\n')
+      .filter(Boolean)
+      .map((entry) => path.posix.basename(entry))
+      .sort();
+
+    const introducedFiles = execFileSync('git', [
+      'diff-tree', '--no-commit-id', '--name-only', '--diff-filter=A', '-r', introductionCommit,
+      '--', 'infra/supabase/migrations/',
+    ], { cwd: root, encoding: 'utf8' })
+      .split('\n')
+      .filter(Boolean)
+      .map((entry) => path.posix.basename(entry))
+      .sort();
+
+    return { introductionCommit, parentCommit, files, introducedFiles };
+  }
+
   it('is the newest forward migration and does not renumber or replace anything', () => {
     const files = fs.readdirSync(migrationsDirectory).filter((file) => file.endsWith('.sql')).sort();
 
@@ -50,33 +93,48 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
     expect(files.at(-1)).toBe(filename);
     expect(files.at(-2)).toBe('20260828170000_assistive_execution_control.sql');
 
-    // Forward-only: the file is new relative to origin/main rather than a rewrite of an existing one.
-    const onMain = execFileSync('git', ['ls-tree', '--name-only', 'origin/main', 'infra/supabase/migrations/'], {
-      cwd: root,
-      encoding: 'utf8',
-    }).split('\n').filter(Boolean).map((entry) => path.posix.basename(entry));
-    expect(onMain).not.toContain(filename);
-    expect(files.filter((file) => !onMain.includes(file))).toEqual([
+    // Forward-only: every migration that existed immediately before 0048 was introduced remains
+    // present in the same ordered prefix. This works before and after merge and catches deletion,
+    // renumbering or replacement without making `origin/main` an impossible post-merge baseline.
+    const baseline = migrationIntroductionBaseline();
+    expect(baseline.files).not.toContain(filename);
+    expect(files.slice(0, baseline.files.length)).toEqual(baseline.files);
+    expect(baseline.introducedFiles).toEqual([
       '20260828170000_assistive_execution_control.sql',
       filename,
     ]);
+    expect(files.slice(baseline.files.length)).toEqual(baseline.introducedFiles);
   });
 
-  it('leaves every historical migration byte-identical to origin/main', () => {
-    const files = fs.readdirSync(migrationsDirectory).filter((file) => file.endsWith('.sql')).sort();
+  it('leaves every migration through 0048 byte-identical to its introduction baseline', () => {
+    const baseline = migrationIntroductionBaseline();
 
-    expect(() => execFileSync('git', [
-      'diff', '--exit-code', 'origin/main', '--',
-      ...files
-        .filter((file) => file !== '20260828170000_assistive_execution_control.sql' && file !== filename)
-        .map((file) => `infra/supabase/migrations/${file}`),
-    ], { cwd: root, stdio: 'pipe' })).not.toThrow();
+    for (const historical of baseline.files) {
+      const repositoryPath = `infra/supabase/migrations/${historical}`;
+      const committed = execFileSync('git', ['show', `${baseline.parentCommit}:${repositoryPath}`], {
+        cwd: root,
+        encoding: 'utf8',
+      }).replace(/\r\n/g, '\n');
+      expect(fs.readFileSync(path.join(root, repositoryPath), 'utf8').replace(/\r\n/g, '\n')).toBe(committed);
+    }
+
+    // Migrations introduced in the same squash-merge as 0048 are now historical as well. Pin their
+    // bytes to the introduction commit so a future PR cannot mutate 0047 or 0048 in place.
+    for (const introduced of baseline.introducedFiles) {
+      const repositoryPath = `infra/supabase/migrations/${introduced}`;
+      const committed = execFileSync('git', ['show', `${baseline.introductionCommit}:${repositoryPath}`], {
+        cwd: root,
+        encoding: 'utf8',
+      }).replace(/\r\n/g, '\n');
+      expect(fs.readFileSync(path.join(root, repositoryPath), 'utf8').replace(/\r\n/g, '\n')).toBe(committed);
+    }
 
     // The five grant-issuing migrations are named explicitly so a future edit to one of them fails
     // here even if the sweeping check above were ever narrowed.
     for (const historical of GRANTING_MIGRATIONS) {
+      expect(baseline.files).toContain(historical);
       const repositoryPath = `infra/supabase/migrations/${historical}`;
-      const committed = execFileSync('git', ['show', `origin/main:${repositoryPath}`], {
+      const committed = execFileSync('git', ['show', `${baseline.parentCommit}:${repositoryPath}`], {
         cwd: root,
         encoding: 'utf8',
       }).replace(/\r\n/g, '\n');
