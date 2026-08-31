@@ -114,6 +114,10 @@ function mutate(mutator: (evidence: Gate4SchemaEvidence) => void): Gate4SchemaEv
   return evidence;
 }
 
+function maintainGrant(): Gate4SchemaEvidence['tableGrants'][number] {
+  return { schema: 'public', table: 'projects', role: 'service_role', privilege: 'MAINTAIN', grantable: false };
+}
+
 function expectDrift(actual: Gate4SchemaEvidence, category: string): void {
   const result = compareGate4Evidence(exactEvidence(), actual);
   expect(result.classification).toBe('GATE4_DRIFT');
@@ -177,6 +181,68 @@ describe('Gate 4 exact schema evidence comparison', () => {
 
   it('detects a missing authenticated lookup privilege', () => {
     expectDrift(mutate((evidence) => { evidence.tableGrants = evidence.tableGrants.filter((grant) => !(grant.table === 'programs' && grant.role === 'authenticated')); }), 'TABLE_GRANTS');
+  });
+
+  it('accepts matching MAINTAIN evidence independent of table-grant ordering', () => {
+    const expected = mutate((evidence) => { evidence.tableGrants.push(maintainGrant()); });
+    const actual = structuredClone(expected);
+    actual.tableGrants.reverse();
+
+    expect(parseGate4Evidence(expected).ok).toBe(true);
+    expect(compareGate4Evidence(expected, actual).classification).toBe('GATE4_MATCH');
+  });
+
+  it('classifies an unexpected MAINTAIN grant as GATE4_DRIFT', () => {
+    const result = compareGate4Evidence(
+      exactEvidence(),
+      mutate((evidence) => { evidence.tableGrants.push(maintainGrant()); }),
+    );
+
+    expect(result.classification).toBe('GATE4_DRIFT');
+    expect(result.validationErrors).toEqual([]);
+    expect(result.differences).toContainEqual({
+      category: 'TABLE_GRANTS',
+      key: 'public.projects.service_role.MAINTAIN',
+      kind: 'UNEXPECTED',
+    });
+  });
+
+  it('classifies a missing expected MAINTAIN grant as GATE4_DRIFT', () => {
+    const result = compareGate4Evidence(
+      mutate((evidence) => { evidence.tableGrants.push(maintainGrant()); }),
+      exactEvidence(),
+    );
+
+    expect(result.classification).toBe('GATE4_DRIFT');
+    expect(result.validationErrors).toEqual([]);
+    expect(result.differences).toContainEqual({
+      category: 'TABLE_GRANTS',
+      key: 'public.projects.service_role.MAINTAIN',
+      kind: 'MISSING',
+    });
+  });
+
+  it('rejects duplicate MAINTAIN grant evidence', () => {
+    const duplicated = mutate((evidence) => {
+      evidence.tableGrants.push(maintainGrant(), maintainGrant());
+    });
+    const result = compareGate4Evidence(exactEvidence(), duplicated);
+
+    expect(result.classification).toBe('EVIDENCE_INVALID');
+    expect(result.validationErrors).toContain(
+      'actual: evidence.tableGrants contains duplicate key public.projects.service_role.MAINTAIN.',
+    );
+  });
+
+  it('continues to reject unsupported table privileges', () => {
+    const unsupported = structuredClone(exactEvidence()) as unknown as Record<string, unknown>;
+    (unsupported.tableGrants as unknown[]).push({
+      schema: 'public', table: 'projects', role: 'service_role', privilege: 'VACUUM', grantable: false,
+    });
+    const result = compareGate4Evidence(exactEvidence(), unsupported);
+
+    expect(result.classification).toBe('EVIDENCE_INVALID');
+    expect(result.validationErrors).toContain('actual: evidence.tableGrants[5].privilege has an unsupported value.');
   });
 
   it('detects a missing application RPC', () => {

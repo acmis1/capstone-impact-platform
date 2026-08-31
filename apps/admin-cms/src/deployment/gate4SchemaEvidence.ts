@@ -81,7 +81,7 @@ export interface Gate4TableGrantEvidence {
   schema: string;
   table: string;
   role: RelevantRole;
-  privilege: 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'TRUNCATE' | 'REFERENCES' | 'TRIGGER';
+  privilege: 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'TRUNCATE' | 'REFERENCES' | 'TRIGGER' | 'MAINTAIN';
   grantable: boolean;
 }
 
@@ -560,7 +560,7 @@ export function parseGate4Evidence(input: unknown): ParseResult {
       schema: requireString(row.schema, `evidence.tableGrants[${index}].schema`, errors),
       table: requireString(row.table, `evidence.tableGrants[${index}].table`, errors),
       role: requireEnum(row.role, RELEVANT_ROLES, `evidence.tableGrants[${index}].role`, errors),
-      privilege: requireEnum(row.privilege, ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'] as const, `evidence.tableGrants[${index}].privilege`, errors),
+      privilege: requireEnum(row.privilege, ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN'] as const, `evidence.tableGrants[${index}].privilege`, errors),
       grantable: requireBoolean(row.grantable, `evidence.tableGrants[${index}].grantable`, errors),
     };
   });
