@@ -49,17 +49,13 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
     expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(48);
     expect(files.at(-1)).toBe(filename);
     expect(files.at(-2)).toBe('20260828170000_assistive_execution_control.sql');
+    expect(files.filter((file) => file === filename)).toHaveLength(1);
 
-    // Forward-only: the file is new relative to origin/main rather than a rewrite of an existing one.
-    const onMain = execFileSync('git', ['ls-tree', '--name-only', 'origin/main', 'infra/supabase/migrations/'], {
-      cwd: root,
-      encoding: 'utf8',
-    }).split('\n').filter(Boolean).map((entry) => path.posix.basename(entry));
-    expect(onMain).not.toContain(filename);
-    expect(files.filter((file) => !onMain.includes(file))).toEqual([
-      '20260828170000_assistive_execution_control.sql',
-      filename,
-    ]);
+    // Forward-only ordering is a repository invariant, not a comparison against moving origin/main.
+    // The latter becomes the current commit immediately after merge and made post-merge CI fail.
+    const versions = files.map((file) => file.slice(0, 14));
+    expect(versions.every((version) => /^\d{14}$/.test(version))).toBe(true);
+    expect(new Set(versions).size).toBe(files.length);
   });
 
   it('leaves every historical migration byte-identical to origin/main', () => {
