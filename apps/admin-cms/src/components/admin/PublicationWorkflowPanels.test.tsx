@@ -70,7 +70,7 @@ describe('PublicationReadinessPanel', () => {
     expect(screen.getByText('Project details and media match confirmation')).toBeTruthy();
   });
 
-    it('places technical result codes behind a keyboard-operable native disclosure', () => {
+  it('places technical result codes behind a collapsed native disclosure carrying the shared focus ring', () => {
     render(
       <PublicationReadinessPanel
         readiness={{
@@ -85,9 +85,21 @@ describe('PublicationReadinessPanel', () => {
     const summary = screen.getByText('Technical details');
     const disclosure = summary.closest('details');
 
+    // Native `<summary>` is what makes the control focusable and Enter/Space operable in a
+    // browser; jsdom does not implement that keyboard activation, so keyboard operation itself
+    // is covered by the manual UAT matrix, not asserted here.
     expect(summary.tagName).toBe('SUMMARY');
     expect(disclosure).not.toBeNull();
     expect(disclosure?.hasAttribute('open')).toBe(false);
+
+    for (const focusClass of [
+      'focus-visible:outline-none',
+      'focus-visible:ring-2',
+      'focus-visible:ring-ring',
+      'focus-visible:ring-offset-2',
+    ]) {
+      expect(summary.className).toContain(focusClass);
+    }
 
     fireEvent.click(summary);
 
