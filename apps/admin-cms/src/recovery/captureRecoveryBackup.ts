@@ -22,11 +22,17 @@ import {
   type PrivateObjectManifest,
 } from './recoveryBundleStore';
 import { serializeTableEvidence } from './recoveryEvidenceSql';
+import {
+  assertRepositoryManagedSchemaMigrationInventory,
+  managedSchemaCustomizationCounts,
+  validateManagedSchemaCustomizationsAgainstRepository,
+} from './managedSchemaCustomizations';
 import { iterateBucketObjects, readBucketConfigurations } from './storageTransfer';
 import {
   dumpDatabaseArtifacts,
   readGate4SourceEvidence,
   readLinkedProjectRef,
+  readManagedSchemaCustomizationEvidence,
   readRecoveryEvidence,
   supabaseCliVersion,
   type RecoverySourceTarget,
@@ -123,13 +129,32 @@ export async function captureRecoveryBackup(options: CaptureOptions): Promise<Ca
     options.repositoryRoot,
     options.sourceKind === 'hosted-staging',
   );
+  assertRepositoryManagedSchemaMigrationInventory(options.repositoryRoot);
   const bundleDirectory = assertOperatorBackupDirectory(options.outputDirectory, options.repositoryRoot);
   fs.mkdirSync(bundleDirectory, { recursive: true, mode: 0o700 });
   fs.chmodSync(bundleDirectory, 0o700);
   // Re-check the now-created directory to close symlink/working-tree races before private bytes land.
   assertOperatorBackupDirectory(bundleDirectory, options.repositoryRoot);
+  writeJsonArtifact(bundleDirectory, BUNDLE_PATHS.incompleteMarker, {
+    classification: 'PRIVATE_INCOMPLETE_RECOVERY_BUNDLE',
+    startedAt,
+    handling: 'RETAIN_OR_DESTROY_UNDER_OPERATOR_POLICY_NEVER_COMMIT',
+  });
 
   const evidence = readRecoveryEvidence(options.repositoryRoot, options.target, options.scratchDirectory);
+  const managedSchemaEvidence = readManagedSchemaCustomizationEvidence(
+    options.repositoryRoot,
+    options.target,
+    options.scratchDirectory,
+  );
+  const managedSchemaErrors = validateManagedSchemaCustomizationsAgainstRepository(
+    managedSchemaEvidence,
+  );
+  if (managedSchemaErrors.length > 0) {
+    throw new RecoveryGuardError(
+      `SOURCE_MANAGED_SCHEMA_CUSTOMIZATION_INVALID:${managedSchemaErrors[0]}`,
+    );
+  }
   if (evidence.migrationVersions.length === 0) {
     throw new RecoveryGuardError('SOURCE_MIGRATION_HISTORY_UNAVAILABLE');
   }
@@ -185,6 +210,12 @@ export async function captureRecoveryBackup(options: CaptureOptions): Promise<Ca
   const serializedDataEvidence = serializeTableEvidence(evidence.tables);
   fs.writeFileSync(dataEvidenceFile, serializedDataEvidence, { encoding: 'utf8', mode: 0o600 });
 
+  const managedSchemaChecksum = writeJsonArtifact(
+    bundleDirectory,
+    BUNDLE_PATHS.managedSchemaCustomizations,
+    managedSchemaEvidence,
+  );
+
   const gate4Evidence = readGate4SourceEvidence(options.repositoryRoot, options.target);
   const expectedMigrations = repositoryMigrationVersions(options.repositoryRoot);
   const gate4Errors = validateCurrentRepositoryGate4Contract(gate4Evidence, expectedMigrations);
@@ -209,7 +240,22 @@ export async function captureRecoveryBackup(options: CaptureOptions): Promise<Ca
   if (completedGitSha !== reviewedGitSha) {
     throw new RecoveryGuardError('REPOSITORY_CHANGED_DURING_CAPTURE');
   }
+  const completedEvidence = readRecoveryEvidence(
+    options.repositoryRoot,
+    options.target,
+    options.scratchDirectory,
+  );
+  const completedManagedSchemaEvidence = readManagedSchemaCustomizationEvidence(
+    options.repositoryRoot,
+    options.target,
+    options.scratchDirectory,
+  );
+  if (JSON.stringify(completedEvidence) !== JSON.stringify(evidence)
+    || JSON.stringify(completedManagedSchemaEvidence) !== JSON.stringify(managedSchemaEvidence)) {
+    throw new RecoveryGuardError('SOURCE_CHANGED_DURING_CAPTURE');
+  }
   const completedAt = new Date().toISOString();
+  const managedCounts = managedSchemaCustomizationCounts(managedSchemaEvidence);
   const manifest: RecoveryBundleManifest = {
     formatVersion: RECOVERY_BUNDLE_FORMAT,
     evidenceLabel: RECOVERY_EVIDENCE_LABEL,
@@ -248,6 +294,12 @@ export async function captureRecoveryBackup(options: CaptureOptions): Promise<Ca
       tableCount: evidence.tables.length,
     },
     gate4Evidence: { path: BUNDLE_PATHS.gate4Evidence, sha256: gate4Checksum },
+    managedSchemaCustomizations: {
+      path: BUNDLE_PATHS.managedSchemaCustomizations,
+      sha256: managedSchemaChecksum,
+      authCount: managedCounts.auth,
+      storageCount: managedCounts.storage,
+    },
     executionControl: {
       budgetGuard: evidence.executionControl.budgetGuard,
       launchReservationCount: evidence.executionControl.launchReservationCount,
@@ -263,6 +315,7 @@ export async function captureRecoveryBackup(options: CaptureOptions): Promise<Ca
     throw new RecoveryGuardError(`SOURCE_CAPTURE_INCOMPLETE:${errors[0]}`);
   }
   writeJsonArtifact(bundleDirectory, BUNDLE_PATHS.manifest, manifest);
+  fs.rmSync(bundleFile(bundleDirectory, BUNDLE_PATHS.incompleteMarker), { force: true });
 
   return {
     bundleDirectory,

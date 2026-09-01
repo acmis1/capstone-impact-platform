@@ -31,6 +31,7 @@
     "check:admin-hosted-smoke": "npm run check:hosted-smoke --workspace=apps/admin-cms --",
     "check:operational-readiness": "npm run check:operational-readiness --workspace=apps/admin-cms --",
     "check:zero-cost": "npm run check:zero-cost --workspace=apps/admin-cms",
+    "check:managed-schema-recovery-inventory": "npm run check:managed-schema-recovery-inventory --workspace=apps/admin-cms",
     "check:gate4-schema-evidence": "npm run check:gate4-schema-evidence --workspace=apps/admin-cms --",
     "capture:recovery-backup": "npm run capture:recovery-backup --workspace=apps/admin-cms --",
     "restore:recovery-backup": "npm run restore:recovery-backup --workspace=apps/admin-cms --",

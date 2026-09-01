@@ -28,6 +28,7 @@
     "check:hosted-smoke": "tsx src/scripts/checkHostedDeploymentSmoke.ts",
     "check:operational-readiness": "tsx src/scripts/checkM6OperationalReadiness.ts",
     "check:zero-cost": "tsx src/scripts/checkZeroCostEnvelope.ts",
+    "check:managed-schema-recovery-inventory": "tsx src/scripts/checkManagedSchemaRecoveryInventory.ts",
     "build:dispatcher": "esbuild src/scripts/runAssistiveDispatcher.ts --bundle --platform=node --target=node24 --format=cjs --external:pg-native --outfile=dist/assistive-dispatcher.cjs",
     "check:gate4-schema-evidence": "tsx src/scripts/runDisposableGate4SchemaEvidence.ts",
     "capture:recovery-backup": "tsx src/scripts/captureRecoveryBackup.ts",

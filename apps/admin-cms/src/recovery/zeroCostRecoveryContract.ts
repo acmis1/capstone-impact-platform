@@ -14,7 +14,7 @@ import path from 'node:path';
  * docs/operations/zero-cost-recovery-rehearsal.md.
  */
 
-export const RECOVERY_BUNDLE_FORMAT = 'zero-cost-hosted-origin-recovery/v1' as const;
+export const RECOVERY_BUNDLE_FORMAT = 'zero-cost-hosted-origin-recovery/v2' as const;
 
 /** Truthful label for this evidence. Never relabel it as managed-hosted PITR or hosted RTO. */
 export const RECOVERY_EVIDENCE_LABEL = 'ZERO_COST_HOSTED_ORIGIN_RECOVERY_REHEARSAL' as const;
@@ -70,6 +70,7 @@ export type RecoveryClassification =
   | 'RECOVERY_BUNDLE_INVALID'
   | 'RESTORE_FAILED'
   | 'RESTORE_INTEGRITY_DRIFT'
+  | 'MANAGED_SCHEMA_CUSTOMIZATION_DRIFT'
   | 'GATE4_DRIFT'
   | 'STORAGE_RESTORE_DRIFT'
   | 'CLEANUP_FAILED';
@@ -87,6 +88,7 @@ export function resolveClassification(
     'RECOVERY_BUNDLE_INVALID',
     'SOURCE_CAPTURE_INCOMPLETE',
     'GATE4_DRIFT',
+    'MANAGED_SCHEMA_CUSTOMIZATION_DRIFT',
     'RESTORE_INTEGRITY_DRIFT',
     'STORAGE_RESTORE_DRIFT',
   ];

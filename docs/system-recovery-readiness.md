@@ -13,10 +13,13 @@ npm run verify:zero-cost-recovery-rehearsal
 ```
 
 This creates a fresh PostgreSQL 15 synthetic source, captures the five-artifact logical backup and
-all three canonical Storage buckets, restores them to a fresh PostgreSQL 17 target, verifies Gate 4,
-database/Auth/execution-control/Storage integrity and application health/login, then cleans only its
-marked resources. It contacts no hosted project and uses no paid service. The resulting evidence is
-`ZERO_COST_RECOVERY_REHEARSAL_VERIFIED`, not a managed-hosted restore or hosted RTO claim.
+all three canonical Storage buckets plus the two repository-owned Auth triggers excluded from the
+standard managed-schema dump, restores them to a fresh PostgreSQL 17 target, and separately
+requires Gate 4 and `MANAGED_SCHEMA_CUSTOMIZATIONS = MATCH`. It then verifies
+database/Auth/execution-control/Storage integrity and application health/login before cleaning only
+its marked resources. It contacts no hosted project and uses no paid service. The resulting
+evidence is `ZERO_COST_RECOVERY_REHEARSAL_VERIFIED`, not a managed-hosted restore or hosted RTO
+claim.
 
 ## Bounded Local probe evidence boundary
 

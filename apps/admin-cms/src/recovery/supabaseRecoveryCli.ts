@@ -2,10 +2,16 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  assertReadOnlyEvidenceSql,
   buildRecoveryEvidenceSql,
   parseRecoveryEvidence,
   type RecoveryEvidenceSnapshot,
 } from './recoveryEvidenceSql';
+import {
+  buildManagedSchemaCustomizationEvidenceSql,
+  parseManagedSchemaCustomizationEvidence,
+  type ManagedSchemaCustomizationEvidence,
+} from './managedSchemaCustomizations';
 import { DATABASE_BACKUP_ARTIFACTS, RecoveryGuardError } from './zeroCostRecoveryContract';
 
 /**
@@ -136,6 +142,53 @@ export function readRecoveryEvidence(
     throw new RecoveryGuardError('RECOVERY_EVIDENCE_QUERY_FAILED');
   }
   return parseRecoveryEvidence(rows[0]?.doc);
+}
+
+/**
+ * Reads only the repository-governed managed-schema trigger structure from pg_catalog. This query
+ * never reads Auth identity rows, Auth user rows, Storage metadata, or Storage object names.
+ */
+export function readManagedSchemaCustomizationEvidence(
+  repositoryRoot: string,
+  target: RecoverySourceTarget,
+  scratchDirectory: string,
+): ManagedSchemaCustomizationEvidence {
+  const sqlFile = path.join(scratchDirectory, 'managed-schema-customization-evidence.sql');
+  fs.mkdirSync(scratchDirectory, { recursive: true, mode: 0o700 });
+  const sql = buildManagedSchemaCustomizationEvidenceSql();
+  assertReadOnlyEvidenceSql(sql);
+  fs.writeFileSync(sqlFile, sql, { encoding: 'utf8', mode: 0o600 });
+  let output: string;
+  try {
+    output = execFileSync(process.execPath, [
+      cliShim(repositoryRoot),
+      'db', 'query', ...targetFlags(target), '-o', 'json', '-f', sqlFile,
+    ], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+      stdio: ['inherit', 'pipe', 'inherit'],
+      timeout: EVIDENCE_QUERY_TIMEOUT_MS,
+      maxBuffer: 4 * 1024 * 1024,
+      env: restrictedCliEnvironment(target),
+    });
+  } catch {
+    throw new RecoveryGuardError('MANAGED_SCHEMA_CUSTOMIZATION_EVIDENCE_QUERY_FAILED');
+  } finally {
+    fs.rmSync(sqlFile, { force: true });
+  }
+  const parsed = parseCliJson(output) as { rows?: Array<{ doc?: unknown }>; error?: unknown }
+    | Array<{ doc?: unknown }>;
+  const rows = Array.isArray(parsed) ? parsed : parsed.rows;
+  if ((!Array.isArray(parsed) && parsed.error) || !Array.isArray(rows) || rows.length !== 1) {
+    throw new RecoveryGuardError('MANAGED_SCHEMA_CUSTOMIZATION_EVIDENCE_QUERY_FAILED');
+  }
+  const evidence = parseManagedSchemaCustomizationEvidence(rows[0]?.doc);
+  if (!evidence.ok) {
+    throw new RecoveryGuardError(
+      `MANAGED_SCHEMA_CUSTOMIZATION_EVIDENCE_INVALID:${evidence.errors[0]}`,
+    );
+  }
+  return evidence.evidence;
 }
 
 /**

@@ -8,6 +8,10 @@ import {
   RECOVERY_EVIDENCE_LABEL,
   type DatabaseBackupArtifact,
 } from './zeroCostRecoveryContract';
+import {
+  EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT,
+  EXPECTED_MANAGED_STORAGE_CUSTOMIZATION_COUNT,
+} from './managedSchemaCustomizations';
 
 /**
  * Recovery bundle shape, validation, and source-versus-restored comparison.
@@ -125,6 +129,12 @@ export interface RecoveryBundleManifest {
   gate4Evidence: {
     path: string;
     sha256: string;
+  };
+  managedSchemaCustomizations: {
+    path: string;
+    sha256: string;
+    authCount: number;
+    storageCount: number;
   };
   executionControl: ExecutionControlEvidence;
   classification: 'ZERO_COST_HOSTED_ORIGIN_RECOVERY_BUNDLE';
@@ -335,6 +345,23 @@ function validateExecutionControl(manifest: RecoveryBundleManifest, errors: stri
   }
 }
 
+function validateManagedSchemaCustomizations(
+  manifest: RecoveryBundleManifest,
+  errors: string[],
+): void {
+  const managed = manifest.managedSchemaCustomizations;
+  if (!isPlainObject(managed)
+    || managed.path !== 'evidence/managed-schema-customizations.json'
+    || typeof managed.sha256 !== 'string'
+    || !SHA256_PATTERN.test(managed.sha256)
+    || managed.authCount !== EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT
+    || managed.storageCount !== EXPECTED_MANAGED_STORAGE_CUSTOMIZATION_COUNT) {
+    errors.push(
+      'Recovery bundle references no complete checksummed managed-schema customization evidence.',
+    );
+  }
+}
+
 /** Structural gate. An invalid bundle can never proceed to a restore. */
 export function validateRecoveryBundleManifest(
   input: unknown,
@@ -411,6 +438,7 @@ export function validateRecoveryBundleManifest(
   validateMigrations(manifest, options, errors);
   validateStorage(manifest, errors);
   validateExecutionControl(manifest, errors);
+  validateManagedSchemaCustomizations(manifest, errors);
   errors.push(...findSensitiveManifestContent(manifest));
   return errors;
 }

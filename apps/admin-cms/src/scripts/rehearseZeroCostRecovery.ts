@@ -25,6 +25,11 @@ import {
   seedSyntheticStorageObjects,
 } from '../recovery/syntheticSourceEvidence';
 import { formatRestoreSummary } from './restoreRecoveryBackup';
+import { BUNDLE_PATHS, bundleFile } from '../recovery/recoveryBundleStore';
+import {
+  countExpectedManagedTriggersInStandardSchemaDump,
+  EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT,
+} from '../recovery/managedSchemaCustomizations';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
 const SOURCE_PORT_BASE = 54_820;
@@ -115,6 +120,16 @@ async function main(): Promise<void> {
       storageServiceKey: sourceEnv.serviceRoleKey,
       scratchDirectory: path.join(source.workdir, 'scratch'),
     });
+    const schemaDump = fs.readFileSync(
+      bundleFile(bundleDirectory, `${BUNDLE_PATHS.database}/schema.sql`),
+      'utf8',
+    );
+    const managedTriggersInStandardSchemaDump = countExpectedManagedTriggersInStandardSchemaDump(
+      schemaDump,
+    );
+    if (managedTriggersInStandardSchemaDump !== 0) {
+      throw new Error('STANDARD_SCHEMA_DUMP_MANAGED_BOUNDARY_CHANGED');
+    }
 
     sourceResidueAbsent = cleanupSource(source, sourceNetworkId, sourceStarted);
     sourceStarted = false;
@@ -132,6 +147,9 @@ async function main(): Promise<void> {
     console.log('SYNTHETIC_SOURCE_POSTGRES_MAJOR = 15');
     console.log('SYNTHETIC_TARGET_POSTGRES_MAJOR = 17');
     console.log(`SYNTHETIC_STORAGE_OBJECTS_SEEDED = ${seededStorageObjects}`);
+    console.log(
+      `STANDARD_SCHEMA_DUMP_MANAGED_AUTH_TRIGGERS = ${managedTriggersInStandardSchemaDump}/${EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT}`,
+    );
     console.log(`BACKUP_DURATION_MS = ${Date.parse(capture.completedAt) - Date.parse(capture.startedAt)}`);
     console.log(`SYNTHETIC_SOURCE_RESIDUE_ABSENT = ${sourceResidueAbsent ? 'YES' : 'NO'}`);
     console.log(formatRestoreSummary(restore, bundlePreservedThroughRestore));

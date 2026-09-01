@@ -35,6 +35,12 @@ FROM auth.users
 WHERE email = '${SYNTHETIC_AUTH_EMAIL}'
 ON CONFLICT (email) DO NOTHING;
 
+INSERT INTO public.user_roles (user_id, role)
+SELECT id, 'admin'
+FROM public.admin_users
+WHERE email = '${SYNTHETIC_AUTH_EMAIL}'
+ON CONFLICT ON CONSTRAINT unique_user_role DO NOTHING;
+
 WITH target AS (
   SELECT id FROM public.projects ORDER BY public_id LIMIT 1
 ), operator AS (

@@ -43,6 +43,16 @@ import {
   resolveClassification,
 } from './zeroCostRecoveryContract';
 import { formatRestoreSummary } from '../scripts/restoreRecoveryBackup';
+import { repositoryMigrationVersions } from './captureRecoveryBackup';
+import {
+  buildApprovedManagedSchemaCustomizationRestoreSql,
+  compareManagedSchemaCustomizations,
+  inspectRepositoryManagedSchemaMigrationInventory,
+  managedSchemaCustomizationCounts,
+  REPOSITORY_MANAGED_SCHEMA_EXPECTATION,
+  scanManagedSchemaMigrationDdl,
+  validateManagedSchemaCustomizationsAgainstRepository,
+} from './managedSchemaCustomizations';
 
 const temporaryDirectories: string[] = [];
 
@@ -99,6 +109,11 @@ function buildBundle(): { directory: string; manifest: RecoveryBundleManifest; o
   const dataEvidence = [{ schema: 'public', table: 'projects', rowCount: 1, checksum: 'a'.repeat(64) }];
   const dataEvidenceChecksum = writeJsonArtifact(directory, BUNDLE_PATHS.dataEvidence, dataEvidence);
   const gate4Checksum = writeJsonArtifact(directory, BUNDLE_PATHS.gate4Evidence, { formatVersion: 'test' });
+  const managedSchemaChecksum = writeJsonArtifact(
+    directory,
+    BUNDLE_PATHS.managedSchemaCustomizations,
+    REPOSITORY_MANAGED_SCHEMA_EXPECTATION,
+  );
   const manifest: RecoveryBundleManifest = {
     formatVersion: RECOVERY_BUNDLE_FORMAT,
     evidenceLabel: RECOVERY_EVIDENCE_LABEL,
@@ -133,6 +148,12 @@ function buildBundle(): { directory: string; manifest: RecoveryBundleManifest; o
       tableCount: 1,
     },
     gate4Evidence: { path: BUNDLE_PATHS.gate4Evidence, sha256: gate4Checksum },
+    managedSchemaCustomizations: {
+      path: BUNDLE_PATHS.managedSchemaCustomizations,
+      sha256: managedSchemaChecksum,
+      authCount: 2,
+      storageCount: 0,
+    },
     executionControl: {
       budgetGuard: { environment: 'staging', launchLimit: 40, windowDays: 31, maxActiveExecutions: 1 },
       launchReservationCount: 2,
@@ -280,6 +301,134 @@ describe('bundle manifest and artifact integrity', () => {
   });
 });
 
+function managedEvidenceFixture() {
+  return JSON.parse(JSON.stringify(REPOSITORY_MANAGED_SCHEMA_EXPECTATION)) as typeof REPOSITORY_MANAGED_SCHEMA_EXPECTATION;
+}
+
+describe('managed auth/storage customization recovery boundary', () => {
+  const repositoryRoot = path.resolve(__dirname, '../../../..');
+
+  it('inventories exactly both current Auth triggers and no custom Storage object across 48 migrations', () => {
+    const operations = inspectRepositoryManagedSchemaMigrationInventory(repositoryRoot);
+    const creates = operations.filter((operation) => operation.action === 'CREATE_TRIGGER');
+    expect(repositoryMigrationVersions(repositoryRoot)).toHaveLength(48);
+    expect(creates.map((operation) => `${operation.schema}.${operation.table}.${operation.name}`))
+      .toEqual([
+        'auth.users.claim_staff_provisioning_auth_insert_before_insert',
+        'auth.users.claim_staff_provisioning_auth_insert_before_metadata_update',
+      ]);
+    expect(operations.some((operation) => operation.schema === 'storage')).toBe(false);
+    expect(managedSchemaCustomizationCounts(REPOSITORY_MANAGED_SCHEMA_EXPECTATION))
+      .toEqual({ auth: 2, storage: 0 });
+  });
+
+  it('matches exact source definitions to the repository expectation without identity rows', () => {
+    const evidence = managedEvidenceFixture();
+    expect(validateManagedSchemaCustomizationsAgainstRepository(evidence)).toEqual([]);
+    const serialized = JSON.stringify(evidence);
+    expect(serialized).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    expect(serialized).not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i);
+    expect(serialized).not.toContain('userCount');
+    expect(serialized).not.toContain('raw_user_meta_data":"');
+  });
+
+  it('fails source evidence when either Auth trigger is missing', () => {
+    for (let index = 0; index < 2; index += 1) {
+      const evidence = managedEvidenceFixture();
+      evidence.triggers.splice(index, 1);
+      expect(validateManagedSchemaCustomizationsAgainstRepository(evidence))
+        .toContain(`MISSING:auth.users.${REPOSITORY_MANAGED_SCHEMA_EXPECTATION.triggers[index].name}`);
+    }
+  });
+
+  it.each([
+    ['event', (evidence: ReturnType<typeof managedEvidenceFixture>) => { evidence.triggers[0].events = ['DELETE']; }],
+    ['definition', (evidence: ReturnType<typeof managedEvidenceFixture>) => { evidence.triggers[0].definition = evidence.triggers[0].definition.replace('before insert', 'after insert'); }],
+    ['function', (evidence: ReturnType<typeof managedEvidenceFixture>) => { evidence.triggers[0].functionName = 'unknown_trigger_function'; }],
+  ])('fails altered trigger %s semantics', (_field, mutate) => {
+    const evidence = managedEvidenceFixture();
+    mutate(evidence);
+    expect(validateManagedSchemaCustomizationsAgainstRepository(evidence).length).toBeGreaterThan(0);
+  });
+
+  it('fails restored-target comparison when either required trigger is absent', () => {
+    for (let index = 0; index < 2; index += 1) {
+      const restored = managedEvidenceFixture();
+      restored.triggers.splice(index, 1);
+      expect(compareManagedSchemaCustomizations(REPOSITORY_MANAGED_SCHEMA_EXPECTATION, restored))
+        .toMatchObject([{ kind: 'MISSING' }]);
+    }
+  });
+
+  it('cannot false-green 48/48 migration history when a managed Auth trigger is absent', () => {
+    const migrations = repositoryMigrationVersions(repositoryRoot);
+    const restored = managedEvidenceFixture();
+    restored.triggers.pop();
+    const managedDrift = compareManagedSchemaCustomizations(
+      REPOSITORY_MANAGED_SCHEMA_EXPECTATION,
+      restored,
+    );
+    expect(migrations).toHaveLength(48);
+    expect(resolveClassification(
+      managedDrift.length > 0 ? ['MANAGED_SCHEMA_CUSTOMIZATION_DRIFT'] : [],
+    )).toBe('MANAGED_SCHEMA_CUSTOMIZATION_DRIFT');
+  });
+
+  it('cannot false-green Gate 4 MATCH when a managed Auth trigger is absent', () => {
+    const gate4Classification = 'GATE4_MATCH';
+    const restored = managedEvidenceFixture();
+    restored.triggers.shift();
+    const managedDrift = compareManagedSchemaCustomizations(
+      REPOSITORY_MANAGED_SCHEMA_EXPECTATION,
+      restored,
+    );
+    expect(gate4Classification).toBe('GATE4_MATCH');
+    expect(resolveClassification(
+      managedDrift.length > 0 ? ['MANAGED_SCHEMA_CUSTOMIZATION_DRIFT'] : [],
+    )).not.toBe('ZERO_COST_RECOVERY_REHEARSAL_VERIFIED');
+  });
+
+  it('matches exact captured and restored customization evidence', () => {
+    expect(compareManagedSchemaCustomizations(
+      managedEvidenceFixture(),
+      managedEvidenceFixture(),
+    )).toEqual([]);
+  });
+
+  it('fails closed for an unreviewed future managed-schema customization', () => {
+    expect(scanManagedSchemaMigrationDdl(`
+      CREATE POLICY future_private_policy ON storage.objects FOR SELECT USING (false);
+    `)).toMatchObject([{ action: 'UNREVIEWED_MANAGED_DDL', schema: 'storage' }]);
+    expect(scanManagedSchemaMigrationDdl(`
+      DO $$ BEGIN
+        EXECUTE 'ALTER TABLE auth.users ADD COLUMN unsafe text';
+      END $$;
+    `)).toMatchObject([{ action: 'UNREVIEWED_MANAGED_DDL', name: 'dynamic-sql' }]);
+  });
+
+  it('does not misclassify ordinary Auth reads, helpers, or foreign-key references', () => {
+    expect(scanManagedSchemaMigrationDdl(`
+      CREATE TABLE public.example (
+        user_id uuid REFERENCES auth.users(id),
+        session_id uuid REFERENCES auth.sessions(id)
+      );
+      SELECT id FROM auth.users;
+      SELECT auth.uid();
+    `)).toEqual([]);
+  });
+
+  it('never executes unknown bundle SQL and returns only the fixed approved restore DDL', () => {
+    const unknown = managedEvidenceFixture();
+    unknown.triggers[0].definition += '; DROP TABLE auth.users';
+    expect(() => buildApprovedManagedSchemaCustomizationRestoreSql(unknown))
+      .toThrowError('MANAGED_SCHEMA_CUSTOMIZATION_NOT_APPROVED');
+    const approvedSql = buildApprovedManagedSchemaCustomizationRestoreSql(managedEvidenceFixture());
+    expect(approvedSql).toContain('MANAGED_AUTH_TRIGGER_FUNCTION_MISSING_OR_DIFFERENT');
+    expect(approvedSql.match(/CREATE TRIGGER/g)).toHaveLength(2);
+    expect(approvedSql).not.toContain('DROP TABLE');
+  });
+});
+
 describe('Storage and failure classifications', () => {
   it('detects missing, extra, changed and wrong-bucket objects without returning keys', () => {
     const original = objectRecord('project-drafts-private', 'private/person-key.png', Buffer.from('one'));
@@ -308,6 +457,8 @@ describe('Storage and failure classifications', () => {
   it('fails closed for SQL restore, database, Gate 4, Storage and cleanup failures', () => {
     expect(resolveClassification(['RESTORE_FAILED'])).toBe('RESTORE_FAILED');
     expect(resolveClassification(['RESTORE_INTEGRITY_DRIFT'])).toBe('RESTORE_INTEGRITY_DRIFT');
+    expect(resolveClassification(['MANAGED_SCHEMA_CUSTOMIZATION_DRIFT']))
+      .toBe('MANAGED_SCHEMA_CUSTOMIZATION_DRIFT');
     expect(resolveClassification(['GATE4_DRIFT'])).toBe('GATE4_DRIFT');
     expect(resolveClassification(['STORAGE_RESTORE_DRIFT'])).toBe('STORAGE_RESTORE_DRIFT');
     expect(resolveClassification(['CLEANUP_FAILED'])).toBe('CLEANUP_FAILED');
@@ -396,6 +547,12 @@ describe('disposable ownership and safe summaries', () => {
       restoredAuthUserCount: 1,
       authCountMatch: true,
       restoredAuthOrphanIdentityCount: 0,
+      managedAuthCustomizationCount: 2,
+      expectedManagedAuthCustomizationCount: 2,
+      managedStorageCustomizationCount: 0,
+      expectedManagedStorageCustomizationCount: 0,
+      managedSchemaCustomizationsMatch: true,
+      managedAuthBehaviorVerified: true,
       bucketSummaries: ['project-drafts-private: 1 objects, 12 bytes, root abcdef123456'],
       gate4: null,
       applicationSmoke: {

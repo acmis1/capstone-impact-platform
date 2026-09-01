@@ -88,6 +88,12 @@ export function formatRestoreSummary(result: RestoreVerificationResult, bundlePr
     `AUTH_RESTORED_COUNT = ${result.restoredAuthUserCount}`,
     `AUTH_COUNT_MATCH = ${result.authCountMatch ? 'YES' : 'NO'}`,
     `AUTH_ORPHAN_IDENTITY_COUNT = ${result.restoredAuthOrphanIdentityCount}`,
+    `MANAGED_AUTH_CUSTOMIZATIONS = ${result.managedAuthCustomizationCount}/${result.expectedManagedAuthCustomizationCount}`,
+    `MANAGED_STORAGE_CUSTOMIZATIONS = ${result.managedStorageCustomizationCount}/${result.expectedManagedStorageCustomizationCount}`,
+    `MANAGED_SCHEMA_CUSTOMIZATIONS = ${result.managedSchemaCustomizationsMatch ? 'MATCH' : 'DRIFT'}`,
+    `MANAGED_AUTH_BEHAVIOR = ${result.managedAuthBehaviorVerified === null
+      ? 'NOT_RUN'
+      : result.managedAuthBehaviorVerified ? 'PASS' : 'FAIL'}`,
     `STORAGE_OBJECT_COUNT = ${result.storageObjectCount}`,
     `GATE4_SELF_CHECK = ${result.gate4?.selfCheckClassification ?? 'NOT_RUN'}`,
     `GATE4_SOURCE_COMPARISON = ${result.gate4?.sourceComparisonClassification ?? 'NOT_RUN'}`,

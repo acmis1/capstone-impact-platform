@@ -10,6 +10,10 @@ import {
   RecoveryGuardError,
   assertApprovedHostedCaptureTarget,
 } from '../recovery/zeroCostRecoveryContract';
+import {
+  EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT,
+  EXPECTED_MANAGED_STORAGE_CUSTOMIZATION_COUNT,
+} from '../recovery/managedSchemaCustomizations';
 
 /**
  * Phase A CLI: capture a read-only recovery bundle from the approved hosted staging origin.
@@ -117,6 +121,9 @@ async function main(): Promise<void> {
     console.log(`MIGRATIONS = ${manifest.migrations.count}`);
     console.log(`LATEST_MIGRATION = ${manifest.migrations.latest}`);
     console.log(`AUTH_USER_COUNT = ${manifest.auth.userCount}`);
+    console.log(`MANAGED_AUTH_CUSTOMIZATIONS = ${manifest.managedSchemaCustomizations.authCount}/${EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT}`);
+    console.log(`MANAGED_STORAGE_CUSTOMIZATIONS = ${manifest.managedSchemaCustomizations.storageCount}/${EXPECTED_MANAGED_STORAGE_CUSTOMIZATION_COUNT}`);
+    console.log('MANAGED_SCHEMA_CUSTOMIZATIONS = SOURCE_MATCH');
     console.log(`APPLICATION_TABLES_MEASURED = ${manifest.dataEvidence.tableCount}`);
     console.log(`ASSISTIVE_LAUNCH_RESERVATIONS = ${manifest.executionControl.launchReservationCount}`);
     // Bucket object keys are private; only counts, byte totals, and checksum roots are printed.
@@ -132,6 +139,9 @@ async function main(): Promise<void> {
   } catch (error) {
     console.error(`CAPTURE_CLASSIFICATION = SOURCE_CAPTURE_INCOMPLETE`);
     console.error(`CAPTURE_REFUSED = ${error instanceof Error ? error.message : 'CAPTURE_FAILED'}`);
+    console.error(
+      'FAILED_BUNDLE_HANDLING = PRIVATE_INCOMPLETE; retain or securely destroy under operator policy; never commit.',
+    );
     process.exitCode = 1;
   } finally {
     fs.rmSync(scratchDirectory, { recursive: true, force: true });

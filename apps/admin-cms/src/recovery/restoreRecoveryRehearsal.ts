@@ -51,7 +51,19 @@ import {
   restoreBucketObjects,
   type CapturedStorageObject,
 } from './storageTransfer';
-import { readRecoveryEvidence } from './supabaseRecoveryCli';
+import {
+  readManagedSchemaCustomizationEvidence,
+  readRecoveryEvidence,
+} from './supabaseRecoveryCli';
+import {
+  buildApprovedManagedSchemaCustomizationRestoreSql,
+  compareManagedSchemaCustomizations,
+  EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT,
+  EXPECTED_MANAGED_STORAGE_CUSTOMIZATION_COUNT,
+  managedSchemaCustomizationCounts,
+  REPOSITORY_MANAGED_SCHEMA_EXPECTATION,
+  type ManagedSchemaCustomizationEvidence,
+} from './managedSchemaCustomizations';
 import {
   CANONICAL_STORAGE_BUCKETS,
   DATABASE_BACKUP_ARTIFACTS,
@@ -126,6 +138,12 @@ export interface RestoreVerificationResult {
   restoredAuthUserCount: number;
   authCountMatch: boolean;
   restoredAuthOrphanIdentityCount: number;
+  managedAuthCustomizationCount: number;
+  expectedManagedAuthCustomizationCount: number;
+  managedStorageCustomizationCount: number;
+  expectedManagedStorageCustomizationCount: number;
+  managedSchemaCustomizationsMatch: boolean;
+  managedAuthBehaviorVerified: boolean | null;
   bucketSummaries: string[];
   gate4: Gate4RestoredResult | null;
   applicationSmoke: ApplicationSmokeResult;
@@ -137,8 +155,10 @@ function containerStagedPath(stagingDirectory: string, artifact: string): string
 }
 
 /**
- * Replays the official Supabase restore order in one transaction, so any unexpected SQL error
- * leaves the target untouched instead of half-restored.
+ * Replays the official Supabase restore order in two fail-fast transactional phases: schema first,
+ * then data. A data-phase failure can leave the schema phase committed in this verifier-owned
+ * disposable target; it can never produce VERIFIED, and mandatory exact-identity cleanup removes
+ * the partial target.
  */
 export function restoreDatabase(
   identity: DisposableStackIdentity,
@@ -173,6 +193,21 @@ export function restoreDatabase(
     });
   } catch {
     throw new RecoveryGuardError('RESTORE_SQL_FAILED');
+  }
+}
+
+/** Installs only fixed reviewed PP1 DDL after validating the checksum-bound source evidence. */
+export function restoreManagedSchemaCustomizations(
+  identity: DisposableStackIdentity,
+  capturedEvidence: ManagedSchemaCustomizationEvidence,
+): void {
+  try {
+    runDisposablePsql(identity, {
+      singleTransaction: true,
+      command: buildApprovedManagedSchemaCustomizationRestoreSql(capturedEvidence),
+    });
+  } catch {
+    throw new RecoveryGuardError('MANAGED_SCHEMA_CUSTOMIZATION_RESTORE_FAILED');
   }
 }
 
@@ -418,6 +453,85 @@ function describeTableDifferences(differences: readonly TableDataDifference[]): 
     .map((difference) => `Data ${difference.field} drift on ${difference.schema}.${difference.table}.`);
 }
 
+/**
+ * Bounded disposable-only behavior probe for both restored Auth trigger events. No identifier or
+ * token is logged, and the entire target is removed by the verifier immediately afterwards.
+ */
+async function verifySyntheticManagedAuthTriggerBehavior(
+  client: SupabaseClient,
+): Promise<{ passed: boolean; stage: string }> {
+  const { data: actor, error: actorError } = await client
+    .from('user_roles')
+    .select('user_id')
+    .eq('role', 'admin')
+    .limit(1)
+    .maybeSingle();
+  if (actorError || !actor?.user_id) return { passed: false, stage: 'ACTOR_UNAVAILABLE' };
+
+  const email = 'managed-trigger-recovery@synthetic.invalid';
+  const { data: reservationRaw, error: reservationError } = await client.rpc(
+    'reserve_staff_provisioning',
+    {
+      p_actor_admin_id: actor.user_id,
+      p_email: email,
+      p_full_name: 'Synthetic Managed Trigger Probe',
+      p_roles: ['reviewer'],
+    },
+  );
+  if (reservationError || !reservationRaw || typeof reservationRaw !== 'object') {
+    return { passed: false, stage: 'RESERVATION_CALL_FAILED' };
+  }
+  const reservation = reservationRaw as Record<string, unknown>;
+  if (reservation.resultCode !== 'RESERVED'
+    || typeof reservation.requestId !== 'string'
+    || typeof reservation.authOwnershipToken !== 'string') {
+    return { passed: false, stage: 'RESERVATION_NOT_CREATED' };
+  }
+  const transientMetadata = {
+    staff_provisioning_request_id: reservation.requestId,
+    staff_provisioning_ownership_token: reservation.authOwnershipToken,
+    scope: 'synthetic-managed-trigger-probe',
+  };
+  const { data: created, error: createError } = await client.auth.admin.createUser({
+    email,
+    password: 'synthetic-managed-trigger-probe-password-2026',
+    email_confirm: true,
+    user_metadata: transientMetadata,
+  });
+  if (createError || !created.user) return { passed: false, stage: 'AUTH_INSERT_FAILED' };
+  const { data: storedAfterInsert, error: readAfterInsertError } =
+    await client.auth.admin.getUserById(created.user.id);
+  if (readAfterInsertError || !storedAfterInsert.user) {
+    return { passed: false, stage: 'AUTH_INSERT_READBACK_FAILED' };
+  }
+  const insertUserMetadata = storedAfterInsert.user.user_metadata ?? {};
+  const insertAppMetadata = storedAfterInsert.user.app_metadata ?? {};
+  const insertPassed = !('staff_provisioning_request_id' in insertUserMetadata)
+    && !('staff_provisioning_ownership_token' in insertUserMetadata)
+    && insertUserMetadata.scope === 'synthetic-managed-trigger-probe'
+    && typeof insertAppMetadata.staff_provisioning_marker === 'string'
+    && /^[0-9a-f]{64}$/.test(insertAppMetadata.staff_provisioning_marker);
+  if (!insertPassed) return { passed: false, stage: 'AUTH_INSERT_SEMANTICS_MISMATCH' };
+
+  const { data: updated, error: updateError } = await client.auth.admin.updateUserById(
+    created.user.id,
+    { user_metadata: { ...transientMetadata, scope: 'synthetic-managed-trigger-update-probe' } },
+  );
+  if (updateError || !updated.user) return { passed: false, stage: 'AUTH_UPDATE_FAILED' };
+  const { data: storedAfterUpdate, error: readAfterUpdateError } =
+    await client.auth.admin.getUserById(created.user.id);
+  if (readAfterUpdateError || !storedAfterUpdate.user) {
+    return { passed: false, stage: 'AUTH_UPDATE_READBACK_FAILED' };
+  }
+  const updateUserMetadata = storedAfterUpdate.user.user_metadata ?? {};
+  const updateAppMetadata = storedAfterUpdate.user.app_metadata ?? {};
+  const passed = !('staff_provisioning_request_id' in updateUserMetadata)
+    && !('staff_provisioning_ownership_token' in updateUserMetadata)
+    && updateUserMetadata.scope === 'synthetic-managed-trigger-update-probe'
+    && updateAppMetadata.staff_provisioning_marker === insertAppMetadata.staff_provisioning_marker;
+  return { passed, stage: passed ? 'MATCH' : 'AUTH_UPDATE_SEMANTICS_MISMATCH' };
+}
+
 /** Restores the bundle into a fresh disposable target and verifies it end to end. */
 export async function runRestoreVerification(
   options: RestoreVerificationOptions,
@@ -473,11 +587,14 @@ export async function runRestoreVerification(
     stagingIdentityClaimed: false,
   };
   let restoredEvidence: Awaited<ReturnType<typeof readRecoveryEvidence>> | null = null;
+  let restoredManagedSchemaEvidence: ManagedSchemaCustomizationEvidence | null = null;
   let restoredObjectCount = 0;
   let bucketSummaries: string[] = [];
   let databaseIntegrityMatch = false;
   let storageIntegrityMatch = false;
   let assistiveCostFenceMatch = false;
+  let managedSchemaCustomizationsMatch = false;
+  let managedAuthBehaviorVerified: boolean | null = null;
 
   try {
     networkId = createDisposableNetwork(identity);
@@ -486,6 +603,7 @@ export async function runRestoreVerification(
     startDisposableStack(options.repositoryRoot, identity, networkId);
 
     restoreDatabase(identity, bundle.directory);
+    restoreManagedSchemaCustomizations(identity, bundle.managedSchemaCustomizations);
 
     const stackEnv = readDisposableStackEnv(options.repositoryRoot, identity);
     const client = createClient(stackEnv.apiUrl, stackEnv.serviceRoleKey, {
@@ -500,6 +618,32 @@ export async function runRestoreVerification(
       { kind: 'local', workdir: identity.workdir },
       path.join(identity.workdir, 'scratch'),
     );
+    restoredManagedSchemaEvidence = readManagedSchemaCustomizationEvidence(
+      options.repositoryRoot,
+      { kind: 'local', workdir: identity.workdir },
+      path.join(identity.workdir, 'scratch'),
+    );
+    const managedSourceDifferences = compareManagedSchemaCustomizations(
+      bundle.managedSchemaCustomizations,
+      restoredManagedSchemaEvidence,
+    );
+    const managedRepositoryDifferences = compareManagedSchemaCustomizations(
+      REPOSITORY_MANAGED_SCHEMA_EXPECTATION,
+      restoredManagedSchemaEvidence,
+    );
+    managedSchemaCustomizationsMatch = managedSourceDifferences.length === 0
+      && managedRepositoryDifferences.length === 0;
+    if (!managedSchemaCustomizationsMatch) {
+      findings.push('MANAGED_SCHEMA_CUSTOMIZATION_DRIFT');
+      notes.push(
+        ...managedSourceDifferences.map((difference) => (
+          `Managed-schema source comparison ${difference.kind}: ${difference.identity}.`
+        )),
+        ...managedRepositoryDifferences.map((difference) => (
+          `Managed-schema repository comparison ${difference.kind}: ${difference.identity}.`
+        )),
+      );
+    }
 
     const restoredObjects = await readRestoredObjects(client, [...CANONICAL_STORAGE_BUCKETS]);
     restoredObjectCount = restoredObjects.length;
@@ -553,7 +697,8 @@ export async function runRestoreVerification(
       && tableDifferences.length === 0
       && authDifferences.length === 0
       && controlDifferences.length === 0
-      && restoredEvidence.executionControl.schemaPresent;
+      && restoredEvidence.executionControl.schemaPresent
+      && managedSchemaCustomizationsMatch;
 
     gate4 = runGate4(
       options.repositoryRoot,
@@ -572,6 +717,15 @@ export async function runRestoreVerification(
         `Gate 4 restored-versus-source comparison: ${gate4.sourceComparisonClassification}.`,
         ...gate4.differences.map((difference) => `Gate 4 difference: ${difference}.`),
       );
+    }
+
+    if (bundle.manifest.source.kind === 'disposable-local-synthetic') {
+      const behavior = await verifySyntheticManagedAuthTriggerBehavior(client);
+      managedAuthBehaviorVerified = behavior.passed;
+      if (!managedAuthBehaviorVerified) {
+        findings.push('MANAGED_SCHEMA_CUSTOMIZATION_DRIFT');
+        notes.push(`Restored managed Auth INSERT/UPDATE trigger behavior probe failed at ${behavior.stage}.`);
+      }
     }
 
     if (!options.skipApplicationSmoke) {
@@ -619,6 +773,7 @@ export async function runRestoreVerification(
   const publicTables = restoredEvidence?.tables.filter((table) => table.schema === 'public').length ?? 0;
   const executionControlTables = restoredEvidence?.tables
     .filter((table) => table.schema === 'assistive_execution_control').length ?? 0;
+  const managedCounts = managedSchemaCustomizationCounts(restoredManagedSchemaEvidence);
 
   return {
     classification: resolveClassification(findings),
@@ -647,6 +802,12 @@ export async function runRestoreVerification(
     authCountMatch: restoredEvidence !== null
       && bundle.manifest.auth.userCount === restoredEvidence.auth.userCount,
     restoredAuthOrphanIdentityCount: restoredEvidence?.auth.orphanIdentityCount ?? -1,
+    managedAuthCustomizationCount: managedCounts.auth,
+    expectedManagedAuthCustomizationCount: EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT,
+    managedStorageCustomizationCount: managedCounts.storage,
+    expectedManagedStorageCustomizationCount: EXPECTED_MANAGED_STORAGE_CUSTOMIZATION_COUNT,
+    managedSchemaCustomizationsMatch,
+    managedAuthBehaviorVerified,
     bucketSummaries,
     gate4,
     applicationSmoke,

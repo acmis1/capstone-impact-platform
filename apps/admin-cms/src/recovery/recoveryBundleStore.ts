@@ -20,6 +20,11 @@ import {
   type BackupDirectoryDecision,
 } from './zeroCostRecoveryContract';
 import { assertSafeObjectKey, type CapturedStorageObject } from './storageTransfer';
+import {
+  parseManagedSchemaCustomizationEvidence,
+  validateManagedSchemaCustomizationsAgainstRepository,
+  type ManagedSchemaCustomizationEvidence,
+} from './managedSchemaCustomizations';
 
 /**
  * Bundle layout on operator-selected disk.
@@ -36,6 +41,8 @@ export const BUNDLE_PATHS = {
   objects: 'storage/objects',
   dataEvidence: 'evidence/data-evidence.json',
   gate4Evidence: 'evidence/gate4-source-evidence.json',
+  managedSchemaCustomizations: 'evidence/managed-schema-customizations.json',
+  incompleteMarker: 'PRIVATE-INCOMPLETE-RECOVERY-BUNDLE.json',
 } as const;
 
 export const PRIVATE_OBJECT_MANIFEST_FORMAT = 'zero-cost-recovery-private-objects/v1' as const;
@@ -43,6 +50,7 @@ const MAX_SAFE_MANIFEST_BYTES = 2 * 1024 * 1024;
 const MAX_PRIVATE_MANIFEST_BYTES = 64 * 1024 * 1024;
 const MAX_DATA_EVIDENCE_BYTES = 64 * 1024 * 1024;
 const MAX_GATE4_EVIDENCE_BYTES = 10 * 1024 * 1024;
+const MAX_MANAGED_SCHEMA_EVIDENCE_BYTES = 1024 * 1024;
 const MAX_STORAGE_OBJECT_BYTES = 256 * 1024 * 1024;
 
 export interface PrivateObjectManifest {
@@ -240,6 +248,7 @@ export interface LoadedRecoveryBundle {
   privateObjects: StorageObjectRecord[];
   dataEvidence: TableDataEvidence[];
   gate4Evidence: unknown;
+  managedSchemaCustomizations: ManagedSchemaCustomizationEvidence;
 }
 
 function readJson(file: string, maxBytes: number): { value: unknown; digest: string } {
@@ -396,11 +405,35 @@ export function loadRecoveryBundle(bundleDirectory: string): LoadedRecoveryBundl
     throw new RecoveryGuardError('RECOVERY_BUNDLE_GATE4_EVIDENCE_CORRUPTED');
   }
 
+  const managedSchemaFile = bundleFile(bundleDirectory, BUNDLE_PATHS.managedSchemaCustomizations);
+  if (!fs.existsSync(managedSchemaFile)) {
+    throw new RecoveryGuardError('RECOVERY_BUNDLE_MANAGED_SCHEMA_EVIDENCE_MISSING');
+  }
+  const managedSchema = readJson(managedSchemaFile, MAX_MANAGED_SCHEMA_EVIDENCE_BYTES);
+  if (managedSchema.digest !== manifest.managedSchemaCustomizations?.sha256) {
+    throw new RecoveryGuardError('RECOVERY_BUNDLE_MANAGED_SCHEMA_EVIDENCE_CORRUPTED');
+  }
+  const parsedManagedSchema = parseManagedSchemaCustomizationEvidence(managedSchema.value);
+  if (!parsedManagedSchema.ok) {
+    throw new RecoveryGuardError(
+      `RECOVERY_BUNDLE_MANAGED_SCHEMA_EVIDENCE_INVALID:${parsedManagedSchema.errors[0]}`,
+    );
+  }
+  const managedSchemaErrors = validateManagedSchemaCustomizationsAgainstRepository(
+    parsedManagedSchema.evidence,
+  );
+  if (managedSchemaErrors.length > 0) {
+    throw new RecoveryGuardError(
+      `RECOVERY_BUNDLE_MANAGED_SCHEMA_EVIDENCE_UNAPPROVED:${managedSchemaErrors[0]}`,
+    );
+  }
+
   return {
     directory: path.resolve(bundleDirectory),
     manifest,
     privateObjects,
     dataEvidence: dataEvidence.value as TableDataEvidence[],
     gate4Evidence: gate4.value,
+    managedSchemaCustomizations: parsedManagedSchema.evidence,
   };
 }
