@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      ca-certificates curl openjdk-17-jre-headless python3 python3-pip python3-venv tar unzip \
+      ca-certificates curl libgl1 libgomp1 openjdk-17-jre-headless python3 python3-pip python3-venv tar unzip \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -37,6 +37,8 @@ RUN mkdir -p /opt/capstone/artifacts/paddle /opt/capstone/artifacts/languagetool
     && unzip -q /opt/capstone/artifacts/languagetool/LanguageTool-stable.zip -d /opt/capstone/artifacts/languagetool \
     && echo 'f5279d946d901c90c0bb09cddaa6fdea8b26db9c548145d09041e8d1ac2d2b45  /opt/capstone/artifacts/languagetool/LanguageTool-6.6/languagetool-server.jar' | sha256sum --check --strict \
     && rm -f /tmp/PP-OCRv6_small_det_infer.tar /tmp/PP-OCRv6_small_rec_infer.tar
+
+RUN python3 -c "from capstone_assistive_worker.ocr.contract import OcrAvailabilityState; from capstone_assistive_worker.ocr.paddle_title import PaddleTitleOcrProvider; availability = PaddleTitleOcrProvider(models_dir='/opt/capstone/artifacts/paddle').availability(); assert availability.state is OcrAvailabilityState.AVAILABLE, availability.message"
 
 COPY . .
 
