@@ -27,15 +27,16 @@ Every capability in this package uses exactly one status:
 | `/api/readiness` dependency readiness | `IMPLEMENTED_AND_TESTED` | Route and tests prove bounded configuration, staging identity, and a Supabase `HEAD` probe; they do not prove schema or workflows. |
 | Read-only hosted smoke | `IMPLEMENTED_AND_TESTED` | The existing verifier checks health, readiness, login, deployment SHA, redirects, timeouts, and migration expectation using GET/HEAD only. A current accepted hosted run is not recorded by this change. |
 | Current hosted deployment identity | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | Render can expose a valid `RENDER_GIT_COMMIT`; the exact reviewed-versus-deployed comparison still needs a supervised run. This is a separate deployment/release gate from migration-history evidence. |
-| Migration manifest and readiness inspection | `IMPLEMENTED_AND_TESTED` | The repository manifest has 48 migrations. Active staging-v2 has point-in-time evidence of 46 tracked rows from `20260601035138` through `20260828120000`, so the execution-control migration `20260828170000` is a pending governed forward application there. Exact schema/grant/RPC parity remains independently re-verifiable, and migration alignment must be rechecked for each release candidate. This status describes the repository checker, not full hosted schema acceptance. |
-| Exact Gate 4 schema evidence | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | A repository-owned SELECT-only catalog snapshot and fail-closed comparator cover exact tables, columns, constraints, RLS/policies, schema/table grants, exposed and non-public routines, relevant roles, and canonical bucket configuration. The disposable Local 48-migration feature baseline is the expected contract; a reviewed hosted snapshot still must be collected and compared for the exact release SHA. |
+| Migration manifest and readiness inspection | `IMPLEMENTED_AND_TESTED` | The repository manifest has 48 migrations. Active staging-v2 has point-in-time evidence of 48/48 tracked rows from `20260601035138` through `20260831090000_postgres17_maintain_privilege_alignment`. Migration alignment remains independently re-verifiable for each release candidate; this evidence does not establish that the exact latest `main` SHA is deployed. |
+| Exact Gate 4 schema evidence | `IMPLEMENTED_AND_TESTED` | A repository-owned SELECT-only catalog snapshot and fail-closed comparator cover exact tables, columns, constraints, RLS/policies, schema/table grants, exposed and non-public routines, relevant roles, and canonical bucket configuration. Reviewed hosted structural schema/grant/RPC evidence completed against the 48/48 staging-v2 migration state; Migration 0048 removed only the unintended PostgreSQL 17 `MAINTAIN` grants. This does not prove latest-`main` deployment identity, row contents, Auth customizations, recovery, monitoring, or UAT. |
 | Historical staging reconciliation | `DOCUMENTED_ONLY` | The runbook preserves the manual-repair background for the old paused staging instance. Active staging-v2 has separate current history evidence; any future repair consideration requires read-only mismatch evidence and separate authorization. |
 | Local database recovery mechanics | `IMPLEMENTED_AND_TESTED` | The bounded verifier owns, backs up, destroys, restores, verifies, and cleans only its synthetic Local schema. |
 | Local Storage recovery mechanics | `IMPLEMENTED_AND_TESTED` | The same verifier owns and restores only its synthetic Local bucket and verifies canonical buckets remain untouched. |
+| Zero-cost portable database/Storage recovery | `IMPLEMENTED_AND_TESTED` | The repository captures a five-artifact logical database bundle, the two PP1-owned Auth triggers omitted by the standard schema dump, and all three Storage buckets. It restores a synthetic PostgreSQL 15 source into a disposable PostgreSQL 17 target, requires both Gate 4 and `MANAGED_SCHEMA_CUSTOMIZATIONS = MATCH`, verifies data/Auth/cost-fence/Storage checksums and application smoke, and cleans only marked resources. Real hosted-origin capture remains separately authorized and unexecuted. |
 | Public-feed artifact rollback | `IMPLEMENTED_AND_TESTED` | Disposable-Local deployment history rollback is tested. It is not database, Storage, configuration, or hosted disaster recovery. |
 | Hosted database backup policy | `INSTITUTION_DEPENDENT` | Provider capability, cadence, retention, encryption/access, owner, and cost are not approved. |
-| Hosted database restore rehearsal | `INSTITUTION_DEPENDENT` | A separately authorized isolated restore target and operator are required. |
-| Hosted Storage backup/restore | `DOCUMENTED_ONLY` | Scope and evidence requirements are defined below; no complete hosted rehearsal exists. |
+| Hosted database restore rehearsal | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | The zero-cost logical restore path is implemented and passes a complete synthetic disposable rehearsal. An authorized read-only staging-origin capture and independent isolated restore are still required. |
+| Hosted Storage backup/restore | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | The three canonical buckets are captured and restored through Storage API with exact object/config/checksum verification in the synthetic rehearsal. No real hosted object was accessed by this change. |
 | Hosted configuration recovery | `DOCUMENTED_ONLY` | Names and categories are inventoried below; values must stay in institution-owned secret/configuration systems. |
 | RPO/RTO measurement method | `DOCUMENTED_ONLY` | The measurement contract and template exist below. |
 | Hosted RPO/RTO result | `MISSING` | No hosted measurement is recorded; Local timing must not be relabelled. |
@@ -205,11 +206,14 @@ Do not place secret values, private dashboard URLs, signed URLs, user identities
 
 ### Local mechanics
 
-Follow [System Recovery Readiness](system-recovery-readiness.md). A passing run is labelled only:
+Follow [System Recovery Readiness](system-recovery-readiness.md) for the bounded legacy probe. Use
+[Zero-Cost Hosted-Origin Recovery Rehearsal](operations/zero-cost-recovery-rehearsal.md) for the
+complete logical database/Storage bundle and disposable restore workflow. A synthetic passing run is
+labelled:
 
 ```text
-LOCAL_RECOVERY_MECHANICS_VERIFIED
-HOSTED_RECOVERY_NOT_YET_REHEARSED
+ZERO_COST_RECOVERY_REHEARSAL_VERIFIED
+REAL_HOSTED_ORIGIN_CAPTURE_NOT_YET_EXECUTED
 ```
 
 Local duration and backup age may be recorded as `LOCAL`, but never reported as hosted RPO/RTO.

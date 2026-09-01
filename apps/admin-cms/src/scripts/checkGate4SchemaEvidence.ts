@@ -48,8 +48,10 @@ function repositoryMigrationVersions(repoRoot: string): string[] {
     });
 }
 
-function localProjectId(repoRoot: string): string {
-  const projectId = process.env.CAPSTONE_GATE4_LOCAL_PROJECT_ID ?? configuredProjectId(repoRoot);
+function localProjectId(repoRoot: string, projectIdOverride?: string): string {
+  const projectId = projectIdOverride
+    ?? process.env.CAPSTONE_GATE4_LOCAL_PROJECT_ID
+    ?? configuredProjectId(repoRoot);
   if (!projectId || !/^[a-z0-9-]+$/.test(projectId)) throw new Error('LOCAL_PROJECT_ID_INVALID');
   return projectId;
 }
@@ -73,9 +75,9 @@ function exactDatabaseContainer(projectId: string): string {
 }
 
 /** Reads only the database container owned by the selected Local Supabase project. */
-export function collectLocalGate4Evidence(repoRoot: string): unknown {
+export function collectLocalGate4Evidence(repoRoot: string, projectIdOverride?: string): unknown {
   const query = fs.readFileSync(path.join(repoRoot, 'infra', 'supabase', 'gate4-schema-evidence.sql'), 'utf8');
-  const container = exactDatabaseContainer(localProjectId(repoRoot));
+  const container = exactDatabaseContainer(localProjectId(repoRoot, projectIdOverride));
   let output: string;
   try {
     output = execFileSync('docker', [
