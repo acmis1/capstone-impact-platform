@@ -1,10 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
 import { Alert } from '../ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '../ui/alert-dialog';
 import { PROJECT_DETAIL_SURFACE_CLASSES } from './projectDetailSurfaceStyles';
 import { CheckCircle2 } from 'lucide-react';
 import { getReviewActionPresentation } from './reviewActionPresentation';
@@ -20,6 +31,7 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const requestInFlight = useRef(false);
 
   if (allowedActions.length === 0 || currentStatus.toLowerCase() === 'deleted') {
     return (
@@ -30,6 +42,8 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
   }
 
   const handleAction = async (action: string) => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     setLoading(true);
     setError(null);
     setSuccess(false);
@@ -61,6 +75,7 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
     } catch {
       setError('Status transition could not be completed. Please try again.');
     } finally {
+      requestInFlight.current = false;
       setLoading(false);
     }
   };
@@ -99,6 +114,42 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
       <div className="flex flex-col gap-2">
         {allowedActions.map((action) => {
           const presentation = getReviewActionPresentation(action);
+          if (action === 'archive') {
+            return (
+              <AlertDialog key={action}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant={presentation.variant}
+                    disabled={loading || success}
+                    className={`w-full font-semibold ${presentation.className ?? ''}`}
+                  >
+                    {presentation.label}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Archive project?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Archiving moves this project to Archived and removes it from the active review workflow. It
+                      does not delete project data and is not the controlled public-removal workflow used for
+                      published projects.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      variant="destructive"
+                      disabled={loading || success}
+                      onClick={() => handleAction('archive')}
+                    >
+                      Archive project
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            );
+          }
           return (
             <Button
               key={action}

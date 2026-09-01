@@ -197,6 +197,30 @@
   line-height: 1.8;
 }
 
+#project-detail .poster-text-disclosure {
+  margin: 1.5rem 0;
+  max-width: 75ch;
+}
+
+#project-detail .poster-text-disclosure summary {
+  width: fit-content;
+  cursor: pointer;
+  color: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+#project-detail .poster-text-disclosure summary:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 4px;
+}
+
+#project-detail .poster-text-content {
+  margin-top: 1rem;
+  white-space: pre-wrap;
+}
+
 #project-detail .poster-header .section-text,
 #project-detail .poster-body .section-text {
   color: #ded6cc;
@@ -698,8 +722,8 @@
   border: 1px solid rgba(148, 163, 184, 0.16);
 }
 
-#project-detail .media-spec-card h3,
-#project-detail .technical-aside-card h4 {
+#project-detail .media-spec-card h2,
+#project-detail .technical-aside-card h2 {
   margin: 0 0 1rem;
   color: #fff;
 }
@@ -710,7 +734,7 @@
   margin-bottom: 1.5rem;
 }
 
-#project-detail .technical-aside-card h4 {
+#project-detail .technical-aside-card h2 {
   margin: 0 0 0.85rem;
   color: #0f172a;
   font-size: 0.85rem;
