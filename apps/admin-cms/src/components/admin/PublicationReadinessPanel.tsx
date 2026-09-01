@@ -263,7 +263,7 @@ export function PublicationReadinessPanel({ readiness }: PublicationReadinessPan
       )}
 
       <details className="border-t border-border pt-3 text-xs text-muted-foreground">
-        <summary className="cursor-pointer font-medium text-foreground">Technical details</summary>
+        <summary className="cursor-pointer rounded-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">Technical details</summary>
         <div className="mt-2 flex items-center gap-2">
           <span>Result code:</span>
           <Badge variant="neutral" className="font-mono">{readiness.resultCode}</Badge>

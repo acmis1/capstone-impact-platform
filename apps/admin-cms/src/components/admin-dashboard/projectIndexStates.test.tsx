@@ -87,25 +87,51 @@ describe('DashboardMetricsSummary', () => {
     ).toBeTruthy();
   });
 
-  it('uses a compact two-by-two mobile grid with semantic row and column dividers', () => {
+  it('exposes the metrics as a semantic list in a compact two-by-two mobile grid with dividers', () => {
     const { container } = render(
       <DashboardMetricsSummary
         metrics={{ totalProjects: 128, publicEligible: 34, inReview: 7, archived: 12 }}
       />,
     );
 
-    const grid = container.querySelector('dl') as HTMLDListElement;
+    const grid = screen.getByRole('list');
+
     expect(container.querySelector('section')?.className).toContain('border-border-structural');
     expect(grid.className).toContain('grid-cols-2');
     expect(grid.className).toContain('lg:grid-cols-4');
 
-    const items = [...grid.children] as HTMLElement[];
+    const items = screen.getAllByRole('listitem');
     expect(items).toHaveLength(4);
+
+    // Every metric stays a single list item carrying its own label, value and description.
+    const expected: Array<[string, string, string]> = [
+      ['Total projects', '128', 'All non-deleted project records'],
+      ['Approved or published', '34', 'Projects that have reached approved or published workflow status'],
+      ['In review', '7', 'Projects with In review status'],
+      ['Archived', '12', 'Projects with Archived status'],
+    ];
+
+    expected.forEach(([label, value, description], index) => {
+      expect(within(items[index]).getByText(label)).toBeTruthy();
+      expect(within(items[index]).getByText(value)).toBeTruthy();
+      expect(within(items[index]).getByText(description)).toBeTruthy();
+    });
+
+    // The remediated defect was `<dt>`/`<dd>` sitting two levels below the `<dl>`, so they formed
+    // no definition-list group. This guards that shape without forbidding a future valid `<dl>`.
+    for (const term of container.querySelectorAll('dt, dd')) {
+      const parent = term.parentElement;
+      const inList = parent?.tagName === 'DL';
+      const inGroup = parent?.tagName === 'DIV' && parent.parentElement?.tagName === 'DL';
+      expect(inList || inGroup).toBe(true);
+    }
+
     expect(items[1].className).toContain('border-l');
     expect(items[2].className).toContain('border-t');
     expect(items[2].className).toContain('lg:border-t-0 lg:border-l');
     expect(items[3].className).toContain('border-t border-l');
     expect(items[3].className).toContain('lg:border-t-0');
+
     for (const item of items) {
       expect(item.className).toContain('border-border');
     }
