@@ -61,6 +61,8 @@ const DOCKER_TIMEOUT_MS = 120_000;
 const IMAGE_PULL_TIMEOUT_MS = 600_000;
 const PSQL_TIMEOUT_MS = 60_000;
 const READINESS_TIMEOUT_MS = 120_000;
+const READINESS_PROBE_INTERVAL_MS = 500;
+const REQUIRED_STABLE_READINESS_PROBES = 3;
 
 const suffix = crypto.randomBytes(4).toString('hex');
 const containerName = `capstone-pp1-pg17-maintain-${suffix}`;
@@ -111,18 +113,71 @@ function sleepMilliseconds(milliseconds: number): void {
 
 function waitForReadiness(): void {
   const deadline = Date.now() + READINESS_TIMEOUT_MS;
-  for (;;) {
-    const probe = spawnSync(
-      'docker',
-      ['exec', containerName, 'pg_isready', '-U', 'postgres', '-d', 'postgres'],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000 },
+  let stableProbes = 0;
+  let lastProbe = 'The final PostgreSQL server process has not started.';
+
+  const failReadiness = (): never => {
+    const logs = spawnSync('docker', ['logs', '--tail', '50', containerName], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: DOCKER_TIMEOUT_MS,
+    });
+    const diagnosticLogs = `${logs.stdout ?? ''}\n${logs.stderr ?? ''}`.trim();
+    throw new Error(
+      `Disposable PostgreSQL 17 container never became stably ready. Last probe: ${lastProbe}`
+      + `\nDocker/PostgreSQL logs:\n${diagnosticLogs || '(no logs available)'}`,
     );
-    if (probe.status === 0) return;
-    if (Date.now() > deadline) {
-      const logs = docker(['logs', '--tail', '20', containerName], { allowFailure: true });
-      throw new Error(`Disposable PostgreSQL 17 container never became ready: ${logs}`);
+  };
+
+  for (;;) {
+    const remainingBeforeProcessProbe = deadline - Date.now();
+    if (remainingBeforeProcessProbe <= 0) failReadiness();
+
+    // The official image runs its temporary initialization postmaster below PID 1, then the
+    // entrypoint execs the final long-lived postgres process as PID 1. A successful SQL probe is
+    // accepted only after that handoff, so temporary-server readiness cannot satisfy this wait.
+    const finalServerProbe = spawnSync(
+      'docker',
+      ['exec', containerName, 'sh', '-c', 'test "$(cat /proc/1/comm)" = postgres'],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: Math.min(20_000, remainingBeforeProcessProbe),
+      },
+    );
+
+    if (finalServerProbe.status === 0) {
+      const remainingBeforeSqlProbe = deadline - Date.now();
+      if (remainingBeforeSqlProbe <= 0) failReadiness();
+      const sqlProbe = spawnSync(
+        'docker',
+        [
+          'exec', containerName,
+          'psql', '-U', 'postgres', '-d', 'postgres', '-X', '-At', '-v', 'ON_ERROR_STOP=1',
+          '-c', 'SELECT 1;',
+        ],
+        {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: Math.min(20_000, remainingBeforeSqlProbe),
+        },
+      );
+      if (sqlProbe.status === 0 && sqlProbe.stdout.trim() === '1') {
+        stableProbes += 1;
+        if (stableProbes === REQUIRED_STABLE_READINESS_PROBES) return;
+        lastProbe = `Final server SQL probe ${stableProbes}/${REQUIRED_STABLE_READINESS_PROBES} succeeded.`;
+      } else {
+        stableProbes = 0;
+        lastProbe = `Final server SQL probe failed: ${(sqlProbe.stderr || sqlProbe.stdout || '').trim() || 'no output'}`;
+      }
+    } else {
+      stableProbes = 0;
+      lastProbe = 'The entrypoint has not handed PID 1 to the final postgres process.';
     }
-    sleepMilliseconds(1_000);
+
+    const remainingBeforeSleep = deadline - Date.now();
+    if (remainingBeforeSleep <= 0) failReadiness();
+    sleepMilliseconds(Math.min(READINESS_PROBE_INTERVAL_MS, remainingBeforeSleep));
   }
 }
 
