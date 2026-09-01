@@ -32,10 +32,11 @@ Every capability in this package uses exactly one status:
 | Historical staging reconciliation | `DOCUMENTED_ONLY` | The runbook preserves the manual-repair background for the old paused staging instance. Active staging-v2 has separate current history evidence; any future repair consideration requires read-only mismatch evidence and separate authorization. |
 | Local database recovery mechanics | `IMPLEMENTED_AND_TESTED` | The bounded verifier owns, backs up, destroys, restores, verifies, and cleans only its synthetic Local schema. |
 | Local Storage recovery mechanics | `IMPLEMENTED_AND_TESTED` | The same verifier owns and restores only its synthetic Local bucket and verifies canonical buckets remain untouched. |
+| Zero-cost portable database/Storage recovery | `IMPLEMENTED_AND_TESTED` | The repository captures a five-artifact logical database bundle plus all three Storage buckets, restores a synthetic PostgreSQL 15 source into a disposable PostgreSQL 17 target, reaches restored-target `GATE4_MATCH`, verifies data/Auth/cost-fence/Storage checksums and application smoke, and cleans only marked resources. Real hosted-origin capture remains separately authorized and unexecuted. |
 | Public-feed artifact rollback | `IMPLEMENTED_AND_TESTED` | Disposable-Local deployment history rollback is tested. It is not database, Storage, configuration, or hosted disaster recovery. |
 | Hosted database backup policy | `INSTITUTION_DEPENDENT` | Provider capability, cadence, retention, encryption/access, owner, and cost are not approved. |
-| Hosted database restore rehearsal | `INSTITUTION_DEPENDENT` | A separately authorized isolated restore target and operator are required. |
-| Hosted Storage backup/restore | `DOCUMENTED_ONLY` | Scope and evidence requirements are defined below; no complete hosted rehearsal exists. |
+| Hosted database restore rehearsal | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | The zero-cost logical restore path is implemented and passes a complete synthetic disposable rehearsal. An authorized read-only staging-origin capture and independent isolated restore are still required. |
+| Hosted Storage backup/restore | `IMPLEMENTED_BUT_NOT_OPERATIONALLY_VERIFIED` | The three canonical buckets are captured and restored through Storage API with exact object/config/checksum verification in the synthetic rehearsal. No real hosted object was accessed by this change. |
 | Hosted configuration recovery | `DOCUMENTED_ONLY` | Names and categories are inventoried below; values must stay in institution-owned secret/configuration systems. |
 | RPO/RTO measurement method | `DOCUMENTED_ONLY` | The measurement contract and template exist below. |
 | Hosted RPO/RTO result | `MISSING` | No hosted measurement is recorded; Local timing must not be relabelled. |
@@ -205,11 +206,14 @@ Do not place secret values, private dashboard URLs, signed URLs, user identities
 
 ### Local mechanics
 
-Follow [System Recovery Readiness](system-recovery-readiness.md). A passing run is labelled only:
+Follow [System Recovery Readiness](system-recovery-readiness.md) for the bounded legacy probe. Use
+[Zero-Cost Hosted-Origin Recovery Rehearsal](operations/zero-cost-recovery-rehearsal.md) for the
+complete logical database/Storage bundle and disposable restore workflow. A synthetic passing run is
+labelled:
 
 ```text
-LOCAL_RECOVERY_MECHANICS_VERIFIED
-HOSTED_RECOVERY_NOT_YET_REHEARSED
+ZERO_COST_RECOVERY_REHEARSAL_VERIFIED
+REAL_HOSTED_ORIGIN_CAPTURE_NOT_YET_EXECUTED
 ```
 
 Local duration and backup age may be recorded as `LOCAL`, but never reported as hosted RPO/RTO.
