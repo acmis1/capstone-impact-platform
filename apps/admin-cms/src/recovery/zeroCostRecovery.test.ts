@@ -45,7 +45,9 @@ import {
 import { formatRestoreSummary } from '../scripts/restoreRecoveryBackup';
 import { repositoryMigrationVersions } from './captureRecoveryBackup';
 import {
+  APPLICATION_OWNED_TRIGGER_FUNCTION_SCHEMAS,
   buildApprovedManagedSchemaCustomizationRestoreSql,
+  buildManagedSchemaCustomizationEvidenceSql,
   compareManagedSchemaCustomizations,
   inspectRepositoryManagedSchemaMigrationInventory,
   managedSchemaCustomizationCounts,
@@ -308,6 +310,20 @@ function managedEvidenceFixture() {
 describe('managed auth/storage customization recovery boundary', () => {
   const repositoryRoot = path.resolve(__dirname, '../../../..');
 
+  it('collects every application-owned managed trigger without filtering by expected names', () => {
+    const sql = buildManagedSchemaCustomizationEvidenceSql();
+    expect(APPLICATION_OWNED_TRIGGER_FUNCTION_SCHEMAS).toEqual(['public']);
+    expect(sql).toContain("relation_namespace.nspname IN ('auth', 'storage')");
+    expect(sql).toContain('AND NOT trigger_definition.tgisinternal');
+    expect(sql).toMatch(/function_namespace\.nspname IN \('public'\)/);
+    expect(sql).not.toMatch(/trigger_definition\.tgname IN/);
+    expect(sql).not.toMatch(/function_namespace\.nspname IN \([^)]*'storage'/);
+    for (const trigger of REPOSITORY_MANAGED_SCHEMA_EXPECTATION.triggers) {
+      expect(trigger.functionSchema).toBe('public');
+      expect(sql).not.toContain(trigger.name);
+    }
+  });
+
   it('inventories exactly both current Auth triggers and no custom Storage object across 48 migrations', () => {
     const operations = inspectRepositoryManagedSchemaMigrationInventory(repositoryRoot);
     const creates = operations.filter((operation) => operation.action === 'CREATE_TRIGGER');
@@ -339,6 +355,41 @@ describe('managed auth/storage customization recovery boundary', () => {
       expect(validateManagedSchemaCustomizationsAgainstRepository(evidence))
         .toContain(`MISSING:auth.users.${REPOSITORY_MANAGED_SCHEMA_EXPECTATION.triggers[index].name}`);
     }
+  });
+
+  it('reports a differently named application-owned Auth trigger as unexpected', () => {
+    const evidence = managedEvidenceFixture();
+    evidence.triggers.push({
+      ...evidence.triggers[0],
+      name: 'unexpected_application_auth_trigger',
+      functionName: 'unexpected_application_auth_hook',
+      definition: `
+        CREATE TRIGGER unexpected_application_auth_trigger
+        BEFORE INSERT ON auth.users
+        FOR EACH ROW EXECUTE FUNCTION public.unexpected_application_auth_hook()
+      `,
+    });
+    expect(validateManagedSchemaCustomizationsAgainstRepository(evidence))
+      .toContain('UNEXPECTED:auth.users.unexpected_application_auth_trigger');
+  });
+
+  it('reports a public-function Storage trigger as unexpected instead of treating it as provider-owned', () => {
+    const evidence = managedEvidenceFixture();
+    evidence.triggers.push({
+      ...evidence.triggers[0],
+      schema: 'storage',
+      table: 'objects',
+      name: 'unexpected_application_storage_trigger',
+      functionName: 'unexpected_application_storage_hook',
+      definition: `
+        CREATE TRIGGER unexpected_application_storage_trigger
+        BEFORE INSERT ON storage.objects
+        FOR EACH ROW EXECUTE FUNCTION public.unexpected_application_storage_hook()
+      `,
+    });
+    expect(validateManagedSchemaCustomizationsAgainstRepository(evidence))
+      .toContain('UNEXPECTED:storage.objects.unexpected_application_storage_trigger');
+    expect(managedSchemaCustomizationCounts(evidence)).toEqual({ auth: 2, storage: 1 });
   });
 
   it.each([

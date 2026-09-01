@@ -94,14 +94,20 @@ export const REPOSITORY_MANAGED_SCHEMA_EXPECTATION: ManagedSchemaCustomizationEv
 export const EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT = 2;
 export const EXPECTED_MANAGED_STORAGE_CUSTOMIZATION_COUNT = 0;
 
-const EXPECTED_TRIGGER_NAMES = REPOSITORY_MANAGED_SCHEMA_EXPECTATION.triggers
-  .map((trigger) => `'${trigger.name}'`)
+/**
+ * Trigger-function schemas owned by this application inside provider-managed relation schemas.
+ * Adding another schema requires an explicit recovery-contract review.
+ */
+export const APPLICATION_OWNED_TRIGGER_FUNCTION_SCHEMAS = ['public'] as const;
+
+const APPLICATION_OWNED_TRIGGER_FUNCTION_SCHEMA_SQL = APPLICATION_OWNED_TRIGGER_FUNCTION_SCHEMAS
+  .map((schema) => `'${schema}'`)
   .join(', ');
 
 /**
  * One SELECT-only catalog statement. It reads no Auth identities or Storage rows and returns only
- * the repository-governed trigger names, their structural semantics, enabled state, and function
- * identity.
+ * the complete current application-owned trigger set attached to auth/storage relations, including
+ * each trigger's structural semantics, enabled state, and function identity.
  */
 export function buildManagedSchemaCustomizationEvidenceSql(): string {
   return `
@@ -147,8 +153,8 @@ SELECT pg_catalog.jsonb_build_object(
     JOIN pg_catalog.pg_namespace AS function_namespace
       ON function_namespace.oid = trigger_function.pronamespace
     WHERE relation_namespace.nspname IN ('auth', 'storage')
-      AND trigger_definition.tgname IN (${EXPECTED_TRIGGER_NAMES})
       AND NOT trigger_definition.tgisinternal
+      AND function_namespace.nspname IN (${APPLICATION_OWNED_TRIGGER_FUNCTION_SCHEMA_SQL})
   ), '[]'::jsonb)
 ) AS doc
 FROM (
