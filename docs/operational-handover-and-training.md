@@ -17,7 +17,8 @@ This document is the KPI-15 handover instrument. It defines role ownership and a
 | GitHub repository ownership and branch protection | TBD — STAKEHOLDER DECISION REQUIRED | TBD — STAKEHOLDER DECISION REQUIRED | Manage institutional repository access, approvals, and protected branches |  | Unassigned |
 | Release approval | TBD — STAKEHOLDER DECISION REQUIRED | TBD — STAKEHOLDER DECISION REQUIRED | Accept/reject an evidenced release |  | Unassigned |
 | Render Admin/CMS deployment authority | TBD — STAKEHOLDER DECISION REQUIRED | TBD — STAKEHOLDER DECISION REQUIRED | Deploy/redeploy/rollback exact reviewed commits |  | Unassigned |
-| Assistive worker deployment authority | TBD — STAKEHOLDER DECISION REQUIRED | TBD — STAKEHOLDER DECISION REQUIRED | Operate the separate worker and heartbeat readiness |  | Unassigned |
+| Assistive executor deployment authority | TBD — STAKEHOLDER DECISION REQUIRED | TBD — STAKEHOLDER DECISION REQUIRED | Operate the chosen execution profile, its readiness registration, and its launch-capacity monitoring |  | Unassigned |
+| Free-tier capacity monitoring | TBD — STAKEHOLDER DECISION REQUIRED | TBD — STAKEHOLDER DECISION REQUIRED | Re-verify provider terms each cycle and watch database, storage, and launch-capacity headroom |  | Unassigned |
 | Supabase project administration | TBD — STAKEHOLDER DECISION REQUIRED | TBD — STAKEHOLDER DECISION REQUIRED | Manage project, plan, access, and approved recovery |  | Unassigned |
 | Database migration authority | TBD — STAKEHOLDER DECISION REQUIRED | TBD — STAKEHOLDER DECISION REQUIRED | Approve and apply governed forward migrations |  | Unassigned |
 | Database backup/recovery lead | TBD — STAKEHOLDER DECISION REQUIRED | TBD — STAKEHOLDER DECISION REQUIRED | Own backup policy, isolated restore, RPO/RTO evidence |  | Unassigned |
@@ -94,6 +95,8 @@ Score each task exactly once as `UNAIDED_COMPLETE`, `ASSISTED_COMPLETE`, `NOT_CO
 | 10 | Archive/unpublish a supplied synthetic scenario through the supported control | Consequence, lifecycle, feed membership, and history checked |  |  |
 | 11 | Locate project/import/publishing history and interpret a bounded failure/recovery state | Does not blindly retry or edit database/Storage |  |  |
 | 12 | Escalate a simulated readiness, data-loss, or wrong-environment incident | Correct safe evidence and owner route selected; no secret/private data captured |  |  |
+| 13 | Run Assistive Checks on a synthetic project and act on one finding | Finding applied or dismissed deliberately; understands that the result is a suggestion and never an approval |  |  |
+| 14 | Explain what to do when Assistive Checks are unavailable or have reached their processing limit | Continues the review and approval workflow without waiting; escalates only when the condition persists |  |  |
 
 ### Score
 

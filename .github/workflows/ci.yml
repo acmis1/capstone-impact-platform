@@ -52,6 +52,9 @@ jobs:
       - name: Repository terminology check
         run: npm run check:terminology
 
+      - name: Zero-cost execution envelope check
+        run: npm run check:zero-cost
+
       - name: GitHub YAML parse check
         run: npm run check:yaml
 
@@ -109,6 +112,34 @@ jobs:
 
       - name: Onboarding Contributor Workflow Rehearsal
         run: npm run verify:onboarding-workflow
+
+  postgres17-privilege-alignment:
+    name: Disposable PostgreSQL 17 Privilege Alignment
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 24.14.1
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+
+      - name: Install npm 11.11.0 (pinned)
+        run: npm install -g npm@11.11.0
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Local Supabase is pinned to PostgreSQL 15, which has no MAINTAIN privilege at all, so the
+      # Local job can only prove Migration 0048 is inert there. This job owns a throwaway
+      # PostgreSQL 17 container with synthetic roles and tables only, and proves the migration
+      # removes exactly MAINTAIN from exactly service_role on exactly the five aligned tables.
+      - name: Verify PostgreSQL 17 MAINTAIN privilege alignment runtime behavior
+        run: npm run verify:pg17-maintain-privilege-runtime
 
   public-feed-ledger:
     name: Disposable Public Deployment Ledger Runtime
@@ -183,7 +214,7 @@ jobs:
       - name: Onboarding Toolchain Precheck
         run: npm run onboarding:check
 
-      # This destructive migration-upgrade verifier must run before normal Local setup establishes shared staff and storage fixtures.
+      # These destructive migration-upgrade verifiers must run before normal Local setup establishes shared staff and storage fixtures.
       - name: Start Local Supabase specifically for migration-upgrade verification
         run: npm run supabase:start
         env:
@@ -191,6 +222,9 @@ jobs:
 
       - name: Verify Migration 0030 to 0031 assistive upgrade behavior
         run: npm run verify:assistive-upgrade-runtime --workspace=apps/admin-cms
+
+      - name: Verify assistive execution control Migration 0047 runtime behavior
+        run: npm run verify:assistive-execution-control-runtime --workspace=apps/admin-cms
 
       - name: Run local developer setup
         run: npm run setup:local
@@ -200,10 +234,10 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify forty-six migrations and local integrity
+      - name: Verify forty-eight migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 46
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 48
 
       - name: Verify exact Gate 4 schema evidence from the migrated Local catalog
         run: npm run check:gate4-schema-evidence:local --workspace=apps/admin-cms -- --local-self-check

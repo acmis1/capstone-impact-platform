@@ -202,16 +202,17 @@ npm run verify:all
 ### What `npm run verify:all` Checks:
 1. `npm run onboarding:check` — Toolchain & environment precheck
 2. `npm run check:onboarding-docs` — Onboarding documentation contract check
-3. `npm run check:terminology` — Tracked current-tree terminology check
-4. `npm run check:yaml` — GitHub workflow and template YAML parse check
-5. `npm run check:markdown-links` — Tracked Markdown relative-link check
-6. `npm run check:feed` — Public feed contract verification
-7. `npm run lint --workspace=apps/admin-cms` — ESLint (must pass with 0 errors & 0 warnings)
-8. `npm run test:admin` — Vitest unit and security test suite
-9. `npm run typecheck:admin` — TypeScript typecheck (`tsc --noEmit`)
-10. `npm run build:admin` — Next.js production build (`next build`)
-11. `git diff --check` — Uncommitted working-tree whitespace check
-12. `git diff --check origin/main...HEAD` — Committed branch diff whitespace check
+3. `npm run check:zero-cost` — Zero-cost execution envelope and launch-ceiling guard
+4. `npm run check:terminology` — Tracked current-tree terminology check
+5. `npm run check:yaml` — GitHub workflow and template YAML parse check
+6. `npm run check:markdown-links` — Tracked Markdown relative-link check
+7. `npm run check:feed` — Public feed contract verification
+8. `npm run lint --workspace=apps/admin-cms` — ESLint (must pass with 0 errors & 0 warnings)
+9. `npm run test:admin` — Vitest unit and security test suite
+10. `npm run typecheck:admin` — TypeScript typecheck (`tsc --noEmit`)
+11. `npm run build:admin` — Next.js production build (`next build`)
+12. `git diff --check` — Uncommitted working-tree whitespace check
+13. `git diff --check origin/main...HEAD` — Committed branch diff whitespace check
 
 ---
 

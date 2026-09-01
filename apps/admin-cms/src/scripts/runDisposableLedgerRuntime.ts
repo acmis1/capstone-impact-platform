@@ -42,13 +42,15 @@ const RUNTIME_TIMEOUT_MS = 600_000;
 
 /**
  * The sole correction migration. Removing exactly this file reproduces current main's
- * 45-migration state; restoring it proves the supported forward-only 45 -> 46 upgrade.
+ * pre-correction state (one fewer than current main); restoring it proves the supported
+ * forward-only upgrade back to the full current-main migration set.
  */
 const CORRECTION_MIGRATIONS = [
   '20260826090000_public_feed_activation_authority_guard.sql',
 ];
 
-const CURRENT_MAIN_MIGRATION_COUNT = 45;
+const PRE_CORRECTION_MIGRATION_COUNT = 47;
+const CURRENT_MAIN_MIGRATION_COUNT = 48;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -137,8 +139,9 @@ function routineDefinition(name: string): string {
 
 /**
  * Proves the exact correction upgrade rather than only proving a fresh install. The stack starts
- * at current main's 45-migration head, preserves synthetic relational and pre-write operation data,
- * applies Migration 0046 alone, and re-inspects both the new fence and existing writer protocol.
+ * at the pre-correction migration head, preserves synthetic relational and pre-write operation data,
+ * applies the activation-authority migration alone, and re-inspects both the new fence and the
+ * existing writer protocol.
  */
 function verifyCorrectionUpgrade(workdir: string): void {
   const appliedCount = () => psql('SELECT count(*) FROM supabase_migrations.schema_migrations;');
@@ -147,13 +150,13 @@ function verifyCorrectionUpgrade(workdir: string): void {
 
   assert.equal(
     baselineFiles.length,
-    CURRENT_MAIN_MIGRATION_COUNT,
-    'The current-main baseline is not exactly 45 files.',
+    PRE_CORRECTION_MIGRATION_COUNT,
+    `The pre-correction baseline is not exactly ${PRE_CORRECTION_MIGRATION_COUNT} files.`,
   );
   assert.equal(
     appliedCount(),
-    String(CURRENT_MAIN_MIGRATION_COUNT),
-    'The provisioned baseline is not exactly current main.',
+    String(PRE_CORRECTION_MIGRATION_COUNT),
+    'The provisioned baseline is not exactly the pre-correction migration head.',
   );
   assert.equal(psql("SELECT to_regclass('public.public_feed_operations') IS NOT NULL;"), 't');
   assert.equal(psql("SELECT to_regclass('public.public_feed_head') IS NOT NULL;"), 't');
@@ -230,12 +233,12 @@ function verifyCorrectionUpgrade(workdir: string): void {
         WHERE ma.id='18600000-0000-4000-8000-000000000014'::uuid)
     )::text;`);
   assert.equal(psql('SELECT count(*) FROM public.public_feed_head;'), '0');
-  console.log('PASS: disposable stack provisioned at the exact current-main 45-migration baseline');
+  console.log(`PASS: disposable stack provisioned at the exact ${PRE_CORRECTION_MIGRATION_COUNT}-migration pre-correction baseline`);
 
   restoreMigrations(workdir, CORRECTION_MIGRATIONS);
   runSupabase('migrate', workdir, '');
 
-  assert.equal(appliedCount(), '46', 'The upgraded database is not exactly 46 migrations.');
+  assert.equal(appliedCount(), String(CURRENT_MAIN_MIGRATION_COUNT), `The upgraded database is not exactly ${CURRENT_MAIN_MIGRATION_COUNT} migrations.`);
   assert.equal(
     psql(
       'SELECT count(*) FROM supabase_migrations.schema_migrations'
@@ -308,7 +311,7 @@ function verifyCorrectionUpgrade(workdir: string): void {
       'media', (SELECT pg_catalog.to_jsonb(ma) FROM public.media_assets ma
         WHERE ma.id='18600000-0000-4000-8000-000000000014'::uuid)
     )::text;`), preservedBefore);
-  console.log('PASS: exact current-main 45 -> 46 activation-authority upgrade preserved project, taxonomy, and media data');
+  console.log(`PASS: exact ${PRE_CORRECTION_MIGRATION_COUNT} -> ${CURRENT_MAIN_MIGRATION_COUNT} activation-authority upgrade preserved project, taxonomy, and media data`);
 
   // End-of-sequence composition. The deployment-ledger migrations carry earlier timestamps than the
   // final merged gallery migration, so the composed database must still end on the merged gallery
@@ -376,7 +379,7 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
-  // An upgrade run must start from the exact current-main 45-migration database; a script run starts
+  // An upgrade run must start from the exact pre-correction migration database; a script run starts
   // from a fresh full install. Provisioning one stack per invocation keeps both baselines exact.
   const workdir = createWorkdir(upgradeRequested ? CORRECTION_MIGRATIONS : []);
   let networkId = '';

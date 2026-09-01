@@ -19,6 +19,7 @@ function exactEvidence(): Gate4SchemaEvidence {
       { name: 'anon', exists: true, canLogin: false, inherits: true, bypassRls: false, superuser: false },
       { name: 'authenticated', exists: true, canLogin: false, inherits: true, bypassRls: false, superuser: false },
       { name: 'service_role', exists: true, canLogin: false, inherits: true, bypassRls: true, superuser: false },
+      { name: 'capstone_assistive_dispatcher', exists: true, canLogin: true, inherits: false, bypassRls: false, superuser: false },
     ],
     migrations: ['20260601035138', '20260601035139'],
     tables: [
@@ -67,6 +68,7 @@ function exactEvidence(): Gate4SchemaEvidence {
       { schema: 'public', role: 'anon', privilege: 'USAGE', grantable: false },
       { schema: 'public', role: 'authenticated', privilege: 'USAGE', grantable: false },
       { schema: 'public', role: 'service_role', privilege: 'USAGE', grantable: false },
+      { schema: 'assistive_execution_control', role: 'capstone_assistive_dispatcher', privilege: 'USAGE', grantable: false },
     ],
     functions: [
       {
@@ -91,6 +93,12 @@ function exactEvidence(): Gate4SchemaEvidence {
         argumentTypes: [], returnType: 'jsonb', securityDefiner: true, configuration: ['search_path=pg_catalog, auth, public'],
         executeGrants: [{ role: 'authenticated', grantable: false }], classification: 'other_exposed_routine',
       },
+      {
+        schema: 'assistive_execution_control', name: 'inspect_assistive_launch_eligibility', kind: 'function',
+        argumentNames: [], argumentTypes: [], returnType: 'jsonb', securityDefiner: true,
+        configuration: ['search_path='],
+        executeGrants: [{ role: 'capstone_assistive_dispatcher', grantable: false }], classification: 'dispatcher_control',
+      },
     ],
     storageBuckets: [
       { id: 'project-drafts-private', name: 'project-drafts-private', public: false, fileSizeLimit: 20 * 1024 * 1024, allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'] },
@@ -104,6 +112,10 @@ function mutate(mutator: (evidence: Gate4SchemaEvidence) => void): Gate4SchemaEv
   const evidence = structuredClone(exactEvidence());
   mutator(evidence);
   return evidence;
+}
+
+function maintainGrant(): Gate4SchemaEvidence['tableGrants'][number] {
+  return { schema: 'public', table: 'projects', role: 'service_role', privilege: 'MAINTAIN', grantable: false };
 }
 
 function expectDrift(actual: Gate4SchemaEvidence, category: string): void {
@@ -171,6 +183,68 @@ describe('Gate 4 exact schema evidence comparison', () => {
     expectDrift(mutate((evidence) => { evidence.tableGrants = evidence.tableGrants.filter((grant) => !(grant.table === 'programs' && grant.role === 'authenticated')); }), 'TABLE_GRANTS');
   });
 
+  it('accepts matching MAINTAIN evidence independent of table-grant ordering', () => {
+    const expected = mutate((evidence) => { evidence.tableGrants.push(maintainGrant()); });
+    const actual = structuredClone(expected);
+    actual.tableGrants.reverse();
+
+    expect(parseGate4Evidence(expected).ok).toBe(true);
+    expect(compareGate4Evidence(expected, actual).classification).toBe('GATE4_MATCH');
+  });
+
+  it('classifies an unexpected MAINTAIN grant as GATE4_DRIFT', () => {
+    const result = compareGate4Evidence(
+      exactEvidence(),
+      mutate((evidence) => { evidence.tableGrants.push(maintainGrant()); }),
+    );
+
+    expect(result.classification).toBe('GATE4_DRIFT');
+    expect(result.validationErrors).toEqual([]);
+    expect(result.differences).toContainEqual({
+      category: 'TABLE_GRANTS',
+      key: 'public.projects.service_role.MAINTAIN',
+      kind: 'UNEXPECTED',
+    });
+  });
+
+  it('classifies a missing expected MAINTAIN grant as GATE4_DRIFT', () => {
+    const result = compareGate4Evidence(
+      mutate((evidence) => { evidence.tableGrants.push(maintainGrant()); }),
+      exactEvidence(),
+    );
+
+    expect(result.classification).toBe('GATE4_DRIFT');
+    expect(result.validationErrors).toEqual([]);
+    expect(result.differences).toContainEqual({
+      category: 'TABLE_GRANTS',
+      key: 'public.projects.service_role.MAINTAIN',
+      kind: 'MISSING',
+    });
+  });
+
+  it('rejects duplicate MAINTAIN grant evidence', () => {
+    const duplicated = mutate((evidence) => {
+      evidence.tableGrants.push(maintainGrant(), maintainGrant());
+    });
+    const result = compareGate4Evidence(exactEvidence(), duplicated);
+
+    expect(result.classification).toBe('EVIDENCE_INVALID');
+    expect(result.validationErrors).toContain(
+      'actual: evidence.tableGrants contains duplicate key public.projects.service_role.MAINTAIN.',
+    );
+  });
+
+  it('continues to reject unsupported table privileges', () => {
+    const unsupported = structuredClone(exactEvidence()) as unknown as Record<string, unknown>;
+    (unsupported.tableGrants as unknown[]).push({
+      schema: 'public', table: 'projects', role: 'service_role', privilege: 'VACUUM', grantable: false,
+    });
+    const result = compareGate4Evidence(exactEvidence(), unsupported);
+
+    expect(result.classification).toBe('EVIDENCE_INVALID');
+    expect(result.validationErrors).toContain('actual: evidence.tableGrants[5].privilege has an unsupported value.');
+  });
+
   it('detects a missing application RPC', () => {
     expectDrift(mutate((evidence) => { evidence.functions = evidence.functions.filter((routine) => routine.name !== 'generate_participant_preview'); }), 'FUNCTIONS');
   });
@@ -191,11 +265,24 @@ describe('Gate 4 exact schema evidence comparison', () => {
     expectDrift(mutate((evidence) => { evidence.functions[0].executeGrants.push({ role: 'anon', grantable: false }); }), 'FUNCTIONS');
   });
 
+  it('detects dispatcher role and control-schema grant drift', () => {
+    expectDrift(mutate((evidence) => { evidence.roles.find((role) => role.name === 'capstone_assistive_dispatcher')!.bypassRls = true; }), 'ROLES');
+    expectDrift(mutate((evidence) => { evidence.schemaGrants = evidence.schemaGrants.filter((grant) => grant.schema !== 'assistive_execution_control'); }), 'SCHEMA_GRANTS');
+  });
+
+  it('detects dispatcher routine execute-grant drift', () => {
+    expectDrift(mutate((evidence) => {
+      const routine = evidence.functions.find((candidate) => candidate.classification === 'dispatcher_control')!;
+      routine.executeGrants.push({ role: 'service_role', grantable: false });
+    }), 'FUNCTIONS');
+  });
+
   it('keeps canonical_staff_roles separate from application RPC counts', () => {
     const stats = gate4EvidenceStats(exactEvidence());
     expect(stats.applicationRpcSignatures).toBe(2);
     expect(stats.applicationRpcNames).toBe(1);
     expect(stats.canonicalStaffRoleHelpers).toBe(1);
+    expect(stats.dispatcherControlRoutines).toBe(1);
   });
 
   it('detects Storage bucket visibility drift', () => {
@@ -253,6 +340,9 @@ describe('Gate 4 hosted SQL safety contract', () => {
     }
     expect(sql).toContain("routine_name = 'canonical_staff_roles'");
     expect(sql).toContain("'application_rpc'");
+    expect(sql).toContain("'assistive_execution_control'");
+    expect(sql).toContain("'capstone_assistive_dispatcher'");
+    expect(sql).toContain("'dispatcher_control'");
   });
 });
 

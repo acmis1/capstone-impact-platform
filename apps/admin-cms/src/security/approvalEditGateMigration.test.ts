@@ -19,7 +19,7 @@ describe('Migration 0018 approval edit gate static security contract', () => {
       const headBlob = execFileSync('git', ['rev-parse', `HEAD:${migrationPath}`], { cwd: root, encoding: 'utf8' }).trim();
       expect(headBlob).toBe(baseBlob);
     }
-  });
+  }, 30_000);
 
   it('replaces protected RPCs with locked, service-role-only, forward-only behavior', () => {
     expect(content).toContain('CREATE OR REPLACE FUNCTION public.update_project_metadata');

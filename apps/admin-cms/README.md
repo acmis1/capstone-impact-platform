@@ -164,6 +164,7 @@ Run these from the repository root unless noted. Read-only checks do not change 
 | Build | `npm run build:admin` | `npm run build` | Local build |
 | Feed contract check | `npm run check:feed` | `npm run check:sample-feed` | Pure offline read-only fixture execution |
 | M6 operational readiness | `npm run check:operational-readiness` | `npm run check:operational-readiness` | Offline repository evidence by default; optional credential-free hosted GET/HEAD smoke |
+| Zero-cost envelope guard | `npm run check:zero-cost` | `npm run check:zero-cost` | Offline. Proves the configured compute envelope fits the verified free grant and that the launch ceiling is still enforced by database constraint |
 
 ### Read-only staging checks
 

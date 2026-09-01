@@ -51,10 +51,15 @@ interface ProjectAssistiveChecksProps {
   canEditMetadata: boolean;
   canReview: boolean;
   canExecute?: boolean;
+  /** Truthful reason shown when execution is not currently possible. */
+  unavailableMessage?: string;
   initialInspection?: AssistiveInspectionView | null;
   initialReadFailed?: boolean;
   headingLevel?: 'h2' | 'h3' | 'h4';
 }
+
+const DEFAULT_UNAVAILABLE_MESSAGE =
+  'Assistive checks are temporarily unavailable because the processing worker is not ready.';
 
 const POLLING_INTERVAL_MS = 2500;
 
@@ -63,6 +68,7 @@ export function ProjectAssistiveChecks({
   canEditMetadata,
   canReview,
   canExecute = true,
+  unavailableMessage = DEFAULT_UNAVAILABLE_MESSAGE,
   initialInspection = null,
   initialReadFailed = false,
   headingLevel: Heading = 'h3',
@@ -366,7 +372,7 @@ export function ProjectAssistiveChecks({
               isLoading={state.actionInFlight === 'running'}
               title={
                 !canExecute
-                  ? 'Assistive checks are temporarily unavailable because the processing worker is not ready.'
+                  ? unavailableMessage
                   : state.inspection
                   ? 'Re-evaluate project metadata against poster document evidence.'
                   : 'Start assistive checks.'
@@ -391,7 +397,7 @@ export function ProjectAssistiveChecks({
       {/* Execution Environment Notice if unavailable */}
       {!canExecute && (
         <div className="mt-3 text-xs text-muted-foreground">
-          Assistive checks are temporarily unavailable because the processing worker is not ready. Historical findings remain viewable.
+          {unavailableMessage} Historical findings remain viewable.
         </div>
       )}
 
@@ -465,7 +471,7 @@ export function ProjectAssistiveChecks({
             description={
               canExecute
                 ? 'Run assistive checks to verify project title consistency and document formatting against uploaded poster evidence.'
-                : 'Assistive checks are temporarily unavailable because the processing worker is not ready.'
+                : unavailableMessage
             }
             action={
               <Button
@@ -475,7 +481,7 @@ export function ProjectAssistiveChecks({
                 isLoading={state.actionInFlight === 'running'}
                 title={
                   !canExecute
-                    ? 'Assistive checks are temporarily unavailable because the processing worker is not ready.'
+                    ? unavailableMessage
                     : 'Run checks now'
                 }
               >

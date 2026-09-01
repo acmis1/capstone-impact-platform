@@ -88,7 +88,7 @@ See `apps/admin-cms/src/lib/env.ts`, `docs/admin-cms-hosted-deployment.md`, `inf
 
 The Admin/CMS web service uses repository root, `npm ci`, `npm run build:admin`, `npm run start --workspace=apps/admin-cms`, and health path `/api/readiness`. `/api/health` is liveness only. Render must expose a valid exact `RENDER_GIT_COMMIT` for deployment identity evidence.
 
-The tracked `render.yaml` currently defines the separate assistive background worker, not the Admin/CMS web service. Do not repurpose the Prototype service or infer web-service configuration from that worker Blueprint.
+There is no tracked Render Blueprint. The paid assistive background worker it once defined is withdrawn: Render documents no free instance type for background workers, so that shape carried a permanent monthly charge. Assistive execution now runs either as a zero-cost on-demand executor or as a School-owned continuous worker; see [Zero-Cost Assistive Executor](operations/zero-cost-assistive-executor.md). Do not repurpose the Prototype service or infer Admin/CMS web-service configuration from any worker definition.
 
 Deployment, redeploy, rollback, environment changes, private dashboard access, and DNS are institutional operator actions. Follow the pre/post gates and rollback procedure in `docs/m6-operational-readiness.md`.
 

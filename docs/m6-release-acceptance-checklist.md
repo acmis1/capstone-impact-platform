@@ -27,7 +27,7 @@ Use one copy per candidate release. Leave every item unchecked until its stated 
 
 - [ ] Repository migration count/latest/full manifest match the candidate. Evidence: ____
 - [ ] Hosted migration history was inspected and compared with the candidate. Evidence: ____
-- [ ] `npm run check:gate4-schema-evidence -- --evidence-file=<snapshot.json> --expected-git-sha=<sha>` returned `GATE4_MATCH` for the exact candidate SHA, covering required tables, columns, constraints, RLS/policies, grants, role/Auth foundation, RPC overloads/security, and Storage bucket configuration. Evidence: ____
+- [ ] `npm run check:gate4-schema-evidence -- --evidence-file=<snapshot.json> --expected-git-sha=<sha>` returned `GATE4_MATCH` for the exact candidate SHA, covering public and execution-control tables, columns, constraints, RLS/policies, schema/table grants, Data API and dispatcher roles, public RPC overloads, non-public dispatcher routines, and Storage bucket configuration. Evidence: ____
 - [ ] No unexpected migration or schema drift remains. Evidence: ____
 - [ ] Any database change has an approved forward migration and compatible application deployment order. Evidence: ____
 
@@ -40,6 +40,19 @@ Use one copy per candidate release. Leave every item unchecked until its stated 
 - [ ] Readiness `deploymentCommit` equals the reviewed SHA. Evidence: ____
 - [ ] `/login` returned the expected HTML surface. Evidence: ____
 - [ ] Post-deploy hosted smoke passed without credentials or mutation. Evidence: ____
+
+## Zero-cost assistive execution
+
+- [ ] `npm run check:zero-cost` passed on the candidate. Evidence: ____
+- [ ] One execution profile is chosen and recorded: zero-cost on-demand executor, or School-owned continuous worker. Evidence: ____
+- [ ] No paid background worker, dedicated workload profile, paid log workspace, paid registry, or paid network component was introduced. Evidence: ____
+- [ ] Both executor images are pinned by immutable digest, and the deployed digests match the registration. Evidence: ____
+- [ ] The executor was registered for the exact reviewed commit and image digest. Evidence: ____
+- [ ] The dispatcher authenticates as the dedicated least-privilege database role and holds no server secret key. Evidence: ____
+- [ ] The launch ceiling of 40 starts per rolling 31-day window is enforced by database constraint on the target. Evidence: ____
+- [ ] Assistive unavailability was demonstrated not to block import, review, approval, or publication. Evidence: ____
+- [ ] End-to-end assistive latency was measured and compared with the PP1 p95 target, or the profile is explicitly recorded as not yet accepted. Evidence: ____
+- [ ] Third-party redistribution position is settled before any image is published publicly. Evidence: ____
 
 ## Core workflow
 

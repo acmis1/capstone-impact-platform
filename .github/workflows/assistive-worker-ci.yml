@@ -9,7 +9,9 @@ on:
       - 'apps/admin-cms/src/assistive-validation/**'
       - 'infra/supabase/migrations/20260820160000_assistive_validation_job_coordination.sql'
       - 'infra/supabase/migrations/20260828120000_assistive_worker_heartbeat.sql'
-      - 'render.yaml'
+      - 'apps/assistive-worker/Dockerfile.dispatcher'
+      - 'infra/supabase/migrations/20260828170000_assistive_execution_control.sql'
+      - 'infra/azure/assistive-executor/**'
       - 'docs/assistive-validation/phase-1-document-extraction.md'
       - 'docs/assistive-validation/phase-4-async-job-coordination.md'
   pull_request:
@@ -20,7 +22,9 @@ on:
       - 'apps/admin-cms/src/assistive-validation/**'
       - 'infra/supabase/migrations/20260820160000_assistive_validation_job_coordination.sql'
       - 'infra/supabase/migrations/20260828120000_assistive_worker_heartbeat.sql'
-      - 'render.yaml'
+      - 'apps/assistive-worker/Dockerfile.dispatcher'
+      - 'infra/supabase/migrations/20260828170000_assistive_execution_control.sql'
+      - 'infra/azure/assistive-executor/**'
       - 'docs/assistive-validation/phase-1-document-extraction.md'
       - 'docs/assistive-validation/phase-4-async-job-coordination.md'
 
@@ -28,6 +32,26 @@ permissions:
   contents: read
 
 jobs:
+  bicep-compile:
+    name: Bicep Compilation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compile executor template without deployment
+        uses: azure/cli@v2
+        with:
+          azcliversion: 2.81.0
+          inlineScript: |
+            az bicep install --version v0.37.4
+            az bicep version
+            az bicep build \
+              --file infra/azure/assistive-executor/main.bicep \
+              --outfile /tmp/capstone-assistive-executor.json
+            rm -f /tmp/capstone-assistive-executor.json
+
   extraction-tests:
     name: Production Extraction & Security Gates
     runs-on: ${{ matrix.os }}

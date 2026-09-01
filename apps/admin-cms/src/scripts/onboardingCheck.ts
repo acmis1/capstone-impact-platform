@@ -60,6 +60,8 @@ export const EXPECTED_MIGRATION_FILENAMES = [
   '20260826090000_public_feed_activation_authority_guard.sql',
   '20260828090000_assistive_language_findings.sql',
   '20260828120000_assistive_worker_heartbeat.sql',
+  '20260828170000_assistive_execution_control.sql',
+  '20260831090000_postgres17_maintain_privilege_alignment.sql',
 ] as const;
 
 export function parseSemverMajorMinorPatch(versionStr: string): { major: number; minor: number; patch: number } | null {
