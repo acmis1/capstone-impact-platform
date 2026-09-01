@@ -202,6 +202,46 @@ function harnessDriver() {
     check(snapshotControls.every(control => control.tagName === 'BUTTON'), 'snapshot gallery controls use native button semantics');
     check(snapshotControls.every(control => Boolean(control.getAttribute('aria-label'))), 'snapshot gallery controls have accessible names');
   };
+  const verifyPosterText = (record) => {
+    const disclosure = document.querySelector('.poster-text-disclosure');
+    const content = disclosure?.querySelector('.poster-text-content');
+    const accessibilityHeading = Array.from(document.querySelectorAll('.section-title'))
+      .find(heading => heading.textContent.trim() === 'Accessibility Text');
+    const accessibilitySection = accessibilityHeading?.closest('.detail-section');
+    check(disclosure?.tagName === 'DETAILS', 'poster full text uses a native details disclosure');
+    check(disclosure?.querySelector('summary')?.textContent.trim() === 'Read full poster text', 'poster full text disclosure has a clear native summary');
+    disclosure?.querySelector('summary')?.click();
+    check(disclosure?.open === true, 'poster full text can be visually expanded with native disclosure behavior');
+    check(content?.textContent === record.posterText, 'poster full text is rendered as user-visible text');
+    check(accessibilitySection?.textContent.includes(record.accessibilityText), 'concise accessibility text remains separately rendered');
+    check(content?.textContent !== record.accessibilityText, 'poster full text remains distinct from concise accessibility text');
+  };
+  const verifyRendererHeadingHierarchy = () => {
+    const renderer = document.querySelector('.cip-module');
+    const headings = Array.from(renderer?.querySelectorAll('h1, h2, h3, h4, h5, h6') || []);
+    const projectHeadings = headings.filter(heading => heading.tagName === 'H1');
+    check(projectHeadings.length === 1, `renderer has exactly one project H1, saw ${projectHeadings.length}`);
+    check(headings[0]?.tagName === 'H1', 'renderer heading sequence starts with the project H1');
+    for (let index = 1; index < headings.length; index += 1) {
+      const previousLevel = Number(headings[index - 1].tagName.slice(1));
+      const currentLevel = Number(headings[index].tagName.slice(1));
+      check(
+        currentLevel - previousLevel <= 1,
+        `renderer heading order does not jump from H${previousLevel} to H${currentLevel}`,
+      );
+    }
+  };
+  const verifyDistinctListingActions = () => {
+    const cards = Array.from(document.querySelectorAll('.capstone-card'));
+    const names = cards.map(card => {
+      const title = card.querySelector('.capstone-card-image')?.alt;
+      const action = card.querySelector('.capstone-card-btn');
+      const accessibleName = action?.getAttribute('aria-label');
+      check(accessibleName === `Learn more about ${title}`, `detail action names its project: ${title}`);
+      return accessibleName;
+    });
+    check(new Set(names).size === cards.length, 'repeated detail actions have distinct accessible names');
+  };
   const verifyExternalLinkSecurity = () => {
     const links = Array.from(document.querySelectorAll('a[target="_blank"]'));
     check(links.length > 0, 'detail renders external resource links');
@@ -263,6 +303,7 @@ function harnessDriver() {
         window.handleFilterChange(type, 'All');
       }
       check(document.querySelectorAll('.capstone-card-image').length === 3, 'listing renders poster images');
+      verifyDistinctListingActions();
       finish();
       return;
     }
@@ -281,19 +322,46 @@ function harnessDriver() {
     }
 
     if (scenario === 'detail-poster') {
+      const project = window.__CAPSTONE_HARNESS_FIXTURE[0];
       check(Boolean(document.querySelector('.layout-preset-poster_showcase')), 'poster_showcase preset renders');
       check(Boolean(document.querySelector('video[src$="/videos/flood-response.mp4"]')), 'MP4 renders in the native video player');
       check(Boolean(document.querySelector('a[href$="/posters/flood-response.pdf"]')), 'poster PDF link renders');
+      verifyPosterText(project);
+      verifyRendererHeadingHierarchy();
       verifyRenderedSnapshotAlts(2);
-      window.openLightbox(0);
+      const opener = document.querySelector('.exhibition-strip button');
+      opener.focus();
+      opener.click();
       await waitFor(() => document.getElementById('capstone-lightbox')?.style.display === 'flex');
-      check(document.getElementById('capstone-lightbox-img')?.alt === window.__CAPSTONE_HARNESS_FIXTURE[0].snapshotMedia[0].altText, 'lightbox uses the first governed alt text');
+      const lightbox = document.getElementById('capstone-lightbox');
+      const closeButton = document.querySelector('.capstone-lightbox-close');
+      const nextButton = document.querySelector('.capstone-lightbox-next');
+      check(lightbox?.getAttribute('role') === 'dialog', 'lightbox exposes dialog semantics');
+      check(lightbox?.getAttribute('aria-modal') === 'true', 'lightbox exposes modal state');
+      check(lightbox?.getAttribute('aria-label') === 'Snapshot viewer', 'lightbox has an accessible dialog name');
+      check(document.activeElement === closeButton, 'lightbox moves initial focus to Close snapshot viewer');
+      check(closeButton?.getAttribute('aria-label') === 'Close snapshot viewer', 'lightbox close control has the required accessible name');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
+      check(document.activeElement === nextButton, 'Shift+Tab wraps from the first to the last lightbox control');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      check(document.activeElement === closeButton, 'Tab wraps from the last to the first lightbox control');
+      check(lightbox?.contains(document.activeElement), 'keyboard focus remains contained inside the open lightbox');
+      check(document.getElementById('capstone-lightbox-img')?.alt === project.snapshotMedia[0].altText, 'lightbox uses the first governed alt text');
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-      check(document.getElementById('capstone-lightbox-img')?.alt === window.__CAPSTONE_HARNESS_FIXTURE[0].snapshotMedia[1].altText, 'lightbox navigation updates to the second governed alt text');
+      check(document.getElementById('capstone-lightbox-img')?.alt === project.snapshotMedia[1].altText, 'lightbox navigation updates to the second governed alt text');
       check(document.querySelector('.capstone-lightbox-prev')?.getAttribute('aria-label') === 'Previous snapshot', 'lightbox previous control has an accessible name');
       check(document.querySelector('.capstone-lightbox-next')?.getAttribute('aria-label') === 'Next snapshot', 'lightbox next control has an accessible name');
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       check(document.getElementById('capstone-lightbox')?.style.display === 'none', 'gallery lightbox closes cleanly');
+      check(document.activeElement === opener, 'Escape restores focus to the exact snapshot opener');
+
+      const backdropOpener = document.querySelectorAll('.exhibition-strip button')[1];
+      backdropOpener.focus();
+      backdropOpener.click();
+      await waitFor(() => document.getElementById('capstone-lightbox')?.style.display === 'flex');
+      document.querySelector('.capstone-lightbox-backdrop').click();
+      check(document.getElementById('capstone-lightbox')?.style.display === 'none', 'backdrop closes the lightbox');
+      check(document.activeElement === backdropOpener, 'backdrop close restores focus to the exact snapshot opener');
       verifyExternalLinkSecurity();
       finish();
       return;
@@ -322,6 +390,8 @@ function harnessDriver() {
         'YouTube URL renders as the expected embed',
       );
       check(Boolean(document.querySelector('a[href$="/posters/zero-trust.pdf"]')), 'technical detail exposes the poster PDF');
+      verifyPosterText(window.__CAPSTONE_HARNESS_FIXTURE[1]);
+      verifyRendererHeadingHierarchy();
       verifyRenderedSnapshotAlts(2);
       verifyExternalLinkSecurity();
       finish();
@@ -335,6 +405,8 @@ function harnessDriver() {
         'Vimeo URL renders as the expected embed',
       );
       check(Boolean(document.querySelector('img[src$="/posters/clinic-wayfinding.jpg"]')), 'media-rich detail renders its poster');
+      verifyPosterText(window.__CAPSTONE_HARNESS_FIXTURE[2]);
+      verifyRendererHeadingHierarchy();
       verifyRenderedSnapshotAlts(2);
       verifyExternalLinkSecurity();
       finish();
@@ -425,12 +497,23 @@ function harnessDriver() {
 
     if (scenario === 'escaped-text-record') {
       const maliciousTitle = window.__CAPSTONE_HARNESS_FIXTURE[0].title;
+      const record = window.__CAPSTONE_HARNESS_FIXTURE[0];
+      if (window.location.pathname.includes('project-detail')) {
+        check(Boolean(document.querySelector('.cip-module')), 'quote-bearing valid record renders its detail template');
+        verifyPosterText(record);
+        check(!document.getElementById('unsafe-poster-text-node'), 'stored poster markup creates no active element');
+        check(document.querySelector('.poster-text-content')?.textContent === record.posterText, 'stored poster markup is preserved as escaped text');
+        verifyRendererHeadingHierarchy();
+        finish();
+        return;
+      }
       const cardImage = document.querySelector('.capstone-card-image');
       const cardButton = document.querySelector('.capstone-poster-link');
       check(document.querySelectorAll('.capstone-card').length === 1, 'quote-bearing valid record still renders');
       check(cardImage?.alt === maliciousTitle, 'quote-bearing title is preserved as inert attribute text');
       check(!document.getElementById('unsafe-active-node'), 'quote-breaking markup creates no active element');
       check(cardButton?.getAttribute('onclick') === 'handleProjectClick(202601)', 'detail handler contains only the normalized numeric id');
+      verifyDistinctListingActions();
       check(window.location.pathname === '/', 'quote-bearing text cannot trigger navigation');
       finish();
       return;
@@ -610,11 +693,14 @@ function harnessDriver() {
       if (scenario === 'contract-lightbox-listener-lifecycle') {
         const governedAlts = contractCase.record.snapshotMedia.map(media => media.altText);
         check(governedAlts.length === 3, 'listener lifecycle case uses a three image gallery so duplicates are distinguishable');
+        const opener = galleryCards[0];
         for (let cycle = 1; cycle <= 3; cycle += 1) {
-          window.openLightbox(0);
+          opener.focus();
+          opener.click();
           await waitFor(() => document.getElementById('capstone-lightbox')?.style.display === 'flex');
           const image = document.getElementById('capstone-lightbox-img');
           check(image?.alt === governedAlts[0], `lifecycle cycle ${cycle} opens at the first governed image`);
+          check(document.activeElement === document.querySelector('.capstone-lightbox-close'), `lifecycle cycle ${cycle} moves focus inside exactly once`);
 
           const forward = countAttributeWrites(image, 'alt', () =>
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })));
@@ -628,6 +714,7 @@ function harnessDriver() {
 
           window.closeLightbox();
           check(document.getElementById('capstone-lightbox')?.style.display === 'none', `lifecycle cycle ${cycle} closes cleanly`);
+          check(document.activeElement === opener, `lifecycle cycle ${cycle} restores the exact opener focus`);
           const afterClose = countAttributeWrites(image, 'alt', () =>
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })));
           check(afterClose.length === 0, `lifecycle cycle ${cycle} leaves no active navigation effect after closing`);
@@ -718,8 +805,16 @@ function buildHarnessPage(requestUrl, runtimeFixture, runtimeContractCases) {
   }
   if (scenario === 'escaped-text-record') {
     payload = [structuredClone(fixtureCopy[0])];
-    payload[0].title = '\"><img id="unsafe-active-node" src=x onerror="window.location=\'https://attacker.example.test\'">';
+    payload[0].title = pathIsDetail
+      ? 'Escaped poster text proof'
+      : '\"><img id="unsafe-active-node" src=x onerror="window.location=\'https://attacker.example.test\'">';
+    payload[0].posterText = 'Full poster text <strong>kept inert</strong>\n<span id="unsafe-poster-text-node">Never active</span>.';
+    payload[0].accessibilityText = 'Concise poster description kept separate from the full text.';
+    payload[0].layoutConfig.hiddenSections = ['poster', 'posterPdf'];
     fixtureCopy[0].title = payload[0].title;
+    fixtureCopy[0].posterText = payload[0].posterText;
+    fixtureCopy[0].accessibilityText = payload[0].accessibilityText;
+    fixtureCopy[0].layoutConfig.hiddenSections = [...payload[0].layoutConfig.hiddenSections];
   }
   if (scenario === 'mixed-feed-availability') {
     const validA = structuredClone(fixtureCopy[0]);
@@ -871,6 +966,7 @@ const scenarios = [
   ['malformed-snapshots', '/project-detail?id=202601', 1440, 1000],
   ['unsafe-record', '/', 1440, 1000],
   ['escaped-text-record', '/', 1440, 1000],
+  ['escaped-text-record', '/project-detail?id=202601', 1440, 1000],
   ['mixed-feed-availability', '/', 1440, 1000],
   ['mixed-feed-availability', '/project-detail?id=202601', 1440, 1000],
   ['mixed-feed-availability', '/project-detail?id=202502', 1440, 1000],
