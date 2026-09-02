@@ -283,6 +283,24 @@ describe('ProjectTableContainer preference integration', () => {
     await waitFor(() => expect(screen.queryByText('1 selected')).toBeNull());
   });
 
+  it('retains the focused individual row checkbox across selection changes', async () => {
+    renderTable();
+    const rowCheckbox = (await screen.findAllByRole('checkbox', { name: 'Select Atlas' }))[0] as HTMLInputElement;
+
+    rowCheckbox.focus();
+    expect(document.activeElement).toBe(rowCheckbox);
+
+    fireEvent.click(rowCheckbox);
+    await waitFor(() => expect(rowCheckbox.checked).toBe(true));
+    expect(rowCheckbox.isConnected).toBe(true);
+    expect(document.activeElement).toBe(rowCheckbox);
+
+    fireEvent.click(rowCheckbox);
+    await waitFor(() => expect(rowCheckbox.checked).toBe(false));
+    expect(rowCheckbox.isConnected).toBe(true);
+    expect(document.activeElement).toBe(rowCheckbox);
+  });
+
   it('selects every selectable row on the current page and leaves unsafe IDs disabled', async () => {
     renderTable('', {
       rows: [
@@ -295,6 +313,26 @@ describe('ProjectTableContainer preference integration', () => {
     fireEvent.click(pageSelectors[0]);
     expect(screen.getAllByText('1 selected').length).toBeGreaterThan(0);
     expect(screen.getAllByRole('checkbox', { name: 'Project cannot be selected' }).every((checkbox) => (checkbox as HTMLInputElement).disabled)).toBe(true);
+  });
+
+  it('retains the focused desktop current-page checkbox across selection changes', async () => {
+    renderTable();
+    const pageCheckbox = (await screen.findAllByRole('checkbox', { name: 'Select current page' }))
+      .find((checkbox) => checkbox.closest('th')) as HTMLInputElement;
+
+    expect(pageCheckbox).toBeTruthy();
+    pageCheckbox.focus();
+    expect(document.activeElement).toBe(pageCheckbox);
+
+    fireEvent.click(pageCheckbox);
+    await waitFor(() => expect(pageCheckbox.checked).toBe(true));
+    expect(pageCheckbox.isConnected).toBe(true);
+    expect(document.activeElement).toBe(pageCheckbox);
+
+    fireEvent.click(pageCheckbox);
+    await waitFor(() => expect(pageCheckbox.checked).toBe(false));
+    expect(pageCheckbox.isConnected).toBe(true);
+    expect(document.activeElement).toBe(pageCheckbox);
   });
 
   it.each([
