@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   seedLocalSupabaseFixtures,
   seedLocalSupabaseFixturesWorker,
@@ -48,6 +49,18 @@ describe('Local Supabase Fixtures Unit Tests', () => {
     uploadPrivateError?: boolean;
     missingPublicList?: boolean;
     missingMedicalDronePdfList?: boolean;
+    medicalDronePdfMetadata?: Partial<{
+      id: string;
+      project_id: string;
+      asset_type: string;
+      file_name: string;
+      storage_bucket: string;
+      storage_path: string;
+      public_url: string | null;
+      mime_type: string;
+      file_size_bytes: number;
+      is_public_approved: boolean;
+    }>;
   } = {}) {
     const bucketsMap = new Map<
       string,
@@ -55,10 +68,75 @@ describe('Local Supabase Fixtures Unit Tests', () => {
     >();
 
     const uploads: Array<{ bucket: string; path: string; contentType: string }> = [];
+    const uploadedContents: Array<{ path: string; content: Buffer; upsert: boolean }> = [];
     const listRequests: Array<{ bucket: string; path: string; search?: string }> = [];
     const objects = new Map<string, { name: string }>();
+    const mediaRows = [
+      {
+        id: 'f0000000-0000-0000-0000-000000000004',
+        project_id: 'e0000000-0000-0000-0000-000000000002',
+        asset_type: 'poster_pdf',
+        file_name: 'poster.pdf',
+        storage_bucket: 'project-drafts-private',
+        storage_path: 'drafts/2026-medical-drone/poster_pdf/poster.pdf',
+        public_url: null,
+        mime_type: 'application/pdf',
+        file_size_bytes: 346,
+        is_public_approved: false,
+        ...overrides.medicalDronePdfMetadata,
+      },
+      {
+        id: 'f0000000-0000-0000-0000-000000000099',
+        project_id: 'e0000000-0000-0000-0000-000000000099',
+        asset_type: 'poster_image',
+        file_name: 'unrelated.png',
+        storage_bucket: 'project-drafts-private',
+        storage_path: 'drafts/unrelated/poster_image/unrelated.png',
+        public_url: null,
+        mime_type: 'image/png',
+        file_size_bytes: 123,
+        is_public_approved: false,
+      },
+    ];
+    const mediaUpdateRequests: Array<{ values: Record<string, unknown>; matchedIds: string[] }> = [];
 
     const client = {
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table !== 'media_assets') throw new Error(`Unexpected table: ${table}`);
+
+        const filters: Array<{ column: string; value: unknown; isNull?: boolean }> = [];
+        let updateValues: Record<string, unknown> | null = null;
+        const builder = {
+          update: vi.fn().mockImplementation((values: Record<string, unknown>) => {
+            updateValues = values;
+            return builder;
+          }),
+          eq: vi.fn().mockImplementation((column: string, value: unknown) => {
+            filters.push({ column, value });
+            return builder;
+          }),
+          is: vi.fn().mockImplementation((column: string, value: unknown) => {
+            filters.push({ column, value, isNull: true });
+            return builder;
+          }),
+          select: vi.fn().mockImplementation(async () => {
+            const matches = mediaRows.filter((row) =>
+              filters.every((filter) =>
+                filter.isNull ? row[filter.column as keyof typeof row] === filter.value : row[filter.column as keyof typeof row] === filter.value
+              )
+            );
+            if (updateValues) {
+              mediaUpdateRequests.push({ values: updateValues, matchedIds: matches.map((row) => row.id) });
+              matches.forEach((row) => Object.assign(row, updateValues));
+            }
+            return {
+              data: matches.map((row) => ({ id: row.id, file_size_bytes: row.file_size_bytes })),
+              error: null,
+            };
+          }),
+        };
+        return builder;
+      }),
       storage: {
         listBuckets: vi.fn().mockImplementation(async () => {
           return { data: Array.from(bucketsMap.values()), error: null };
@@ -99,7 +177,7 @@ describe('Local Supabase Fixtures Unit Tests', () => {
         }),
         from: vi.fn().mockImplementation((bucketName: string) => {
           return {
-            upload: vi.fn().mockImplementation(async (storagePath: string, _content: Buffer, options: { contentType: string }) => {
+            upload: vi.fn().mockImplementation(async (storagePath: string, content: Buffer, options: { contentType: string; upsert: boolean }) => {
               if (bucketName === 'project-public-assets' && overrides.uploadPublicError) {
                 return { error: new Error('Storage write failed') };
               }
@@ -107,6 +185,7 @@ describe('Local Supabase Fixtures Unit Tests', () => {
                 return { error: new Error('Storage write failed') };
               }
               uploads.push({ bucket: bucketName, path: storagePath, contentType: options.contentType });
+              uploadedContents.push({ path: storagePath, content: Buffer.from(content), upsert: options.upsert });
               objects.set(`${bucketName}:${storagePath}`, { name: storagePath.split('/').at(-1)! });
               return { error: null };
             }),
@@ -134,7 +213,7 @@ describe('Local Supabase Fixtures Unit Tests', () => {
       },
     } as unknown as SupabaseClient;
 
-    return { client, uploads, listRequests };
+    return { client, uploads, uploadedContents, listRequests, mediaRows, mediaUpdateRequests };
   }
 
   it('3. Worker function seedLocalSupabaseFixturesWorker reconciles buckets and uploads fixtures idempotently', async () => {
@@ -164,6 +243,66 @@ describe('Local Supabase Fixtures Unit Tests', () => {
     const res2 = await seedLocalSupabaseFixturesWorker(mock.client);
     expect(res2.bucketsVerified.length).toBe(3);
     expect(res2.fixturesUploaded).toEqual(res1.fixturesUploaded);
+  });
+
+  it('uploads a deterministic one-page PDF with valid xref offsets and matching seed metadata', async () => {
+    const mock = createMockSupabaseClient();
+    await seedLocalSupabaseFixturesWorker(mock.client);
+    await seedLocalSupabaseFixturesWorker(mock.client);
+
+    const pdfPath = 'drafts/2026-medical-drone/poster_pdf/poster.pdf';
+    const pdfUploads = mock.uploadedContents.filter((upload) => upload.path === pdfPath);
+    expect(pdfUploads).toHaveLength(2);
+    expect(pdfUploads.every((upload) => upload.upsert)).toBe(true);
+    const content = pdfUploads[0].content;
+    expect(pdfUploads[1].content.equals(content)).toBe(true);
+    expect(content.length).toBe(346);
+
+    // Check this fixed fixture's page tree and byte offsets, not arbitrary uploaded PDFs.
+    const pdf = content.toString('ascii');
+    expect(pdf).toContain('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj');
+    expect(pdf).toContain('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj');
+    expect(pdf).toContain('3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>\nendobj');
+    const xrefOffset = Number(pdf.match(/startxref\n(\d+)\n%%EOF\n$/)?.[1]);
+    expect(pdf.slice(xrefOffset)).toMatch(/^xref\n0 4\n0000000000 65535 f \n/);
+    const entries = pdf.slice(xrefOffset).split('\n').slice(3, 6);
+    entries.forEach((entry, index) => {
+      expect(entry).toMatch(/^\d{10} 00000 n $/);
+      expect(pdf.slice(Number(entry.slice(0, 10)))).toMatch(new RegExp(`^${index + 1} 0 obj\\n`));
+    });
+    expect(pdf).toContain('trailer\n<< /Size 4 /Root 1 0 R >>\n');
+
+    const seed = readFileSync(new URL('../../../../infra/supabase/seed.sql', import.meta.url), 'utf8');
+    const seededSize = seed.match(new RegExp(`'${pdfPath.replaceAll('.', '\\.')}',\\s*NULL,\\s*'application/pdf',\\s*(\\d+),\\s*false`));
+    expect(Number(seededSize?.[1])).toBe(content.length);
+  });
+
+  it('reconciles stale Medical Drone PDF metadata to the uploaded size and remains idempotent', async () => {
+    const mock = createMockSupabaseClient({ medicalDronePdfMetadata: { file_size_bytes: 77 } });
+
+    await seedLocalSupabaseFixturesWorker(mock.client);
+    expect(mock.mediaRows.find((row) => row.id === 'f0000000-0000-0000-0000-000000000004')?.file_size_bytes).toBe(346);
+    expect(mock.mediaRows.find((row) => row.id === 'f0000000-0000-0000-0000-000000000099')?.file_size_bytes).toBe(123);
+    expect(mock.mediaUpdateRequests).toEqual([
+      { values: { file_size_bytes: 346 }, matchedIds: ['f0000000-0000-0000-0000-000000000004'] },
+    ]);
+
+    await seedLocalSupabaseFixturesWorker(mock.client);
+    expect(mock.mediaRows.find((row) => row.id === 'f0000000-0000-0000-0000-000000000004')?.file_size_bytes).toBe(346);
+    expect(mock.mediaRows.find((row) => row.id === 'f0000000-0000-0000-0000-000000000099')?.file_size_bytes).toBe(123);
+    expect(mock.mediaUpdateRequests).toHaveLength(2);
+  });
+
+  it('fails closed when the known Medical Drone PDF row has contradictory identity', async () => {
+    const mock = createMockSupabaseClient({ medicalDronePdfMetadata: { storage_path: 'drafts/contradictory/poster.pdf' } });
+
+    await expect(seedLocalSupabaseFixturesWorker(mock.client)).rejects.toThrow(
+      'Failed to reconcile Medical Drone poster PDF metadata.'
+    );
+    expect(mock.mediaRows.find((row) => row.id === 'f0000000-0000-0000-0000-000000000004')?.file_size_bytes).toBe(346);
+    expect(mock.mediaUpdateRequests).toEqual([
+      { values: { file_size_bytes: 346 }, matchedIds: [] },
+    ]);
   });
 
   it('4. Worker function fails with generic error when public fixture upload fails', async () => {
