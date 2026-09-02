@@ -3,10 +3,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import { captureRecoveryBackup } from '../recovery/captureRecoveryBackup';
+import { compareGate4Evidence } from '../deployment/gate4SchemaEvidence';
+import { installSyntheticTableDefaultAclFixture } from '../recovery/syntheticTableDefaultAclFixture';
 import {
   createDisposableNetwork,
   createDisposableStackIdentity,
   inspectDisposableResidue,
+  preflightDisposablePortBase,
   readDisposableStackEnv,
   removeDisposableResidue,
   residueIsAbsent,
@@ -25,7 +28,7 @@ import {
   seedSyntheticStorageObjects,
 } from '../recovery/syntheticSourceEvidence';
 import { formatRestoreSummary } from './restoreRecoveryBackup';
-import { BUNDLE_PATHS, bundleFile, sha256File } from '../recovery/recoveryBundleStore';
+import { BUNDLE_PATHS, bundleFile, loadRecoveryBundle, sha256File } from '../recovery/recoveryBundleStore';
 import {
   countExpectedManagedTriggersInStandardSchemaDump,
   EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT,
@@ -41,9 +44,6 @@ import {
 } from '../recovery/roleParameterAclCompatibility';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
-const SOURCE_PORT_BASE = 54_820;
-const TARGET_PORT_BASE = 54_940;
-const APPLICATION_PORT = 3_017;
 
 function removeSyntheticBundle(bundleDirectory: string): void {
   const resolved = path.resolve(bundleDirectory);
@@ -88,6 +88,7 @@ async function main(): Promise<void> {
     return;
   }
 
+  const sourcePortBase = await preflightDisposablePortBase();
   const bundleDirectory = fs.mkdtempSync(
     path.join(os.tmpdir(), 'capstone-recovery-synthetic-bundle-'),
   );
@@ -95,8 +96,8 @@ async function main(): Promise<void> {
   const source = createDisposableStackIdentity({
     repositoryRoot,
     mode: 'migrated-source',
-    portBase: SOURCE_PORT_BASE,
-    postgresMajorVersion: 15,
+    portBase: sourcePortBase,
+    postgresMajorVersion: 17,
     tag: 'source',
   });
   let sourceNetworkId = '';
@@ -126,6 +127,13 @@ async function main(): Promise<void> {
     runDisposablePsql(source, { command: buildSyntheticSourceSeedSql(), timeoutMs: 300_000 });
     const seededStorageObjects = await seedSyntheticStorageObjects(sourceClient);
 
+    const sourceBeforeCapture = installSyntheticTableDefaultAclFixture({
+      repositoryRoot,
+      target: { kind: 'local', workdir: source.workdir },
+      sourceKind: 'disposable-local-synthetic',
+      sourceProjectRef: source.projectId,
+    }, source);
+
     const capture = await captureRecoveryBackup({
       repositoryRoot,
       target: { kind: 'local', workdir: source.workdir },
@@ -138,6 +146,10 @@ async function main(): Promise<void> {
       scratchDirectory: path.join(source.workdir, 'scratch'),
       syntheticPlatformParameterAclSource: source,
     });
+    if (compareGate4Evidence(sourceBeforeCapture, loadRecoveryBundle(bundleDirectory).gate4Evidence)
+      .classification !== 'GATE4_MATCH') {
+      throw new Error('SYNTHETIC_CAPTURED_SOURCE_TABLE_ACLS_CHANGED');
+    }
     const schemaDump = fs.readFileSync(
       bundleFile(bundleDirectory, `${BUNDLE_PATHS.database}/schema.sql`),
       'utf8',
@@ -180,11 +192,12 @@ async function main(): Promise<void> {
     sourceStarted = false;
     if (!sourceResidueAbsent) throw new Error('SYNTHETIC_SOURCE_CLEANUP_FAILED');
 
+    const targetPortBase = await preflightDisposablePortBase([sourcePortBase]);
     const restore = await runRestoreVerification({
       repositoryRoot,
       bundleDirectory,
-      portBase: TARGET_PORT_BASE,
-      applicationPort: APPLICATION_PORT,
+      portBase: targetPortBase,
+      applicationPort: sourcePortBase,
       targetPostgresMajorVersion: 17,
       skipApplicationSmoke,
       proveUnalignedManagedAuthReplayFailure: true,
@@ -194,8 +207,13 @@ async function main(): Promise<void> {
     const bundlePreservedThroughRestore = assertBundlePreserved(bundleDirectory);
     const roleArtifactUnchanged = fs.readFileSync(rolesFile).equals(rolesBytesBeforeRestore)
       && fs.readFileSync(manifestFile).equals(manifestBytesBeforeRestore);
-    console.log('SYNTHETIC_SOURCE_POSTGRES_MAJOR = 15');
+    console.log('SYNTHETIC_SOURCE_POSTGRES_MAJOR = 17');
     console.log('SYNTHETIC_TARGET_POSTGRES_MAJOR = 17');
+    console.log('SYNTHETIC_SOURCE_TABLE_DEFAULT_ACL_ENTRIES = 12');
+    console.log('SYNTHETIC_SOURCE_EXISTING_TABLE_ACLS_UNCHANGED = YES');
+    console.log('SYNTHETIC_SOURCE_HIGH_IMPACT_GRANTS = 15');
+    console.log(`SYNTHETIC_TARGET_ONLY_TABLE_GRANTS_REPRODUCED = ${restore.tableGrantPortabilityRevokeCount > 0 ? 'YES' : 'NO'}`);
+    console.log(`SYNTHETIC_SOURCE_REQUIRED_TABLE_GRANTS_PRESERVED = ${restore.tableGrantPortabilityCompatibility === 'REVOKED_KNOWN_TARGET_DEFAULT_ACL_OVERGRANTS' ? 'YES' : 'NO'}`);
     console.log(`SYNTHETIC_STORAGE_OBJECTS_SEEDED = ${seededStorageObjects}`);
     console.log(
       `STANDARD_SCHEMA_DUMP_MANAGED_AUTH_TRIGGERS = ${managedTriggersInStandardSchemaDump}/${EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT}`,
@@ -224,6 +242,11 @@ async function main(): Promise<void> {
       || restore.roleParameterAclCompatibility !== 'NORMALIZED_KNOWN_PLATFORM_ACL'
       || restore.legacyUnnormalizedRoleReplayFailed !== true
       || restore.legacyUnnormalizedRoleReplaySqlState !== PLATFORM_PARAMETER_ACL_DENIED_SQLSTATE
+      || restore.tableGrantPortabilityCompatibility !== 'REVOKED_KNOWN_TARGET_DEFAULT_ACL_OVERGRANTS'
+      || restore.tableGrantPortabilityRevokeCount <= 0
+      || restore.gate4?.sourceComparisonClassification !== 'GATE4_MATCH_CONSTRAINT_RENDERING_PORTABLE'
+      || restore.gate4?.constraintRenderingPairCount !== 5
+      || restore.gate4?.tableGrantsMatch !== true
       || !roleArtifactUnchanged
       || !bundlePreservedThroughRestore
       || !syntheticBundleCleaned) {

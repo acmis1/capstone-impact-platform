@@ -17,7 +17,6 @@ import {
 import {
   compareGate4Evidence,
   validateCurrentRepositoryGate4Contract,
-  type Gate4ComparisonResult,
   type Gate4EvidenceStats,
 } from '../deployment/gate4SchemaEvidence';
 import { collectLocalGate4Evidence } from '../scripts/checkGate4SchemaEvidence';
@@ -92,6 +91,11 @@ import {
   planRoleParameterAclCompatibility,
   type RoleParameterAclCompatibilityPlan,
 } from './roleParameterAclCompatibility';
+import {
+  planTableGrantPortabilityCompatibility,
+  type TableGrantPortabilityPlan,
+} from './tableGrantPortabilityCompatibility';
+import { constraintRenderingDifferencesAreExpected } from './constraintRenderingCompatibility';
 
 /**
  * Phase B: restore a bundle into a disposable local target and verify it.
@@ -104,7 +108,7 @@ import {
 
 export const DEFAULT_RESTORE_PORT_BASE = 54940;
 export const DEFAULT_RESTORE_POSTGRES_MAJOR_VERSION = 17;
-const MAX_CROSS_ENGINE_GATE4_DIFFERENCES = 1_000;
+const MAX_RECOVERY_GATE4_DIFFERENCES = 1_000;
 
 export interface RestoreVerificationOptions {
   repositoryRoot: string;
@@ -129,7 +133,9 @@ export interface Gate4RestoredResult {
   expectedStats: Gate4EvidenceStats | null;
   actualStats: Gate4EvidenceStats | null;
   differences: string[];
-  crossEnginePortabilityNormalization: boolean;
+  constraintRenderingPortabilityNormalization: boolean;
+  constraintRenderingPairCount: number;
+  tableGrantsMatch: boolean;
 }
 
 export interface ApplicationSmokeResult {
@@ -172,6 +178,8 @@ export interface RestoreVerificationResult {
   managedSchemaCustomizationsMatch: boolean;
   managedAuthCompatibility: 'NOT_RUN' | 'MATCH' | 'ALIGNED_KNOWN_DELTA';
   roleParameterAclCompatibility: 'NOT_RUN' | 'MATCH' | 'NORMALIZED_KNOWN_PLATFORM_ACL';
+  tableGrantPortabilityCompatibility: 'NOT_RUN' | TableGrantPortabilityPlan['action'];
+  tableGrantPortabilityRevokeCount: number;
   legacyUnalignedDataReplayFailed: boolean | null;
   legacyUnnormalizedRoleReplayFailed: boolean | null;
   legacyUnnormalizedRoleReplaySqlState: string | null;
@@ -390,6 +398,9 @@ function alignManagedAuthCompatibility(
 
 export function classifyRestoreFailure(error: unknown): RecoveryClassification {
   const code = error instanceof RecoveryGuardError ? error.code : '';
+  if (code.startsWith('TABLE_GRANT_PORTABILITY_COMPATIBILITY_')) {
+    return 'TABLE_GRANT_PORTABILITY_COMPATIBILITY_FAILED';
+  }
   if (code.startsWith('ROLE_PLATFORM_ACL_COMPATIBILITY_')) {
     return 'ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED';
   }
@@ -399,6 +410,39 @@ export function classifyRestoreFailure(error: unknown): RecoveryClassification {
     return 'MANAGED_AUTH_COMPATIBILITY_FAILED';
   }
   return 'RESTORE_FAILED';
+}
+
+/** Schema exists, but data has not been replayed. Re-query exact grant parity after subtraction. */
+export function alignTableGrantPortability(
+  repositoryRoot: string,
+  identity: DisposableStackIdentity,
+  sourceEvidence: unknown,
+): TableGrantPortabilityPlan {
+  const migrations = repositoryMigrationVersions(repositoryRoot);
+  const inspect = () => {
+    try {
+      assertDisposableOwnership(identity);
+      return planTableGrantPortabilityCompatibility(
+        sourceEvidence,
+        collectLocalGate4Evidence(repositoryRoot, identity.projectId),
+        migrations,
+      );
+    } catch (error) {
+      if (error instanceof RecoveryGuardError) throw error;
+      throw new RecoveryGuardError('TABLE_GRANT_PORTABILITY_COMPATIBILITY_QUERY_FAILED');
+    }
+  };
+  const plan = inspect();
+  if (plan.sql === null) return plan;
+  try {
+    runDisposablePsql(identity, { stdinSql: plan.sql, singleTransaction: true });
+  } catch {
+    throw new RecoveryGuardError('TABLE_GRANT_PORTABILITY_COMPATIBILITY_REVOKE_FAILED');
+  }
+  if (inspect().action !== 'MATCH') {
+    throw new RecoveryGuardError('TABLE_GRANT_PORTABILITY_COMPATIBILITY_RECHECK_FAILED');
+  }
+  return plan;
 }
 
 /** Installs only fixed reviewed PP1 DDL after validating the checksum-bound source evidence. */
@@ -438,13 +482,10 @@ async function restoreStorage(
   }
 }
 
-function runGate4(
+export function runGate4(
   repositoryRoot: string,
   identity: DisposableStackIdentity,
   sourceEvidence: unknown,
-  sourceKind: LoadedRecoveryBundle['manifest']['source']['kind'],
-  sourcePostgresMajorVersion: number,
-  targetPostgresMajorVersion: number,
 ): Gate4RestoredResult {
   const restoredEvidence = collectLocalGate4Evidence(repositoryRoot, identity.projectId);
   const contractErrors = validateCurrentRepositoryGate4Contract(
@@ -455,27 +496,27 @@ function runGate4(
   const sourceComparison = compareGate4Evidence(
     restoredEvidence,
     sourceEvidence,
-    MAX_CROSS_ENGINE_GATE4_DIFFERENCES,
+    MAX_RECOVERY_GATE4_DIFFERENCES,
   );
   const sourceContractErrors = validateCurrentRepositoryGate4Contract(
     sourceEvidence,
     repositoryMigrationVersions(repositoryRoot),
   );
-  const crossEnginePortabilityNormalization = crossEngineDifferencesAreExpected({
-    comparison: sourceComparison,
-    sourceContractErrors,
-    sourceKind,
-    sourcePostgresMajorVersion,
-    targetPostgresMajorVersion,
-  });
+  const constraintRenderingPortabilityNormalization = sourceContractErrors.length === 0
+    && contractErrors.length === 0
+    && constraintRenderingDifferencesAreExpected({
+      comparison: sourceComparison,
+      sourceEvidence,
+      restoredEvidence,
+    });
   return {
     selfCheckClassification: contractErrors.length > 0
       ? `EVIDENCE_INVALID:${contractErrors[0]}`
       : selfComparison.classification,
     sourceComparisonClassification: sourceComparison.validationErrors.length > 0
       ? `EVIDENCE_INVALID:${sourceComparison.validationErrors[0]}`
-      : crossEnginePortabilityNormalization
-        ? 'GATE4_MATCH_CROSS_ENGINE_PORTABLE'
+      : constraintRenderingPortabilityNormalization
+        ? 'GATE4_MATCH_CONSTRAINT_RENDERING_PORTABLE'
         : sourceComparison.classification,
     expectedStats: sourceComparison.expectedStats ?? selfComparison.expectedStats ?? null,
     actualStats: sourceComparison.actualStats ?? null,
@@ -483,60 +524,11 @@ function runGate4(
       `${difference.category}:${difference.kind}:${difference.key}`
       + (difference.changedFields?.length ? `:${difference.changedFields.join(',')}` : '')
     )),
-    crossEnginePortabilityNormalization,
+    constraintRenderingPortabilityNormalization,
+    constraintRenderingPairCount: constraintRenderingPortabilityNormalization
+      ? sourceComparison.totalDifferences : 0,
+    tableGrantsMatch: sourceComparison.categoryMatches.TABLE_GRANTS === true,
   };
-}
-
-const EXPECTED_PG15_TO_PG17_CONSTRAINT_RENDERING_KEYS = new Set([
-  'public.participant_preview_notifications.check_participant_preview_notification_transport_reference',
-  'public.public_feed_operations.public_feed_operations_public_id_check',
-  'public.public_feed_version_members.public_feed_version_members_public_id_check',
-  'public.public_feed_versions.public_feed_versions_affected_public_id_check',
-  'public.staff_provisioning_requests.check_staff_provisioning_roles',
-]);
-
-function crossEngineDifferencesAreExpected(input: {
-  comparison: Gate4ComparisonResult;
-  sourceContractErrors: readonly string[];
-  sourceKind: LoadedRecoveryBundle['manifest']['source']['kind'];
-  sourcePostgresMajorVersion: number;
-  targetPostgresMajorVersion: number;
-}): boolean {
-  if (input.sourceKind !== 'disposable-local-synthetic'
-    || input.sourcePostgresMajorVersion !== 15
-    || input.targetPostgresMajorVersion !== 17
-    || input.sourceContractErrors.length > 0
-    || input.comparison.classification !== 'GATE4_DRIFT'
-    || input.comparison.validationErrors.length > 0
-    || input.comparison.totalDifferences !== input.comparison.differences.length) {
-    return false;
-  }
-  const mismatchedCategories = Object.entries(input.comparison.categoryMatches)
-    .filter(([, matches]) => matches === false)
-    .map(([category]) => category);
-  if (mismatchedCategories.some((category) => !['CONSTRAINTS', 'TABLE_GRANTS'].includes(category))) {
-    return false;
-  }
-  for (const difference of input.comparison.differences) {
-    if (difference.category === 'CONSTRAINTS') {
-      if (difference.kind !== 'CHANGED'
-        || difference.changedFields?.join(',') !== 'definition'
-        || !EXPECTED_PG15_TO_PG17_CONSTRAINT_RENDERING_KEYS.has(difference.key)) {
-        return false;
-      }
-      continue;
-    }
-    if (difference.category === 'TABLE_GRANTS') {
-      const privilege = difference.key.split('.').at(-1);
-      if (difference.kind !== 'MISSING'
-        || !['MAINTAIN', 'REFERENCES', 'TRIGGER', 'TRUNCATE'].includes(privilege ?? '')) {
-        return false;
-      }
-      continue;
-    }
-    return false;
-  }
-  return mismatchedCategories.length > 0;
 }
 
 async function probe(url: string): Promise<Response | null> {
@@ -752,7 +744,7 @@ export async function runRestoreVerification(
     repositoryMigrationVersions(options.repositoryRoot),
   );
   if (sourceGate4Errors.length > 0) {
-    throw new RecoveryGuardError(`RECOVERY_BUNDLE_GATE4_EVIDENCE_INVALID:${sourceGate4Errors[0]}`);
+    throw new RecoveryGuardError('RECOVERY_BUNDLE_GATE4_EVIDENCE_INVALID');
   }
 
   const sourcePostgresMajorVersion = bundle.manifest.postgres.majorVersion;
@@ -801,6 +793,8 @@ export async function runRestoreVerification(
   let managedSchemaCustomizationsMatch = false;
   let managedAuthCompatibility: RestoreVerificationResult['managedAuthCompatibility'] = 'NOT_RUN';
   let roleParameterAclCompatibility: RestoreVerificationResult['roleParameterAclCompatibility'] = 'NOT_RUN';
+  let tableGrantPortabilityCompatibility: RestoreVerificationResult['tableGrantPortabilityCompatibility'] = 'NOT_RUN';
+  let tableGrantPortabilityRevokeCount = 0;
   let legacyUnalignedDataReplayFailed: boolean | null = null;
   let legacyUnnormalizedRoleReplayFailed: boolean | null = null;
   let legacyUnnormalizedRoleReplaySqlState: string | null = null;
@@ -863,6 +857,9 @@ export async function runRestoreVerification(
       ? 'MATCH'
       : 'NORMALIZED_KNOWN_PLATFORM_ACL';
     restoreDatabaseSchema(identity, staged);
+    const tableGrantPlan = alignTableGrantPortability(options.repositoryRoot, identity, bundle.gate4Evidence);
+    tableGrantPortabilityCompatibility = tableGrantPlan.action;
+    tableGrantPortabilityRevokeCount = tableGrantPlan.revokeCount;
     const compatibilityInspection = inspectManagedAuthCompatibility(
       identity,
       bundleFile(bundle.directory, `${BUNDLE_PATHS.database}/data.sql`),
@@ -990,12 +987,9 @@ export async function runRestoreVerification(
       options.repositoryRoot,
       identity,
       bundle.gate4Evidence,
-      bundle.manifest.source.kind,
-      sourcePostgresMajorVersion,
-      targetPostgresMajorVersion,
     );
     if (gate4.selfCheckClassification !== 'GATE4_MATCH'
-      || !['GATE4_MATCH', 'GATE4_MATCH_CROSS_ENGINE_PORTABLE']
+      || !['GATE4_MATCH', 'GATE4_MATCH_CONSTRAINT_RENDERING_PORTABLE']
         .includes(gate4.sourceComparisonClassification)) {
       findings.push('GATE4_DRIFT');
       notes.push(
@@ -1093,6 +1087,8 @@ export async function runRestoreVerification(
     managedSchemaCustomizationsMatch,
     managedAuthCompatibility,
     roleParameterAclCompatibility,
+    tableGrantPortabilityCompatibility,
+    tableGrantPortabilityRevokeCount,
     legacyUnalignedDataReplayFailed,
     legacyUnnormalizedRoleReplayFailed,
     legacyUnnormalizedRoleReplaySqlState,

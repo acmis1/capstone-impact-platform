@@ -5,6 +5,8 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as disposableStack from './disposableSupabaseStack';
 import * as gate4SchemaEvidence from '../deployment/gate4SchemaEvidence';
+import * as gate4Collector from '../scripts/checkGate4SchemaEvidence';
+import * as tableGrantCompatibility from './tableGrantPortabilityCompatibility';
 import {
   compareBucketConfiguration,
   compareStorageObjects,
@@ -648,6 +650,9 @@ describe('managed Auth provider-schema compatibility', () => {
       // The full synthetic rehearsal exercises those external boundaries without mocks.
       const gate4 = vi.spyOn(gate4SchemaEvidence, 'validateCurrentRepositoryGate4Contract')
         .mockReturnValue([]);
+      vi.spyOn(gate4Collector, 'collectLocalGate4Evidence').mockReturnValue({});
+      vi.spyOn(tableGrantCompatibility, 'planTableGrantPortabilityCompatibility')
+        .mockReturnValue({ action: 'MATCH', revokeCount: 0, sql: null });
       vi.spyOn(disposableStack, 'createDisposableNetwork').mockReturnValue('unit-network');
       vi.spyOn(disposableStack, 'startDisposableStack').mockImplementation(() => {});
       vi.spyOn(disposableStack, 'stopDisposableStack').mockImplementation(() => {});
@@ -806,6 +811,9 @@ function rewriteBundleArtifact(
 /** Isolates Gate 4 and Docker only; private-path, manifest and checksum validation stay real. */
 function mockDisposableBoundaries() {
   vi.spyOn(gate4SchemaEvidence, 'validateCurrentRepositoryGate4Contract').mockReturnValue([]);
+  vi.spyOn(gate4Collector, 'collectLocalGate4Evidence').mockReturnValue({});
+  vi.spyOn(tableGrantCompatibility, 'planTableGrantPortabilityCompatibility')
+    .mockReturnValue({ action: 'MATCH', revokeCount: 0, sql: null });
   return {
     network: vi.spyOn(disposableStack, 'createDisposableNetwork').mockReturnValue('unit-network'),
     start: vi.spyOn(disposableStack, 'startDisposableStack').mockImplementation(() => {}),
@@ -1240,6 +1248,8 @@ describe('disposable ownership and safe summaries', () => {
       managedSchemaCustomizationsMatch: true,
       managedAuthCompatibility: 'ALIGNED_KNOWN_DELTA',
       roleParameterAclCompatibility: 'NORMALIZED_KNOWN_PLATFORM_ACL',
+      tableGrantPortabilityCompatibility: 'REVOKED_KNOWN_TARGET_DEFAULT_ACL_OVERGRANTS',
+      tableGrantPortabilityRevokeCount: 4,
       legacyUnalignedDataReplayFailed: true,
       legacyUnnormalizedRoleReplayFailed: true,
       legacyUnnormalizedRoleReplaySqlState: '42501',

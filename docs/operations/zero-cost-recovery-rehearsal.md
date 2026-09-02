@@ -236,6 +236,7 @@ and checks:
 - exact source/repository/restored managed-schema evidence (`2/2` Auth, `0/0` Storage,
   `MANAGED_SCHEMA_CUSTOMIZATIONS = MATCH`);
 - provider-global role compatibility (`ROLE_PLATFORM_ACL_COMPATIBILITY`);
+- recovery-only table-grant compatibility (`TABLE_GRANT_PORTABILITY_COMPATIBILITY`);
 - launch guard `staging / 40 / 31 / 1`, reservation count/checksum, and executor registrations;
 - all three bucket configurations and the exact object set, lengths, content types, and SHA-256;
 - current Gate 4 structure: 40 tables, 78 application RPC signatures across 77 names, four
@@ -258,7 +259,8 @@ The repository-owned proof uses no hosted credential or provider call:
 npm run verify:zero-cost-recovery-rehearsal
 ```
 
-It creates a migrated PostgreSQL 15 source, applies the exact reviewed source-ahead Auth column,
+It bind-preflights eight contiguous loopback TCP ports before each disposable stack, then creates
+a migrated PostgreSQL 17 source and applies the exact reviewed source-ahead Auth column. It
 seeds synthetic project/media/audit/participant
 preview/public-feed/assistive/Auth/execution-control evidence plus one object in each canonical
 bucket, asserts that the captured COPY header contains the new column, and makes the synthetic-only
@@ -289,11 +291,52 @@ normalized replay and both schema artifacts then succeed, and that the synthetic
 `roles.sql` bytes and recorded checksum are byte-for-byte unchanged across the whole restore
 (`SYNTHETIC_BUNDLE_ROLE_ARTIFACT_UNCHANGED = YES`).
 
-The current cross-engine proof permits only a bounded PostgreSQL 15-to-17 Gate 4 normalization:
-five known constraint-rendering differences and table-grant vocabulary/`GRANT ALL` effects involving
-`MAINTAIN`, `REFERENCES`, `TRIGGER`, and `TRUNCATE`. Both source and target must independently pass
-the current repository Gate 4 contract, and every other Gate 4 category must match. Real hosted
-PostgreSQL 17-to-17 capture/restore requires exact Gate 4 equality.
+After schema replay and before Auth/data replay, table-grant compatibility compares the validated,
+checksum-bound source against the disposable target. It may revoke only target-only, non-grantable
+`MAINTAIN`, `REFERENCES`, `TRIGGER`, or `TRUNCATE` privileges for `anon`, `authenticated`, or
+`service_role` on the exact public application table inventory. It never grants privileges. A
+missing source-required grant, grantability change, unapproved role/schema/table, malformed
+evidence, or any other extra privilege fails with `TABLE_GRANT_PORTABILITY_COMPATIBILITY_FAILED`.
+All differences are planned before any SQL runs; a transactional revoke is followed by fresh
+catalog collection requiring exact table-grant parity. The validated batch is streamed to psql's
+standard input as `postgres`, retaining `ON_ERROR_STOP` and one transaction. This avoids Windows
+command-line limits: the observed 429-statement batch contained 33,833 characters and failed with
+`ENAMETOOLONG` before psql started. Catalog inspection confirmed that `postgres` was both
+owner and grantor with revoke authority; no role elevation or ownership change is needed. An
+injected mid-transaction failure rolled back the whole batch in the disposable proof. Diagnostics
+contain fixed codes and counts.
+
+The verifier-owned synthetic source establishes the twelve PostgreSQL 17 high-impact default ACL
+entries only after repository migrations have created the historical tables, proves those existing
+table ACLs remain unchanged, and captures through the ordinary recovery path. The rehearsal must
+observe target-only grants after fresh schema replay, revoke only the recognized extras, preserve
+every source-required grant, and retain the checksum-valid bundle unchanged. The fixture requires
+matching disposable ownership marker, workdir, project identity, and running container labels; no
+operator Local or hosted capture option can enable it.
+
+The independent PG17 capture/replay proof observed 15 source high-impact grants, twelve high-impact
+default ACL entries already on the bare target, and 429 target-only grants after schema replay.
+The dump's default-ACL statements occur after table creation; the fresh target's pre-existing
+defaults cause the inherited overgrants. Revoking only those extras preserved all 15 legitimate
+source grants and produced exact parity with zero missing grants.
+
+Post-recovery security follow-up: separately review and harden public table default ACLs. Migration
+`20260719003407` narrows existing table access but its default-ACL revocation names only CRUD
+privileges. This recovery change adds no migration and preserves the 48-migration acceptance source.
+
+The ordinary Gate 4 comparator remains exact. Recovery accepts only the five fixed, directional
+constraint definition pairs in `constraintRenderingCompatibility.ts`, with no version or source-kind
+exemption. Fresh PG17 migrations reproduce the supplied hosted definitions exactly. Replaying the
+ordinary dump on PG17 flattens the nested `AND` grouping introduced by migration `BETWEEN`
+expressions. Only association changes; operands, casts, bounds, regexes, NULL handling, and role
+values remain identical. Existing catalog canonicalization does not erase that inner grouping.
+
+Both definitions must independently match their reviewed form, only `definition` may differ, all
+five known constraints must exist, both repository contracts must pass, and every other Gate 4
+category (including table grants) must match. Arbitrary edits on those keys, missing/extra
+constraints, additional changed fields, and truncated comparisons fail closed. Successful rendering
+portability reports `GATE4_MATCH_CONSTRAINT_RENDERING_PORTABLE` and a bounded pair count; the full
+synthetic rehearsal requires all five actual dump-replay pairs.
 
 ## Timing language
 
