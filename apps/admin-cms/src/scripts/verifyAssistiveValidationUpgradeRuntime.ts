@@ -323,7 +323,7 @@ async function main(): Promise<void> {
       );
       assert.equal(
         psql('SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 1;'),
-        '20260831090000',
+        '20260902010606',
         'restarted Local stack did not retain the Migration 0049 head',
       );
       console.log('PASS: fresh Migration 0049 database and Local service stack restored.');

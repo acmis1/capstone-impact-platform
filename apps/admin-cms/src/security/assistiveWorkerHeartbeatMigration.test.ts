@@ -21,8 +21,9 @@ describe('assistive worker heartbeat migration and deployment boundary', () => {
     expect(() => execFileSync('git', [
       'diff', '--exit-code', 'origin/main', '--',
       ...files.filter((file) => file !== '20260828170000_assistive_execution_control.sql'
-        && file !== '20260831090000_postgres17_maintain_privilege_alignment.sql')
-        .map((file) => `infra/supabase/migrations/${file}`),
+                && file !== '20260831090000_postgres17_maintain_privilege_alignment.sql'
+                && file !== '20260902010606_controlled_project_links_import.sql')
+              .map((file) => `infra/supabase/migrations/${file}`)
     ], { cwd: root, stdio: 'pipe' })).not.toThrow();
   });
 
