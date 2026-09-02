@@ -37,7 +37,7 @@ export function validateProjectControlledUrl(
   if (/[\s\u0000-\u001F\u007F]/.test(trimmed)) {
     return { valid: false, reason: 'UNSAFE_CHARACTERS' };
   }
-  
+
   let parsed: URL;
 
   try {
