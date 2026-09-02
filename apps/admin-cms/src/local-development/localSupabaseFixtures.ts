@@ -139,6 +139,9 @@ export async function seedLocalSupabaseFixturesWorker(client: SupabaseClient): P
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
     'base64'
   );
+  const syntheticPosterPdfBuffer = Buffer.from(
+    '%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n'
+  );
 
   // Upload public fixture
   const publicBucket = 'project-public-assets';
@@ -181,6 +184,51 @@ export async function seedLocalSupabaseFixturesWorker(client: SupabaseClient): P
     throw new Error('Verification failed: Uploaded private fixture object missing.');
   }
   fixturesUploaded.push(`${privateBucket}:${privatePath}`);
+
+  // Upload Medical Drone's approved-but-not-yet-published private media fixtures.
+  const medicalDronePosterImagePath = 'drafts/2026-medical-drone/poster_image/poster.png';
+  const { error: uploadMedicalDroneImageErr } = await client.storage
+    .from(privateBucket)
+    .upload(medicalDronePosterImagePath, syntheticPosterBuffer, { contentType: 'image/png', upsert: true });
+
+  if (uploadMedicalDroneImageErr) {
+    throw new Error('Failed to upload Medical Drone private poster image fixture.');
+  }
+
+  const { data: medicalDroneImageList, error: listMedicalDroneImageErr } = await client.storage
+    .from(privateBucket)
+    .list('drafts/2026-medical-drone/poster_image', { search: 'poster.png' });
+
+  if (
+    listMedicalDroneImageErr ||
+    !medicalDroneImageList ||
+    !medicalDroneImageList.some((file) => file.name === 'poster.png')
+  ) {
+    throw new Error('Verification failed: Uploaded Medical Drone private poster image fixture object missing.');
+  }
+  fixturesUploaded.push(`${privateBucket}:${medicalDronePosterImagePath}`);
+
+  const medicalDronePosterPdfPath = 'drafts/2026-medical-drone/poster_pdf/poster.pdf';
+  const { error: uploadMedicalDronePdfErr } = await client.storage
+    .from(privateBucket)
+    .upload(medicalDronePosterPdfPath, syntheticPosterPdfBuffer, { contentType: 'application/pdf', upsert: true });
+
+  if (uploadMedicalDronePdfErr) {
+    throw new Error('Failed to upload Medical Drone private poster PDF fixture.');
+  }
+
+  const { data: medicalDronePdfList, error: listMedicalDronePdfErr } = await client.storage
+    .from(privateBucket)
+    .list('drafts/2026-medical-drone/poster_pdf', { search: 'poster.pdf' });
+
+  if (
+    listMedicalDronePdfErr ||
+    !medicalDronePdfList ||
+    !medicalDronePdfList.some((file) => file.name === 'poster.pdf')
+  ) {
+    throw new Error('Verification failed: Uploaded Medical Drone private poster PDF fixture object missing.');
+  }
+  fixturesUploaded.push(`${privateBucket}:${medicalDronePosterPdfPath}`);
 
   return { bucketsVerified, fixturesUploaded };
 }
