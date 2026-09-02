@@ -263,7 +263,7 @@ INSERT INTO public.media_assets (id, project_id, asset_type, file_name, storage_
     'drafts/2026-medical-drone/poster_pdf/poster.pdf',
     NULL,
     'application/pdf',
-    77,
+    346,
     false
   )
 ON CONFLICT (id) DO NOTHING;

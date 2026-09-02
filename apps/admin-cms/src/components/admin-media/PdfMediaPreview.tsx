@@ -1,6 +1,3 @@
-'use client';
-
-import { useState } from 'react';
 import { ExternalLink, FileWarning } from 'lucide-react';
 
 import { MediaFileInfo } from './MediaFileInfo';
@@ -15,14 +12,14 @@ interface PdfMediaPreviewProps {
 export function PdfMediaPreview({
   media,
 }: PdfMediaPreviewProps) {
-  const [hasLoaded, setHasLoaded] = useState(false);
-  const [hasError, setHasError] = useState(false);
-
   if (!media.url) {
     return (
       <div role="status" className={MEDIA_PREVIEW_CLASSES.tile}>
         <p className={MEDIA_PREVIEW_CLASSES.stateMessage}>
-          <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <FileWarning
+            className="mt-0.5 h-4 w-4 shrink-0 text-warning"
+            aria-hidden="true"
+          />
           <span>PDF preview is unavailable.</span>
         </p>
         <MediaFileInfo media={media} />
@@ -34,7 +31,10 @@ export function PdfMediaPreview({
     return (
       <div role="alert" className={MEDIA_PREVIEW_CLASSES.tile}>
         <p className={MEDIA_PREVIEW_CLASSES.stateMessage}>
-          <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+          <FileWarning
+            className="mt-0.5 h-4 w-4 shrink-0 text-destructive"
+            aria-hidden="true"
+          />
           <span>Invalid PDF URL.</span>
         </p>
         <MediaFileInfo media={media} />
@@ -60,47 +60,21 @@ export function PdfMediaPreview({
         </a>
       </div>
 
-      {hasError ? (
-        <div role="alert">
-          <p className={MEDIA_PREVIEW_CLASSES.stateMessage}>
-            <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-            <span>Inline PDF preview is unavailable. The file can still be opened in a new tab.</span>
-          </p>
+      <p className={MEDIA_PREVIEW_CLASSES.stateMessage}>
+        For keyboard access or if the inline preview is unavailable, open the PDF in a new tab.
+      </p>
+
+      <div className="hidden sm:block">
+        <div className={MEDIA_PREVIEW_CLASSES.frame}>
+          {/* Native PDF viewers can trap focus and do not reliably report load/error events. */}
+          <iframe
+            src={media.url}
+            title={`PDF preview of ${media.fileName}`}
+            tabIndex={-1}
+            className="block min-h-80 w-full border-0"
+          />
         </div>
-      ) : (
-        <>
-          <p
-            role="status"
-            className={`${MEDIA_PREVIEW_CLASSES.stateMessage} sm:hidden`}
-          >
-            <span>
-              Inline PDF preview may be unavailable on smaller screens. Open the PDF
-              in a new tab instead.
-            </span>
-          </p>
-
-          <div className="hidden sm:block">
-            {!hasLoaded && (
-              <p role="status" className={MEDIA_PREVIEW_CLASSES.stateMessage}>
-                <span>Loading PDF preview...</span>
-              </p>
-            )}
-
-            <div className={MEDIA_PREVIEW_CLASSES.frame}>
-              <iframe
-                src={media.url}
-                title={`PDF preview of ${media.fileName}`}
-                onLoad={() => setHasLoaded(true)}
-                onError={() => {
-                  setHasLoaded(false);
-                  setHasError(true);
-                }}
-                className="block min-h-80 w-full border-0"
-              />
-            </div>
-          </div>
-        </>
-      )}
+      </div>
 
       <MediaFileInfo media={media} />
     </div>
