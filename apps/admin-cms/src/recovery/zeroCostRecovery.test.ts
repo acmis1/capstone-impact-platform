@@ -49,7 +49,7 @@ import {
   resolveClassification,
 } from './zeroCostRecoveryContract';
 import { formatRestoreSummary } from '../scripts/restoreRecoveryBackup';
-import { repositoryMigrationVersions } from './captureRecoveryBackup';
+import { captureRecoveryBackup, repositoryMigrationVersions } from './captureRecoveryBackup';
 import {
   APPLICATION_OWNED_TRIGGER_FUNCTION_SCHEMAS,
   buildApprovedManagedSchemaCustomizationRestoreSql,
@@ -69,6 +69,11 @@ import {
   planManagedAuthSchemaCompatibility,
   type ManagedAuthCatalogColumn,
 } from './managedAuthSchemaCompatibility';
+import {
+  EXPECTED_ROLE_COMPATIBILITY_TARGET_ROLES,
+  KNOWN_PLATFORM_PARAMETER_ACL,
+  planRoleParameterAclCompatibility,
+} from './roleParameterAclCompatibility';
 
 const temporaryDirectories: string[] = [];
 
@@ -771,6 +776,341 @@ COPY auth.custom_oauth_providers (id, identifier, future_unreviewed_column) FROM
   });
 });
 
+const KNOWN_PLATFORM_GRANT = KNOWN_PLATFORM_PARAMETER_ACL.canonicalStatements[0];
+
+/** Minimal shape of a pinned-CLI role-only dump: reserved roles filtered, trailing RESET ALL. */
+function roleDumpFixture(parameterAclStatements: readonly string[] = []): string {
+  return [
+    'SET default_transaction_read_only = off;',
+    'CREATE ROLE "capstone_reporting";',
+    'GRANT "anon" TO "authenticator" WITH INHERIT FALSE GRANTED BY "supabase_admin";',
+    ...parameterAclStatements,
+    'RESET ALL;',
+    '',
+  ].join('\n');
+}
+
+function rewriteBundleArtifact(
+  bundle: ReturnType<typeof buildBundle>,
+  artifact: string,
+  content: Buffer,
+): void {
+  fs.writeFileSync(bundleFile(bundle.directory, `${BUNDLE_PATHS.database}/${artifact}`), content);
+  const recorded = bundle.manifest.database.find((entry) => entry.artifact === artifact);
+  if (!recorded) throw new Error('UNKNOWN_TEST_ARTIFACT');
+  recorded.bytes = content.length;
+  recorded.sha256 = sha256(content);
+  writeJsonArtifact(bundle.directory, BUNDLE_PATHS.manifest, bundle.manifest);
+}
+
+/** Isolates Gate 4 and Docker only; private-path, manifest and checksum validation stay real. */
+function mockDisposableBoundaries() {
+  vi.spyOn(gate4SchemaEvidence, 'validateCurrentRepositoryGate4Contract').mockReturnValue([]);
+  return {
+    network: vi.spyOn(disposableStack, 'createDisposableNetwork').mockReturnValue('unit-network'),
+    start: vi.spyOn(disposableStack, 'startDisposableStack').mockImplementation(() => {}),
+    stop: vi.spyOn(disposableStack, 'stopDisposableStack').mockImplementation(() => {}),
+    staging: vi.spyOn(disposableStack, 'prepareDisposableContainerStaging')
+      .mockReturnValue('/tmp/recovery'),
+    copied: vi.spyOn(disposableStack, 'copyFileIntoDisposableContainer').mockImplementation(() => {}),
+    cleanup: vi.spyOn(disposableStack, 'removeDisposableResidue').mockImplementation((identity) => {
+      temporaryDirectories.push(identity.workdir);
+    }),
+    residue: vi.spyOn(disposableStack, 'inspectDisposableResidue').mockReturnValue({
+      containers: [], volumes: [], networks: [], workdirPresent: false,
+    }),
+    stdout: vi.spyOn(process.stdout, 'write').mockReturnValue(true),
+    stderr: vi.spyOn(process.stderr, 'write').mockReturnValue(true),
+  };
+}
+
+describe('provider-global role parameter ACL restore path', () => {
+  it('keeps roles.sql checksum validation authoritative before compatibility parsing', () => {
+    const bundle = buildBundle();
+    fs.appendFileSync(
+      bundleFile(bundle.directory, `${BUNDLE_PATHS.database}/roles.sql`),
+      `\n${KNOWN_PLATFORM_GRANT}\n`,
+    );
+    expect(() => loadRecoveryBundle(bundle.directory))
+      .toThrowError('RECOVERY_BUNDLE_ARTIFACT_CORRUPTED:roles.sql');
+  });
+
+  it('refuses an unreviewed provider parameter ACL before any disposable target starts', async () => {
+    const bundle = buildBundle();
+    const sensitiveToken = `SECRETTOKEN_${randomBytes(16).toString('hex').toUpperCase()}`;
+    const content = Buffer.from(roleDumpFixture([
+      `GRANT SET ON PARAMETER "${sensitiveToken}" TO "supabase_realtime_admin";`,
+    ]), 'utf8');
+    rewriteBundleArtifact(bundle, 'roles.sql', content);
+    const rolesFile = bundleFile(bundle.directory, `${BUNDLE_PATHS.database}/roles.sql`);
+    const manifestFile = bundleFile(bundle.directory, BUNDLE_PATHS.manifest);
+    const manifestBefore = fs.readFileSync(manifestFile);
+    const boundaries = mockDisposableBoundaries();
+    const psql = vi.spyOn(disposableStack, 'runDisposablePsql').mockReturnValue('');
+
+    const result = await runRestoreVerification({
+      repositoryRoot: path.resolve(__dirname, '../../../..'),
+      bundleDirectory: bundle.directory,
+    });
+
+    expect(result.classification).toBe('ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED');
+    expect(result.roleParameterAclCompatibility).toBe('NOT_RUN');
+    expect(result.findings).toEqual(['ROLE_PLATFORM_ACL_COMPATIBILITY_STATEMENT_UNSUPPORTED']);
+    // No target was created, started, staged, or replayed against.
+    expect(boundaries.network).not.toHaveBeenCalled();
+    expect(boundaries.start).not.toHaveBeenCalled();
+    expect(boundaries.staging).not.toHaveBeenCalled();
+    expect(boundaries.copied).not.toHaveBeenCalled();
+    expect(psql).not.toHaveBeenCalled();
+    expect(boundaries.cleanup).toHaveBeenCalledOnce();
+
+    const summary = formatRestoreSummary(result, assertBundlePreserved(bundle.directory));
+    expect(summary.includes(sensitiveToken)).toBe(false);
+    expect(summary).toContain('ROLE_PLATFORM_ACL_COMPATIBILITY = NOT_RUN');
+    expect(summary).toContain('FINDING = ROLE_PLATFORM_ACL_COMPATIBILITY_STATEMENT_UNSUPPORTED');
+    expect(JSON.stringify([
+      ...boundaries.stdout.mock.calls,
+      ...boundaries.stderr.mock.calls,
+    ]).includes(sensitiveToken)).toBe(false);
+    expect(fs.readFileSync(rolesFile).equals(content)).toBe(true);
+    expect(fs.readFileSync(manifestFile).equals(manifestBefore)).toBe(true);
+  });
+
+  it('replays a verifier-owned normalized copy and never rewrites the bundle', async () => {
+    const bundle = buildBundle();
+    const content = Buffer.from(roleDumpFixture([KNOWN_PLATFORM_GRANT]), 'utf8');
+    rewriteBundleArtifact(bundle, 'roles.sql', content);
+    const rolesFile = bundleFile(bundle.directory, `${BUNDLE_PATHS.database}/roles.sql`);
+    const manifestFile = bundleFile(bundle.directory, BUNDLE_PATHS.manifest);
+    const manifestBefore = fs.readFileSync(manifestFile);
+    const boundaries = mockDisposableBoundaries();
+    const psql = vi.spyOn(disposableStack, 'runDisposablePsql')
+      .mockImplementation((_identity, options) => (
+        options.command?.includes('pg_parameter_acl')
+          ? JSON.stringify({
+            roles: EXPECTED_ROLE_COMPATIBILITY_TARGET_ROLES,
+            knownParameterAclRowCount: 0,
+          })
+          : ''
+      ));
+
+    const result = await runRestoreVerification({
+      repositoryRoot: path.resolve(__dirname, '../../../..'),
+      bundleDirectory: bundle.directory,
+    });
+
+    expect(result.roleParameterAclCompatibility).toBe('NORMALIZED_KNOWN_PLATFORM_ACL');
+    const schemaReplay = psql.mock.calls.find((call) => (call[1].files ?? []).length === 3);
+    expect(schemaReplay?.[1].files).toEqual([
+      '/tmp/recovery/roles.normalized.sql',
+      '/tmp/recovery/schema.sql',
+      '/tmp/recovery/migrations-schema.sql',
+    ]);
+    const staged = boundaries.copied.mock.calls
+      .find((call) => call[2] === '/tmp/recovery/roles.normalized.sql');
+    expect(staged).toBeDefined();
+    const normalizedHostFile = (staged as unknown as [unknown, string, string])[1];
+    // The normalized artifact is verifier-owned and lives only inside the disposable workdir.
+    expect(normalizedHostFile.includes('capstone-recovery-')).toBe(true);
+    expect(fs.readFileSync(normalizedHostFile, 'utf8'))
+      .toBe(planRoleParameterAclCompatibility(content.toString('utf8')).normalizedRolesSql);
+    expect(fs.readFileSync(rolesFile).equals(content)).toBe(true);
+    expect(fs.readFileSync(manifestFile).equals(manifestBefore)).toBe(true);
+    expect(formatRestoreSummary(result, assertBundlePreserved(bundle.directory)))
+      .toContain('ROLE_PLATFORM_ACL_COMPATIBILITY = NORMALIZED_KNOWN_PLATFORM_ACL');
+  });
+
+  it.each([
+    ['an unsupported parameter ACL hidden behind bare CR',
+      ['-- heading\rGRANT ALTER SYSTEM ON PARAMETER "log_min_messages" TO "supabase_realtime_admin";'],
+      'ROLE_PLATFORM_ACL_COMPATIBILITY_STATEMENT_UNSUPPORTED'],
+    ['a session authorization switch hidden behind bare CR',
+      ['-- heading\rSET SESSION AUTHORIZATION "postgres";'],
+      'ROLE_PLATFORM_ACL_COMPATIBILITY_GRANTOR_SWITCH_UNSUPPORTED'],
+    ['an ACL after a bare-CR comment and ordinary literal carrying a fake canonical grant',
+      ["-- heading\rALTER ROLE \"capstone_reporting\" SET \"note\" TO ';",
+        KNOWN_PLATFORM_GRANT,
+        "-- literal\r'; GRANT ALTER SYSTEM ON PARAMETER \"log_min_messages\" TO \"supabase_realtime_admin\";"],
+      'ROLE_PLATFORM_ACL_COMPATIBILITY_STATEMENT_UNSUPPORTED'],
+    ['an ACL after a bare-CR comment and escape literal carrying a fake canonical grant',
+      ["-- heading\rALTER ROLE \"capstone_reporting\" SET \"note\" TO E';",
+        KNOWN_PLATFORM_GRANT,
+        "-- literal\r'; GRANT ALTER SYSTEM ON PARAMETER \"log_min_messages\" TO \"supabase_realtime_admin\";"],
+      'ROLE_PLATFORM_ACL_COMPATIBILITY_STATEMENT_UNSUPPORTED'],
+    ['an ACL after a bare-CR comment and dollar literal carrying a fake canonical grant',
+      ['-- heading\rALTER ROLE "capstone_reporting" SET "note" TO $body$;',
+        KNOWN_PLATFORM_GRANT,
+        '-- literal\r$body$; GRANT ALTER SYSTEM ON PARAMETER "log_min_messages" TO "supabase_realtime_admin";'],
+      'ROLE_PLATFORM_ACL_COMPATIBILITY_STATEMENT_UNSUPPORTED'],
+    ['an unterminated literal opened after a bare-CR comment carrying a fake canonical grant',
+      ["-- heading\rALTER ROLE \"capstone_reporting\" SET \"note\" TO ';", KNOWN_PLATFORM_GRANT],
+      'ROLE_PLATFORM_ACL_COMPATIBILITY_UNTERMINATED_LITERAL'],
+    ['a real parameter ACL hidden behind nested block comments',
+      ["/* outer /* inner */ ' */",
+        'GRANT SET ON PARAMETER "statement_timeout"',
+        '  TO "supabase_realtime_admin";',
+        "/* ' */"],
+      'ROLE_PLATFORM_ACL_COMPATIBILITY_STATEMENT_UNSUPPORTED'],
+    ['a real parameter ACL between valid escape-string literals',
+      ["ALTER ROLE \"capstone_reporting\" SET \"note_a\" TO E'can\\'t';",
+        'GRANT SET ON PARAMETER "wal_level" TO "postgres";',
+        "ALTER ROLE \"capstone_reporting\" SET \"note_b\" TO E'can\\'t';"],
+      'ROLE_PLATFORM_ACL_COMPATIBILITY_STATEMENT_UNSUPPORTED'],
+    ['a real parameter ACL beside dollar-quoted role data',
+      ['ALTER ROLE "capstone_reporting" SET "note_c" TO $$one; two;$$;',
+        'GRANT SET ON PARAMETER "wal_level" TO "postgres";'],
+      'ROLE_PLATFORM_ACL_COMPATIBILITY_STATEMENT_UNSUPPORTED'],
+    ['a grantor switch split across physical lines',
+      ['SET SESSION', 'AUTHORIZATION "postgres";', KNOWN_PLATFORM_GRANT],
+      'ROLE_PLATFORM_ACL_COMPATIBILITY_GRANTOR_SWITCH_UNSUPPORTED'],
+    ['a grantor switch separated by a block comment',
+      ['SET SESSION', '/* provider */', 'AUTHORIZATION "postgres";', KNOWN_PLATFORM_GRANT],
+      'ROLE_PLATFORM_ACL_COMPATIBILITY_GRANTOR_SWITCH_UNSUPPORTED'],
+    ['an unterminated dollar-quoted role setting',
+      ['ALTER ROLE "capstone_reporting" SET "note_d" TO $body$one;'],
+      'ROLE_PLATFORM_ACL_COMPATIBILITY_UNTERMINATED_LITERAL'],
+  ])('refuses %s before Docker, staging or replay', async (_label, statements, expectedCode) => {
+    const bundle = buildBundle();
+    const content = Buffer.from(roleDumpFixture(statements), 'utf8');
+    rewriteBundleArtifact(bundle, 'roles.sql', content);
+    const manifestFile = bundleFile(bundle.directory, BUNDLE_PATHS.manifest);
+    const manifestBefore = fs.readFileSync(manifestFile);
+    const boundaries = mockDisposableBoundaries();
+    const psql = vi.spyOn(disposableStack, 'runDisposablePsql').mockReturnValue('');
+
+    const result = await runRestoreVerification({
+      repositoryRoot: path.resolve(__dirname, '../../../..'),
+      bundleDirectory: bundle.directory,
+    });
+
+    expect(result.classification).toBe('ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED');
+    expect(result.roleParameterAclCompatibility).toBe('NOT_RUN');
+    expect(result.findings).toEqual([expectedCode]);
+    expect(boundaries.network).not.toHaveBeenCalled();
+    expect(boundaries.start).not.toHaveBeenCalled();
+    expect(boundaries.staging).not.toHaveBeenCalled();
+    expect(boundaries.copied).not.toHaveBeenCalled();
+    expect(psql).not.toHaveBeenCalled();
+    expect(fs.readFileSync(bundleFile(bundle.directory, `${BUNDLE_PATHS.database}/roles.sql`))
+      .equals(content)).toBe(true);
+    expect(fs.readFileSync(manifestFile).equals(manifestBefore)).toBe(true);
+  });
+
+  it('stays distinguishable from an ordinary schema.sql psql failure', () => {
+    expect(classifyRestoreFailure(
+      new RecoveryGuardError('ROLE_PLATFORM_ACL_COMPATIBILITY_DUPLICATE'),
+    )).toBe('ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED');
+    expect(classifyRestoreFailure(new RecoveryGuardError('RESTORE_SCHEMA_SQL_FAILED')))
+      .toBe('RESTORE_SCHEMA_FAILED');
+    // The role phase stops earlier than schema replay, so it outranks it.
+    expect(resolveClassification(['RESTORE_SCHEMA_FAILED', 'ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED']))
+      .toBe('ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED');
+    expect(resolveClassification(['ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED', 'CLEANUP_FAILED']))
+      .toBe('CLEANUP_FAILED');
+    expect(resolveClassification(['ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED']))
+      .not.toBe('ZERO_COST_RECOVERY_REHEARSAL_VERIFIED');
+  });
+});
+
+describe('synthetic platform parameter ACL source isolation', () => {
+  const repositoryRoot = path.resolve(__dirname, '../../../..');
+
+  /** A capture whose caller claims a disposable synthetic source in every caller-controlled way. */
+  function syntheticCapture(input: {
+    targetWorkdir: string;
+    sourceProjectRef: string;
+    outputDirectory: string;
+    syntheticSource: disposableStack.DisposableStackIdentity;
+  }) {
+    return captureRecoveryBackup({
+      repositoryRoot,
+      target: { kind: 'local', workdir: input.targetWorkdir },
+      sourceKind: 'disposable-local-synthetic',
+      sourceProjectRef: input.sourceProjectRef,
+      environmentLabel: 'disposable-local-synthetic',
+      outputDirectory: input.outputDirectory,
+      storageApiUrl: 'http://127.0.0.1:54321',
+      storageServiceKey: 'synthetic-service-key',
+      scratchDirectory: path.join(input.targetWorkdir, 'scratch'),
+      syntheticPlatformParameterAclSource: input.syntheticSource,
+    });
+  }
+
+  function ownedDisposableSource(): disposableStack.DisposableStackIdentity {
+    const identity = createDisposableStackIdentity({
+      repositoryRoot,
+      mode: 'bare-restore-target',
+      portBase: 54_960,
+      postgresMajorVersion: 17,
+      tag: 'unit',
+    });
+    temporaryDirectories.push(identity.workdir);
+    return identity;
+  }
+
+  it('refuses an ordinary operator Local stack that only claims the synthetic source kind', async () => {
+    // A caller-constructed identity over an ordinary local workdir: right shape, no ownership.
+    const workdir = temporaryDirectory('capstone-operator-local-');
+    const projectId = 'capstone-pp1-recovery-source-abcdef12';
+    const outputDirectory = temporaryDirectory();
+    await expect(syntheticCapture({
+      targetWorkdir: workdir,
+      sourceProjectRef: projectId,
+      outputDirectory,
+      syntheticSource: {
+        projectId,
+        networkName: `${projectId}-loopback`,
+        portBase: 54_820,
+        workdir,
+        databaseContainer: `supabase_db_${projectId}`,
+      },
+    })).rejects.toThrowError('SYNTHETIC_PLATFORM_PARAMETER_ACL_SOURCE_NOT_OWNED');
+    // Refused before the bundle directory, any dump, or any checksum exists.
+    expect(fs.readdirSync(outputDirectory)).toEqual([]);
+  });
+
+  it('refuses a capture of some other workdir than the owned disposable source', async () => {
+    const identity = ownedDisposableSource();
+    const outputDirectory = temporaryDirectory();
+    await expect(syntheticCapture({
+      targetWorkdir: temporaryDirectory('capstone-operator-local-'),
+      sourceProjectRef: identity.projectId,
+      outputDirectory,
+      syntheticSource: identity,
+    })).rejects.toThrowError('SYNTHETIC_PLATFORM_PARAMETER_ACL_SOURCE_NOT_OWNED');
+    expect(fs.readdirSync(outputDirectory)).toEqual([]);
+  });
+
+  it('refuses a capture recorded under a different project identity', async () => {
+    const identity = ownedDisposableSource();
+    const outputDirectory = temporaryDirectory();
+    await expect(syntheticCapture({
+      targetWorkdir: identity.workdir,
+      sourceProjectRef: 'capstone-pp1-recovery-source-abcdef12',
+      outputDirectory,
+      syntheticSource: identity,
+    })).rejects.toThrowError('SYNTHETIC_PLATFORM_PARAMETER_ACL_SOURCE_NOT_OWNED');
+    expect(fs.readdirSync(outputDirectory)).toEqual([]);
+  });
+
+  it('refuses when the running source database container is not verifier-owned', async () => {
+    const identity = ownedDisposableSource();
+    const outputDirectory = temporaryDirectory();
+    const containerOwnership = vi.spyOn(disposableStack, 'assertDatabaseContainerOwned')
+      .mockImplementation(() => {
+        throw new Error('DISPOSABLE_DATABASE_OWNERSHIP_UNPROVEN');
+      });
+    await expect(syntheticCapture({
+      targetWorkdir: identity.workdir,
+      sourceProjectRef: identity.projectId,
+      outputDirectory,
+      syntheticSource: identity,
+    })).rejects.toThrowError('SYNTHETIC_PLATFORM_PARAMETER_ACL_SOURCE_NOT_OWNED');
+    expect(containerOwnership).toHaveBeenCalledWith(identity);
+    expect(fs.readdirSync(outputDirectory)).toEqual([]);
+  });
+});
+
 describe('Storage and failure classifications', () => {
   it('detects missing, extra, changed and wrong-bucket objects without returning keys', () => {
     const original = objectRecord('project-drafts-private', 'private/person-key.png', Buffer.from('one'));
@@ -899,7 +1239,10 @@ describe('disposable ownership and safe summaries', () => {
       expectedManagedStorageCustomizationCount: 0,
       managedSchemaCustomizationsMatch: true,
       managedAuthCompatibility: 'ALIGNED_KNOWN_DELTA',
+      roleParameterAclCompatibility: 'NORMALIZED_KNOWN_PLATFORM_ACL',
       legacyUnalignedDataReplayFailed: true,
+      legacyUnnormalizedRoleReplayFailed: true,
+      legacyUnnormalizedRoleReplaySqlState: '42501',
       managedAuthBehaviorVerified: true,
       bucketSummaries: ['project-drafts-private: 1 objects, 12 bytes, root abcdef123456'],
       gate4: null,

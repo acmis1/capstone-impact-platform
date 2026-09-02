@@ -287,7 +287,7 @@ export function assertDisposableOwnership(identity: DisposableStackIdentity): vo
   }
 }
 
-function assertDatabaseContainerOwned(identity: DisposableStackIdentity): void {
+export function assertDatabaseContainerOwned(identity: DisposableStackIdentity): void {
   assertDisposableOwnership(identity);
   const inspected = docker([
     'inspect', '--format', `{{ index .Config.Labels "com.supabase.cli.project" }}|{{.Name}}`,
@@ -389,6 +389,11 @@ export interface PsqlOptions {
   timeoutMs?: number;
   /** Fixed managed-service owner used only for reviewed compatibility SQL. */
   databaseUser?: 'postgres' | 'supabase_auth_admin';
+  /**
+   * Makes psql print the SQLSTATE with each error. Used only by the synthetic role-compatibility
+   * regression, which retains the fixed-width code and discards the rest of the output.
+   */
+  verboseErrors?: boolean;
 }
 
 const APPROVED_MANAGED_AUTH_OWNER_COMMANDS = new Set([
@@ -427,6 +432,7 @@ export function runDisposablePsql(
     args.push('-h', '127.0.0.1');
     environment.PGPASSWORD = readDisposableAuthDatabasePassword(identity);
   }
+  if (options.verboseErrors) args.push('-v', 'VERBOSITY=verbose');
   if (options.singleTransaction) args.push('--single-transaction');
   if (options.command) args.push('--command', options.command);
   for (const file of options.files ?? []) args.push('--file', file);

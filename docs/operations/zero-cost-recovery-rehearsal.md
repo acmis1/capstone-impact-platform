@@ -88,6 +88,58 @@ SHA-256, content type, last-modified evidence, and provider version/eTag when av
 summaries print only canonical bucket names, counts, byte totals, and checksum-root prefixes; they
 do not print object keys.
 
+Before `roles.sql` is replayed, and only after every recorded artifact checksum has been
+re-derived, the verifier structurally inspects the captured role dump for provider-global
+`pg_parameter_acl` state. A hosted Supabase cluster carries platform-owned parameter ACLs;
+`pg_dumpall --roles-only` reproduces them, and Local's intentionally non-superuser `postgres`
+cannot replay one, so the whole schema phase aborts with SQLSTATE `42501` before `schema.sql` is
+reached. The only reviewed provider-global difference is:
+
+```sql
+GRANT SET ON PARAMETER "log_min_messages" TO "supabase_realtime_admin";
+```
+
+Supabase's own delta tooling classifies exactly these `log_min_messages` grants
+(`supabase_admin` SET/ALTER SYSTEM, `supabase_realtime_admin` SET) as platform state and drops
+them for non-superuser replay, so this is provider-managed cluster state that a fresh self-hosted
+target does not carry and must not be made to carry. The compatibility action is therefore
+normalization, never recreation: the verifier never replays the role dump as a superuser, never
+grants `postgres` SUPERUSER, and never grants a parameter ACL or grant option.
+
+Both the pinned CLI form above (`pg_dumpall --quote-all-identifier` quotes every identifier) and
+the unquoted plain-`pg_dumpall` spelling of the same statement are accepted. Everything else fails
+closed as `ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED`: another parameter, another grantee, another
+privilege, `ALTER SYSTEM`, `ALL`, `WITH GRANT OPTION`, any `REVOKE ... ON PARAMETER`, any
+`SET SESSION AUTHORIZATION` grantor switch, duplicates, trailing SQL, and comment or token
+variants. That classification is distinct from an ordinary `schema.sql` failure, and it stops the
+run before a disposable target is even started.
+
+Detection reads complete top-level statements, not physical lines. The role dump is first scanned
+under a bounded PostgreSQL lexical model that understands ordinary strings, `E` escape strings with
+backslash escaping, quoted identifiers, line comments, nested block comments, and both untagged and
+tagged dollar-quoted strings, each of which may span lines in either an LF or a CRLF dump. A
+semicolon inside any of them is role data, not a statement terminator, so a grant spelled inside a
+role setting value or a comment stays ordinary role data and a real grant cannot be hidden inside
+one. Both the parameter-ACL check and the grantor-switch check therefore see the same statement
+however its tokens are spread across lines or separated by comments. Anything the model cannot
+account for refuses rather than guesses: unterminated lexical state of any kind, and the one
+construct whose containment would depend on `standard_conforming_strings` — an ordinary string
+whose quote is preceded by an odd backslash run. The reviewed grant is normalized only when one
+complete top-level statement is byte-identical to a canonical spelling and occupies a whole
+physical line, which is also what lets normalization replace that statement and leave every other
+byte, including the line terminator, exactly as captured.
+
+When the reviewed grant is present, the verifier first checks the disposable target catalog: a
+non-superuser `postgres`, a superuser `supabase_admin`, a `supabase_realtime_admin` that is
+neither, and no existing `log_min_messages` parameter ACL. Any other target state fails closed, so
+an unexpected target ACL is never overwritten. It then writes a temporary verifier-owned normalized
+copy inside the disposable workdir, identical to the checksum-validated artifact except that the one
+reviewed statement is replaced by a fixed comment, and replays that copy instead. The private
+bundle, its manifest, its recorded checksums, and its SQL artifacts are never written; the normalized
+copy is removed with the rest of the disposable target. Summaries report
+`ROLE_PLATFORM_ACL_COMPATIBILITY = MATCH` or `NORMALIZED_KNOWN_PLATFORM_ACL` and never print
+captured role text.
+
 The logical dump preserves supported Auth database state. Verification reports only source and
 restored user/identity counts plus orphan-identity integrity; it never prints UUIDs, emails,
 password hashes, identity payloads, or performs a copied-user login.
@@ -172,10 +224,10 @@ npm run restore:recovery-backup -- \
 The verifier creates a fresh PostgreSQL 17 disposable target. Schema and data are separate
 `ON_ERROR_STOP`/single-transaction phases; a data failure can leave the schema phase committed only
 inside the verifier-owned disposable target. Any failure blocks VERIFIED, and mandatory cleanup
-removes that partial target. Diagnostics distinguish `RESTORE_SCHEMA_FAILED`,
-`MANAGED_AUTH_COMPATIBILITY_FAILED`, and `RESTORE_DATA_FAILED`. It then restores only approved PP1
-managed-schema customizations,
-restores Storage through the API, and checks:
+removes that partial target. Diagnostics distinguish `ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED`,
+`RESTORE_SCHEMA_FAILED`, `MANAGED_AUTH_COMPATIBILITY_FAILED`, and `RESTORE_DATA_FAILED`. It
+then restores only approved PP1 managed-schema customizations, restores Storage through the API,
+and checks:
 
 - all 48 migrations and latest migration;
 - 37 public application tables plus three execution-control tables;
@@ -183,6 +235,7 @@ restores Storage through the API, and checks:
 - Auth user/identity counts and zero orphan identities;
 - exact source/repository/restored managed-schema evidence (`2/2` Auth, `0/0` Storage,
   `MANAGED_SCHEMA_CUSTOMIZATIONS = MATCH`);
+- provider-global role compatibility (`ROLE_PLATFORM_ACL_COMPATIBILITY`);
 - launch guard `staging / 40 / 31 / 1`, reservation count/checksum, and executor registrations;
 - all three bucket configurations and the exact object set, lengths, content types, and SHA-256;
 - current Gate 4 structure: 40 tables, 78 application RPC signatures across 77 names, four
@@ -215,6 +268,26 @@ contains `0/2` PP1 Auth triggers, captures their separate structural evidence, a
 reviewed provider delta, restores them to PostgreSQL 17, verifies exact structure and bounded synthetic
 INSERT/UPDATE metadata-stripping behavior, runs all remaining verification and the application
 smoke, and cleans both stacks and the synthetic bundle.
+
+The same run also reproduces the hosted provider-global parameter ACL. Only a superuser can
+`GRANT ... ON PARAMETER`, so a disposable local source cannot create that cluster-global state
+naturally, and manufacturing it must never widen production privileged execution. The rehearsal
+therefore rewrites the captured role artifact before the synthetic manifest and checksums exist, so
+the finished bundle is checksum-valid and reaches the real production restore path. The fixture is
+bound to the disposable stack itself, not to an option: capture accepts it only when it is handed
+the running verifier-owned source identity, when the capture is reading exactly that stack's
+workdir under the temporary root, when the workdir carries that stack's ownership marker, when the
+recorded project identity is that stack's, and when the source database container is one the
+Supabase CLI labelled with the same identity. An operator Local stack, a chosen project name, and a
+chosen source kind satisfy none of that, and the check runs before the bundle directory, any dump,
+or any checksum exists — so no real capture can reach the fixture. It then proves
+that replaying the unnormalized captured role artifact into a fresh disposable PostgreSQL 17 target
+genuinely fails with SQLSTATE `42501`
+(`LEGACY_UNNORMALIZED_ROLE_REPLAY_FAILED = YES`), that the production planner selects only the
+reviewed grant (`ROLE_PLATFORM_ACL_COMPATIBILITY = NORMALIZED_KNOWN_PLATFORM_ACL`), that the
+normalized replay and both schema artifacts then succeed, and that the synthetic bundle's
+`roles.sql` bytes and recorded checksum are byte-for-byte unchanged across the whole restore
+(`SYNTHETIC_BUNDLE_ROLE_ARTIFACT_UNCHANGED = YES`).
 
 The current cross-engine proof permits only a bounded PostgreSQL 15-to-17 Gate 4 normalization:
 five known constraint-rendering differences and table-grant vocabulary/`GRANT ALL` effects involving
