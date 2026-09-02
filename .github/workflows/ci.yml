@@ -172,7 +172,7 @@ jobs:
 
       # Owns independent synthetic source/restore stacks, loopback networks, volumes, temporary
       # workdirs and bundle. No hosted credential or external Supabase project is available here.
-      - name: Verify synthetic PostgreSQL 15 to 17 zero-cost recovery
+      - name: Verify synthetic PostgreSQL 17 to 17 zero-cost recovery
         run: npm run verify:zero-cost-recovery-rehearsal
         env:
           SUPABASE_START_TIMEOUT_MS: '900000'
