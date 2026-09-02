@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { runDisposablePsql, type DisposableStackIdentity } from './disposableSupabaseStack';
+import { preflightDisposablePortBase, runDisposablePsql, type DisposableStackIdentity } from './disposableSupabaseStack';
 import { ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL } from './managedAuthSchemaCompatibility';
 
 vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }));
@@ -12,6 +13,7 @@ vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }));
 const directories: string[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.resetAllMocks();
   vi.unstubAllEnvs();
   for (const directory of directories.splice(0)) fs.rmSync(directory, { recursive: true });
@@ -95,6 +97,7 @@ describe('disposable Auth-owner password forwarding', () => {
     { command: `${ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL}\nSELECT 1;` },
     { files: ['/tmp/capstone-recovery/arbitrary.sql'] },
     { singleTransaction: false },
+    { stdinSql: ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL },
   ])('refuses any relaxation of the fixed Auth-owner command contract (%#)', (change) => {
     const identity = ownedDocker(randomBytes(32).toString('hex'));
     expect(() => runDisposablePsql(identity, { ...allowedOptions, ...change }))
@@ -116,4 +119,67 @@ describe('disposable Auth-owner password forwarding', () => {
       expect(vi.mocked(execFileSync).mock.calls.some((call) => call[1]?.[0] === 'exec')).toBe(false);
     }
   });
+});
+
+describe('atomic postgres SQL transport', () => {
+  it('streams a batch beyond the Windows argv limit without putting SQL in argv', () => {
+    const identity = ownedDocker('unused');
+    const stdinSql = 'REVOKE MAINTAIN ON TABLE "public"."admin_users" FROM "anon";\n'.repeat(700);
+    expect(stdinSql.length).toBeGreaterThan(32_767);
+    const inspect = vi.mocked(execFileSync).getMockImplementation()!;
+    vi.mocked(execFileSync).mockImplementation((...args) => {
+      if (args[1]?.[0] === 'exec' && JSON.stringify(args[1]).length > 32_767) {
+        throw Object.assign(new Error('spawnSync docker ENAMETOOLONG'), { code: 'ENAMETOOLONG' });
+      }
+      return inspect(...args);
+    });
+    expect(() => runDisposablePsql(identity, { command: stdinSql, singleTransaction: true }))
+      .toThrowError('ENAMETOOLONG');
+    runDisposablePsql(identity, { stdinSql, singleTransaction: true });
+    const call = vi.mocked(execFileSync).mock.calls.at(-1)!;
+    expect(call[1]).toEqual(['exec', '-i', identity.databaseContainer, 'psql', '-U', 'postgres',
+      '-d', 'postgres', '-X', '-v', 'ON_ERROR_STOP=1', '--single-transaction', '--file', '-']);
+    expect(call[2]).toMatchObject({ input: stdinSql, stdio: ['pipe', 'pipe', 'pipe'] });
+  });
+
+  it.each([
+    { singleTransaction: false }, { command: 'SELECT 1;' }, { files: ['/tmp/other.sql'] },
+  ])('rejects non-atomic or mixed stdin execution (%#)', (change) => {
+    const identity = ownedDocker('unused');
+    expect(() => runDisposablePsql(identity, { stdinSql: 'SELECT 1;', singleTransaction: true, ...change }))
+      .toThrowError('DISPOSABLE_PSQL_STDIN_OPTIONS_NOT_APPROVED');
+    expect(vi.mocked(execFileSync).mock.calls.some((call) => call[1]?.[0] === 'exec')).toBe(false);
+  });
+});
+
+it('rejects an entire port block on any failed bind and releases all eight accepted listeners', async () => {
+  const attempted: number[] = [];
+  const released: number[] = [];
+  const output = vi.spyOn(console, 'log').mockImplementation(() => {});
+  vi.spyOn(net, 'createServer').mockImplementation(() => {
+    let onError: (error: Error) => void;
+    let boundPort = 0;
+    const listener = {
+      listening: false,
+      once: (_event: string, callback: (error: Error) => void) => { onError = callback; },
+      listen: (options: { host: string; port: number; exclusive: boolean }, callback: () => void) => {
+        expect(options.host).toBe('127.0.0.1');
+        expect(options.exclusive).toBe(true);
+        attempted.push(options.port);
+        if (attempted.length === 4) { onError(new Error('EACCES')); return; }
+        boundPort = options.port;
+        listener.listening = true;
+        callback();
+      },
+      close: (callback: () => void) => { released.push(boundPort); listener.listening = false; callback(); },
+    };
+    return listener as unknown as net.Server;
+  });
+  const base = await preflightDisposablePortBase();
+  expect(base).toBeGreaterThanOrEqual(20_040);
+  expect(base).toBeLessThanOrEqual(48_040);
+  expect(base).not.toBe(attempted[0]);
+  expect(attempted.slice(-8)).toEqual(Array.from({ length: 8 }, (_, offset) => base + offset));
+  expect(released).toEqual([...attempted.slice(0, 3), ...attempted.slice(-8)]);
+  expect(output).toHaveBeenCalledExactlyOnceWith(`PREFLIGHT_PORT_BASE = ${base}\nPREFLIGHT_PORTS = ${base}-${base + 7}\nPREFLIGHT_BIND = PASS`);
 });

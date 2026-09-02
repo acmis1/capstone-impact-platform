@@ -93,6 +93,8 @@ export function formatRestoreSummary(result: RestoreVerificationResult, bundlePr
     `MANAGED_SCHEMA_CUSTOMIZATIONS = ${result.managedSchemaCustomizationsMatch ? 'MATCH' : 'DRIFT'}`,
     `MANAGED_AUTH_COMPATIBILITY = ${result.managedAuthCompatibility}`,
     `ROLE_PLATFORM_ACL_COMPATIBILITY = ${result.roleParameterAclCompatibility}`,
+    `TABLE_GRANT_PORTABILITY_COMPATIBILITY = ${result.tableGrantPortabilityCompatibility}`,
+    `TABLE_GRANT_PORTABILITY_REVOKE_COUNT = ${result.tableGrantPortabilityRevokeCount}`,
     `LEGACY_UNALIGNED_DATA_REPLAY_FAILED = ${result.legacyUnalignedDataReplayFailed === null
       ? 'NOT_RUN'
       : result.legacyUnalignedDataReplayFailed ? 'YES' : 'NO'}`,
@@ -106,7 +108,9 @@ export function formatRestoreSummary(result: RestoreVerificationResult, bundlePr
     `STORAGE_OBJECT_COUNT = ${result.storageObjectCount}`,
     `GATE4_SELF_CHECK = ${result.gate4?.selfCheckClassification ?? 'NOT_RUN'}`,
     `GATE4_SOURCE_COMPARISON = ${result.gate4?.sourceComparisonClassification ?? 'NOT_RUN'}`,
-    `GATE4_CROSS_ENGINE_PORTABILITY_NORMALIZATION = ${result.gate4?.crossEnginePortabilityNormalization ? 'YES' : 'NO'}`,
+    `GATE4_CONSTRAINT_RENDERING_PORTABILITY_NORMALIZATION = ${result.gate4?.constraintRenderingPortabilityNormalization ? 'YES' : 'NO'}`,
+    `GATE4_CONSTRAINT_RENDERING_PAIR_COUNT = ${result.gate4?.constraintRenderingPairCount ?? 0}`,
+    `GATE4_TABLE_GRANTS = ${result.gate4 === null ? 'NOT_RUN' : result.gate4.tableGrantsMatch ? 'MATCH' : 'DRIFT'}`,
     `GATE4_MIGRATIONS = ${gate4Expected?.migrations ?? 0}`,
     `GATE4_TABLES = ${gate4Expected?.tables ?? 0}`,
     `GATE4_RPC_SIGNATURES = ${gate4Expected?.applicationRpcSignatures ?? 0}`,

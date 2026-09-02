@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -24,6 +25,53 @@ const OWNERSHIP_MARKER = '.capstone-recovery-owner';
 
 /** PostgreSQL majors the pinned Supabase CLI can supply for a local restore target. */
 export const SUPPORTED_RESTORE_POSTGRES_MAJORS = [15, 17] as const;
+
+/**
+ * Verifier preflight: hold actual loopback listeners on all eight ports, then release them before
+ * creating a stack. An apparently unused Windows port can still be excluded by the OS. This is a
+ * preflight, not a reservation: a later startup failure still stops the rehearsal without retry.
+ */
+export async function preflightDisposablePortBase(excludedBases: readonly number[] = []): Promise<number> {
+  if (process.platform === 'win32') {
+    try {
+      execFileSync('netsh', ['interface', 'ipv4', 'show', 'excludedportrange', 'protocol=tcp'], {
+        stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000,
+      });
+    } catch {
+      // Diagnostic only; real socket binds below are authoritative. Never print network config.
+    }
+  }
+  const start = randomInt(3_501);
+  for (let offset = 0; offset < 3_501; offset += 1) {
+    const base = 20_040 + ((start + offset) % 3_501) * 8;
+    if (excludedBases.includes(base)) continue;
+    const listeners: net.Server[] = [];
+    let passed = false;
+    try {
+      for (let port = base; port < base + 8; port += 1) {
+        const listener = net.createServer();
+        listeners.push(listener);
+        await new Promise<void>((resolve, reject) => {
+          listener.once('error', reject);
+          listener.listen({ host: '127.0.0.1', port, exclusive: true }, resolve);
+        });
+      }
+      passed = true;
+    } catch {
+      // Reject the entire candidate block if any bind fails.
+    } finally {
+      await Promise.all(listeners.map((listener) => new Promise<void>((resolve) => {
+        if (!listener.listening) resolve();
+        else listener.close(() => resolve());
+      })));
+    }
+    if (passed) {
+      console.log(`PREFLIGHT_PORT_BASE = ${base}\nPREFLIGHT_PORTS = ${base}-${base + 7}\nPREFLIGHT_BIND = PASS`);
+      return base;
+    }
+  }
+  throw new Error('DISPOSABLE_PORT_BIND_PREFLIGHT_FAILED');
+}
 
 export type DisposableStackMode = 'migrated-source' | 'bare-restore-target';
 
@@ -385,6 +433,8 @@ export function residueIsAbsent(residue: DisposableResidue): boolean {
 export interface PsqlOptions {
   files?: string[];
   command?: string;
+  /** Atomic postgres-only SQL streamed through stdin, avoiding Windows command-line limits. */
+  stdinSql?: string;
   singleTransaction?: boolean;
   timeoutMs?: number;
   /** Fixed managed-service owner used only for reviewed compatibility SQL. */
@@ -416,12 +466,18 @@ export function runDisposablePsql(
   const databaseUser = options.databaseUser ?? 'postgres';
   if (databaseUser === 'supabase_auth_admin'
     && (!options.singleTransaction
+      || options.stdinSql !== undefined
       || (options.files?.length ?? 0) > 0
       || !isApprovedDisposableManagedAuthOwnerCommand(options.command))) {
     throw new Error('DISPOSABLE_MANAGED_AUTH_OWNER_COMMAND_NOT_APPROVED');
   }
+  if (options.stdinSql !== undefined
+    && (databaseUser !== 'postgres' || !options.singleTransaction
+      || options.command !== undefined || (options.files?.length ?? 0) > 0)) {
+    throw new Error('DISPOSABLE_PSQL_STDIN_OPTIONS_NOT_APPROVED');
+  }
   const args = [
-    'exec', identity.databaseContainer, 'psql',
+    'exec', ...(options.stdinSql !== undefined ? ['-i'] : []), identity.databaseContainer, 'psql',
     '-U', databaseUser,
     '-d', 'postgres', '-X', '-v', 'ON_ERROR_STOP=1',
   ];
@@ -435,11 +491,13 @@ export function runDisposablePsql(
   if (options.verboseErrors) args.push('-v', 'VERBOSITY=verbose');
   if (options.singleTransaction) args.push('--single-transaction');
   if (options.command) args.push('--command', options.command);
+  if (options.stdinSql !== undefined) args.push('--file', '-');
   for (const file of options.files ?? []) args.push('--file', file);
   try {
     return execFileSync('docker', args, {
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [options.stdinSql !== undefined ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+      input: options.stdinSql,
       timeout: options.timeoutMs ?? 600_000,
       maxBuffer: 64 * 1024 * 1024,
       env: environment,
