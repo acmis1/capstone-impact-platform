@@ -69,6 +69,7 @@ export type RecoveryClassification =
   | 'SOURCE_CAPTURE_INCOMPLETE'
   | 'RECOVERY_BUNDLE_INVALID'
   | 'RESTORE_FAILED'
+  | 'ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED'
   | 'RESTORE_SCHEMA_FAILED'
   | 'RESTORE_DATA_FAILED'
   | 'MANAGED_AUTH_COMPATIBILITY_FAILED'
@@ -87,6 +88,7 @@ export function resolveClassification(
 ): RecoveryClassification {
   const severity: RecoveryClassification[] = [
     'CLEANUP_FAILED',
+    'ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED',
     'RESTORE_SCHEMA_FAILED',
     'MANAGED_AUTH_COMPATIBILITY_FAILED',
     'RESTORE_DATA_FAILED',

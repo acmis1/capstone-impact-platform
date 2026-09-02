@@ -25,7 +25,7 @@ import {
   seedSyntheticStorageObjects,
 } from '../recovery/syntheticSourceEvidence';
 import { formatRestoreSummary } from './restoreRecoveryBackup';
-import { BUNDLE_PATHS, bundleFile } from '../recovery/recoveryBundleStore';
+import { BUNDLE_PATHS, bundleFile, sha256File } from '../recovery/recoveryBundleStore';
 import {
   countExpectedManagedTriggersInStandardSchemaDump,
   EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT,
@@ -35,6 +35,10 @@ import {
   CUSTOM_CLAIMS_ALLOWLIST_COMPATIBILITY,
   deriveManagedAuthCopyRequirements,
 } from '../recovery/managedAuthSchemaCompatibility';
+import {
+  PLATFORM_PARAMETER_ACL_DENIED_SQLSTATE,
+  planRoleParameterAclCompatibility,
+} from '../recovery/roleParameterAclCompatibility';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
 const SOURCE_PORT_BASE = 54_820;
@@ -132,6 +136,7 @@ async function main(): Promise<void> {
       storageApiUrl: sourceEnv.apiUrl,
       storageServiceKey: sourceEnv.serviceRoleKey,
       scratchDirectory: path.join(source.workdir, 'scratch'),
+      syntheticPlatformParameterAclSource: source,
     });
     const schemaDump = fs.readFileSync(
       bundleFile(bundleDirectory, `${BUNDLE_PATHS.database}/schema.sql`),
@@ -154,6 +159,22 @@ async function main(): Promise<void> {
     if (managedTriggersInStandardSchemaDump !== 0) {
       throw new Error('STANDARD_SCHEMA_DUMP_MANAGED_BOUNDARY_CHANGED');
     }
+    // The reproduced provider-global grant must be checksum-bound in the finished bundle, and the
+    // production planner — not the fixture — must be the thing that recognizes it.
+    const rolesFile = bundleFile(bundleDirectory, `${BUNDLE_PATHS.database}/roles.sql`);
+    const manifestFile = bundleFile(bundleDirectory, BUNDLE_PATHS.manifest);
+    const rolesBytesBeforeRestore = fs.readFileSync(rolesFile);
+    const manifestBytesBeforeRestore = fs.readFileSync(manifestFile);
+    const rolePlan = planRoleParameterAclCompatibility(rolesBytesBeforeRestore.toString('utf8'));
+    if (rolePlan.action !== 'NORMALIZE_KNOWN_PLATFORM_ACL'
+      || rolePlan.parameterAclStatementCount !== 1) {
+      throw new Error('SYNTHETIC_PLATFORM_PARAMETER_ACL_NOT_REPRODUCED');
+    }
+    const recordedRolesChecksum = capture.manifest.database
+      .find((entry) => entry.artifact === 'roles.sql')?.sha256;
+    if (recordedRolesChecksum !== sha256File(rolesFile)) {
+      throw new Error('SYNTHETIC_ROLE_ARTIFACT_CHECKSUM_MISMATCH');
+    }
 
     sourceResidueAbsent = cleanupSource(source, sourceNetworkId, sourceStarted);
     sourceStarted = false;
@@ -168,8 +189,11 @@ async function main(): Promise<void> {
       skipApplicationSmoke,
       proveUnalignedManagedAuthReplayFailure: true,
       simulatePreCustomClaimsAllowlistTarget: true,
+      proveUnnormalizedRoleReplayFailure: true,
     });
     const bundlePreservedThroughRestore = assertBundlePreserved(bundleDirectory);
+    const roleArtifactUnchanged = fs.readFileSync(rolesFile).equals(rolesBytesBeforeRestore)
+      && fs.readFileSync(manifestFile).equals(manifestBytesBeforeRestore);
     console.log('SYNTHETIC_SOURCE_POSTGRES_MAJOR = 15');
     console.log('SYNTHETIC_TARGET_POSTGRES_MAJOR = 17');
     console.log(`SYNTHETIC_STORAGE_OBJECTS_SEEDED = ${seededStorageObjects}`);
@@ -177,6 +201,8 @@ async function main(): Promise<void> {
       `STANDARD_SCHEMA_DUMP_MANAGED_AUTH_TRIGGERS = ${managedTriggersInStandardSchemaDump}/${EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT}`,
     );
     console.log('SYNTHETIC_HOSTED_AHEAD_AUTH_COPY_HEADER = PRESENT');
+    console.log('SYNTHETIC_SOURCE_PLATFORM_PARAMETER_ACL = PRESENT');
+    console.log(`SYNTHETIC_BUNDLE_ROLE_ARTIFACT_UNCHANGED = ${roleArtifactUnchanged ? 'YES' : 'NO'}`);
     console.log('SYNTHETIC_TARGET_AUTH_BASELINE = PRE_20260625000000');
     console.log(`MANAGED_AUTH_COMPATIBILITY = ${restore.managedAuthCompatibility}`);
     console.log(
@@ -195,6 +221,10 @@ async function main(): Promise<void> {
     if (restore.classification !== 'ZERO_COST_RECOVERY_REHEARSAL_VERIFIED'
       || restore.managedAuthCompatibility !== 'ALIGNED_KNOWN_DELTA'
       || restore.legacyUnalignedDataReplayFailed !== true
+      || restore.roleParameterAclCompatibility !== 'NORMALIZED_KNOWN_PLATFORM_ACL'
+      || restore.legacyUnnormalizedRoleReplayFailed !== true
+      || restore.legacyUnnormalizedRoleReplaySqlState !== PLATFORM_PARAMETER_ACL_DENIED_SQLSTATE
+      || !roleArtifactUnchanged
       || !bundlePreservedThroughRestore
       || !syntheticBundleCleaned) {
       process.exitCode = 1;
