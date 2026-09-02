@@ -1,7 +1,10 @@
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as disposableStack from './disposableSupabaseStack';
+import * as gate4SchemaEvidence from '../deployment/gate4SchemaEvidence';
 import {
   compareBucketConfiguration,
   compareStorageObjects,
@@ -23,10 +26,13 @@ import {
 import {
   buildDisposableSupabaseConfig,
   createDisposableStackIdentity,
+  isApprovedDisposableManagedAuthOwnerCommand,
 } from './disposableSupabaseStack';
 import {
   applicationSmokeMatchesRecoveryContract,
   assertBundlePreserved,
+  classifyRestoreFailure,
+  runRestoreVerification,
   type ApplicationSmokeResult,
   type RestoreVerificationResult,
 } from './restoreRecoveryRehearsal';
@@ -55,10 +61,19 @@ import {
   scanManagedSchemaMigrationDdl,
   validateManagedSchemaCustomizationsAgainstRepository,
 } from './managedSchemaCustomizations';
+import {
+  ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL,
+  CUSTOM_CLAIMS_ALLOWLIST_COMPATIBILITY,
+  REMOVE_CUSTOM_CLAIMS_ALLOWLIST_FOR_SYNTHETIC_TARGET_SQL,
+  deriveManagedAuthCopyRequirements,
+  planManagedAuthSchemaCompatibility,
+  type ManagedAuthCatalogColumn,
+} from './managedAuthSchemaCompatibility';
 
 const temporaryDirectories: string[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const directory of temporaryDirectories.splice(0)) {
     fs.rmSync(directory, { recursive: true, force: true });
   }
@@ -253,6 +268,16 @@ describe('bundle manifest and artifact integrity', () => {
     const corrupt = buildBundle();
     fs.appendFileSync(bundleFile(corrupt.directory, `${BUNDLE_PATHS.database}/schema.sql`), 'tampered');
     expect(() => loadRecoveryBundle(corrupt.directory)).toThrowError('RECOVERY_BUNDLE_ARTIFACT_CORRUPTED:schema.sql');
+  });
+
+  it('keeps checksum validation authoritative before supported compatibility parsing', () => {
+    const bundle = buildBundle();
+    fs.appendFileSync(
+      bundleFile(bundle.directory, `${BUNDLE_PATHS.database}/data.sql`),
+      '\nCOPY auth.custom_oauth_providers (id, custom_claims_allowlist) FROM stdin;\n\\.\n',
+    );
+    expect(() => loadRecoveryBundle(bundle.directory))
+      .toThrowError('RECOVERY_BUNDLE_ARTIFACT_CORRUPTED:data.sql');
   });
 
   it('rejects corrupted Storage bytes before upload', () => {
@@ -480,6 +505,272 @@ describe('managed auth/storage customization recovery boundary', () => {
   });
 });
 
+const hostedAheadAuthDataSql = `
+COPY auth.custom_oauth_providers (id, identifier, custom_claims_allowlist) FROM stdin;
+\\.
+COPY auth.users (id, email) FROM stdin;
+\\.
+RESET ALL;
+`.trim();
+
+const unsupportedCopyHeaders = [
+  ['Unicode-escaped schema', 'COPY U&"auth".future_table (id) FROM stdin;'],
+  ['comment after COPY', 'COPY/*comment*/auth.users (id) FROM stdin;'],
+  ['comment before table', 'COPY auth./*comment*/users (id) FROM stdin;'],
+  ['unterminated schema', 'COPY "unterminated.users (id) FROM stdin;'],
+  ['malformed quoted Auth schema', 'COPY "auth"junk.users (id) FROM stdin;'],
+  ['query COPY', 'COPY (SELECT 1) TO STDOUT;'],
+  ['query COPY with trailing SQL', 'COPY (SELECT 1) TO STDOUT; CREATE TABLE auth.review_unapproved (id integer);'],
+  ['table COPY with trailing SQL', 'COPY public.projects (id) FROM stdin; CREATE TABLE auth.bad (id integer);'],
+  ['quoted non-Auth schema with trailing SQL', 'COPY "Auth".users (id) FROM stdin; SELECT 1;'],
+  ['malformed Auth column', 'COPY "auth".users (id; select) FROM stdin;'],
+  ['empty Auth columns', 'COPY auth.users () FROM stdin;'],
+  ['malformed non-Auth columns', 'COPY public.projects (id,) FROM stdin;'],
+] as const;
+
+function managedAuthTargetColumns(): ManagedAuthCatalogColumn[] {
+  return [
+    {
+      table: 'custom_oauth_providers',
+      column: 'id',
+      formattedType: 'uuid',
+      notNull: true,
+      defaultExpression: 'gen_random_uuid()',
+    },
+    {
+      table: 'custom_oauth_providers',
+      column: 'identifier',
+      formattedType: 'text',
+      notNull: true,
+      defaultExpression: null,
+    },
+    {
+      table: 'users',
+      column: 'id',
+      formattedType: 'uuid',
+      notNull: true,
+      defaultExpression: null,
+    },
+    {
+      table: 'users',
+      column: 'email',
+      formattedType: 'character varying(255)',
+      notNull: false,
+      defaultExpression: null,
+    },
+  ];
+}
+
+describe('managed Auth provider-schema compatibility', () => {
+  it.each([
+    ['quoted table', 'public."ProjectItems" (id)'],
+    ['quoted column', 'public.projects ("ProjectTitle")'],
+    ['distinct quoted schema', '"Auth"."Users" ("Email")'],
+    ['distinct quoted schema with ordinary table', '"Auth".users (id)'],
+    ['quoted punctuation and escaped quote', '"Other.Schema"."Project""Items" ("Title, (Public)", id)'],
+  ])('ignores non-Auth COPY identifiers: %s', (_label, target) => {
+    const requirements = deriveManagedAuthCopyRequirements(
+      `COPY ${target} FROM stdin;\nrow body is not SQL\n\\.\n${hostedAheadAuthDataSql}`,
+    );
+    expect(requirements).toEqual(deriveManagedAuthCopyRequirements(hostedAheadAuthDataSql));
+    expect(planManagedAuthSchemaCompatibility(requirements, managedAuthTargetColumns()))
+      .toMatchObject({ action: 'ADD_CUSTOM_CLAIMS_ALLOWLIST' });
+  });
+
+  it.each(['AUTH', 'Auth', '"auth"'])('recognizes PostgreSQL Auth schema spelling %s', (schema) => {
+    expect(deriveManagedAuthCopyRequirements(`COPY ${schema}.users (id, email) FROM stdin;\n\\.`))
+      .toEqual([{ table: 'users', columns: ['id', 'email'] }]);
+  });
+
+  it.each([
+    'auth."UnsafeTable" (id)',
+    'auth.users ("UnsafeColumn")',
+    'AUTH."unsafe-table" (id)',
+    'auth.users (id, id)',
+    'auth.users (id, "id")',
+  ])('fails closed for invalid Auth COPY structure %s', (target) => {
+    expect(() => deriveManagedAuthCopyRequirements(`COPY ${target} FROM stdin;\n\\.`))
+      .toThrowError('MANAGED_AUTH_COMPATIBILITY_COPY_HEADER_INVALID');
+  });
+
+  it.each(unsupportedCopyHeaders)('rejects unsupported COPY syntax: %s', (_label, header) => {
+    expect(() => deriveManagedAuthCopyRequirements(`${hostedAheadAuthDataSql}\n${header}\n\\.`))
+      .toThrowError('MANAGED_AUTH_COMPATIBILITY_COPY_HEADER_UNSUPPORTED');
+  });
+
+  it.each(['\n', '\r\n'])('keeps COPY rows opaque through the exact terminator (%#)', (newline) => {
+    const data = [
+      'COPY public.projects (id) FROM stdin;',
+      ...unsupportedCopyHeaders.map(([, header]) => header),
+      'COPY auth.future_table (unknown_column) FROM stdin;',
+      ' \\.',
+      '\\.',
+      hostedAheadAuthDataSql,
+    ].join('\n').replaceAll('\n', newline);
+    expect(deriveManagedAuthCopyRequirements(data))
+      .toEqual(deriveManagedAuthCopyRequirements(hostedAheadAuthDataSql));
+  });
+
+  it.each([
+    ['Auth missing terminator', 'COPY auth.sessions (id) FROM stdin;\nrow'],
+    ['non-Auth missing terminator', 'COPY public.projects (id) FROM stdin;\nrow'],
+    ['leading space on terminator', 'COPY public.projects (id) FROM stdin;\n \\.'],
+    ['trailing space on terminator', 'COPY public.projects (id) FROM stdin;\n\\. '],
+    ['trailing tab on terminator', 'COPY public.projects (id) FROM stdin;\n\\.\t'],
+  ])('rejects incomplete COPY data: %s', (_label, block) => {
+    expect(() => deriveManagedAuthCopyRequirements(`${hostedAheadAuthDataSql}\n${block}`))
+      .toThrowError('MANAGED_AUTH_COMPATIBILITY_COPY_DATA_TRUNCATED');
+  });
+
+  it.each([
+    ...unsupportedCopyHeaders,
+    ['sensitive unsupported COPY', 'COPY U&"__SENSITIVE__".users (id) FROM stdin;'],
+  ] as const)(
+    'rejects before production data replay and preserves diagnostics: %s',
+    async (_label, header) => {
+      const bundle = buildBundle();
+      const sensitiveToken = `SECRETTOKEN_${randomBytes(16).toString('hex')}`;
+      const content = Buffer.from(`${hostedAheadAuthDataSql}\n${header.replace('__SENSITIVE__', sensitiveToken)}\n\\.\n`);
+      const dataFile = bundleFile(bundle.directory, `${BUNDLE_PATHS.database}/data.sql`);
+      fs.writeFileSync(dataFile, content);
+      const dataArtifact = bundle.manifest.database.find((entry) => entry.artifact === 'data.sql')!;
+      dataArtifact.bytes = content.length;
+      dataArtifact.sha256 = sha256(content);
+      writeJsonArtifact(bundle.directory, BUNDLE_PATHS.manifest, bundle.manifest);
+      const manifestBefore = fs.readFileSync(bundleFile(bundle.directory, BUNDLE_PATHS.manifest));
+
+      // Keep real private-path, manifest and checksum validation; isolate Gate 4 and Docker here.
+      // The full synthetic rehearsal exercises those external boundaries without mocks.
+      const gate4 = vi.spyOn(gate4SchemaEvidence, 'validateCurrentRepositoryGate4Contract')
+        .mockReturnValue([]);
+      vi.spyOn(disposableStack, 'createDisposableNetwork').mockReturnValue('unit-network');
+      vi.spyOn(disposableStack, 'startDisposableStack').mockImplementation(() => {});
+      vi.spyOn(disposableStack, 'stopDisposableStack').mockImplementation(() => {});
+      vi.spyOn(disposableStack, 'prepareDisposableContainerStaging').mockReturnValue('/tmp/recovery');
+      vi.spyOn(disposableStack, 'copyFileIntoDisposableContainer').mockImplementation(() => {});
+      const cleanup = vi.spyOn(disposableStack, 'removeDisposableResidue').mockImplementation((identity) => {
+        temporaryDirectories.push(identity.workdir);
+      });
+      vi.spyOn(disposableStack, 'inspectDisposableResidue').mockReturnValue({
+        containers: [], volumes: [], networks: [], workdirPresent: false,
+      });
+      const psql = vi.spyOn(disposableStack, 'runDisposablePsql').mockReturnValue('');
+      const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+
+      let rejected: unknown;
+      try {
+        deriveManagedAuthCopyRequirements(content.toString('utf8'));
+      } catch (error) {
+        rejected = error;
+      }
+      expect(rejected instanceof RecoveryGuardError).toBe(true);
+      const failure = rejected as RecoveryGuardError;
+      expect(failure.code === 'MANAGED_AUTH_COMPATIBILITY_COPY_HEADER_UNSUPPORTED').toBe(true);
+      expect(failure.message === failure.code).toBe(true);
+      expect(String(failure).includes(sensitiveToken)).toBe(false);
+
+      const result = await runRestoreVerification({
+        repositoryRoot: path.resolve(__dirname, '../../../..'),
+        bundleDirectory: bundle.directory,
+      });
+      expect(gate4).toHaveBeenCalledOnce();
+      expect(result.classification).toBe('MANAGED_AUTH_COMPATIBILITY_FAILED');
+      expect(result.findings.every((finding) => finding === failure.code)).toBe(true);
+      expect(result.findings).toHaveLength(1);
+      // Only schema replay ran: neither catalog/alignment SQL nor data replay reached psql.
+      expect(psql).toHaveBeenCalledOnce();
+      expect(psql.mock.calls[0][1].files).toEqual([
+        '/tmp/recovery/roles.sql', '/tmp/recovery/schema.sql', '/tmp/recovery/migrations-schema.sql',
+      ]);
+      expect(cleanup).toHaveBeenCalledOnce();
+      const summary = formatRestoreSummary(result, assertBundlePreserved(bundle.directory));
+      expect(summary.includes(sensitiveToken)).toBe(false);
+      expect(summary).toContain('FINDING = MANAGED_AUTH_COMPATIBILITY_COPY_HEADER_UNSUPPORTED');
+      expect(JSON.stringify([...stdout.mock.calls, ...stderr.mock.calls]).includes(sensitiveToken)).toBe(false);
+      expect(fs.readFileSync(dataFile).equals(content)).toBe(true);
+      expect(fs.readFileSync(bundleFile(bundle.directory, BUNDLE_PATHS.manifest)).equals(manifestBefore)).toBe(true);
+    },
+  );
+
+  it('still refuses duplicate and missing Auth COPY structure', () => {
+    expect(() => deriveManagedAuthCopyRequirements(`${hostedAheadAuthDataSql}\n${hostedAheadAuthDataSql}`))
+      .toThrowError('MANAGED_AUTH_COMPATIBILITY_COPY_HEADER_DUPLICATE');
+    expect(() => deriveManagedAuthCopyRequirements('COPY "Auth".users (id) FROM stdin;\n\\.'))
+      .toThrowError('MANAGED_AUTH_COMPATIBILITY_SOURCE_REQUIREMENTS_MISSING');
+    expect(() => planManagedAuthSchemaCompatibility(
+      [{ table: 'unknown_auth_table', columns: ['id'] }], managedAuthTargetColumns(),
+    )).toThrowError('MANAGED_AUTH_COMPATIBILITY_UNKNOWN_DRIFT');
+  });
+
+  it('derives only COPY structure and selects the one reviewed hosted-ahead delta', () => {
+    const requirements = deriveManagedAuthCopyRequirements(hostedAheadAuthDataSql);
+    expect(requirements).toEqual([
+      {
+        table: 'custom_oauth_providers',
+        columns: ['id', 'identifier', 'custom_claims_allowlist'],
+      },
+      { table: 'users', columns: ['id', 'email'] },
+    ]);
+    expect(planManagedAuthSchemaCompatibility(requirements, managedAuthTargetColumns()))
+      .toMatchObject({ action: 'ADD_CUSTOM_CLAIMS_ALLOWLIST' });
+    expect(ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL).toBe(
+      "alter table auth.custom_oauth_providers\n"
+      + "    add column if not exists custom_claims_allowlist text[] not null default '{}';",
+    );
+  });
+
+  it('requires the exact structural result after the known delta is present', () => {
+    const requirements = deriveManagedAuthCopyRequirements(hostedAheadAuthDataSql);
+    const target = [
+      ...managedAuthTargetColumns(),
+      { ...CUSTOM_CLAIMS_ALLOWLIST_COMPATIBILITY },
+    ];
+    expect(planManagedAuthSchemaCompatibility(requirements, target))
+      .toMatchObject({ action: 'MATCH', requiredTableCount: 2, requiredColumnCount: 5 });
+  });
+
+  it('fails closed for an unknown source-ahead Auth column', () => {
+    const requirements = deriveManagedAuthCopyRequirements(`
+COPY auth.custom_oauth_providers (id, identifier, future_unreviewed_column) FROM stdin;
+\\.
+    `.trim());
+    expect(() => planManagedAuthSchemaCompatibility(requirements, managedAuthTargetColumns()))
+      .toThrowError('MANAGED_AUTH_COMPATIBILITY_UNKNOWN_DRIFT');
+  });
+
+  it.each([
+    ['type', { formattedType: 'jsonb' }],
+    ['nullability', { notNull: false }],
+    ['default', { defaultExpression: null }],
+  ])('rejects the known compatibility column with wrong %s', (_field, change) => {
+    const requirements = deriveManagedAuthCopyRequirements(hostedAheadAuthDataSql);
+    const target = [
+      ...managedAuthTargetColumns(),
+      { ...CUSTOM_CLAIMS_ALLOWLIST_COMPATIBILITY, ...change },
+    ];
+    expect(() => planManagedAuthSchemaCompatibility(requirements, target))
+      .toThrowError('MANAGED_AUTH_COMPATIBILITY_KNOWN_DELTA_SHAPE_MISMATCH');
+  });
+
+  it('never accepts arbitrary managed Auth DDL from the data artifact', () => {
+    expect(() => deriveManagedAuthCopyRequirements(`${hostedAheadAuthDataSql}\n`
+      + 'ALTER TABLE auth.users ADD COLUMN arbitrary_bundle_sql text;'))
+      .toThrowError('MANAGED_AUTH_COMPATIBILITY_UNSAFE_AUTH_STATEMENT');
+    expect(() => deriveManagedAuthCopyRequirements(`${hostedAheadAuthDataSql}\n`
+      + 'SET search_path = auth;\nALTER TABLE users ADD COLUMN arbitrary_bundle_sql text;'))
+      .toThrowError('MANAGED_AUTH_COMPATIBILITY_DATA_DUMP_STATEMENT_UNSUPPORTED');
+    expect(isApprovedDisposableManagedAuthOwnerCommand(ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL)).toBe(true);
+    expect(isApprovedDisposableManagedAuthOwnerCommand(
+      REMOVE_CUSTOM_CLAIMS_ALLOWLIST_FOR_SYNTHETIC_TARGET_SQL,
+    )).toBe(true);
+    expect(isApprovedDisposableManagedAuthOwnerCommand(
+      'ALTER TABLE auth.users ADD COLUMN arbitrary_bundle_sql text;',
+    )).toBe(false);
+    expect(ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL).not.toContain('arbitrary_bundle_sql');
+  });
+});
+
 describe('Storage and failure classifications', () => {
   it('detects missing, extra, changed and wrong-bucket objects without returning keys', () => {
     const original = objectRecord('project-drafts-private', 'private/person-key.png', Buffer.from('one'));
@@ -507,6 +798,10 @@ describe('Storage and failure classifications', () => {
 
   it('fails closed for SQL restore, database, Gate 4, Storage and cleanup failures', () => {
     expect(resolveClassification(['RESTORE_FAILED'])).toBe('RESTORE_FAILED');
+    expect(resolveClassification(['RESTORE_SCHEMA_FAILED'])).toBe('RESTORE_SCHEMA_FAILED');
+    expect(resolveClassification(['RESTORE_DATA_FAILED'])).toBe('RESTORE_DATA_FAILED');
+    expect(resolveClassification(['MANAGED_AUTH_COMPATIBILITY_FAILED']))
+      .toBe('MANAGED_AUTH_COMPATIBILITY_FAILED');
     expect(resolveClassification(['RESTORE_INTEGRITY_DRIFT'])).toBe('RESTORE_INTEGRITY_DRIFT');
     expect(resolveClassification(['MANAGED_SCHEMA_CUSTOMIZATION_DRIFT']))
       .toBe('MANAGED_SCHEMA_CUSTOMIZATION_DRIFT');
@@ -574,7 +869,7 @@ describe('disposable ownership and safe summaries', () => {
     expect(recoverySources).not.toMatch(/update\s+storage\.objects/i);
   });
 
-  it('does not expose object keys or secret-shaped values in a successful normal summary', () => {
+  it('keeps normal and rejected-bundle summaries free of private values', () => {
     const result = {
       classification: 'ZERO_COST_RECOVERY_REHEARSAL_VERIFIED',
       findings: [],
@@ -603,6 +898,8 @@ describe('disposable ownership and safe summaries', () => {
       managedStorageCustomizationCount: 0,
       expectedManagedStorageCustomizationCount: 0,
       managedSchemaCustomizationsMatch: true,
+      managedAuthCompatibility: 'ALIGNED_KNOWN_DELTA',
+      legacyUnalignedDataReplayFailed: true,
       managedAuthBehaviorVerified: true,
       bucketSummaries: ['project-drafts-private: 1 objects, 12 bytes, root abcdef123456'],
       gate4: null,
@@ -622,6 +919,27 @@ describe('disposable ownership and safe summaries', () => {
     expect(output).not.toContain('recovery-rehearsal@synthetic.invalid');
     expect(output).not.toContain('sb_secret_');
     expect(output).not.toContain('postgresql://');
+
+    const sensitiveToken = `SECRETTOKEN_${randomBytes(16).toString('hex').replace(/[0-9]/g, 'X').toUpperCase()}`;
+    let rejected: unknown;
+    try {
+      deriveManagedAuthCopyRequirements(`${hostedAheadAuthDataSql}\n${sensitiveToken} malformed;`);
+    } catch (error) {
+      rejected = error;
+    }
+    expect(rejected instanceof RecoveryGuardError).toBe(true);
+    const failure = rejected as RecoveryGuardError;
+    // Boolean assertions cannot print the synthetic token on regression failures.
+    expect(failure.code.includes(sensitiveToken)).toBe(false);
+    expect(failure.message.includes(sensitiveToken)).toBe(false);
+    expect(failure.code === 'MANAGED_AUTH_COMPATIBILITY_DATA_DUMP_STATEMENT_UNSUPPORTED').toBe(true);
+    const failedSummary = formatRestoreSummary({
+      ...result,
+      classification: classifyRestoreFailure(failure),
+      findings: [failure.message],
+    }, true);
+    expect(failedSummary.includes(sensitiveToken)).toBe(false);
+    expect(failedSummary).toContain('FINDING = MANAGED_AUTH_COMPATIBILITY_DATA_DUMP_STATEMENT_UNSUPPORTED');
   });
 
   it('requires the exact fail-closed readiness contract in application smoke', () => {
@@ -643,8 +961,14 @@ describe('disposable ownership and safe summaries', () => {
   });
 
   it('uses only explicit fail-closed classifications', () => {
-    const error = new RecoveryGuardError('RESTORE_SQL_FAILED');
-    expect(error.code).toBe('RESTORE_SQL_FAILED');
+    const error = new RecoveryGuardError('RESTORE_DATA_SQL_FAILED');
+    expect(error.code).toBe('RESTORE_DATA_SQL_FAILED');
+    expect(classifyRestoreFailure(new RecoveryGuardError('RESTORE_SCHEMA_SQL_FAILED')))
+      .toBe('RESTORE_SCHEMA_FAILED');
+    expect(classifyRestoreFailure(error)).toBe('RESTORE_DATA_FAILED');
+    expect(classifyRestoreFailure(
+      new RecoveryGuardError('MANAGED_AUTH_COMPATIBILITY_UNKNOWN_DRIFT'),
+    )).toBe('MANAGED_AUTH_COMPATIBILITY_FAILED');
     expect(resolveClassification(['RESTORE_FAILED'])).not.toBe('ZERO_COST_RECOVERY_REHEARSAL_VERIFIED');
   });
 });

@@ -91,6 +91,10 @@ export function formatRestoreSummary(result: RestoreVerificationResult, bundlePr
     `MANAGED_AUTH_CUSTOMIZATIONS = ${result.managedAuthCustomizationCount}/${result.expectedManagedAuthCustomizationCount}`,
     `MANAGED_STORAGE_CUSTOMIZATIONS = ${result.managedStorageCustomizationCount}/${result.expectedManagedStorageCustomizationCount}`,
     `MANAGED_SCHEMA_CUSTOMIZATIONS = ${result.managedSchemaCustomizationsMatch ? 'MATCH' : 'DRIFT'}`,
+    `MANAGED_AUTH_COMPATIBILITY = ${result.managedAuthCompatibility}`,
+    `LEGACY_UNALIGNED_DATA_REPLAY_FAILED = ${result.legacyUnalignedDataReplayFailed === null
+      ? 'NOT_RUN'
+      : result.legacyUnalignedDataReplayFailed ? 'YES' : 'NO'}`,
     `MANAGED_AUTH_BEHAVIOR = ${result.managedAuthBehaviorVerified === null
       ? 'NOT_RUN'
       : result.managedAuthBehaviorVerified ? 'PASS' : 'FAIL'}`,
