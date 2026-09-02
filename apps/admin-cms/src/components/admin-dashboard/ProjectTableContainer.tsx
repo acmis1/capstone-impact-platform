@@ -8,6 +8,8 @@ import {
   getCoreRowModel,
   flexRender,
   createColumnHelper,
+  type CellContext,
+  type HeaderContext,
 } from '@tanstack/react-table';
 import {
   ArrowUpDown,
@@ -80,6 +82,22 @@ const COLUMN_WIDTH_CLASSES: Record<DashboardColumnId, string> = {
   actions: 'w-[10%]',
 };
 
+type ProjectSelectionTableMeta = {
+  allCurrentPageSelected: boolean;
+  someCurrentPageSelected: boolean;
+  selectableRowCount: number;
+  selectedVisibleIds: Set<string>;
+  busy: boolean;
+  toggleCurrentPage: (checked: boolean) => void;
+  toggleSelection: (publicId: string, checked: boolean) => void;
+};
+
+function getProjectSelectionMeta(
+  context: CellContext<ProjectIndexRow, unknown> | HeaderContext<ProjectIndexRow, unknown>,
+) {
+  return context.table.options.meta as ProjectSelectionTableMeta;
+}
+
 function PageSelectionCheckbox({
   checked,
   indeterminate,
@@ -104,6 +122,34 @@ function PageSelectionCheckbox({
       onChange={(event) => onChange(event.target.checked)}
       aria-label="Select current page"
       className="size-4 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    />
+  );
+}
+
+function ProjectSelectionHeader(context: HeaderContext<ProjectIndexRow, unknown>) {
+  const selection = getProjectSelectionMeta(context);
+  return (
+    <PageSelectionCheckbox
+      checked={selection.allCurrentPageSelected}
+      indeterminate={selection.someCurrentPageSelected}
+      disabled={selection.busy || selection.selectableRowCount === 0}
+      onChange={selection.toggleCurrentPage}
+    />
+  );
+}
+
+function ProjectSelectionCell(context: CellContext<ProjectIndexRow, unknown>) {
+  const selection = getProjectSelectionMeta(context);
+  const publicId = context.row.original.publicId;
+  const selectable = typeof publicId === 'string' && isSafeBulkPublicId(publicId);
+  return (
+    <input
+      type="checkbox"
+      checked={selectable ? selection.selectedVisibleIds.has(publicId) : false}
+      disabled={selection.busy || !selectable}
+      onChange={(event) => selectable && selection.toggleSelection(publicId, event.target.checked)}
+      aria-label={selectable ? `Select ${context.row.original.title}` : 'Project cannot be selected'}
+      className="mt-1 size-4 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     />
   );
 }
@@ -270,28 +316,8 @@ export function ProjectTableContainer({ query, result, canSubmitBulk = false, ca
     () => [
       columnHelper.display({
         id: 'selection',
-        header: () => (
-          <PageSelectionCheckbox
-            checked={allCurrentPageSelected}
-            indeterminate={someCurrentPageSelected}
-            disabled={bulkReviewBusy || selectableIds.length === 0}
-            onChange={toggleCurrentPage}
-          />
-        ),
-        cell: (info) => {
-          const publicId = info.row.original.publicId;
-          const selectable = typeof publicId === 'string' && isSafeBulkPublicId(publicId);
-          return (
-            <input
-              type="checkbox"
-              checked={selectable ? selectedVisibleIds.has(publicId) : false}
-              disabled={bulkReviewBusy || !selectable}
-              onChange={(event) => selectable && toggleSelection(publicId, event.target.checked)}
-              aria-label={selectable ? `Select ${info.row.original.title}` : 'Project cannot be selected'}
-              className="mt-1 size-4 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            />
-          );
-        },
+        header: ProjectSelectionHeader,
+        cell: ProjectSelectionCell,
       }),
       columnHelper.accessor('title', {
         header: () => renderSortHeader(COLUMN_LABELS.title, 'title'),
@@ -379,7 +405,7 @@ export function ProjectTableContainer({ query, result, canSubmitBulk = false, ca
         },
       }),
     ],
-    [allCurrentPageSelected, someCurrentPageSelected, selectableIds, selectedVisibleIds, toggleCurrentPage, toggleSelection, renderSortHeader, staticHeader, bulkReviewBusy]
+    [renderSortHeader, staticHeader]
   );
 
   // TanStack Table's useReactTable returns an API that React Compiler cannot safely memoize;
@@ -392,6 +418,15 @@ export function ProjectTableContainer({ query, result, canSubmitBulk = false, ca
     manualPagination: true,
     manualSorting: true,
     pageCount: result.pageCount,
+    meta: {
+      allCurrentPageSelected,
+      someCurrentPageSelected,
+      selectableRowCount: selectableIds.length,
+      selectedVisibleIds,
+      busy: bulkReviewBusy,
+      toggleCurrentPage,
+      toggleSelection,
+    },
     state: {
       columnVisibility: Object.fromEntries(
         DASHBOARD_CONFIGURABLE_COLUMN_IDS.map((column) => [
