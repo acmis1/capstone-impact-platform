@@ -603,6 +603,7 @@ export function ProjectTableContainer({ query, result, canSubmitBulk = false, ca
                     checked={Boolean(row.publicId && selectedVisibleIds.has(row.publicId))}
                     disabled={bulkReviewBusy || !row.publicId || !isSafeBulkPublicId(row.publicId)}
                     onChange={(event) => row.publicId && isSafeBulkPublicId(row.publicId) && toggleSelection(row.publicId, event.target.checked)}
+                    aria-label={row.publicId && isSafeBulkPublicId(row.publicId) ? `Select ${row.title}` : 'Project cannot be selected'}
                     className="size-4 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   />
                   Select project
