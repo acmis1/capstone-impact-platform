@@ -78,6 +78,8 @@ export function ProjectMetadataEditor({
 
   const inFlight = useRef(false);
   const summaryRef = useRef<HTMLParagraphElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
   const dirty = isMetadataDirty(initial, draft);
 
   const protectedNotice =
@@ -271,6 +273,7 @@ export function ProjectMetadataEditor({
           </div>
           {canEdit && !protectedNotice ? (
             <Button
+              ref={editButtonRef}
               type="button"
               className="shrink-0"
               onClick={() => {
@@ -472,7 +475,7 @@ export function ProjectMetadataEditor({
           <Button type="submit" size="lg" disabled={!editorCanSubmit(pending, dirty)} aria-busy={pending}>
             {pending ? 'Saving…' : 'Save changes'}
           </Button>
-          <Button type="button" variant="ghost" onClick={cancel} disabled={pending}>
+          <Button ref={cancelButtonRef} type="button" variant="ghost" onClick={cancel} disabled={pending}>
             Cancel
           </Button>
         </div>
@@ -525,7 +528,12 @@ export function ProjectMetadataEditor({
 
       {/* Discard Changes Confirmation Dialog */}
       <AlertDialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            (cancelButtonRef.current ?? editButtonRef.current)?.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
             <AlertDialogDescription>
