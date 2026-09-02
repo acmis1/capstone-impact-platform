@@ -297,6 +297,56 @@ describe('ProjectTableContainer preference integration', () => {
     expect(screen.getAllByRole('checkbox', { name: 'Project cannot be selected' }).every((checkbox) => (checkbox as HTMLInputElement).disabled)).toBe(true);
   });
 
+  it('selects only the 50 visible projects when the index contains 120 records', async () => {
+    const rows = Array.from({ length: 50 }, (_, index) => ({
+      ...baseRow,
+      id: `project-${index + 1}`,
+      publicId: `release-ui-${String(index + 1).padStart(3, '0')}`,
+      title: `Synthetic UI project ${index + 1}`,
+    }));
+    renderTable('', { rows, total: 120, page: 1, pageSize: 50, pageCount: 3 });
+
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select current page' }))[0]);
+
+    await waitFor(() => expect(screen.getAllByText('50 selected').length).toBeGreaterThan(0));
+    expect(screen.getAllByRole('checkbox', { name: /Select Synthetic UI project/ }).filter((checkbox) => (checkbox as HTMLInputElement).checked)).toHaveLength(50);
+  });
+
+  it('moves from page one to page two and never carries hidden page-one selection forward', async () => {
+    const pageOneRows = [
+      { ...baseRow, id: 'page-one-a', publicId: 'release-page-one-a', title: 'Page one project A' },
+      { ...baseRow, id: 'page-one-b', publicId: 'release-page-one-b', title: 'Page one project B' },
+    ];
+    const pageTwoRows = [
+      { ...baseRow, id: 'page-two-a', publicId: 'release-page-two-a', title: 'Page two project A' },
+      { ...baseRow, id: 'page-two-b', publicId: 'release-page-two-b', title: 'Page two project B' },
+    ];
+    const pageOne: ProjectIndexResult = { rows: pageOneRows, total: 120, page: 1, pageSize: 50, pageCount: 3 };
+    const pageTwo: ProjectIndexResult = { rows: pageTwoRows, total: 120, page: 2, pageSize: 50, pageCount: 3 };
+    const view = renderTable('', pageOne);
+
+    fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select current page' }))[0]);
+    await waitFor(() => expect(screen.getAllByText('2 selected').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go to next page' }));
+    expect(navigation.push).toHaveBeenLastCalledWith('/admin?page=2');
+
+    navigation.search = 'page=2';
+    view.rerender(
+      <DashboardPreferencesProvider>
+        <ProjectTableContainer
+          query={parseProjectListQuery({ page: '2' })}
+          result={pageTwo}
+        />
+      </DashboardPreferencesProvider>,
+    );
+
+    await waitFor(() => expect(screen.queryByText('2 selected')).toBeNull());
+    expect(screen.getByRole('heading', { name: 'Page two project A', level: 4 })).toBeTruthy();
+    expect(screen.queryByText('Page one project A')).toBeNull();
+    expect(screen.getAllByRole('checkbox', { name: 'Select Page two project A' }).every((checkbox) => !(checkbox as HTMLInputElement).checked)).toBe(true);
+  });
+
   it.each([
     ['search', 'q=atlas'],
     ['filter', 'status=approved'],
