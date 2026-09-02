@@ -76,6 +76,7 @@
     // --- LIGHTBOX STATE ---
     let currentSnapshotIndex = 0;
     let lightboxKeyHandler = null;
+    let lightboxOpener = null;
     let previousBodyOverflow = "";
 
     // --- UTILS ---
@@ -718,7 +719,7 @@
                             <button class="capstone-poster-link" type="button" onclick="handleProjectClick(${p.id})" aria-label="View ${escapeHTML(p.title)} project detail">
                                 <img class="capstone-card-image" src="${escapeHTML(p.poster || 'https://via.placeholder.com/400x600?text=No+Poster')}" alt="${escapeHTML(p.title)}" loading="lazy">
                             </button>
-                            <button class="capstone-card-btn" type="button" onclick="handleProjectClick(${p.id})">Learn More</button>
+                            <button class="capstone-card-btn" type="button" onclick="handleProjectClick(${p.id})" aria-label="Learn more about ${escapeHTML(p.title)}">Learn More</button>
                         </div>
                     `).join('')}
                 </div>
@@ -880,7 +881,7 @@
                 return `
                     <div class="snapshot-grid">
                         ${snapshotItems.map(({ url, altText }, idx) => `
-                            <button type="button" class="snapshot-card" onclick="openLightbox(${idx})" aria-label="Open ${escapeHTML(altText)}">
+                            <button type="button" class="snapshot-card" onclick="openLightbox(${idx}, this)" aria-label="Open ${escapeHTML(altText)}">
                                 <div class="snapshot-inner">
                                     <img src="${escapeHTML(url)}" alt="${escapeHTML(altText)}" loading="lazy">
                                     <div class="snapshot-overlay">
@@ -925,7 +926,7 @@
                 <section class="detail-section ${numbered ? "report-row" : ""}">
                     ${numbered && sectionIndex > 0 ? `<span class="report-number">${sectionIndex}</span>` : ""}
                     <div>
-                        <h3 class="section-title">${sectionLabels[sec] || sec}</h3>
+                        <h2 class="section-title">${sectionLabels[sec] || sec}</h2>
                         ${content}
                     </div>
                 </section>
@@ -968,13 +969,21 @@
         });
 
         const posterAlt = project.accessibilityText || project.imageAlt || project.title || "Project Poster";
+        const posterTextHTML = typeof project.posterText === "string" && project.posterText.trim()
+            ? `
+                <details class="poster-text-disclosure">
+                    <summary>Read full poster text</summary>
+                    <p class="section-text poster-text-content">${escapeHTML(project.posterText)}</p>
+                </details>
+            `
+            : "";
         const heroMediaHTML = elevatedMedia === "video"
             ? renderVideo(project.videoUrl)
             : elevatedMedia === "snapshots"
                 ? `
                     <div class="snapshot-grid snapshot-hero-grid">
                         ${snapshotItems.map(({ url, altText }, idx) => `
-                            <button type="button" class="snapshot-card" onclick="openLightbox(${idx})" aria-label="Open ${escapeHTML(altText)}">
+                            <button type="button" class="snapshot-card" onclick="openLightbox(${idx}, this)" aria-label="Open ${escapeHTML(altText)}">
                                 <div class="snapshot-inner">
                                     <img src="${escapeHTML(url)}" alt="${escapeHTML(altText)}" loading="lazy">
                                     <div class="snapshot-overlay">
@@ -993,7 +1002,7 @@
             if (elevatedMedia === "video") {
                 return `
                     <div class="technical-aside-card">
-                        <h4>Featured Video</h4>
+                        <h2>Featured Video</h2>
                         ${renderVideo(project.videoUrl)}
                     </div>
                 `;
@@ -1001,10 +1010,10 @@
             if (elevatedMedia === "snapshots") {
                 return `
                     <div class="technical-aside-card">
-                        <h4>Featured Snapshots</h4>
+                        <h2>Featured Snapshots</h2>
                         <div class="snapshot-grid">
                             ${snapshotItems.slice(0, 4).map(({ url, altText }, idx) => `
-                                <button type="button" class="snapshot-card" onclick="openLightbox(${idx})" aria-label="Open ${escapeHTML(altText)}">
+                                <button type="button" class="snapshot-card" onclick="openLightbox(${idx}, this)" aria-label="Open ${escapeHTML(altText)}">
                                     <div class="snapshot-inner">
                                         <img src="${escapeHTML(url)}" alt="${escapeHTML(altText)}" loading="lazy">
                                         <div class="snapshot-overlay">
@@ -1034,7 +1043,7 @@
                 <div class="exhibition-strip">
                     <div>
                         ${snapshotItems.map(({ url, altText }, idx) => `
-                            <button type="button" onclick="openLightbox(${idx})" aria-label="Open ${escapeHTML(altText)}">
+                            <button type="button" onclick="openLightbox(${idx}, this)" aria-label="Open ${escapeHTML(altText)}">
                                 <img src="${escapeHTML(url)}" alt="${escapeHTML(altText)}" loading="lazy">
                             </button>
                         `).join("")}
@@ -1058,19 +1067,20 @@
                             </div>
                             <div class="detail-content-grid report-grid">
                                 <main class="detail-main">
+                                    ${posterTextHTML}
                                     ${bodySections.map(sec => renderSection(sec, activeNumberedSections.includes(sec))).join("")}
                                 </main>
                                 <aside class="detail-sidebar technical-side-col">
                                     ${activeNumberedSections.length > 0 ? `
                                         <div class="technical-aside-card">
-                                            <h4>Contents</h4>
+                                            <h2>Contents</h2>
                                             <ol>
                                                 ${activeNumberedSections.map(sec => `<li>${escapeHTML(sectionLabels[sec] || sec)}</li>`).join("")}
                                             </ol>
                                         </div>
                                     ` : ""}
                                     <div class="technical-aside-card">
-                                        <h4>Report Metadata</h4>
+                                        <h2>Report Metadata</h2>
                                         ${renderMetadata(true)}
                                     </div>
                                     ${sidebarMediaHTML}
@@ -1099,11 +1109,12 @@
                         ${launchpadHTML ? `<section class="media-launchpad"><h2>Project Launchpad</h2>${launchpadHTML}</section>` : ""}
                         <div class="detail-content-grid media-grid">
                             <main class="detail-main">
+                                ${posterTextHTML}
                                 ${bodySections.map(sec => renderSection(sec, false)).join("")}
                             </main>
                             <aside class="detail-sidebar media-side-col">
                                 <div class="media-spec-card">
-                                    <h3>Quick Specifications</h3>
+                                    <h2>Quick Specifications</h2>
                                     ${renderMetadata(false)}
                                 </div>
                                 ${elevatedMedia !== "poster" && canShowPoster ? `
@@ -1141,6 +1152,7 @@
                     </div>
                     ${snapshotStripHTML}
                     <main class="poster-body">
+                        ${posterTextHTML}
                         ${bodySections.map(sec => renderSection(sec, false)).join("")}
                     </main>
                 </div>
@@ -1155,11 +1167,14 @@
 
         lb = document.createElement('div');
         lb.id = 'capstone-lightbox';
+        lb.setAttribute('role', 'dialog');
+        lb.setAttribute('aria-modal', 'true');
+        lb.setAttribute('aria-label', 'Snapshot viewer');
         lb.style.cssText = "position:fixed; inset:0; z-index:2147483647; display:none; align-items:center; justify-content:center; background:rgba(2, 6, 23, 0.9); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); font-family:sans-serif; transition: all 0.3s ease;";
         lb.innerHTML = `
             <div class="capstone-lightbox-backdrop" style="position:absolute; inset:0; cursor:zoom-out;" onclick="closeLightbox()"></div>
             <div class="capstone-lightbox-content" style="position:relative; z-index:10; width:100%; height:100%; display:flex; align-items:center; justify-content:center; pointer-events:none;">
-                <button type="button" class="capstone-lightbox-close" style="position:absolute; top:24px; right:24px; width:48px; height:48px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; z-index:20; pointer-events:auto; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="closeLightbox()" aria-label="Close" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">&times;</button>
+                <button type="button" class="capstone-lightbox-close" style="position:absolute; top:24px; right:24px; width:48px; height:48px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; z-index:20; pointer-events:auto; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="closeLightbox()" aria-label="Close snapshot viewer" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">&times;</button>
 
                 <div class="capstone-lightbox-nav-wrapper" style="position:relative; display:flex; align-items:center; justify-content:center; width:100%; height:100%; pointer-events:auto;">
                     <button type="button" class="capstone-lightbox-prev" style="position:absolute; left:24px; width:64px; height:64px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:50%; color:#fff; font-size:32px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s ease;" onclick="event.stopPropagation(); changeSnapshot(-1)" aria-label="Previous snapshot" onmouseover="this.style.background='rgba(255,255,255,0.15)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.transform='scale(1)'">‹</button>
@@ -1193,7 +1208,7 @@
         return lb;
     };
 
-    const openLightbox = (index) => {
+    const openLightbox = (index, opener = null) => {
         const projectId = getQueryParam('id') || localStorage.getItem('selectedProjectId');
         const numericId = parseProjectId(projectId);
         const project = numericId === null ? null : allProjects.find(p => p.id === numericId);
@@ -1206,6 +1221,11 @@
         console.log(`[Showcase] Opening lightbox for snapshot ${index + 1} of ${snapshotItems.length}`);
 
         const lb = ensureLightbox();
+        lightboxOpener = opener instanceof HTMLElement
+            ? opener
+            : (document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+                ? document.activeElement
+                : null);
 
         updateLightbox(project);
         lb.style.display = 'flex';
@@ -1215,11 +1235,32 @@
 
         if (lightboxKeyHandler) document.removeEventListener('keydown', lightboxKeyHandler);
         lightboxKeyHandler = (e) => {
-            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'Tab') {
+                const focusable = Array.from(lb.querySelectorAll('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'));
+                if (focusable.length === 0) {
+                    e.preventDefault();
+                    return;
+                }
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey && (document.activeElement === first || !lb.contains(document.activeElement))) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && (document.activeElement === last || !lb.contains(document.activeElement))) {
+                    e.preventDefault();
+                    first.focus();
+                }
+                return;
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeLightbox();
+            }
             if (e.key === 'ArrowLeft') changeSnapshot(-1);
             if (e.key === 'ArrowRight') changeSnapshot(1);
         };
         document.addEventListener('keydown', lightboxKeyHandler);
+        lb.querySelector('.capstone-lightbox-close')?.focus();
     };
 
     const updateLightbox = (project) => {
@@ -1255,6 +1296,10 @@
             document.removeEventListener('keydown', lightboxKeyHandler);
             lightboxKeyHandler = null;
         }
+
+        const opener = lightboxOpener;
+        lightboxOpener = null;
+        if (opener?.isConnected) opener.focus();
     };
 
     const handleProjectClick = (id) => {

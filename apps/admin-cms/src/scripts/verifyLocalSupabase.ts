@@ -68,6 +68,42 @@ const EXPECTED_BUCKETS = [
   },
 ];
 
+const REQUIRED_LOCAL_FIXTURE_OBJECTS = [
+  { bucket: 'project-public-assets', directory: '2026/traffic-engine', fileName: 'poster.png', description: 'public poster fixture' },
+  { bucket: 'project-drafts-private', directory: '2026/hydrogrid', fileName: 'poster.png', description: 'private draft fixture' },
+  { bucket: 'project-drafts-private', directory: 'drafts/2026-medical-drone/poster_image', fileName: 'poster.png', description: 'Medical Drone private poster image fixture' },
+  { bucket: 'project-drafts-private', directory: 'drafts/2026-medical-drone/poster_pdf', fileName: 'poster.pdf', description: 'Medical Drone private poster PDF fixture' },
+] as const;
+
+const MEDICAL_DRONE_PUBLIC_ID = '2026-medical-drone';
+
+function isValidMedicalDronePrivatePoster(
+  asset: Record<string, unknown>,
+  assetType: 'poster_image' | 'poster_pdf',
+): boolean {
+  const isImage = assetType === 'poster_image';
+  const fileName = isImage ? 'poster.png' : 'poster.pdf';
+  const expectedMimeTypes = isImage ? ['image/png', 'image/jpeg', 'image/webp'] : ['application/pdf'];
+  const maxFileSize = isImage ? 5 * 1024 * 1024 : 20 * 1024 * 1024;
+  const fileSize = Number(asset.file_size_bytes);
+
+  return (
+    asset.asset_type === assetType &&
+    asset.storage_bucket === 'project-drafts-private' &&
+    asset.storage_path === `drafts/${MEDICAL_DRONE_PUBLIC_ID}/${assetType}/${fileName}` &&
+    asset.file_name === fileName &&
+    expectedMimeTypes.includes(String(asset.mime_type)) &&
+    Number.isInteger(fileSize) &&
+    fileSize >= 1 &&
+    fileSize <= maxFileSize &&
+    asset.is_public_approved === false &&
+    asset.public_url == null &&
+    asset.public_storage_bucket == null &&
+    asset.public_storage_path == null &&
+    asset.gallery_position == null
+  );
+}
+
 function normalizeMimeTypes(mimeTypes?: string[] | null): string[] {
   if (!mimeTypes || !Array.isArray(mimeTypes)) return [];
   return [...mimeTypes].map((m) => String(m).toLowerCase().trim()).sort();
@@ -702,23 +738,16 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
     }
   }
 
-  // Verify local fixture objects exist in storage
-  const { data: publicFixtureList, error: pubListErr } = await adminClient.storage
-    .from('project-public-assets')
-    .list('2026/traffic-engine', { search: 'poster.png' });
+  // Verify the local objects that back synthetic fixture metadata exist in Storage.
+  for (const fixture of REQUIRED_LOCAL_FIXTURE_OBJECTS) {
+    const { data: fixtureList, error: fixtureListErr } = await adminClient.storage
+      .from(fixture.bucket)
+      .list(fixture.directory, { search: fixture.fileName });
 
-  if (pubListErr || !publicFixtureList || !publicFixtureList.some((f) => f.name === 'poster.png')) {
-    console.error('❌ Storage fixture verification failed: missing public poster fixture object.');
-    return false;
-  }
-
-  const { data: privateFixtureList, error: privListErr } = await adminClient.storage
-    .from('project-drafts-private')
-    .list('2026/hydrogrid', { search: 'poster.png' });
-
-  if (privListErr || !privateFixtureList || !privateFixtureList.some((f) => f.name === 'poster.png')) {
-    console.error('❌ Storage fixture verification failed: missing private draft fixture object.');
-    return false;
+    if (fixtureListErr || !fixtureList || !fixtureList.some((file) => file.name === fixture.fileName)) {
+      console.error(`❌ Storage fixture verification failed: missing ${fixture.description} object.`);
+      return false;
+    }
   }
 
   console.log('✔ Storage buckets & required local fixture objects verified (exact visibility, limits, MIME, objects).');
@@ -727,7 +756,7 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
   const { data: dbProjects, error: projErr } = await adminClient
     .from('projects')
     .select(
-      '*, media_assets(asset_type,gallery_position,public_url,alt_text_public,is_public_approved)',
+      '*, media_assets(asset_type,gallery_position,file_name,storage_bucket,storage_path,public_url,public_storage_bucket,public_storage_path,mime_type,file_size_bytes,alt_text_public,is_public_approved)',
     );
   if (projErr || !dbProjects || dbProjects.length === 0) {
     console.error('❌ Synthetic project verification failed: No project rows found.');
@@ -743,6 +772,38 @@ export async function verifyLocalSupabaseSetup(customCredsPath?: string): Promis
       return false;
     }
   }
+
+  const medicalDrone = dbProjects.find((project) => project.public_id === MEDICAL_DRONE_PUBLIC_ID);
+  if (!medicalDrone || medicalDrone.status !== 'approved') {
+    console.error('❌ Approved fixture verification failed: Medical Drone project is missing or not approved.');
+    return false;
+  }
+  if (
+    medicalDrone.poster_url != null ||
+    medicalDrone.poster_pdf_url != null ||
+    !Array.isArray(medicalDrone.snapshots) ||
+    medicalDrone.snapshots.length !== 0
+  ) {
+    console.error('❌ Approved fixture verification failed: Medical Drone has pre-publication public media fields.');
+    return false;
+  }
+
+  const medicalDroneAssets = Array.isArray(medicalDrone.media_assets)
+    ? medicalDrone.media_assets as Array<Record<string, unknown>>
+    : [];
+  const medicalDronePosterImage = medicalDroneAssets.filter((asset) => asset.asset_type === 'poster_image');
+  const medicalDronePosterPdf = medicalDroneAssets.filter((asset) => asset.asset_type === 'poster_pdf');
+  if (
+    medicalDroneAssets.length !== 2 ||
+    medicalDronePosterImage.length !== 1 ||
+    medicalDronePosterPdf.length !== 1 ||
+    !isValidMedicalDronePrivatePoster(medicalDronePosterImage[0], 'poster_image') ||
+    !isValidMedicalDronePrivatePoster(medicalDronePosterPdf[0], 'poster_pdf')
+  ) {
+    console.error('❌ Approved fixture verification failed: Medical Drone media is not the complete canonical private pre-publication set.');
+    return false;
+  }
+  console.log('✔ Approved Medical Drone fixture verified (private poster image/PDF, no public media mapping).');
 
   const domainProjects = dbProjects.map((row) => mapDbRowToProject(row as Record<string, unknown>));
   const feedItems = compilePublicFeed(domainProjects);

@@ -2,9 +2,26 @@
 
 This runbook covers repository/disposable-Local recovery evidence for the active Admin/CMS. It does not authorize or perform hosted Supabase, Render, Duda, email, public-feed history, or public-feed rollback operations.
 
-The hosted database, Storage, configuration, RPO/RTO, monitoring, Render redeploy/rollback, ownership, and supervised-rehearsal contract is defined in [M6 Operational Readiness and Recovery](m6-operational-readiness.md). A passing run under this document must remain labelled `LOCAL_RECOVERY_MECHANICS_VERIFIED` and `HOSTED_RECOVERY_NOT_YET_REHEARSED`.
+The hosted database, Storage, configuration, RPO/RTO, monitoring, Render redeploy/rollback, ownership, and supervised-rehearsal contract is defined in [M6 Operational Readiness and Recovery](m6-operational-readiness.md). The older bounded probe below remains labelled `LOCAL_RECOVERY_MECHANICS_VERIFIED`. The complete zero-cost logical capture/restore implementation and synthetic hosted-origin-equivalent proof are documented separately in [Zero-Cost Hosted-Origin Recovery Rehearsal](operations/zero-cost-recovery-rehearsal.md); no real hosted-origin capture has been executed by the coding workflow.
 
-## Current evidence boundary
+## Complete zero-cost portable recovery proof
+
+Run the repository-owned disposable source-to-target proof with:
+
+```bash
+npm run verify:zero-cost-recovery-rehearsal
+```
+
+This creates a fresh PostgreSQL 15 synthetic source, captures the five-artifact logical backup and
+all three canonical Storage buckets plus the two repository-owned Auth triggers excluded from the
+standard managed-schema dump, restores them to a fresh PostgreSQL 17 target, and separately
+requires Gate 4 and `MANAGED_SCHEMA_CUSTOMIZATIONS = MATCH`. It then verifies
+database/Auth/execution-control/Storage integrity and application health/login before cleaning only
+its marked resources. It contacts no hosted project and uses no paid service. The resulting
+evidence is `ZERO_COST_RECOVERY_REHEARSAL_VERIFIED`, not a managed-hosted restore or hosted RTO
+claim.
+
+## Bounded Local probe evidence boundary
 
 The repository provides a non-destructive Local recovery drill at:
 

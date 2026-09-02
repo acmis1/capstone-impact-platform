@@ -712,7 +712,16 @@ export function gate4EvidenceStats(evidence: Gate4SchemaEvidence): Gate4Evidence
 }
 
 /** Compares two complete snapshots and never converts malformed evidence into a match. */
-export function compareGate4Evidence(expectedInput: unknown, actualInput: unknown): Gate4ComparisonResult {
+export function compareGate4Evidence(
+  expectedInput: unknown,
+  actualInput: unknown,
+  maxReportedDifferences = MAX_REPORTED_DIFFERENCES,
+): Gate4ComparisonResult {
+  if (!Number.isSafeInteger(maxReportedDifferences)
+    || maxReportedDifferences < 1
+    || maxReportedDifferences > 5_000) {
+    throw new Error('GATE4_DIFFERENCE_LIMIT_INVALID');
+  }
   const expectedParsed = parseGate4Evidence(expectedInput);
   const actualParsed = parseGate4Evidence(actualInput);
   const validationErrors = [
@@ -749,7 +758,7 @@ export function compareGate4Evidence(expectedInput: unknown, actualInput: unknow
   return {
     classification: allDifferences.length === 0 ? 'GATE4_MATCH' : 'GATE4_DRIFT',
     validationErrors: [],
-    differences: allDifferences.slice(0, MAX_REPORTED_DIFFERENCES),
+    differences: allDifferences.slice(0, maxReportedDifferences),
     totalDifferences: allDifferences.length,
     expectedStats: gate4EvidenceStats(expected),
     actualStats: gate4EvidenceStats(actual),

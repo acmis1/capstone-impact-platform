@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from 'react';
-import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProjectReviewSection } from './ProjectReviewSection';
 import { ProjectMediaSummary } from './ProjectMediaSummary';
@@ -320,7 +320,86 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       expect(screen.queryByRole('button', { name: /Archive project/i })).toBeNull();
     });
 
-    it('renders allowed action buttons and dispatches review-action with payload', async () => {
+    it('requires accessible confirmation and safely cancels archive by button or Escape', async () => {
+      const mockFetch = vi.fn();
+      vi.stubGlobal('fetch', mockFetch);
+
+      render(
+        <StagingReviewActions
+          publicId="2026-proj-01"
+          currentStatus="in_review"
+          allowedActions={['archive']}
+        />
+      );
+
+      const archiveButton = screen.getByRole('button', { name: 'Archive project' });
+      archiveButton.focus();
+      fireEvent.click(archiveButton);
+
+      const dialog = screen.getByRole('alertdialog', { name: 'Archive project?' });
+      expect(mockFetch).not.toHaveBeenCalled();
+      const descriptionId = dialog.getAttribute('aria-describedby');
+      expect(descriptionId).toBeTruthy();
+      expect(document.getElementById(descriptionId!)?.textContent).toMatch(/moves this project to Archived/i);
+      expect(within(dialog).getByText(/moves this project to Archived/i)).toBeTruthy();
+      expect(within(dialog).getByText(/does not delete project data/i)).toBeTruthy();
+      expect(within(dialog).getByText(/not the controlled public-removal workflow/i)).toBeTruthy();
+      expect(within(dialog).getByRole('button', { name: 'Archive project' })).toBeTruthy();
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+      expect(mockFetch).not.toHaveBeenCalled();
+      await waitFor(() => expect(document.activeElement).toBe(archiveButton));
+
+      fireEvent.click(archiveButton);
+      expect(screen.getByRole('alertdialog', { name: 'Archive project?' })).toBeTruthy();
+      fireEvent.keyDown(document, { key: 'Escape' });
+
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+      expect(mockFetch).not.toHaveBeenCalled();
+      await waitFor(() => expect(document.activeElement).toBe(archiveButton));
+    });
+
+    it('dispatches exactly one canonical archive request only after confirmation', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      render(
+        <StagingReviewActions
+          publicId="2026-proj-01"
+          currentStatus="in_review"
+          allowedActions={['archive']}
+        />
+      );
+
+      fireEvent.change(screen.getByLabelText(/Review comments/i), {
+        target: { value: 'Archive after final review.' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Archive project' }));
+      expect(mockFetch).not.toHaveBeenCalled();
+
+      const confirmButton = within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Archive project',
+      });
+      fireEvent.click(confirmButton);
+      fireEvent.click(confirmButton);
+
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/projects/2026-proj-01/review-action',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'archive', comments: 'Archive after final review.' }),
+        }),
+      );
+    });
+
+    it('dispatches approve directly without archive confirmation', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ success: true }),
@@ -358,6 +437,34 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       });
 
       expect(await screen.findByText(/Status transition successful\./i)).toBeTruthy();
+    });
+
+    it('dispatches request changes directly without archive confirmation', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      render(
+        <StagingReviewActions
+          publicId="2026-proj-01"
+          currentStatus="in_review"
+          allowedActions={['request_changes']}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Request changes/i }));
+
+      await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/projects/2026-proj-01/review-action',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ action: 'request_changes', comments: undefined }),
+        }),
+      );
     });
 
     it('renders safe generic error message when review transition fails', async () => {

@@ -409,10 +409,63 @@ describe('ProjectMetadataEditor Title Suggestion and Form Integration', () => {
     });
   });
 
-  it('prompts with AlertDialog when canceling dirty changes, and discards changes on confirmation', async () => {
+  it('restores focus to Cancel when dirty changes are kept with the dialog button', async () => {
     render(
       <ProjectMetadataNavigationProvider>
         <TestContainer canEdit={true} projectStatus="draft" />
+      </ProjectMetadataNavigationProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Edit project information/i }));
+    const titleInput = screen.getByLabelText(/Project title/i) as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: 'Modified Title Before Keep Editing' } });
+
+    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+    cancelBtn.focus();
+    fireEvent.click(cancelBtn);
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(screen.getByText('Editing project information')).toBeTruthy();
+    expect((screen.getByLabelText(/Project title/i) as HTMLInputElement).value).toBe(
+      'Modified Title Before Keep Editing',
+    );
+    await waitFor(() => expect(document.activeElement).toBe(cancelBtn));
+  });
+
+  it('restores focus to Cancel when dirty changes are kept with Escape', async () => {
+    render(
+      <ProjectMetadataNavigationProvider>
+        <TestContainer canEdit={true} projectStatus="draft" />
+      </ProjectMetadataNavigationProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Edit project information/i }));
+    const titleInput = screen.getByLabelText(/Project title/i) as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: 'Modified Title Before Escape' } });
+
+    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+    cancelBtn.focus();
+    fireEvent.click(cancelBtn);
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(screen.getByText('Editing project information')).toBeTruthy();
+    expect((screen.getByLabelText(/Project title/i) as HTMLInputElement).value).toBe(
+      'Modified Title Before Escape',
+    );
+    await waitFor(() => expect(document.activeElement).toBe(cancelBtn));
+  });
+
+  it('prompts with AlertDialog when canceling dirty changes, and discards changes on confirmation', async () => {
+    const saveAction = vi.fn().mockResolvedValue({ ok: true, metadata: initialMetadata } as ProjectMetadataActionResult);
+    render(
+      <ProjectMetadataNavigationProvider>
+        <TestContainer canEdit={true} projectStatus="draft" saveAction={saveAction} />
       </ProjectMetadataNavigationProvider>,
     );
 
@@ -424,20 +477,25 @@ describe('ProjectMetadataEditor Title Suggestion and Form Integration', () => {
 
     expect(screen.getByTestId('dirty-indicator').textContent).toBe('DIRTY');
 
-    // Click Cancel
     const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+    cancelBtn.focus();
     fireEvent.click(cancelBtn);
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
 
-    // Verify Discard changes dialog appears
-    expect(screen.getByText('Discard unsaved changes?')).toBeTruthy();
-
-    // Confirm discard
     const discardBtn = screen.getByRole('button', { name: 'Discard changes' });
     fireEvent.click(discardBtn);
 
     await waitFor(() => {
       expect(screen.getByText('Project information')).toBeTruthy();
       expect(screen.getByTestId('dirty-indicator').textContent).toBe('CLEAN');
+      expect(screen.queryByLabelText(/Project title/i)).toBeNull();
+    });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(saveAction).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: /Edit project information/i }),
+      );
     });
   });
 
