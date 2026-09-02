@@ -405,10 +405,25 @@ describe('ProjectTableContainer mobile card presentation', () => {
     expect(cardQueries.getByRole('link', { name: 'View project' })).toBeTruthy();
   });
 
+  it('gives each mobile card selection control a project-specific accessible name', async () => {
+    const mobileRows = [
+      { ...baseRow, id: 'agri', publicId: 'P-AGRI', title: 'Agricultural IoT Hydration Roster' },
+      { ...baseRow, id: 'drone', publicId: 'P-DRONE', title: 'Smart Medical Drone Delivery' },
+    ];
+    renderTable('', { rows: mobileRows, total: 2, page: 1, pageSize: 10, pageCount: 1 });
+
+    for (const row of mobileRows) {
+      const card = (await screen.findByRole('heading', { name: row.title, level: 4 })).closest('li');
+      const cardQueries = within(card as HTMLElement);
+      expect(cardQueries.getByText('Select project')).toBeTruthy();
+      expect(cardQueries.getByRole('checkbox', { name: `Select ${row.title}` })).toBeTruthy();
+    }
+  });
+
   it('selects a project from the mobile card controls', async () => {
     renderTable();
     const card = (await screen.findByRole('heading', { name: 'Atlas', level: 4 })).closest('li');
-    fireEvent.click(within(card as HTMLElement).getByRole('checkbox', { name: 'Select project' }));
+    fireEvent.click(within(card as HTMLElement).getByRole('checkbox', { name: 'Select Atlas' }));
     expect(screen.getAllByText('1 selected').length).toBeGreaterThan(0);
   });
 
