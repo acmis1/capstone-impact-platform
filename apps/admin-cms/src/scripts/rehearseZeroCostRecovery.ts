@@ -30,6 +30,11 @@ import {
   countExpectedManagedTriggersInStandardSchemaDump,
   EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT,
 } from '../recovery/managedSchemaCustomizations';
+import {
+  ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL,
+  CUSTOM_CLAIMS_ALLOWLIST_COMPATIBILITY,
+  deriveManagedAuthCopyRequirements,
+} from '../recovery/managedAuthSchemaCompatibility';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
 const SOURCE_PORT_BASE = 54_820;
@@ -99,6 +104,14 @@ async function main(): Promise<void> {
     sourceNetworkId = createDisposableNetwork(source);
     startDisposableStack(repositoryRoot, source, sourceNetworkId);
     sourceStarted = true;
+    // Reproduce the reviewed hosted-ahead Auth migration on the disposable source only. The
+    // synthetic restore target is deterministically set to the corresponding pre-migration shape.
+    runDisposablePsql(source, {
+      command: ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL,
+      singleTransaction: true,
+      timeoutMs: 120_000,
+      databaseUser: 'supabase_auth_admin',
+    });
     const sourceEnv = readDisposableStackEnv(repositoryRoot, source);
     const sourceClient = createClient(sourceEnv.apiUrl, sourceEnv.serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -124,6 +137,17 @@ async function main(): Promise<void> {
       bundleFile(bundleDirectory, `${BUNDLE_PATHS.database}/schema.sql`),
       'utf8',
     );
+    const authCopyRequirements = deriveManagedAuthCopyRequirements(fs.readFileSync(
+      bundleFile(bundleDirectory, `${BUNDLE_PATHS.database}/data.sql`),
+      'utf8',
+    ));
+    const hostedAheadCopyHeaderPresent = authCopyRequirements.some((requirement) => (
+      requirement.table === CUSTOM_CLAIMS_ALLOWLIST_COMPATIBILITY.table
+      && requirement.columns.includes(CUSTOM_CLAIMS_ALLOWLIST_COMPATIBILITY.column)
+    ));
+    if (!hostedAheadCopyHeaderPresent) {
+      throw new Error('SYNTHETIC_HOSTED_AHEAD_AUTH_COPY_HEADER_MISSING');
+    }
     const managedTriggersInStandardSchemaDump = countExpectedManagedTriggersInStandardSchemaDump(
       schemaDump,
     );
@@ -142,6 +166,8 @@ async function main(): Promise<void> {
       applicationPort: APPLICATION_PORT,
       targetPostgresMajorVersion: 17,
       skipApplicationSmoke,
+      proveUnalignedManagedAuthReplayFailure: true,
+      simulatePreCustomClaimsAllowlistTarget: true,
     });
     const bundlePreservedThroughRestore = assertBundlePreserved(bundleDirectory);
     console.log('SYNTHETIC_SOURCE_POSTGRES_MAJOR = 15');
@@ -149,6 +175,12 @@ async function main(): Promise<void> {
     console.log(`SYNTHETIC_STORAGE_OBJECTS_SEEDED = ${seededStorageObjects}`);
     console.log(
       `STANDARD_SCHEMA_DUMP_MANAGED_AUTH_TRIGGERS = ${managedTriggersInStandardSchemaDump}/${EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT}`,
+    );
+    console.log('SYNTHETIC_HOSTED_AHEAD_AUTH_COPY_HEADER = PRESENT');
+    console.log('SYNTHETIC_TARGET_AUTH_BASELINE = PRE_20260625000000');
+    console.log(`MANAGED_AUTH_COMPATIBILITY = ${restore.managedAuthCompatibility}`);
+    console.log(
+      `LEGACY_UNALIGNED_DATA_REPLAY_FAILED = ${restore.legacyUnalignedDataReplayFailed ? 'YES' : 'NO'}`,
     );
     console.log(`BACKUP_DURATION_MS = ${Date.parse(capture.completedAt) - Date.parse(capture.startedAt)}`);
     console.log(`SYNTHETIC_SOURCE_RESIDUE_ABSENT = ${sourceResidueAbsent ? 'YES' : 'NO'}`);
@@ -161,6 +193,8 @@ async function main(): Promise<void> {
     console.log('PAID_SERVICE_DEPENDENCY = NO');
 
     if (restore.classification !== 'ZERO_COST_RECOVERY_REHEARSAL_VERIFIED'
+      || restore.managedAuthCompatibility !== 'ALIGNED_KNOWN_DELTA'
+      || restore.legacyUnalignedDataReplayFailed !== true
       || !bundlePreservedThroughRestore
       || !syntheticBundleCleaned) {
       process.exitCode = 1;

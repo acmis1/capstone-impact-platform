@@ -71,6 +71,16 @@ import {
   resolveClassification,
   type RecoveryClassification,
 } from './zeroCostRecoveryContract';
+import {
+  ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL,
+  REMOVE_CUSTOM_CLAIMS_ALLOWLIST_FOR_SYNTHETIC_TARGET_SQL,
+  buildManagedAuthCatalogEvidenceSql,
+  deriveManagedAuthCopyRequirements,
+  parseManagedAuthCatalogEvidence,
+  planManagedAuthSchemaCompatibility,
+  type ManagedAuthCompatibilityPlan,
+  type ManagedAuthCopyRequirement,
+} from './managedAuthSchemaCompatibility';
 
 /**
  * Phase B: restore a bundle into a disposable local target and verify it.
@@ -94,6 +104,10 @@ export interface RestoreVerificationOptions {
   applicationPort?: number;
   /** Defaults to the PostgreSQL 17 hosted-engine lineage already validated for this rehearsal. */
   targetPostgresMajorVersion?: number;
+  /** Synthetic-only regression proof that the unaligned data replay still fails transactionally. */
+  proveUnalignedManagedAuthReplayFailure?: boolean;
+  /** Synthetic-only deterministic emulation of the pinned target before Auth migration 20260625. */
+  simulatePreCustomClaimsAllowlistTarget?: boolean;
 }
 
 export interface Gate4RestoredResult {
@@ -143,6 +157,8 @@ export interface RestoreVerificationResult {
   managedStorageCustomizationCount: number;
   expectedManagedStorageCustomizationCount: number;
   managedSchemaCustomizationsMatch: boolean;
+  managedAuthCompatibility: 'NOT_RUN' | 'MATCH' | 'ALIGNED_KNOWN_DELTA';
+  legacyUnalignedDataReplayFailed: boolean | null;
   managedAuthBehaviorVerified: boolean | null;
   bucketSummaries: string[];
   gate4: Gate4RestoredResult | null;
@@ -160,10 +176,10 @@ function containerStagedPath(stagingDirectory: string, artifact: string): string
  * disposable target; it can never produce VERIFIED, and mandatory exact-identity cleanup removes
  * the partial target.
  */
-export function restoreDatabase(
+function stageDatabaseArtifacts(
   identity: DisposableStackIdentity,
   bundleDirectory: string,
-): void {
+): string {
   const stagingDirectory = prepareDisposableContainerStaging(identity);
   for (const artifact of DATABASE_BACKUP_ARTIFACTS) {
     copyFileIntoDisposableContainer(
@@ -172,6 +188,14 @@ export function restoreDatabase(
       containerStagedPath(stagingDirectory, artifact),
     );
   }
+  return stagingDirectory;
+}
+
+/** Schema replay is separately classified so it cannot be confused with provider data drift. */
+export function restoreDatabaseSchema(
+  identity: DisposableStackIdentity,
+  stagingDirectory: string,
+): void {
   try {
     runDisposablePsql(identity, {
       singleTransaction: true,
@@ -181,8 +205,17 @@ export function restoreDatabase(
         containerStagedPath(stagingDirectory, 'migrations-schema.sql'),
       ],
     });
-    // Data is replayed with replication triggers disabled, exactly as the Supabase data dump
-    // expects, then migration history is applied last.
+  } catch {
+    throw new RecoveryGuardError('RESTORE_SCHEMA_SQL_FAILED');
+  }
+}
+
+/** Data replay follows compatibility alignment and retains its own safe failure code. */
+export function restoreDatabaseData(
+  identity: DisposableStackIdentity,
+  stagingDirectory: string,
+): void {
+  try {
     runDisposablePsql(identity, {
       singleTransaction: true,
       command: 'SET session_replication_role = replica',
@@ -192,8 +225,72 @@ export function restoreDatabase(
       ],
     });
   } catch {
-    throw new RecoveryGuardError('RESTORE_SQL_FAILED');
+    throw new RecoveryGuardError('RESTORE_DATA_SQL_FAILED');
   }
+}
+
+function readManagedAuthCatalog(identity: DisposableStackIdentity) {
+  try {
+    return parseManagedAuthCatalogEvidence(runDisposablePsql(identity, {
+      command: buildManagedAuthCatalogEvidenceSql(),
+      timeoutMs: 120_000,
+    }));
+  } catch (error) {
+    if (error instanceof RecoveryGuardError) throw error;
+    throw new RecoveryGuardError('MANAGED_AUTH_COMPATIBILITY_CATALOG_QUERY_FAILED');
+  }
+}
+
+function inspectManagedAuthCompatibility(
+  identity: DisposableStackIdentity,
+  dataSqlFile: string,
+): { requirements: ManagedAuthCopyRequirement[]; plan: ManagedAuthCompatibilityPlan } {
+  let requirements: ManagedAuthCopyRequirement[];
+  try {
+    requirements = deriveManagedAuthCopyRequirements(fs.readFileSync(dataSqlFile, 'utf8'));
+  } catch (error) {
+    if (error instanceof RecoveryGuardError) throw error;
+    throw new RecoveryGuardError('MANAGED_AUTH_COMPATIBILITY_SOURCE_READ_FAILED');
+  }
+  return {
+    requirements,
+    plan: planManagedAuthSchemaCompatibility(requirements, readManagedAuthCatalog(identity)),
+  };
+}
+
+function alignManagedAuthCompatibility(
+  identity: DisposableStackIdentity,
+  inspection: ReturnType<typeof inspectManagedAuthCompatibility>,
+): 'MATCH' | 'ALIGNED_KNOWN_DELTA' {
+  if (inspection.plan.action === 'MATCH') return 'MATCH';
+  try {
+    runDisposablePsql(identity, {
+      singleTransaction: true,
+      command: ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL,
+      timeoutMs: 120_000,
+      databaseUser: 'supabase_auth_admin',
+    });
+  } catch {
+    throw new RecoveryGuardError('MANAGED_AUTH_COMPATIBILITY_ALIGNMENT_SQL_FAILED');
+  }
+  const recheck = planManagedAuthSchemaCompatibility(
+    inspection.requirements,
+    readManagedAuthCatalog(identity),
+  );
+  if (recheck.action !== 'MATCH') {
+    throw new RecoveryGuardError('MANAGED_AUTH_COMPATIBILITY_RECHECK_FAILED');
+  }
+  return 'ALIGNED_KNOWN_DELTA';
+}
+
+export function classifyRestoreFailure(error: unknown): RecoveryClassification {
+  const code = error instanceof RecoveryGuardError ? error.code : '';
+  if (code.startsWith('RESTORE_SCHEMA_SQL_FAILED')) return 'RESTORE_SCHEMA_FAILED';
+  if (code.startsWith('RESTORE_DATA_SQL_FAILED')) return 'RESTORE_DATA_FAILED';
+  if (code.startsWith('MANAGED_AUTH_COMPATIBILITY_')) {
+    return 'MANAGED_AUTH_COMPATIBILITY_FAILED';
+  }
+  return 'RESTORE_FAILED';
 }
 
 /** Installs only fixed reviewed PP1 DDL after validating the checksum-bound source evidence. */
@@ -594,6 +691,8 @@ export async function runRestoreVerification(
   let storageIntegrityMatch = false;
   let assistiveCostFenceMatch = false;
   let managedSchemaCustomizationsMatch = false;
+  let managedAuthCompatibility: RestoreVerificationResult['managedAuthCompatibility'] = 'NOT_RUN';
+  let legacyUnalignedDataReplayFailed: boolean | null = null;
   let managedAuthBehaviorVerified: boolean | null = null;
 
   try {
@@ -602,7 +701,55 @@ export async function runRestoreVerification(
     started = true;
     startDisposableStack(options.repositoryRoot, identity, networkId);
 
-    restoreDatabase(identity, bundle.directory);
+    if (options.simulatePreCustomClaimsAllowlistTarget) {
+      if (bundle.manifest.source.kind !== 'disposable-local-synthetic'
+        || !options.proveUnalignedManagedAuthReplayFailure) {
+        throw new RecoveryGuardError(
+          'MANAGED_AUTH_COMPATIBILITY_SYNTHETIC_BASELINE_PRECONDITION_FAILED',
+        );
+      }
+      try {
+        runDisposablePsql(identity, {
+          singleTransaction: true,
+          command: REMOVE_CUSTOM_CLAIMS_ALLOWLIST_FOR_SYNTHETIC_TARGET_SQL,
+          timeoutMs: 120_000,
+          databaseUser: 'supabase_auth_admin',
+        });
+      } catch {
+        throw new RecoveryGuardError(
+          'MANAGED_AUTH_COMPATIBILITY_SYNTHETIC_BASELINE_SETUP_FAILED',
+        );
+      }
+    }
+
+    const stagingDirectory = stageDatabaseArtifacts(identity, bundle.directory);
+    restoreDatabaseSchema(identity, stagingDirectory);
+    const compatibilityInspection = inspectManagedAuthCompatibility(
+      identity,
+      bundleFile(bundle.directory, `${BUNDLE_PATHS.database}/data.sql`),
+    );
+    if (options.proveUnalignedManagedAuthReplayFailure) {
+      if (bundle.manifest.source.kind !== 'disposable-local-synthetic'
+        || compatibilityInspection.plan.action !== 'ADD_CUSTOM_CLAIMS_ALLOWLIST') {
+        throw new RecoveryGuardError('MANAGED_AUTH_COMPATIBILITY_LEGACY_PROBE_PRECONDITION_FAILED');
+      }
+      try {
+        restoreDatabaseData(identity, stagingDirectory);
+        legacyUnalignedDataReplayFailed = false;
+      } catch (error) {
+        if (!(error instanceof RecoveryGuardError) || error.code !== 'RESTORE_DATA_SQL_FAILED') {
+          throw error;
+        }
+        legacyUnalignedDataReplayFailed = true;
+      }
+      if (!legacyUnalignedDataReplayFailed) {
+        throw new RecoveryGuardError(
+          'MANAGED_AUTH_COMPATIBILITY_LEGACY_PROBE_UNEXPECTEDLY_SUCCEEDED',
+        );
+      }
+    }
+    managedAuthCompatibility = alignManagedAuthCompatibility(identity, compatibilityInspection);
+    restoreDatabaseData(identity, stagingDirectory);
     restoreManagedSchemaCustomizations(identity, bundle.managedSchemaCustomizations);
 
     const stackEnv = readDisposableStackEnv(options.repositoryRoot, identity);
@@ -742,9 +889,7 @@ export async function runRestoreVerification(
     }
     verificationCompletedAt = new Date().toISOString();
   } catch (error) {
-    findings.push(error instanceof RecoveryGuardError && error.code.startsWith('RESTORE_SQL_FAILED')
-      ? 'RESTORE_FAILED'
-      : 'RESTORE_FAILED');
+    findings.push(classifyRestoreFailure(error));
     notes.push(error instanceof Error ? error.message : 'RESTORE_FAILED');
   } finally {
     if (started) {
@@ -807,6 +952,8 @@ export async function runRestoreVerification(
     managedStorageCustomizationCount: managedCounts.storage,
     expectedManagedStorageCustomizationCount: EXPECTED_MANAGED_STORAGE_CUSTOMIZATION_COUNT,
     managedSchemaCustomizationsMatch,
+    managedAuthCompatibility,
+    legacyUnalignedDataReplayFailed,
     managedAuthBehaviorVerified,
     bucketSummaries,
     gate4,

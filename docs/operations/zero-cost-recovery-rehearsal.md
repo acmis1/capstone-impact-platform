@@ -61,6 +61,11 @@ The safe manifest binds:
 Restore verifies every consumed checksum before starting a disposable target. Missing, changed,
 duplicated, path-traversing, oversized, or structurally invalid material fails closed.
 
+Managed Auth provider-version compatibility is derived from the checksum-bound `data.sql` COPY
+headers, so the existing v2 bundle format remains valid and a previously captured bundle does not
+need to be regenerated. The verifier does not execute bundle text to discover compatibility and
+does not require new manifest metadata from `auth.schema_migrations`.
+
 ## Database and Storage split
 
 The logical database artifacts are replayed in this order:
@@ -86,6 +91,21 @@ do not print object keys.
 The logical dump preserves supported Auth database state. Verification reports only source and
 restored user/identity counts plus orphan-identity integrity; it never prints UUIDs, emails,
 password hashes, identity payloads, or performs a copied-user login.
+
+After schema replay and before data replay, the verifier compares every Auth COPY table/column
+requirement with the disposable target catalog. Unknown source-ahead tables or columns fail closed
+as `MANAGED_AUTH_COMPATIBILITY_FAILED`. The only reviewed forward delta is Supabase Auth migration
+`20260625000000_add_custom_claims_allowlist.up.sql`:
+
+```sql
+alter table auth.custom_oauth_providers
+    add column if not exists custom_claims_allowlist text[] not null default '{}';
+```
+
+This fixed repository-owned statement runs only when that exact column alone is missing. An
+existing column with a different type, nullability, or default is refused. The target catalog is
+queried again after alignment and must report `text[] NOT NULL DEFAULT '{}'` before `data.sql` can
+run. Bundle SQL never supplies executable compatibility DDL.
 
 The standard Supabase schema dump intentionally excludes provider-managed schemas including
 `auth` and `storage`. Supabase therefore requires custom triggers, policies, and other application
@@ -152,7 +172,9 @@ npm run restore:recovery-backup -- \
 The verifier creates a fresh PostgreSQL 17 disposable target. Schema and data are separate
 `ON_ERROR_STOP`/single-transaction phases; a data failure can leave the schema phase committed only
 inside the verifier-owned disposable target. Any failure blocks VERIFIED, and mandatory cleanup
-removes that partial target. It then restores only approved PP1 managed-schema customizations,
+removes that partial target. Diagnostics distinguish `RESTORE_SCHEMA_FAILED`,
+`MANAGED_AUTH_COMPATIBILITY_FAILED`, and `RESTORE_DATA_FAILED`. It then restores only approved PP1
+managed-schema customizations,
 restores Storage through the API, and checks:
 
 - all 48 migrations and latest migration;
@@ -183,10 +205,14 @@ The repository-owned proof uses no hosted credential or provider call:
 npm run verify:zero-cost-recovery-rehearsal
 ```
 
-It creates a migrated PostgreSQL 15 source, seeds synthetic project/media/audit/participant
+It creates a migrated PostgreSQL 15 source, applies the exact reviewed source-ahead Auth column,
+seeds synthetic project/media/audit/participant
 preview/public-feed/assistive/Auth/execution-control evidence plus one object in each canonical
-bucket, proves the normal schema dump contains `0/2` PP1 Auth triggers, captures their separate
-structural evidence, restores them to PostgreSQL 17, verifies exact structure and bounded synthetic
+bucket, asserts that the captured COPY header contains the new column, and makes the synthetic-only
+target reproduce the pre-migration managed schema even when the locally cached Auth image is newer.
+It then proves unaligned replay rejects the hosted-ahead COPY header, proves the normal schema dump
+contains `0/2` PP1 Auth triggers, captures their separate structural evidence, aligns the one
+reviewed provider delta, restores them to PostgreSQL 17, verifies exact structure and bounded synthetic
 INSERT/UPDATE metadata-stripping behavior, runs all remaining verification and the application
 smoke, and cleans both stacks and the synthetic bundle.
 

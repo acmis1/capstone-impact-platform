@@ -298,6 +298,55 @@ function assertDatabaseContainerOwned(identity: DisposableStackIdentity): void {
   }
 }
 
+/** Reads the verifier-owned Auth container's generated internal DB credential without logging it. */
+function readDisposableAuthDatabasePassword(identity: DisposableStackIdentity): string {
+  assertDisposableOwnership(identity);
+  const authContainer = `supabase_auth_${identity.projectId}`;
+  let inspected: string;
+  try {
+    inspected = docker([
+      'inspect', '--format',
+      `{{ index .Config.Labels "com.supabase.cli.project" }}|{{json .Config.Env}}`,
+      authContainer,
+    ]);
+  } catch {
+    throw new Error('DISPOSABLE_AUTH_DATABASE_CREDENTIAL_UNAVAILABLE');
+  }
+  const separator = inspected.indexOf('|');
+  if (separator < 0 || inspected.slice(0, separator) !== identity.projectId) {
+    throw new Error('DISPOSABLE_AUTH_CONTAINER_OWNERSHIP_UNPROVEN');
+  }
+  let environment: unknown;
+  try {
+    environment = JSON.parse(inspected.slice(separator + 1)) as unknown;
+  } catch {
+    throw new Error('DISPOSABLE_AUTH_DATABASE_CREDENTIAL_UNAVAILABLE');
+  }
+  if (!Array.isArray(environment)
+    || environment.some((entry) => typeof entry !== 'string')) {
+    throw new Error('DISPOSABLE_AUTH_DATABASE_CREDENTIAL_UNAVAILABLE');
+  }
+  const connectionEntry = environment.find((entry) => (
+    entry.startsWith('GOTRUE_DB_DATABASE_URL=')
+  ));
+  if (!connectionEntry) throw new Error('DISPOSABLE_AUTH_DATABASE_CREDENTIAL_UNAVAILABLE');
+  let connection: URL;
+  try {
+    connection = new URL(connectionEntry.slice('GOTRUE_DB_DATABASE_URL='.length));
+  } catch {
+    throw new Error('DISPOSABLE_AUTH_DATABASE_CREDENTIAL_UNAVAILABLE');
+  }
+  if (!['postgres:', 'postgresql:'].includes(connection.protocol)
+    || decodeURIComponent(connection.username) !== 'supabase_auth_admin'
+    || !['db', identity.databaseContainer].includes(connection.hostname)
+    || connection.port !== '5432'
+    || connection.pathname !== '/postgres'
+    || !connection.password) {
+    throw new Error('DISPOSABLE_AUTH_DATABASE_CREDENTIAL_INVALID');
+  }
+  return decodeURIComponent(connection.password);
+}
+
 /** Only resources labelled with this execution project id are ever considered owned. */
 export function inspectDisposableResidue(identity: DisposableStackIdentity): DisposableResidue {
   assertDisposableProjectId(identity.projectId);
@@ -338,6 +387,19 @@ export interface PsqlOptions {
   command?: string;
   singleTransaction?: boolean;
   timeoutMs?: number;
+  /** Fixed managed-service owner used only for reviewed compatibility SQL. */
+  databaseUser?: 'postgres' | 'supabase_auth_admin';
+}
+
+const APPROVED_MANAGED_AUTH_OWNER_COMMANDS = new Set([
+  `alter table auth.custom_oauth_providers
+    add column if not exists custom_claims_allowlist text[] not null default '{}';`,
+  `alter table auth.custom_oauth_providers
+    drop column if exists custom_claims_allowlist;`,
+]);
+
+export function isApprovedDisposableManagedAuthOwnerCommand(command: unknown): boolean {
+  return typeof command === 'string' && APPROVED_MANAGED_AUTH_OWNER_COMMANDS.has(command);
 }
 
 /** Runs psql inside the disposable database container only. */
@@ -346,16 +408,42 @@ export function runDisposablePsql(
   options: PsqlOptions,
 ): string {
   assertDatabaseContainerOwned(identity);
-  const args = ['exec', identity.databaseContainer, 'psql', '-U', 'postgres', '-d', 'postgres', '-X', '-v', 'ON_ERROR_STOP=1'];
+  const databaseUser = options.databaseUser ?? 'postgres';
+  if (databaseUser === 'supabase_auth_admin'
+    && (!options.singleTransaction
+      || (options.files?.length ?? 0) > 0
+      || !isApprovedDisposableManagedAuthOwnerCommand(options.command))) {
+    throw new Error('DISPOSABLE_MANAGED_AUTH_OWNER_COMMAND_NOT_APPROVED');
+  }
+  const args = [
+    'exec', identity.databaseContainer, 'psql',
+    '-U', databaseUser,
+    '-d', 'postgres', '-X', '-v', 'ON_ERROR_STOP=1',
+  ];
+  const environment = restrictedLocalEnvironment();
+  if (databaseUser === 'supabase_auth_admin') {
+    // Docker resolves this name from its restricted CLI environment; the value never enters argv.
+    args.splice(1, 0, '--env', 'PGPASSWORD');
+    args.push('-h', '127.0.0.1');
+    environment.PGPASSWORD = readDisposableAuthDatabasePassword(identity);
+  }
   if (options.singleTransaction) args.push('--single-transaction');
   if (options.command) args.push('--command', options.command);
   for (const file of options.files ?? []) args.push('--file', file);
-  return execFileSync('docker', args, {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: options.timeoutMs ?? 600_000,
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  try {
+    return execFileSync('docker', args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: options.timeoutMs ?? 600_000,
+      maxBuffer: 64 * 1024 * 1024,
+      env: environment,
+    });
+  } catch (error) {
+    if (databaseUser === 'supabase_auth_admin') {
+      throw new Error('DISPOSABLE_MANAGED_AUTH_OWNER_COMMAND_FAILED');
+    }
+    throw error;
+  }
 }
 
 /** Streams a host file into the disposable container without exposing the host filesystem to it. */
