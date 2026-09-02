@@ -139,6 +139,16 @@ export async function seedLocalSupabaseFixturesWorker(client: SupabaseClient): P
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
     'base64'
   );
+  // Deterministic blank one-page PDF; xref offsets and seed.sql size match these ASCII bytes.
+  const syntheticPosterPdfBuffer = Buffer.from(
+    '%PDF-1.4\n' +
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n' +
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n' +
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>\nendobj\n' +
+    'xref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n' +
+    'trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n203\n%%EOF\n',
+    'ascii'
+  );
 
   // Upload public fixture
   const publicBucket = 'project-public-assets';
@@ -181,6 +191,77 @@ export async function seedLocalSupabaseFixturesWorker(client: SupabaseClient): P
     throw new Error('Verification failed: Uploaded private fixture object missing.');
   }
   fixturesUploaded.push(`${privateBucket}:${privatePath}`);
+
+  // Upload Medical Drone's approved-but-not-yet-published private media fixtures.
+  const medicalDronePosterImagePath = 'drafts/2026-medical-drone/poster_image/poster.png';
+  const { error: uploadMedicalDroneImageErr } = await client.storage
+    .from(privateBucket)
+    .upload(medicalDronePosterImagePath, syntheticPosterBuffer, { contentType: 'image/png', upsert: true });
+
+  if (uploadMedicalDroneImageErr) {
+    throw new Error('Failed to upload Medical Drone private poster image fixture.');
+  }
+
+  const { data: medicalDroneImageList, error: listMedicalDroneImageErr } = await client.storage
+    .from(privateBucket)
+    .list('drafts/2026-medical-drone/poster_image', { search: 'poster.png' });
+
+  if (
+    listMedicalDroneImageErr ||
+    !medicalDroneImageList ||
+    !medicalDroneImageList.some((file) => file.name === 'poster.png')
+  ) {
+    throw new Error('Verification failed: Uploaded Medical Drone private poster image fixture object missing.');
+  }
+  fixturesUploaded.push(`${privateBucket}:${medicalDronePosterImagePath}`);
+
+  const medicalDronePosterPdfPath = 'drafts/2026-medical-drone/poster_pdf/poster.pdf';
+  const { error: uploadMedicalDronePdfErr } = await client.storage
+    .from(privateBucket)
+    .upload(medicalDronePosterPdfPath, syntheticPosterPdfBuffer, { contentType: 'application/pdf', upsert: true });
+
+  if (uploadMedicalDronePdfErr) {
+    throw new Error('Failed to upload Medical Drone private poster PDF fixture.');
+  }
+
+  const { data: medicalDronePdfList, error: listMedicalDronePdfErr } = await client.storage
+    .from(privateBucket)
+    .list('drafts/2026-medical-drone/poster_pdf', { search: 'poster.pdf' });
+
+  if (
+    listMedicalDronePdfErr ||
+    !medicalDronePdfList ||
+    !medicalDronePdfList.some((file) => file.name === 'poster.pdf')
+  ) {
+    throw new Error('Verification failed: Uploaded Medical Drone private poster PDF fixture object missing.');
+  }
+
+  // Reconcile only the known synthetic PDF metadata row. The conditional update is intentionally
+  // fail-closed so a missing or drifted row cannot cause an unrelated media asset to be changed.
+  const { data: reconciledMedicalDronePdf, error: reconcileMedicalDronePdfErr } = await client
+    .from('media_assets')
+    .update({ file_size_bytes: syntheticPosterPdfBuffer.length })
+    .eq('id', 'f0000000-0000-0000-0000-000000000004')
+    .eq('project_id', 'e0000000-0000-0000-0000-000000000002')
+    .eq('asset_type', 'poster_pdf')
+    .eq('file_name', 'poster.pdf')
+    .eq('storage_bucket', privateBucket)
+    .eq('storage_path', medicalDronePosterPdfPath)
+    .is('public_url', null)
+    .eq('mime_type', 'application/pdf')
+    .eq('is_public_approved', false)
+    .select('id,file_size_bytes');
+
+  if (
+    reconcileMedicalDronePdfErr ||
+    !Array.isArray(reconciledMedicalDronePdf) ||
+    reconciledMedicalDronePdf.length !== 1 ||
+    reconciledMedicalDronePdf[0]?.id !== 'f0000000-0000-0000-0000-000000000004' ||
+    Number(reconciledMedicalDronePdf[0]?.file_size_bytes) !== syntheticPosterPdfBuffer.length
+  ) {
+    throw new Error('Failed to reconcile Medical Drone poster PDF metadata.');
+  }
+  fixturesUploaded.push(`${privateBucket}:${medicalDronePosterPdfPath}`);
 
   return { bucketsVerified, fixturesUploaded };
 }

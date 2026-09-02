@@ -283,6 +283,24 @@ describe('ProjectTableContainer preference integration', () => {
     await waitFor(() => expect(screen.queryByText('1 selected')).toBeNull());
   });
 
+  it('retains the focused individual row checkbox across selection changes', async () => {
+    renderTable();
+    const rowCheckbox = (await screen.findAllByRole('checkbox', { name: 'Select Atlas' }))[0] as HTMLInputElement;
+
+    rowCheckbox.focus();
+    expect(document.activeElement).toBe(rowCheckbox);
+
+    fireEvent.click(rowCheckbox);
+    await waitFor(() => expect(rowCheckbox.checked).toBe(true));
+    expect(rowCheckbox.isConnected).toBe(true);
+    expect(document.activeElement).toBe(rowCheckbox);
+
+    fireEvent.click(rowCheckbox);
+    await waitFor(() => expect(rowCheckbox.checked).toBe(false));
+    expect(rowCheckbox.isConnected).toBe(true);
+    expect(document.activeElement).toBe(rowCheckbox);
+  });
+
   it('selects every selectable row on the current page and leaves unsafe IDs disabled', async () => {
     renderTable('', {
       rows: [
@@ -345,6 +363,24 @@ describe('ProjectTableContainer preference integration', () => {
     expect(screen.getByRole('heading', { name: 'Page two project A', level: 4 })).toBeTruthy();
     expect(screen.queryByText('Page one project A')).toBeNull();
     expect(screen.getAllByRole('checkbox', { name: 'Select Page two project A' }).every((checkbox) => !(checkbox as HTMLInputElement).checked)).toBe(true);
+  it('retains the focused desktop current-page checkbox across selection changes', async () => {
+    renderTable();
+    const pageCheckbox = (await screen.findAllByRole('checkbox', { name: 'Select current page' }))
+      .find((checkbox) => checkbox.closest('th')) as HTMLInputElement;
+
+    expect(pageCheckbox).toBeTruthy();
+    pageCheckbox.focus();
+    expect(document.activeElement).toBe(pageCheckbox);
+
+    fireEvent.click(pageCheckbox);
+    await waitFor(() => expect(pageCheckbox.checked).toBe(true));
+    expect(pageCheckbox.isConnected).toBe(true);
+    expect(document.activeElement).toBe(pageCheckbox);
+
+    fireEvent.click(pageCheckbox);
+    await waitFor(() => expect(pageCheckbox.checked).toBe(false));
+    expect(pageCheckbox.isConnected).toBe(true);
+    expect(document.activeElement).toBe(pageCheckbox);
   });
 
   it.each([
@@ -417,10 +453,25 @@ describe('ProjectTableContainer mobile card presentation', () => {
     expect(cardQueries.getByRole('link', { name: 'View project' })).toBeTruthy();
   });
 
+  it('gives each mobile card selection control a project-specific accessible name', async () => {
+    const mobileRows = [
+      { ...baseRow, id: 'agri', publicId: 'P-AGRI', title: 'Agricultural IoT Hydration Roster' },
+      { ...baseRow, id: 'drone', publicId: 'P-DRONE', title: 'Smart Medical Drone Delivery' },
+    ];
+    renderTable('', { rows: mobileRows, total: 2, page: 1, pageSize: 10, pageCount: 1 });
+
+    for (const row of mobileRows) {
+      const card = (await screen.findByRole('heading', { name: row.title, level: 4 })).closest('li');
+      const cardQueries = within(card as HTMLElement);
+      expect(cardQueries.getByText('Select project')).toBeTruthy();
+      expect(cardQueries.getByRole('checkbox', { name: `Select ${row.title}` })).toBeTruthy();
+    }
+  });
+
   it('selects a project from the mobile card controls', async () => {
     renderTable();
     const card = (await screen.findByRole('heading', { name: 'Atlas', level: 4 })).closest('li');
-    fireEvent.click(within(card as HTMLElement).getByRole('checkbox', { name: 'Select project' }));
+    fireEvent.click(within(card as HTMLElement).getByRole('checkbox', { name: 'Select Atlas' }));
     expect(screen.getAllByText('1 selected').length).toBeGreaterThan(0);
   });
 

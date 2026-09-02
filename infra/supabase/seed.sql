@@ -123,11 +123,11 @@ INSERT INTO public.projects (
     'Dr. Academic Supervisor B (Synthetic)',
     'AeroMed Delivery (Synthetic)',
     ARRAY['Synthetic Member 3', 'Synthetic Member 4'],
-    'http://127.0.0.1:54321/storage/v1/object/public/project-public-assets/2026/aeromed/poster.png',
-    'http://127.0.0.1:54321/storage/v1/object/public/project-public-assets/2026/aeromed/poster.pdf',
+    NULL,
+    NULL,
     'AeroMed Cargo Delivery. Safe mountain routing.',
     'Infographic depicting drone models with insulated internal temperature chambers.',
-    ARRAY['http://127.0.0.1:54321/storage/v1/object/public/project-public-assets/2026/aeromed/snapshot1.png'],
+    ARRAY[]::text[],
     NULL,
     NULL,
     NULL,
@@ -247,12 +247,24 @@ INSERT INTO public.media_assets (id, project_id, asset_type, file_name, storage_
     'e0000000-0000-0000-0000-000000000002',
     'poster_image',
     'poster.png',
-    'project-public-assets',
-    '2026/aeromed/poster.png',
-    'http://127.0.0.1:54321/storage/v1/object/public/project-public-assets/2026/aeromed/poster.png',
+    'project-drafts-private',
+    'drafts/2026-medical-drone/poster_image/poster.png',
+    NULL,
     'image/png',
-    1048576,
-    true
+    70,
+    false
+  ),
+  (
+    'f0000000-0000-0000-0000-000000000004',
+    'e0000000-0000-0000-0000-000000000002',
+    'poster_pdf',
+    'poster.pdf',
+    'project-drafts-private',
+    'drafts/2026-medical-drone/poster_pdf/poster.pdf',
+    NULL,
+    'application/pdf',
+    346,
+    false
   )
 ON CONFLICT (id) DO NOTHING;
 

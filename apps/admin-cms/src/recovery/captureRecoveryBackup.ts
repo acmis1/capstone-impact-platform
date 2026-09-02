@@ -27,6 +27,12 @@ import {
   managedSchemaCustomizationCounts,
   validateManagedSchemaCustomizationsAgainstRepository,
 } from './managedSchemaCustomizations';
+import {
+  assertDatabaseContainerOwned,
+  assertDisposableOwnership,
+  type DisposableStackIdentity,
+} from './disposableSupabaseStack';
+import { buildSyntheticPlatformParameterAclRoleDump } from './roleParameterAclCompatibility';
 import { iterateBucketObjects, readBucketConfigurations } from './storageTransfer';
 import {
   dumpDatabaseArtifacts,
@@ -66,6 +72,19 @@ export interface CaptureOptions {
   storageApiUrl: string;
   storageServiceKey: string;
   scratchDirectory: string;
+  /**
+   * Synthetic-only reproduction of the hosted platform `pg_parameter_acl` grant inside the role
+   * dump. Only a superuser can create that cluster-global state, so a disposable local source
+   * cannot produce it naturally. It is applied before any manifest checksum exists, keeping the
+   * synthetic bundle checksum-valid so it reaches the real production restore path.
+   *
+   * The evidence is structural, never a flag or a name: this must be the running
+   * rehearsal-created disposable stack the capture is reading, proven by the same ownership
+   * machinery that guards every other disposable operation. An operator Local stack, a
+   * caller-chosen project name, and a caller-chosen `sourceKind` cannot satisfy it, so no real
+   * capture can reach the fixture. Never accepted for a hosted source.
+   */
+  syntheticPlatformParameterAclSource?: DisposableStackIdentity;
 }
 
 export interface CaptureResult {
@@ -107,6 +126,37 @@ export function repositoryMigrationVersions(repositoryRoot: string): string[] {
     .sort();
 }
 
+/**
+ * Proves the synthetic role fixture belongs to a running verifier-owned disposable source before
+ * anything is captured.
+ *
+ * A caller-selected `sourceKind`, project name, or loopback endpoint says only what the caller
+ * claims. This instead requires the disposable stack itself: the capture must be reading exactly
+ * that stack's workdir under the temporary root, carrying its ownership marker, named with the
+ * rehearsal project id, and backed by a running database container the Supabase CLI labelled with
+ * the same id. An ordinary operator Local stack satisfies none of that, so it cannot activate the
+ * fixture, and the check runs before the bundle directory, any dump, or any checksum exists.
+ */
+function assertSyntheticPlatformParameterAclSource(
+  options: CaptureOptions,
+  identity: DisposableStackIdentity,
+): void {
+  if (options.sourceKind !== 'disposable-local-synthetic' || options.target.kind !== 'local') {
+    throw new RecoveryGuardError('SYNTHETIC_PLATFORM_PARAMETER_ACL_PRECONDITION_FAILED');
+  }
+  if (path.resolve(options.target.workdir) !== path.resolve(identity.workdir)
+    || options.sourceProjectRef !== identity.projectId) {
+    throw new RecoveryGuardError('SYNTHETIC_PLATFORM_PARAMETER_ACL_SOURCE_NOT_OWNED');
+  }
+  try {
+    assertDisposableOwnership(identity);
+    assertDatabaseContainerOwned(identity);
+  } catch {
+    // Ownership failures carry resource identity, so only the fixed refusal is surfaced.
+    throw new RecoveryGuardError('SYNTHETIC_PLATFORM_PARAMETER_ACL_SOURCE_NOT_OWNED');
+  }
+}
+
 /** Runs the complete read-only capture and writes the bundle. */
 export async function captureRecoveryBackup(options: CaptureOptions): Promise<CaptureResult> {
   const startedAt = new Date().toISOString();
@@ -124,6 +174,9 @@ export async function captureRecoveryBackup(options: CaptureOptions): Promise<Ca
     if (!/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+\/?$/.test(options.storageApiUrl)) {
       throw new RecoveryGuardError('SYNTHETIC_STORAGE_ENDPOINT_NOT_LOOPBACK');
     }
+  }
+  if (options.syntheticPlatformParameterAclSource !== undefined) {
+    assertSyntheticPlatformParameterAclSource(options, options.syntheticPlatformParameterAclSource);
   }
   const reviewedGitSha = reviewedRepositoryGitSha(
     options.repositoryRoot,
@@ -173,6 +226,17 @@ export async function captureRecoveryBackup(options: CaptureOptions): Promise<Ca
   });
   for (const artifact of DATABASE_BACKUP_ARTIFACTS) {
     fs.chmodSync(bundleFile(bundleDirectory, `${BUNDLE_PATHS.database}/${artifact}`), 0o600);
+  }
+  if (options.syntheticPlatformParameterAclSource !== undefined) {
+    // Re-proven here so the fixture cannot outlive the source it belongs to, and still ahead of
+    // every manifest entry and recorded checksum.
+    assertSyntheticPlatformParameterAclSource(options, options.syntheticPlatformParameterAclSource);
+    const rolesFile = bundleFile(bundleDirectory, `${BUNDLE_PATHS.database}/roles.sql`);
+    fs.writeFileSync(
+      rolesFile,
+      buildSyntheticPlatformParameterAclRoleDump(fs.readFileSync(rolesFile, 'utf8')),
+      { encoding: 'utf8', mode: 0o600 },
+    );
   }
 
   const client = createClient(options.storageApiUrl, options.storageServiceKey, {

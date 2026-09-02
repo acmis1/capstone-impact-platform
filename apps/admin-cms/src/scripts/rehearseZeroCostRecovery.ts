@@ -25,11 +25,20 @@ import {
   seedSyntheticStorageObjects,
 } from '../recovery/syntheticSourceEvidence';
 import { formatRestoreSummary } from './restoreRecoveryBackup';
-import { BUNDLE_PATHS, bundleFile } from '../recovery/recoveryBundleStore';
+import { BUNDLE_PATHS, bundleFile, sha256File } from '../recovery/recoveryBundleStore';
 import {
   countExpectedManagedTriggersInStandardSchemaDump,
   EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT,
 } from '../recovery/managedSchemaCustomizations';
+import {
+  ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL,
+  CUSTOM_CLAIMS_ALLOWLIST_COMPATIBILITY,
+  deriveManagedAuthCopyRequirements,
+} from '../recovery/managedAuthSchemaCompatibility';
+import {
+  PLATFORM_PARAMETER_ACL_DENIED_SQLSTATE,
+  planRoleParameterAclCompatibility,
+} from '../recovery/roleParameterAclCompatibility';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
 const SOURCE_PORT_BASE = 54_820;
@@ -99,6 +108,14 @@ async function main(): Promise<void> {
     sourceNetworkId = createDisposableNetwork(source);
     startDisposableStack(repositoryRoot, source, sourceNetworkId);
     sourceStarted = true;
+    // Reproduce the reviewed hosted-ahead Auth migration on the disposable source only. The
+    // synthetic restore target is deterministically set to the corresponding pre-migration shape.
+    runDisposablePsql(source, {
+      command: ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL,
+      singleTransaction: true,
+      timeoutMs: 120_000,
+      databaseUser: 'supabase_auth_admin',
+    });
     const sourceEnv = readDisposableStackEnv(repositoryRoot, source);
     const sourceClient = createClient(sourceEnv.apiUrl, sourceEnv.serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -119,16 +136,44 @@ async function main(): Promise<void> {
       storageApiUrl: sourceEnv.apiUrl,
       storageServiceKey: sourceEnv.serviceRoleKey,
       scratchDirectory: path.join(source.workdir, 'scratch'),
+      syntheticPlatformParameterAclSource: source,
     });
     const schemaDump = fs.readFileSync(
       bundleFile(bundleDirectory, `${BUNDLE_PATHS.database}/schema.sql`),
       'utf8',
     );
+    const authCopyRequirements = deriveManagedAuthCopyRequirements(fs.readFileSync(
+      bundleFile(bundleDirectory, `${BUNDLE_PATHS.database}/data.sql`),
+      'utf8',
+    ));
+    const hostedAheadCopyHeaderPresent = authCopyRequirements.some((requirement) => (
+      requirement.table === CUSTOM_CLAIMS_ALLOWLIST_COMPATIBILITY.table
+      && requirement.columns.includes(CUSTOM_CLAIMS_ALLOWLIST_COMPATIBILITY.column)
+    ));
+    if (!hostedAheadCopyHeaderPresent) {
+      throw new Error('SYNTHETIC_HOSTED_AHEAD_AUTH_COPY_HEADER_MISSING');
+    }
     const managedTriggersInStandardSchemaDump = countExpectedManagedTriggersInStandardSchemaDump(
       schemaDump,
     );
     if (managedTriggersInStandardSchemaDump !== 0) {
       throw new Error('STANDARD_SCHEMA_DUMP_MANAGED_BOUNDARY_CHANGED');
+    }
+    // The reproduced provider-global grant must be checksum-bound in the finished bundle, and the
+    // production planner — not the fixture — must be the thing that recognizes it.
+    const rolesFile = bundleFile(bundleDirectory, `${BUNDLE_PATHS.database}/roles.sql`);
+    const manifestFile = bundleFile(bundleDirectory, BUNDLE_PATHS.manifest);
+    const rolesBytesBeforeRestore = fs.readFileSync(rolesFile);
+    const manifestBytesBeforeRestore = fs.readFileSync(manifestFile);
+    const rolePlan = planRoleParameterAclCompatibility(rolesBytesBeforeRestore.toString('utf8'));
+    if (rolePlan.action !== 'NORMALIZE_KNOWN_PLATFORM_ACL'
+      || rolePlan.parameterAclStatementCount !== 1) {
+      throw new Error('SYNTHETIC_PLATFORM_PARAMETER_ACL_NOT_REPRODUCED');
+    }
+    const recordedRolesChecksum = capture.manifest.database
+      .find((entry) => entry.artifact === 'roles.sql')?.sha256;
+    if (recordedRolesChecksum !== sha256File(rolesFile)) {
+      throw new Error('SYNTHETIC_ROLE_ARTIFACT_CHECKSUM_MISMATCH');
     }
 
     sourceResidueAbsent = cleanupSource(source, sourceNetworkId, sourceStarted);
@@ -142,13 +187,26 @@ async function main(): Promise<void> {
       applicationPort: APPLICATION_PORT,
       targetPostgresMajorVersion: 17,
       skipApplicationSmoke,
+      proveUnalignedManagedAuthReplayFailure: true,
+      simulatePreCustomClaimsAllowlistTarget: true,
+      proveUnnormalizedRoleReplayFailure: true,
     });
     const bundlePreservedThroughRestore = assertBundlePreserved(bundleDirectory);
+    const roleArtifactUnchanged = fs.readFileSync(rolesFile).equals(rolesBytesBeforeRestore)
+      && fs.readFileSync(manifestFile).equals(manifestBytesBeforeRestore);
     console.log('SYNTHETIC_SOURCE_POSTGRES_MAJOR = 15');
     console.log('SYNTHETIC_TARGET_POSTGRES_MAJOR = 17');
     console.log(`SYNTHETIC_STORAGE_OBJECTS_SEEDED = ${seededStorageObjects}`);
     console.log(
       `STANDARD_SCHEMA_DUMP_MANAGED_AUTH_TRIGGERS = ${managedTriggersInStandardSchemaDump}/${EXPECTED_MANAGED_AUTH_CUSTOMIZATION_COUNT}`,
+    );
+    console.log('SYNTHETIC_HOSTED_AHEAD_AUTH_COPY_HEADER = PRESENT');
+    console.log('SYNTHETIC_SOURCE_PLATFORM_PARAMETER_ACL = PRESENT');
+    console.log(`SYNTHETIC_BUNDLE_ROLE_ARTIFACT_UNCHANGED = ${roleArtifactUnchanged ? 'YES' : 'NO'}`);
+    console.log('SYNTHETIC_TARGET_AUTH_BASELINE = PRE_20260625000000');
+    console.log(`MANAGED_AUTH_COMPATIBILITY = ${restore.managedAuthCompatibility}`);
+    console.log(
+      `LEGACY_UNALIGNED_DATA_REPLAY_FAILED = ${restore.legacyUnalignedDataReplayFailed ? 'YES' : 'NO'}`,
     );
     console.log(`BACKUP_DURATION_MS = ${Date.parse(capture.completedAt) - Date.parse(capture.startedAt)}`);
     console.log(`SYNTHETIC_SOURCE_RESIDUE_ABSENT = ${sourceResidueAbsent ? 'YES' : 'NO'}`);
@@ -161,6 +219,12 @@ async function main(): Promise<void> {
     console.log('PAID_SERVICE_DEPENDENCY = NO');
 
     if (restore.classification !== 'ZERO_COST_RECOVERY_REHEARSAL_VERIFIED'
+      || restore.managedAuthCompatibility !== 'ALIGNED_KNOWN_DELTA'
+      || restore.legacyUnalignedDataReplayFailed !== true
+      || restore.roleParameterAclCompatibility !== 'NORMALIZED_KNOWN_PLATFORM_ACL'
+      || restore.legacyUnnormalizedRoleReplayFailed !== true
+      || restore.legacyUnnormalizedRoleReplaySqlState !== PLATFORM_PARAMETER_ACL_DENIED_SQLSTATE
+      || !roleArtifactUnchanged
       || !bundlePreservedThroughRestore
       || !syntheticBundleCleaned) {
       process.exitCode = 1;

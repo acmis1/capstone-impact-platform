@@ -31,6 +31,7 @@ import {
   type LoadedRecoveryBundle,
 } from './recoveryBundleStore';
 import {
+  assertDisposableOwnership,
   copyFileIntoDisposableContainer,
   createDisposableNetwork,
   createDisposableStackIdentity,
@@ -71,6 +72,26 @@ import {
   resolveClassification,
   type RecoveryClassification,
 } from './zeroCostRecoveryContract';
+import {
+  ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL,
+  REMOVE_CUSTOM_CLAIMS_ALLOWLIST_FOR_SYNTHETIC_TARGET_SQL,
+  buildManagedAuthCatalogEvidenceSql,
+  deriveManagedAuthCopyRequirements,
+  parseManagedAuthCatalogEvidence,
+  planManagedAuthSchemaCompatibility,
+  type ManagedAuthCompatibilityPlan,
+  type ManagedAuthCopyRequirement,
+} from './managedAuthSchemaCompatibility';
+import {
+  NORMALIZED_ROLE_ARTIFACT,
+  PLATFORM_PARAMETER_ACL_DENIED_SQLSTATE,
+  assertRoleCompatibilityTargetBaseline,
+  buildRoleCompatibilityTargetBaselineSql,
+  extractSqlState,
+  parseRoleCompatibilityTargetBaseline,
+  planRoleParameterAclCompatibility,
+  type RoleParameterAclCompatibilityPlan,
+} from './roleParameterAclCompatibility';
 
 /**
  * Phase B: restore a bundle into a disposable local target and verify it.
@@ -94,6 +115,12 @@ export interface RestoreVerificationOptions {
   applicationPort?: number;
   /** Defaults to the PostgreSQL 17 hosted-engine lineage already validated for this rehearsal. */
   targetPostgresMajorVersion?: number;
+  /** Synthetic-only regression proof that the unaligned data replay still fails transactionally. */
+  proveUnalignedManagedAuthReplayFailure?: boolean;
+  /** Synthetic-only deterministic emulation of the pinned target before Auth migration 20260625. */
+  simulatePreCustomClaimsAllowlistTarget?: boolean;
+  /** Synthetic-only regression proof that the unnormalized role replay still fails with 42501. */
+  proveUnnormalizedRoleReplayFailure?: boolean;
 }
 
 export interface Gate4RestoredResult {
@@ -143,6 +170,11 @@ export interface RestoreVerificationResult {
   managedStorageCustomizationCount: number;
   expectedManagedStorageCustomizationCount: number;
   managedSchemaCustomizationsMatch: boolean;
+  managedAuthCompatibility: 'NOT_RUN' | 'MATCH' | 'ALIGNED_KNOWN_DELTA';
+  roleParameterAclCompatibility: 'NOT_RUN' | 'MATCH' | 'NORMALIZED_KNOWN_PLATFORM_ACL';
+  legacyUnalignedDataReplayFailed: boolean | null;
+  legacyUnnormalizedRoleReplayFailed: boolean | null;
+  legacyUnnormalizedRoleReplaySqlState: string | null;
   managedAuthBehaviorVerified: boolean | null;
   bucketSummaries: string[];
   gate4: Gate4RestoredResult | null;
@@ -154,16 +186,25 @@ function containerStagedPath(stagingDirectory: string, artifact: string): string
   return `${stagingDirectory}/${artifact}`;
 }
 
+export interface StagedDatabaseArtifacts {
+  directory: string;
+  /** Artifact the schema phase replays: the normalized copy whenever one was planned. */
+  rolesPath: string;
+  /** The unmodified captured role artifact, staged for the synthetic regression probe. */
+  capturedRolesPath: string;
+}
+
 /**
  * Replays the official Supabase restore order in two fail-fast transactional phases: schema first,
  * then data. A data-phase failure can leave the schema phase committed in this verifier-owned
  * disposable target; it can never produce VERIFIED, and mandatory exact-identity cleanup removes
  * the partial target.
  */
-export function restoreDatabase(
+function stageDatabaseArtifacts(
   identity: DisposableStackIdentity,
   bundleDirectory: string,
-): void {
+  normalizedRolesHostFile: string | null,
+): StagedDatabaseArtifacts {
   const stagingDirectory = prepareDisposableContainerStaging(identity);
   for (const artifact of DATABASE_BACKUP_ARTIFACTS) {
     copyFileIntoDisposableContainer(
@@ -172,17 +213,114 @@ export function restoreDatabase(
       containerStagedPath(stagingDirectory, artifact),
     );
   }
+  const capturedRolesPath = containerStagedPath(stagingDirectory, 'roles.sql');
+  if (normalizedRolesHostFile === null) {
+    return { directory: stagingDirectory, rolesPath: capturedRolesPath, capturedRolesPath };
+  }
+  const normalizedPath = containerStagedPath(stagingDirectory, NORMALIZED_ROLE_ARTIFACT);
+  try {
+    copyFileIntoDisposableContainer(identity, normalizedRolesHostFile, normalizedPath);
+  } catch {
+    throw new RecoveryGuardError('ROLE_PLATFORM_ACL_COMPATIBILITY_STAGING_FAILED');
+  }
+  return { directory: stagingDirectory, rolesPath: normalizedPath, capturedRolesPath };
+}
+
+/** Reads the checksum-validated role artifact. No unverified role text reaches normalization. */
+function readRolesArtifact(bundleDirectory: string): string {
+  try {
+    return fs.readFileSync(bundleFile(bundleDirectory, `${BUNDLE_PATHS.database}/roles.sql`), 'utf8');
+  } catch {
+    throw new RecoveryGuardError('ROLE_PLATFORM_ACL_COMPATIBILITY_SOURCE_READ_FAILED');
+  }
+}
+
+/**
+ * Writes the normalized replay artifact into the verifier-owned disposable workdir. It never
+ * reaches the private bundle, and exact-identity cleanup removes it with the rest of the target.
+ */
+function writeNormalizedRolesArtifact(
+  identity: DisposableStackIdentity,
+  normalizedRolesSql: string,
+): string {
+  assertDisposableOwnership(identity);
+  try {
+    const directory = path.join(identity.workdir, 'role-compatibility');
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    const file = path.join(directory, NORMALIZED_ROLE_ARTIFACT);
+    fs.writeFileSync(file, normalizedRolesSql, { encoding: 'utf8', mode: 0o600 });
+    return file;
+  } catch {
+    throw new RecoveryGuardError('ROLE_PLATFORM_ACL_COMPATIBILITY_STAGING_FAILED');
+  }
+}
+
+function readRoleCompatibilityTargetBaseline(identity: DisposableStackIdentity) {
+  try {
+    return parseRoleCompatibilityTargetBaseline(runDisposablePsql(identity, {
+      command: buildRoleCompatibilityTargetBaselineSql(),
+      timeoutMs: 120_000,
+    }));
+  } catch (error) {
+    if (error instanceof RecoveryGuardError) throw error;
+    throw new RecoveryGuardError('ROLE_PLATFORM_ACL_COMPATIBILITY_TARGET_BASELINE_QUERY_FAILED');
+  }
+}
+
+/**
+ * Synthetic-only proof that the captured role artifact still fails on a fresh non-superuser
+ * target. The single-transaction replay rolls back, so the normalized replay that follows starts
+ * from the same clean target. Only the fixed-width SQLSTATE is retained.
+ */
+function proveUnnormalizedRoleReplayFails(
+  identity: DisposableStackIdentity,
+  staged: StagedDatabaseArtifacts,
+): string {
+  try {
+    runDisposablePsql(identity, {
+      singleTransaction: true,
+      files: [staged.capturedRolesPath],
+      verboseErrors: true,
+    });
+  } catch (error) {
+    const sqlState = extractSqlState((error as { stderr?: unknown }).stderr);
+    if (sqlState !== PLATFORM_PARAMETER_ACL_DENIED_SQLSTATE) {
+      throw new RecoveryGuardError(
+        'ROLE_PLATFORM_ACL_COMPATIBILITY_LEGACY_PROBE_SQLSTATE_UNEXPECTED',
+      );
+    }
+    return sqlState;
+  }
+  throw new RecoveryGuardError(
+    'ROLE_PLATFORM_ACL_COMPATIBILITY_LEGACY_PROBE_UNEXPECTEDLY_SUCCEEDED',
+  );
+}
+
+/** Schema replay is separately classified so it cannot be confused with provider data drift. */
+export function restoreDatabaseSchema(
+  identity: DisposableStackIdentity,
+  staged: StagedDatabaseArtifacts,
+): void {
   try {
     runDisposablePsql(identity, {
       singleTransaction: true,
       files: [
-        containerStagedPath(stagingDirectory, 'roles.sql'),
-        containerStagedPath(stagingDirectory, 'schema.sql'),
-        containerStagedPath(stagingDirectory, 'migrations-schema.sql'),
+        staged.rolesPath,
+        containerStagedPath(staged.directory, 'schema.sql'),
+        containerStagedPath(staged.directory, 'migrations-schema.sql'),
       ],
     });
-    // Data is replayed with replication triggers disabled, exactly as the Supabase data dump
-    // expects, then migration history is applied last.
+  } catch {
+    throw new RecoveryGuardError('RESTORE_SCHEMA_SQL_FAILED');
+  }
+}
+
+/** Data replay follows compatibility alignment and retains its own safe failure code. */
+export function restoreDatabaseData(
+  identity: DisposableStackIdentity,
+  stagingDirectory: string,
+): void {
+  try {
     runDisposablePsql(identity, {
       singleTransaction: true,
       command: 'SET session_replication_role = replica',
@@ -192,8 +330,75 @@ export function restoreDatabase(
       ],
     });
   } catch {
-    throw new RecoveryGuardError('RESTORE_SQL_FAILED');
+    throw new RecoveryGuardError('RESTORE_DATA_SQL_FAILED');
   }
+}
+
+function readManagedAuthCatalog(identity: DisposableStackIdentity) {
+  try {
+    return parseManagedAuthCatalogEvidence(runDisposablePsql(identity, {
+      command: buildManagedAuthCatalogEvidenceSql(),
+      timeoutMs: 120_000,
+    }));
+  } catch (error) {
+    if (error instanceof RecoveryGuardError) throw error;
+    throw new RecoveryGuardError('MANAGED_AUTH_COMPATIBILITY_CATALOG_QUERY_FAILED');
+  }
+}
+
+function inspectManagedAuthCompatibility(
+  identity: DisposableStackIdentity,
+  dataSqlFile: string,
+): { requirements: ManagedAuthCopyRequirement[]; plan: ManagedAuthCompatibilityPlan } {
+  let requirements: ManagedAuthCopyRequirement[];
+  try {
+    requirements = deriveManagedAuthCopyRequirements(fs.readFileSync(dataSqlFile, 'utf8'));
+  } catch (error) {
+    if (error instanceof RecoveryGuardError) throw error;
+    throw new RecoveryGuardError('MANAGED_AUTH_COMPATIBILITY_SOURCE_READ_FAILED');
+  }
+  return {
+    requirements,
+    plan: planManagedAuthSchemaCompatibility(requirements, readManagedAuthCatalog(identity)),
+  };
+}
+
+function alignManagedAuthCompatibility(
+  identity: DisposableStackIdentity,
+  inspection: ReturnType<typeof inspectManagedAuthCompatibility>,
+): 'MATCH' | 'ALIGNED_KNOWN_DELTA' {
+  if (inspection.plan.action === 'MATCH') return 'MATCH';
+  try {
+    runDisposablePsql(identity, {
+      singleTransaction: true,
+      command: ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL,
+      timeoutMs: 120_000,
+      databaseUser: 'supabase_auth_admin',
+    });
+  } catch {
+    throw new RecoveryGuardError('MANAGED_AUTH_COMPATIBILITY_ALIGNMENT_SQL_FAILED');
+  }
+  const recheck = planManagedAuthSchemaCompatibility(
+    inspection.requirements,
+    readManagedAuthCatalog(identity),
+  );
+  if (recheck.action !== 'MATCH') {
+    throw new RecoveryGuardError('MANAGED_AUTH_COMPATIBILITY_RECHECK_FAILED');
+  }
+  return 'ALIGNED_KNOWN_DELTA';
+}
+
+export function classifyRestoreFailure(error: unknown): RecoveryClassification {
+  const code = error instanceof RecoveryGuardError ? error.code : '';
+  if (code.startsWith('ROLE_PLATFORM_ACL_COMPATIBILITY_')) {
+    return 'ROLE_PLATFORM_ACL_COMPATIBILITY_FAILED';
+  }
+  if (code.startsWith('RESTORE_SCHEMA_SQL_FAILED')) return 'RESTORE_SCHEMA_FAILED';
+  if (code.startsWith('RESTORE_DATA_SQL_FAILED')) return 'RESTORE_DATA_FAILED';
+  if (code.startsWith('MANAGED_AUTH_COMPATIBILITY_')) {
+    return 'MANAGED_AUTH_COMPATIBILITY_FAILED';
+  }
+  return 'RESTORE_FAILED';
 }
 
 /** Installs only fixed reviewed PP1 DDL after validating the checksum-bound source evidence. */
@@ -594,15 +799,96 @@ export async function runRestoreVerification(
   let storageIntegrityMatch = false;
   let assistiveCostFenceMatch = false;
   let managedSchemaCustomizationsMatch = false;
+  let managedAuthCompatibility: RestoreVerificationResult['managedAuthCompatibility'] = 'NOT_RUN';
+  let roleParameterAclCompatibility: RestoreVerificationResult['roleParameterAclCompatibility'] = 'NOT_RUN';
+  let legacyUnalignedDataReplayFailed: boolean | null = null;
+  let legacyUnnormalizedRoleReplayFailed: boolean | null = null;
+  let legacyUnnormalizedRoleReplaySqlState: string | null = null;
   let managedAuthBehaviorVerified: boolean | null = null;
 
   try {
+    // The role dump is inspected and planned on checksum-validated bytes before any disposable
+    // target exists, so an unsupported provider-global construct never reaches a running stack,
+    // let alone schema or data replay.
+    const rolePlan: RoleParameterAclCompatibilityPlan = planRoleParameterAclCompatibility(
+      readRolesArtifact(bundle.directory),
+    );
+    const normalizedRolesHostFile = rolePlan.normalizedRolesSql === null
+      ? null
+      : writeNormalizedRolesArtifact(identity, rolePlan.normalizedRolesSql);
+
     networkId = createDisposableNetwork(identity);
     restoreStartedAt = new Date().toISOString();
     started = true;
     startDisposableStack(options.repositoryRoot, identity, networkId);
 
-    restoreDatabase(identity, bundle.directory);
+    if (options.simulatePreCustomClaimsAllowlistTarget) {
+      if (bundle.manifest.source.kind !== 'disposable-local-synthetic'
+        || !options.proveUnalignedManagedAuthReplayFailure) {
+        throw new RecoveryGuardError(
+          'MANAGED_AUTH_COMPATIBILITY_SYNTHETIC_BASELINE_PRECONDITION_FAILED',
+        );
+      }
+      try {
+        runDisposablePsql(identity, {
+          singleTransaction: true,
+          command: REMOVE_CUSTOM_CLAIMS_ALLOWLIST_FOR_SYNTHETIC_TARGET_SQL,
+          timeoutMs: 120_000,
+          databaseUser: 'supabase_auth_admin',
+        });
+      } catch {
+        throw new RecoveryGuardError(
+          'MANAGED_AUTH_COMPATIBILITY_SYNTHETIC_BASELINE_SETUP_FAILED',
+        );
+      }
+    }
+
+    // A normalization is only ever applied to the reviewed fresh disposable baseline, so an
+    // unexpected target role identity or an existing target parameter ACL fails closed here.
+    if (rolePlan.action === 'NORMALIZE_KNOWN_PLATFORM_ACL') {
+      assertRoleCompatibilityTargetBaseline(readRoleCompatibilityTargetBaseline(identity));
+    }
+    const staged = stageDatabaseArtifacts(identity, bundle.directory, normalizedRolesHostFile);
+    if (options.proveUnnormalizedRoleReplayFailure) {
+      if (bundle.manifest.source.kind !== 'disposable-local-synthetic'
+        || rolePlan.action !== 'NORMALIZE_KNOWN_PLATFORM_ACL') {
+        throw new RecoveryGuardError(
+          'ROLE_PLATFORM_ACL_COMPATIBILITY_LEGACY_PROBE_PRECONDITION_FAILED',
+        );
+      }
+      legacyUnnormalizedRoleReplaySqlState = proveUnnormalizedRoleReplayFails(identity, staged);
+      legacyUnnormalizedRoleReplayFailed = true;
+    }
+    roleParameterAclCompatibility = rolePlan.action === 'MATCH'
+      ? 'MATCH'
+      : 'NORMALIZED_KNOWN_PLATFORM_ACL';
+    restoreDatabaseSchema(identity, staged);
+    const compatibilityInspection = inspectManagedAuthCompatibility(
+      identity,
+      bundleFile(bundle.directory, `${BUNDLE_PATHS.database}/data.sql`),
+    );
+    if (options.proveUnalignedManagedAuthReplayFailure) {
+      if (bundle.manifest.source.kind !== 'disposable-local-synthetic'
+        || compatibilityInspection.plan.action !== 'ADD_CUSTOM_CLAIMS_ALLOWLIST') {
+        throw new RecoveryGuardError('MANAGED_AUTH_COMPATIBILITY_LEGACY_PROBE_PRECONDITION_FAILED');
+      }
+      try {
+        restoreDatabaseData(identity, staged.directory);
+        legacyUnalignedDataReplayFailed = false;
+      } catch (error) {
+        if (!(error instanceof RecoveryGuardError) || error.code !== 'RESTORE_DATA_SQL_FAILED') {
+          throw error;
+        }
+        legacyUnalignedDataReplayFailed = true;
+      }
+      if (!legacyUnalignedDataReplayFailed) {
+        throw new RecoveryGuardError(
+          'MANAGED_AUTH_COMPATIBILITY_LEGACY_PROBE_UNEXPECTEDLY_SUCCEEDED',
+        );
+      }
+    }
+    managedAuthCompatibility = alignManagedAuthCompatibility(identity, compatibilityInspection);
+    restoreDatabaseData(identity, staged.directory);
     restoreManagedSchemaCustomizations(identity, bundle.managedSchemaCustomizations);
 
     const stackEnv = readDisposableStackEnv(options.repositoryRoot, identity);
@@ -742,9 +1028,7 @@ export async function runRestoreVerification(
     }
     verificationCompletedAt = new Date().toISOString();
   } catch (error) {
-    findings.push(error instanceof RecoveryGuardError && error.code.startsWith('RESTORE_SQL_FAILED')
-      ? 'RESTORE_FAILED'
-      : 'RESTORE_FAILED');
+    findings.push(classifyRestoreFailure(error));
     notes.push(error instanceof Error ? error.message : 'RESTORE_FAILED');
   } finally {
     if (started) {
@@ -807,6 +1091,11 @@ export async function runRestoreVerification(
     managedStorageCustomizationCount: managedCounts.storage,
     expectedManagedStorageCustomizationCount: EXPECTED_MANAGED_STORAGE_CUSTOMIZATION_COUNT,
     managedSchemaCustomizationsMatch,
+    managedAuthCompatibility,
+    roleParameterAclCompatibility,
+    legacyUnalignedDataReplayFailed,
+    legacyUnnormalizedRoleReplayFailed,
+    legacyUnnormalizedRoleReplaySqlState,
     managedAuthBehaviorVerified,
     bucketSummaries,
     gate4,
