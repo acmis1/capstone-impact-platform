@@ -167,9 +167,9 @@ async function main(): Promise<void> {
       assert.equal(JSON.parse(findingsBefore).length, 1);
     });
 
-    assertCliSuccess(runLocalSupabaseCli('migration-up', root), 'apply pending Migrations 0031 through 0048');
-    scenario('Migrations 0031 through 0048 apply as the only pending migrations', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '48');
+    assertCliSuccess(runLocalSupabaseCli('migration-up', root), 'apply pending Migrations 0031 through 0049');
+    scenario('Migrations 0031 through 0049 apply as the only pending migrations', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '49');
       assert.equal(psql("SELECT to_regclass('public.assistive_validation_jobs') IS NOT NULL;"), 't');
     });
 
@@ -310,23 +310,23 @@ async function main(): Promise<void> {
       );
       assertCliSuccess(
         runLocalSupabaseCli('stop', root),
-        'stop Local services after restoring Migration 0048',
+        'stop Local services after restoring Migration 0049',
       );
       assertCliSuccess(
         runLocalSupabaseCli('start', root),
-        'restart Local services after restoring Migration 0048',
+        'restart Local services after restoring Migration 0049',
       );
       assert.equal(
         psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'),
-        '48',
-        'restarted Local stack did not retain all 48 migrations',
+        '49',
+        'restarted Local stack did not retain all 49 migrations',
       );
       assert.equal(
         psql('SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 1;'),
         '20260831090000',
-        'restarted Local stack did not retain the Migration 0048 head',
+        'restarted Local stack did not retain the Migration 0049 head',
       );
-      console.log('PASS: fresh Migration 0048 database and Local service stack restored.');
+      console.log('PASS: fresh Migration 0049 database and Local service stack restored.');
     } catch (restoreError) {
       if (primaryFailure) throw new AggregateError([primaryFailure, restoreError], 'Upgrade verification and database restoration failed.');
       throw restoreError;

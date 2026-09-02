@@ -4,7 +4,7 @@ import { parseProjectDetailsWorkbook } from '../parseProjectDetailsWorkbook';
 import { ProjectDetailsWorkbookError, COLUMN_DEFINITIONS } from '../projectDetailsWorkbookContract';
 import { buildImportPackageManifestFromWorkbook } from '../workbookManifestAdapter';
 import { ACCESSIBLE_CONTENT_LIMITS } from '../../domain/accessibleContent';
-
+import { PROJECT_CONTROLLED_URL_MAX_LENGTH } from '../../domain/projectControlledUrl';
 async function createWorkbookBuffer(options: {
   sheetName?: string;
   extraSheets?: { name: string; rows: (string | number | boolean | null | undefined)[][] }[];
@@ -1229,6 +1229,276 @@ describe('parseProjectDetailsWorkbook', () => {
       const issues = await errorsFor(await createWorkbookBuffer(withValue(headerIndex('Project title'), '')), 'title');
       expect(issues).toHaveLength(1);
       expect(issues[0].code).toBe('WORKBOOK_MISSING_REQUIRED_VALUE');
+    });
+  });
+  describe('controlled project links', () => {
+    const controlledHeaders = [
+      ...defaultCanonicalHeaders,
+      'Project video URL',
+      'Live demo URL',
+      'Source repository URL',
+    ];
+
+    const controlledData = [
+      ...defaultCanonicalData,
+      'https://www.youtube.com/watch?v=example',
+      'https://demo.example.com/live',
+      'https://github.com/example/project',
+    ];
+
+    const errorsForControlledWorkbook = async (
+      headers: (string | number | boolean | null | undefined)[],
+      data: (
+        | string
+        | number
+        | boolean
+        | null
+        | undefined
+        | { formula: string; result?: unknown }
+      )[],
+      fieldName: 'videoUrl' | 'demoUrl' | 'repositoryUrl',
+    ) => {
+      try {
+        await parseProjectDetailsWorkbook(
+          await createWorkbookBuffer({
+            headers,
+            dataRows: [data],
+          }),
+        );
+        throw new Error('Expected the workbook to be rejected.');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ProjectDetailsWorkbookError);
+
+        return (err as ProjectDetailsWorkbookError).errors.filter(
+          (issue) => issue.fieldName === fieldName,
+        );
+      }
+    };
+
+    it('64. parses all three optional controlled project URLs', async () => {
+      const result = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer({
+          headers: controlledHeaders,
+          dataRows: [controlledData],
+        }),
+      );
+
+      expect(result.metadata.videoUrl).toBe(
+        'https://www.youtube.com/watch?v=example',
+      );
+      expect(result.metadata.demoUrl).toBe(
+        'https://demo.example.com/live',
+      );
+      expect(result.metadata.repositoryUrl).toBe(
+        'https://github.com/example/project',
+      );
+    });
+
+    it('65. leaves controlled project URLs empty when optional columns are absent', async () => {
+      const result = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer({
+          headers: defaultCanonicalHeaders,
+          dataRows: [defaultCanonicalData],
+        }),
+      );
+
+      expect(result.metadata.videoUrl).toBe('');
+      expect(result.metadata.demoUrl).toBe('');
+      expect(result.metadata.repositoryUrl).toBe('');
+    });
+
+    it('66. accepts blank controlled URL cells', async () => {
+      const result = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer({
+          headers: controlledHeaders,
+          dataRows: [
+            [
+              ...defaultCanonicalData,
+              '',
+              '   ',
+              '',
+            ],
+          ],
+        }),
+      );
+
+      expect(result.metadata.videoUrl).toBe('');
+      expect(result.metadata.demoUrl).toBe('');
+      expect(result.metadata.repositoryUrl).toBe('');
+    });
+
+    it('67. matches controlled URL aliases case-insensitively and independently of column order', async () => {
+      const headers = [
+        'REPOSITORYURL',
+        'Video URL',
+        'DemoUrl',
+        ...defaultCanonicalHeaders,
+      ];
+
+      const data = [
+        'https://github.com/example/reordered',
+        'https://video.example.com/watch',
+        'https://prototype.example.com',
+        ...defaultCanonicalData,
+      ];
+
+      const result = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer({
+          headers,
+          dataRows: [data],
+        }),
+      );
+
+      expect(result.metadata.videoUrl).toBe(
+        'https://video.example.com/watch',
+      );
+      expect(result.metadata.demoUrl).toBe(
+        'https://prototype.example.com',
+      );
+      expect(result.metadata.repositoryUrl).toBe(
+        'https://github.com/example/reordered',
+      );
+    });
+
+    it('68. rejects duplicate headers mapping to the same controlled URL field', async () => {
+      const issues = await errorsForControlledWorkbook(
+        [
+          ...defaultCanonicalHeaders,
+          'Project video URL',
+          'videoUrl',
+        ],
+        [
+          ...defaultCanonicalData,
+          'https://video.example.com/one',
+          'https://video.example.com/two',
+        ],
+        'videoUrl',
+      );
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_DUPLICATE_COLUMN');
+    });
+
+    it.each([
+      'javascript:alert(1)',
+      'data:text/html,test',
+      'file:///tmp/demo',
+      '/Users/example/demo',
+      'not-a-url',
+    ])('69. rejects unsafe or malformed video URL: %s', async (value) => {
+      const issues = await errorsForControlledWorkbook(
+        [...defaultCanonicalHeaders, 'Project video URL'],
+        [...defaultCanonicalData, value],
+        'videoUrl',
+      );
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_INVALID_URL');
+    });
+
+    it('70. rejects a controlled URL containing embedded credentials', async () => {
+      const issues = await errorsForControlledWorkbook(
+        [...defaultCanonicalHeaders, 'Live demo URL'],
+        [
+          ...defaultCanonicalData,
+          'https://user:secret@example.com/demo',
+        ],
+        'demoUrl',
+      );
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_INVALID_URL');
+    });
+
+    it('71. rejects a controlled URL beyond the bounded maximum length', async () => {
+      const overlong =
+        'https://example.com/' +
+        'x'.repeat(PROJECT_CONTROLLED_URL_MAX_LENGTH);
+
+      const issues = await errorsForControlledWorkbook(
+        [...defaultCanonicalHeaders, 'Source repository URL'],
+        [...defaultCanonicalData, overlong],
+        'repositoryUrl',
+      );
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_VALUE_TOO_LONG');
+    });
+
+    it('72. accepts a controlled URL formula with a usable cached result', async () => {
+      const result = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer({
+          headers: [
+            ...defaultCanonicalHeaders,
+            'Project video URL',
+          ],
+          dataRows: [
+            [
+              ...defaultCanonicalData,
+              {
+                formula: 'A1',
+                result: 'https://video.example.com/cached',
+              },
+            ],
+          ],
+        }),
+      );
+
+      expect(result.metadata.videoUrl).toBe(
+        'https://video.example.com/cached',
+      );
+    });
+
+    it('73. rejects a controlled URL formula without a usable cached result', async () => {
+      const issues = await errorsForControlledWorkbook(
+        [...defaultCanonicalHeaders, 'Live demo URL'],
+        [
+          ...defaultCanonicalData,
+          {
+            formula: 'A1',
+          },
+        ],
+        'demoUrl',
+      );
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0].code).toBe('WORKBOOK_UNUSABLE_FORMULA');
+    });
+
+    it('74. carries controlled project URLs through the manifest adapter', async () => {
+      const parsed = await parseProjectDetailsWorkbook(
+        await createWorkbookBuffer({
+          headers: controlledHeaders,
+          dataRows: [controlledData],
+        }),
+      );
+
+      const manifest = buildImportPackageManifestFromWorkbook({
+        parsedWorkbook: parsed,
+        publicId: '2026-controlled-links',
+      });
+
+      expect(manifest.videoUrl).toBe(parsed.metadata.videoUrl);
+      expect(manifest.demoUrl).toBe(parsed.metadata.demoUrl);
+      expect(manifest.repositoryUrl).toBe(
+        parsed.metadata.repositoryUrl,
+      );
+    });
+
+    it('75. does not expose an unsafe raw workbook URL in the validation message', async () => {
+      const malicious =
+        'javascript:secret-workbook-payload-do-not-echo';
+
+      const issues = await errorsForControlledWorkbook(
+        [...defaultCanonicalHeaders, 'Project video URL'],
+        [...defaultCanonicalData, malicious],
+        'videoUrl',
+      );
+
+      expect(issues).toHaveLength(1);
+      expect(issues[0].message).not.toContain(
+        'secret-workbook-payload-do-not-echo',
+      );
     });
   });
 });

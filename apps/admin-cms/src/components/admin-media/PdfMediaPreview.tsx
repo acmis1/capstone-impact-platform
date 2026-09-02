@@ -23,7 +23,7 @@ export function PdfMediaPreview({
       <div role="status" className={MEDIA_PREVIEW_CLASSES.tile}>
         <p className={MEDIA_PREVIEW_CLASSES.stateMessage}>
           <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-          <span>PDF file is missing.</span>
+          <span>PDF preview is unavailable.</span>
         </p>
         <MediaFileInfo media={media} />
       </div>
@@ -52,8 +52,11 @@ export function PdfMediaPreview({
           rel="noopener noreferrer"
           className="inline-flex min-h-[32px] items-center gap-1.5 text-sm font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
-          Open PDF in a new tab
-          <ExternalLink className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden="true" />
+          Open {media.fileName} in a new tab
+          <ExternalLink
+            className="h-3.5 w-3.5 shrink-0 text-foreground-subtle"
+            aria-hidden="true"
+          />
         </a>
       </div>
 
@@ -66,19 +69,35 @@ export function PdfMediaPreview({
         </div>
       ) : (
         <>
-          {!hasLoaded && (
-            <p role="status" className={MEDIA_PREVIEW_CLASSES.stateMessage}>
-              <span>Loading PDF preview...</span>
-            </p>
-          )}
-          <div className={MEDIA_PREVIEW_CLASSES.frame}>
-            <iframe
-              src={media.url}
-              title={`PDF preview of ${media.fileName}`}
-              onLoad={() => setHasLoaded(true)}
-              onError={() => { setHasLoaded(false); setHasError(true); }}
-              className="block min-h-80 w-full border-0"
-            />
+          <p
+            role="status"
+            className={`${MEDIA_PREVIEW_CLASSES.stateMessage} sm:hidden`}
+          >
+            <span>
+              Inline PDF preview may be unavailable on smaller screens. Open the PDF
+              in a new tab instead.
+            </span>
+          </p>
+
+          <div className="hidden sm:block">
+            {!hasLoaded && (
+              <p role="status" className={MEDIA_PREVIEW_CLASSES.stateMessage}>
+                <span>Loading PDF preview...</span>
+              </p>
+            )}
+
+            <div className={MEDIA_PREVIEW_CLASSES.frame}>
+              <iframe
+                src={media.url}
+                title={`PDF preview of ${media.fileName}`}
+                onLoad={() => setHasLoaded(true)}
+                onError={() => {
+                  setHasLoaded(false);
+                  setHasError(true);
+                }}
+                className="block min-h-80 w-full border-0"
+              />
+            </div>
           </div>
         </>
       )}

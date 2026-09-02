@@ -11,7 +11,7 @@ const source = fs.readFileSync(path.join(migrations, migrationName), 'utf8').rep
 describe('public-feed activation authority migration', () => {
   it('leaves every earlier migration byte-identical to current main', () => {
     const files = fs.readdirSync(migrations).filter((name) => name.endsWith('.sql')).sort();
-    expect(files).toHaveLength(48);
+    expect(files).toHaveLength(49);
     expect(files).toContain(migrationName);
 
     expect(() => execFileSync('git', [

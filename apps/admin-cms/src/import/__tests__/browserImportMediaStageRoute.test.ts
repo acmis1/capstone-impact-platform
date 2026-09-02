@@ -401,6 +401,44 @@ describe('Browser Import Media Staging Route Handler & Admin Reference Tests', (
     const json = await res.json();
     expect(json.code).toBe('MEDIA_UNSUPPORTED_TYPE');
   });
+  it('11a. Rejects poster PDF when actual bytes are an image despite the PDF filename and MIME', async () => {
+    const { formData } = await setupValidScenario();
+
+    const fakePdfBytes = Buffer.alloc(VALID_PDF_BYTES.length, 0);
+
+    VALID_PNG_BYTES.copy(
+      fakePdfBytes,
+      0,
+      0,
+      Math.min(VALID_PNG_BYTES.length, fakePdfBytes.length),
+    );
+
+    const pdfKey = generateUploadKey('pkg1/poster.pdf');
+
+    formData.set(
+      pdfKey,
+      new File([fakePdfBytes], 'poster.pdf', {
+        type: 'application/pdf',
+      }),
+    );
+
+    const req = new NextRequest(
+      'http://localhost:3000/api/imports/stage-media',
+      {
+        method: 'POST',
+        headers: { 'content-length': '10000' },
+        body: formData,
+      },
+    );
+
+    const res = await mediaStagePOST(req);
+
+    expect(res.status).toBe(400);
+
+    const json = await res.json();
+
+    expect(json.code).toBe('MEDIA_SIGNATURE_MISMATCH');
+  });
 
   it('12. Existing snapshot alt-text binding remains intact (server-authoritative from manifest)', async () => {
     const { formData } = await setupValidScenario({

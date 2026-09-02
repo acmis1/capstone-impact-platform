@@ -38,6 +38,45 @@ describe('project media preview read model', () => {
     expect(result.url).toBeUndefined();
     expect(JSON.stringify(result)).not.toContain('storage_path');
   });
+  it('retains poster PDF metadata but fails closed when private signing is unavailable', async () => {
+    const posterPdf: ProjectMediaAssetPreviewRow = {
+      ...privateRow,
+      id: 'asset-pdf-private',
+      asset_type: 'poster_pdf',
+      file_name: 'poster.pdf',
+      storage_path: 'drafts/private/poster_pdf/poster.pdf',
+      mime_type: 'application/pdf',
+    };
+
+    const signDraftMediaUrl = vi
+      .fn()
+      .mockRejectedValue(new Error('provider-specific signing failure'));
+
+    const result = await toProjectMediaPreviewItem(posterPdf, {
+      projectTitle: 'Synthetic Project',
+      privateBucket: 'draft-media',
+      signDraftMediaUrl,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'asset-pdf-private',
+        assetType: 'poster_pdf',
+        fileName: 'poster.pdf',
+        mimeType: 'application/pdf',
+        fileSize: 2048,
+        previewSource: 'unavailable',
+      }),
+    );
+
+    expect(result.url).toBeUndefined();
+
+    const serialized = JSON.stringify(result);
+
+    expect(serialized).not.toContain('drafts/private');
+    expect(serialized).not.toContain('draft-media');
+    expect(serialized).not.toContain('provider-specific');
+  });
 
   it('uses only a valid authoritative public URL for approved media', async () => {
     const result = await toProjectMediaPreviewItem({ ...privateRow, id: 'asset-public', is_public_approved: true, public_url: 'https://assets.example/public/poster.png' }, {

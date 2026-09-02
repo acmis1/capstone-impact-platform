@@ -17,6 +17,7 @@ import {
 import { computeCanonicalIntentHash } from './browserImportMetadataStageServerCore';
 import { BrowserImportServerAnalysis } from './parseBrowserImportPreview';
 import { validateFolderDerivedPublicId } from './publicIdValidation';
+import { validateProjectControlledUrl } from '../domain/projectControlledUrl';
 import { normalizeParticipantContactEmail } from '../domain/participantContactEmail';
 import {
   adminReferenceIntentsSemanticallyEqual,
@@ -167,6 +168,21 @@ export async function stageBrowserImportMetadata(params: {
     publicIdsSeen.add(pkg.proposedPublicId);
 
     const m = pkg.manifest;
+    for (const field of ['videoUrl', 'demoUrl', 'repositoryUrl'] as const) {
+      const value = m[field];
+
+      if (!value) continue;
+
+      const validation = validateProjectControlledUrl(value);
+
+      if (!validation.valid) {
+        return {
+          success: false,
+          code: 'INVALID_SELECTION',
+          error: 'Project external link metadata is invalid.',
+        };
+      }
+    }
     if (!m.title || m.title.trim() === '' || m.title.length > 200) {
       return { success: false, code: 'INVALID_SELECTION', error: 'Title is invalid.' };
     }
@@ -247,6 +263,9 @@ export async function stageBrowserImportMetadata(params: {
       // never reach persistence, and the database normalizes a third time as the final authority.
       participantContactEmail: normalizeParticipantContactEmail(m.participantContactEmail),
       teamMembers: m.teamMembers.map((t) => String(t).trim()).filter((t) => t !== ''),
+      videoUrl: m.videoUrl ? m.videoUrl.trim() : null,
+      demoUrl: m.demoUrl ? m.demoUrl.trim() : null,
+      repositoryUrl: m.repositoryUrl ? m.repositoryUrl.trim() : null,
       posterText: m.posterText ? m.posterText.trim() : null,
       accessibilityText: m.accessibilityText ? m.accessibilityText.trim() : null,
       layoutConfig: m.layoutConfig,

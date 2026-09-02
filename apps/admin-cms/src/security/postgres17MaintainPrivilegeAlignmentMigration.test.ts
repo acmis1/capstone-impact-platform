@@ -83,15 +83,16 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
     return { introductionCommit, parentCommit, files, introducedFiles };
   }
 
-  it('is the newest forward migration and does not renumber or replace anything', () => {
+  it('remains in the forward migration sequence and does not renumber or replace anything', () => {
     const files = fs.readdirSync(migrationsDirectory).filter((file) => file.endsWith('.sql')).sort();
 
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
     expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
     expect(files).toHaveLength(EXPECTED_REPOSITORY_MIGRATION_COUNT);
-    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(48);
-    expect(files.at(-1)).toBe(filename);
-    expect(files.at(-2)).toBe('20260828170000_assistive_execution_control.sql');
+    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(49);
+    expect(files.at(-1)).toBe('20260902010606_controlled_project_links_import.sql');
+    expect(files.at(-2)).toBe(filename);
+    expect(files.at(-3)).toBe('20260828170000_assistive_execution_control.sql');;
 
     // Forward-only: every migration that existed immediately before 0048 was introduced remains
     // present in the same ordered prefix. This works before and after merge and catches deletion,
@@ -103,7 +104,11 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
       '20260828170000_assistive_execution_control.sql',
       filename,
     ]);
-    expect(files.slice(baseline.files.length)).toEqual(baseline.introducedFiles);
+
+    expect(files.slice(baseline.files.length)).toEqual([
+      ...baseline.introducedFiles,
+      '20260902010606_controlled_project_links_import.sql',
+    ]);
   });
 
   it('leaves every migration through 0048 byte-identical to its introduction baseline', () => {
@@ -224,13 +229,18 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
   });
 
   it('keeps the exact migration manifest, count and latest-migration contracts in step', () => {
-    expect(EXPECTED_MIGRATION_FILENAMES).toHaveLength(48);
-    expect(EXPECTED_MIGRATION_FILENAMES.at(-1)).toBe(filename);
-    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-1)).toBe(filename);
-    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(EXPECTED_REPOSITORY_MIGRATIONS.length);
-
+    expect(EXPECTED_MIGRATION_FILENAMES).toHaveLength(49);
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-1)).toBe('20260902010606_controlled_project_links_import.sql',);
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-2)).toBe(filename);
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-1)).toBe('20260902010606_controlled_project_links_import.sql',);
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-2)).toBe(filename);
+    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(
+      EXPECTED_REPOSITORY_MIGRATIONS.length,
+    );
     const ci = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
-    expect(ci).toContain("test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 48");
+    expect(ci).toContain(
+      "test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 49",
+    );
   });
 
   it('leaves the Gate 4 evidence contract able to observe MAINTAIN drift', () => {

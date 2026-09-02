@@ -34,12 +34,14 @@ describe('PdfMediaPreview', () => {
     expect(
       screen.getByTitle('PDF preview of project.pdf'),
     ).toBeTruthy();
-    const link = screen.getByRole('link', { name: 'Open PDF in a new tab' });
+    const link = screen.getByRole('link', {
+      name: 'Open project.pdf in a new tab',
+    });
     expect(link.getAttribute('target')).toBe('_blank');
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
-  it('shows missing-file state when URL is absent', () => {
+  it('shows a bounded unavailable state when preview URL is absent', () => {
     render(
       <PdfMediaPreview
         media={{
@@ -50,7 +52,7 @@ describe('PdfMediaPreview', () => {
     );
 
     expect(
-      screen.getByText('PDF file is missing.'),
+      screen.getByText('PDF preview is unavailable.'),
     ).toBeTruthy();
   });
 
@@ -75,5 +77,21 @@ describe('PdfMediaPreview', () => {
     expect(screen.getByText('project.pdf')).toBeTruthy();
     expect(screen.getByText('application/pdf')).toBeTruthy();
     expect(screen.getByText('1.0 MB')).toBeTruthy();
+  });
+
+  it('provides an explicit small-screen fallback action', () => {
+    render(<PdfMediaPreview media={validPdf} />);
+
+    expect(
+      screen.getByText(
+        /Inline PDF preview may be unavailable on smaller screens/i,
+      ),
+    ).toBeTruthy();
+
+    expect(
+      screen.getByRole('link', {
+        name: 'Open project.pdf in a new tab',
+      }),
+    ).toBeTruthy();
   });
 });

@@ -99,21 +99,21 @@ describe('PR2B1 Core Project Review Experience Components', () => {
         />
       );
 
-      expect(screen.getByText('Video Showcase')).toBeTruthy();
-      expect(screen.getByText('Interactive Demo')).toBeTruthy();
-      expect(screen.getByText('Git Repository')).toBeTruthy();
+      expect(screen.getByText('Video')).toBeTruthy();
+      expect(screen.getByText('Live demo / prototype')).toBeTruthy();
+      expect(screen.getByText('Repository')).toBeTruthy();
 
-      const videoLink = screen.getByRole('link', { name: /video showcase link/i });
+      const videoLink = screen.getByRole('link', { name: 'Open video' });
       expect(videoLink.getAttribute('href')).toBe('https://video.example.com/watch');
       expect(videoLink.getAttribute('target')).toBe('_blank');
       expect(videoLink.getAttribute('rel')).toBe('noopener noreferrer');
 
-      const demoLink = screen.getByRole('link', { name: /external demo/i });
+      const demoLink = screen.getByRole('link', { name: 'Open live demo / prototype' });
       expect(demoLink.getAttribute('href')).toBe('https://demo.example.com');
       expect(demoLink.getAttribute('target')).toBe('_blank');
       expect(demoLink.getAttribute('rel')).toBe('noopener noreferrer');
 
-      const repoLink = screen.getByRole('link', { name: /git repository/i });
+      const repoLink = screen.getByRole('link', { name: 'Open repository' });
       expect(repoLink.getAttribute('href')).toBe('https://github.com/example/drone');
       expect(repoLink.getAttribute('target')).toBe('_blank');
       expect(repoLink.getAttribute('rel')).toBe('noopener noreferrer');

@@ -16,6 +16,9 @@ export interface ImportPackageManifest {
   background: string;
   solution: string;
   year: string;
+  videoUrl?: string;
+  demoUrl?: string;
+  repositoryUrl?: string;
   program: string;
   studyProgram: string;
   discipline: string;
