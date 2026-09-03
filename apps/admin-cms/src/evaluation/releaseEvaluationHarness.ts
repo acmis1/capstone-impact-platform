@@ -760,15 +760,20 @@ async function countOwnedRows(supabase: SupabaseClient, table: string, column: s
 }
 
 async function countOwnedStorageObjects(supabase: SupabaseClient, bucket: string, publicIds: string[]): Promise<number> {
-  let count = 0;
-  for (const publicId of publicIds) {
-    for (const assetType of ['poster_image', 'poster_pdf', 'snapshot_image']) {
-      const result = await supabase.storage.from(bucket).list(`drafts/${publicId}/${assetType}`, { limit: 1000 });
-      if (result.error) return -1;
-      count += result.data?.length || 0;
-    }
+  const listed = await listOwnedStoragePaths(supabase, bucket, publicIds);
+  return listed.failed ? -1 : listed.paths.length;
+}
+
+async function listReleaseStorageDirectory(supabase: SupabaseClient, bucket: string, prefix: string) {
+  const entries: { name: string; id: string | null }[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const result = await supabase.storage.from(bucket).list(prefix, {
+      limit: 1000, offset, sortBy: { column: 'name', order: 'asc' },
+    });
+    if (result.error || !result.data) return { entries, failed: true };
+    entries.push(...result.data);
+    if (result.data.length < 1000) return { entries, failed: false };
   }
-  return count;
 }
 
 async function listOwnedStoragePaths(
@@ -778,15 +783,20 @@ async function listOwnedStoragePaths(
 ): Promise<{ paths: string[]; failed: boolean }> {
   const paths = new Set<string>();
   let failed = false;
+  const assetTypes = ['poster_image', 'poster_pdf', 'snapshot_image'];
   for (const publicId of publicIds) {
-    for (const assetType of ['poster_image', 'poster_pdf', 'snapshot_image']) {
-      const result = await supabase.storage.from(bucket).list(`drafts/${publicId}/${assetType}`, { limit: 1000 });
-      if (result.error) {
-        failed = true;
-        continue;
-      }
-      (result.data || []).forEach((entry) => {
-        if (entry.name) paths.add(`drafts/${publicId}/${assetType}/${entry.name}`);
+    const directory = await listReleaseStorageDirectory(supabase, bucket, `drafts/${publicId}`);
+    // Unexpected objects/folders are ambiguous, not evaluator media to adopt and delete.
+    failed = directory.failed || directory.entries.some((entry) => entry.id !== null || !assetTypes.includes(entry.name)) || failed;
+    for (const assetType of assetTypes) {
+      const result = await listReleaseStorageDirectory(supabase, bucket, `drafts/${publicId}/${assetType}`);
+      failed = result.failed || failed;
+      result.entries.forEach((entry) => {
+        if (!entry.id || !entry.name || entry.name === '.' || entry.name === '..' || /[/\\]/.test(entry.name)) {
+          failed = true;
+          return;
+        }
+        paths.add(`drafts/${publicId}/${assetType}/${entry.name}`);
       });
     }
   }
@@ -889,7 +899,7 @@ export async function cleanupOwnedState(supabase: SupabaseClient, runtime: Relea
 }
 
 /**
- * Recover only a prior evaluator run whose normal finally block could not run.
+ * Recover a prior evaluator run, including Storage left after database cleanup.
  * The namespace is deliberately strict so this path cannot become a general-purpose cleanup.
  */
 export async function cleanupInterruptedReleaseEvaluationRun(params: {
@@ -912,16 +922,28 @@ export async function cleanupInterruptedReleaseEvaluationRun(params: {
     throw new Error('Could not discover the requested release evaluation namespace safely.');
   }
   const ownedPublicIds = new Set((projectsResult.data || []).map((row) => String(row.public_id)).filter(Boolean));
+  // Storage survives independently of projects/media_assets. Discover folders by the exact
+  // reserved namespace and synthetic identity shape, never a substring or a DB-only join.
+  const bucket = getStagingBuckets().DRAFT_PRIVATE;
+  const storageFolders = await listReleaseStorageDirectory(params.supabase, bucket, 'drafts');
+  if (storageFolders.failed) throw new Error('Could not discover evaluator private storage safely; no cleanup was attempted.');
+  for (const entry of storageFolders.entries) {
+    if (!entry.name.startsWith(prefix)) continue;
+    if (entry.id !== null || !/^synthetic-[0-9]{4}-[0-9]{4}$/.test(entry.name.slice(prefix.length))) {
+      throw new Error('Ambiguous object in evaluator storage namespace; no cleanup was attempted.');
+    }
+    ownedPublicIds.add(entry.name);
+  }
   const ownedBatchIds = new Set((batchesResult.data || []).map((row) => String(row.id)).filter(Boolean));
   const projectIds = (projectsResult.data || []).map((row) => String(row.id)).filter(Boolean);
   const previewsResult = projectIds.length
     ? await params.supabase.from('participant_previews').select('id').in('project_id', projectIds)
     : { data: [], error: null };
   if (previewsResult.error) throw new Error('Could not discover evaluator preview rows safely.');
-  const listedStorage = await listOwnedStoragePaths(params.supabase, getStagingBuckets().DRAFT_PRIVATE, [...ownedPublicIds].sort());
+  const listedStorage = await listOwnedStoragePaths(params.supabase, bucket, [...ownedPublicIds].sort());
   if (listedStorage.failed) throw new Error('Could not inspect evaluator private storage safely; no cleanup was attempted.');
   const cleanup = await cleanupOwnedState(params.supabase, {
-    privateBucket: getStagingBuckets().DRAFT_PRIVATE,
+    privateBucket: bucket,
     ownedPublicIds,
     ownedBatchIds,
     ownedStoragePaths: new Set(listedStorage.paths),

@@ -9,7 +9,12 @@ import {
   assertCohortAccounting,
   readinessField,
   cleanupOwnedState,
+  cleanupInterruptedReleaseEvaluationRun,
 } from './releaseEvaluationHarness';
+import { getStagingBuckets } from '../lib/supabase/buckets';
+vi.mock('../lib/supabase/buckets', () => ({
+  getStagingBuckets: () => ({ DRAFT_PRIVATE: 'private', PUBLIC_ASSETS: 'public', PUBLIC_FEEDS: 'feeds' }),
+}));
 import { buildReleaseEvaluationCorpus } from '../fixtures/releaseEvaluationCorpus';
 import {
   createReleaseEvidenceLedger,
@@ -28,7 +33,130 @@ function previewPackage(overrides: Partial<Parameters<typeof deriveActualPreview
   };
 }
 
+function interruptedCleanupFixture() {
+  const runNamespace = 'run-1-0123456789abcdef';
+  const publicId = `release-${runNamespace}-synthetic-2022-0001`;
+  const ownedPath = `drafts/${publicId}/poster_image/poster.png`;
+  const ordinaryPath = 'drafts/ordinary-project/poster_image/poster.png';
+  const similarPath = `drafts/release-${runNamespace}0-synthetic-2022-0001/poster_image/poster.png`;
+  const objects = new Set([ownedPath, ordinaryPath, similarPath]);
+  const rows: Record<string, Record<string, string>[]> = {
+    projects: [{ id: 'owned-project', public_id: publicId }, { id: 'ordinary-project', public_id: 'ordinary-project' }],
+    media_assets: [{ project_id: 'owned-project', storage_bucket: getStagingBuckets().DRAFT_PRIVATE, storage_path: ownedPath }],
+  };
+  const failures = { remove: true, list: false };
+  const remove = vi.fn(async (paths: string[]) => {
+    if (failures.remove) return { error: { message: 'injected Storage outage' } };
+    paths.forEach((path) => objects.delete(path));
+    return { error: null };
+  });
+  const list = vi.fn(async (prefix: string, options: { limit: number; offset?: number }) => {
+    if (failures.list) return { data: null, error: { message: 'injected listing outage' } };
+    const entries = new Map<string, { name: string; id: string | null }>();
+    for (const path of objects) {
+      if (!path.startsWith(`${prefix}/`)) continue;
+      const relative = path.slice(prefix.length + 1);
+      const name = relative.split('/')[0];
+      entries.set(name, { name, id: relative.includes('/') ? null : 'storage-object' });
+    }
+    const offset = options.offset || 0;
+    return { data: [...entries.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(offset, offset + options.limit), error: null };
+  });
+  const client = {
+    supabaseUrl: 'http://127.0.0.1:54321',
+    from: (table: string) => {
+      let deleting = false;
+      let filter: (row: Record<string, string>) => boolean = () => true;
+      const query = {
+        select: () => query,
+        delete: () => { deleting = true; return query; },
+        in: (column: string, values: string[]) => { filter = (row) => values.includes(row[column]); return query; },
+        like: (column: string, pattern: string) => { filter = (row) => row[column]?.startsWith(pattern.slice(0, -1)); return query; },
+        then: (resolve: (value: unknown) => unknown) => {
+          const data = (rows[table] || []).filter(filter);
+          if (deleting) rows[table] = (rows[table] || []).filter((row) => !filter(row));
+          return Promise.resolve({ data, count: data.length, error: null }).then(resolve);
+        },
+      };
+      return query;
+    },
+    storage: { from: () => ({ list, remove }) },
+  } as unknown as Parameters<typeof cleanupOwnedState>[0];
+  return { runNamespace, publicId, ownedPath, ordinaryPath, similarPath, objects, rows, failures, remove, list, client };
+}
+
 describe('release evaluation harness safety', () => {
+  it('recovers orphaned Storage using only the run namespace after failed removal and successful DB cleanup', async () => {
+    const fixture = interruptedCleanupFixture();
+    const runtime = { privateBucket: getStagingBuckets().DRAFT_PRIVATE, ownedPublicIds: new Set([fixture.publicId]), ownedBatchIds: new Set<string>(), ownedStoragePaths: new Set([fixture.ownedPath]), previewIds: new Set<string>() };
+    const first = await cleanupOwnedState(fixture.client, runtime);
+    expect(first.completed).toBe(false);
+    expect(first.residue.projects).toBe(0);
+    expect(first.residue.privateStorageObjects).toBe(1);
+    expect(fixture.rows.projects).toEqual([{ id: 'ordinary-project', public_id: 'ordinary-project' }]);
+    expect(fixture.rows.media_assets).toEqual([]);
+    expect((await cleanupOwnedState(fixture.client, runtime)).completed).toBe(false);
+    expect(fixture.objects.has(fixture.ownedPath)).toBe(true);
+
+    fixture.failures.remove = false;
+    const recovered = await cleanupInterruptedReleaseEvaluationRun({ supabase: fixture.client, apiUrl: 'http://127.0.0.1:54321', runNamespace: fixture.runNamespace });
+    expect(fixture.objects.has(fixture.ownedPath)).toBe(false);
+    expect(recovered.completed).toBe(true);
+    expect(Object.values(recovered.residue).every((count) => count === 0)).toBe(true);
+    expect(fixture.objects).toEqual(new Set([fixture.ordinaryPath, fixture.similarPath]));
+    expect(fixture.remove.mock.calls.every(([paths]) => paths.every((path) => path === fixture.ownedPath))).toBe(true);
+  });
+
+  it('reports orphaned Storage residue when recovery removal still fails', async () => {
+    const fixture = interruptedCleanupFixture();
+    fixture.rows.projects = [];
+    fixture.rows.media_assets = [];
+    const recovered = await cleanupInterruptedReleaseEvaluationRun({ supabase: fixture.client, apiUrl: 'http://127.0.0.1:54321', runNamespace: fixture.runNamespace });
+    expect(recovered.completed).toBe(false);
+    expect(recovered.residue.privateStorageObjects).toBe(1);
+    expect(fixture.objects.has(fixture.ownedPath)).toBe(true);
+  });
+
+  it('fails closed before deletion when Storage discovery is unavailable', async () => {
+    const fixture = interruptedCleanupFixture();
+    fixture.failures.list = true;
+    await expect(cleanupInterruptedReleaseEvaluationRun({ supabase: fixture.client, apiUrl: 'http://127.0.0.1:54321', runNamespace: fixture.runNamespace })).rejects.toThrow('no cleanup was attempted');
+    expect(fixture.remove).not.toHaveBeenCalled();
+    expect(fixture.rows.projects).toHaveLength(2);
+  });
+
+  it.each(['similar-project', 'unknown-asset', 'nested-file'])('leaves ambiguous %s residue untouched and refuses success', async (kind) => {
+    const fixture = interruptedCleanupFixture();
+    const ambiguousPath = kind === 'similar-project'
+      ? `drafts/release-${fixture.runNamespace}-synthetic-2022-0001-copy/poster_image/poster.png`
+      : kind === 'unknown-asset' ? `drafts/${fixture.publicId}/ordinary/file.txt`
+        : `drafts/${fixture.publicId}/poster_image/nested/file.png`;
+    fixture.objects.add(ambiguousPath);
+    fixture.failures.remove = false;
+    await expect(cleanupInterruptedReleaseEvaluationRun({ supabase: fixture.client, apiUrl: 'http://127.0.0.1:54321', runNamespace: fixture.runNamespace })).rejects.toThrow('no cleanup was attempted');
+    expect(fixture.remove).not.toHaveBeenCalled();
+    expect(fixture.objects.has(ambiguousPath)).toBe(true);
+    expect(fixture.rows.projects).toHaveLength(2);
+  });
+
+  it('discovers folders and counts/removes objects beyond the first Storage list page', async () => {
+    const fixture = interruptedCleanupFixture();
+    fixture.rows.projects = [];
+    fixture.rows.media_assets = [];
+    for (let index = 0; index < 1001; index += 1) {
+      fixture.objects.add(`drafts/ordinary-${String(index).padStart(4, '0')}/poster_image/seed.png`);
+      fixture.objects.add(`drafts/${fixture.publicId}/poster_image/extra-${index}.png`);
+    }
+    fixture.failures.remove = false;
+    const recovered = await cleanupInterruptedReleaseEvaluationRun({ supabase: fixture.client, apiUrl: 'http://127.0.0.1:54321', runNamespace: fixture.runNamespace });
+    expect(recovered.completed).toBe(true);
+    expect(recovered.residue.privateStorageObjects).toBe(0);
+    expect(fixture.objects.size).toBe(1003);
+    expect(fixture.list.mock.calls.some(([prefix, options]) => prefix === 'drafts' && options.offset === 1000)).toBe(true);
+    expect(fixture.list.mock.calls.some(([prefix, options]) => prefix.endsWith('/poster_image') && options.offset === 1000)).toBe(true);
+    expect([...fixture.objects].some((path) => path.startsWith(`drafts/${fixture.publicId}/`))).toBe(false);
+  });
+
   it.each(['https://localhost.example.com', 'https://127.0.0.1.example.com', 'https://127.0.0.1@host.example.com', 'ftp://127.0.0.1', 'http://127.0.0.1/forward', 'http://127.0.0.1?target=remote'])('refuses deceptive or non-HTTP target %s', (url) => {
     expect(() => assertReleaseLocalTarget(url)).toThrow('loopback');
   });

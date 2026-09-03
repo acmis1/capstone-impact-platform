@@ -7,7 +7,7 @@ Date: 2026-09-03. Scope: independent review and local integration of PR #258, **
 - Audited Binh head: `f004d39d9e4f5744018dd17efd9094afa77acb7f`.
 - Current main used: `6cee51d5a7b4bbf9d6add26726347d0dcedaa699`; common base: `045cce114775c89ea83be59200532ce3641bc6e8`.
 - Branch: `integration/binh-release-evaluation-audit`, in a clean dedicated worktree. Original dirty main checkout was preserved.
-- Normal merge commit: `c712cca20b45446e7d3427516a19de67d9f284af`; Binh's commits/history retained. The correction commit containing this document is the local audit result.
+- Normal merge commit: `c712cca20b45446e7d3427516a19de67d9f284af`; Binh's commits/history retained. Initial correction: `b5fd6ed0c8ecc6c8cd996b7f78762044ec01eee6`. The subsequent independent-review correction is recorded below.
 - Reviewed the complete effective 16-file PR diff and current authorities. Main's later #259 recovery-portability changes have no conflicting file edits; their semantic boundaries were checked and their focused regressions rerun. No reconciliation-only source change was needed. Recovery contracts and migrations were unchanged.
 - PR #258 remains open/unmerged, at the audited head. No integration push/new PR, teammate rewrite, or Tan/Huy branch integration.
 
@@ -21,8 +21,8 @@ Date: 2026-09-03. Scope: independent review and local integration of PR #258, **
 | D. End-to-end accounting | PASS | All 132 cases classified, 120 persisted, 12 deliberate rejects, zero unexpected/unaccounted. Exact cohort identity checks and per-stage ledger. |
 | E. Seeded issues and controls | PASS | Critical 32/32, non-critical 20/20, zero misses; all 110 controls observed, zero blocking false positives. |
 | F. Observational timing | PARTIAL | Two complete uninterrupted runs and runtime context retained. Parsing/validation/reconciliation is one combined measurement; independent reconciliation time is not available. No SLA claim. |
-| G. Annual-scale UI | PASS | Real authenticated Local browser at 1440x900 and 390x844; screenshots, search, filters, 10/25/50 pages, current-page selection, pagination and bounded-query inspection. |
-| H. Repeatability and cleanup | PASS | Two consecutive complete runs without reset; forced failure after real media staging; 13 residue scopes zero; ordinary data fingerprints unchanged; independent SQL and disposable teardown. Evidence-mode exit fix separately rerun. |
+| G. Annual-scale UI | PARTIAL | Retained authenticated Local desktop/mobile checks cover search, filters, 10/25/50 pages, selection and pagination, but lack a complete clean authenticated browser-console record. Independent review downgraded the original PASS; no new browser session is claimed. |
+| H. Repeatability and cleanup | PASS | Independent review changed the original PASS to FAIL for orphaned Storage recovery. The correction below proves namespace-only recovery after DB deletion, all 13 residue scopes zero, ordinary data preservation, and two fresh uninterrupted evaluator runs without reset. |
 | I. Efficiency preparation | PASS | Manual comparison template retained; matching stages present. Human/manual comparison and >=50% reduction remain NOT TESTED. |
 | J. Reporting | PASS | JSON and Markdown share the evidence model; per-run JSON retained. Local gate, browser, CI and human acceptance distinguished. |
 
@@ -80,7 +80,7 @@ The uninterrupted passing pair agrees after removing generated IDs/timestamps/ti
 - Read-only planning: READY_TO_STAGE 20, NOT_READY 100. Ordinary published-only feed: 0 verifier records, valid. No publication performed.
 - Issues: 32 critical + 20 non-critical = 52 detected / 52 seeded (100%); zero missed. Controls 110 observed / 110 declared; zero blocking false positives. Unexpected/unaccounted 0.
 
-Cleanup after success and the injected failure reports zero projects, batches, metadata/media commits, media, taxonomy links, flags, audits, previews, confirmations, correction requests and private objects. Whole-row baseline fingerprints for ordinary data plus admin, taxonomy and publication/feed state match. Independent SQL after the passing pair and after the browser run found owned projects/batches/Storage objects 0, ordinary projects 4 and media 4, audits/flags/previews 0, and publication ledger/head 0. Disposable containers, volumes, networks and temporary workdirs are absent after teardown. A hard kill/power loss still requires the documented namespace-scoped recovery path.
+Cleanup after success and the injected failure reports zero projects, batches, metadata/media commits, media, taxonomy links, flags, audits, previews, confirmations, correction requests and private objects. Whole-row baseline fingerprints for ordinary data plus admin, taxonomy and publication/feed state match. Independent SQL after the passing pair and after the browser run found owned projects/batches/Storage objects 0, ordinary projects 4 and media 4, audits/flags/previews 0, and publication ledger/head 0. Disposable containers, volumes, networks and temporary workdirs are absent after teardown. These original live-run observations did not prove interrupted recovery after a Storage deletion failure; that defect and its subsequent correction are recorded below.
 
 ## Retained evidence and browser result
 
@@ -144,3 +144,71 @@ Corrections beyond Binh's integrated work touch only:
 Remaining limits: independent reconciliation timing; no single wholly green default full-suite run on this host; GitHub authentication for posting review; no final-head CI; no comparable human efficiency measurements. Browser evidence is a representative Local smoke, not institutional UAT or comprehensive accessibility certification. Candidate planning does not prove 100+ published projects, Duda integration, production capacity, Render limits, hosted recovery or stakeholder acceptance. Content-correction ownership was observed through current authority, not redesigned.
 
 **Hosted application/infrastructure contacts/mutations: NONE.** GitHub source/CI metadata was read and the authorized review submission failed authentication. No hosted Supabase, Render, Azure, Duda or publish-cloud-feed call; no public promotion/removal, publication ledger mutation, production load test, teammate branch rewrite, push or merge.
+
+## Interrupted recovery correction after independent review
+
+Date: 2026-09-03. This section records only the follow-up to the independent **CHANGES_REQUIRED** decision. Earlier successful-run metrics and review history above are retained. Starting HEAD was verified as `b5fd6ed0c8ecc6c8cd996b7f78762044ec01eee6` on `integration/binh-release-evaluation-audit`, with no tracked, staged or untracked worktree changes. Both the recorded main integration base and original Binh head were verified as ancestors. The separate dirty primary checkout was preserved.
+
+**Root cause (P2):** the CLI recovery helper rebuilt `ownedPublicIds` exclusively from surviving project rows. Its Storage discovery and final residue count both depended on those IDs. If Storage removal failed but later database deletion succeeded, a fresh process found no projects, skipped the orphaned draft objects, and falsely reported zero Storage residue and completed cleanup. The earlier fix to continue later cleanup operations after an error was correct and remains intact; it made the missing durable Storage discovery observable.
+
+**Correction:** recovery now lists private `drafts` folders directly, with stable name ordering and pagination. It accepts only the exact `release-<validated run namespace>-synthetic-YYYY-NNNN` folder shape, then combines those identities with surviving database identities. Discovery needs neither the prior process's ownership sets nor a seed value. Only the three existing private media directories are eligible. Unexpected folders, nested entries, invalid path segments, or failed enumeration prevent a success result; recovery leaves ambiguous entries untouched and refuses mutation if discovery is incomplete. Storage residue is enumerated again after deletion, independently of whether project rows remain. Both folder and object listings cover pages beyond 1,000 entries.
+
+No application deletion semantics, public promotion, publication planning behavior, workflow, authorization/RLS, migrations, dependencies, or CLI argument contract changed. Live intended-identity/path tracking and non-short-circuit cleanup sequencing remain in place. No persistent cleanup registry was added.
+
+### Regression and disposable Local evidence
+
+The new regression first failed against unchanged `b5fd6ed0` production source: the post-recovery assertion found the owned Storage object still present. The fixture had already verified failed first cleanup and retry, zero owned project/media rows, and one actual Storage object. After the correction it passes using only the namespace in the recovery call, with every residue scope zero. Additional regressions cover continued removal failure (one reported object, incomplete), listing failure, ambiguous project/asset/nested paths, more than 1,000 folders and objects, and ordinary/similar-run objects left intact. All 24 harness tests and the 69-test focused group pass.
+
+New evidence is retained outside Git at:
+
+`C:/Users/Admin/.codex/visualizations/2026/09/03/01a06516-7e9f-7ce3-84b5-470ce3d0a1ef/binh-correction`
+
+`local-recovery.cjs` uses the repository disposable-stack owner and cached Local images. Its bounded failure injection intercepts only removal of one exact verifier object at the client Storage boundary; all database operations and other Storage requests use the real disposable services. It does not simulate the database or the later CLI process.
+
+| Observation | Actual result |
+| --- | --- |
+| First cleanup / live retry | Both incomplete; later DB deletions still executed. |
+| Independent SQL after failure | Owned projects 0; actual owned Storage objects 1. |
+| Fresh `--cleanup-run=<namespace>` process | Exit 0, complete; supplied only the durable namespace plus in-memory Local connection configuration. |
+| Final Storage residue | API count 0 and independent SQL count 0. |
+| All cleanup scopes | Projects, batches, metadata commits, media commits, media assets, discipline links, industry links, flags, approval records, previews, confirmations, correction requests, private Storage objects: all 0. |
+| Ordinary state | Full-row fingerprints across 25 DB tables unchanged; both ordinary and similar-run Storage control bytes unchanged. |
+| Two uninterrupted evaluations afterward | Both PASS, normalized repeatability comparable, both forced-failure probes and final cleanups complete; no reset. |
+| Independent SQL after pair | Verifier projects 0; Storage excluding the two preserved controls 0; ordinary projects 4 and media rows 4. |
+| Disposable teardown | Owned containers, volumes, networks absent; temporary workdir absent. Other Local stacks untouched. |
+
+Retained artifacts: `reproduction.log`, `focused.log`, `local-recovery-evidence.json`, `cleanup-cli.log`, `local-runtime.log`, both per-run JSON files and final JSON/Markdown under `two-runs/`, `after-two-runs-sql.txt`, and `disposable-residue.json`. The initial probe stopped on a verification-only SQL table-name typo, before creating its verifier project; its stack was removed. That log is retained as `local-runtime-initial.log`; the probe was corrected to the existing `feed_rollback_preparations` table and rerun. No schema change was needed.
+
+Both fresh evaluations retain exactly: cases 132; persisted 120; deliberate rejects 12; unaccounted 0; critical 32/32; non-critical 20/20; controls 110/110; blocking false positives 0; audit rows 185; publication candidates 20; ordinary published feed records 0. Manifest digest and final status counts match the earlier evidence. New total timings were 25,572.931 ms and 26,805.131 ms, including the additional cleanup enumeration and concurrent Local verification load; these do not replace the earlier observations or establish a performance target.
+
+**Requirement reconciliation:** H changes from the independent review's FAIL to PASS on the new regression and real fresh-process Local recovery evidence. G remains PARTIAL because the previous browser workflow did not retain a complete authenticated console record; rebuilding that evidence setup was deferred for this narrow correction. F remains PARTIAL: the truthful combined parsing/validation/reconciliation timer is unchanged.
+
+### Follow-up verification commands
+
+Commands ran in the integration worktree. Evidence filenames below are relative to the new evidence directory. No hosted verification flags were used.
+
+| Exact command | Result |
+| --- | --- |
+| `npm run test:run --workspace=apps/admin-cms -- src/evaluation/releaseEvaluationHarness.test.ts -t 'recovers orphaned Storage'` | Before source correction: one expected failure, orphan still present (`reproduction.log`). An initial fixture setup attempt lacked a mocked bucket config and was corrected before this reproduction. |
+| `npm run test:run --workspace=apps/admin-cms -- src/evaluation/releaseEvaluationHarness.test.ts` | First implementation check: 18/18 passed, before adding the remaining six safety/pagination cases (`harness-first.log`). |
+| `npm run test:admin -- src/evaluation src/fixtures/releaseEvaluationCorpus.test.ts src/components/admin-dashboard/ProjectTableContainer.integration.test.tsx` | 69/69 tests, four files passed (`focused.log`). Covers report, corpus, cleanup/forced failure and ProjectTableContainer. |
+| `node --conditions=react-server --import tsx C:/Users/Admin/.codex/visualizations/2026/09/03/01a06516-7e9f-7ce3-84b5-470ce3d0a1ef/binh-correction/local-recovery.cjs` | Final probe exit 0; real recovery, both full evaluations, baseline preservation and teardown pass. Initial verification-script typo described above. |
+| `node --conditions=react-server --import tsx apps/admin-cms/src/scripts/verifyReleaseEvaluation.ts --cleanup-run=<generated namespace>` | Actual exact argument retained in `cleanup-cli-command.json`; fresh process exit 0 and all residue scopes zero. CLI source/argument parsing unchanged. |
+| `node --conditions=react-server --import tsx apps/admin-cms/src/scripts/verifyReleaseEvaluation.ts --output-dir=C:/Users/Admin/.codex/visualizations/2026/09/03/01a06516-7e9f-7ce3-84b5-470ce3d0a1ef/binh-correction/two-runs` | Default two uninterrupted runs, exit 0, both gates PASS (`two-runs.log`). |
+| `npm run lint --workspace=apps/admin-cms` | Final PASS: zero errors, six unchanged warnings (`lint-final.log`). The earlier run found one new test warning, subsequently removed (`lint.log`). |
+| `npm run lint --workspace=apps/admin-cms -- src/evaluation/releaseEvaluationHarness.ts src/evaluation/releaseEvaluationHarness.test.ts` | Final changed files: zero errors or warnings (`lint-changed.log`). |
+| `npm run typecheck:admin` | PASS (`typecheck.log`). |
+| `npm run build:admin` | Attempted with telemetry disabled and HTTP/HTTPS/ALL proxy set to closed loopback `http://127.0.0.1:9`. Build cannot fetch existing Geist/Geist Mono Google Fonts with external requests blocked (`build.log`). No product/font/config change made to bypass this restriction; the earlier build PASS is not represented as a fresh PASS. |
+| `npm run test:admin` | 4,304 passed, 11 five-second timeouts, 14 skipped; three unhandled errors, including the explicitly terminated stalled worker. The browser test temporarily removes global Buffer; timeout stack formatting in Vite then failed on `Buffer.from`, leaving one worker stalled. Only this verified worktree worker was terminated after over five minutes without progress; total run 397.94 seconds (`test-admin.log`, `test-admin-termination.txt`). |
+| `npm run test:run --workspace=apps/admin-cms -- src/components/imports/BrowserImportPreviewClient.browser.test.tsx --maxWorkers=1` | Isolated recheck also stalled; three unhandled errors, no completed test. Only its verified worker was terminated after more than three minutes; total 218.70 seconds (`browser-test-recheck.log`, `browser-recheck-termination.txt`). This unchanged browser unit test remains an unresolved verification gap. |
+| `git diff --check` and `git diff --cached --check` | PASS; exact three-file correction scope reviewed. |
+
+The eleven timed-out files were rechecked with unchanged limits using this exact command (254/254 passed, 27.34 seconds; `timeout-recheck.log`):
+
+```powershell
+npm run test:run --workspace=apps/admin-cms -- src/recovery/zeroCostRecovery.test.ts src/security/controlledPublicationMigration.test.ts src/security/controlledPublicRemovalMigration.test.ts src/security/participantPreviewCorrectionResolutionMigration.test.ts src/security/passwordRecoverySessionProvenanceMigration.test.ts src/security/postgres17MaintainPrivilegeAlignmentMigration.test.ts src/security/privateMediaApprovalGateMigration.test.ts src/security/transactionalImportBatchReviewSubmitMigration.test.ts src/security/transactionalMediaStageMigration.test.ts src/assistive-validation/__tests__/duplicateRanker.test.ts src/components/admin-dashboard/ProjectTableContainer.integration.test.tsx --maxWorkers=1
+```
+
+The final correction changes only this audit, `apps/admin-cms/src/evaluation/releaseEvaluationHarness.ts`, and `apps/admin-cms/src/evaluation/releaseEvaluationHarness.test.ts`. The existing integration commit is not amended. The final correction SHA is retained after commit in `correction-commit.json` beside the evidence and in the final handoff; resolve it from this document's commit with `git log -1 --format=%H -- docs/release-evaluation-integration-audit.md` (a commit cannot embed its own hash).
+
+Remaining gaps are the fresh offline production build, one wholly green canonical full-suite run and the isolated unchanged browser unit test, the authenticated browser-console record, independent reconciliation timing, and the previously recorded human efficiency/hosted CI boundaries. No hosted Supabase, Duda, Render, Azure, private dashboard, or publish-cloud-feed access; no public Storage promotion or publication/removal; no migration/auth/RLS/production lifecycle changes; no push, PR creation, merge, or modification of main/Binh refs. All application service requests in this correction used disposable loopback Local endpoints.
