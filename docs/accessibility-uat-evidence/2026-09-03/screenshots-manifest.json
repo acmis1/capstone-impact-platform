@@ -45,10 +45,10 @@
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/import-workflow-mobile-375px.png",
-      "width": 750,
-      "height": 1624,
-      "bytes": 145269,
-      "sha256": "74c83484140757509743be1abb2743c867f9733c127e7a0f3845db068cfec059"
+      "width": 375,
+      "height": 812,
+      "bytes": 33827,
+      "sha256": "41d57090691a0bfd58f466ddd93f883662cf23fdf9d68b86f5a2c9ae052ba175"
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/import-workflow-new-keyboard.png",
@@ -94,10 +94,10 @@
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/participant-preview-browser-zoom-200.png",
-      "width": 1264,
-      "height": 705,
-      "bytes": 61230,
-      "sha256": "ba1bc6c9c490dd3888c68f6a4f1adfb2c90040ff3abd6d0c051f74578aa165ac"
+      "width": 1280,
+      "height": 720,
+      "bytes": 65677,
+      "sha256": "d0c9e8ecafdc3d8bb124b48302d0cdb88955af9c6053727f5d46f9db5ee9323b"
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/participant-preview-controlled-failure.png",
@@ -108,10 +108,10 @@
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/participant-preview-mobile-375px.png",
-      "width": 750,
-      "height": 1624,
-      "bytes": 114867,
-      "sha256": "54aff51ad101dc6f7b76edec111a5d1b35588c9682c259795c6c0bc1380fd5bb"
+      "width": 375,
+      "height": 812,
+      "bytes": 32047,
+      "sha256": "ccf2cb3fa3b3db0fa7f09a46f621dc370a61dec3bc94b240356191dc5487b7b5"
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/participant-preview-reading-order.png",
@@ -121,11 +121,18 @@
       "sha256": "c49da1e03d6a3aa613318469eef67d9079db44d02ae0869c50484a57a00b75c9"
     },
     {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/participant-preview-validation-failure.png",
+      "width": 1280,
+      "height": 800,
+      "bytes": 66827,
+      "sha256": "2cc9699a7c9bb18f9bcaa5c0185ca31a8250906e06646de3adf3d9a69443c3b7"
+    },
+    {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/project-detail-browser-zoom-200.png",
-      "width": 1264,
-      "height": 705,
-      "bytes": 79770,
-      "sha256": "88926aff7b3d2b2d41568615c1eac63b013ddb4d5282caec1541f79f626dbb0f"
+      "width": 1280,
+      "height": 720,
+      "bytes": 85546,
+      "sha256": "8276c4bf86758eedaca826861e168352ef082d9f6554d531282e4a5aa0d64f00"
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/project-detail-controlled-failure.png",
@@ -150,10 +157,10 @@
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/project-detail-mobile-375px.png",
-      "width": 750,
-      "height": 1624,
-      "bytes": 129711,
-      "sha256": "a61d87d0f97eb478023cfdd72e885fdcefdd8755d4f927f077d8b8b0bad2ba9e"
+      "width": 375,
+      "height": 812,
+      "bytes": 46275,
+      "sha256": "28837cf3d96d59f9ed1eccd4ee2cd32871017c028b85c4b3dee1f84319f61c73"
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-200pct-zoom.png",
@@ -164,10 +171,10 @@
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-browser-zoom-200.png",
-      "width": 1264,
-      "height": 705,
-      "bytes": 63051,
-      "sha256": "3b8d7d5414adaad68b48876440d0987da17165528597495e2aad82219290a357"
+      "width": 1280,
+      "height": 720,
+      "bytes": 72689,
+      "sha256": "15cd20b01f1331eff9c4f92bb00639f3c10134c15f33a74976b1fad52501424f"
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-desktop-keyboard.png",
@@ -178,10 +185,10 @@
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-mobile-375px.png",
-      "width": 750,
-      "height": 1624,
-      "bytes": 133074,
-      "sha256": "8d9e35a0f3b57977721091ac30eddaeaa438eca65f2e63813e1d5e5d9a639396"
+      "width": 375,
+      "height": 812,
+      "bytes": 44007,
+      "sha256": "87384609bd1d13dba7dfa2d530fc8fa16407c88cfd1ce40897594ecc7bff7dcb"
     },
     {
       "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/public-feed-keyboard-focus.png",
@@ -219,13 +226,5 @@
       "sha256": "831d921bbe4068ff73b371579040e45743b010ba8d26afd96a028e335d8b9010"
     }
   ],
-  "duplicates": [
-    {
-      "sha256": "3b8d7d5414adaad68b48876440d0987da17165528597495e2aad82219290a357",
-      "filenames": [
-        "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-200pct-zoom.png",
-        "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-browser-zoom-200.png"
-      ]
-    }
-  ]
+  "duplicates": []
 }

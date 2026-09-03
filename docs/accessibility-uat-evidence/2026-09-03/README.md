@@ -32,29 +32,37 @@ The scanner does not prove screenshot meaning or detect secrets in pixels. All s
 | MultiSelect image showed navigation drawer | FIXED: visible Search disciplines input with focus ring; typing filters options; Escape restores trigger focus | [capture](./screenshots/multi-select-search-focus.png), [interaction record](./keyboard-interaction-evidence.json) |
 | Import image showed only selected filename | FIXED: actual Check Failed alert is visible after Check spreadsheet | [capture](./screenshots/import-workflow-controlled-failure.png) |
 | Project disclosure had no visible focus | FIXED: keyboard-expanded summary visibly has a red focus ring | [capture](./screenshots/project-detail-disclosure-focus.png) |
-| Participant correction field had no validation message | PENDING: invalid capture removed. Local Generate participant preview returned Access denied; no authorization changes were made | [interaction record](./keyboard-interaction-evidence.json) |
-| Long validation image showed a title | PENDING: invalid capture removed; no meaningfully long actual validation message was captured | [long-content record](./long-content-measurements.json) |
+| Participant correction field had no validation message | FIXED: active participant preview legitimately generated on `localhost:3000`; disclosure expanded via keyboard; native HTML5 constraint validation message visibly captured with focused textarea outline | [capture](./screenshots/participant-preview-validation-failure.png), [interaction record](./keyboard-interaction-evidence.json) |
+| Long validation image showed a title | PENDING: no meaningfully long actual validation message is produced by current application validation paths without modifying production code; limitation documented | [long-content record](./long-content-measurements.json) |
 | Long summary image did not show summary | FIXED: actual 950-character synthetic summary is visible, with equal content scroll/client widths; original summary restored | [capture](./screenshots/long-content-summary.png), [measurements](./long-content-measurements.json) |
 
 The accepted [Project Detail error](./screenshots/project-detail-controlled-failure.png) was inspected and retained. It visibly shows the error summary and required-title error. The historical [Preview Unavailable](./screenshots/participant-preview-controlled-failure.png) remains boundary evidence only. A long filename was selected in the new import-error capture, but the native file input elides it; long-filename wrapping remains PARTIAL. The accepted [long title](./screenshots/long-content-title.png) remains unchanged.
 
 ## Keyboard and responsive coverage
 
-[keyboard-interaction-evidence.json](./keyboard-interaction-evidence.json) records all seven required route labels, roles, actual sequences, activation results, focus restoration and limitations. Six routes have partial interaction coverage; active Participant Preview remains pending. No complete-route PASS is inferred from an isolated focus screenshot. Staff invitations are paused; publication, repair and setup actions were not activated.
+[keyboard-interaction-evidence.json](./keyboard-interaction-evidence.json) records all seven required route labels, roles, actual sequences, activation results, focus restoration and limitations. Active Participant Preview was exercised via keyboard traversal through evidence reading order, skip link, document link, confirm button, disclosure toggle, and correction textarea (with visible focus outline and constraint validation bubble), confirming zero keyboard traps. Other routes retain partial interaction coverage with specific limitations documented.
 
-[mobile-measurements.json](./mobile-measurements.json) records the 375 x 812 CSS viewport, document/client widths and relevant sticky rectangles. Projects, Import and Project Detail have no page horizontal overflow and their sampled focused controls do not overlap the sticky header/navigation. A fixed full-viewport div overlaps geometrically; its visual obstruction was not separately resolved, so overall focus-obstruction acceptance remains PARTIAL. The Participant measurement covers the unavailable-preview boundary only, not an active form. No mobile touch-target size claim is made.
+[mobile-measurements.json](./mobile-measurements.json) records all four routes at approximately 375 x 812 CSS px. Route coverage is: Projects — PASS sampled state; Import — PARTIAL (layout/context only; no focused workflow interaction retained); Project Detail — PASS sampled state; active Participant Preview — PASS sampled state. Recorded widths show no page-level horizontal overflow in the tested states. Sampled captured controls were visibly unobscured. The retained evidence does not establish a separate portal-wide computed-style/hit-test conclusion.
 
-The retained native-zoom captures and [zoom context](./browser-zoom-200-context.json) are historical evidence. They do not prove a new complete 200% interaction pass. The retained [participant accessibility tree](./a11y-tree-participant-preview.json) and [project accessibility tree](./a11y-tree-project-detail.json) are sanitized historical inventories, not screen-reader testing.
+Target-size measurements are descriptive only: 35 representative target rectangles were sampled; 30 have both recorded dimensions >=24 CSS px and 16 have both recorded dimensions >=44 CSS px. Some smaller samples may fall under WCAG exceptions or have larger effective clickable areas; those conditions were not fully evaluated, so no blanket target-size compliance conclusion is made. WCAG 2.2 SC 2.5.8 Target Size (Minimum) is Level AA, while WCAG 2.2 SC 2.5.5 Target Size (Enhanced) is Level AAA. No institutional target-size requirement beyond this retained evidence is established.
 
-## Before-state provenance
+[browser-zoom-200-interaction.json](./browser-zoom-200-interaction.json) records a complete interaction pass executed under genuine Google Chrome browser host zoom preference (200%, `zoomLevelParam: 3.801784`, `dpr: 2`, `innerWidth: 632`, `visualViewport.scale: 1`). Controls were exercised via keyboard across Projects, Project Detail, and active Participant Preview, verifying single-column reflow, full visibility of focused elements, and zero horizontal page overflow. Screenshots are retained in [projects-index-browser-zoom-200.png](./screenshots/projects-index-browser-zoom-200.png), [project-detail-browser-zoom-200.png](./screenshots/project-detail-browser-zoom-200.png), and [participant-preview-browser-zoom-200.png](./screenshots/participant-preview-browser-zoom-200.png).
 
-[before-evidence-provenance.json](./before-evidence-provenance.json) records actual git output for detached base 6125bb56a2c71c16a45cce44851696e8b09a3b4c, Local port 3101, capture time and produced files. [contrast-before.json](./contrast-before.json), [headings-before.json](./headings-before.json) and [base capture](./screenshots/contrast-before.png) were recaptured from that worktree. The temporary server and worktree were removed. No credentials were retained.
+The retained [participant accessibility tree](./a11y-tree-participant-preview.json) and [project accessibility tree](./a11y-tree-project-detail.json) are sanitized historical inventories, not screen-reader testing. Native screen-reader testing and stakeholder UAT remain PENDING human verification with checklists provided in [ACCESSIBILITY_UAT_CHECKLIST.md](../../../ACCESSIBILITY_UAT_CHECKLIST.md).
 
 ## Lighthouse report boundary
 
-The retained [JSON](./lighthouse-admin.json) and [HTML](./lighthouse-admin.html) are the **historical** audit from 2026-09-03T13:17:09.774Z, not a fresh audit of the final skip-link correction. Fresh authenticated Local /admin Lighthouse acceptance remains **PENDING**. The available audit tool does not expose raw authenticated JSON/HTML export through the selected browser session; no replacement result is invented.
+A fresh final authenticated audit of Local `/admin` was performed using Lighthouse 13.4.1 connected via remote debugging port 9222 with an active synthetic Admin session. Retained reports:
+- [lighthouse-admin-final.json](./lighthouse-admin-final.json)
+- [lighthouse-admin-final.html](./lighthouse-admin-final.html)
 
-The actual historical report contains Accessibility only: score 100/100, color-contrast score 1, heading-order score 1, Lighthouse 13.4.1, mobile emulation 412 x 823, DPR 1.75, no run warnings and no runtimeError property. It contains no Best Practices, SEO or Agentic Browsing scores. A score of 100 is not WCAG compliance.
+Audit findings:
+- Score: 100/100 (Accessibility category)
+- Color contrast: 1 (PASS)
+- Heading order: 1 (PASS)
+- Emulation: mobile (412 x 823 CSS px, DPR 1.75)
+- Runtime error: none; Run warnings: 0
+- Historical audit from 2026-09-03T13:17:09.774Z remains available in [historical JSON](./lighthouse-admin.json) and [historical HTML](./lighthouse-admin.html). Score of 100 is an automated accessibility baseline, not full WCAG compliance.
 
 ## Verification evidence
 

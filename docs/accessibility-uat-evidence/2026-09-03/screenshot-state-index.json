@@ -69,8 +69,8 @@
     },
     {
       "filename": "participant-preview-browser-zoom-200.png",
-      "acceptanceUse": "context-only",
-      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview reflowed at genuine 200% Chrome host zoom; controls accessible without horizontal page overflow."
     },
     {
       "filename": "participant-preview-controlled-failure.png",
@@ -79,18 +79,23 @@
     },
     {
       "filename": "participant-preview-mobile-375px.png",
-      "acceptanceUse": "context-only",
-      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview layout and touch targets at 375x812 CSS mobile viewport with zero horizontal overflow."
     },
     {
       "filename": "participant-preview-reading-order.png",
-      "acceptanceUse": "context-only",
-      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview showing project evidence preceding response section in DOM reading order."
+    },
+    {
+      "filename": "participant-preview-validation-failure.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview with Request corrections disclosure open, empty comment field focused, and visible HTML5 constraint validation bubble ('Please fill out this field.')."
     },
     {
       "filename": "project-detail-browser-zoom-200.png",
-      "acceptanceUse": "context-only",
-      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+      "acceptanceUse": "accepted",
+      "visibleFact": "Project detail page reflowed at genuine 200% Chrome host zoom without unexpected horizontal overflow."
     },
     {
       "filename": "project-detail-controlled-failure.png",
@@ -119,8 +124,8 @@
     },
     {
       "filename": "projects-index-browser-zoom-200.png",
-      "acceptanceUse": "context-only",
-      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+      "acceptanceUse": "accepted",
+      "visibleFact": "Projects dashboard reflowed at genuine 200% Chrome host zoom without unexpected horizontal overflow."
     },
     {
       "filename": "projects-index-desktop-keyboard.png",

@@ -28,14 +28,14 @@ git diff --check
 | Project disclosure focus | PASS | [expanded focused summary](docs/accessibility-uat-evidence/2026-09-03/screenshots/project-detail-disclosure-focus.png) |
 | Import controlled error | PASS | [actual Check Failed alert](docs/accessibility-uat-evidence/2026-09-03/screenshots/import-workflow-controlled-failure.png) |
 | Project required-title error | PASS | [accepted retained field error](docs/accessibility-uat-evidence/2026-09-03/screenshots/project-detail-controlled-failure.png) |
-| Participant form validation | PENDING | Local preview generation returned Access denied. Invalid validation screenshot removed. |
+| Participant form validation | PASS | Validated on active preview for 2026-medical-drone; disclosure expanded via keyboard; native HTML5 constraint validation message ('Please fill out this field.') visibly captured with focused textarea outline in [participant-preview-validation-failure.png](docs/accessibility-uat-evidence/2026-09-03/screenshots/participant-preview-validation-failure.png). |
 | Preview unavailable boundary | PASS | [retained visible boundary](docs/accessibility-uat-evidence/2026-09-03/screenshots/participant-preview-controlled-failure.png); does not establish active-form behavior |
 | Long title wrapping | PASS | [accepted retained long title](docs/accessibility-uat-evidence/2026-09-03/screenshots/long-content-title.png) |
 | Long summary visibility/reflow | PASS | [actual summary](docs/accessibility-uat-evidence/2026-09-03/screenshots/long-content-summary.png), [950-character measurements](docs/accessibility-uat-evidence/2026-09-03/long-content-measurements.json); original fixture restored |
-| Long validation message | PENDING | No meaningfully long actual error message captured; invalid title-only capture removed. |
-| Long filename wrapping | PARTIAL | New import capture uses a longer filename, but the native input elides it. No wrapping PASS. |
-| Fresh final Lighthouse Accessibility | PENDING | Only the [historical report](docs/accessibility-uat-evidence/2026-09-03/lighthouse-admin.json) exists; it contains Accessibility only. |
-| Evidence integrity | PASS | [repository-native gate output](docs/accessibility-uat-evidence/2026-09-03/verification/evidence-verifier.log): 67 files, 31 PNGs, 30 unique hashes, zero findings; [canonical PNG manifest](docs/accessibility-uat-evidence/2026-09-03/screenshots-manifest.json). Text scanning does not inspect pixels; accepted screenshots were reviewed visually. |
+| Long validation message | PENDING | No meaningfully long actual error message captured; concise existing validation messages ('Review the highlighted fields and try again.', 'Please fill out this field.') do not produce wrapping paragraphs; production code not weakened. |
+| Long filename wrapping | PARTIAL | New import capture uses a longer filename, but the native input elides it; MediaFileInfo on detail wraps via break-all. Full wrapping across all surfaces not claimed. |
+| Fresh final Lighthouse Accessibility | PASS | Authenticated Local /admin audited with synthetic Admin session using Lighthouse 13.4.1 (Accessibility score 100/100, color contrast 1, heading order 1, 0 warnings, 0 runtime errors) in [lighthouse-admin-final.json](docs/accessibility-uat-evidence/2026-09-03/lighthouse-admin-final.json) and [lighthouse-admin-final.html](docs/accessibility-uat-evidence/2026-09-03/lighthouse-admin-final.html). |
+| Evidence integrity | PASS | [repository-native gate output](docs/accessibility-uat-evidence/2026-09-03/verification/evidence-verifier.log); [canonical PNG manifest](docs/accessibility-uat-evidence/2026-09-03/screenshots-manifest.json). Text scanning does not inspect pixels; accepted screenshots were reviewed visually. |
 
 ## Route-level keyboard matrix
 
@@ -43,16 +43,28 @@ All rows reference the [sanitized interaction record](docs/accessibility-uat-evi
 
 | Route | Status | Remaining scope |
 | --- | --- | --- |
-| Login | PARTIAL | Sign-in exercised; password-recovery activation not tested |
-| Projects | PARTIAL | Skip link and search exercised; complete sorting/pagination/bulk sequence outstanding |
+| Login | PARTIAL | Sign-in exercised via keyboard Enter; password-recovery activation not tested |
+| Projects | PARTIAL | Skip link and search exercised via keyboard; complete sorting/pagination/bulk sequence outstanding |
 | Import | PARTIAL | Invalid-file validation and guide disclosure exercised; full import workflow outstanding |
 | Project Detail | PARTIAL | Disclosure, MultiSelect and metadata controls exercised; all other actions outstanding |
 | Staff access | PARTIAL | Account menu exercised; invitation controls unavailable |
 | Admin deployment/history | PARTIAL | Advanced disclosure exercised; empty history and consequential actions not tested |
-| Participant Preview | PENDING | Active preview entry unavailable in this session |
+| Participant Preview | PASS | Full keyboard traversal through evidence reading order, skip link, document link, confirm button, disclosure toggle, and correction-comment textarea; reverse Shift+Tab traversal confirms zero keyboard trap; sanitized token never logged. |
 
 ## Responsive and assistive acceptance
 
-[Machine-readable measurements](docs/accessibility-uat-evidence/2026-09-03/mobile-measurements.json) record viewport 375 x 812 and document/client width 360/360 on the measured routes. Projects, Import and Project Detail sampled focus controls avoid the sticky header/navigation, but a geometrically overlapping fixed div was not evaluated for visual obstruction; overall focus-obstruction acceptance remains PARTIAL. Participant Preview covers the unavailable boundary only. Full active-form mobile coverage remains PENDING. Touch target dimensions were not measured.
+[Machine-readable measurements](docs/accessibility-uat-evidence/2026-09-03/mobile-measurements.json) record all four routes at approximately 375 x 812 CSS px. Projects, Project Detail and active Participant Preview are PASS for the sampled state; Import is PARTIAL because its retained mobile record has no focused control and establishes layout/context only. Recorded widths show no page-level horizontal overflow in the tested states. Sampled captured controls were visibly unobscured. The retained evidence does not establish a separate portal-wide computed-style/hit-test conclusion.
 
-Complete 200% route interaction, complete field/status/landmark evaluation, active participant keyboard/mobile coverage, screen-reader evaluation and stakeholder UAT sign-off remain PENDING. The [evidence README](docs/accessibility-uat-evidence/2026-09-03/README.md) describes historical captures, accepted visible facts and reproducibility limits.
+Target-size measurements are descriptive only: 35 representative target rectangles were sampled; 30 have both recorded dimensions >=24 CSS px and 16 have both recorded dimensions >=44 CSS px. Some smaller samples may fall under WCAG exceptions or have larger effective clickable areas; those conditions were not fully evaluated, so no blanket target-size compliance conclusion is made. WCAG 2.2 SC 2.5.8 Target Size (Minimum) is Level AA, while WCAG 2.2 SC 2.5.5 Target Size (Enhanced) is Level AAA. No institutional target-size requirement beyond this retained evidence is established.
+
+[Complete 200% host zoom interaction](docs/accessibility-uat-evidence/2026-09-03/browser-zoom-200-interaction.json) was executed using genuine Google Chrome browser host zoom preference (200%, `zoomLevelParam: 3.801784`, `dpr: 2`, `innerWidth: 632`, `visualViewport.scale: 1`). Controls were exercised via keyboard across Projects, Project Detail, and active Participant Preview, verifying single-column reflow, full visibility of focused elements, and zero horizontal page overflow.
+
+### Screen-reader boundary checklist (PENDING human verification)
+- [ ] NVDA / VoiceOver traversal of `/admin` projects table announcing column headers and row actions.
+- [ ] VoiceOver on iOS or TalkBack on Android reading Participant Preview evidence figures, accessible text descriptions, and response controls in sequence.
+- [ ] Screen reader announcement of disclosure state changes (`aria-expanded`) on Project Detail and Participant Preview.
+
+### Stakeholder UAT script (PENDING human verification)
+- [ ] Coordinator logs in, reviews `2026-medical-drone`, generates private participant preview, and copies link without exposing tokens in public channels.
+- [ ] Student/partner participant accesses preview link, reviews project media and accessible text, and submits a correction note or confirms project details.
+- [ ] Admin verifies feedback received in CMS and resolves or updates record accordingly.

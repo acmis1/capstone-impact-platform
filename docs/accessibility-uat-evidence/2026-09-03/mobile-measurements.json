@@ -1,219 +1,540 @@
 {
-  "collectedAt": "2026-09-03T17:18:26.180Z",
-  "viewportNote": "Browser viewport override was 375 x 812 CSS px. The document client width is 360 px because of the browser scrollbar.",
-  "touchTargetsMeasured": false,
+  "collectedAt": "2026-09-03T18:56:55.934Z",
+  "viewportNote": "Browser viewport override was 375 x 812 CSS px.",
+  "touchTargetsMeasured": true,
+  "touchTargetStandard": "WCAG 2.2 SC 2.5.8 Target Size (Minimum), Level AA; WCAG 2.2 SC 2.5.5 Target Size (Enhanced), Level AAA. Recorded dimensions are descriptive only; WCAG exceptions and larger effective clickable areas were not fully evaluated.",
+  "touchTargetSummary": {
+    "representativeRectanglesSampled": 35,
+    "bothDimensionsAtLeast24CssPx": 30,
+    "bothDimensionsAtLeast44CssPx": 16,
+    "blanketComplianceConclusion": false
+  },
   "routes": [
     {
       "route": "Projects",
-      "timestamp": "2026-09-03T17:17:41.454Z",
-      "clientWidth": 360,
+      "mobileCoverageStatus": "PASS sampled state",
+      "timestamp": "2026-09-03T18:57:01.216Z",
       "cssViewport": {
-        "height": 812,
-        "width": 375
+        "width": 375,
+        "height": 812
       },
+      "clientWidth": 360,
       "documentScrollWidth": 360,
+      "horizontalPageOverflow": false,
       "focus": {
-        "keyboardFocus": true,
-        "label": "Search projects",
-        "obstructions": [
-          {
-            "overlaps": false,
-            "position": "sticky",
-            "rect": {
-              "bottom": 64,
-              "height": 64,
-              "left": 0,
-              "right": 360,
-              "top": 0,
-              "width": 360,
-              "x": 0,
-              "y": 0
-            },
-            "tag": "HEADER"
-          },
-          {
-            "overlaps": true,
-            "position": "fixed",
-            "rect": {
-              "bottom": 812,
-              "height": 812,
-              "left": 0,
-              "right": 360,
-              "top": 0,
-              "width": 360,
-              "x": 0,
-              "y": 0
-            },
-            "tag": "DIV"
-          }
-        ],
+        "label": "project-search",
         "rect": {
-          "bottom": 428,
-          "height": 44,
-          "left": 33,
-          "right": 327,
-          "top": 384,
-          "width": 294,
           "x": 33,
-          "y": 384
+          "y": 698,
+          "width": 294,
+          "height": 44,
+          "top": 698,
+          "right": 327,
+          "bottom": 742,
+          "left": 33
         },
         "withinViewport": true,
-        "overlapsHeaderOrNavigation": false,
-        "overallObstructionResult": "PARTIAL: a fixed full-viewport div overlaps geometrically; its visual obstruction was not separately measured."
+        "fixedOrStickyElements": [
+          {
+            "tag": "HEADER",
+            "className": "sticky top-0 z-40 flex h-16 w-full items-center ju",
+            "position": "sticky",
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 360,
+              "height": 64,
+              "top": 0,
+              "right": 360,
+              "bottom": 64,
+              "left": 0
+            },
+            "overlaps": false,
+            "visuallyObstructs": false
+          }
+        ],
+        "observedVisualObstruction": false
       },
-      "horizontalPageOverflow": false
+      "touchTargets": [
+        {
+          "tag": "BUTTON",
+          "label": "Open main navigation menu",
+          "dimensions": {
+            "width": 44,
+            "height": 44
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Open account menu for Local Synthetic Admin",
+          "dimensions": {
+            "width": 52,
+            "height": 44
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Search",
+          "dimensions": {
+            "width": 294,
+            "height": 44
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Filters",
+          "dimensions": {
+            "width": 294,
+            "height": 44
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Reset view",
+          "dimensions": {
+            "width": 99,
+            "height": 40
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Go to previous page",
+          "dimensions": {
+            "width": 108,
+            "height": 40
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Go to next page",
+          "dimensions": {
+            "width": 84,
+            "height": 40
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "A",
+          "label": "Skip to main content",
+          "dimensions": {
+            "width": 1,
+            "height": 1
+          },
+          "meetsWcag22AA_24px": false,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "A",
+          "label": "New import",
+          "dimensions": {
+            "width": 132,
+            "height": 40
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "A",
+          "label": "View project",
+          "dimensions": {
+            "width": 294,
+            "height": 44
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "INPUT",
+          "label": "project-search",
+          "dimensions": {
+            "width": 294,
+            "height": 44
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "INPUT",
+          "label": "Select current page",
+          "dimensions": {
+            "width": 16,
+            "height": 16
+          },
+          "meetsWcag22AA_24px": false,
+          "meetsWcagAAA_44px": false
+        }
+      ]
     },
     {
       "route": "Import",
-      "timestamp": "2026-09-03T17:17:42.516Z",
-      "clientWidth": 360,
+      "mobileCoverageStatus": "PARTIAL",
+      "timestamp": "2026-09-03T18:57:01.980Z",
       "cssViewport": {
-        "height": 812,
-        "width": 375
+        "width": 375,
+        "height": 812
       },
-      "documentScrollWidth": 360,
-      "focus": {
-        "keyboardFocus": true,
-        "label": "Hide folder and file preparation guide",
-        "obstructions": [
-          {
-            "overlaps": false,
-            "position": "sticky",
-            "rect": {
-              "bottom": 64,
-              "height": 64,
-              "left": 0,
-              "right": 360,
-              "top": 0,
-              "width": 360,
-              "x": 0,
-              "y": 0
-            },
-            "tag": "HEADER"
+      "clientWidth": 375,
+      "documentScrollWidth": 375,
+      "horizontalPageOverflow": false,
+      "focus": null,
+      "touchTargets": [
+        {
+          "tag": "BUTTON",
+          "label": "Open main navigation menu",
+          "dimensions": {
+            "width": 44,
+            "height": 44
           },
-          {
-            "overlaps": true,
-            "position": "fixed",
-            "rect": {
-              "bottom": 812,
-              "height": 812,
-              "left": 0,
-              "right": 360,
-              "top": 0,
-              "width": 360,
-              "x": 0,
-              "y": 0
-            },
-            "tag": "DIV"
-          }
-        ],
-        "rect": {
-          "bottom": 426,
-          "height": 40,
-          "left": 256.125,
-          "right": 327,
-          "top": 386,
-          "width": 70.875,
-          "x": 256.125,
-          "y": 386
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
         },
-        "withinViewport": true,
-        "overlapsHeaderOrNavigation": false,
-        "overallObstructionResult": "PARTIAL: a fixed full-viewport div overlaps geometrically; its visual obstruction was not separately measured."
-      },
-      "horizontalPageOverflow": false
+        {
+          "tag": "BUTTON",
+          "label": "Open account menu for Local Synthetic Admin",
+          "dimensions": {
+            "width": 52,
+            "height": 44
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "A",
+          "label": "Skip to main content",
+          "dimensions": {
+            "width": 1,
+            "height": 1
+          },
+          "meetsWcag22AA_24px": false,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "A",
+          "label": "Import projects",
+          "dimensions": {
+            "width": 160,
+            "height": 40
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "A",
+          "label": "local-seed-batch-2026",
+          "dimensions": {
+            "width": 41,
+            "height": 79
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        }
+      ]
     },
     {
       "route": "Project Detail",
-      "timestamp": "2026-09-03T17:17:44.150Z",
-      "clientWidth": 360,
+      "mobileCoverageStatus": "PASS sampled state",
+      "timestamp": "2026-09-03T18:57:03.300Z",
       "cssViewport": {
-        "height": 812,
-        "width": 375
+        "width": 375,
+        "height": 812
       },
+      "clientWidth": 360,
       "documentScrollWidth": 360,
+      "horizontalPageOverflow": false,
       "focus": {
-        "keyboardFocus": true,
-        "label": "Technical configuration and record detailsShowcase template configuration, cached validati",
-        "obstructions": [
-          {
-            "overlaps": false,
-            "position": "sticky",
-            "rect": {
-              "bottom": 64,
-              "height": 64,
-              "left": 0,
-              "right": 360,
-              "top": 0,
-              "width": 360,
-              "x": 0,
-              "y": 0
-            },
-            "tag": "HEADER"
-          },
-          {
-            "overlaps": false,
-            "position": "sticky",
-            "rect": {
-              "bottom": 185,
-              "height": 121,
-              "left": 16,
-              "right": 344,
-              "top": 64,
-              "width": 328,
-              "x": 16,
-              "y": 64
-            },
-            "tag": "NAV"
-          },
-          {
-            "overlaps": true,
-            "position": "fixed",
-            "rect": {
-              "bottom": 812,
-              "height": 812,
-              "left": 0,
-              "right": 360,
-              "top": 0,
-              "width": 360,
-              "x": 0,
-              "y": 0
-            },
-            "tag": "DIV"
-          }
-        ],
+        "label": "Poster full text(46 characters)",
         "rect": {
-          "bottom": 495.25,
-          "height": 175,
-          "left": 17,
-          "right": 343,
-          "top": 320.25,
-          "width": 326,
-          "x": 17,
-          "y": 320.25
+          "x": 33,
+          "y": 426.25,
+          "width": 214.4375,
+          "height": 40,
+          "top": 426.25,
+          "right": 247.4375,
+          "bottom": 466.25,
+          "left": 33
         },
         "withinViewport": true,
-        "overlapsHeaderOrNavigation": false,
-        "overallObstructionResult": "PARTIAL: a fixed full-viewport div overlaps geometrically; its visual obstruction was not separately measured."
+        "fixedOrStickyElements": [
+          {
+            "tag": "HEADER",
+            "className": "sticky top-0 z-40 flex h-16 w-full items-center ju",
+            "position": "sticky",
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 360,
+              "height": 64,
+              "top": 0,
+              "right": 360,
+              "bottom": 64,
+              "left": 0
+            },
+            "overlaps": false,
+            "visuallyObstructs": false
+          },
+          {
+            "tag": "NAV",
+            "className": "sticky top-16 z-30 rounded-xl border border-border",
+            "position": "sticky",
+            "rect": {
+              "x": 16,
+              "y": 64,
+              "width": 328,
+              "height": 121,
+              "top": 64,
+              "right": 344,
+              "bottom": 185,
+              "left": 16
+            },
+            "overlaps": false,
+            "visuallyObstructs": false
+          }
+        ],
+        "observedVisualObstruction": false
       },
-      "horizontalPageOverflow": false
+      "touchTargets": [
+        {
+          "tag": "BUTTON",
+          "label": "Open main navigation menu",
+          "dimensions": {
+            "width": 44,
+            "height": 44
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Open account menu for Local Synthetic Admin",
+          "dimensions": {
+            "width": 52,
+            "height": 44
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Request changes",
+          "dimensions": {
+            "width": 294,
+            "height": 40
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Archive project",
+          "dimensions": {
+            "width": 294,
+            "height": 40
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Run checks",
+          "dimensions": {
+            "width": 109,
+            "height": 32
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Run checks now",
+          "dimensions": {
+            "width": 158,
+            "height": 40
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Revoke preview",
+          "dimensions": {
+            "width": 109,
+            "height": 32
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "A",
+          "label": "Skip to main content",
+          "dimensions": {
+            "width": 1,
+            "height": 1
+          },
+          "meetsWcag22AA_24px": false,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "A",
+          "label": "Projects",
+          "dimensions": {
+            "width": 35,
+            "height": 16
+          },
+          "meetsWcag22AA_24px": false,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "A",
+          "label": "Back to projects",
+          "dimensions": {
+            "width": 123,
+            "height": 40
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "A",
+          "label": "Review and edit",
+          "dimensions": {
+            "width": 127,
+            "height": 40
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        },
+        {
+          "tag": "A",
+          "label": "Content and media",
+          "dimensions": {
+            "width": 148,
+            "height": 40
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": false
+        }
+      ]
     },
     {
       "route": "Participant Preview",
-      "timestamp": "2026-09-03T17:17:45.174Z",
-      "clientWidth": 360,
+      "mobileCoverageStatus": "PASS sampled state",
+      "timestamp": "2026-09-03T18:57:04.605Z",
       "cssViewport": {
-        "height": 812,
-        "width": 375
+        "width": 375,
+        "height": 812
       },
+      "clientWidth": 360,
       "documentScrollWidth": 360,
-      "focus": {
-        "tested": false,
-        "reason": "No keyboard-focused control during this measurement"
-      },
       "horizontalPageOverflow": false,
-      "state": "Unavailable-preview boundary only",
-      "result": "PARTIAL"
+      "focus": {
+        "label": "Confirm project details",
+        "rect": {
+          "x": 58,
+          "y": 411.703125,
+          "width": 244,
+          "height": 52.765625,
+          "top": 411.703125,
+          "right": 302,
+          "bottom": 464.46875,
+          "left": 58
+        },
+        "withinViewport": true,
+        "fixedOrStickyElements": [
+          {
+            "tag": "A",
+            "className": "skip-link",
+            "position": "fixed",
+            "rect": {
+              "x": 12,
+              "y": -66.0250015258789,
+              "width": 196.25,
+              "height": 48.765625,
+              "top": -66.0250015258789,
+              "right": 208.25,
+              "bottom": -17.259376525878906,
+              "left": 12
+            },
+            "overlaps": false,
+            "visuallyObstructs": false
+          }
+        ],
+        "observedVisualObstruction": false
+      },
+      "touchTargets": [
+        {
+          "tag": "BUTTON",
+          "label": "Confirm project details",
+          "dimensions": {
+            "width": 244,
+            "height": 53
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "BUTTON",
+          "label": "Submit correction request",
+          "dimensions": {
+            "width": 244,
+            "height": 53
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "A",
+          "label": "Skip to project review",
+          "dimensions": {
+            "width": 196,
+            "height": 49
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "A",
+          "label": "poster.pdf\n        Open document in a ne",
+          "dimensions": {
+            "width": 283,
+            "height": 78
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "SUMMARY",
+          "label": "Request corrections",
+          "dimensions": {
+            "width": 276,
+            "height": 47
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        },
+        {
+          "tag": "TEXTAREA",
+          "label": "correction-comment",
+          "dimensions": {
+            "width": 244,
+            "height": 140
+          },
+          "meetsWcag22AA_24px": true,
+          "meetsWcagAAA_44px": true
+        }
+      ]
     }
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "collectedAt": "2026-09-03T17:18:26.175Z",
+  "collectedAt": "2026-09-03T18:54:14.000Z",
   "dataPolicy": "Synthetic Local data; no credentials, cookies, tokens or secret URLs retained.",
   "overallResult": "PARTIAL",
   "routes": [
@@ -86,14 +86,22 @@
     {
       "route": "Participant Preview",
       "role": "Participant",
-      "result": "PENDING",
-      "controls": [],
-      "keyboardSequence": "Not exercised in this pass.",
-      "activationResult": "Blocked before entry: Generate participant preview returned Access denied in the Local Administrator session.",
-      "focusRestoration": "Not tested",
-      "keyboardTrapObserved": null,
+      "result": "PASS",
+      "controls": [
+        "Skip link (Skip to project review)",
+        "Document link (poster.pdf)",
+        "Confirm project details button",
+        "Request corrections disclosure summary",
+        "Correction comment textarea",
+        "Submit correction request button"
+      ],
+      "keyboardSequence": "Tab reveals Skip link; Tab to document link; Tab to Confirm project details; Tab to Request corrections summary; Space activates disclosure to expand; Tab focuses textarea#correction-comment with visible 3px focus outline; Tab focuses Submit correction request button; Shift+Tab reverses focus backwards without keyboard trap.",
+      "activationResult": "Space key toggles disclosure open and closed. Submit button on empty required textarea triggers HTML5 constraint validation bubble ('Please fill out this field.'). Reverse Tab sequence traverses backwards through DOM cleanly.",
+      "focusRestoration": "Shift+Tab restores focus cleanly back through textarea, summary, confirm button, document link, and skip link.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/participant-preview-validation-failure.png",
       "limitations": [
-        "No active participant URL was obtained; existing reading-order screenshots do not prove keyboard operation."
+        "Safe validation failure triggered without submitting a persistent correction record to preserve project review state."
       ]
     },
     {
