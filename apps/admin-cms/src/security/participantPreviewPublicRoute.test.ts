@@ -713,7 +713,7 @@ describe('Public participant-preview route', () => {
     responseStateSpy.mockRestore();
   });
 
-  it('renders the confirmed state with the recorded timestamp and a separate complete-package upload form once already confirmed', async () => {
+  it('renders the confirmed state with the recorded timestamp and no correction upload form', async () => {
     const { GET } = await import('../app/participant-preview/[token]/route');
     const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
 
@@ -740,7 +740,8 @@ describe('Public participant-preview route', () => {
 
     expect(res.status).toBe(200);
     expect(html).toContain('You confirmed that');
-    expect(html).not.toContain('<form method="POST">');
+    expect(html).not.toContain('<form');
+    expect(html).not.toContain('type="file"');
     expect(html).not.toContain('Confirm project details');
     expect(html).not.toContain('Correction request submitted');
 

@@ -270,7 +270,7 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify fifty migrations and local integrity
+      - name: Verify fifty-one migrations and local integrity
         run: |
           npm run supabase:verify:local
           test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 51

@@ -86,11 +86,13 @@ Corrected content requires a new exact participant preview and confirmation. Exp
 
 The project team owns submitted public content, controlled links, media, poster text and image descriptions. Staff check completeness and technical quality, request corrections, accept an exact participant revision, and retain approval and publication authority. Staff metadata editors, gallery description editors and assistive apply controls are read-only; legacy server actions reject direct content writes.
 
+Before the first participant preview, staff can upload a complete project-team-supplied replacement for a completed import in draft, submitted, in-review or changes-requested state. The same parser, immutable candidates, exact comparison and recovery transaction apply. Staff freeze and accept the package without changing its content or automatically approving the project. Provenance records staff transport separately from project-team authorship.
+
 After requesting a correction through an active preview, the project team uploads a complete replacement `project-details.xlsx`, poster image, poster PDF and optional numbered supporting images. The server validates the source bytes and stages an immutable candidate in private Storage. Submission leaves authoritative project content unchanged. Staff compare current and proposed fields, file hashes, descriptions and omissions. Beginning review freezes the selected candidate, revokes the old preview and moves the project to changes requested.
 
 Acceptance applies only that frozen package. Metadata, media rows, project taxonomy mappings, complete recovery records and obsolete-row retirement commit in one database transaction. Every old Storage object remains intact; shared taxonomy catalogues are never retired. Prepared new objects remain bounded and retryable if Storage or database completion fails. Acceptance neither approves nor publishes. Normal technical review, staff reapproval, a corrected preview and fresh participant confirmation follow before publication readiness.
 
-Migration 0051 implements this workflow with the existing preview capability; participants need no account or CMS access. This implements the advisor's expressed concern and still requires final UAT and stakeholder sign-off. See [participant correction handoff](participant-owned-corrections-handoff.md) for limits, ownership and verification evidence.
+Migration 0051 implements these workflows with authenticated staff transport before preview and the existing participant preview capability afterward; participants need no account or CMS access. This implements the advisor's expressed concern and still requires final UAT and stakeholder sign-off. See [participant correction handoff](participant-owned-corrections-handoff.md) for limits, ownership and verification evidence.
 
 ## Publication Boundary
 

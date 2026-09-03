@@ -12,7 +12,9 @@ const fileSchema = z.object({
   altText: z.string().max(2000).nullable(),
 }).strict();
 const submissionSchema = z.object({
-  id: z.uuid(), project_id: z.uuid(), correction_request_id: z.uuid(), participant_preview_id: z.uuid(),
+  id: z.uuid(), project_id: z.uuid(), correction_request_id: z.uuid().nullable(), participant_preview_id: z.uuid().nullable(),
+  source: z.enum(['participant_capability', 'staff_pre_preview']), base_version: hash.nullable(),
+  validation_checks: z.array(z.object({ ruleCode: z.string(), fieldName: z.string().nullable() }).strict()),
   package_hash: hash, metadata: z.record(z.string(), z.unknown()), files: z.array(fileSchema).min(3).max(13),
   warnings: z.array(z.string()), storage_bucket: z.literal('participant-corrections-private'),
   state: z.enum(['preparing', 'submitted', 'superseded', 'frozen', 'accepted', 'returned']),
@@ -43,11 +45,12 @@ export interface CorrectionReviewView {
     files: Array<{ role: string; position: number | null; fileName: string; bytes: number; hash: string; altText: string | null; url: string }>;
     currentMedia: Array<{ role: string; position: number | null; fileName: string; hash: string; altText: string | null }>;
     warnings: string[];
+    validationFlags: Array<{ message: string; resolved: boolean; willResolve: boolean }>;
   };
 }
 const unavailable: CorrectionReviewView = { available: false, candidate: null };
 const printable = (value: unknown) => value == null ? '' : typeof value === 'string' ? value : JSON.stringify(value);
-const candidatePath = (s: Submission, f: CorrectionFile) => `corrections/${s.project_id}/${s.correction_request_id}/${s.id}/${f.storageName}`;
+const candidatePath = (s: Submission, f: CorrectionFile) => `corrections/${s.project_id}/${s.correction_request_id ?? s.id}/${s.id}/${f.storageName}`;
 const draftPath = (publicId: string, s: Submission, f: CorrectionFile) => `drafts/${publicId}/${f.role}/corrections/${s.id}/${f.storageName}/${f.fileName}`;
 
 async function verifiedBytes(client: SupabaseClient, bucket: string, path: string, file: { bytes: number; sha256?: string }): Promise<Buffer> {
@@ -59,13 +62,14 @@ async function verifiedBytes(client: SupabaseClient, bucket: string, path: strin
 }
 
 /** Read-only staff evidence. Current values are compared with the immutable candidate, never supplied by the browser. */
-export async function loadCorrectionReviewView(client: SupabaseClient, publicId: string, correctionId: string | null): Promise<CorrectionReviewView> {
-  if (!correctionId) return { available: true, candidate: null };
+export async function loadCorrectionReviewView(client: SupabaseClient, publicId: string, correctionId: string | null, prePreview = false): Promise<CorrectionReviewView> {
+  if (!correctionId && !prePreview) return { available: true, candidate: null };
   try {
     const project = await client.from('projects').select('*').eq('public_id', publicId).is('deleted_at', null).single();
     if (project.error || !project.data) return unavailable;
-    const candidates = await client.from('participant_correction_submissions').select('*').eq('project_id', project.data.id)
-      .eq('correction_request_id', correctionId).in('state', ['submitted', 'frozen', 'accepted', 'returned']).order('reserved_at', { ascending: false }).limit(1);
+    const query = client.from('participant_correction_submissions').select('*').eq('project_id', project.data.id);
+    const candidates = await (prePreview ? query.eq('source', 'staff_pre_preview') : query.eq('correction_request_id', correctionId))
+      .in('state', ['submitted', 'frozen', 'accepted', 'returned']).order('reserved_at', { ascending: false }).limit(1);
     if (candidates.error) return unavailable;
     if (!candidates.data?.length) return { available: true, candidate: null };
     const s = submissionSchema.parse(candidates.data[0]);
@@ -93,14 +97,18 @@ export async function loadCorrectionReviewView(client: SupabaseClient, publicId:
     if (disciplines.error || industries.error) return unavailable;
     const names = (rows: unknown[], key: string) => rows.map((row) => z.object({ [key]: z.object({ name: z.string() }) }).parse(row)[key].name).join(', ');
     const current = { ...project.data, discipline: names(disciplines.data ?? [], 'disciplines'), industry: names(industries.data ?? [], 'industry_categories') };
+    const flags = await client.from('validation_flags').select('rule_code,field_name,message,resolved').eq('project_id', project.data.id);
+    if (flags.error || !flags.data) return unavailable;
     const finalVersion = await client.rpc('participant_correction_project_version', { p_project_id: project.data.id });
     if (finalVersion.error || finalVersion.data !== version.data) return unavailable;
     return { available: true, candidate: {
-      id: s.id, hash: s.package_hash, expectedVersion: s.frozen_version ?? version.data, state: s.state, submittedAt: s.submitted_at!,
+      id: s.id, hash: s.package_hash, expectedVersion: s.frozen_version ?? s.base_version ?? version.data, state: s.state, submittedAt: s.submitted_at!,
       fields: Object.entries(CONTENT_FIELDS).map(([name, column]) => {
         const before = printable(current[column]); const after = printable(s.metadata[name]);
         return { name, current: before, proposed: after, changed: before !== after };
       }), files, currentMedia, warnings: s.warnings,
+      validationFlags: flags.data.map((flag) => ({ message: flag.message, resolved: flag.resolved === true,
+        willResolve: flag.resolved !== true && s.validation_checks.some((check) => check.ruleCode === flag.rule_code && check.fieldName === flag.field_name) })),
     } };
   } catch { return unavailable; }
 }

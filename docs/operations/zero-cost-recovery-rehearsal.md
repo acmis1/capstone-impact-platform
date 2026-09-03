@@ -229,8 +229,8 @@ removes that partial target. Diagnostics distinguish `ROLE_PLATFORM_ACL_COMPATIB
 then restores only approved PP1 managed-schema customizations, restores Storage through the API,
 and checks:
 
-- all 48 migrations and latest migration;
-- 37 public application tables plus three execution-control tables;
+- all 51 migrations and latest migration;
+- the complete public application and execution-control table inventory;
 - safe table row counts and order-independent checksums;
 - Auth user/identity counts and zero orphan identities;
 - exact source/repository/restored managed-schema evidence (`2/2` Auth, `0/0` Storage,
@@ -238,7 +238,7 @@ and checks:
 - provider-global role compatibility (`ROLE_PLATFORM_ACL_COMPATIBILITY`);
 - recovery-only table-grant compatibility (`TABLE_GRANT_PORTABILITY_COMPATIBILITY`);
 - launch guard `staging / 40 / 31 / 1`, reservation count/checksum, and executor registrations;
-- all three bucket configurations and the exact object set, lengths, content types, and SHA-256;
+- all canonical bucket configurations and the exact object set, lengths, content types, and SHA-256;
 - current Gate 4 structure: 40 tables, 78 application RPC signatures across 77 names, four
   dispatcher routines, and three buckets;
 - `/api/health` 200, `/login` 200 with the stable marker, and a truthful non-staging readiness
@@ -246,7 +246,7 @@ and checks:
 - absence of verifier-owned containers, volumes, network, and workdir after cleanup.
 
 Only `ZERO_COST_RECOVERY_REHEARSAL_VERIFIED` is success. Both Gate 4 and the separate managed-schema
-customization gate must pass: 48/48 migration history or `GATE4_MATCH` cannot compensate for a
+customization gate must pass: matching migration history or `GATE4_MATCH` cannot compensate for a
 missing Auth trigger. Invalid/corrupt bundle, source capture, database restore, managed-schema,
 database integrity, Storage, Gate 4, and cleanup failures remain distinct classifications. A real
 bundle remains present on both success and failure.

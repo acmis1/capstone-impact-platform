@@ -24,7 +24,7 @@ describe('participant correction migration authority', () => {
   it('exposes no mutation authority to participant or ordinary authenticated roles', () => {
     expect(sql).not.toMatch(/GRANT (?:ALL|INSERT|UPDATE|DELETE|EXECUTE)[^;]+ TO (?:PUBLIC|anon|authenticated)/i);
     expect((sql.match(/ENABLE ROW LEVEL SECURITY/g) ?? []).length).toBe(4);
-    expect((sql.match(/GRANT EXECUTE ON FUNCTION/g) ?? []).length).toBe(5);
+    expect((sql.match(/GRANT EXECUTE ON FUNCTION/g) ?? []).length).toBe(6);
   });
   it('preserves historical snapshot and confirmation evidence and forbids Storage deletion', () => {
     expect(sql).not.toMatch(/(?:DELETE FROM|UPDATE)\s+storage\./i);

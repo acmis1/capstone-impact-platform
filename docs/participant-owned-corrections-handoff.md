@@ -12,6 +12,18 @@ Project teams author submitted public content. Staff assess technical completene
 | Staff/system | Review comments and dispositions, technical checks, lifecycle state, approval, publication/removal authority, reference datasets and reconciliation evidence, canonical catalogue administration, audit identities, storage identities, imports, timestamps, preview issuance/revocation and notification scheduling. |
 | Historical evidence | Preview snapshots, confirmations, original correction comments and audit evidence are immutable. Existing request/preview lifecycle fields record revocation, review start and corrected-preview reissue. Legacy generic external links/citations are preserved; this package contract does not expose an editor for them. |
 
+## Pre-preview package replacement
+
+Before the first participant preview, authenticated staff with combined edit/review authority can transport a complete corrected package supplied by the project team. The project detail page offers **Replace project-team package** for `draft`, `submitted`, `in_review`, and `changes_requested` projects. An incomplete import, any historical preview, archived/published/approved state, or active publication/removal operation closes this path. Project identity comes from the selected existing project, never the workbook or an extra form field.
+
+This reuses the participant package parser, immutable reservations, private Storage, exact comparison and acceptance transaction. The bounded source discriminator is `staff_pre_preview` versus `participant_capability`; the staff transport actor is distinct from project-team content authorship. Three distinct reservations are allowed per current project revision, including failed uploads. Begin review freezes the selected package and pauses approval/uploads. Acceptance preserves the current review state. Returning the package changes no content and releases the freeze, including when separate governance changes have made the frozen base stale. Staff then perform normal checks and approval before issuing the first preview.
+
+## Validation history
+
+The project revision includes all validation flag rows. Acceptance locks them and captures their full prior state. Only known deterministic `validateImportPackage` rule/field pairs that passed revalidation of the exact new package receive `resolved`, actor and time. The old row is retained in immutable recovery evidence tied to the submission, hash and acceptance actor. Existing resolved rows, unknown/governance rules, mismatched fields and recommendations still present in the replacement remain unchanged. No validation flag is deleted. The read-only comparison shows which findings will resolve and which remain open.
+
+The disposable initial-review scenario proves a corrected missing-image-description error resolves, an unknown governance error still blocks review evidence, mismatched rule identity remains unresolved and historical resolved evidence is unchanged. Separate explicit staff governance resolution is required before that scenario finishes normal approval.
+
 ## Participant correction flow
 
 An approved project's active, unexpired, unconfirmed preview accepts a correction comment. The same capability then offers a plain same-origin multipart form: one project-details XLSX workbook, one poster image, one poster PDF and up to ten numbered supporting images. No participant account, JavaScript editor, CMS access, bucket name, project selector or content override is required.
@@ -32,7 +44,7 @@ Staff compare current and proposed metadata, canonical classifications, file ide
 
 ## Database and Storage
 
-Migration **0051**, `20260903130000_participant_owned_corrections.sql`, is forward-only. Earlier migrations remain byte-identical. The application inventory contains 51 migrations and includes four new private tables: `participant_correction_submissions`, `participant_correction_prior_revisions`, `participant_correction_recovery_rows` and `participant_correction_events`. Five service-only RPCs provide project revision hashing, capability context, reservation, completion and staff review. The obsolete staff-authored resolution-start RPC now rejects that path.
+Migration **0051**, `20260903130000_participant_owned_corrections.sql`, includes both package origins. It was revised while local and unmerged; earlier migrations remain byte-identical in this follow-up. The application inventory contains 51 migrations and includes four new private tables: `participant_correction_submissions`, `participant_correction_prior_revisions`, `participant_correction_recovery_rows` and `participant_correction_events`. Six service-only RPCs provide project revision hashing, participant/staff context, reservation, completion and staff review. The obsolete staff-authored resolution-start RPC now rejects that path.
 
 Source packages use `participant-corrections-private`. Accepted media is prepared at unique immutable paths in `project-drafts-private`; copy reuse requires exact bytes. Both private buckets are included in the recovery inventory. There is no Storage deletion path in correction submission or acceptance.
 

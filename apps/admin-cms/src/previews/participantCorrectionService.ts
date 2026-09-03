@@ -24,14 +24,23 @@ const reservationSchema = z.object({
 });
 
 /** Files are generated under a durable, quota-counted reservation. Never overwrite or delete. */
-export async function stageParticipantCorrection(client: SupabaseClient, tokenHash: string, candidate: CorrectionPackage): Promise<'submitted' | 'limit' | 'lookup' | 'failed'> {
+export async function stageParticipantCorrection(client: SupabaseClient, tokenHash: string, candidate: CorrectionPackage) {
+  return stageCorrectionPackage(client, { p_token_hash: tokenHash }, candidate);
+}
+
+export async function stagePrePreviewReplacement(client: SupabaseClient, publicId: string, adminId: string, candidate: CorrectionPackage) {
+  return stageCorrectionPackage(client, { p_token_hash: null, p_public_id: publicId, p_admin_id: adminId }, candidate);
+}
+
+async function stageCorrectionPackage(client: SupabaseClient, binding: { p_token_hash: string | null; p_public_id?: string; p_admin_id?: string }, candidate: CorrectionPackage): Promise<'submitted' | 'limit' | 'lookup' | 'failed'> {
   const bucket = PARTICIPANT_CORRECTION_BUCKET;
-  const files = candidate.files.map(({ content: _content, ...file }) => ({
-    ...file, storageName: `${file.role}${file.position === null ? '' : `-${file.position}`}.${file.fileName.split('.').pop()!.toLowerCase()}`,
+  const files = candidate.files.map(({ role, position, fileName, mimeType, bytes, sha256, altText }) => ({
+    role, position, fileName, mimeType, bytes, sha256, altText,
+    storageName: `${role}${position === null ? '' : `-${position}`}.${fileName.split('.').pop()!.toLowerCase()}`,
   }));
   try {
     const reserved = await client.rpc('reserve_participant_correction', {
-      p_token_hash: tokenHash, p_package_hash: candidate.hash, p_metadata: candidate.metadata,
+      ...binding, p_validation_checks: candidate.validationChecks, p_package_hash: candidate.hash, p_metadata: candidate.metadata,
       p_files: files, p_warnings: candidate.warnings, p_bucket: bucket,
     });
     if (reserved.error) return 'failed';
@@ -53,7 +62,7 @@ export async function stageParticipantCorrection(client: SupabaseClient, tokenHa
       }
     }
     const completed = await client.rpc('complete_participant_correction', {
-      p_token_hash: tokenHash, p_submission_id: reservation.submissionId, p_package_hash: candidate.hash,
+      ...binding, p_submission_id: reservation.submissionId, p_package_hash: candidate.hash,
     });
     return !completed.error && completed.data?.resultCode === 'SUCCESS' ? 'submitted' : 'failed';
   } catch {

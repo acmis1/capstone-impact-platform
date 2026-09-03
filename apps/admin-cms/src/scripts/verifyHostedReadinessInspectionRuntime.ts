@@ -76,7 +76,7 @@ async function main(): Promise<void> {
     `RPC name evidence incomplete (missing=${evaluation.missingRpcNames.join(',') || 'none'}).`
   );
   assert.equal(evaluation.missingRpcNames.length, 0);
-  assert.equal(REQUIRED_RPC_NAMES.length, 82);
+  assert.equal(REQUIRED_RPC_NAMES.length, 83);
   assert.equal(
     evaluation.requiredStorageBuckets,
     'PRESENT',

@@ -122,7 +122,7 @@ npm run verify:all         # the full quality gate
 Then confirm you can:
 
 - sign in with a synthetic local account;
-- see 48 migrations applied (`npm run onboarding:check`);
+- see 51 migrations applied (`npm run onboarding:check`);
 - build the assistive worker image (`docker build -f apps/assistive-worker/Dockerfile.hosted .`);
 - run the worker locally and watch it process a queued project;
 - read current executor readiness and remaining launch capacity;

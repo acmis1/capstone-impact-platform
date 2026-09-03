@@ -6,6 +6,7 @@ import { correctionForm, correctionWorkbook, ORIGINAL_PNG, ORIGINAL_PDF } from '
 import { correctionDigest, parseParticipantCorrectionPackage } from '../previews/participantCorrectionPackage';
 import { getParticipantCorrectionContext, stageParticipantCorrection } from '../previews/participantCorrectionService';
 import { decideParticipantCorrection, loadCorrectionReviewView } from '../previews/participantCorrectionReview';
+import { verifyPrePreviewPackageReplacementRuntime } from './verifyPrePreviewPackageReplacementRuntime';
 
 /** Synthetic runtime only: the caller must supply a proven-owned disposable stack. No primary/hosted fallback. */
 export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: string, identity: DisposableStackIdentity): Promise<void> {
@@ -65,6 +66,20 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
     const discipline = await taxonomy('disciplines', 'Software Engineering');
     const obsoleteDiscipline = await taxonomy('disciplines', `Synthetic Design ${suffix}`);
     const industry = await taxonomy('industry_categories', `Synthetic Industry ${suffix}`);
+    phase = 'initial import and pre-preview replacement';
+    const environmentKeys = ['NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY'] as const;
+    const previousEnvironment = environmentKeys.map((key) => process.env[key]);
+    try {
+      process.env.NEXT_PUBLIC_SUPABASE_URL = env.apiUrl;
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = env.anonKey;
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = env.anonKey;
+      process.env.SUPABASE_SERVICE_ROLE_KEY = env.serviceRoleKey;
+      process.env.SUPABASE_SECRET_KEY = env.serviceRoleKey;
+      await verifyPrePreviewPackageReplacementRuntime(client, staff.admin, `Synthetic Design ${suffix}`, `Synthetic Industry ${suffix}`);
+    } finally {
+      environmentKeys.forEach((key, i) => { if (previousEnvironment[i] === undefined) delete process.env[key]; else process.env[key] = previousEnvironment[i]; });
+    }
+    phase = 'participant fixtures';
     await data(client.from('projects').insert({ id, public_id: publicId, title: 'Original synthetic project', summary: 'Original synthetic summary.',
       year: 2026, status: 'approved', program_id: programId, program_name: 'Information Technology', group_name: 'Synthetic team',
       team_members: ['Participant One'], poster_text_public: 'Original full poster text.', accessibility_text_public: 'Original description.',

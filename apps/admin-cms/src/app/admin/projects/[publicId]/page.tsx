@@ -13,6 +13,7 @@ import { Project } from '../../../../domain/project';
 import { requireAdmin } from '../../../../auth/requireAdmin';
 import { hasPermission, canManageParticipantPreview, canPreparePublication, canResolveParticipantCorrection } from '../../../../auth/permissions';
 import { ParticipantCorrectionReview } from '../../../../components/admin/ParticipantCorrectionReview';
+import { PrePreviewPackageReplacement } from '../../../../components/admin/PrePreviewPackageReplacement';
 import { loadCorrectionReviewView, type CorrectionReviewView } from '../../../../previews/participantCorrectionReview';
 import { ParticipantPreviewPanel } from '../../../../components/admin/ParticipantPreviewPanel';
 import { SupabaseParticipantPreviewRepository } from '../../../../repositories/SupabaseParticipantPreviewRepository';
@@ -131,6 +132,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   let resolutionStatus: import('../../../../domain/participantPreview').ParticipantPreviewCorrectionResolutionStatus | null = null;
   let resolutionStatusAvailable = false;
   let correctionReview: CorrectionReviewView = { available: false, candidate: null };
+  let replacementPackage: { view: CorrectionReviewView; canSubmit: boolean } | null = null;
   let canResolveCorrection = false;
   let publicationReadiness: import('../../../../domain/publicationReadiness').PublicationReadinessResult | null = null;
   let publicationActionsAvailable = false;
@@ -290,6 +292,12 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       resolutionStatus = auxiliary.resolutionStatus;
       resolutionStatusAvailable = auxiliary.resolutionStatusAvailable;
       if (resolutionStatusAvailable) correctionReview = await loadCorrectionReviewView(supabase, publicId, resolutionStatus?.correctionRequestId ?? null);
+      if (canResolveCorrection && ['draft', 'submitted', 'in_review', 'changes_requested'].includes(project.status)) {
+        const context = await supabase.rpc('pre_preview_package_context', { p_public_id: publicId, p_admin_id: adminContext.adminUserId });
+        if (!context.error && context.data?.resultCode === 'SUCCESS') replacementPackage = {
+          view: await loadCorrectionReviewView(supabase, publicId, null, true), canSubmit: context.data.canSubmit === true,
+        };
+      }
       publicationReadiness = auxiliary.publicationReadiness;
       publicationActionsAvailable = auxiliary.publicationActionsAvailable;
       try {
@@ -711,6 +719,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               />
             </ProjectReviewSection>
 
+            {replacementPackage && <PrePreviewPackageReplacement publicId={publicId} view={replacementPackage.view} canSubmit={replacementPackage.canSubmit} />}
             </ProjectDetailMacroSection>
 
             <ProjectDetailMacroSection

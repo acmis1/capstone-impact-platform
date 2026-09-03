@@ -5,6 +5,7 @@ import { validateImportPackage } from '../import/validateImportPackage';
 import type { ImportPackageManifest, ImportPackageFile } from '../import/importTypes';
 import { MAX_GALLERY_IMAGES } from '../import/galleryConvention';
 import { validateMediaAssetBytes } from '../storage/mediaValidationCore';
+import { passedPackageRules, type PassedPackageRule } from './correctionValidation';
 import { assertCorrectionWorkbookBounds } from './correctionWorkbookBounds';
 
 export const CORRECTION_PACKAGE_LIMITS = {
@@ -34,6 +35,7 @@ export interface CorrectionPackage {
   metadata: ImportPackageManifest;
   files: Array<CorrectionFileEvidence & { content: Buffer }>;
   warnings: string[];
+  validationChecks: PassedPackageRule[];
   hash: string;
   totalBytes: number;
 }
@@ -151,5 +153,6 @@ export async function parseParticipantCorrectionPackage(form: FormData, publicId
     if (file.role === 'snapshot_image') file.altText = metadata.galleryAltTexts?.find((a) => a.position === file.position)?.altText ?? (file.position === 1 ? metadata.snapshotAltText ?? null : null);
   }
   const evidence = files.map(({ role, position, fileName, mimeType, bytes, sha256, altText }) => ({ role, position, fileName, mimeType, bytes, sha256, altText }));
-  return { metadata, files, warnings: [...parsed.warnings.map((w) => w.message), ...validation.warnings.map((w) => w.message)], hash: correctionDigest(JSON.stringify({ metadata, files: evidence })), totalBytes };
+  const validationChecks = passedPackageRules(validation);
+  return { metadata, files, validationChecks, warnings: [...parsed.warnings.map((w) => w.message), ...validation.warnings.map((w) => w.message)], hash: correctionDigest(JSON.stringify({ metadata, files: evidence, validationChecks })), totalBytes };
 }

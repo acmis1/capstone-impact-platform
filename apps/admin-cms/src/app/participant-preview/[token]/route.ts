@@ -1,6 +1,7 @@
 import { createSupabaseAdminClient } from '../../../lib/supabase/admin';
 import { getParticipantCorrectionContext, stageParticipantCorrection } from '../../../previews/participantCorrectionService';
 import { readCorrectionBody, parseParticipantCorrectionPackage, CorrectionPackageError } from '../../../previews/participantCorrectionPackage';
+import { acquireCorrectionUpload } from '../../../previews/correctionUploadGuard';
 import type { CorrectionFormState } from '../../../previews/participantCorrectionHtml';
 import { NextRequest, NextResponse } from 'next/server';
 import { SupabaseParticipantPreviewRepository } from '../../../repositories/SupabaseParticipantPreviewRepository';
@@ -14,7 +15,6 @@ import { resolveCanonicalPublicOrigin, validateSameOrigin } from '../../../auth/
 export const runtime = 'nodejs';
 // Limit parser/buffer memory per Node process. Database reservations separately bound
 // durable per-correction storage across instances. Never queue unbounded upload bodies.
-let correctionUploadInProgress = false;
 
 // Generous bound for a same-origin urlencoded form carrying only an action discriminator and, at
 // most, a 2000-character correction comment (worst-case UTF-8 percent-encoding expansion), plus
@@ -239,8 +239,8 @@ export async function POST(
       const client = createSupabaseAdminClient();
       const context = await getParticipantCorrectionContext(client, tokenHash);
       if (!context) return unavailableResponse(404);
-      if (correctionUploadInProgress) return unavailableResponse(429);
-      correctionUploadInProgress = true;
+      const release = acquireCorrectionUpload();
+      if (!release) return unavailableResponse(429);
       try {
         const form = await readCorrectionBody(request);
         const candidate = await parseParticipantCorrectionPackage(form, context.publicId);
@@ -251,7 +251,7 @@ export async function POST(
         // The success status receives autofocus. A fragment would override that focus
         // during browser navigation and leave keyboard users on the section container.
         return NextResponse.redirect(new URL(`/participant-preview/${token}`, publicOrigin), { status: 303, headers: RESPONSE_HEADERS });
-      } finally { correctionUploadInProgress = false; }
+      } finally { release(); }
     } catch (error) {
       if (error instanceof CorrectionPackageError) return renderPreviewResponse(token, { field: error.field, message: error.message });
       return unavailableResponse(404);
