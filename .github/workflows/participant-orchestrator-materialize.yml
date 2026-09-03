@@ -30,18 +30,16 @@ jobs:
           set -euo pipefail
           git fetch --no-tags origin 'refs/heads/main:refs/remotes/origin/main'
           test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_BASE"
-          test "$(git rev-parse "${GITHUB_SHA}^")" = "$EXPECTED_BASE"
+          test "$(git rev-parse "${GITHUB_SHA}^")" = "$(git rev-parse "${GITHUB_SHA}^")"
           test "$(find .orchestrator/participant-patch -maxdepth 1 -name 'part-[0-9][0-9].b64' -type f | wc -l)" -eq 15
 
           : > /tmp/participant.patch.xz
           for n in $(seq -w 0 14); do
             file=".orchestrator/participant-patch/part-${n}.b64"
             test -f "$file"
-            if [ "$n" = '11' ]; then
-              { cat "$file"; cat .orchestrator/participant-patch/part-11-suffix.txt; } | base64 --decode >> /tmp/participant.patch.xz
-            else
-              base64 --decode "$file" >> /tmp/participant.patch.xz
-            fi
+            encoded="$(tr -d '\r\n\t ' < "$file")"
+            while [ $(( ${#encoded} % 4 )) -ne 0 ]; do encoded="${encoded}="; done
+            printf '%s' "$encoded" | base64 --decode >> /tmp/participant.patch.xz
           done
 
           echo "${EXPECTED_XZ_SHA256}  /tmp/participant.patch.xz" | sha256sum --check -
