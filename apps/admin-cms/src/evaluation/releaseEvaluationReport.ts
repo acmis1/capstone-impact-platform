@@ -64,6 +64,8 @@ export interface SeededIssueMetricSummary {
 
 export interface NegativeControlSummary {
   totalAssertions: number;
+  observedAssertions: number;
+  missingAssertionIds: string[];
   blockingFalsePositiveCount: number;
   blockingFalsePositiveIds: string[];
   blockingFalsePositiveRate: number;
@@ -158,7 +160,7 @@ function stageIndex(stage: ReleaseStage): number {
   const order: ReleaseStage[] = [
     'parse', 'package-validation', 'admin-reconciliation', 'commit-intent',
     'server-revalidation', 'metadata-staging', 'media-staging', 'final-persistence',
-    'review-readiness', 'workflow', 'publication-readiness',
+    'review-readiness', 'workflow', 'publication-readiness', 'candidate-planning', 'ordinary-feed',
   ];
   return order.indexOf(stage);
 }
@@ -217,15 +219,15 @@ export function recordReleaseTerminalClassification(
 }
 
 function actualPrimaryStage(entry: ReleaseEvidenceLedgerEntry): ReleaseStageObservation | undefined {
-  const primary = entry.observations.filter((observation) => (observation.attempt || 'primary') === 'primary');
+  const primary = entry.observations.filter((observation) => (observation.attempt || 'primary') === 'primary' && stageIndex(observation.stage) <= stageIndex('final-persistence'));
   return primary.find((observation) => observation.outcome === 'rejected')
     || primary.find((observation) => observation.stage === 'final-persistence' && observation.outcome === 'accepted')
     || primary.find((observation) => observation.stage === 'final-persistence' && observation.outcome !== 'not_run')
     || primary.find((observation) => observation.outcome !== 'not_run');
 }
 
-function expectedFailureContract(entry: ReleaseEvaluationCase): { stage: ReleaseStage; expected: ReleaseExpectedStage } | undefined {
-  const stages: Array<[ReleaseStage, ReleaseExpectedStage]> = [
+function expectedImportStages(entry: ReleaseEvaluationCase): Array<[ReleaseStage, ReleaseExpectedStage]> {
+  return [
     ['parse', entry.expected.parse],
     ['package-validation', entry.expected.packageValidation],
     ['admin-reconciliation', entry.expected.reconciliation],
@@ -235,7 +237,10 @@ function expectedFailureContract(entry: ReleaseEvaluationCase): { stage: Release
     ['media-staging', entry.expected.mediaStaging],
     ['final-persistence', entry.expected.finalPersistence],
   ];
-  const failure = stages.find(([, expected]) => expected.outcome === 'rejected');
+}
+
+function expectedFailureContract(entry: ReleaseEvaluationCase): { stage: ReleaseStage; expected: ReleaseExpectedStage } | undefined {
+  const failure = expectedImportStages(entry).find(([, expected]) => expected.outcome === 'rejected');
   return failure ? { stage: failure[0], expected: failure[1] } : undefined;
 }
 
@@ -246,7 +251,32 @@ export function evaluateReleaseAccounting(ledger: ReleaseEvidenceLedger): Releas
   const unexpectedPersistenceCaseIds: string[] = [];
 
   ledger.entries.forEach((entry) => {
-    const primary = entry.observations.filter((observation) => (observation.attempt || 'primary') === 'primary');
+    const primary = entry.observations.filter((observation) => (observation.attempt || 'primary') === 'primary' && stageIndex(observation.stage) <= stageIndex('final-persistence'));
+    if (primary.length === 0) missingCaseIds.push(entry.caseId);
+    for (const [stage, expected] of expectedImportStages(entry.expected)) {
+      const actual = primary.find((observation) => observation.stage === stage);
+      const expectedOutcome = expected.severity === 'warning' ? 'warning' : expected.outcome;
+      if (!actual || actual.outcome !== expectedOutcome
+        || (expected.code !== undefined && actual.code !== expected.code)
+        || (expected.fieldName !== undefined && actual.fieldName !== expected.fieldName)) {
+        expectedActualMismatchCaseIds.push(entry.caseId);
+      }
+    }
+    if (entry.expected.expected.persistence === 'persisted') {
+      for (const [stage, code] of [
+        ['review-readiness', entry.expected.expected.reviewReadiness],
+        ['publication-readiness', entry.expected.expected.publicationReadiness],
+        ['candidate-planning', entry.expected.expected.candidatePlan === 'included' ? 'READY_TO_STAGE' : 'NOT_READY'],
+        ['ordinary-feed', entry.expected.expected.ordinaryFeed],
+      ] as const) {
+        const actual = entry.observations.find((observation) => observation.stage === stage && ['primary', 'readiness'].includes(observation.attempt || 'primary'));
+        if (!actual || actual.code !== code) expectedActualMismatchCaseIds.push(entry.caseId);
+      }
+      for (const [attempt, expected] of Object.entries(entry.expected.expected.bulkReview || {})) {
+        const actual = entry.observations.find((observation) => observation.stage === 'workflow' && observation.attempt === attempt);
+        if (!actual || actual.outcome !== expected.outcome || actual.code !== expected.code) expectedActualMismatchCaseIds.push(entry.caseId);
+      }
+    }
     const final = actualPrimaryStage(entry);
     if (!final) missingTerminalClassificationCaseIds.push(entry.caseId);
     const expectedPersistence = entry.expected.expected.persistence === 'persisted';
@@ -291,12 +321,11 @@ export function evaluateReleaseAccounting(ledger: ReleaseEvidenceLedger): Releas
 }
 
 function issueDetected(issue: SeededIssue, ledger: ReleaseEvidenceLedger): boolean {
-  if (!issue.expectedCurrentDetection) return false;
   const entry = ledger.entries.get(issue.caseId);
   if (!entry) return false;
   return entry.observations.some((observation) =>
     observation.stage === issue.expectedDetectionStage
-    && observation.outcome !== 'not_run'
+    && (observation.outcome === 'rejected' || observation.outcome === 'warning')
     && (!issue.expectedProductionCode || observation.code === issue.expectedProductionCode)
     && (!issue.expectedFieldName || observation.fieldName === issue.expectedFieldName || observation.evidence?.fieldName === issue.expectedFieldName),
   );
@@ -353,11 +382,16 @@ export function deriveNegativeControlSummary(
   controlIds: readonly string[],
 ): NegativeControlSummary {
   const falsePositives = new Set<string>();
+  const observed = new Set<string>();
   ledger.entries.forEach((entry) => entry.observations.forEach((observation) => {
-    if (observation.controlAssertionId && observation.blocking === true) falsePositives.add(observation.controlAssertionId);
+    if (!observation.controlAssertionId || !controlIds.includes(observation.controlAssertionId) || typeof observation.blocking !== 'boolean') return;
+    observed.add(observation.controlAssertionId);
+    if (observation.blocking) falsePositives.add(observation.controlAssertionId);
   }));
   return {
     totalAssertions: controlIds.length,
+    observedAssertions: observed.size,
+    missingAssertionIds: sortedUnique(controlIds.filter((id) => !observed.has(id))),
     blockingFalsePositiveCount: falsePositives.size,
     blockingFalsePositiveIds: sortedUnique(falsePositives),
     blockingFalsePositiveRate: controlIds.length === 0 ? 0 : Number((falsePositives.size / controlIds.length).toFixed(4)),
@@ -378,7 +412,7 @@ export function deriveFailureStageDistribution(
     const expectedStage = expectedFailureStage(entry);
     expected[expectedStage] = (expected[expectedStage] || 0) + 1;
     const observed = ledger.entries.get(entry.caseId);
-    const primary = observed?.observations.filter((observation) => (observation.attempt || 'primary') === 'primary') || [];
+    const primary = observed?.observations.filter((observation) => (observation.attempt || 'primary') === 'primary' && stageIndex(observation.stage) <= stageIndex('final-persistence')) || [];
     const actualFailure = primary.find((observation) => observation.outcome === 'rejected');
     const actualPersistence = primary.some((observation) => observation.stage === 'final-persistence' && observation.outcome === 'accepted' && observation.persisted !== false);
     const actualStage = actualFailure?.stage || (actualPersistence ? 'persisted' : 'unclassified');
@@ -399,6 +433,8 @@ export function deriveFailureStageDistribution(
 export function deriveReleaseStageCounts(ledger: ReleaseEvidenceLedger): Record<string, ReleaseStageCount> {
   const counts: Record<string, ReleaseStageCount> = {};
   ledger.entries.forEach((entry) => entry.observations.forEach((observation) => {
+    if (observation.controlAssertionId || observation.attempt?.startsWith('reason-')) return;
+    if (observation.stage !== 'workflow' && !['primary', 'readiness'].includes(observation.attempt || 'primary')) return;
     const current = counts[observation.stage] || { accepted: 0, rejected: 0, warning: 0, notRun: 0 };
     if (observation.outcome === 'accepted') current.accepted += 1;
     else if (observation.outcome === 'rejected') current.rejected += 1;
@@ -463,6 +499,7 @@ export function evaluateReleaseGate(
   if (issues.criticalPercentage < 100) failureReasons.push('critical seeded issue detection is below 100%');
   if (issues.overallPercentage < 95) failureReasons.push('overall seeded issue detection is below 95%');
   if (controls.blockingFalsePositiveCount > 0) failureReasons.push('a negative control produced a blocking false positive');
+  if (controls.missingAssertionIds.length > 0) failureReasons.push('negative control evidence is missing');
   if (!cleanupCompleted) failureReasons.push('cleanup did not prove zero owned residue');
   if (repeatability && !repeatability.comparable) failureReasons.push('normalized repeatability comparison failed');
   return { passed: failureReasons.length === 0, failureReasons };
@@ -481,7 +518,7 @@ export function renderReleaseEvaluationMarkdown(report: ReleaseEvaluationReport)
     '',
     `## A. Executive Status`,
     '',
-    `- Status: **${report.gate.passed ? 'READY FOR INDEPENDENT REVIEW' : 'NOT READY FOR INDEPENDENT REVIEW'}** (${report.gate.passed ? 'PASS' : 'FAIL'}).`,
+    `- Local harness gate: **${report.gate.passed ? 'PASS' : 'FAIL'}**. Browser acceptance, CI, and human KPI evidence require separate review.`,
     `- Manifest digest: \`${report.manifestDigest}\``,
     '',
     '## B. Runtime Metadata',
@@ -517,6 +554,7 @@ export function renderReleaseEvaluationMarkdown(report: ReleaseEvaluationReport)
     '',
     `- Blocking false-positive rate: ${report.negativeControls.blockingFalsePositiveCount}/${report.negativeControls.totalAssertions} (${report.negativeControls.blockingFalsePositiveRate}).`,
     `- Blocking false-positive IDs: ${report.negativeControls.blockingFalsePositiveIds.length ? report.negativeControls.blockingFalsePositiveIds.join(', ') : 'none'}.`,
+    `- Observed controls: ${report.negativeControls.observedAssertions}/${report.negativeControls.totalAssertions}; missing: ${report.negativeControls.missingAssertionIds.length}.`,
     '',
     '## H. Import and Persistence',
     '',
@@ -592,6 +630,8 @@ export function createReleaseEvaluationReport(params: {
   const failureStageDistribution = deriveFailureStageDistribution(params.corpus, params.ledger);
   const gate = evaluateReleaseGate(accounting, issueMetrics, negativeControls, params.cleanup?.completed === true, params.repeatability);
   if (!failureStageDistribution.matches) gate.failureReasons.push('failure-stage distribution did not match the manifest');
+  if (params.corpus.cases.length < 120) gate.failureReasons.push('annual cohort has fewer than 120 cases');
+  gate.passed = gate.failureReasons.length === 0;
   return {
     schemaVersion: RELEASE_EVALUATION_REPORT_SCHEMA,
     manifestDigest: params.corpus.manifestDigest,
@@ -633,14 +673,14 @@ export function createReleaseEvaluationReport(params: {
       developerRuntimeIsStaffEffortEvidence: false,
       manualEfficiencyTemplate: 'docs/templates/release-evaluation-manual-efficiency.md',
     },
-    demonstrated: [
+    demonstrated: gate.passed ? [
       'Deterministic 132-case input corpus and exact persistence accounting.',
       'Production parser, package validation, Admin reconciliation, commit intent, metadata staging, and media staging exercised against Local Supabase.',
       'Production review, stale-version fencing, participant-correction, archive, readiness, and audit authorities exercised with manifest-derived expectations.',
       'Publication readiness and candidate planning were evaluated without publication; ordinary feed compilation remained published-only and returned no verifier-owned records.',
       'Seeded issue detection, warning-only controls, 10/25/50 repository pagination, search, exact filters, sorting, and final-page clamping were verified.',
-      'Bounded Local timings, scoped cleanup, forced-failure cleanup, and two-run normalized repeatability evidence.',
-    ],
+      'Observational Local timings and scoped cleanup; see the explicit probe and repeatability fields for those outcomes.',
+    ] : ['The ledger records the stages actually exercised; failed or absent evidence is not an acceptance claim.'],
     notDemonstrated: [
       'Automated screenshots were not captured; evidence mode is available for operator-captured 1440x900 desktop and 390x844 mobile views.',
       'Hosted Supabase, Render, Duda, production SLA, production-scale throughput, high-concurrency capacity, and institutional UAT.',

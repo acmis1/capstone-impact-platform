@@ -327,7 +327,7 @@ describe('ProjectTableContainer preference integration', () => {
     fireEvent.click((await screen.findAllByRole('checkbox', { name: 'Select current page' }))[0]);
 
     await waitFor(() => expect(screen.getAllByText('50 selected').length).toBeGreaterThan(0));
-    expect(screen.getAllByRole('checkbox', { name: /Select Synthetic UI project/ }).filter((checkbox) => (checkbox as HTMLInputElement).checked)).toHaveLength(50);
+    expect(within(screen.getByRole('table')).getAllByRole('checkbox', { name: /Select Synthetic UI project/ }).filter((checkbox) => (checkbox as HTMLInputElement).checked)).toHaveLength(50);
   });
 
   it('moves from page one to page two and never carries hidden page-one selection forward', async () => {
@@ -363,6 +363,8 @@ describe('ProjectTableContainer preference integration', () => {
     expect(screen.getByRole('heading', { name: 'Page two project A', level: 4 })).toBeTruthy();
     expect(screen.queryByText('Page one project A')).toBeNull();
     expect(screen.getAllByRole('checkbox', { name: 'Select Page two project A' }).every((checkbox) => !(checkbox as HTMLInputElement).checked)).toBe(true);
+  });
+
   it('retains the focused desktop current-page checkbox across selection changes', async () => {
     renderTable();
     const pageCheckbox = (await screen.findAllByRole('checkbox', { name: 'Select current page' }))

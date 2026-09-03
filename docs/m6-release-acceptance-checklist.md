@@ -58,7 +58,7 @@ Use one copy per candidate release. Leave every item unchecked until its stated 
 
 Reference the [integrated release evaluation harness](release-evaluation-harness.md) for disposable-Local release-scale evidence; do not create a competing release-scale harness. Its report is evidence for the listed Local boundaries, not hosted capacity, institutional UAT, or staff-effort KPIs.
 
-- [ ] `npm run verify:release-evaluation` produced a reviewed report with status `READY FOR INDEPENDENT REVIEW`; record the report evidence reference: ____
+- [ ] `npm run verify:release-evaluation` produced a reviewed `Local harness gate: PASS` report; desktop/mobile browser evidence and exact-head CI were reviewed separately. Record the evidence references: ____
 - [ ] Import preview, selection, metadata staging, media staging, and completed batch evidence passed. Evidence: ____
 - [ ] Blocking validation and warning acknowledgement behaved as documented. Evidence: ____
 - [ ] Submit-for-review and review action evidence passed. Evidence: ____

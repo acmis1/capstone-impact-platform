@@ -5,6 +5,10 @@ import {
   runReleaseEvaluation,
   runForcedFailureCleanupProbe,
   validateReleaseEvaluationRunNamespace,
+  assertReleaseLocalTarget,
+  assertCohortAccounting,
+  readinessField,
+  cleanupOwnedState,
 } from './releaseEvaluationHarness';
 import { buildReleaseEvaluationCorpus } from '../fixtures/releaseEvaluationCorpus';
 import {
@@ -25,6 +29,22 @@ function previewPackage(overrides: Partial<Parameters<typeof deriveActualPreview
 }
 
 describe('release evaluation harness safety', () => {
+  it.each(['https://localhost.example.com', 'https://127.0.0.1.example.com', 'https://127.0.0.1@host.example.com', 'ftp://127.0.0.1', 'http://127.0.0.1/forward', 'http://127.0.0.1?target=remote'])('refuses deceptive or non-HTTP target %s', (url) => {
+    expect(() => assertReleaseLocalTarget(url)).toThrow('loopback');
+  });
+
+  it('verifies every actual client target, including the production staging singleton', () => {
+    expect(() => assertReleaseLocalTarget('http://127.0.0.1:54321', ['https://example.supabase.co'])).toThrow('loopback');
+    expect(() => assertReleaseLocalTarget('http://127.0.0.1:54321', ['http://127.0.0.1:54331'])).toThrow('match');
+    expect(() => assertReleaseLocalTarget('http://[::1]:54321', ['http://[::1]:54321/'])).not.toThrow();
+  });
+
+  it('rejects dropped, duplicated, and substituted bulk results', () => {
+    for (const result of [['a'], ['a', 'a'], ['a', 'foreign']]) expect(() => assertCohortAccounting(['a', 'b'], result)).toThrow();
+    expect(() => assertCohortAccounting(['a', 'b'], ['b', 'a'])).not.toThrow();
+    expect(readinessField('Poster full text is missing.')).toBe('posterText');
+    expect(readinessField('Accessibility text is missing.')).toBe('accessibilityText');
+  });
   it('refuses a non-loopback endpoint before touching the Supabase client', async () => {
     const supabase = {} as Parameters<typeof runReleaseEvaluation>[0]['supabase'];
     await expect(runReleaseEvaluation({ supabase, apiUrl: 'https://example.supabase.co' })).rejects.toThrow('loopback');
@@ -32,12 +52,46 @@ describe('release evaluation harness safety', () => {
 
   it('proves the tooling failure hook enters cleanup and leaves no residue', async () => {
     const createOwnedState = vi.fn(async () => undefined);
-    const cleanupOwnedState = vi.fn(async () => ({ projects: 0, media: 0, batches: 0 }));
+    const cleanupOwnedState = vi.fn(async () => ({ completed: true, residue: { projects: 0, media: 0, batches: 0 } }));
     const result = await runForcedFailureCleanupProbe({ createOwnedState, cleanupOwnedState });
 
     expect(createOwnedState).toHaveBeenCalledOnce();
     expect(cleanupOwnedState).toHaveBeenCalledOnce();
     expect(result).toEqual({ completed: true, residue: { projects: 0, media: 0, batches: 0 } });
+  });
+
+  it('does not certify a failed cleanup with zero visible residue', async () => {
+    const result = await runForcedFailureCleanupProbe({ createOwnedState: async () => {}, cleanupOwnedState: async () => ({ completed: false, residue: { projects: 0 } }) });
+    expect(result.completed).toBe(false);
+  });
+
+  it('continues cleanup after one deletion fails and never removes an unrelated media path', async () => {
+    const deleted: string[] = [];
+    const remove = vi.fn(async () => ({ error: null }));
+    const client = {
+      from: (table: string) => {
+        let deleting = false;
+        let head = false;
+        const query = {
+          select: (_columns: string, options?: { head?: boolean }) => { head = Boolean(options?.head); return query; },
+          delete: () => { deleting = true; deleted.push(table); return query; },
+          in: () => query,
+          like: () => query,
+          then: (resolve: (value: unknown) => unknown) => Promise.resolve({
+            data: deleting || head ? [] : table === 'projects' ? [{ id: 'owned-project' }]
+              : table === 'media_assets' ? [{ storage_bucket: 'private', storage_path: 'drafts/ordinary-project/poster_image/poster.png' }] : [],
+            error: deleting && table === 'approval_records' ? { code: 'injected-failure' } : null,
+            count: 0,
+          }).then(resolve),
+        };
+        return query;
+      },
+      storage: { from: () => ({ list: async () => ({ data: [], error: null }), remove }) },
+    } as unknown as Parameters<typeof cleanupOwnedState>[0];
+    const result = await cleanupOwnedState(client, { privateBucket: 'private', ownedPublicIds: new Set(['release-run-1-0123456789abcdef-synthetic-001']), ownedBatchIds: new Set(['owned-batch']), ownedStoragePaths: new Set(), previewIds: new Set() });
+    expect(result.completed).toBe(false);
+    expect(deleted).toEqual(expect.arrayContaining(['approval_records', 'validation_flags', 'projects', 'import_batches']));
+    expect(remove).not.toHaveBeenCalled();
   });
 
   it('accepts only evaluator-generated namespaces for interrupted-run cleanup', () => {

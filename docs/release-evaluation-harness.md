@@ -1,6 +1,6 @@
 # Integrated Release Evaluation Harness
 
-The Admin/CMS release evaluator is an explicit, disposable-Local verification command. It creates a deterministic 132-case synthetic corpus, stages the 120 accepted projects through the existing import authorities, exercises bounded review/readiness paths, renders a report, and removes only the state it captured.
+The Admin/CMS release evaluator is an explicit, disposable-Local verification command. It creates a deterministic 132-case synthetic corpus, stages the 120 accepted projects through the existing import authorities, exercises bounded review/readiness paths, renders a report, and removes only state in its verified, initially empty namespace.
 
 ## Run
 
@@ -33,3 +33,11 @@ The corpus is input-only evidence, not production data. Runtime IDs, UUIDs, time
 It demonstrates deterministic corpus generation, parser/package validation, Admin reference reconciliation, Local import/media staging, review workflow and audit evidence, publication-readiness/candidate/feed distinctions, bounded repository pagination, observational Local timings, cleanup, and repeatability.
 
 It does not demonstrate hosted Supabase, Render, Duda, production SLA, high-concurrency capacity, institutional UAT, production infrastructure throughput, or a staff-effort/KPI reduction. Local machine timing is not staff-effort evidence.
+
+## Reading the evidence
+
+`Local harness gate: PASS` covers the executable's assertions only. Review real desktop/mobile screenshots, exact-head CI and human KPI evidence separately before release acceptance. The [integration audit](release-evaluation-integration-audit.md) records the checked source revisions, corrections and retained Local browser evidence.
+
+Each run has a JSON report; the final JSON/Markdown pair shares one evidence model and contains the two-run comparison when requested. Expected stage outcomes are declared by the fixture manifest; actual readiness reasons and planning results come from production authorities. Missing stage/control evidence fails the gate. Candidate planning exercises exclusions as well as inclusions.
+
+Timing values are milliseconds. Parsing, package validation and Admin reconciliation currently share one production analysis call, so `packageParsingValidationAndReconciliation` is a combined observation (`importAnalysis` is its alias), not independent stage durations. `validationReadiness` measures the real readiness calls. Parent/child timing fields overlap and must not be summed. Evidence-mode total time includes the operator's pause; use uninterrupted runs for observational summaries.

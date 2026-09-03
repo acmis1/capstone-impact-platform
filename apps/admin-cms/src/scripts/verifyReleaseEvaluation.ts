@@ -8,6 +8,7 @@ import { DEFAULT_SYNTHETIC_SEED } from '../fixtures/syntheticProjects';
 import {
   cleanupInterruptedReleaseEvaluationRun,
   runReleaseEvaluation,
+  assertReleaseLocalTarget,
 } from '../evaluation/releaseEvaluationHarness';
 import {
   compareNormalizedReleaseReports,
@@ -15,7 +16,7 @@ import {
   renderReleaseEvaluationMarkdown,
   summarizeReleaseTimings,
 } from '../evaluation/releaseEvaluationReport';
-import { isLoopbackUrl, parseSupabaseCliEnv, validateAllowedOutputPath } from '../local-development/localEnvironmentFile';
+import { parseSupabaseCliEnv, validateAllowedOutputPath } from '../local-development/localEnvironmentFile';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
 
@@ -83,19 +84,23 @@ function parseArgs(argv: string[]): CliOptions {
 function localSupabaseEnvironment(): { apiUrl: string; serviceRoleKey: string; cliVersion?: string } {
   const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const configuredKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (configuredUrl && configuredKey && isLoopbackUrl(configuredUrl)) {
+  if (configuredUrl) assertReleaseLocalTarget(configuredUrl);
+  if (configuredUrl && configuredKey) {
+    process.env.SUPABASE_SECRET_KEY = configuredKey;
     return { apiUrl: configuredUrl, serviceRoleKey: configuredKey };
   }
   const cli = path.resolve(REPO_ROOT, 'node_modules/supabase/dist/supabase.js');
   const raw = execFileSync(process.execPath, [cli, 'status', '--workdir', path.resolve(REPO_ROOT, 'infra'), '-o', 'env'], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: '1' },
   });
   const parsed = parseSupabaseCliEnv(raw);
-  if (!parsed.API_URL || !parsed.SERVICE_ROLE_KEY || !isLoopbackUrl(parsed.API_URL)) {
+  if (!parsed.API_URL || !parsed.SERVICE_ROLE_KEY) {
     throw new Error('A running loopback Local Supabase stack is required for release evaluation.');
   }
+  assertReleaseLocalTarget(parsed.API_URL);
   process.env.NEXT_PUBLIC_SUPABASE_URL = parsed.API_URL;
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = parsed.ANON_KEY || '';
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = parsed.ANON_KEY || '';
@@ -160,11 +165,15 @@ async function main(): Promise<void> {
                   if (settled) return;
                   settled = true;
                   process.stdin.removeListener('data', onData);
+                  process.stdin.removeListener('end', finish);
+                  process.stdin.pause();
+                  process.stdin.unref?.();
                   resolve();
                 };
                 const onData = () => finish();
                 signals.setEvidenceResumer(finish);
                 process.stdin.once('data', onData);
+                process.stdin.once('end', finish);
               });
             }
           : undefined,
@@ -180,6 +189,13 @@ async function main(): Promise<void> {
       }
     }
     const finalReport = reports[reports.length - 1];
+    if (reports.some((report) => !report.gate.passed)) {
+      finalReport.gate.failureReasons.push('one or more complete runs failed; inspect the per-run reports');
+      finalReport.gate.passed = false;
+    }
+    reports.forEach((report, index) => {
+      fs.writeFileSync(path.join(outputDir, `release-evaluation-run-${index + 1}.json`), renderReleaseEvaluationJson(report), 'utf8');
+    });
     finalReport.timingRuns = reports.map((report) => ({ runNumber: report.runtime.runNumber, timings: report.timings }));
     finalReport.timingSummary = summarizeReleaseTimings(reports.map((report) => report.timings));
     fs.writeFileSync(path.join(outputDir, 'release-evaluation-report.json'), renderReleaseEvaluationJson(finalReport), 'utf8');

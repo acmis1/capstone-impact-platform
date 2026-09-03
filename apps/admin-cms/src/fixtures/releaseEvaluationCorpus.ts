@@ -67,6 +67,8 @@ export const RELEASE_STAGES = [
   'review-readiness',
   'workflow',
   'publication-readiness',
+  'candidate-planning',
+  'ordinary-feed',
 ] as const;
 export type ReleaseStage = (typeof RELEASE_STAGES)[number];
 
@@ -125,6 +127,7 @@ export interface ReleaseEvaluationCase {
     persistence: 'persisted' | 'rejected';
     finalStatus?: WorkflowStatus;
     reviewReadiness?: string;
+    bulkReview?: Record<string, { outcome: 'accepted' | 'rejected' | 'warning'; code?: string }>;
     reviewActions: ReleaseExpectedAudit[];
     publicationReadiness?: string;
     candidatePlan: 'included' | 'excluded' | 'not_applicable';
@@ -334,8 +337,8 @@ function buildExpectedForProfile(profile: ReleasePackageProfile, lifecycle?: Rel
       };
     }
     return {
-      parse: expectedStage('accepted'),
-      packageValidation: expectedStage(warning ? 'accepted' : 'accepted', packageCode),
+      parse: { ...expectedStage('accepted', profile === 'xlsx-duplicate-team-member' ? packageCode : undefined), ...(profile === 'xlsx-duplicate-team-member' ? { severity: 'warning' as const } : {}) },
+      packageValidation: { ...expectedStage('accepted', profile === 'xlsx-duplicate-team-member' ? undefined : profile === 'legacy-json-missing-accessibility' ? 'RECOMMENDED_FIELD_MISSING' : packageCode, profile === 'legacy-json-missing-accessibility' ? 'accessibilityText' : undefined), ...(warning && profile !== 'xlsx-duplicate-team-member' ? { severity: 'warning' as const } : {}) },
       reconciliation: expectedStage('accepted', 'RECONCILED'),
       commitIntent: expectedStage('accepted'),
       serverRevalidation: expectedStage('accepted'),
@@ -344,7 +347,7 @@ function buildExpectedForProfile(profile: ReleasePackageProfile, lifecycle?: Rel
       finalPersistence: expectedStage('accepted'),
       persistence: 'persisted',
       finalStatus: workflow?.finalStatus,
-      reviewReadiness: workflow?.readiness,
+      reviewReadiness: lifecycle === 'accessibility-blocked-draft' ? 'READINESS_BLOCKED' : 'READY',
       reviewActions: workflow?.actions || [],
       publicationReadiness: lifecycle === 'successful-approval' ? 'READY' : workflow?.readiness,
       candidatePlan: lifecycle === 'successful-approval' ? 'included' : workflow?.candidatePlan || 'excluded',
@@ -375,6 +378,9 @@ function buildExpectedForProfile(profile: ReleasePackageProfile, lifecycle?: Rel
     name,
     index < stageIndex ? expectedStage('accepted') : index === stageIndex ? expectedStage('rejected', rejection.code, rejection.fieldName) : expectedStage('not_run'),
   ])) as Pick<ReleaseEvaluationCase['expected'], typeof stageNames[number]>;
+  if (stageIndex > 1 && galleryCountForProfile(profile) === 0) {
+    stages.packageValidation = { ...expectedStage('accepted', 'FILE_MISSING_RECOMMENDED'), severity: 'warning' };
+  }
   return {
     ...stages,
     persistence: 'rejected',
@@ -409,8 +415,8 @@ function issueForCase(profile: ReleasePackageProfile, currentCaseId: string): Se
   switch (profile) {
     case 'legacy-json-missing-accessibility':
       return [
-        critical(`${currentCaseId}-missing-poster-text`, 'missing-accessible-poster-full-text', 'review-readiness', 'READINESS_BLOCKED'),
-        critical(`${currentCaseId}-missing-accessibility-text`, 'missing-poster-accessibility-text', 'review-readiness', 'READINESS_BLOCKED'),
+        critical(`${currentCaseId}-missing-poster-text`, 'missing-accessible-poster-full-text', 'review-readiness', 'READINESS_BLOCKED', 'posterText'),
+        critical(`${currentCaseId}-missing-accessibility-text`, 'missing-poster-accessibility-text', 'review-readiness', 'READINESS_BLOCKED', 'accessibilityText'),
       ];
     case 'xlsx-zero-gallery':
       return [nonCritical(`${currentCaseId}-empty-gallery`, 'empty-gallery', 'package-validation', 'FILE_MISSING_RECOMMENDED')];
@@ -487,6 +493,29 @@ export function buildReleaseEvaluationCorpus(seed = DEFAULT_SYNTHETIC_SEED): Rel
         item.expected.publicationReadiness = 'NO_ACTIVE_PREVIEW';
         item.expected.candidatePlan = 'excluded';
       }
+    }
+    if (lifecycle) {
+      const accepted = { outcome: 'accepted' as const };
+      const alreadyComplete = { outcome: 'warning' as const };
+      item.expected.bulkReview = {
+        'bulk-submit-preflight': lifecycle === 'already-submitted' ? alreadyComplete
+          : lifecycle === 'already-approved' ? { outcome: 'rejected', code: 'INVALID_PROJECT_STATE' }
+            : lifecycle === 'accessibility-blocked-draft' ? { outcome: 'rejected', code: 'READINESS_BLOCKED' } : accepted,
+      };
+      if (['stale-approval-candidate', 'successful-approval', 'bulk-request-changes', 'participant-correction', 'archived'].includes(lifecycle)) {
+        item.expected.bulkReview['bulk-submit-execution'] = accepted;
+      }
+      if (['stale-approval-candidate', 'already-approved', 'successful-approval', 'participant-correction', 'already-submitted'].includes(lifecycle)) {
+        item.expected.bulkReview['bulk-approve-preflight'] = lifecycle === 'already-approved' ? alreadyComplete : accepted;
+      }
+      if (['stale-approval-candidate', 'successful-approval', 'participant-correction'].includes(lifecycle)) {
+        item.expected.bulkReview['bulk-approve-execution'] = lifecycle === 'stale-approval-candidate' ? { outcome: 'rejected', code: 'STALE_VERSION' } : accepted;
+      }
+      if (lifecycle === 'bulk-request-changes') {
+        item.expected.bulkReview['bulk-request-changes-preflight'] = accepted;
+        item.expected.bulkReview['bulk-request-changes-execution'] = accepted;
+      }
+      if (lifecycle === 'archived') item.expected.bulkReview['archive-execution'] = accepted;
     }
     cases.push(item);
     seededIssues.push(...issues);

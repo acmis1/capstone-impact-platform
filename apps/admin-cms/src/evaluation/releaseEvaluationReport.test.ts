@@ -9,6 +9,8 @@ import {
   compareNormalizedReleaseReports,
   deriveSeededIssueMetrics,
   deriveFailureStageDistribution,
+  deriveNegativeControlSummary,
+  deriveReleaseStageCounts,
   evaluateReleaseAccounting,
   evaluateReleaseGate,
   recordReleaseObservation,
@@ -25,21 +27,57 @@ function expectedRejectedStage(item: ReturnType<typeof buildReleaseEvaluationCor
 }
 
 describe('release evaluation evidence ledger', () => {
+  it('does not count one accessibility blocker as detection of two independent issues', () => {
+    const corpus = buildReleaseEvaluationCorpus();
+    const item = corpus.cases.find((entry) => entry.packageProfile === 'legacy-json-missing-accessibility')!;
+    const ledger = createReleaseEvidenceLedger(corpus);
+    recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'review-readiness', outcome: 'rejected', code: 'READINESS_BLOCKED', fieldName: 'posterText' });
+    expect(deriveSeededIssueMetrics(corpus.seededIssues.filter((issue) => issue.caseId === item.caseId), ledger).criticalDetected).toBe(1);
+  });
+
+  it('fails accounting when successful persistence has no intermediate stage evidence', () => {
+    const corpus = buildReleaseEvaluationCorpus();
+    const item = corpus.cases[0];
+    const ledger = createReleaseEvidenceLedger({ ...corpus, cases: [item] });
+    recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'final-persistence', outcome: 'accepted', persisted: true });
+    expect(evaluateReleaseAccounting(ledger).unexpectedOrUnaccounted).toBe(1);
+  });
+
+  it('counts primary package outcomes separately from negative-control observations', () => {
+    const corpus = buildReleaseEvaluationCorpus();
+    const ledger = createReleaseEvidenceLedger(corpus);
+    recordReleaseObservation(ledger, { caseId: corpus.cases[0].caseId, stage: 'package-validation', outcome: 'accepted' });
+    recordReleaseObservation(ledger, { caseId: corpus.cases[0].caseId, stage: 'package-validation', attempt: 'control', controlAssertionId: corpus.negativeControls[0].assertionId, outcome: 'accepted', blocking: false });
+    expect(deriveReleaseStageCounts(ledger)['package-validation'].accepted).toBe(1);
+  });
+
+  it('fails the gate when negative controls were never observed', () => {
+    const corpus = buildReleaseEvaluationCorpus();
+    const ledger = createReleaseEvidenceLedger(corpus);
+    const controls = deriveNegativeControlSummary(ledger, corpus.negativeControls.map((control) => control.assertionId));
+    const metrics = deriveSeededIssueMetrics([], ledger);
+    const accounting = { ...evaluateReleaseAccounting(ledger), unexpectedOrUnaccounted: 0 };
+    expect(evaluateReleaseGate(accounting, metrics, controls, true).passed).toBe(false);
+  });
+
   it('derives complete accounting and corrected seeded-issue totals from the manifest', () => {
     const corpus = buildReleaseEvaluationCorpus();
     const ledger = createReleaseEvidenceLedger(corpus);
     corpus.cases.forEach((item) => {
+      const stages = [
+        ['parse', item.expected.parse], ['package-validation', item.expected.packageValidation],
+        ['admin-reconciliation', item.expected.reconciliation], ['commit-intent', item.expected.commitIntent],
+        ['server-revalidation', item.expected.serverRevalidation], ['metadata-staging', item.expected.metadataStaging],
+        ['media-staging', item.expected.mediaStaging], ['final-persistence', item.expected.finalPersistence],
+      ] as const;
+      // This is reducer input for an arithmetic unit test, not runtime product evidence.
+      stages.forEach(([stage, expected]) => recordReleaseObservation(ledger, { caseId: item.caseId, stage, outcome: expected.severity === 'warning' ? 'warning' : expected.outcome, code: expected.code, fieldName: expected.fieldName, ...(stage === 'final-persistence' ? { persisted: item.expected.persistence === 'persisted' } : {}) }));
       if (item.expected.persistence === 'persisted') {
-        recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'final-persistence', outcome: 'accepted', persisted: true });
-      } else {
-        recordReleaseObservation(ledger, {
-          caseId: item.caseId,
-          stage: expectedRejectedStage(item),
-          outcome: 'rejected',
-          code: item.expected.metadataStaging.code || item.expected.packageValidation.code || item.expected.parse.code || item.expected.reconciliation.code,
-          fieldName: item.expected.parse.fieldName || item.expected.packageValidation.fieldName || item.expected.reconciliation.fieldName,
-          persisted: false,
-        });
+        recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'review-readiness', outcome: 'accepted', code: item.expected.reviewReadiness });
+        recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'publication-readiness', attempt: 'readiness', outcome: 'accepted', code: item.expected.publicationReadiness });
+        recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'candidate-planning', outcome: 'accepted', code: item.expected.candidatePlan === 'included' ? 'READY_TO_STAGE' : 'NOT_READY' });
+        recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'ordinary-feed', outcome: 'rejected', code: item.expected.ordinaryFeed });
+        Object.entries(item.expected.bulkReview || {}).forEach(([attempt, expected]) => recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'workflow', attempt, ...expected }));
       }
     });
     corpus.seededIssues.forEach((issue) => recordReleaseObservation(ledger, {

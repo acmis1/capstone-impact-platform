@@ -4,6 +4,7 @@ import { performance } from 'node:perf_hooks';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { AuthenticatedAdminContext } from '../auth/authTypes';
+import type { Project } from '../domain/project';
 import { getPermissionsForRoles } from '../auth/permissions';
 import { compilePublicFeed } from '../feed/compilePublicFeed';
 import { validatePublicFeed } from '../feed/validatePublicFeed';
@@ -16,7 +17,9 @@ import { stageBrowserImportMedia, type MediaFileToStage } from '../import/stageB
 import { stageBrowserImportMetadata } from '../import/stageBrowserImportMetadata';
 import { validateMediaAssetBytes } from '../storage/mediaValidationCore';
 import { getStagingBuckets } from '../lib/supabase/buckets';
-import { isLoopbackUrl } from '../local-development/localEnvironmentFile';
+import { createSupabaseAdminClientCore } from '../lib/supabase/adminCore';
+import { ImportBatchRepositoryCore } from '../repositories/ImportBatchRepositoryCore';
+import { computeReadinessForImportBatchRow } from '../import/importBatchReviewReadiness';
 import { SupabaseBulkProjectReviewGateway } from '../projects/SupabaseBulkProjectReviewGateway';
 import { BulkReviewService } from '../projects/bulkProjectReviewService';
 import type { BulkReviewAction, BulkReviewActor } from '../projects/bulkProjectReview';
@@ -41,7 +44,6 @@ import {
   type ReleaseEvaluationReport,
   type ReleaseEvidenceLedger,
 } from './releaseEvaluationReport';
-import type { SeededIssue } from '../fixtures/releaseEvaluationCorpus';
 
 export interface ReleaseEvaluationHarnessOptions {
   supabase: SupabaseClient;
@@ -85,6 +87,7 @@ interface ReleaseSharedBaseline {
   adminRoles: string;
   reference: Record<string, string>;
   publication: Record<string, string>;
+  ordinary: Record<string, string>;
 }
 
 interface StageTotals {
@@ -131,8 +134,22 @@ const IMPORT_STAGES = [
   'final-persistence',
 ] as const;
 
-function assertLoopback(apiUrl: string): void {
-  if (!isLoopbackUrl(apiUrl)) throw new Error('Release evaluation requires a loopback Local Supabase endpoint.');
+export function assertReleaseLocalTarget(apiUrl: string, clientUrls: readonly string[] = []): void {
+  const validate = (value: string): string => {
+    let url: URL;
+    try { url = new URL(value); } catch { throw new Error('Release evaluation requires a loopback Local Supabase endpoint.'); }
+    if (!['http:', 'https:'].includes(url.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)
+      || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+      throw new Error('Release evaluation requires a loopback Local Supabase endpoint.');
+    }
+    return url.origin;
+  };
+  const expected = validate(apiUrl);
+  if (clientUrls.some((url) => validate(url) !== expected)) throw new Error('Release evaluation client targets must match the loopback endpoint.');
+}
+
+function clientUrl(client: SupabaseClient): string {
+  return (client as unknown as { supabaseUrl: string }).supabaseUrl;
 }
 
 export function validateReleaseEvaluationRunNamespace(runNamespace: string): void {
@@ -145,6 +162,20 @@ function chunks<T>(values: readonly T[], size: number): T[][] {
   const result: T[][] = [];
   for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size) as T[]);
   return result;
+}
+
+export function assertCohortAccounting(requested: string[], returned: string[]): void {
+  if (requested.length !== returned.length || new Set(returned).size !== returned.length
+    || returned.some((id) => !requested.includes(id))) {
+    throw new Error('Bulk review returned missing, duplicate, or unknown case identities.');
+  }
+}
+
+/** Map production reasons to evidence fields, independently of the expected-issue manifest. */
+export function readinessField(message: string): string | undefined {
+  if (message.startsWith('Poster full text ')) return 'posterText';
+  if (message.startsWith('Accessibility text ')) return 'accessibilityText';
+  return undefined;
 }
 
 function addTiming(timings: Record<string, number | Record<string, number>>, name: string, elapsed: number): void {
@@ -288,9 +319,14 @@ async function resolveSeededTaxonomy(supabase: SupabaseClient): Promise<{ progra
 }
 
 async function fingerprintRows(supabase: SupabaseClient, table: string, columns: string): Promise<string> {
-  const result = await supabase.from(table).select(columns);
-  if (result.error) throw new Error(`Release evaluation could not snapshot ${table}.`);
-  const rows = (result.data || []).map((row) => Object.fromEntries(
+  const data: Record<string, unknown>[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const result = await supabase.from(table).select(columns).range(offset, offset + 999);
+    if (result.error) throw new Error(`Release evaluation could not snapshot ${table}.`);
+    data.push(...(result.data || []) as unknown as Record<string, unknown>[]);
+    if ((result.data?.length || 0) < 1000) break;
+  }
+  const rows = data.map((row) => Object.fromEntries(
     Object.entries(row).sort(([left], [right]) => left.localeCompare(right)),
   )).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
   return createHash('sha256').update(JSON.stringify(rows), 'utf8').digest('hex');
@@ -314,6 +350,11 @@ async function captureSharedBaseline(supabase: SupabaseClient, admin: Authentica
   ]);
   return {
     admin: adminFingerprint,
+    ordinary: Object.fromEntries(await Promise.all([
+      'projects', 'import_batches', 'browser_import_commits', 'browser_import_media_commits', 'media_assets',
+      'approval_records', 'validation_flags', 'project_disciplines', 'project_industry_categories',
+      'participant_previews', 'participant_preview_confirmations', 'participant_preview_correction_requests',
+    ].map(async (table) => [table, await fingerprintRows(supabase, table, '*')]))),
     adminRoles: adminRolesFingerprint,
     reference: { programs: programFingerprint, disciplines: disciplineFingerprint, industryCategories: industryFingerprint, adminIdentity: createHash('sha256').update(`${admin.adminUserId}:${admin.email}:${admin.fullName}`, 'utf8').digest('hex') },
     publication: { publishedSnapshots: snapshotsFingerprint, publicationAttempts: attemptsFingerprint, operations: operationsFingerprint, versions: versionsFingerprint, members: membersFingerprint, head: headFingerprint, rollbackPreparations: rollbackFingerprint, operationEvents: eventsFingerprint },
@@ -326,6 +367,7 @@ async function verifySharedBaseline(
 ): Promise<Record<string, boolean>> {
   const current = await captureSharedBaseline(supabase, runtime.admin);
   return {
+    ordinaryLocalRowsUnchanged: Object.entries(runtime.sharedBaseline.ordinary).every(([table, digest]) => current.ordinary[table] === digest),
     localAdminUnchanged: current.admin === runtime.sharedBaseline.admin
       && current.adminRoles === runtime.sharedBaseline.adminRoles
       && current.reference.adminIdentity === runtime.sharedBaseline.reference.adminIdentity,
@@ -387,8 +429,7 @@ async function stageAcceptedBatch(
   if (timing && analysisStarted !== undefined) {
     const elapsed = timing.now() - analysisStarted;
     addTiming(timing.timings, 'importAnalysis', elapsed);
-    addTiming(timing.timings, 'parsingPackageValidation', elapsed);
-    addTiming(timing.timings, 'adminReconciliation', elapsed);
+    addTiming(timing.timings, 'packageParsingValidationAndReconciliation', elapsed);
   }
   recordPreviewStages(corpus, ledger, batch, analysis);
   const selectedPackagePaths = selectedOverride || analysis.packages.filter((pkg) => pkg.status === 'valid' || pkg.status === 'warning').map((pkg) => pkg.packagePath);
@@ -405,7 +446,6 @@ async function stageAcceptedBatch(
   selectedPackagePaths.forEach((packagePath) => {
     const item = itemByPackagePath(corpus, batch, packagePath);
     recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'commit-intent', outcome: 'accepted' });
-    recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'server-revalidation', outcome: 'accepted' });
   });
   const metadataStarted = timing?.now();
   const metadata = await stageBrowserImportMetadata({ authContext, serverAnalysis: analysis, intent: prepared.intent });
@@ -418,6 +458,7 @@ async function stageAcceptedBatch(
   });
   selectedPackagePaths.forEach((packagePath) => {
     const item = itemByPackagePath(corpus, batch, packagePath);
+    recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'server-revalidation', outcome: 'accepted' });
     recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'metadata-staging', outcome: 'accepted' });
   });
   const preflight = runBrowserImportManifestPreflight(batch.materialized.selectionManifest);
@@ -461,8 +502,7 @@ async function inspectAndStageSpecialBatch(
   if (timing && analysisStarted !== undefined) {
     const elapsed = timing.now() - analysisStarted;
     addTiming(timing.timings, 'importAnalysis', elapsed);
-    addTiming(timing.timings, 'parsingPackageValidation', elapsed);
-    addTiming(timing.timings, 'adminReconciliation', elapsed);
+    addTiming(timing.timings, 'packageParsingValidationAndReconciliation', elapsed);
   }
   recordPreviewStages(corpus, ledger, batch, analysis);
   for (const item of batch.caseIds.map((id) => corpus.cases.find((candidate) => candidate.caseId === id)!)) {
@@ -565,7 +605,6 @@ async function runBulkAction(params: {
   comments?: string;
   ledger: ReleaseEvidenceLedger;
   caseByPublicId: Map<string, ReleaseEvaluationCase>;
-  seededIssues: Map<string, SeededIssue>;
   beforeExecute?: () => Promise<void>;
   timing?: TimingContext;
 }): Promise<{ preflight: StageTotals; execution: StageTotals; resultCodes: Record<string, number> }> {
@@ -574,6 +613,7 @@ async function runBulkAction(params: {
   const preflightStarted = params.timing?.now();
   for (const cohort of chunks(params.preflightIds, 50)) {
     const response = await params.service.preflight({ action: params.action, publicIds: cohort, actor: params.actor });
+    assertCohortAccounting(cohort, response.items.map((item) => item.publicId));
     response.items.forEach((item) => {
       expectedUpdatedAt[item.publicId] = item.updatedAt;
       if (item.disposition === 'eligible') preflight.accepted += 1;
@@ -582,12 +622,6 @@ async function runBulkAction(params: {
       const caseItem = params.caseByPublicId.get(item.publicId);
       if (caseItem) {
         recordReleaseObservation(params.ledger, { caseId: caseItem.caseId, stage: 'workflow', attempt: `${params.attempt}-preflight`, outcome: item.disposition === 'eligible' ? 'accepted' : item.disposition === 'already_complete' ? 'warning' : 'rejected', code: item.reasons[0]?.code, finalStatus: item.status || undefined });
-        for (const issueId of caseItem.seededIssueIds) {
-          const issue = params.seededIssues.get(issueId);
-          if (!issue || issue.expectedDetectionStage !== 'review-readiness') continue;
-          const matchingReason = item.reasons.find((reason) => reason.code === issue.expectedProductionCode && reason.message.toLowerCase().includes(issue.family.includes('poster-full') ? 'poster full text' : 'accessibility text'));
-          if (matchingReason) recordReleaseObservation(params.ledger, { caseId: caseItem.caseId, stage: 'review-readiness', attempt: `issue-${issue.issueId}`, outcome: 'rejected', code: matchingReason.code });
-        }
       }
     });
   }
@@ -598,6 +632,7 @@ async function runBulkAction(params: {
   const executionStarted = params.timing?.now();
   for (const cohort of chunks(params.executeIds, 50)) {
     const response = await params.service.execute({ action: params.action, publicIds: cohort, expectedUpdatedAt, comments: params.comments, actor: params.actor });
+    assertCohortAccounting(cohort, response.items.map((item) => item.publicId));
     response.items.forEach((item) => {
       if (item.outcome === 'successful') execution.accepted += 1;
       else if (item.outcome === 'already_complete') execution.warnings += 1;
@@ -630,7 +665,7 @@ async function runParticipantEvidence(
   for (const [index, item] of regularCases.entries()) {
     if (index >= 30) continue;
     const publicId = corpus.packages.get(item.caseId)!.publicId;
-    const tokenHash = createHash('sha256').update(`release-evaluation:${item.caseId}`, 'utf8').digest('hex');
+    const tokenHash = createHash('sha256').update(`release-evaluation:${corpus.runNamespace}:${item.caseId}`, 'utf8').digest('hex');
     const preview = await previews.generatePreview({ publicId, adminId: runtime.admin.adminUserId, tokenHash, privateBucket: runtime.privateBucket });
     runtime.previewIds.add(preview.previewId);
     if (index < 20) await previews.confirmPreview(tokenHash);
@@ -640,7 +675,7 @@ async function runParticipantEvidence(
   }
   for (const item of correctionCases) {
     const publicId = corpus.packages.get(item.caseId)!.publicId;
-    const tokenHash = createHash('sha256').update(`release-evaluation:${item.caseId}`, 'utf8').digest('hex');
+    const tokenHash = createHash('sha256').update(`release-evaluation:${corpus.runNamespace}:${item.caseId}`, 'utf8').digest('hex');
     const preview = await previews.generatePreview({ publicId, adminId: runtime.admin.adminUserId, tokenHash, privateBucket: runtime.privateBucket });
     runtime.previewIds.add(preview.previewId);
     const correction = await previews.requestCorrection(tokenHash, 'Synthetic participant correction request.');
@@ -768,10 +803,19 @@ interface ReleaseCleanupContext {
   admin?: AuthenticatedAdminContext;
 }
 
-async function cleanupOwnedState(supabase: SupabaseClient, runtime: ReleaseCleanupContext): Promise<{ completed: boolean; residue: Record<string, number>; scopesChecked: string[]; baselineChecks: Record<string, boolean> }> {
+export async function cleanupOwnedState(supabase: SupabaseClient, runtime: ReleaseCleanupContext): Promise<{ completed: boolean; residue: Record<string, number>; scopesChecked: string[]; baselineChecks: Record<string, boolean> }> {
   const ownedIds = [...runtime.ownedPublicIds].sort();
   const batchIds = [...runtime.ownedBatchIds].sort();
   let cleanupFailed = false;
+  const namespace = /^release-(run-[1-2]-[0-9a-f]{16})-/.exec(ownedIds[0] || '')?.[1];
+  if (ownedIds.length && (!namespace || ownedIds.some((id) => !id.startsWith(`release-${namespace}-`)))) {
+    throw new Error('Release cleanup refused identities outside a single verifier namespace.');
+  }
+  if (namespace) {
+    const discovered = await supabase.from('import_batches').select('id').like('source_folder', `release-${namespace}-%`);
+    cleanupFailed ||= Boolean(discovered.error);
+    (discovered.data || []).forEach((row) => { if (!batchIds.includes(String(row.id))) batchIds.push(String(row.id)); });
+  }
   const projectResult = ownedIds.length ? await supabase.from('projects').select('id').in('public_id', ownedIds) : { data: [], error: null };
   cleanupFailed ||= Boolean(projectResult.error);
   const projectIds = (projectResult.data || []).map((row) => String(row.id));
@@ -784,33 +828,39 @@ async function cleanupOwnedState(supabase: SupabaseClient, runtime: ReleaseClean
       return;
     }
     const storagePath = String(row.storage_path);
-    if (storagePath) privatePaths.add(storagePath);
+    if (ownedIds.some((publicId) => storagePath.startsWith(`drafts/${publicId}/`))) privatePaths.add(storagePath);
+    else cleanupFailed = true;
   });
   const listedStorage = await listOwnedStoragePaths(supabase, runtime.privateBucket, ownedIds);
   cleanupFailed ||= listedStorage.failed;
   listedStorage.paths.forEach((storagePath) => privatePaths.add(storagePath));
   if (privatePaths.size) {
+    if ([...privatePaths].some((storagePath) => !ownedIds.some((id) => storagePath.startsWith(`drafts/${id}/`)))) {
+      throw new Error('Release cleanup refused a storage path outside the owned project scope.');
+    }
     const storageRemoval = await supabase.storage.from(runtime.privateBucket).remove([...privatePaths]);
     cleanupFailed ||= Boolean(storageRemoval.error);
   }
-  const previews = runtime.previewIds.size ? [...runtime.previewIds] : [];
+  const discoveredPreviews = projectIds.length ? await supabase.from('participant_previews').select('id').in('project_id', projectIds) : { data: [], error: null };
+  cleanupFailed ||= Boolean(discoveredPreviews.error);
+  const previews = [...new Set([...runtime.previewIds, ...(discoveredPreviews.data || []).map((row) => String(row.id))])];
   if (previews.length) {
-    cleanupFailed ||= Boolean((await supabase.from('participant_preview_correction_requests').delete().in('participant_preview_id', previews)).error);
-    cleanupFailed ||= Boolean((await supabase.from('participant_preview_confirmations').delete().in('participant_preview_id', previews)).error);
-    cleanupFailed ||= Boolean((await supabase.from('participant_previews').delete().in('id', previews)).error);
+    cleanupFailed = Boolean((await supabase.from('participant_preview_correction_requests').delete().in('participant_preview_id', previews)).error) || cleanupFailed;
+    cleanupFailed = Boolean((await supabase.from('participant_preview_confirmations').delete().in('participant_preview_id', previews)).error) || cleanupFailed;
+    cleanupFailed = Boolean((await supabase.from('participant_previews').delete().in('id', previews)).error) || cleanupFailed;
   }
   if (projectIds.length) {
-    cleanupFailed ||= Boolean((await supabase.from('approval_records').delete().in('project_id', projectIds)).error);
-    cleanupFailed ||= Boolean((await supabase.from('validation_flags').delete().in('project_id', projectIds)).error);
-    cleanupFailed ||= Boolean((await supabase.from('project_disciplines').delete().in('project_id', projectIds)).error);
-    cleanupFailed ||= Boolean((await supabase.from('project_industry_categories').delete().in('project_id', projectIds)).error);
-    cleanupFailed ||= Boolean((await supabase.from('media_assets').delete().in('project_id', projectIds)).error);
-    cleanupFailed ||= Boolean((await supabase.from('projects').delete().in('id', projectIds)).error);
+    cleanupFailed = Boolean((await supabase.from('approval_records').delete().in('project_id', projectIds)).error) || cleanupFailed;
+    cleanupFailed = Boolean((await supabase.from('validation_flags').delete().in('project_id', projectIds)).error) || cleanupFailed;
+    cleanupFailed = Boolean((await supabase.from('project_disciplines').delete().in('project_id', projectIds)).error) || cleanupFailed;
+    cleanupFailed = Boolean((await supabase.from('project_industry_categories').delete().in('project_id', projectIds)).error) || cleanupFailed;
+    cleanupFailed = Boolean((await supabase.from('media_assets').delete().in('project_id', projectIds)).error) || cleanupFailed;
+    cleanupFailed = Boolean((await supabase.from('projects').delete().in('id', projectIds)).error) || cleanupFailed;
   }
   if (batchIds.length) {
-    cleanupFailed ||= Boolean((await supabase.from('browser_import_media_commits').delete().in('batch_id', batchIds)).error);
-    cleanupFailed ||= Boolean((await supabase.from('browser_import_commits').delete().in('batch_id', batchIds)).error);
-    cleanupFailed ||= Boolean((await supabase.from('import_batches').delete().in('id', batchIds)).error);
+    cleanupFailed = Boolean((await supabase.from('browser_import_media_commits').delete().in('batch_id', batchIds)).error) || cleanupFailed;
+    cleanupFailed = Boolean((await supabase.from('browser_import_commits').delete().in('batch_id', batchIds)).error) || cleanupFailed;
+    cleanupFailed = Boolean((await supabase.from('import_batches').delete().in('id', batchIds)).error) || cleanupFailed;
   }
   const residue: Record<string, number> = {
     projects: await countOwnedRows(supabase, 'projects', 'public_id', ownedIds),
@@ -847,7 +897,7 @@ export async function cleanupInterruptedReleaseEvaluationRun(params: {
   apiUrl: string;
   runNamespace: string;
 }): Promise<ReleaseCleanupRecoveryResult> {
-  assertLoopback(params.apiUrl);
+  assertReleaseLocalTarget(params.apiUrl, [clientUrl(params.supabase)]);
   validateReleaseEvaluationRunNamespace(params.runNamespace);
   const prefix = `release-${params.runNamespace}-`;
   const projectsResult = await params.supabase
@@ -881,12 +931,15 @@ export async function cleanupInterruptedReleaseEvaluationRun(params: {
 }
 
 export async function runReleaseEvaluation(options: ReleaseEvaluationHarnessOptions): Promise<ReleaseEvaluationReport> {
-  assertLoopback(options.apiUrl);
+  assertReleaseLocalTarget(options.apiUrl, [clientUrl(options.supabase)]);
+  assertReleaseLocalTarget(options.apiUrl, [process.env.NEXT_PUBLIC_SUPABASE_URL || '']);
+  assertReleaseLocalTarget(options.apiUrl, [clientUrl(createSupabaseAdminClientCore())]);
   const now = options.now || (() => performance.now());
   const runNumber = options.runNumber || 1;
   const runToken = randomBytes(8).toString('hex');
   const runNamespace = options.runNamespace || `run-${runNumber}-${runToken}`;
   const runId = options.runId || `release-${runNumber}-${runToken}`;
+  validateReleaseEvaluationRunNamespace(runNamespace);
   options.onRunNamespace?.(runNamespace);
   const start = now();
   const timings: Record<string, number | Record<string, number>> = {};
@@ -896,6 +949,11 @@ export async function runReleaseEvaluation(options: ReleaseEvaluationHarnessOpti
   const ledger = createReleaseEvidenceLedger(corpus);
   const admin = await resolveAdminContext(options.supabase);
   const buckets = getStagingBuckets();
+  const privateBucket = await options.supabase.storage.getBucket(buckets.DRAFT_PRIVATE);
+  if (privateBucket.error || !privateBucket.data || privateBucket.data.public
+    || [buckets.PUBLIC_ASSETS, buckets.PUBLIC_FEEDS].includes(buckets.DRAFT_PRIVATE)) {
+    throw new Error('Release evaluation requires a verified private draft bucket.');
+  }
   const sharedBaseline = await captureSharedBaseline(options.supabase, admin);
   const runtime: ReleaseEvaluationRuntimeContext = {
     admin,
@@ -918,9 +976,19 @@ export async function runReleaseEvaluation(options: ReleaseEvaluationHarnessOpti
   let cleanup: ReleaseEvaluationReport['cleanup'] = { completed: false, residue: {}, scopesChecked: [] };
   try {
     const materialized = await time('packageMaterialization', () => materializeReleaseEvaluationCorpus({ seed: corpus.seed, runNamespace, metadataTaxonomy: runtime.taxonomy }));
+    const prefix = `release-${runNamespace}-`;
+    const existingProjects = await options.supabase.from('projects').select('id', { count: 'exact', head: true }).like('public_id', `${prefix}%`);
+    const existingBatches = await options.supabase.from('import_batches').select('id', { count: 'exact', head: true }).like('source_folder', `${prefix}%`);
+    const intendedIds = [...new Set([...materialized.packages.values()].map((pkg) => pkg.publicId))];
+    if (existingProjects.error || existingBatches.error || existingProjects.count || existingBatches.count
+      || await countOwnedStorageObjects(options.supabase, runtime.privateBucket, intendedIds) !== 0) {
+      throw new Error('Release namespace is not empty; refusing to adopt pre-existing data.');
+    }
+    // Own intended identities before any RPC: a committed write with a lost response must still be cleaned.
+    intendedIds.forEach((id) => runtime.ownedPublicIds.add(id));
     const probeRuntime: ReleaseEvaluationRuntimeContext = {
       ...runtime,
-      ownedPublicIds: new Set(),
+      ownedPublicIds: new Set([materialized.packages.get('release-case-001')!.publicId]),
       ownedBatchIds: new Set(),
       ownedStoragePaths: new Set(),
       previewIds: new Set(),
@@ -930,8 +998,9 @@ export async function runReleaseEvaluation(options: ReleaseEvaluationHarnessOpti
     const probePackagePath = materialized.acceptedBatches[0].materialized.packages[0].packagePath;
     const forcedFailureProbe = await runForcedFailureCleanupProbe({
       createOwnedState: () => stageAcceptedBatch(materialized, probeLedger, materialized.acceptedBatches[0], admin, probeRuntime, [probePackagePath]),
-      cleanupOwnedState: async () => (await cleanupOwnedState(options.supabase, probeRuntime)).residue,
+      cleanupOwnedState: () => cleanupOwnedState(options.supabase, probeRuntime),
     });
+    if (!forcedFailureProbe.completed) throw new Error('Forced-failure cleanup did not prove zero residue and unchanged baseline.');
     const acceptedStart = now();
     const importTiming = { now, timings };
     for (const batch of materialized.acceptedBatches) await stageAcceptedBatch(materialized, ledger, batch, admin, runtime, undefined, importTiming);
@@ -939,7 +1008,6 @@ export async function runReleaseEvaluation(options: ReleaseEvaluationHarnessOpti
     for (const batch of materialized.rejectedBatches) await inspectAndStageSpecialBatch(options.supabase, materialized, ledger, batch, admin, runtime, importTiming);
 
     const caseByPublicId = new Map<string, ReleaseEvaluationCase>();
-    const seededIssues = new Map(materialized.seededIssues.map((issue) => [issue.issueId, issue]));
     materialized.cases.forEach((item) => {
       const pkg = materialized.packages.get(item.caseId);
       if (pkg && item.expected.persistence === 'persisted' && !caseByPublicId.has(pkg.publicId)) {
@@ -949,23 +1017,35 @@ export async function runReleaseEvaluation(options: ReleaseEvaluationHarnessOpti
     const bulkService = new BulkReviewService(new SupabaseBulkProjectReviewGateway(options.supabase, runtime.privateBucket));
     const actor: BulkReviewActor = { adminId: admin.adminUserId, permissions: admin.permissions };
     const persistedItems = materialized.cases.filter((item) => item.expected.persistence === 'persisted');
+    const readinessStartedAt = now();
+    const importRepository = new ImportBatchRepositoryCore(options.supabase);
+    for (const item of persistedItems) {
+      const row = await importRepository.getProjectReviewDataByPublicId(materialized.packages.get(item.caseId)!.publicId);
+      if (!row) throw new Error(`Missing persisted readiness case ${item.caseId}.`);
+      const readiness = computeReadinessForImportBatchRow(row);
+      recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'review-readiness', outcome: readiness.ready ? readiness.warnings.length ? 'warning' : 'accepted' : 'rejected', code: readiness.ready ? 'READY' : 'READINESS_BLOCKED' });
+      readiness.blockingReasons.forEach((message, index) => recordReleaseObservation(ledger, {
+        caseId: item.caseId, stage: 'review-readiness', attempt: `reason-${index}`, outcome: 'rejected', code: 'READINESS_BLOCKED', fieldName: readinessField(message),
+      }));
+    }
+    timings.validationReadiness = Number((now() - readinessStartedAt).toFixed(3));
     const publicIds = [...new Set(persistedItems.map((item) => materialized.packages.get(item.caseId)!.publicId))];
     const alreadySubmitted = persistedItems.filter((item) => item.lifecycleProfile === 'already-submitted').map((item) => materialized.packages.get(item.caseId)!.publicId);
     const alreadyApproved = persistedItems.filter((item) => item.lifecycleProfile === 'already-approved').map((item) => materialized.packages.get(item.caseId)!.publicId);
     const stale = persistedItems.filter((item) => item.lifecycleProfile === 'stale-approval-candidate').map((item) => materialized.packages.get(item.caseId)!.publicId);
     const mainSubmit = persistedItems.filter((item) => ['stale-approval-candidate', 'successful-approval', 'bulk-request-changes', 'participant-correction', 'archived'].includes(item.lifecycleProfile || '')).map((item) => materialized.packages.get(item.caseId)!.publicId);
     const bulkTiming = { now, timings };
-    const setupSubmitted = await runBulkAction({ service: bulkService, actor, action: 'submit_for_review', preflightIds: alreadySubmitted, executeIds: alreadySubmitted, attempt: 'setup-submitted', ledger, caseByPublicId, seededIssues, timing: bulkTiming });
-    const setupApprovedSubmit = await runBulkAction({ service: bulkService, actor, action: 'submit_for_review', preflightIds: alreadyApproved, executeIds: alreadyApproved, attempt: 'setup-approved-submit', ledger, caseByPublicId, seededIssues, timing: bulkTiming });
-    const setupApproved = await runBulkAction({ service: bulkService, actor, action: 'approve', preflightIds: alreadyApproved, executeIds: alreadyApproved, attempt: 'setup-approved', ledger, caseByPublicId, seededIssues, timing: bulkTiming });
-    const submitAll = await runBulkAction({ service: bulkService, actor, action: 'submit_for_review', preflightIds: publicIds, executeIds: mainSubmit, attempt: 'bulk-submit', ledger, caseByPublicId, seededIssues, timing: bulkTiming });
+    const setupSubmitted = await runBulkAction({ service: bulkService, actor, action: 'submit_for_review', preflightIds: alreadySubmitted, executeIds: alreadySubmitted, attempt: 'setup-submitted', ledger, caseByPublicId, timing: bulkTiming });
+    const setupApprovedSubmit = await runBulkAction({ service: bulkService, actor, action: 'submit_for_review', preflightIds: alreadyApproved, executeIds: alreadyApproved, attempt: 'setup-approved-submit', ledger, caseByPublicId, timing: bulkTiming });
+    const setupApproved = await runBulkAction({ service: bulkService, actor, action: 'approve', preflightIds: alreadyApproved, executeIds: alreadyApproved, attempt: 'setup-approved', ledger, caseByPublicId, timing: bulkTiming });
+    const submitAll = await runBulkAction({ service: bulkService, actor, action: 'submit_for_review', preflightIds: publicIds, executeIds: mainSubmit, attempt: 'bulk-submit', ledger, caseByPublicId, timing: bulkTiming });
     const approvalCases = persistedItems.filter((item) => ['stale-approval-candidate', 'already-approved', 'successful-approval', 'participant-correction', 'already-submitted'].includes(item.lifecycleProfile || ''));
     const approvalPreflightIds = approvalCases.map((item) => materialized.packages.get(item.caseId)!.publicId);
     const approveExecuteIds = approvalCases.filter((item) => item.lifecycleProfile !== 'already-submitted' && item.lifecycleProfile !== 'already-approved').map((item) => materialized.packages.get(item.caseId)!.publicId);
-    const approval = await runBulkAction({ service: bulkService, actor, action: 'approve', preflightIds: approvalPreflightIds, executeIds: approveExecuteIds, attempt: 'bulk-approve', ledger, caseByPublicId, seededIssues, beforeExecute: () => updateStaleProjects(options.supabase, stale), timing: bulkTiming });
+    const approval = await runBulkAction({ service: bulkService, actor, action: 'approve', preflightIds: approvalPreflightIds, executeIds: approveExecuteIds, attempt: 'bulk-approve', ledger, caseByPublicId, beforeExecute: () => updateStaleProjects(options.supabase, stale), timing: bulkTiming });
     const requestCases = persistedItems.filter((item) => item.lifecycleProfile === 'bulk-request-changes');
     const requestIds = requestCases.map((item) => materialized.packages.get(item.caseId)!.publicId);
-    const requestChanges = await runBulkAction({ service: bulkService, actor, action: 'request_changes', preflightIds: requestIds, executeIds: requestIds, attempt: 'bulk-request-changes', comments: 'Synthetic release evaluation correction request.', ledger, caseByPublicId, seededIssues, timing: bulkTiming });
+    const requestChanges = await runBulkAction({ service: bulkService, actor, action: 'request_changes', preflightIds: requestIds, executeIds: requestIds, attempt: 'bulk-request-changes', comments: 'Synthetic release evaluation correction request.', ledger, caseByPublicId, timing: bulkTiming });
     const participantStarted = now();
     const correctionResult = await runParticipantEvidence(materialized, runtime, options.supabase, persistedItems.filter((item) => item.lifecycleProfile === 'successful-approval' || item.lifecycleProfile === 'already-approved' || item.lifecycleProfile === 'participant-correction'));
     timings.participantAndCorrection = Number((now() - participantStarted).toFixed(3));
@@ -1045,10 +1125,16 @@ export async function runReleaseEvaluation(options: ReleaseEvaluationHarnessOpti
     }
     timings.publicationReadiness = Number((now() - readinessStarted).toFixed(3));
     const publicationRepo = new SupabasePublicationExecutionRepositoryCore(options.supabase, options.apiUrl);
-    const ownedProjects = (await repository.listProjects()).filter((project) => project.publicId && runtime.ownedPublicIds.has(project.publicId));
+    const ownedProjects: Project[] = [];
+    for (let page = 1; ; page += 1) {
+      const result = await repository.listProjectsPage(parseProjectListQuery({ q: `release-${runNamespace}-`, page: String(page), pageSize: '50' }));
+      ownedProjects.push(...result.projects);
+      if (page >= result.pageCount) break;
+    }
+    assertCohortAccounting(publicIds, ownedProjects.map((project) => project.publicId || ''));
     const candidateResults: Record<string, string> = {};
     const candidateStarted = now();
-    for (const item of persistedItems.filter((candidate) => candidate.expected.candidatePlan === 'included')) {
+    for (const item of persistedItems) {
       const publicId = materialized.packages.get(item.caseId)!.publicId;
       const plan = await preparePublicationPlan(admin.permissions, publicId, {
         getReadiness: () => previews.getPublicationReadiness({ publicId, adminId: admin.adminUserId, privateBucket: runtime.privateBucket }),
@@ -1061,8 +1147,14 @@ export async function runReleaseEvaluation(options: ReleaseEvaluationHarnessOpti
         getPublicUrl: (bucket, path) => publicationRepo.getPublicUrl(bucket, path),
       });
       candidateResults[item.caseId] = plan.resultCode;
+      recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'candidate-planning', outcome: plan.resultCode === 'READY_TO_STAGE' ? 'accepted' : 'rejected', code: plan.resultCode,
+        evidence: plan.resultCode === 'READY_TO_STAGE' ? { recordCount: plan.recordCount } : undefined });
     }
     const ordinaryFeed = compilePublicFeed(ownedProjects);
+    for (const item of persistedItems) {
+      const included = ordinaryFeed.some((record) => record.publicId === materialized.packages.get(item.caseId)!.publicId);
+      recordReleaseObservation(ledger, { caseId: item.caseId, stage: 'ordinary-feed', outcome: included ? 'accepted' : 'rejected', code: included ? 'included' : 'excluded' });
+    }
     const ordinaryFeedValidation = validatePublicFeed(ordinaryFeed);
     timings.candidatePlanningAndFeed = Number((now() - candidateStarted).toFixed(3));
     const candidateDistribution = Object.values(candidateResults).reduce<Record<string, number>>((result, value) => { result[value] = (result[value] || 0) + 1; return result; }, {});
@@ -1070,7 +1162,6 @@ export async function runReleaseEvaluation(options: ReleaseEvaluationHarnessOpti
     const uiStarted = now();
     const uiEvidence = await verifyIndex(repository, materialized, runtime.taxonomy, Boolean(options.evidenceMode));
     timings.uiQuery = Number((now() - uiStarted).toFixed(3));
-    timings.validationReadiness = Number((now() - start).toFixed(3));
     if (options.evidenceMode && options.pauseForEvidence) {
       process.stdout.write(`Release evaluation evidence prefix: ${runNamespace}\n`);
       await options.pauseForEvidence();
@@ -1085,12 +1176,25 @@ export async function runReleaseEvaluation(options: ReleaseEvaluationHarnessOpti
     if (workflowEvidence.duplicateAudits !== 0 || !workflowEvidence.auditActorMatches) report.gate.failureReasons.push('audit attribution or uniqueness verification failed');
     if (workflowEvidence.finalStatusMismatches.length > 0 || !workflowEvidence.auditSignaturesMatch) report.gate.failureReasons.push('per-case final status or audit transition signatures did not match the manifest');
     if (!workflowEvidence.auditCommentsMatch) report.gate.failureReasons.push('audit comments did not match the manifest');
+    if (ordinaryFeedValidation.errors.length || ordinaryFeed.length !== 0) report.gate.failureReasons.push('ordinary feed did not preserve exclusion of non-published cases');
+    if (Object.values(candidateResults).filter((code) => code === 'READY_TO_STAGE').length !== 20) report.gate.failureReasons.push('publication candidate count did not match the manifest');
     if (workflowEvidence.staleExecution.expected !== workflowEvidence.staleExecution.reported || !workflowEvidence.staleExecution.noTransition) report.gate.failureReasons.push('stale review execution did not remain version-fenced');
     report.gate.passed = report.gate.failureReasons.length === 0;
+    return report;
+  } catch (error) {
+    cleanup = await cleanupOwnedState(options.supabase, runtime);
+    timings.total = Number((now() - start).toFixed(3));
+    const report = createReleaseEvaluationReport({ corpus, ledger,
+      runtime: { seed: corpus.seed, corpusSize: corpus.cases.length, runNumber, runId, nodeVersion: process.version, platform: process.platform },
+      timings, cleanup });
+    const message = error instanceof Error ? error.message : 'Release evaluation failed.';
+    report.gate.failureReasons.push(message.replace(/https?:\/\/\S+/g, '[endpoint]').replace(/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/gi, '[internal identity]').slice(0, 400));
+    report.gate.passed = false;
     return report;
   } finally {
     if (!cleanup.completed && (runtime.ownedPublicIds.size > 0 || runtime.ownedBatchIds.size > 0)) {
       cleanup = await cleanupOwnedState(options.supabase, runtime);
+      if (!cleanup.completed) throw new Error(`Release cleanup failed for ${runNamespace}: ${JSON.stringify(cleanup.residue)}`);
     }
   }
 }
@@ -1103,7 +1207,7 @@ export interface ForcedFailureProbeResult {
 /** Tooling-only failure hook used by unit tests and release operators to prove finally cleanup. */
 export async function runForcedFailureCleanupProbe(params: {
   createOwnedState(): Promise<void>;
-  cleanupOwnedState(): Promise<Record<string, number>>;
+  cleanupOwnedState(): Promise<{ completed: boolean; residue: Record<string, number> }>;
 }): Promise<ForcedFailureProbeResult> {
   let created = false;
   try {
@@ -1111,7 +1215,7 @@ export async function runForcedFailureCleanupProbe(params: {
     created = true;
     throw new Error('RELEASE_EVALUATION_FORCED_FAILURE_AFTER_MEDIA_STAGE');
   } catch {
-    const residue = await params.cleanupOwnedState();
-    return { completed: created && Object.values(residue).every((value) => value === 0), residue };
+    const cleanup = await params.cleanupOwnedState();
+    return { completed: created && cleanup.completed && Object.values(cleanup.residue).every((value) => value === 0), residue: cleanup.residue };
   }
 }
