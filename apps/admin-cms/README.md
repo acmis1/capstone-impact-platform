@@ -30,6 +30,10 @@ Omitting the argument runs all three against one throwaway stack. `CAPSTONE_LEDG
 
 ## Current capability and verification
 
+### Integrated release evaluation
+
+The explicit `npm run verify:release-evaluation` command runs the deterministic 132-case corpus against loopback Local Supabase. It exercises existing import, reconciliation, media, review, participant-preview, readiness, publication-planning, feed, and repository authorities, then writes JSON/Markdown evidence to an OS temporary directory and proves prefix-scoped cleanup. It does not publish, mutate the public feed, contact hosted services, or claim production capacity or staff-effort savings. See the [release evaluation guide](../../docs/release-evaluation-harness.md).
+
 | Capability | Implemented | Verification status | Remaining limitation |
 | --- | --- | --- | --- |
 | Administrator authentication | Yes | Initial administrator flow verified in isolated staging | Broader provisioning and UAT remain pending |

@@ -42,6 +42,35 @@ const SYNTHETIC_DUPLICATE_BATCH_ROOT = 'synthetic-import-duplicate-batch';
 
 type SyntheticWorkbookValues = Record<string, string>;
 
+export type SyntheticWorkbookOverrides = Readonly<Record<string, string>>;
+
+export interface SyntheticImportMaterializationFile {
+  fileName: string;
+  browserMimeType: string;
+  content: Buffer;
+}
+
+export interface SyntheticImportMaterializationPackageInput {
+  publicId: string;
+  packagePath: string;
+  metadataFileName: 'project-details.xlsx' | 'project.json';
+  metadataBuffer: Buffer;
+  mediaFiles: readonly SyntheticImportMaterializationFile[];
+}
+
+export interface SyntheticImportMaterializedPackage
+  extends SyntheticImportMaterializationPackageInput {
+  descriptors: SelectedFileDescriptor[];
+}
+
+export interface SyntheticImportMaterializedBatch {
+  selectedRootName: string;
+  packages: SyntheticImportMaterializedPackage[];
+  selectionManifest: SelectionManifest;
+  uploadedMetadataFiles: Map<string, Buffer>;
+  uploadedFiles: Map<string, Buffer>;
+}
+
 export interface SyntheticImportPackageFixture {
   variant: SyntheticPreviewVariant;
   project: Project;
@@ -164,6 +193,19 @@ async function createWorkbookBuffer(
   project: Project,
   variant: SyntheticPreviewVariant,
 ): Promise<Buffer> {
+  return createSyntheticWorkbookBuffer(project, variant === 'incomplete-workbook'
+    ? { __omitProjectRow: 'true' }
+    : getVariantWorkbookValues(project, variant));
+}
+
+/**
+ * Creates the same canonical workbook used by the existing synthetic package generator, with
+ * explicit tooling-only cell overrides for integrated evaluation cases.
+ */
+export async function createSyntheticWorkbookBuffer(
+  project: Project,
+  overrides: SyntheticWorkbookOverrides = {},
+): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Synthetic Import Fixture Generator';
   workbook.lastModifiedBy = 'Synthetic Import Fixture Generator';
@@ -176,8 +218,8 @@ async function createWorkbookBuffer(
 
   worksheet.addRow(headers);
 
-  if (variant !== 'incomplete-workbook') {
-    const values = getVariantWorkbookValues(project, variant);
+  if (overrides.__omitProjectRow !== 'true') {
+    const values = { ...getWorkbookValues(project), ...overrides };
     worksheet.addRow(
       COLUMN_DEFINITIONS.map((definition) => {
         const field = definition.internalField;
@@ -191,6 +233,34 @@ async function createWorkbookBuffer(
 
   const arrayBuffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(arrayBuffer);
+}
+
+/** Creates a legacy JSON metadata buffer for the browser-import compatibility path. */
+export function createSyntheticJsonBuffer(
+  project: Project,
+  overrides: Record<string, unknown> = {},
+): Buffer {
+  const metadata = {
+    title: project.title,
+    summary: project.summary,
+    background: project.background,
+    solution: project.solution,
+    teamMembers: project.teamMembers,
+    groupName: project.groupName,
+    participantContactEmail: '',
+    academicSupervisor: project.academicSupervisor,
+    industryPartner: project.industryPartner,
+    industry: project.industry,
+    program: project.program,
+    studyProgram: project.studyProgram,
+    discipline: project.discipline,
+    year: project.year,
+    posterText: project.posterText,
+    accessibilityText: project.accessibilityText,
+    layoutConfig: project.layoutConfig,
+    ...overrides,
+  };
+  return Buffer.from(JSON.stringify(metadata), 'utf8');
 }
 
 function createDescriptor(
@@ -320,6 +390,65 @@ export async function generateSyntheticImportBatch({
     packages,
     selectionManifest,
     uploadedMetadataFiles,
+  };
+}
+
+/**
+ * Materializes an explicit in-memory package batch while retaining the production descriptor and
+ * browser-path contracts. It is intentionally separate from `generateSyntheticImportBatch` so
+ * existing fixture callers retain their exact output shape and behavior.
+ */
+export function materializeSyntheticImportBatch(
+  selectedRootName: string,
+  inputs: readonly SyntheticImportMaterializationPackageInput[],
+): SyntheticImportMaterializedBatch {
+  const packages = inputs.map((input) => {
+    const metadataDescriptor = createDescriptor(
+      `${input.packagePath}/${input.metadataFileName}`,
+      input.metadataBuffer.length,
+      input.metadataFileName === 'project.json'
+        ? 'application/json'
+        : XLSX_MIME_TYPE,
+    );
+    const mediaDescriptors = input.mediaFiles.map((file) =>
+      createDescriptor(
+        `${input.packagePath}/${file.fileName}`,
+        file.content.length,
+        file.browserMimeType,
+      ),
+    );
+
+    return {
+      ...input,
+      descriptors: [metadataDescriptor, ...mediaDescriptors],
+    };
+  });
+
+  const descriptors = packages.flatMap((pkg) => pkg.descriptors);
+  const uploadedMetadataFiles = new Map<string, Buffer>();
+  const uploadedFiles = new Map<string, Buffer>();
+
+  packages.forEach((pkg) => {
+    const metadataDescriptor = pkg.descriptors[0];
+    uploadedMetadataFiles.set(metadataDescriptor.uploadKey, pkg.metadataBuffer);
+    uploadedFiles.set(metadataDescriptor.uploadKey, pkg.metadataBuffer);
+    pkg.mediaFiles.forEach((file, index) => {
+      uploadedFiles.set(pkg.descriptors[index + 1].uploadKey, file.content);
+    });
+  });
+
+  return {
+    selectedRootName,
+    packages,
+    selectionManifest: {
+      selectedRootName,
+      fileCount: descriptors.length,
+      declaredTotalBytes: descriptors.reduce((total, descriptor) => total + descriptor.fileSizeBytes, 0),
+      ignoredSystemFilesCount: 0,
+      descriptors,
+    },
+    uploadedMetadataFiles,
+    uploadedFiles,
   };
 }
 
