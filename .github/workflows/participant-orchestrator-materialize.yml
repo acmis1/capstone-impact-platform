@@ -1,0 +1,82 @@
+name: Materialize Participant Integration Candidate
+
+on:
+  push:
+    branches:
+      - integration/participant-owned-corrections-orchestrator
+
+permissions:
+  contents: read
+
+jobs:
+  materialize:
+    name: Materialize reviewed participant candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout temporary scaffold
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify and materialize exact reviewed patch
+        shell: bash
+        env:
+          EXPECTED_BASE: 6125bb56a2c71c16a45cce44851696e8b09a3b4c
+          EXPECTED_XZ_SHA256: fe54b7021accf6d4a71480181db6fe963bd57739aa287292d118841bbf36807f
+          EXPECTED_PATCH_SHA256: a7f5f71ea493e3fb31c7974d690bc5e93afbca6bb8da7bb641fc4a765f9b21f7
+          EXPECTED_PATCH_BYTES: '683191'
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin 'refs/heads/main:refs/remotes/origin/main'
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_BASE"
+          test "$(git rev-parse "${GITHUB_SHA}^")" = "$EXPECTED_BASE"
+          test "$(find .orchestrator/participant-patch -maxdepth 1 -name 'part-[0-9][0-9].b64' -type f | wc -l)" -eq 15
+
+          : > /tmp/participant.patch.xz
+          for n in $(seq -w 0 14); do
+            file=".orchestrator/participant-patch/part-${n}.b64"
+            test -f "$file"
+            if [ "$n" = '11' ]; then
+              { cat "$file"; cat .orchestrator/participant-patch/part-11-suffix.txt; } | base64 --decode >> /tmp/participant.patch.xz
+            else
+              base64 --decode "$file" >> /tmp/participant.patch.xz
+            fi
+          done
+
+          echo "${EXPECTED_XZ_SHA256}  /tmp/participant.patch.xz" | sha256sum --check -
+          xz --decompress --stdout /tmp/participant.patch.xz > /tmp/participant.patch
+          echo "${EXPECTED_PATCH_SHA256}  /tmp/participant.patch" | sha256sum --check -
+          test "$(wc -c < /tmp/participant.patch)" -eq "$EXPECTED_PATCH_BYTES"
+
+          git checkout --detach "$EXPECTED_BASE"
+          git apply --3way --index /tmp/participant.patch
+          git diff --cached --check
+
+          test -f apps/admin-cms/src/scripts/runDisposableParticipantCorrectionsRuntime.ts
+          test -f apps/admin-cms/src/evaluation/releaseEvaluationHarness.ts
+          test "$(find infra/supabase/migrations -maxdepth 1 -name '*.sql' | wc -l)" -eq 51
+          grep -Fq 'REVOKE ALL ON public.participant_correction_submissions FROM PUBLIC, anon, authenticated, service_role;' infra/supabase/migrations/20260903130000_participant_owned_corrections.sql
+          test ! -e .orchestrator
+          test ! -e .github/workflows/participant-orchestrator-materialize.yml
+
+          mkdir -p /tmp/materialized/files
+          git diff --cached --name-only -z --diff-filter=ACMRT "$EXPECTED_BASE" > /tmp/materialized/paths.z
+          git checkout-index --prefix=/tmp/materialized/files/ -z --stdin < /tmp/materialized/paths.z
+          git diff --cached --name-status "$EXPECTED_BASE" > /tmp/materialized/name-status.txt
+          git diff --cached --stat "$EXPECTED_BASE" > /tmp/materialized/diffstat.txt
+          git diff --cached --binary "$EXPECTED_BASE" > /tmp/materialized/integrated.patch
+          {
+            echo "base=${EXPECTED_BASE}"
+            echo "tree=$(git write-tree)"
+            echo "changed=$(git diff --cached --name-only "$EXPECTED_BASE" | wc -l)"
+            echo "integrated_patch_sha256=$(sha256sum /tmp/materialized/integrated.patch | cut -d' ' -f1)"
+          } > /tmp/materialized/metadata.txt
+
+      - name: Upload materialized candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: participant-integration-materialized
+          path: /tmp/materialized
+          if-no-files-found: error
+          retention-days: 1
