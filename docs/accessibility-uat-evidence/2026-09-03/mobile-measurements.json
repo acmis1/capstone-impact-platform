@@ -1,0 +1,219 @@
+{
+  "collectedAt": "2026-09-03T17:18:26.180Z",
+  "viewportNote": "Browser viewport override was 375 x 812 CSS px. The document client width is 360 px because of the browser scrollbar.",
+  "touchTargetsMeasured": false,
+  "routes": [
+    {
+      "route": "Projects",
+      "timestamp": "2026-09-03T17:17:41.454Z",
+      "clientWidth": 360,
+      "cssViewport": {
+        "height": 812,
+        "width": 375
+      },
+      "documentScrollWidth": 360,
+      "focus": {
+        "keyboardFocus": true,
+        "label": "Search projects",
+        "obstructions": [
+          {
+            "overlaps": false,
+            "position": "sticky",
+            "rect": {
+              "bottom": 64,
+              "height": 64,
+              "left": 0,
+              "right": 360,
+              "top": 0,
+              "width": 360,
+              "x": 0,
+              "y": 0
+            },
+            "tag": "HEADER"
+          },
+          {
+            "overlaps": true,
+            "position": "fixed",
+            "rect": {
+              "bottom": 812,
+              "height": 812,
+              "left": 0,
+              "right": 360,
+              "top": 0,
+              "width": 360,
+              "x": 0,
+              "y": 0
+            },
+            "tag": "DIV"
+          }
+        ],
+        "rect": {
+          "bottom": 428,
+          "height": 44,
+          "left": 33,
+          "right": 327,
+          "top": 384,
+          "width": 294,
+          "x": 33,
+          "y": 384
+        },
+        "withinViewport": true,
+        "overlapsHeaderOrNavigation": false,
+        "overallObstructionResult": "PARTIAL: a fixed full-viewport div overlaps geometrically; its visual obstruction was not separately measured."
+      },
+      "horizontalPageOverflow": false
+    },
+    {
+      "route": "Import",
+      "timestamp": "2026-09-03T17:17:42.516Z",
+      "clientWidth": 360,
+      "cssViewport": {
+        "height": 812,
+        "width": 375
+      },
+      "documentScrollWidth": 360,
+      "focus": {
+        "keyboardFocus": true,
+        "label": "Hide folder and file preparation guide",
+        "obstructions": [
+          {
+            "overlaps": false,
+            "position": "sticky",
+            "rect": {
+              "bottom": 64,
+              "height": 64,
+              "left": 0,
+              "right": 360,
+              "top": 0,
+              "width": 360,
+              "x": 0,
+              "y": 0
+            },
+            "tag": "HEADER"
+          },
+          {
+            "overlaps": true,
+            "position": "fixed",
+            "rect": {
+              "bottom": 812,
+              "height": 812,
+              "left": 0,
+              "right": 360,
+              "top": 0,
+              "width": 360,
+              "x": 0,
+              "y": 0
+            },
+            "tag": "DIV"
+          }
+        ],
+        "rect": {
+          "bottom": 426,
+          "height": 40,
+          "left": 256.125,
+          "right": 327,
+          "top": 386,
+          "width": 70.875,
+          "x": 256.125,
+          "y": 386
+        },
+        "withinViewport": true,
+        "overlapsHeaderOrNavigation": false,
+        "overallObstructionResult": "PARTIAL: a fixed full-viewport div overlaps geometrically; its visual obstruction was not separately measured."
+      },
+      "horizontalPageOverflow": false
+    },
+    {
+      "route": "Project Detail",
+      "timestamp": "2026-09-03T17:17:44.150Z",
+      "clientWidth": 360,
+      "cssViewport": {
+        "height": 812,
+        "width": 375
+      },
+      "documentScrollWidth": 360,
+      "focus": {
+        "keyboardFocus": true,
+        "label": "Technical configuration and record detailsShowcase template configuration, cached validati",
+        "obstructions": [
+          {
+            "overlaps": false,
+            "position": "sticky",
+            "rect": {
+              "bottom": 64,
+              "height": 64,
+              "left": 0,
+              "right": 360,
+              "top": 0,
+              "width": 360,
+              "x": 0,
+              "y": 0
+            },
+            "tag": "HEADER"
+          },
+          {
+            "overlaps": false,
+            "position": "sticky",
+            "rect": {
+              "bottom": 185,
+              "height": 121,
+              "left": 16,
+              "right": 344,
+              "top": 64,
+              "width": 328,
+              "x": 16,
+              "y": 64
+            },
+            "tag": "NAV"
+          },
+          {
+            "overlaps": true,
+            "position": "fixed",
+            "rect": {
+              "bottom": 812,
+              "height": 812,
+              "left": 0,
+              "right": 360,
+              "top": 0,
+              "width": 360,
+              "x": 0,
+              "y": 0
+            },
+            "tag": "DIV"
+          }
+        ],
+        "rect": {
+          "bottom": 495.25,
+          "height": 175,
+          "left": 17,
+          "right": 343,
+          "top": 320.25,
+          "width": 326,
+          "x": 17,
+          "y": 320.25
+        },
+        "withinViewport": true,
+        "overlapsHeaderOrNavigation": false,
+        "overallObstructionResult": "PARTIAL: a fixed full-viewport div overlaps geometrically; its visual obstruction was not separately measured."
+      },
+      "horizontalPageOverflow": false
+    },
+    {
+      "route": "Participant Preview",
+      "timestamp": "2026-09-03T17:17:45.174Z",
+      "clientWidth": 360,
+      "cssViewport": {
+        "height": 812,
+        "width": 375
+      },
+      "documentScrollWidth": 360,
+      "focus": {
+        "tested": false,
+        "reason": "No keyboard-focused control during this measurement"
+      },
+      "horizontalPageOverflow": false,
+      "state": "Unavailable-preview boundary only",
+      "result": "PARTIAL"
+    }
+  ]
+}

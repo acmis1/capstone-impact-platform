@@ -123,9 +123,9 @@ export function BulkProjectReviewPanel({
     >
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 id="bulk-review-heading" className="text-base font-semibold text-foreground">
+          <h2 id="bulk-review-heading" className="text-base font-semibold text-foreground">
             Review selected projects
-          </h3>
+          </h2>
           <p className="text-sm text-muted-foreground">
             {selectedProjects.length} project{selectedProjects.length === 1 ? '' : 's'} selected. Every action is checked first, and you confirm before anything changes.
           </p>

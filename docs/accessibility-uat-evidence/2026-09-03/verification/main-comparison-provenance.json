@@ -1,0 +1,20 @@
+{
+  "baseCommit": "6125bb56a2c71c16a45cce44851696e8b09a3b4c",
+  "worktree": "Temporary detached origin/main suite comparison",
+  "command": "npm run test:run --workspace=apps/admin-cms",
+  "exitCode": 1,
+  "testFiles": {
+    "passed": 282,
+    "failed": 2,
+    "total": 285,
+    "skipped": 1
+  },
+  "tests": {
+    "passed": 4314,
+    "failed": 2,
+    "total": 4330,
+    "skipped": 14
+  },
+  "conditions": "Same installed Node/npm/dependency tree; no task-owned browser tabs or development servers. The focused follow-up started after this comparison completed. An ephemeral safe.directory environment setting permitted the sandbox user to read this task-created worktree.",
+  "conclusion": "The same migration-baseline timeout reproduces on origin/main. Full-suite timing is resource/concurrency sensitive; this does not make the branch run pass."
+}

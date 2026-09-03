@@ -1,0 +1,37 @@
+
+> admin-cms@0.1.0 test:run
+> vitest run src/lib/designTokenContrast.test.ts
+
+
+ RUN  v4.1.10 D:/IT RMIT/Capstone/.worktrees/accessibility-uat-final-evidence/apps/admin-cms
+
+ ❯ src/lib/designTokenContrast.test.ts (38 tests | 1 failed) 30ms
+     × resolves the actual focused text and background utilities to at least 4.5:1 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/designTokenContrast.test.ts > Focused skip-link contrast > resolves the actual focused text and background utilities to at least 4.5:1
+AssertionError: expected 4.378778588169904 to be greater than or equal to 4.5
+ ❯ src/lib/designTokenContrast.test.ts:452:120
+    450|     expect(foreground).not.toBeNull();
+    451|     expect(background).not.toBeNull();
+    452|     expect(getContrastRatio(tokens[foreground!.token], renderedBackgro…
+       |                                                                                                                        ^
+    453|   });
+    454| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 37 passed (38)
+   Start at  21:25:45
+   Duration  855ms (transform 153ms, setup 0ms, import 605ms, tests 30ms, environment 0ms)
+
+npm error Lifecycle script `test:run` failed with error:
+npm error code 1
+npm error path D:\IT RMIT\Capstone\.worktrees\accessibility-uat-final-evidence\apps\admin-cms
+npm error workspace admin-cms@0.1.0
+npm error location D:\IT RMIT\Capstone\.worktrees\accessibility-uat-final-evidence\apps\admin-cms
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c vitest run src/lib/designTokenContrast.test.ts

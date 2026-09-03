@@ -7,6 +7,7 @@
     "npm": ">=11.11.0 <12"
   },
   "scripts": {
+    "verify:accessibility-uat-evidence": "tsx src/scripts/verifyAccessibilityUatEvidence.ts",
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
     "start": "next start",

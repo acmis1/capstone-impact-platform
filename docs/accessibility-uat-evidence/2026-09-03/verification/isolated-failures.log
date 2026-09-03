@@ -1,0 +1,13 @@
+
+> admin-cms@0.1.0 test:run
+> vitest run src/security/postgres17MaintainPrivilegeAlignmentMigration.test.ts src/components/admin-dashboard/ProjectTableContainer.integration.test.tsx src/assistive-validation/__tests__/duplicateRanker.test.ts src/scripts/repositoryChecks.test.ts
+
+
+ RUN  v4.1.10 D:/IT RMIT/Capstone/.worktrees/accessibility-uat-final-evidence/apps/admin-cms
+
+
+ Test Files  4 passed (4)
+      Tests  102 passed (102)
+   Start at  00:33:07
+   Duration  5.78s (transform 483ms, setup 0ms, import 1.64s, tests 9.52s, environment 1.48s)
+

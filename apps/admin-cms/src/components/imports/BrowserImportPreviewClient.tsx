@@ -510,7 +510,7 @@ export default function BrowserImportPreviewClient() {
                   type="button"
                   onClick={handleRequestPreview}
                   disabled={isLoading || isPreparingOrLocked}
-                  className="bg-primary hover:bg-primary/90 font-semibold"
+                  className="bg-primary hover:bg-primary font-semibold shadow-xs hover:shadow-md"
                 >
                   <Search className="h-4 w-4 mr-2" aria-hidden="true" />
                   {isLoading ? 'Checking files…' : 'Check files and continue'}

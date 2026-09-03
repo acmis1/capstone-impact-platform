@@ -1,0 +1,102 @@
+
+> build:admin
+> npm run build --workspace=apps/admin-cms
+
+
+> admin-cms@0.1.0 build
+> next build
+
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of D:\IT RMIT\Capstone\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * D:\IT RMIT\Capstone\.worktrees\accessibility-uat-final-evidence\package-lock.json
+
+▲ Next.js 16.2.6 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+Turbopack build encountered 1 warnings:
+./.worktrees/accessibility-uat-final-evidence/apps/admin-cms/next.config.ts
+Encountered unexpected file in NFT list
+A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:
+- filesystem operations (like path.join, path.resolve or fs.readFile), or
+- very dynamic requires (like require('./' + foo)).
+To resolve this, you can
+- remove them if possible, or
+- only use them in development, or
+- make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or
+- add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)
+
+Import trace:
+  App Route:
+    ./.worktrees/accessibility-uat-final-evidence/apps/admin-cms/next.config.ts
+    ./.worktrees/accessibility-uat-final-evidence/apps/admin-cms/src/local-development/localEnvironmentFile.ts
+    ./.worktrees/accessibility-uat-final-evidence/apps/admin-cms/src/projects/localPublicationExecution.ts
+    ./.worktrees/accessibility-uat-final-evidence/apps/admin-cms/src/app/api/projects/[publicId]/deployment-reconciliation/route.ts
+
+
+✓ Compiled successfully in 6.5s
+  Running TypeScript ...
+  Finished TypeScript in 29.0s ...
+  Collecting page data using 15 workers ...
+  Generating static pages using 15 workers (0/15) ...
+  Generating static pages using 15 workers (3/15) 
+  Generating static pages using 15 workers (7/15) 
+  Generating static pages using 15 workers (11/15) 
+✓ Generating static pages using 15 workers (15/15) in 475ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /admin
+├ ƒ /admin/imports
+├ ƒ /admin/imports/[batchId]
+├ ƒ /admin/imports/new
+├ ƒ /admin/projects/[publicId]
+├ ƒ /admin/public-feed
+├ ƒ /admin/staff
+├ ƒ /api/health
+├ ƒ /api/imports/[batchId]/submit-for-review
+├ ƒ /api/imports/admin-reference/inspect
+├ ƒ /api/imports/preview
+├ ƒ /api/imports/stage-media
+├ ƒ /api/imports/stage-metadata
+├ ƒ /api/projects
+├ ƒ /api/projects/[publicId]/deployment-reconciliation
+├ ƒ /api/projects/[publicId]/local-archive
+├ ƒ /api/projects/[publicId]/local-publication
+├ ƒ /api/projects/[publicId]/participant-preview
+├ ƒ /api/projects/[publicId]/participant-preview/correction-resolution
+├ ƒ /api/projects/[publicId]/participant-preview/reminders
+├ ƒ /api/projects/[publicId]/publication-plan
+├ ƒ /api/projects/[publicId]/review-action
+├ ƒ /api/projects/[publicId]/staging-archive
+├ ƒ /api/projects/[publicId]/staging-publication
+├ ƒ /api/projects/bulk-review/execute
+├ ƒ /api/projects/bulk-review/preflight
+├ ƒ /api/public-feed/activation
+├ ƒ /api/public-feed/recovery
+├ ƒ /api/public-feed/rollback
+├ ƒ /api/public-feed/rollback/prepare
+├ ƒ /api/readiness
+├ ƒ /api/staff/invitations
+├ ƒ /api/staff/test-accounts
+├ ƒ /auth/confirm
+├ ƒ /auth/confirm/accept
+├ ○ /auth/forgot-password
+├ ƒ /auth/recovery/accept
+├ ƒ /auth/recovery/callback
+├ ƒ /auth/recovery/invalid
+├ ƒ /auth/reset-password
+├ ƒ /auth/set-password
+├ ○ /icon
+├ ○ /login
+└ ƒ /participant-preview/[token]
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

@@ -56,9 +56,9 @@ export function DashboardMetricsSummary({ metrics }: DashboardMetricsSummaryProp
       aria-labelledby="project-metrics-heading"
       className={STRUCTURAL_SURFACE_CLASS_NAME}
     >
-      <h3 id="project-metrics-heading" className="sr-only">
+      <h2 id="project-metrics-heading" className="sr-only">
         Project record summary
-      </h3>
+      </h2>
 
       {/* Explicit list roles rather than `<ul>/<li>`: Tailwind preflight strips the list marker,
           which drops native list semantics in Safari/VoiceOver. */}

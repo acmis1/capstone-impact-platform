@@ -1,0 +1,231 @@
+{
+  "version": 1,
+  "screenshots": [
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/contrast-after.png",
+      "width": 1280,
+      "height": 800,
+      "bytes": 74767,
+      "sha256": "d04975f5f87a410e636f4fb4d0c293d41e10989c6e19132ed09a498fb7de802a"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/contrast-before.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 68972,
+      "sha256": "1e417e3a6ad3ec43c7f08f4a9d4c5523d54a624639ceff3fab24b4d8f3c1b107"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/heading-hierarchy-after.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 68164,
+      "sha256": "ce374706b69430f512adea13ca14736850f8bbe8e5fe37f6af38ef4aeeb6c880"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/heading-hierarchy-before.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 67804,
+      "sha256": "1522618995f466385aec78ffd7a5eb2a4c014655a116ca6adb2f8b2474e1e0d4"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/import-batch-detail-disclosure.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 87883,
+      "sha256": "70b2ee05bee7738045c2ff9069c7123144ec76c3c7a9a4b0312a3461ceed98f4"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/import-workflow-controlled-failure.png",
+      "width": 1280,
+      "height": 800,
+      "bytes": 71996,
+      "sha256": "668d7531f8cbf0be4fe4c9810b693544809f5f60679df6bdec3e25baf8e59f8b"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/import-workflow-mobile-375px.png",
+      "width": 750,
+      "height": 1624,
+      "bytes": 145269,
+      "sha256": "74c83484140757509743be1abb2743c867f9733c127e7a0f3845db068cfec059"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/import-workflow-new-keyboard.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 64268,
+      "sha256": "a08004dc550721110b00bb9e8672dd30fba8c629852d71377f8f904a510e8efe"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/login-keyboard-focus.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 74611,
+      "sha256": "f8fdc42e146269f0e0533d82281b94e4f8b3f608bfdf3e32cf81fe0e2f5b3465"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/long-content-filename.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 67829,
+      "sha256": "ecc3333b4bd0da7075e5aaffdb3bc3dc876e1f508e4910fc876ffaeff5b32e2c"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/long-content-summary.png",
+      "width": 1280,
+      "height": 800,
+      "bytes": 78918,
+      "sha256": "92814b732d98b421b521c29811badeee7b0b5ce9cab5ca926dd19e4d809fd433"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/long-content-title.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 74548,
+      "sha256": "8e29fda5026f4eab3e9545a958ebcd5347843c1e33c29ace26a8c85bea70862c"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/multi-select-search-focus.png",
+      "width": 1280,
+      "height": 800,
+      "bytes": 60205,
+      "sha256": "0a351430b218ee37fd82c962025fdf360145a5e7ab443c625686665af8a7b8a0"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/participant-preview-browser-zoom-200.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 61230,
+      "sha256": "ba1bc6c9c490dd3888c68f6a4f1adfb2c90040ff3abd6d0c051f74578aa165ac"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/participant-preview-controlled-failure.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 25731,
+      "sha256": "355e30f21c5314d79db2a4fc4c68fa3a4450b127b7df3d7321b90178d33163a5"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/participant-preview-mobile-375px.png",
+      "width": 750,
+      "height": 1624,
+      "bytes": 114867,
+      "sha256": "54aff51ad101dc6f7b76edec111a5d1b35588c9682c259795c6c0bc1380fd5bb"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/participant-preview-reading-order.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 54931,
+      "sha256": "c49da1e03d6a3aa613318469eef67d9079db44d02ae0869c50484a57a00b75c9"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/project-detail-browser-zoom-200.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 79770,
+      "sha256": "88926aff7b3d2b2d41568615c1eac63b013ddb4d5282caec1541f79f626dbb0f"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/project-detail-controlled-failure.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 48470,
+      "sha256": "742ccf8ffbc76570dcb73e1fb6066abcc07356b5ce51076e5a3cd74a0a65525d"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/project-detail-dialog-focus-restore.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 49045,
+      "sha256": "dfa033042504c8fd9a72984c79e47e2bb5bad4d09107294baccd883b1f62b79e"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/project-detail-disclosure-focus.png",
+      "width": 1280,
+      "height": 800,
+      "bytes": 73501,
+      "sha256": "c349d24f2ed307c755872b067e6e47bebac0b7002183c40c28351d50b422d63a"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/project-detail-mobile-375px.png",
+      "width": 750,
+      "height": 1624,
+      "bytes": 129711,
+      "sha256": "a61d87d0f97eb478023cfdd72e885fdcefdd8755d4f927f077d8b8b0bad2ba9e"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-200pct-zoom.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 63051,
+      "sha256": "3b8d7d5414adaad68b48876440d0987da17165528597495e2aad82219290a357"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-browser-zoom-200.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 63051,
+      "sha256": "3b8d7d5414adaad68b48876440d0987da17165528597495e2aad82219290a357"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-desktop-keyboard.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 70828,
+      "sha256": "b938d73d18ab177b2f9d8fb49ced2816315a654915626adcaa04483d10dae166"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-mobile-375px.png",
+      "width": 750,
+      "height": 1624,
+      "bytes": 133074,
+      "sha256": "8d9e35a0f3b57977721091ac30eddaeaa438eca65f2e63813e1d5e5d9a639396"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/public-feed-keyboard-focus.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 67315,
+      "sha256": "313a3a3f1a3cd55ed53620c5b651ae2bacea0d47397349ce3ce97cb080c0babe"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/role-availability-admin-vs-reviewer.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 64957,
+      "sha256": "192c53511eb8a5e9d7b2e01b4ed667ecf8e6efd660f733b4d3c8a1740c18b019"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/role-denied-action-staff-ui.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 39099,
+      "sha256": "3db46851b360a935fa1a59c64d20852542dfb86d8b8ba6d6483dd8556af5b58b"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/skip-link-after.png",
+      "width": 1280,
+      "height": 800,
+      "bytes": 74792,
+      "sha256": "178c0f750f1892e651c931545370da9a8a3435609ef5e02d55e7ba8bb8ccadeb"
+    },
+    {
+      "filename": "docs/accessibility-uat-evidence/2026-09-03/screenshots/staff-access-keyboard-focus.png",
+      "width": 1264,
+      "height": 705,
+      "bytes": 60866,
+      "sha256": "831d921bbe4068ff73b371579040e45743b010ba8d26afd96a028e335d8b9010"
+    }
+  ],
+  "duplicates": [
+    {
+      "sha256": "3b8d7d5414adaad68b48876440d0987da17165528597495e2aad82219290a357",
+      "filenames": [
+        "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-200pct-zoom.png",
+        "docs/accessibility-uat-evidence/2026-09-03/screenshots/projects-index-browser-zoom-200.png"
+      ]
+    }
+  ]
+}

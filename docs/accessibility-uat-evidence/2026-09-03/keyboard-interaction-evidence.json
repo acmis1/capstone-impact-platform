@@ -1,0 +1,136 @@
+{
+  "collectedAt": "2026-09-03T17:18:26.175Z",
+  "dataPolicy": "Synthetic Local data; no credentials, cookies, tokens or secret URLs retained.",
+  "overallResult": "PARTIAL",
+  "routes": [
+    {
+      "route": "Login",
+      "role": "Administrator",
+      "result": "PARTIAL",
+      "controls": [
+        "Email",
+        "Forgot password link",
+        "Password",
+        "Sign in"
+      ],
+      "keyboardSequence": "Tab to Email; type synthetic account; Tab to Forgot password; Tab to Password; type existing local credential; Tab to Sign in; Enter.",
+      "activationResult": "Projects page rendered after successful sign-in.",
+      "focusRestoration": "Not applicable",
+      "keyboardTrapObserved": false,
+      "limitations": [
+        "Password-recovery activation was not tested."
+      ]
+    },
+    {
+      "route": "Projects",
+      "role": "Administrator",
+      "result": "PARTIAL",
+      "controls": [
+        "Skip to main content",
+        "New import",
+        "Search projects",
+        "Search",
+        "Clear search and filters"
+      ],
+      "keyboardSequence": "Reload; Tab reveals skip link; Enter moves focus to main; Tab focuses New import; Tab focuses Search projects; type unmatched synthetic query; Tab to Search; Enter; activate Clear search and filters with Enter.",
+      "activationResult": "Main received focus; search rendered No projects match. Clear search and filters was activated; its immediate result was not separately retained.",
+      "focusRestoration": "Main content receives skip-link focus.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/skip-link-after.png",
+      "limitations": [
+        "Sorting, pagination and every bulk action have not been exercised in a continuous keyboard sequence."
+      ]
+    },
+    {
+      "route": "Import",
+      "role": "Administrator",
+      "result": "PARTIAL",
+      "controls": [
+        "New import",
+        "Choose School reference spreadsheet",
+        "Check spreadsheet"
+      ],
+      "keyboardSequence": "Enter on New import; choose a synthetic invalid file through the file chooser; Tab from file input to Check spreadsheet; Enter.",
+      "activationResult": "Visible Check Failed alert explains that the spreadsheet could not be checked.",
+      "focusRestoration": "Check spreadsheet remains focused after validation.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/import-workflow-controlled-failure.png",
+      "limitations": [
+        "The chooser was opened by pointer; confirm/save/media steps were not tested."
+      ]
+    },
+    {
+      "route": "Project Detail",
+      "role": "Administrator",
+      "result": "PARTIAL",
+      "controls": [
+        "Technical details and history anchor",
+        "Technical configuration disclosure",
+        "Edit project information",
+        "Disciplines MultiSelect",
+        "Search disciplines",
+        "Save changes"
+      ],
+      "keyboardSequence": "Enter on section anchor; Tab to disclosure; Enter expands; Enter collapses; Enter on Edit project information; Enter on Disciplines; type Virtual; Escape; save temporary synthetic summary and restore it.",
+      "activationResult": "Disclosure expanded and collapsed; search reduced options from 8 to 1; summary saved and then restored.",
+      "focusRestoration": "Escape returned focus to Disciplines trigger.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshots": [
+        "screenshots/project-detail-disclosure-focus.png",
+        "screenshots/multi-select-search-focus.png"
+      ],
+      "limitations": [
+        "Not every review, media or publication action was exercised."
+      ]
+    },
+    {
+      "route": "Participant Preview",
+      "role": "Participant",
+      "result": "PENDING",
+      "controls": [],
+      "keyboardSequence": "Not exercised in this pass.",
+      "activationResult": "Blocked before entry: Generate participant preview returned Access denied in the Local Administrator session.",
+      "focusRestoration": "Not tested",
+      "keyboardTrapObserved": null,
+      "limitations": [
+        "No active participant URL was obtained; existing reading-order screenshots do not prove keyboard operation."
+      ]
+    },
+    {
+      "route": "Staff access",
+      "role": "Administrator",
+      "result": "PARTIAL",
+      "controls": [
+        "Staff access navigation",
+        "Account menu",
+        "Log out item"
+      ],
+      "keyboardSequence": "Enter on Staff access navigation; Tab to account menu; Enter opens menu; Escape closes it.",
+      "activationResult": "Staff directory rendered; account menu opened and closed. Invitations are paused in the local environment.",
+      "focusRestoration": "Escape returned focus to the account-menu trigger.",
+      "keyboardTrapObserved": false,
+      "limitations": [
+        "Invitation controls unavailable; no invitation was submitted."
+      ]
+    },
+    {
+      "route": "Admin deployment/history",
+      "role": "Administrator",
+      "result": "PARTIAL",
+      "controls": [
+        "Publishing navigation",
+        "Staff access navigation",
+        "Account menu",
+        "Choose a project to publish",
+        "Advanced publishing details"
+      ],
+      "keyboardSequence": "Enter on Publishing; Tab four times through Staff access, account menu and Choose a project to publish to Advanced publishing details; Enter expands; Enter collapses.",
+      "activationResult": "Advanced publishing details toggled open and closed.",
+      "focusRestoration": "Focus remained on the disclosure summary.",
+      "keyboardTrapObserved": false,
+      "limitations": [
+        "History is empty; setup, repair and publication actions were not activated."
+      ]
+    }
+  ]
+}

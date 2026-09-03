@@ -1,1 +1,2 @@
 tools/assistive-validation-benchmark/src/assistive_validation_benchmark/ocr_title_fullpage_holdout_v2/__init__.py whitespace=-blank-at-eof
+docs/accessibility-uat-evidence/2026-09-03/verification/*.log -whitespace

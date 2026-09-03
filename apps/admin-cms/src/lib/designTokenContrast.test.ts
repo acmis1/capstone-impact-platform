@@ -418,6 +418,7 @@ describe("Review-action rendered contrast (WCAG 2.2 AA)", () => {
 
   it("keeps approve and archive action text at >= 4.5:1", () => {
     expectActionTextContrast("approve");
+    expectActionTextContrast("approve", "hover");
     expectActionTextContrast("archive");
   });
 
@@ -435,6 +436,34 @@ describe("Review-action rendered contrast (WCAG 2.2 AA)", () => {
       ratio,
       `request_changes border --${border!.token} against card is ${ratio.toFixed(2)}:1`,
     ).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("Focused skip-link contrast", () => {
+  it("resolves the actual focused text and background utilities to at least 4.5:1", () => {
+    const source = fs.readFileSync(path.resolve(__dirname, "../components/admin-shell/AdminShellClient.tsx"), "utf8");
+    const classes = source.match(/href="#admin-main-content"\s+className="([^"]+)"/)?.[1];
+    expect(classes).toBeDefined();
+    const tokens = extractCssTokens();
+    const foreground = findLastColorUtility(classes!, "text", Object.keys(tokens), "focus");
+    const background = findLastColorUtility(classes!, "bg", Object.keys(tokens), "focus");
+    expect(foreground).not.toBeNull();
+    expect(background).not.toBeNull();
+    expect(getContrastRatio(tokens[foreground!.token], renderedBackgroundHex(background!, tokens, tokens.background))).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("Primary button hover contrast", () => {
+  it("keeps normal and hover text at least 4.5:1 over the page surface", () => {
+    const tokens = extractCssTokens();
+    const classes = buttonVariants({ variant: "default" });
+    for (const state of ["", "hover"]) {
+      const foreground = findLastColorUtility(classes, "text", Object.keys(tokens), state);
+      const background = findLastColorUtility(classes, "bg", Object.keys(tokens), state);
+      expect(foreground).not.toBeNull();
+      expect(background).not.toBeNull();
+      expect(getContrastRatio(tokens[foreground!.token], renderedBackgroundHex(background!, tokens, tokens.background))).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });
 
