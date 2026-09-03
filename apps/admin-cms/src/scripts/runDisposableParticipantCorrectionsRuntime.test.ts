@@ -33,6 +33,24 @@ describe('disposable participant corrections runner', () => {
     expect(stack.inspectDisposableResidue).toHaveBeenCalledTimes(1);
     expect(process.exitCode).toBe(0);
   });
+  it('fails boundedly on identity construction before any disposable resource operation', async () => {
+    vi.mocked(stack.createDisposableStackIdentity).mockImplementation(() => {
+      throw new Error('identity-construction-secret-sentinel');
+    });
+
+    await runDisposableParticipantCorrectionsRuntime();
+
+    expect(stack.createDisposableNetwork).not.toHaveBeenCalled();
+    expect(stack.startDisposableStack).not.toHaveBeenCalled();
+    expect(stack.assertDatabaseContainerOwned).not.toHaveBeenCalled();
+    expect(verifyParticipantOwnedCorrectionsRuntime).not.toHaveBeenCalled();
+    expect(stack.removeDisposableResidue).not.toHaveBeenCalled();
+    expect(stack.inspectDisposableResidue).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls))
+      .not.toContain('identity-construction-secret-sentinel');
+    expect(vi.mocked(console.error)).toHaveBeenCalledWith('FAIL: participant-owned corrections runtime');
+  });
   it('fails before mutation when container ownership is unproven and still cleans up', async () => {
     vi.mocked(stack.assertDatabaseContainerOwned).mockImplementation(() => { throw new Error('UNPROVEN'); });
     await runDisposableParticipantCorrectionsRuntime();

@@ -2,7 +2,7 @@ import path from 'node:path';
 import {
   assertDatabaseContainerOwned, createDisposableNetwork, createDisposableStackIdentity,
   inspectDisposableResidue, preflightDisposablePortBase, removeDisposableResidue,
-  residueIsAbsent, startDisposableStack, stopDisposableStack,
+  residueIsAbsent, startDisposableStack, stopDisposableStack, type DisposableStackIdentity,
 } from '../recovery/disposableSupabaseStack';
 import { verifyParticipantOwnedCorrectionsRuntime } from './verifyParticipantOwnedCorrectionsRuntime';
 
@@ -10,13 +10,14 @@ import { verifyParticipantOwnedCorrectionsRuntime } from './verifyParticipantOwn
 export async function runDisposableParticipantCorrectionsRuntime(): Promise<void> {
   const repositoryRoot = path.resolve(__dirname, '../../../..');
   const startedAt = Date.now();
-  const identity = createDisposableStackIdentity({
-    repositoryRoot, mode: 'migrated-source', tag: 'pcorr',
-    portBase: await preflightDisposablePortBase(), postgresMajorVersion: 17,
-  });
+  let identity: DisposableStackIdentity | undefined;
   let networkId = '';
   let startAttempted = false;
   try {
+    identity = createDisposableStackIdentity({
+      repositoryRoot, mode: 'migrated-source', tag: 'pcorr',
+      portBase: await preflightDisposablePortBase(), postgresMajorVersion: 17,
+    });
     networkId = createDisposableNetwork(identity);
     startAttempted = true;
     startDisposableStack(repositoryRoot, identity, networkId);
@@ -28,17 +29,19 @@ export async function runDisposableParticipantCorrectionsRuntime(): Promise<void
     console.error('FAIL: participant-owned corrections runtime');
     process.exitCode = 1;
   } finally {
-    if (startAttempted) {
+    if (identity && startAttempted) {
       try { stopDisposableStack(repositoryRoot, identity, networkId); }
       catch { /* Exact-identity residue cleanup below is authoritative. */ }
     }
-    try {
-      removeDisposableResidue(identity);
-      if (!residueIsAbsent(inspectDisposableResidue(identity))) throw new Error('RESIDUE');
-      console.log('PASS: disposable containers, volumes, network and workdir removed');
-    } catch {
-      console.error('FAIL: disposable cleanup or residue verification');
-      process.exitCode = 1;
+    if (identity) {
+      try {
+        removeDisposableResidue(identity);
+        if (!residueIsAbsent(inspectDisposableResidue(identity))) throw new Error('RESIDUE');
+        console.log('PASS: disposable containers, volumes, network and workdir removed');
+      } catch {
+        console.error('FAIL: disposable cleanup or residue verification');
+        process.exitCode = 1;
+      }
     }
     console.log(`Participant corrections elapsed seconds: ${Math.ceil((Date.now() - startedAt) / 1000)}`);
   }
