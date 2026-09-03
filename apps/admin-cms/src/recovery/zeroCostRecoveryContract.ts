@@ -34,6 +34,7 @@ export const REFUSED_SOURCE_PROJECT_REFS: Readonly<Record<string, string>> = Obj
 
 export const CANONICAL_STORAGE_BUCKETS = [
   'project-drafts-private',
+  'participant-corrections-private',
   'project-public-assets',
   'public-feeds',
 ] as const;
@@ -41,7 +42,7 @@ export const CANONICAL_STORAGE_BUCKETS = [
 export type CanonicalStorageBucket = (typeof CANONICAL_STORAGE_BUCKETS)[number];
 
 /** Buckets whose object keys must never reach an ordinary terminal summary. */
-export const PRIVATE_STORAGE_BUCKETS: readonly string[] = ['project-drafts-private'];
+export const PRIVATE_STORAGE_BUCKETS: readonly string[] = ['project-drafts-private', 'participant-corrections-private'];
 
 /** Ordered logical-backup artifacts. The restore applies them in exactly this order. */
 export const DATABASE_BACKUP_ARTIFACTS = [

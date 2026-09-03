@@ -1,14 +1,32 @@
+import { renderParticipantCorrectionForm, type CorrectionFormState } from './participantCorrectionHtml';
 import {
   ParticipantPreviewMediaViewRef,
   ParticipantPreviewResponseState,
   ParticipantPreviewSnapshot,
 } from '../domain/participantPreview';
+import { validateProjectControlledUrl } from '../domain/projectControlledUrl';
 import { MAX_CORRECTION_COMMENT_LENGTH } from './participantPreviewCorrectionComment';
 
 export class ParticipantPreviewMediaAccessibilityError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ParticipantPreviewMediaAccessibilityError';
+  }
+}
+
+/**
+ * Raised when the immutable snapshot carries a populated controlled project link that is not a
+ * usable, safe destination. The public route catches it and serves the same generic
+ * preview-unavailable response it already serves for undescribable media.
+ *
+ * Failing closed is deliberate: quietly dropping the offending field would show the participant
+ * incomplete evidence and still let them confirm it, which is exactly the confirm-A/publish-B
+ * problem this contract exists to prevent.
+ */
+export class ParticipantPreviewEvidenceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ParticipantPreviewEvidenceError';
   }
 }
 
@@ -140,7 +158,7 @@ function renderMedia(media: ParticipantPreviewMediaViewRef[], accessibilityText:
  * Renders exactly one authoritative response state. Both unresponded options remain plain,
  * same-current-URL POST forms with no JavaScript and no mutable project data.
  */
-function renderResponseSection(responseState: ParticipantPreviewResponseState): string {
+function renderResponseSection(responseState: ParticipantPreviewResponseState, correctionForm?: CorrectionFormState): string {
   if (responseState.type === 'confirmed') {
     const confirmedAtDisplay = escapeHtml(new Date(responseState.confirmedAt).toUTCString());
     return `<aside class="response-column" aria-labelledby="response-heading">
@@ -169,6 +187,7 @@ function renderResponseSection(responseState: ParticipantPreviewResponseState): 
         </div>
         <p class="response-note">Staff will review your request. The correction has not yet been applied.</p>
       </div>
+      ${correctionForm ? renderParticipantCorrectionForm(correctionForm) : ''}
     </aside>`;
   }
 
@@ -188,7 +207,7 @@ function renderResponseSection(responseState: ParticipantPreviewResponseState): 
       <details class="correction-disclosure">
         <summary>Request corrections</summary>
         <div class="correction-content">
-          <p>Describe what staff should change in this exact preview.</p>
+          <p>Describe what needs to change in this exact preview. You can then submit your corrected source package for staff review.</p>
           <form method="POST" class="correction-form">
             <input type="hidden" name="action" value="request_correction" />
             <label for="correction-comment">What needs to change?</label>
@@ -266,6 +285,51 @@ function renderProjectContext(snapshot: ParticipantPreviewSnapshot): string {
         ${renderList(snapshot.teamMembers, 'team-list')}
       </section>
     </div>
+  </section>`;
+}
+
+/**
+ * The three controlled project links, as ordinary participant-reviewable evidence.
+ *
+ * Deliberately plain external anchors: no embed, no iframe, no autoplay. A video link is a link
+ * here even though the public showcase may embed an allowlisted player, because the participant
+ * is confirming the destination, not previewing the presentation.
+ *
+ * Populated values are re-validated at render time rather than trusted from storage, so a
+ * tampered or drifted snapshot fails closed instead of producing an unsafe href. Absent values —
+ * `null` on a current snapshot, missing entirely on a historical one — render nothing at all, so
+ * there are never empty anchors. When no link exists the whole section is omitted.
+ */
+function renderControlledProjectLinks(snapshot: ParticipantPreviewSnapshot): string {
+  const fields: Array<{
+    value: string | null | undefined;
+    heading: string;
+    action: string;
+  }> = [
+    { value: snapshot.videoUrl, heading: 'Video', action: 'Open video' },
+    { value: snapshot.demoUrl, heading: 'Live demo / prototype', action: 'Open live demo / prototype' },
+    { value: snapshot.repositoryUrl, heading: 'Repository', action: 'Open repository' },
+  ];
+
+  const rendered = fields.flatMap(({ value, heading, action }) => {
+    if (value === null || value === undefined) return [];
+
+    const validation = validateProjectControlledUrl(value);
+
+    if (!validation.valid) {
+      throw new ParticipantPreviewEvidenceError(
+        `Participant preview evidence contains an unusable ${heading} link.`,
+      );
+    }
+
+    return [`<section><h3>${escapeHtml(heading)}</h3><ul class="reference-list external-links"><li><a href="${escapeHtml(validation.url)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(action)}<span class="link-purpose"> (opens in a new tab)</span></a></li></ul></section>`];
+  });
+
+  if (rendered.length === 0) return '';
+
+  return `<section class="review-section project-links-section" aria-labelledby="project-links-heading">
+    <div class="section-heading"><p class="section-kicker">Project evidence</p><h2 id="project-links-heading">Project links</h2></div>
+    <div class="reference-grid">${rendered.join('')}</div>
   </section>`;
 }
 
@@ -488,6 +552,13 @@ const PAGE_STYLE = `
     .project-introduction, .prose-field p { font-size: 1rem; }
     .accessible-content, .confirmation-choice { padding: 1rem; }
   }
+  .correction-package { margin-top: 1.5rem; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; overflow-wrap: anywhere; }
+  .correction-package p { margin: 0.75rem 0; }
+  .correction-file-field { margin: 1.25rem 0; min-width: 0; }
+  .correction-file-field label { font-weight: 700; display: block; }
+  .correction-file-field input { display: block; width: 100%; max-width: 100%; min-width: 0; font: inherit; }
+  .correction-file-field input:focus-visible, #package-error:focus { outline: 3px solid #176b87; outline-offset: 3px; }
+  #package-error { border: 2px solid #8b2525; padding: 1rem; margin: 1rem 0; }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
@@ -498,6 +569,7 @@ export function renderParticipantPreviewPage(params: {
   snapshot: ParticipantPreviewSnapshot;
   media: ParticipantPreviewMediaViewRef[];
   responseState: ParticipantPreviewResponseState;
+  correctionForm?: CorrectionFormState;
 }): string {
   const { snapshot, media, responseState } = params;
 
@@ -531,9 +603,10 @@ export function renderParticipantPreviewPage(params: {
       ${renderMedia(media, snapshot.accessibilityText)}
       ${renderAccessibleContent(snapshot)}
       ${renderProjectContext(snapshot)}
+      ${renderControlledProjectLinks(snapshot)}
       ${renderReferences(snapshot)}
     </article>
-    ${renderResponseSection(responseState)}
+    ${renderResponseSection(responseState, params.correctionForm)}
   </div>
 </main>
 <footer class="page-footer"><p>This private preview is provided for project review only. Contact your project coordinator if you need help.</p></footer>

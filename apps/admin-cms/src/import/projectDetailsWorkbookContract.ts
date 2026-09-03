@@ -41,6 +41,9 @@ export interface ProjectDetailsWorkbookMetadata {
   studyProgram: string;
   discipline: string;
   year: string;
+  videoUrl: string;
+  demoUrl: string;
+  repositoryUrl: string;
   /**
    * Searchable/selectable full textual version of the meaningful poster content. Required: the
    * public project page must carry a full text version of its image content.
@@ -49,7 +52,7 @@ export interface ProjectDetailsWorkbookMetadata {
   /** Concise descriptive text alternative/context for the poster image. Required. */
   accessibilityText: string;
   /**
-   * Staff-authored text alternative describing the meaningful content of `snapshot-1.png`.
+   * Project-team-authored text alternative describing the meaningful content of `snapshot-1.png`.
    *
    * Conditionally required, and therefore not a required *column*: the workbook parser cannot see
    * which files the package contains, so it only enforces the rules it can evaluate on its own
@@ -238,6 +241,38 @@ export const COLUMN_DEFINITIONS: ColumnDefinition[] = [
     internalField: 'year',
     required: true,
     aliases: ['project year', 'projectyear', 'year']
+  },
+  {
+    canonicalName: 'Project video URL',
+    internalField: 'videoUrl',
+    required: false,
+    aliases: [
+      'project video url',
+      'video url',
+      'videourl'
+    ]
+  },
+  {
+    canonicalName: 'Live demo URL',
+    internalField: 'demoUrl',
+    required: false,
+    aliases: [
+      'live demo url',
+      'demo url',
+      'demourl',
+      'prototype url'
+    ]
+  },
+  {
+    canonicalName: 'Source repository URL',
+    internalField: 'repositoryUrl',
+    required: false,
+    aliases: [
+      'source repository url',
+      'repository url',
+      'repositoryurl',
+      'repo url'
+    ]
   },
   {
     canonicalName: 'Showcase layout',

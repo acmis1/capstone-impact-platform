@@ -189,7 +189,7 @@ describe('release evaluation evidence ledger', () => {
       completed: true,
       residue: { projects: 0, batches: 0, storage: 0 },
       scopesChecked: ['projects', 'storage', 'batches'],
-      baselineChecks: { localAdminUnchanged: true, referenceTaxonomyUnchanged: true },
+      baselineChecks: { ordinaryLocalRowsUnchanged: true, localAdminUnchanged: true, referenceTaxonomyUnchanged: true },
       forcedFailureProbe: { completed: true, residue: { projects: 0, storage: 0 } },
     };
     const create = (runNumber: number, cleanupOverride = cleanup) => createReleaseEvaluationReport({
@@ -200,6 +200,10 @@ describe('release evaluation evidence ledger', () => {
     });
 
     expect(compareNormalizedReleaseReports(create(1), create(2))).toEqual({ comparable: true, mismatchFields: [] });
+    expect(compareNormalizedReleaseReports(
+      create(1),
+      create(2, { ...cleanup, baselineChecks: { ...cleanup.baselineChecks, ordinaryLocalRowsUnchanged: false } }),
+    ).comparable).toBe(false);
     expect(compareNormalizedReleaseReports(
       create(1),
       create(2, { ...cleanup, residue: { ...cleanup.residue, projects: 1 } }),

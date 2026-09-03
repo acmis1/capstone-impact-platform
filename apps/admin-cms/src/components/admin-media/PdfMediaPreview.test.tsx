@@ -35,7 +35,9 @@ describe('PdfMediaPreview', () => {
     expect(frame.getAttribute('tabindex')).toBe('-1');
     expect(frame.getAttribute('src')).toBe(validPdf.url);
     expect(frame.getAttribute('aria-hidden')).toBeNull();
-    const link = screen.getByRole('link', { name: 'Open PDF in a new tab' });
+    // File-specific wording: several media tiles can share one Project Detail page, so the
+    // accessible name has to say which file the action opens.
+    const link = screen.getByRole('link', { name: 'Open project.pdf in a new tab' });
     expect(link.getAttribute('href')).toBe(validPdf.url);
     expect(link.tabIndex).toBe(0);
     expect(link.getAttribute('target')).toBe('_blank');

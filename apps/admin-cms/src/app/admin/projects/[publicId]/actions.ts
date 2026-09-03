@@ -2,50 +2,33 @@
 
 import { requireAdmin } from '../../../../auth/requireAdmin';
 import { AdminAuthError } from '../../../../auth/authTypes';
-import { createSupabaseAdminClient } from '../../../../lib/supabase/admin';
+import { hasPermission } from '../../../../auth/permissions';
 import { ProjectMetadataActionResult, metadataResultMessage } from '../../../../projects/projectMetadata';
-import { SupabaseProjectMetadataGateway } from '../../../../projects/projectMetadataService';
-import { saveAuthorizedProjectMetadata } from '../../../../projects/projectMetadataAuthorization';
 import { SnapshotAltTextActionResult, snapshotAltTextResultMessage } from '../../../../projects/snapshotAltText';
-import {
-  SupabaseSnapshotAltTextGateway,
-  saveAuthorizedSnapshotAltText,
-} from '../../../../projects/snapshotAltTextService';
+import { PARTICIPANT_CONTENT_OWNED } from '../../../../projects/contentOwnership';
 
-export async function saveProjectMetadataAction(rawInput: unknown): Promise<ProjectMetadataActionResult> {
+/** Legacy staff action retained to deny old clients explicitly, without creating a database gateway. */
+export async function saveProjectMetadataAction(_rawInput: unknown): Promise<ProjectMetadataActionResult> {
+  void _rawInput; // Legacy payload is intentionally discarded before any persistence.
   try {
     const context = await requireAdmin();
-    return await saveAuthorizedProjectMetadata(context.permissions, new SupabaseProjectMetadataGateway(createSupabaseAdminClient()), rawInput, context.adminUserId);
+    if (!hasPermission(context.permissions, 'projects.edit')) return { ok: false, code: 'PERMISSION_DENIED', message: metadataResultMessage('PERMISSION_DENIED') };
+    return PARTICIPANT_CONTENT_OWNED;
   } catch (error) {
-    console.error('[Project metadata action failure]', error instanceof Error ? error.message : 'unknown');
-    if (error instanceof AdminAuthError) {
-      return { ok: false, code: 'PERMISSION_DENIED', message: metadataResultMessage('PERMISSION_DENIED') };
-    }
-    return { ok: false, code: 'INTERNAL_FAILURE', message: metadataResultMessage('INTERNAL_FAILURE') };
+    const code = error instanceof AdminAuthError ? 'PERMISSION_DENIED' : 'INTERNAL_FAILURE';
+    return { ok: false, code, message: metadataResultMessage(code) };
   }
 }
 
-/**
- * Saves the authoritative text alternative for one snapshot image.
- * Actor identity and permissions come from requireAdmin() on the server.
- * The browser supplies the project public id, target media asset id, text,
- * and project version. The database independently verifies that the media
- * asset belongs to that project and is a snapshot_image.
- */
-export async function saveSnapshotAltTextAction(rawInput: unknown): Promise<SnapshotAltTextActionResult> {
+/** Snapshot descriptions can only change through acceptance of a participant-authored package. */
+export async function saveSnapshotAltTextAction(_rawInput: unknown): Promise<SnapshotAltTextActionResult> {
+  void _rawInput;
   try {
     const context = await requireAdmin();
-    return await saveAuthorizedSnapshotAltText(
-      context.permissions,
-      new SupabaseSnapshotAltTextGateway(createSupabaseAdminClient()),
-      rawInput,
-      context.adminUserId,
-    );
+    if (!hasPermission(context.permissions, 'projects.edit')) return { ok: false, code: 'PERMISSION_DENIED', message: snapshotAltTextResultMessage('PERMISSION_DENIED') };
+    return PARTICIPANT_CONTENT_OWNED;
   } catch (error) {
-    console.error('[Snapshot alt text action failure]', error instanceof Error ? error.message : 'unknown');
-    if (error instanceof AdminAuthError) {
-      return { ok: false, code: 'PERMISSION_DENIED', message: snapshotAltTextResultMessage('PERMISSION_DENIED') };
-    }
-    return { ok: false, code: 'INTERNAL_FAILURE', message: snapshotAltTextResultMessage('INTERNAL_FAILURE') };
+    const code = error instanceof AdminAuthError ? 'PERMISSION_DENIED' : 'INTERNAL_FAILURE';
+    return { ok: false, code, message: snapshotAltTextResultMessage(code) };
   }
 }

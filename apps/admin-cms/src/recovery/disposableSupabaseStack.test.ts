@@ -5,7 +5,10 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { preflightDisposablePortBase, runDisposablePsql, type DisposableStackIdentity } from './disposableSupabaseStack';
+import {
+  createDisposableStackIdentity, preflightDisposablePortBase, runDisposablePsql,
+  type DisposableStackIdentity,
+} from './disposableSupabaseStack';
 import { ADD_CUSTOM_CLAIMS_ALLOWLIST_SQL } from './managedAuthSchemaCompatibility';
 
 vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }));
@@ -51,6 +54,105 @@ const allowedOptions = {
   singleTransaction: true,
   databaseUser: 'supabase_auth_admin',
 } as const;
+
+describe('disposable stack identity construction', () => {
+  it('removes only the exact partial workdir after setup failure without Docker cleanup', () => {
+    const sentinel = `constructor-setup-${randomBytes(16).toString('hex')}`;
+    const repositoryRoot = path.join(os.tmpdir(), sentinel);
+    const unrelatedDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'constructor-unrelated-'));
+    directories.push(unrelatedDirectory);
+    let createdWorkdir = '';
+    const originalMkdtempSync = fs.mkdtempSync;
+    vi.spyOn(fs, 'mkdtempSync').mockImplementation((prefix) => {
+      createdWorkdir = originalMkdtempSync(prefix);
+      return createdWorkdir;
+    });
+    vi.spyOn(fs, 'cpSync').mockImplementation(() => {
+      throw new Error(`${sentinel}: ${repositoryRoot}`);
+    });
+
+    let failure: unknown;
+    try {
+      createDisposableStackIdentity({
+        repositoryRoot, mode: 'migrated-source', portBase: 54_940,
+        postgresMajorVersion: 17, tag: 'unit',
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(createdWorkdir).not.toBe('');
+    expect(fs.existsSync(createdWorkdir)).toBe(false);
+    expect(fs.existsSync(unrelatedDirectory)).toBe(true);
+    expect(failure).toEqual(new Error('DISPOSABLE_STACK_SETUP_FAILED'));
+    expect(String(failure)).not.toContain(sentinel);
+    expect(String(failure)).not.toContain(repositoryRoot);
+    expect((failure as Error).cause).toBeUndefined();
+    expect(vi.mocked(execFileSync)).not.toHaveBeenCalled();
+  });
+
+  it('uses a distinct bounded error when exact-workdir cleanup fails', () => {
+    const setupSentinel = `constructor-setup-${randomBytes(16).toString('hex')}`;
+    const cleanupSentinel = `constructor-cleanup-${randomBytes(16).toString('hex')}`;
+    const repositoryRoot = path.join(os.tmpdir(), setupSentinel);
+    let createdWorkdir = '';
+    const originalMkdtempSync = fs.mkdtempSync;
+    vi.spyOn(fs, 'mkdtempSync').mockImplementation((prefix) => {
+      createdWorkdir = originalMkdtempSync(prefix);
+      return createdWorkdir;
+    });
+    vi.spyOn(fs, 'cpSync').mockImplementation(() => { throw new Error(setupSentinel); });
+    const originalRmSync = fs.rmSync;
+    vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+      if (String(target) === createdWorkdir) throw new Error(`${cleanupSentinel}: ${repositoryRoot}`);
+      return originalRmSync(target, options);
+    });
+
+    let failure: unknown;
+    try {
+      createDisposableStackIdentity({
+        repositoryRoot, mode: 'migrated-source', portBase: 54_940,
+        postgresMajorVersion: 17, tag: 'unit',
+      });
+    } catch (error) {
+      failure = error;
+    }
+    if (createdWorkdir) directories.push(createdWorkdir);
+
+    expect(fs.existsSync(createdWorkdir)).toBe(true);
+    expect(failure).toEqual(new Error('DISPOSABLE_STACK_SETUP_CLEANUP_FAILED'));
+    expect(String(failure)).not.toContain(setupSentinel);
+    expect(String(failure)).not.toContain(cleanupSentinel);
+    expect(String(failure)).not.toContain(repositoryRoot);
+    expect((failure as Error).cause).toBeUndefined();
+    expect(vi.mocked(execFileSync)).not.toHaveBeenCalled();
+  });
+
+  it('preserves successful owned identity construction and copied source', () => {
+    const repositoryRoot = path.resolve(__dirname, '../../../..');
+    const identity = createDisposableStackIdentity({
+      repositoryRoot, mode: 'migrated-source', portBase: 54_940,
+      postgresMajorVersion: 17, tag: 'unit',
+    });
+    directories.push(identity.workdir);
+    const supabaseDirectory = path.join(identity.workdir, 'supabase');
+    const config = fs.readFileSync(path.join(supabaseDirectory, 'config.toml'), 'utf8');
+
+    expect(identity.projectId).toMatch(/^capstone-pp1-recovery-unit-[a-f0-9]{8}$/);
+    expect(identity.networkName).toBe(`${identity.projectId}-loopback`);
+    expect(identity.databaseContainer).toBe(`supabase_db_${identity.projectId}`);
+    expect(fs.existsSync(identity.workdir)).toBe(true);
+    expect(fs.readFileSync(path.join(identity.workdir, '.capstone-recovery-owner'), 'utf8'))
+      .toBe(`${identity.projectId}\n`);
+    expect(fs.existsSync(path.join(supabaseDirectory, 'templates', 'invite.html'))).toBe(true);
+    expect(fs.existsSync(path.join(supabaseDirectory, 'migrations'))).toBe(true);
+    expect(fs.existsSync(path.join(supabaseDirectory, 'seed.sql'))).toBe(true);
+    expect(config).toContain(`project_id = "${identity.projectId}"`);
+    expect(config).toContain(`port = ${identity.portBase + 1}`);
+    expect(config).toContain('major_version = 17');
+    expect(vi.mocked(execFileSync)).not.toHaveBeenCalled();
+  });
+});
 
 describe('disposable Auth-owner password forwarding', () => {
   it('forwards only the variable name with a restricted environment and permits the fixed SQL', () => {

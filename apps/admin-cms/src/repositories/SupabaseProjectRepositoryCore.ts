@@ -556,7 +556,9 @@ export class SupabaseProjectRepositoryCore implements ProjectRepository {
       const rawMsg = error.message || '';
       let code: ReviewActionExecutionErrorCode = 'INTERNAL_FAILURE';
 
-      if (rawMsg.includes('PUBLICATION_IN_PROGRESS')) {
+      if (rawMsg.includes('PROJECT_TEAM_PACKAGE_DECISION_REQUIRED')) {
+        code = 'PROJECT_TEAM_PACKAGE_DECISION_REQUIRED';
+      } else if (rawMsg.includes('PUBLICATION_IN_PROGRESS')) {
         code = 'PUBLICATION_IN_PROGRESS';
       } else if (rawMsg.includes('CONTROLLED_PUBLIC_REMOVAL_REQUIRED')) {
         code = 'CONTROLLED_PUBLIC_REMOVAL_REQUIRED';

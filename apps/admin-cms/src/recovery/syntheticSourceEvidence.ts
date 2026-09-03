@@ -165,6 +165,12 @@ export interface SyntheticStorageFixture {
 export function buildSyntheticStorageFixtures(): SyntheticStorageFixture[] {
   return [
     {
+      bucket: 'participant-corrections-private',
+      key: 'recovery-rehearsal/private/candidate-poster.png',
+      contentType: 'image/png',
+      content: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x02, 0xff]),
+    },
+    {
       bucket: 'project-drafts-private',
       key: 'recovery-rehearsal/private/poster-draft.png',
       contentType: 'image/png',

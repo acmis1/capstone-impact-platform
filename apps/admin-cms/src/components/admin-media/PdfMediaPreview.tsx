@@ -46,7 +46,7 @@ export function PdfMediaPreview({
           rel="noopener noreferrer"
           className="inline-flex min-h-[32px] items-center gap-1.5 text-sm font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
-          Open PDF in a new tab
+          Open {media.fileName} in a new tab
           <ExternalLink className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden="true" />
         </a>
       </div>
@@ -54,7 +54,12 @@ export function PdfMediaPreview({
       <p className={MEDIA_PREVIEW_CLASSES.stateMessage}>
         For keyboard access or if the inline preview is unavailable, open the PDF in a new tab.
       </p>
-      <div className={MEDIA_PREVIEW_CLASSES.frame}>
+      {/*
+        Hidden below `sm`: a native PDF viewer in a narrow column is unusable and overflows, and
+        the static guidance above already routes small screens to the keyboard-operable new-tab
+        action. Deliberately no small-screen live region — the guidance never changes.
+      */}
+      <div className={`hidden sm:block ${MEDIA_PREVIEW_CLASSES.frame}`}>
         {/* Native PDF viewers can trap focus and do not reliably report load/error events. */}
         <iframe
           src={media.url}

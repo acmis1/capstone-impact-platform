@@ -10,12 +10,15 @@ import {
   readinessField,
   cleanupOwnedState,
   cleanupInterruptedReleaseEvaluationRun,
+  captureSharedBaseline,
+  runParticipantEvidence,
 } from './releaseEvaluationHarness';
+import { getPermissionsForRoles } from '../auth/permissions';
 import { getStagingBuckets } from '../lib/supabase/buckets';
 vi.mock('../lib/supabase/buckets', () => ({
   getStagingBuckets: () => ({ DRAFT_PRIVATE: 'private', PUBLIC_ASSETS: 'public', PUBLIC_FEEDS: 'feeds' }),
 }));
-import { buildReleaseEvaluationCorpus } from '../fixtures/releaseEvaluationCorpus';
+import { buildReleaseEvaluationCorpus, materializeReleaseEvaluationCorpus } from '../fixtures/releaseEvaluationCorpus';
 import {
   createReleaseEvidenceLedger,
   deriveFailureStageDistribution,
@@ -32,6 +35,16 @@ function previewPackage(overrides: Partial<Parameters<typeof deriveActualPreview
     ...overrides,
   };
 }
+
+const correctionEvidenceTables = [
+  'participant_correction_submissions', 'participant_correction_prior_revisions',
+  'participant_correction_recovery_rows', 'participant_correction_events',
+];
+const syntheticAdmin = {
+  authUserId: 'synthetic-admin', adminUserId: 'synthetic-admin',
+  email: 'release-admin@example.invalid', fullName: 'Synthetic Admin',
+  roles: ['admin'] as ['admin'], permissions: getPermissionsForRoles(['admin']),
+};
 
 function interruptedCleanupFixture() {
   const runNamespace = 'run-1-0123456789abcdef';
@@ -69,6 +82,7 @@ function interruptedCleanupFixture() {
       let filter: (row: Record<string, string>) => boolean = () => true;
       const query = {
         select: () => query,
+        range: () => query,
         delete: () => { deleting = true; return query; },
         in: (column: string, values: string[]) => { filter = (row) => values.includes(row[column]); return query; },
         like: (column: string, pattern: string) => { filter = (row) => row[column]?.startsWith(pattern.slice(0, -1)); return query; },
@@ -86,6 +100,46 @@ function interruptedCleanupFixture() {
 }
 
 describe('release evaluation harness safety', () => {
+  it('opens the five participant correction requests without starting resolution or submitting packages', async () => {
+    const corpus = await materializeReleaseEvaluationCorpus({ runNamespace: 'test-correction' });
+    const cases = corpus.cases.filter((item) => item.lifecycleProfile === 'participant-correction');
+    const rpc = vi.fn(async (name: string, params: Record<string, string>) => {
+      if (name === 'generate_participant_preview') return { error: null, data: {
+        resultCode: 'SUCCESS', previewId: `preview-${params.p_public_id}`, publicId: params.p_public_id,
+        createdAt: '2026-09-04T00:00:00Z', expiresAt: '2026-09-05T00:00:00Z',
+      } };
+      if (name === 'request_participant_preview_correction') return { error: null, data: {
+        resultCode: 'SUCCESS', correctionRequestId: 'synthetic-request', requestedAt: '2026-09-04T00:00:00Z',
+        comment: params.p_comment, alreadyRequested: false,
+      } };
+      throw new Error(`Unexpected participant authority: ${name}`);
+    });
+    const runtime = { admin: syntheticAdmin, privateBucket: 'private', previewIds: new Set<string>() };
+    const result = await runParticipantEvidence(corpus, runtime, { rpc } as unknown as Parameters<typeof runParticipantEvidence>[2], cases);
+    expect(result.corrections).toBe(5);
+    expect(runtime.previewIds.size).toBe(5);
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(cases.flatMap(() => [
+      'generate_participant_preview', 'request_participant_preview_correction',
+    ]));
+  });
+
+  it.each(correctionEvidenceTables)('baseline-protects immutable %s evidence and rejects changes', async (table) => {
+    const fixture = interruptedCleanupFixture();
+    fixture.rows[table] = [{ id: 'retained-evidence' }];
+    const sharedBaseline = await captureSharedBaseline(fixture.client, syntheticAdmin);
+    expect(sharedBaseline.ordinary[table]).toBeDefined();
+    const runtime = {
+      privateBucket: 'private', ownedPublicIds: new Set<string>(), ownedBatchIds: new Set<string>(),
+      ownedStoragePaths: new Set<string>(), previewIds: new Set<string>(), admin: syntheticAdmin, sharedBaseline,
+    };
+    expect((await cleanupOwnedState(fixture.client, runtime)).completed).toBe(true);
+    fixture.rows[table].push({ id: 'unexpected-evidence' });
+    const changed = await cleanupOwnedState(fixture.client, runtime);
+    expect(changed.baselineChecks.ordinaryLocalRowsUnchanged).toBe(false);
+    expect(changed.completed).toBe(false);
+    expect(fixture.rows[table]).toHaveLength(2);
+  });
+
   it('recovers orphaned Storage using only the run namespace after failed removal and successful DB cleanup', async () => {
     const fixture = interruptedCleanupFixture();
     const runtime = { privateBucket: getStagingBuckets().DRAFT_PRIVATE, ownedPublicIds: new Set([fixture.publicId]), ownedBatchIds: new Set<string>(), ownedStoragePaths: new Set([fixture.ownedPath]), previewIds: new Set<string>() };
@@ -216,9 +270,10 @@ describe('release evaluation harness safety', () => {
       },
       storage: { from: () => ({ list: async () => ({ data: [], error: null }), remove }) },
     } as unknown as Parameters<typeof cleanupOwnedState>[0];
-    const result = await cleanupOwnedState(client, { privateBucket: 'private', ownedPublicIds: new Set(['release-run-1-0123456789abcdef-synthetic-001']), ownedBatchIds: new Set(['owned-batch']), ownedStoragePaths: new Set(), previewIds: new Set() });
+    const result = await cleanupOwnedState(client, { privateBucket: 'private', ownedPublicIds: new Set(['release-run-1-0123456789abcdef-synthetic-001']), ownedBatchIds: new Set(['owned-batch']), ownedStoragePaths: new Set(), previewIds: new Set(['owned-preview']) });
     expect(result.completed).toBe(false);
-    expect(deleted).toEqual(expect.arrayContaining(['approval_records', 'validation_flags', 'projects', 'import_batches']));
+    expect(deleted).toEqual(expect.arrayContaining(['approval_records', 'validation_flags', 'projects', 'import_batches', 'participant_preview_correction_requests', 'participant_preview_confirmations', 'participant_previews']));
+    for (const table of correctionEvidenceTables) expect(deleted).not.toContain(table);
     expect(remove).not.toHaveBeenCalled();
   });
 

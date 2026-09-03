@@ -62,6 +62,9 @@ Header matching is case-insensitive, order-independent, trims surrounding whites
 | `Main media to feature` | `layoutConfig.featuredMedia` | Optional | `main media to feature`, `mainmediatofeature`, `featuredmedia`, `featured media` |
 | `Poster full text` | `posterText` | **Required** | `poster full text`, `poster text`, `postertext`, `posterfulltext` |
 | `Accessibility text` | `accessibilityText` | **Required** | `accessibility text`, `accessibilitytext` |
+| `Project video URL` | `videoUrl` | Optional | `project video url`, `video url`, `videourl` |
+| `Live demo URL` | `demoUrl` | Optional | `live demo url`, `demo url`, `demourl`, `prototype url` |
+| `Source repository URL` | `repositoryUrl` | Optional | `source repository url`, `repository url`, `repositoryurl`, `repo url` |
 | `Snapshot image alt text` | `snapshotAltText` | Conditional — required when gallery position 1 exists | `snapshot image alt text`, `snapshot alt text`, `snapshot accessibility text`, `snapshotimagealttext`, `snapshotalttext`, `snapshot 1 alt text`, `snapshot1alttext` |
 | `Snapshot 2 alt text` | `snapshot2AltText` | Conditional — required when gallery position 2 exists | `snapshot 2 alt text`, `snapshot2 alt text`, `snapshot2alttext` |
 | `Snapshot 3 alt text` | `snapshot3AltText` | Conditional — required when gallery position 3 exists | `snapshot 3 alt text`, `snapshot3 alt text`, `snapshot3alttext` |
@@ -86,6 +89,25 @@ leave it blank — an ordinary participant preview never requires one.
   error. The raw cell value is never echoed into the issue message.
 - The browser never supplies or overrides this address at send time; the server resolves it from
   persisted project data at execution time.
+
+### Controlled Project Links
+
+`Project video URL`, `Live demo URL`, and `Source repository URL` are optional controlled external-link fields.
+
+- Blank or absent cells normalize to no value and do not block the workbook.
+- Headers are matched case-insensitively and independently of column order through the centralized workbook contract.
+- Canonical headers and their documented aliases map to exactly one internal field. If more than one column resolves to the same field, parsing fails with `WORKBOOK_DUPLICATE_COLUMN`.
+- Populated values are trimmed only after bounded validation and are limited to 2,048 characters, applied to both the raw cell text and the canonical result.
+- Only absolute `http://` and `https://` URLs are accepted, and the value must already be written in that literal form. WHATWG URL repair is deliberately not relied upon: `https:///path` and `https:\host/x` are rejected rather than silently rewritten into a different origin.
+- An accepted value is **canonicalized once** and the canonical form is what is staged, persisted, snapshotted, rendered and compared. The raw cell text is never persisted, so `HTTPS://Example.COM` is stored as `https://example.com/`.
+- Malformed URLs, relative/local filesystem paths, credential-bearing URLs, unsafe schemes such as `javascript:`, `data:`, and `file:`, and URLs containing whitespace or control characters are rejected with `WORKBOOK_INVALID_URL`.
+- An overlong value is rejected with `WORKBOOK_VALUE_TOO_LONG`; it is never truncated.
+- Formula cells use their cached primitive value. A formula without a usable cached result fails with `WORKBOOK_UNUSABLE_FORMULA`.
+- Validation messages never echo the raw URL value from the workbook.
+- Browser preview may display the parsed values, but it is not publication or persistence authority. Metadata staging uses the server-reparsed package manifest, so browser-supplied state cannot replace the URL destinations.
+- The current URL contract intentionally preserves the existing broad safe-web policy rather than restricting video links to a specific provider such as YouTube or Vimeo.
+- These fields represent external links only. They do not create binary video assets, arbitrary HTML, iframes, embeds, or a new publication media role.
+- `project-details.xlsx` is the standard controlled-link intake path. The legacy `project.json` parser remains a compatibility/developer-testing path and does not gain these dedicated URL fields.
 
 ### Accessible Poster Content
 
@@ -201,9 +223,10 @@ Unrecognized non-empty values emit a generic `WORKBOOK_UNKNOWN_FEATURED_MEDIA` w
 | `WORKBOOK_DUPLICATE_COLUMN` | `error` | Multiple header columns map to the same internal field. |
 | `WORKBOOK_MISSING_REQUIRED_VALUE` | `error` | A required cell value is empty or missing. |
 | `WORKBOOK_INVALID_YEAR` | `error` | Project year is not a valid 4-digit year between 1900 and 2100. |
-| `WORKBOOK_UNUSABLE_FORMULA` | `error` | Formula cell in a required field has no usable cached result. |
+| `WORKBOOK_UNUSABLE_FORMULA` | `error` | A validated formula cell has no usable cached primitive result. |
 | `WORKBOOK_INVALID_PARTICIPANT_CONTACT_EMAIL` | `error` | Participant contact email is present but is not a valid single email address. |
-| `WORKBOOK_VALUE_TOO_LONG` | `error` | An accessible-content value exceeds its bounded technical ceiling. |
+| `WORKBOOK_INVALID_URL` | `error` | A populated controlled project-link value is malformed or violates the safe web-URL contract. |
+| `WORKBOOK_VALUE_TOO_LONG` | `error` | A bounded workbook value, including accessible content or a controlled project URL, exceeds its technical ceiling. |
 | `WORKBOOK_UNEXPECTED_SHEET_NAME` | `warning` | Preferred sheet `Project details` was absent; processed fallback sheet. |
 | `WORKBOOK_EXTRA_SHEET` | `warning` | Additional non-empty worksheet detected and ignored. |
 | `WORKBOOK_UNKNOWN_COLUMN` | `warning` | Non-empty header column not recognized in canonical/alias dictionary. |

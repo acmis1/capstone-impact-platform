@@ -2,13 +2,13 @@ import { z } from 'zod';
 import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
 
 /**
- * Staff-facing contract for editing the authoritative text alternative of a project's snapshot
- * image.
+ * Legacy compatibility contract for snapshot image text alternatives. The active workflow
+ * replaces project-team-authored source packages; staff cannot edit this content directly.
  *
- * The value is staff-authored. Nothing here derives it from the filename, the project title, the
+ * The value is project-team-authored. Nothing here derives it from the filename, the project title, the
  * poster accessibility text, OCR, or any AI service, and nothing judges the prose: the only rules
  * are that it is present after trimming and within the shared technical ceiling. An oversized value
- * is rejected rather than truncated, so staff always see exactly what they wrote.
+ * is rejected rather than truncated, so the project team's supplied wording remains intact.
  */
 export const snapshotAltTextInputSchema = z.object({
   publicId: z.string().trim().min(1),
@@ -40,6 +40,7 @@ export const snapshotAltTextInputSchema = z.object({
 export type SnapshotAltTextInput = z.infer<typeof snapshotAltTextInputSchema>;
 
 export type SnapshotAltTextErrorCode =
+  | 'PARTICIPANT_CONTENT_OWNED'
   | 'VALIDATION_FAILED'
   | 'PERMISSION_DENIED'
   | 'PROJECT_NOT_FOUND'

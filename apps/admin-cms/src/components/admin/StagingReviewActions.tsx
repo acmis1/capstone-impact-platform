@@ -62,6 +62,11 @@ export function StagingReviewActions({ publicId, currentStatus, allowedActions }
 
       const data = await response.json().catch(() => ({ success: false }));
 
+      if (response.status === 409 && data.code === 'PROJECT_TEAM_PACKAGE_DECISION_REQUIRED') {
+        setError('Accept or return the pending project-team package before approving this project.');
+        return;
+      }
+
       if (!response.ok || !data.success) {
         throw new Error('Status transition could not be completed.');
       }

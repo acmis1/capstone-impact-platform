@@ -4,7 +4,7 @@ import { Project } from '../../domain/project';
 import { MediaAccessibilityReview } from '../admin-media/MediaAccessibilityReview';
 import { MediaPreview } from '../admin-media/MediaPreview';
 import type { ProjectMediaPreviewItem } from '../admin-media/mediaPreviewTypes';
-import { isValidMediaUrl } from '../admin-media/mediaPreviewUtils';
+import { validateProjectControlledUrl } from '../../domain/projectControlledUrl';
 import { SnapshotAltTextGalleryEditor } from './SnapshotAltTextGalleryEditor';
 import type { SnapshotAltTextActionResult } from '../../projects/snapshotAltText';
 import { ExternalLink as ExternalLinkIcon, Video, Globe, Code2 } from 'lucide-react';
@@ -26,16 +26,28 @@ interface ProjectMediaSummaryProps {
 }
 
 function ExternalLink({ label, url }: { label: string; url: string }) {
-  if (!isValidMediaUrl(url)) return <span className="text-sm text-muted-foreground">Not provided</span>;
+  const validation = validateProjectControlledUrl(url);
+
+  if (!validation.valid) {
+    return (
+      <span className="text-sm text-muted-foreground">
+        Not provided
+      </span>
+    );
+  }
+
   return (
     <a
-      href={url}
+      href={validation.url}
       target="_blank"
       rel="noopener noreferrer"
       className="inline-flex min-h-[32px] items-center gap-1.5 text-sm font-medium text-foreground underline decoration-border-strong underline-offset-4 wrap-anywhere hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <span>{label}</span>
-      <ExternalLinkIcon className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden="true" />
+      <ExternalLinkIcon
+        className="h-3.5 w-3.5 shrink-0 text-foreground-subtle"
+        aria-hidden="true"
+      />
     </a>
   );
 }
@@ -91,30 +103,36 @@ export function ProjectMediaSummary({ project, mediaItems, mediaAvailable, snaps
           <div className="min-w-0">
             <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               <Video className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden="true" />
-              Video Showcase
+              Video
             </dt>
             <dd className="min-w-0">
-              <ExternalLink label="Video showcase link" url={project.videoUrl} />
+              <ExternalLink label="Open video" url={project.videoUrl} />
             </dd>
           </div>
 
           <div className="min-w-0">
             <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               <Globe className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden="true" />
-              Interactive Demo
+              Live demo / prototype
             </dt>
             <dd className="min-w-0">
-              <ExternalLink label="External demo" url={project.demoUrl} />
+              <ExternalLink
+                label="Open live demo / prototype"
+                url={project.demoUrl}
+              />
             </dd>
           </div>
 
           <div className="min-w-0">
             <dt className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               <Code2 className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden="true" />
-              Git Repository
+              Repository
             </dt>
             <dd className="min-w-0">
-              <ExternalLink label="Git repository" url={project.repositoryUrl} />
+              <ExternalLink
+                label="Open repository"
+                url={project.repositoryUrl}
+              />
             </dd>
           </div>
         </dl>
