@@ -36,7 +36,7 @@ export interface ImportPackageManifest {
    */
   galleryAltTexts?: ImportPackageGalleryAltText[];
   /**
-   * Staff-authored text alternative for the package's snapshot image. Absent when the source did
+   * Project-team-authored text alternative for the package's snapshot image. Absent when the source did
    * not supply one. Required only when the package actually contains a snapshot image, which is
    * enforced at the package-aware boundary (`validateImportPackage`) rather than by the individual
    * metadata parsers.

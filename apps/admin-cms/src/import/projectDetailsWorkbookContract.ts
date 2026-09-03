@@ -52,7 +52,7 @@ export interface ProjectDetailsWorkbookMetadata {
   /** Concise descriptive text alternative/context for the poster image. Required. */
   accessibilityText: string;
   /**
-   * Staff-authored text alternative describing the meaningful content of `snapshot-1.png`.
+   * Project-team-authored text alternative describing the meaningful content of `snapshot-1.png`.
    *
    * Conditionally required, and therefore not a required *column*: the workbook parser cannot see
    * which files the package contains, so it only enforces the rules it can evaluate on its own

@@ -1,192 +1,57 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-vi.mock('server-only', () => ({}));
-vi.mock('../../../../../../lib/supabase/admin', () => ({
-  createSupabaseAdminClient: vi.fn(() => ({})),
-}));
-
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { POST as correctionResolutionPOST } from './route';
+import { POST } from './route';
 import { requireAdmin } from '../../../../../../auth/requireAdmin';
-import { validateSameOrigin } from '../../../../../../auth/csrf';
-import { SupabaseParticipantPreviewRepository } from '../../../../../../repositories/SupabaseParticipantPreviewRepository';
-import { ParticipantPreviewExecutionError } from '../../../../../../repositories/ParticipantPreviewRepository';
 import { AdminAuthError } from '../../../../../../auth/authTypes';
-
+import { decideParticipantCorrection } from '../../../../../../previews/participantCorrectionReview';
 vi.mock('../../../../../../auth/requireAdmin');
-vi.mock('../../../../../../auth/csrf');
-
-describe('POST /api/projects/[publicId]/participant-preview/correction-resolution Route Handler Tests', () => {
-  const mockPublicId = 'proj-test-456';
-  const mockAdminId = '00000000-0000-0000-0000-000000000001';
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(validateSameOrigin).mockReturnValue(true);
+vi.mock('../../../../../../lib/supabase/adminCore', () => ({ createSupabaseAdminClientCore: () => ({}) }));
+vi.mock('../../../../../../previews/participantCorrectionReview', async (importOriginal) => ({ ...await importOriginal<typeof import('../../../../../../previews/participantCorrectionReview')>(), decideParticipantCorrection: vi.fn() }));
+const payload = { action: 'accept', submissionId: '22222222-2222-4222-8222-222222222222', packageHash: 'a'.repeat(64), expectedVersion: 'b'.repeat(64) };
+const params = { params: Promise.resolve({ publicId: '2026-synthetic' }) };
+function request(body: unknown = payload, origin: string | null = 'http://localhost:3000') {
+  const headers: Record<string,string> = { 'Content-Type': 'application/json' };
+  if (origin !== null) headers.origin = origin;
+  return new NextRequest('http://localhost:3000/api/projects/2026-synthetic/participant-preview/correction-resolution', { method: 'POST', headers, body: JSON.stringify(body) });
+}
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(requireAdmin).mockResolvedValue({ adminUserId: 'actor-from-session', permissions: ['projects.edit', 'projects.review'] } as never);
+  vi.mocked(decideParticipantCorrection).mockResolvedValue({ success: true, code: 'SUCCESS' });
+});
+describe('participant correction decision boundary', () => {
+  it.each([null, 'null', 'http://attacker.invalid', 'http://localhost:3001'])('rejects invalid Origin %s before auth or parsing', async (origin) => {
+    expect((await POST(request(payload, origin), params)).status).toBe(403);
+    expect(requireAdmin).not.toHaveBeenCalled(); expect(decideParticipantCorrection).not.toHaveBeenCalled();
   });
-
-  function createRequest(origin = 'http://localhost:3000') {
-    return new NextRequest(`http://localhost:3000/api/projects/${mockPublicId}/participant-preview/correction-resolution`, {
-      method: 'POST',
-      headers: {
-        origin,
-        'content-type': 'application/json',
-      },
-    });
-  }
-
-  it('1. Rejects request when validateSameOrigin fails (CSRF)', async () => {
-    vi.mocked(validateSameOrigin).mockReturnValue(false);
-    const req = createRequest('http://evil.com');
-    const res = await correctionResolutionPOST(req, { params: Promise.resolve({ publicId: mockPublicId }) });
-
-    expect(res.status).toBe(403);
-    const json = await res.json();
-    expect(json.success).toBe(false);
-    expect(json.error).toBe('Access denied.');
-    expect(validateSameOrigin).toHaveBeenCalledWith('http://evil.com', 'http://localhost:3000');
+  it('requires authentication', async () => {
+    vi.mocked(requireAdmin).mockRejectedValue(new AdminAuthError('UNAUTHENTICATED', 'Authentication required.'));
+    expect((await POST(request(), params)).status).toBe(401);
+    expect(decideParticipantCorrection).not.toHaveBeenCalled();
   });
-
-  it('2. Rejects unauthenticated request when requireAdmin throws AdminAuthError', async () => {
-    vi.mocked(requireAdmin).mockRejectedValue(new AdminAuthError('UNAUTHENTICATED', 'Access denied.'));
-    const req = createRequest();
-    const res = await correctionResolutionPOST(req, { params: Promise.resolve({ publicId: mockPublicId }) });
-
-    expect(res.status).toBe(401);
-    const json = await res.json();
-    expect(json.success).toBe(false);
+  it.each([['projects.edit'], ['projects.review'], []])('requires combined review authority: %s', async (...permissions) => {
+    vi.mocked(requireAdmin).mockResolvedValue({ adminUserId: 'actor', permissions } as never);
+    expect((await POST(request(), params)).status).toBe(403); expect(decideParticipantCorrection).not.toHaveBeenCalled();
   });
-
-  it('3. Rejects request for reviewer-only staff', async () => {
-    vi.mocked(requireAdmin).mockResolvedValue({
-      adminUserId: mockAdminId,
-      permissions: ['projects.review'],
-    } as never);
-
-    const req = createRequest();
-    const res = await correctionResolutionPOST(req, { params: Promise.resolve({ publicId: mockPublicId }) });
-
-    expect(res.status).toBe(403);
-    const json = await res.json();
-    expect(json.success).toBe(false);
+  it.each(['begin', 'accept', 'return'])('sends only exact identity and the authenticated actor for %s', async (action) => {
+    const response = await POST(request({ ...payload, action }), params);
+    expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(decideParticipantCorrection).toHaveBeenCalledWith({}, '2026-synthetic', 'actor-from-session', { ...payload, action });
   });
-
-  it('4. Rejects request for editor-only staff', async () => {
-    vi.mocked(requireAdmin).mockResolvedValue({
-      adminUserId: mockAdminId,
-      permissions: ['projects.edit'],
-    } as never);
-
-    const req = createRequest();
-    const res = await correctionResolutionPOST(req, { params: Promise.resolve({ publicId: mockPublicId }) });
-
-    expect(res.status).toBe(403);
-    const json = await res.json();
-    expect(json.success).toBe(false);
+  it.each(['title', 'metadata', 'files', 'storagePath', 'bucket', 'actor', 'projectId', 'status'])('rejects replacement/override field %s', async (field) => {
+    expect((await POST(request({ ...payload, [field]: 'staff override' }), params)).status).toBe(400);
+    expect(decideParticipantCorrection).not.toHaveBeenCalled();
   });
-
-  it('5. Allows start correction resolution for combined edit+review staff', async () => {
-    vi.mocked(requireAdmin).mockResolvedValue({
-      adminUserId: mockAdminId,
-      permissions: ['projects.edit', 'projects.review'],
-    } as never);
-
-    const mockStartResolution = vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'startCorrectionResolution').mockResolvedValue({
-      correctionRequestId: 'corr-req-1',
-      resolutionStartedAt: '2026-08-11T12:00:00Z',
-      alreadyInProgress: false,
-    });
-
-    const req = createRequest();
-    const res = await correctionResolutionPOST(req, { params: Promise.resolve({ publicId: mockPublicId }) });
-
-    expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.success).toBe(true);
-    expect(json.correctionRequestId).toBe('corr-req-1');
-    expect(mockStartResolution).toHaveBeenCalledWith({
-      publicId: mockPublicId,
-      adminId: mockAdminId,
-    });
+  it('rejects the old empty payload and invalid revision hashes', async () => {
+    for (const body of [{}, { ...payload, packageHash: 'invalid' }, { ...payload, submissionId: 'other-project' }]) expect((await POST(request(body), params)).status).toBe(400);
+    expect(decideParticipantCorrection).not.toHaveBeenCalled();
   });
-
-  it('6. Maps PROJECT_NOT_FOUND error to HTTP 404', async () => {
-    vi.mocked(requireAdmin).mockResolvedValue({
-      adminUserId: mockAdminId,
-      permissions: ['projects.edit', 'projects.review'],
-    } as never);
-
-    vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'startCorrectionResolution').mockRejectedValue(
-      new ParticipantPreviewExecutionError('PROJECT_NOT_FOUND')
-    );
-
-    const req = createRequest();
-    const res = await correctionResolutionPOST(req, { params: Promise.resolve({ publicId: mockPublicId }) });
-
-    expect(res.status).toBe(404);
+  it('bounds actual bytes without relying on Content-Length', async () => {
+    expect((await POST(request({ ...payload, excess: 'x'.repeat(3000) }), params)).status).toBe(413);
+    expect(decideParticipantCorrection).not.toHaveBeenCalled();
   });
-
-  it('7. Maps INVALID_PROJECT_STATE error to HTTP 400', async () => {
-    vi.mocked(requireAdmin).mockResolvedValue({
-      adminUserId: mockAdminId,
-      permissions: ['projects.edit', 'projects.review'],
-    } as never);
-
-    vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'startCorrectionResolution').mockRejectedValue(
-      new ParticipantPreviewExecutionError('INVALID_PROJECT_STATE')
-    );
-
-    const req = createRequest();
-    const res = await correctionResolutionPOST(req, { params: Promise.resolve({ publicId: mockPublicId }) });
-
-    expect(res.status).toBe(400);
-  });
-
-  it('8. Maps NO_OPEN_CORRECTION error to HTTP 400', async () => {
-    vi.mocked(requireAdmin).mockResolvedValue({
-      adminUserId: mockAdminId,
-      permissions: ['projects.edit', 'projects.review'],
-    } as never);
-
-    vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'startCorrectionResolution').mockRejectedValue(
-      new ParticipantPreviewExecutionError('NO_OPEN_CORRECTION')
-    );
-
-    const req = createRequest();
-    const res = await correctionResolutionPOST(req, { params: Promise.resolve({ publicId: mockPublicId }) });
-
-    expect(res.status).toBe(400);
-  });
-
-  it('9. Maps AMBIGUOUS_CORRECTION_REQUEST error to HTTP 409', async () => {
-    vi.mocked(requireAdmin).mockResolvedValue({
-      adminUserId: mockAdminId,
-      permissions: ['projects.edit', 'projects.review'],
-    } as never);
-
-    vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'startCorrectionResolution').mockRejectedValue(
-      new ParticipantPreviewExecutionError('AMBIGUOUS_CORRECTION_REQUEST')
-    );
-
-    const req = createRequest();
-    const res = await correctionResolutionPOST(req, { params: Promise.resolve({ publicId: mockPublicId }) });
-
-    expect(res.status).toBe(409);
-  });
-
-  it('10. Maps CONFLICTING_ACTIVE_PREVIEW error to HTTP 409', async () => {
-    vi.mocked(requireAdmin).mockResolvedValue({
-      adminUserId: mockAdminId,
-      permissions: ['projects.edit', 'projects.review'],
-    } as never);
-
-    vi.spyOn(SupabaseParticipantPreviewRepository.prototype, 'startCorrectionResolution').mockRejectedValue(
-      new ParticipantPreviewExecutionError('CONFLICTING_ACTIVE_PREVIEW')
-    );
-
-    const req = createRequest();
-    const res = await correctionResolutionPOST(req, { params: Promise.resolve({ publicId: mockPublicId }) });
-
-    expect(res.status).toBe(409);
+  it('maps stale/unavailable decisions to bounded errors', async () => {
+    vi.mocked(decideParticipantCorrection).mockResolvedValue({ success: false, code: 'STALE_REVISION' });
+    const response = await POST(request(), params); expect(response.status).toBe(409); expect((await response.json()).error).toMatch(/Reload/);
   });
 });

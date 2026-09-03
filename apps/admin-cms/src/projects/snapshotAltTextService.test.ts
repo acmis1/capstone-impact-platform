@@ -128,11 +128,11 @@ describe('snapshot alt text save service', () => {
 });
 
 describe('snapshot alt text authorization', () => {
-  it('allows an identity holding projects.edit', async () => {
+  it('blocks direct content edits even for an identity holding projects.edit', async () => {
     const gateway = gatewayReturning(successResponse);
     const result = await saveAuthorizedSnapshotAltText(EDIT_PERMISSIONS, gateway, input(), ADMIN_ID);
-    expect(result.ok).toBe(true);
-    expect(gateway.updateSnapshotAltTextAtomically).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ ok: false, code: 'PARTICIPANT_CONTENT_OWNED' });
+    expect(gateway.updateSnapshotAltTextAtomically).not.toHaveBeenCalled();
   });
 
   it('denies a reviewer-only identity before any persistence attempt', async () => {

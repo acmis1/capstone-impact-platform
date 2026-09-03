@@ -50,7 +50,7 @@ const CORRECTION_MIGRATIONS = [
 ];
 
 const PRE_CORRECTION_MIGRATION_COUNT = 49;
-const CURRENT_MAIN_MIGRATION_COUNT = 50;
+const CURRENT_MAIN_MIGRATION_COUNT = 51;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');

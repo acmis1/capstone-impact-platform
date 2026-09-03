@@ -41,10 +41,7 @@ import {
   formatPartialNoticeDescription,
   initialAssistiveChecksUiState,
   isAssistiveRunActive,
-  isFindingEligibleToApply,
-  isLanguageFindingEligibleToApply,
 } from './projectAssistiveChecksState';
-import { useProjectMetadataNavigation } from './ProjectMetadataNavigation';
 
 interface ProjectAssistiveChecksProps {
   publicId: string;
@@ -65,7 +62,6 @@ const POLLING_INTERVAL_MS = 2500;
 
 export function ProjectAssistiveChecks({
   publicId,
-  canEditMetadata,
   canReview,
   canExecute = true,
   unavailableMessage = DEFAULT_UNAVAILABLE_MESSAGE,
@@ -79,10 +75,6 @@ export function ProjectAssistiveChecks({
     readUnavailable: initialReadFailed,
   });
 
-  const {
-    canApplyTitleSuggestion, applyTitleSuggestion,
-    canApplyLanguageSuggestion, applyLanguageSuggestion,
-  } = useProjectMetadataNavigation();
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPollingRef = useRef(false);
@@ -244,56 +236,6 @@ export function ProjectAssistiveChecks({
     } finally {
       inFlightRef.current = false;
     }
-  };
-
-  // Reports success only once the metadata editor draft has actually changed. When the editor asks
-  // a human to confirm replacing an unsaved title, this stays in the "applying" state until they
-  // decide: a pending confirmation is never reported as an applied suggestion.
-  const handleApplyToDraft = async (candidateText: string) => {
-    dispatch({ type: 'APPLY_STARTED' });
-    const outcome = await applyTitleSuggestion(candidateText);
-    if (!isMountedRef.current) return;
-    if (outcome === 'applied') {
-      dispatch({
-        type: 'APPLY_COMPLETED',
-        message: 'Suggestion applied to the metadata editor draft.',
-        success: true,
-      });
-    } else if (outcome === 'cancelled') {
-      dispatch({
-        type: 'APPLY_COMPLETED',
-        message: 'Suggestion not applied. The current title was kept.',
-        success: false,
-      });
-    } else {
-      dispatch({
-        type: 'APPLY_FAILED',
-        error: 'Could not apply the suggestion: the project information editor is not available for editing.',
-      });
-    }
-  };
-
-  const handleApplyLanguageToDraft = (
-    finding: AssistiveInspectionFinding,
-    replacement: string,
-  ) => {
-    if (finding.evidence.version !== 'assistive-finding-evidence/v3') return;
-    dispatch({ type: 'APPLY_STARTED' });
-    const applied = applyLanguageSuggestion({
-      field: finding.affectedField as 'title' | 'summary' | 'background' | 'solution',
-      startOffset: finding.evidence.startOffset,
-      endOffset: finding.evidence.endOffset,
-      offsetUnit: finding.evidence.offsetUnit,
-      originalSourceSpan: finding.evidence.originalSourceSpan,
-      replacement,
-    });
-    dispatch({
-      type: 'APPLY_COMPLETED',
-      message: applied
-        ? 'Language suggestion applied to the metadata editor draft.'
-        : 'Could not apply suggestion because the draft no longer matches this source span.',
-      success: applied,
-    });
   };
 
   const handleCopyText = async (textToCopy: string, findingId: string) => {
@@ -459,7 +401,7 @@ export function ProjectAssistiveChecks({
         {state.readUnavailable && !state.inspection && !isJobActive && (
           <div className="rounded-lg border border-border bg-surface-inset p-4 text-sm text-muted-foreground">
             <p className="font-medium text-foreground">Assistive checks are temporarily unavailable.</p>
-            <p className="mt-1 text-xs">Could not load historical check results. You can still review and edit project information below.</p>
+            <p className="mt-1 text-xs">Could not load historical check results. You can still review project information below.</p>
           </div>
         )}
 
@@ -558,18 +500,6 @@ export function ProjectAssistiveChecks({
                 {state.inspection.findings.map((finding: AssistiveInspectionFinding) => {
                   const outcome = formatOutcome(finding.outcome);
                   const disposition = formatDisposition(finding.disposition);
-                  const canApply = isFindingEligibleToApply(
-                    finding,
-                    state.inspection!.staleState,
-                    canEditMetadata,
-                    canApplyTitleSuggestion,
-                  );
-                  const canApplyLanguage = isLanguageFindingEligibleToApply(
-                    finding,
-                    state.inspection!.staleState,
-                    canEditMetadata,
-                    canApplyLanguageSuggestion,
-                  );
                   const isCopied = state.copiedFindingId === finding.findingId && state.copyStatus === 'copied';
                   const isCopyFailed = state.copiedFindingId === finding.findingId && state.copyStatus === 'failed';
                   const duplicateCandidates = finding.evidence.version === 'assistive-finding-evidence/v2'
@@ -720,24 +650,14 @@ export function ProjectAssistiveChecks({
                           {languageEvidence.suggestions.length > 0 ? (
                             <div className="mt-3 flex flex-wrap gap-2" aria-label="Language suggestions">
                               {languageEvidence.suggestions.map((suggestion) => (
-                              <Button
-                                key={suggestion}
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                disabled={!canApplyLanguage || state.actionInFlight !== 'idle'}
-                                onClick={() => handleApplyLanguageToDraft(finding, suggestion)}
-                                title={state.inspection!.staleState !== 'CURRENT'
-                                  ? 'Cannot apply a suggestion from an outdated run.'
-                                  : `Apply this suggestion to the ${finding.affectedField} draft.`}
-                              >
-                                Apply “{suggestion}” to draft
-                              </Button>
+                                <Button key={suggestion} type="button" variant="outline" size="sm" onClick={() => handleCopyText(suggestion, finding.findingId)}>
+                                  Copy suggestion: {suggestion}
+                                </Button>
                               ))}
                             </div>
                           ) : (
                             <p className="mt-3 text-xs text-muted-foreground">
-                              No safe automatic replacement was provided. Review this issue directly in the metadata editor.
+                              Review this issue and request a corrected package from the project team.
                             </p>
                           )}
                           <details className="mt-3 border-t border-border pt-2 text-xs text-muted-foreground">
@@ -753,7 +673,7 @@ export function ProjectAssistiveChecks({
 
                       {/* Action Bar */}
                       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
-                        {/* Copy & Apply Draft Actions */}
+                        {/* Copy evidence for a change request */}
                         <div className="flex flex-wrap items-center gap-2">
                           {copyableText && (
                             <div className="flex flex-wrap items-center gap-2">
@@ -795,24 +715,7 @@ export function ProjectAssistiveChecks({
                             </div>
                           )}
 
-                          {finding.checkType === 'TITLE_CONSISTENCY' && legacyEvidence?.candidateValue && (
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              disabled={!canApply || state.actionInFlight !== 'idle'}
-                              onClick={() => { void handleApplyToDraft(legacyEvidence.candidateValue!); }}
-                              title={
-                                !canEditMetadata
-                                  ? 'Your role cannot edit project metadata.'
-                                  : state.inspection!.staleState !== 'CURRENT'
-                                  ? 'Cannot apply suggestion from an outdated run.'
-                                  : 'Apply this candidate title to the project metadata editor draft.'
-                              }
-                            >
-                              Apply to draft
-                            </Button>
-                          )}
+
                         </div>
 
                         {/* Reviewer Disposition Controls */}

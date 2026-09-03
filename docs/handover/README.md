@@ -16,14 +16,16 @@ a defect — please raise it.
 
 ## 1. What the platform does
 
-School staff import capstone project packages, the platform validates them, staff review and correct
-the metadata, participants confirm their own entries, staff approve, and approved projects are
+School staff import project-team-authored capstone packages and review the validated content.
+Project teams provide complete corrected packages when needed; staff accept exact revisions and
+approve them, participants confirm the resulting preview, and approved projects are
 compiled into a stable JSON feed that the public Duda showcase consumes. It replaces manual email,
 spreadsheet, and page-building work.
 
 ```text
-staff import  →  validation  →  staff review and correction  →  participant confirmation
-              →  staff approval  →  governed publication  →  public feed  →  Duda showcase
+participant package → staff import and review → staff approval → participant preview
+  → participant correction package if needed → staff acceptance and reapproval → corrected preview
+  → participant confirmation → governed publication → public feed → Duda showcase
 ```
 
 Two ideas explain most of the design:

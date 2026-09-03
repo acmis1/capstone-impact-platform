@@ -11,7 +11,7 @@ const source = fs.readFileSync(path.join(migrations, migrationName), 'utf8').rep
 describe('public-feed activation authority migration', () => {
   it('leaves every earlier migration byte-identical to current main', () => {
     const files = fs.readdirSync(migrations).filter((name) => name.endsWith('.sql')).sort();
-    expect(files).toHaveLength(50);
+    expect(files).toHaveLength(51);
     expect(files).toContain(migrationName);
 
     expect(() => execFileSync('git', [
@@ -20,7 +20,7 @@ describe('public-feed activation authority migration', () => {
       // that follows it are the only files newer than origin/main; every other file, this one
       // included, must remain byte-identical.
       ...files.filter((file) => file !== '20260902010606_controlled_project_links_import.sql'
-                        && file !== '20260903120000_participant_preview_controlled_links.sql')
+                        && file !== '20260903120000_participant_preview_controlled_links.sql' && file !== '20260903130000_participant_owned_corrections.sql')
                       .map((file) => `infra/supabase/migrations/${file}`)
     ], { cwd: root, stdio: 'pipe' })).not.toThrow();
 

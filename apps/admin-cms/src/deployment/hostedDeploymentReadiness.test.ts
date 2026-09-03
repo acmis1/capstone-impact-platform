@@ -154,16 +154,17 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches the exact repository migration inventory and keeps every historical migration byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
 
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(50);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(51);
 
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
       // The controlled-project-links import migration and the participant-evidence migration
-      // that follows it are the only two new relative to origin/main. Every current-main
+      // and correction package migration are the new migrations relative to origin/main. Every current-main
       // migration must stay byte-identical.
       const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.filter(
         (migration) => migration !== '20260902010606_controlled_project_links_import.sql'
-          && migration !== '20260903120000_participant_preview_controlled_links.sql',
+          && migration !== '20260903120000_participant_preview_controlled_links.sql' && migration !== '20260903130000_participant_owned_corrections.sql',
+  '20260903130000_participant_owned_corrections.sql',
       );
 
       expect(historicalMigrations).toHaveLength(48);
@@ -196,7 +197,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       );
 
       expect([...ALL_REQUIRED_TABLES].sort()).toEqual([...new Set(createdTables)].sort());
-      expect(ALL_REQUIRED_TABLES).toHaveLength(37);
+      expect(ALL_REQUIRED_TABLES).toHaveLength(41);
       for (const controlTable of ['launch_budget_guard', 'launch_reservations', 'executor_registrations']) {
         expect(ALL_REQUIRED_TABLES).not.toContain(controlTable);
       }
@@ -215,7 +216,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches every final service-role application RPC signature and isolates the one internal helper', () => {
       const contracts = migrationServiceRoleContracts();
       expect(contracts.application.map(contractKey).sort()).toEqual(REQUIRED_RPC_SIGNATURES.map(contractKey).sort());
-      expect(contracts.application).toHaveLength(78);
+      expect(contracts.application).toHaveLength(83);
       expect(REQUIRED_RPC_NAMES).toContain('persist_assistive_validation_run');
       expect(REQUIRED_RPC_NAMES).toContain('record_assistive_finding_disposition');
       expect(REQUIRED_RPC_NAMES).toContain('claim_next_assistive_validation_job');
@@ -343,7 +344,7 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
       const inspected = inspectPostgrestOpenApi(openApiDocument());
       expect(inspected?.publicRelations).toEqual([...ALL_REQUIRED_TABLES].sort());
       expect(inspected?.rpcNames).toEqual([...REQUIRED_RPC_NAMES].sort());
-      expect(inspected?.rpcSignatures).toHaveLength(77);
+      expect(inspected?.rpcSignatures).toHaveLength(82);
       expect(inspected?.rpcSignatures.some((signature) => signature.name === 'execute_controlled_publication')).toBe(false);
     });
 

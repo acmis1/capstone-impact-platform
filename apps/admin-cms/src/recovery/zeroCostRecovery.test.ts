@@ -95,7 +95,7 @@ function temporaryDirectory(prefix = 'capstone-recovery-unit-'): string {
 const bucketConfigurations: BucketConfigurationEvidence[] = CANONICAL_STORAGE_BUCKETS.map((id) => ({
   id,
   name: id,
-  public: id !== 'project-drafts-private',
+  public: !id.endsWith('-private'),
   fileSizeLimit: 50_000_000,
   allowedMimeTypes: id === 'public-feeds' ? ['application/json'] : ['image/png'],
 }));
@@ -356,10 +356,10 @@ describe('managed auth/storage customization recovery boundary', () => {
     }
   });
 
-  it('inventories exactly both current Auth triggers and no custom Storage object across 50 migrations', () => {
+  it('inventories exactly both current Auth triggers and no custom Storage object across 51 migrations', () => {
     const operations = inspectRepositoryManagedSchemaMigrationInventory(repositoryRoot);
     const creates = operations.filter((operation) => operation.action === 'CREATE_TRIGGER');
-    expect(repositoryMigrationVersions(repositoryRoot)).toHaveLength(50);
+    expect(repositoryMigrationVersions(repositoryRoot)).toHaveLength(51);
     expect(creates.map((operation) => `${operation.schema}.${operation.table}.${operation.name}`))
       .toEqual([
         'auth.users.claim_staff_provisioning_auth_insert_before_insert',
@@ -443,7 +443,7 @@ describe('managed auth/storage customization recovery boundary', () => {
     }
   });
 
-  it('cannot false-green 50/50 migration history when a managed Auth trigger is absent', () => {
+  it('cannot false-green 51/51 migration history when a managed Auth trigger is absent', () => {
     const migrations = repositoryMigrationVersions(repositoryRoot);
     const restored = managedEvidenceFixture();
     restored.triggers.pop();
@@ -451,7 +451,7 @@ describe('managed auth/storage customization recovery boundary', () => {
       REPOSITORY_MANAGED_SCHEMA_EXPECTATION,
       restored,
     );
-    expect(migrations).toHaveLength(50);
+    expect(migrations).toHaveLength(51);
     expect(resolveClassification(
       managedDrift.length > 0 ? ['MANAGED_SCHEMA_CUSTOMIZATION_DRIFT'] : [],
     )).toBe('MANAGED_SCHEMA_CUSTOMIZATION_DRIFT');

@@ -58,7 +58,7 @@ async function main(): Promise<void> {
   const openApiDocument = await fetchPostgrestOpenApi(apiUrl, serviceRoleKey, auditedFetch);
   const evaluation = await checkHostedDeploymentReadinessWithClient(client, { openApiDocument });
 
-  assert.equal(ALL_REQUIRED_TABLES.length, 37);
+  assert.equal(ALL_REQUIRED_TABLES.length, 41);
   assert.equal(ALL_REQUIRED_TABLES.includes('publication_attempts'), true);
   assert.equal(ALL_REQUIRED_TABLES.includes('participant_preview_tokens' as never), false);
   assert.equal(
@@ -76,7 +76,7 @@ async function main(): Promise<void> {
     `RPC name evidence incomplete (missing=${evaluation.missingRpcNames.join(',') || 'none'}).`
   );
   assert.equal(evaluation.missingRpcNames.length, 0);
-  assert.equal(REQUIRED_RPC_NAMES.length, 77);
+  assert.equal(REQUIRED_RPC_NAMES.length, 82);
   assert.equal(
     evaluation.requiredStorageBuckets,
     'PRESENT',

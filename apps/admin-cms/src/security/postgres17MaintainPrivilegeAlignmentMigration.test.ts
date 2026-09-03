@@ -89,11 +89,11 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
     expect(files).toEqual([...EXPECTED_MIGRATION_FILENAMES]);
     expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
     expect(files).toHaveLength(EXPECTED_REPOSITORY_MIGRATION_COUNT);
-    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(50);
-    expect(files.at(-1)).toBe('20260903120000_participant_preview_controlled_links.sql');
-    expect(files.at(-2)).toBe('20260902010606_controlled_project_links_import.sql');
-    expect(files.at(-3)).toBe(filename);
-    expect(files.at(-4)).toBe('20260828170000_assistive_execution_control.sql');
+    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(51);
+    expect(files.at(-2)).toBe('20260903120000_participant_preview_controlled_links.sql');
+    expect(files.at(-3)).toBe('20260902010606_controlled_project_links_import.sql');
+    expect(files.at(-4)).toBe(filename);
+    expect(files.at(-5)).toBe('20260828170000_assistive_execution_control.sql');
 
     // Forward-only: every migration that existed immediately before 0048 was introduced remains
     // present in the same ordered prefix. This works before and after merge and catches deletion,
@@ -110,6 +110,7 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
       ...baseline.introducedFiles,
       '20260902010606_controlled_project_links_import.sql',
       '20260903120000_participant_preview_controlled_links.sql',
+  '20260903130000_participant_owned_corrections.sql',
     ]);
   });
 
@@ -231,18 +232,18 @@ describe('PostgreSQL 17 MAINTAIN privilege alignment migration', () => {
   });
 
   it('keeps the exact migration manifest, count and latest-migration contracts in step', () => {
-    expect(EXPECTED_MIGRATION_FILENAMES).toHaveLength(50);
-    expect(EXPECTED_MIGRATION_FILENAMES.at(-1)).toBe('20260903120000_participant_preview_controlled_links.sql');
-    expect(EXPECTED_MIGRATION_FILENAMES.at(-2)).toBe('20260902010606_controlled_project_links_import.sql');
-    expect(EXPECTED_MIGRATION_FILENAMES.at(-3)).toBe(filename);
-    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-1)).toBe('20260903120000_participant_preview_controlled_links.sql');
-    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-2)).toBe('20260902010606_controlled_project_links_import.sql');
-    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-3)).toBe(filename);
+    expect(EXPECTED_MIGRATION_FILENAMES).toHaveLength(51);
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-1)).toBe('20260903130000_participant_owned_corrections.sql');
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-3)).toBe('20260902010606_controlled_project_links_import.sql');
+    expect(EXPECTED_MIGRATION_FILENAMES.at(-4)).toBe(filename);
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-1)).toBe('20260903130000_participant_owned_corrections.sql');
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-3)).toBe('20260902010606_controlled_project_links_import.sql');
+    expect(EXPECTED_REPOSITORY_MIGRATIONS.at(-4)).toBe(filename);
     expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(EXPECTED_REPOSITORY_MIGRATIONS.length);
 
     const ci = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
     expect(ci).toContain(
-      "test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 50",
+      "test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 51",
     );
   });
 

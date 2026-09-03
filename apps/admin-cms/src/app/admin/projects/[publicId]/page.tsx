@@ -12,6 +12,8 @@ import { createSupabaseAdminClientCore } from '../../../../lib/supabase/adminCor
 import { Project } from '../../../../domain/project';
 import { requireAdmin } from '../../../../auth/requireAdmin';
 import { hasPermission, canManageParticipantPreview, canPreparePublication, canResolveParticipantCorrection } from '../../../../auth/permissions';
+import { ParticipantCorrectionReview } from '../../../../components/admin/ParticipantCorrectionReview';
+import { loadCorrectionReviewView, type CorrectionReviewView } from '../../../../previews/participantCorrectionReview';
 import { ParticipantPreviewPanel } from '../../../../components/admin/ParticipantPreviewPanel';
 import { SupabaseParticipantPreviewRepository } from '../../../../repositories/SupabaseParticipantPreviewRepository';
 import { SupabaseParticipantPreviewNotificationRepository } from '../../../../repositories/SupabaseParticipantPreviewNotificationRepository';
@@ -128,6 +130,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   const reminderSchedulingEnabled = emailDeliveryEnabled && isParticipantPreviewRemindersEnabled();
   let resolutionStatus: import('../../../../domain/participantPreview').ParticipantPreviewCorrectionResolutionStatus | null = null;
   let resolutionStatusAvailable = false;
+  let correctionReview: CorrectionReviewView = { available: false, candidate: null };
   let canResolveCorrection = false;
   let publicationReadiness: import('../../../../domain/publicationReadiness').PublicationReadinessResult | null = null;
   let publicationActionsAvailable = false;
@@ -286,6 +289,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       previewReminders = auxiliary.previewState.reminders;
       resolutionStatus = auxiliary.resolutionStatus;
       resolutionStatusAvailable = auxiliary.resolutionStatusAvailable;
+      if (resolutionStatusAvailable) correctionReview = await loadCorrectionReviewView(supabase, publicId, resolutionStatus?.correctionRequestId ?? null);
       publicationReadiness = auxiliary.publicationReadiness;
       publicationActionsAvailable = auxiliary.publicationActionsAvailable;
       try {
@@ -455,8 +459,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
           <div className="flex min-w-0 flex-col gap-14">
             <ProjectDetailMacroSection
               id="review-and-edit"
-              title="Review and edit"
-              description="Understand the current workflow decision, resolve blockers, take the permitted action, and update project information."
+              title="Review project content"
+              description="Review submitted content, resolve technical blockers and take the permitted workflow action."
             >
               {/* Operationally important even though it is repeated in the technical record below */}
               {project.pendingRemovalFromPublic && (
@@ -724,8 +728,8 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                   : 'Becomes available after internal review approves the project. Participants confirm their project before publication.'
               }
               icon={UserCheck}
-              collapsible={!laterStagesActive}
-              collapsedHint={laterStagesActive ? undefined : 'After approval'}
+              collapsible={!laterStagesActive && resolutionStatus?.status !== 'in_progress'}
+              collapsedHint={laterStagesActive || resolutionStatus?.status === 'in_progress' ? undefined : 'After approval'}
             >
               <ParticipantPreviewPanel
                 publicId={project.publicId || ''}
@@ -744,6 +748,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                 canResolveCorrection={canResolveCorrection}
                 projectStatus={project.status}
               />
+              {resolutionStatus && <ParticipantCorrectionReview publicId={publicId} view={correctionReview} canDecide={canResolveCorrection} />}
             </ProjectReviewSection>
 
             <ProjectReviewSection

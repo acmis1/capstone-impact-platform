@@ -1,3 +1,7 @@
+import { createSupabaseAdminClient } from '../../../lib/supabase/admin';
+import { getParticipantCorrectionContext, stageParticipantCorrection } from '../../../previews/participantCorrectionService';
+import { readCorrectionBody, parseParticipantCorrectionPackage, CorrectionPackageError } from '../../../previews/participantCorrectionPackage';
+import type { CorrectionFormState } from '../../../previews/participantCorrectionHtml';
 import { NextRequest, NextResponse } from 'next/server';
 import { SupabaseParticipantPreviewRepository } from '../../../repositories/SupabaseParticipantPreviewRepository';
 import { hashPreviewToken, isPlausibleRawPreviewToken } from '../../../previews/participantPreviewToken';
@@ -6,6 +10,11 @@ import { renderParticipantPreviewPage, renderParticipantPreviewUnavailablePage }
 import { validateCorrectionComment } from '../../../previews/participantPreviewCorrectionComment';
 import { ParticipantPreviewMediaViewRef } from '../../../domain/participantPreview';
 import { resolveCanonicalPublicOrigin, validateSameOrigin } from '../../../auth/csrf';
+
+export const runtime = 'nodejs';
+// Limit parser/buffer memory per Node process. Database reservations separately bound
+// durable per-correction storage across instances. Never queue unbounded upload bodies.
+let correctionUploadInProgress = false;
 
 // Generous bound for a same-origin urlencoded form carrying only an action discriminator and, at
 // most, a 2000-character correction comment (worst-case UTF-8 percent-encoding expansion), plus
@@ -77,6 +86,17 @@ async function readBoundedBody(request: NextRequest, limit: number): Promise<Uin
  * (same-origin or cross-origin), so the raw token in this URL is still never leaked, while the
  * real Origin survives on the confirmation/correction submission.
  */
+// Local Supabase serves signed images over HTTP. Permit only its configured loopback
+// origin during development; production retains the HTTPS-only image policy.
+const localStorageImageOrigin = (() => {
+  if (process.env.NODE_ENV !== 'development') return '';
+  try {
+    const url = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '');
+    return url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) && !url.username && !url.password
+      ? ` ${url.origin}` : '';
+  } catch { return ''; }
+})();
+
 const RESPONSE_HEADERS = {
   'Content-Type': 'text/html; charset=utf-8',
   'Cache-Control': 'no-store',
@@ -89,19 +109,18 @@ const RESPONSE_HEADERS = {
   // confirmation POST form below; same-origin submission is separately and authoritatively
   // enforced server-side via validateSameOrigin, never by the CSP alone.
   'Content-Security-Policy':
-    "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'",
+    `default-src 'none'; img-src https:${localStorageImageOrigin}; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'`,
 } as const;
 
 function unavailableResponse(status: number): Response {
   return new Response(renderParticipantPreviewUnavailablePage(), { status, headers: RESPONSE_HEADERS });
 }
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-) {
-  const { token } = await params;
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+  return renderPreviewResponse((await params).token);
+}
 
+async function renderPreviewResponse(token: string, correctionError?: CorrectionFormState['error']) {
   if (!isPlausibleRawPreviewToken(token)) {
     return unavailableResponse(404);
   }
@@ -150,16 +169,25 @@ export async function GET(
     return unavailableResponse(500);
   }
 
+  let correctionForm: CorrectionFormState | undefined;
+  if (responseState.type === 'correction_requested') {
+    try {
+      const context = await getParticipantCorrectionContext(createSupabaseAdminClient(), tokenHash);
+      if (!context) return unavailableResponse(404);
+      correctionForm = { submitted: context.submitted, canSubmit: context.canSubmit, error: correctionError };
+    } catch { return unavailableResponse(404); }
+  }
+
   // Fail closed for the same reason as an unsignable asset: if the immutable snapshot cannot supply
   // an authoritative text alternative for an image, the participant gets the generic unavailable
   // page rather than a page that shows them an image nobody can describe.
   let html: string;
   try {
-    html = renderParticipantPreviewPage({ snapshot: resolved.snapshot, media: mediaViews, responseState });
+    html = renderParticipantPreviewPage({ snapshot: resolved.snapshot, media: mediaViews, responseState, correctionForm });
   } catch {
     return unavailableResponse(404);
   }
-  return new Response(html, { status: 200, headers: RESPONSE_HEADERS });
+  return new Response(html, { status: correctionError ? 400 : 200, headers: RESPONSE_HEADERS });
 }
 
 /**
@@ -203,6 +231,31 @@ export async function POST(
 
   if (!isPlausibleRawPreviewToken(token)) {
     return unavailableResponse(404);
+  }
+
+  if (/^multipart\/form-data(?:;|$)/i.test(request.headers.get('content-type') ?? '')) {
+    const tokenHash = hashPreviewToken(token);
+    try {
+      const client = createSupabaseAdminClient();
+      const context = await getParticipantCorrectionContext(client, tokenHash);
+      if (!context) return unavailableResponse(404);
+      if (correctionUploadInProgress) return unavailableResponse(429);
+      correctionUploadInProgress = true;
+      try {
+        const form = await readCorrectionBody(request);
+        const candidate = await parseParticipantCorrectionPackage(form, context.publicId);
+        const result = await stageParticipantCorrection(client, tokenHash, candidate);
+        if (result === 'lookup') throw new CorrectionPackageError('workbook', 'Use supported program, discipline and industry names in the workbook. Contact your coordinator if a mapping needs review.');
+        if (result === 'limit') throw new CorrectionPackageError('package', 'This correction cycle has reached its submission allowance. Contact your coordinator.');
+        if (result !== 'submitted') throw new CorrectionPackageError('package', 'The corrected package could not be submitted. Retry with the same files. Staff may already have started review.');
+        // The success status receives autofocus. A fragment would override that focus
+        // during browser navigation and leave keyboard users on the section container.
+        return NextResponse.redirect(new URL(`/participant-preview/${token}`, publicOrigin), { status: 303, headers: RESPONSE_HEADERS });
+      } finally { correctionUploadInProgress = false; }
+    } catch (error) {
+      if (error instanceof CorrectionPackageError) return renderPreviewResponse(token, { field: error.field, message: error.message });
+      return unavailableResponse(404);
+    }
   }
 
   const contentType = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();

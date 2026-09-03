@@ -1,3 +1,4 @@
+import { renderParticipantCorrectionForm, type CorrectionFormState } from './participantCorrectionHtml';
 import {
   ParticipantPreviewMediaViewRef,
   ParticipantPreviewResponseState,
@@ -157,7 +158,7 @@ function renderMedia(media: ParticipantPreviewMediaViewRef[], accessibilityText:
  * Renders exactly one authoritative response state. Both unresponded options remain plain,
  * same-current-URL POST forms with no JavaScript and no mutable project data.
  */
-function renderResponseSection(responseState: ParticipantPreviewResponseState): string {
+function renderResponseSection(responseState: ParticipantPreviewResponseState, correctionForm?: CorrectionFormState): string {
   if (responseState.type === 'confirmed') {
     const confirmedAtDisplay = escapeHtml(new Date(responseState.confirmedAt).toUTCString());
     return `<aside class="response-column" aria-labelledby="response-heading">
@@ -186,6 +187,7 @@ function renderResponseSection(responseState: ParticipantPreviewResponseState): 
         </div>
         <p class="response-note">Staff will review your request. The correction has not yet been applied.</p>
       </div>
+      ${correctionForm ? renderParticipantCorrectionForm(correctionForm) : ''}
     </aside>`;
   }
 
@@ -205,7 +207,7 @@ function renderResponseSection(responseState: ParticipantPreviewResponseState): 
       <details class="correction-disclosure">
         <summary>Request corrections</summary>
         <div class="correction-content">
-          <p>Describe what staff should change in this exact preview.</p>
+          <p>Describe what needs to change in this exact preview. You can then submit your corrected source package for staff review.</p>
           <form method="POST" class="correction-form">
             <input type="hidden" name="action" value="request_correction" />
             <label for="correction-comment">What needs to change?</label>
@@ -550,6 +552,13 @@ const PAGE_STYLE = `
     .project-introduction, .prose-field p { font-size: 1rem; }
     .accessible-content, .confirmation-choice { padding: 1rem; }
   }
+  .correction-package { margin-top: 1.5rem; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; overflow-wrap: anywhere; }
+  .correction-package p { margin: 0.75rem 0; }
+  .correction-file-field { margin: 1.25rem 0; min-width: 0; }
+  .correction-file-field label { font-weight: 700; display: block; }
+  .correction-file-field input { display: block; width: 100%; max-width: 100%; min-width: 0; font: inherit; }
+  .correction-file-field input:focus-visible, #package-error:focus { outline: 3px solid #176b87; outline-offset: 3px; }
+  #package-error { border: 2px solid #8b2525; padding: 1rem; margin: 1rem 0; }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
@@ -560,6 +569,7 @@ export function renderParticipantPreviewPage(params: {
   snapshot: ParticipantPreviewSnapshot;
   media: ParticipantPreviewMediaViewRef[];
   responseState: ParticipantPreviewResponseState;
+  correctionForm?: CorrectionFormState;
 }): string {
   const { snapshot, media, responseState } = params;
 
@@ -596,7 +606,7 @@ export function renderParticipantPreviewPage(params: {
       ${renderControlledProjectLinks(snapshot)}
       ${renderReferences(snapshot)}
     </article>
-    ${renderResponseSection(responseState)}
+    ${renderResponseSection(responseState, params.correctionForm)}
   </div>
 </main>
 <footer class="page-footer"><p>This private preview is provided for project review only. Contact your project coordinator if you need help.</p></footer>

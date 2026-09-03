@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 50;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 51;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -58,6 +58,7 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260831090000_postgres17_maintain_privilege_alignment.sql',
   '20260902010606_controlled_project_links_import.sql',
   '20260903120000_participant_preview_controlled_links.sql',
+  '20260903130000_participant_owned_corrections.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [
@@ -85,6 +86,10 @@ export const REQUIRED_PREVIEW_TABLES = [
   'participant_previews',
   'participant_preview_confirmations',
   'participant_preview_correction_requests',
+  'participant_correction_submissions',
+  'participant_correction_prior_revisions',
+  'participant_correction_recovery_rows',
+  'participant_correction_events',
 ] as const;
 
 export const REQUIRED_PUBLICATION_TABLES = [
@@ -164,6 +169,11 @@ export const REQUIRED_RPC_SIGNATURES = [
   rpc('confirm_participant_preview', ['p_token_hash'], ['text']),
   rpc('request_participant_preview_correction', ['p_token_hash', 'p_comment'], ['text', 'text']),
   rpc('start_participant_preview_correction_resolution', ['p_public_id', 'p_admin_id'], ['text', 'uuid']),
+  rpc('participant_correction_project_version', ['p_project_id'], ['uuid']),
+  rpc('participant_correction_context', ['p_token_hash'], ['text']),
+  rpc('reserve_participant_correction', ['p_token_hash', 'p_package_hash', 'p_metadata', 'p_files', 'p_warnings', 'p_bucket'], ['text', 'text', 'jsonb', 'jsonb', 'jsonb', 'text']),
+  rpc('complete_participant_correction', ['p_token_hash', 'p_submission_id', 'p_package_hash'], ['text', 'uuid', 'text']),
+  rpc('review_participant_correction', ['p_public_id', 'p_admin_id', 'p_submission_id', 'p_package_hash', 'p_expected_version', 'p_action'], ['text', 'uuid', 'uuid', 'text', 'text', 'text']),
   rpc('get_project_publication_readiness', ['p_public_id', 'p_admin_id', 'p_private_bucket'], ['text', 'uuid', 'text']),
   rpc('get_project_reconciliation_readiness', ['p_public_id', 'p_admin_id', 'p_private_bucket'], ['text', 'uuid', 'text']),
   rpc('reserve_publication_attempt', ['p_public_id', 'p_admin_id', 'p_private_bucket', 'p_confirmed_preview_id', 'p_confirmed_at'], ['text', 'uuid', 'text', 'uuid', 'timestamptz']),
@@ -238,6 +248,7 @@ export const REQUIRED_RPC_NAMES = [...new Set(REQUIRED_RPC_SIGNATURES.map(({ nam
 
 export const REQUIRED_STORAGE_BUCKETS = [
   'project-drafts-private',
+  'participant-corrections-private',
   'project-public-assets',
   'public-feeds',
 ] as const;

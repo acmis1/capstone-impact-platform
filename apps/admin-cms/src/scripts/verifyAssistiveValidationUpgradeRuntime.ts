@@ -169,7 +169,7 @@ async function main(): Promise<void> {
 
     assertCliSuccess(runLocalSupabaseCli('migration-up', root), 'apply pending Migrations 0031 through 0050');
     scenario('Migrations 0031 through 0050 apply as the only pending migrations', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '50');
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '51');
       assert.equal(psql("SELECT to_regclass('public.assistive_validation_jobs') IS NOT NULL;"), 't');
     });
 
@@ -319,7 +319,7 @@ async function main(): Promise<void> {
       assert.equal(
         psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'),
         '50',
-        'restarted Local stack did not retain all 50 migrations',
+        'restarted Local stack did not retain all 51 migrations',
       );
       assert.equal(
         psql('SELECT version FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 1;'),

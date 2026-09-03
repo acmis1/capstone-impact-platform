@@ -480,7 +480,7 @@ describe('project detail workspace information architecture', () => {
 
   it('keeps four ordered macro destinations with the requested labels', () => {
     const macroSections = [
-      ['review-and-edit', 'Review and edit'],
+      ['review-and-edit', 'Review project content'],
       ['content-and-media', 'Content and media'],
       ['participant-and-publication', 'Participant and publication'],
       ['technical-and-history', 'Technical details and history'],
@@ -499,7 +499,7 @@ describe('project detail workspace information architecture', () => {
     expect(navigationSource).not.toContain("'use client'");
     expect(navigationSource).not.toMatch(/useState|useEffect|onClick|role="tab"/);
     for (const [id, label] of [
-      ['review-and-edit', 'Review and edit'],
+      ['review-and-edit', 'Review project content'],
       ['content-and-media', 'Content and media'],
       ['participant-and-publication', 'Participant and publication'],
       ['technical-and-history', 'Technical details and history'],

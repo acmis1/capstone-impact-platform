@@ -64,19 +64,19 @@ const ORIGINAL_COMPARISON = '  IF v_current_snapshot IS DISTINCT FROM v_active_p
 const NEW_COMPARISON = '  IF v_comparable_snapshot IS DISTINCT FROM v_active_preview.snapshot THEN';
 
 describe('participant-preview controlled-links migration (0050)', () => {
-  it('is the newest forward-only migration and every manifest agrees', () => {
+  it('preserves the forward-only migration and every manifest agrees', () => {
     const files = fs.readdirSync(migrations).filter((file) => file.endsWith('.sql')).sort();
 
-    expect(files).toHaveLength(50);
-    expect(files.at(-1)).toBe(FILENAME);
-    expect(files.at(-2)).toBe(IMPORT_MIGRATION);
+    expect(files).toHaveLength(51);
+    expect(files.at(-2)).toBe(FILENAME);
+    expect(files.at(-3)).toBe(IMPORT_MIGRATION);
 
     expect([...EXPECTED_MIGRATION_FILENAMES]).toEqual(files);
     expect([...EXPECTED_REPOSITORY_MIGRATIONS]).toEqual(files);
-    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(50);
+    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(51);
 
     const ci = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8');
-    expect(ci).toContain("test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 50");
+    expect(ci).toContain("test \"$(find infra/supabase/migrations -name '*.sql' | wc -l)\" -eq 51");
   });
 
   it('edits no migration that already exists on origin/main', () => {
@@ -85,7 +85,7 @@ describe('participant-preview controlled-links migration (0050)', () => {
     expect(() => execFileSync('git', [
       'diff', '--exit-code', 'origin/main', '--',
       ...files
-        .filter((file) => file !== IMPORT_MIGRATION && file !== FILENAME)
+        .filter((file) => file !== IMPORT_MIGRATION && file !== FILENAME && file !== '20260903130000_participant_owned_corrections.sql')
         .map((file) => `infra/supabase/migrations/${file}`),
     ], { cwd: root, stdio: 'pipe' })).not.toThrow();
   });

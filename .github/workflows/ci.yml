@@ -273,7 +273,7 @@ jobs:
       - name: Verify fifty migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 50
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 51
 
       - name: Verify exact Gate 4 schema evidence from the migrated Local catalog
         run: npm run check:gate4-schema-evidence:local --workspace=apps/admin-cms -- --local-self-check

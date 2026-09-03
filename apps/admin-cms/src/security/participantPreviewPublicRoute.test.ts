@@ -10,6 +10,7 @@ const { JSDOM } = require('jsdom') as {
   JSDOM: new (html: string) => { window: { document: Document } };
 };
 
+vi.mock('../previews/participantCorrectionService', () => ({ getParticipantCorrectionContext: vi.fn().mockResolvedValue({ submitted: false, canSubmit: true }), stageParticipantCorrection: vi.fn() }));
 vi.mock('server-only', () => ({}));
 vi.mock('../lib/supabase/admin', () => ({
   createSupabaseAdminClient: vi.fn(),
@@ -712,7 +713,7 @@ describe('Public participant-preview route', () => {
     responseStateSpy.mockRestore();
   });
 
-  it('renders the confirmed state with the recorded timestamp and no confirmation/correction form once already confirmed', async () => {
+  it('renders the confirmed state with the recorded timestamp and a separate complete-package upload form once already confirmed', async () => {
     const { GET } = await import('../app/participant-preview/[token]/route');
     const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
 

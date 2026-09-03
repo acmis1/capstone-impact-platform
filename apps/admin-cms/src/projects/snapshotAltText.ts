@@ -5,7 +5,7 @@ import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
  * Staff-facing contract for editing the authoritative text alternative of a project's snapshot
  * image.
  *
- * The value is staff-authored. Nothing here derives it from the filename, the project title, the
+ * The value is project-team-authored. Nothing here derives it from the filename, the project title, the
  * poster accessibility text, OCR, or any AI service, and nothing judges the prose: the only rules
  * are that it is present after trimming and within the shared technical ceiling. An oversized value
  * is rejected rather than truncated, so staff always see exactly what they wrote.
@@ -40,6 +40,7 @@ export const snapshotAltTextInputSchema = z.object({
 export type SnapshotAltTextInput = z.infer<typeof snapshotAltTextInputSchema>;
 
 export type SnapshotAltTextErrorCode =
+  | 'PARTICIPANT_CONTENT_OWNED'
   | 'VALIDATION_FAILED'
   | 'PERMISSION_DENIED'
   | 'PROJECT_NOT_FOUND'
