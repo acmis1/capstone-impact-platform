@@ -75,8 +75,8 @@ async function main(): Promise<void> {
   try {
     psql(`DELETE FROM public.assistive_worker_heartbeats WHERE worker_instance_id LIKE 'runtime-%';`);
 
-    await scenario('fresh schema contains exactly 48 migrations and the heartbeat relation', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '48');
+    await scenario('fresh schema contains exactly 50 migrations and the heartbeat relation', () => {
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '50');
       assert.equal(psql("SELECT to_regclass('public.assistive_worker_heartbeats') IS NOT NULL;"), 't');
     });
 

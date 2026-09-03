@@ -154,18 +154,19 @@ describe('Hosted Deployment Readiness & Staging Governance Contract Tests', () =
     it('matches the exact repository migration inventory and keeps every historical migration byte-identical to origin/main', () => {
       const files = migrationSources().map(({ file }) => file);
 
-      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(48);
+      expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(50);
 
       expect(files).toEqual([...EXPECTED_REPOSITORY_MIGRATIONS]);
 
-      // Only the execution-control migration and the PostgreSQL 17 MAINTAIN alignment migration
-      // are new relative to origin/main. Every current-main migration must stay byte-identical.
+      // The controlled-project-links import migration and the participant-evidence migration
+      // that follows it are the only two new relative to origin/main. Every current-main
+      // migration must stay byte-identical.
       const historicalMigrations = EXPECTED_REPOSITORY_MIGRATIONS.filter(
-        (migration) => migration !== '20260828170000_assistive_execution_control.sql'
-          && migration !== '20260831090000_postgres17_maintain_privilege_alignment.sql',
+        (migration) => migration !== '20260902010606_controlled_project_links_import.sql'
+          && migration !== '20260903120000_participant_preview_controlled_links.sql',
       );
 
-      expect(historicalMigrations).toHaveLength(46);
+      expect(historicalMigrations).toHaveLength(48);
 
       expect(() =>
         execFileSync(

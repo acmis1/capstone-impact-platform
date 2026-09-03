@@ -181,7 +181,7 @@ async function main(): Promise<void> {
     assert.equal(
       migrationUp.ok,
       true,
-      `Migration 0046 to 0048 failed (${migrationUp.failureCategory ?? 'UNKNOWN'}).`,
+      `Migration 0046 to 0050 failed (${migrationUp.failureCategory ?? 'UNKNOWN'}).`,
     );
 
     const actor = await service.from('admin_users').insert({
@@ -212,8 +212,11 @@ async function main(): Promise<void> {
     // privilege checks below exercise the real authenticated connection path.
     psql(`ALTER ROLE ${DISPATCHER_ROLE} WITH PASSWORD '${dispatcherPassword}';`);
 
-    await scenario(1, 'Migration 0046 to 0048 preserves project data and installs the control schema', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '48');
+    await scenario(1, 'Migration 0046 to 0050 preserves project data and installs the control schema', () => {
+      assert.equal(
+        psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'),
+        '50',
+      );
       assert.equal(
         psql(`SELECT to_jsonb(p)::text FROM public.projects AS p WHERE p.id = '${upgradeProjectId}'::uuid;`),
         upgradeProjectBefore,

@@ -5,7 +5,7 @@
  * execute an RPC because repository RPCs can mutate authoritative state.
  */
 
-export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 48;
+export const EXPECTED_REPOSITORY_MIGRATION_COUNT = 50;
 
 export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260601035138_staging_schema.sql',
@@ -56,6 +56,8 @@ export const EXPECTED_REPOSITORY_MIGRATIONS = [
   '20260828120000_assistive_worker_heartbeat.sql',
   '20260828170000_assistive_execution_control.sql',
   '20260831090000_postgres17_maintain_privilege_alignment.sql',
+  '20260902010606_controlled_project_links_import.sql',
+  '20260903120000_participant_preview_controlled_links.sql',
 ] as const;
 
 export const REQUIRED_CORE_TABLES = [

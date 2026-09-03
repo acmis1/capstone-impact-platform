@@ -3,12 +3,29 @@ import {
   ParticipantPreviewResponseState,
   ParticipantPreviewSnapshot,
 } from '../domain/participantPreview';
+import { validateProjectControlledUrl } from '../domain/projectControlledUrl';
 import { MAX_CORRECTION_COMMENT_LENGTH } from './participantPreviewCorrectionComment';
 
 export class ParticipantPreviewMediaAccessibilityError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ParticipantPreviewMediaAccessibilityError';
+  }
+}
+
+/**
+ * Raised when the immutable snapshot carries a populated controlled project link that is not a
+ * usable, safe destination. The public route catches it and serves the same generic
+ * preview-unavailable response it already serves for undescribable media.
+ *
+ * Failing closed is deliberate: quietly dropping the offending field would show the participant
+ * incomplete evidence and still let them confirm it, which is exactly the confirm-A/publish-B
+ * problem this contract exists to prevent.
+ */
+export class ParticipantPreviewEvidenceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ParticipantPreviewEvidenceError';
   }
 }
 
@@ -266,6 +283,51 @@ function renderProjectContext(snapshot: ParticipantPreviewSnapshot): string {
         ${renderList(snapshot.teamMembers, 'team-list')}
       </section>
     </div>
+  </section>`;
+}
+
+/**
+ * The three controlled project links, as ordinary participant-reviewable evidence.
+ *
+ * Deliberately plain external anchors: no embed, no iframe, no autoplay. A video link is a link
+ * here even though the public showcase may embed an allowlisted player, because the participant
+ * is confirming the destination, not previewing the presentation.
+ *
+ * Populated values are re-validated at render time rather than trusted from storage, so a
+ * tampered or drifted snapshot fails closed instead of producing an unsafe href. Absent values —
+ * `null` on a current snapshot, missing entirely on a historical one — render nothing at all, so
+ * there are never empty anchors. When no link exists the whole section is omitted.
+ */
+function renderControlledProjectLinks(snapshot: ParticipantPreviewSnapshot): string {
+  const fields: Array<{
+    value: string | null | undefined;
+    heading: string;
+    action: string;
+  }> = [
+    { value: snapshot.videoUrl, heading: 'Video', action: 'Open video' },
+    { value: snapshot.demoUrl, heading: 'Live demo / prototype', action: 'Open live demo / prototype' },
+    { value: snapshot.repositoryUrl, heading: 'Repository', action: 'Open repository' },
+  ];
+
+  const rendered = fields.flatMap(({ value, heading, action }) => {
+    if (value === null || value === undefined) return [];
+
+    const validation = validateProjectControlledUrl(value);
+
+    if (!validation.valid) {
+      throw new ParticipantPreviewEvidenceError(
+        `Participant preview evidence contains an unusable ${heading} link.`,
+      );
+    }
+
+    return [`<section><h3>${escapeHtml(heading)}</h3><ul class="reference-list external-links"><li><a href="${escapeHtml(validation.url)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(action)}<span class="link-purpose"> (opens in a new tab)</span></a></li></ul></section>`];
+  });
+
+  if (rendered.length === 0) return '';
+
+  return `<section class="review-section project-links-section" aria-labelledby="project-links-heading">
+    <div class="section-heading"><p class="section-kicker">Project evidence</p><h2 id="project-links-heading">Project links</h2></div>
+    <div class="reference-grid">${rendered.join('')}</div>
   </section>`;
 }
 
@@ -531,6 +593,7 @@ export function renderParticipantPreviewPage(params: {
       ${renderMedia(media, snapshot.accessibilityText)}
       ${renderAccessibleContent(snapshot)}
       ${renderProjectContext(snapshot)}
+      ${renderControlledProjectLinks(snapshot)}
       ${renderReferences(snapshot)}
     </article>
     ${renderResponseSection(responseState)}

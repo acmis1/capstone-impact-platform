@@ -242,4 +242,88 @@ describe('ProjectMediaSummary accessibility integration', () => {
     expect(screen.getByRole('status').textContent).toContain('Media preview temporarily unavailable.');
     expect(screen.queryByText(/Accessibility review/)).toBeNull();
   });
+
+  it('renders safe controlled project links with the expected labels and link protections', () => {
+    render(
+      <ProjectMediaSummary
+        project={project({
+          videoUrl: 'https://video.example.com/watch',
+          demoUrl: 'https://demo.example.com/live',
+          repositoryUrl: 'https://github.com/example/project',
+        })}
+        mediaAvailable
+        mediaItems={[]}
+      />,
+    );
+
+    expect(screen.getByText('Video')).toBeTruthy();
+    expect(screen.getByText('Live demo / prototype')).toBeTruthy();
+    expect(screen.getByText('Repository')).toBeTruthy();
+
+    const video = screen.getByRole('link', { name: 'Open video' });
+    const demo = screen.getByRole('link', {
+      name: 'Open live demo / prototype',
+    });
+    const repository = screen.getByRole('link', {
+      name: 'Open repository',
+    });
+
+    expect(video.getAttribute('href')).toBe(
+      'https://video.example.com/watch',
+    );
+    expect(demo.getAttribute('href')).toBe(
+      'https://demo.example.com/live',
+    );
+    expect(repository.getAttribute('href')).toBe(
+      'https://github.com/example/project',
+    );
+
+    for (const link of [video, demo, repository]) {
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    }
+  });
+
+  it.each([
+    'javascript:alert(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'file:///tmp/project.html',
+    'not-a-url',
+  ])('does not render an unsafe controlled URL as a clickable link: %s', (unsafeUrl) => {
+    render(
+      <ProjectMediaSummary
+        project={project({
+          videoUrl: unsafeUrl,
+        })}
+        mediaAvailable
+        mediaItems={[]}
+      />,
+    );
+
+    expect(
+      screen.queryByRole('link', { name: 'Open video' }),
+    ).toBeNull();
+
+    expect(screen.getAllByText('Not provided').length).toBeGreaterThan(0);
+  });
+
+  it('does not interpret controlled project links as arbitrary HTML or embedded content', () => {
+    const { container } = render(
+      <ProjectMediaSummary
+        project={project({
+          videoUrl:
+            'https://example.com/?value=%3Cscript%3Ealert(1)%3C%2Fscript%3E',
+        })}
+        mediaAvailable
+        mediaItems={[]}
+      />,
+    );
+
+    expect(container.querySelector('script')).toBeNull();
+    expect(container.querySelector('iframe')).toBeNull();
+
+    expect(
+      screen.getByRole('link', { name: 'Open video' }),
+    ).toBeTruthy();
+  });
 });

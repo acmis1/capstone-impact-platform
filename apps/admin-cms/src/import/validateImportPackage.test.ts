@@ -439,6 +439,54 @@ describe('validateImportPackage', () => {
     expect(result.errors.some(e => e.ruleCode === 'FILE_MISSING_POSTER_PDF')).toBe(true);
   });
 
+  it('rejects poster PDF with an unsupported MIME type', () => {
+    const pkg = createMockParsedPackage({
+      posterPdf: {
+        fileName: 'poster.pdf',
+        fileSizeBytes: 1024,
+        mimeType: 'application/octet-stream',
+        content: Buffer.from([]),
+      },
+    });
+
+    const result = validateImportPackage(pkg);
+
+    expect(result.valid).toBe(false);
+
+    const error = result.errors.find(
+      (e) => e.ruleCode === 'FILE_INVALID_POSTER_PDF',
+    );
+
+    expect(error).toBeDefined();
+    expect(error?.message).toContain(
+      'MIME type [application/octet-stream] is not allowed',
+    );
+  });
+
+  it('rejects poster PDF larger than the 20 MB limit', () => {
+    const pkg = createMockParsedPackage({
+      posterPdf: {
+        fileName: 'poster.pdf',
+        fileSizeBytes: 20 * 1024 * 1024 + 1,
+        mimeType: 'application/pdf',
+        content: Buffer.from([]),
+      },
+    });
+
+    const result = validateImportPackage(pkg);
+
+    expect(result.valid).toBe(false);
+
+    const error = result.errors.find(
+      (e) => e.ruleCode === 'FILE_INVALID_POSTER_PDF',
+    );
+
+    expect(error).toBeDefined();
+    expect(error?.message).toContain(
+      'exceeds the maximum limit of 20 MB',
+    );
+  });
+
   it('produces a warning when recommended snapshot is missing', () => {
     const pkg = createMockParsedPackage({ snapshot1: null });
     const result = validateImportPackage(pkg);
