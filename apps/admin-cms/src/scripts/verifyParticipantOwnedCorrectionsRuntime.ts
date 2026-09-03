@@ -54,6 +54,34 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
   };
   try {
     assert.match(sql('SELECT count(*) AS migration_count FROM supabase_migrations.schema_migrations;'), /\b51\b/);
+    // Default ACLs materialize as direct grants at CREATE TABLE; SELECT alone cannot narrow them.
+    const correctionTables = ['participant_correction_events', 'participant_correction_prior_revisions',
+      'participant_correction_recovery_rows', 'participant_correction_submissions'];
+    const tableNames = correctionTables.map((table) => "'" + table + "'").join(',');
+    const expectedGrants = correctionTables.map((table) => [table, 'service_role', 'SELECT', false]);
+    const directGrants = JSON.parse(sql(`COPY (
+      SELECT COALESCE(jsonb_agg(jsonb_build_array(c.relname, COALESCE(r.rolname, 'PUBLIC'),
+        a.privilege_type, a.is_grantable) ORDER BY c.relname, r.rolname, a.privilege_type), '[]'::jsonb)
+      FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      CROSS JOIN LATERAL pg_catalog.aclexplode(c.relacl) a
+      LEFT JOIN pg_catalog.pg_roles r ON r.oid = a.grantee
+      WHERE n.nspname = 'public' AND c.relname IN (${tableNames})
+        AND (a.grantee = 0 OR r.rolname IN ('anon', 'authenticated', 'service_role'))
+    ) TO STDOUT;`).trim());
+    assert.deepEqual(directGrants, expectedGrants);
+    const effectiveGrants = JSON.parse(sql(`COPY (
+      SELECT COALESCE(jsonb_agg(jsonb_build_array(c.relname, r.role, p.privilege,
+        has_table_privilege(r.role, c.oid, p.privilege || ' WITH GRANT OPTION'))
+        ORDER BY c.relname, r.role, p.privilege), '[]'::jsonb)
+      FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      CROSS JOIN (VALUES ('anon'), ('authenticated'), ('service_role')) r(role)
+      CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'),
+        ('REFERENCES'), ('TRIGGER'), ('TRUNCATE'), ('MAINTAIN')) p(privilege)
+      WHERE n.nspname = 'public' AND c.relname IN (${tableNames})
+        AND has_table_privilege(r.role, c.oid, p.privilege)
+    ) TO STDOUT;`).trim());
+    assert.deepEqual(effectiveGrants, expectedGrants);
+    pass('correction table direct and effective ACLs are service_role SELECT-only');
     for (const [role, userId] of Object.entries(staff)) {
       await data(client.from('admin_users').insert({ id: userId, email: `synthetic-${role}-${suffix}@example.invalid`, full_name: 'Synthetic correction verifier' }).select());
       await data(client.from('user_roles').insert({ user_id: userId, role }).select());

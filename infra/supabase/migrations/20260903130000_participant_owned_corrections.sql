@@ -39,7 +39,7 @@ CREATE UNIQUE INDEX pre_preview_package_identity ON public.participant_correctio
 CREATE UNIQUE INDEX pre_preview_one_submitted ON public.participant_correction_submissions(project_id) WHERE source='staff_pre_preview' AND state='submitted';
 CREATE UNIQUE INDEX pre_preview_one_frozen ON public.participant_correction_submissions(project_id) WHERE source='staff_pre_preview' AND state='frozen';
 ALTER TABLE public.participant_correction_submissions ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.participant_correction_submissions FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON public.participant_correction_submissions FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON public.participant_correction_submissions TO service_role;
 
 -- Complete prior records are retained before application; no Storage object is removed.
@@ -56,7 +56,7 @@ CREATE TABLE public.participant_correction_prior_revisions (
   captured_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.participant_correction_prior_revisions ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.participant_correction_prior_revisions FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON public.participant_correction_prior_revisions FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON public.participant_correction_prior_revisions TO service_role;
 
 -- One immutable record per old row, including retained/updated rows. The submission is
@@ -71,7 +71,7 @@ CREATE TABLE public.participant_correction_recovery_rows (
   CHECK (row_data->>'project_id' = project_id::text)
 );
 ALTER TABLE public.participant_correction_recovery_rows ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.participant_correction_recovery_rows FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON public.participant_correction_recovery_rows FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON public.participant_correction_recovery_rows TO service_role;
 
 CREATE FUNCTION public.reject_correction_audit_change() RETURNS trigger
@@ -90,7 +90,7 @@ CREATE TABLE public.participant_correction_events (
   CHECK ((event = 'participant_submitted') = (staff_actor_id IS NULL)), UNIQUE(submission_id,event)
 );
 ALTER TABLE public.participant_correction_events ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.participant_correction_events FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON public.participant_correction_events FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON public.participant_correction_events TO service_role;
 CREATE TRIGGER correction_event_immutable BEFORE UPDATE OR DELETE ON public.participant_correction_events
 FOR EACH ROW EXECUTE FUNCTION public.reject_correction_audit_change();
