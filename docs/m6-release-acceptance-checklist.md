@@ -56,8 +56,9 @@ Use one copy per candidate release. Leave every item unchecked until its stated 
 
 ## Core workflow
 
-Reference the integrated workflow evidence; do not create a competing release-scale harness.
+Reference the [integrated release evaluation harness](release-evaluation-harness.md) for disposable-Local release-scale evidence; do not create a competing release-scale harness. Its report is evidence for the listed Local boundaries, not hosted capacity, institutional UAT, or staff-effort KPIs.
 
+- [ ] `npm run verify:release-evaluation` produced a reviewed report with status `READY FOR INDEPENDENT REVIEW`; record the report evidence reference: ____
 - [ ] Import preview, selection, metadata staging, media staging, and completed batch evidence passed. Evidence: ____
 - [ ] Blocking validation and warning acknowledgement behaved as documented. Evidence: ____
 - [ ] Submit-for-review and review action evidence passed. Evidence: ____
@@ -114,6 +115,8 @@ Reference the integrated workflow evidence; do not create a competing release-sc
 - [ ] Administrator, technical owner, and institutional sponsor sign-off are recorded. Evidence: ____
 
 ## KPI decision
+
+The integrated release-evaluation report deliberately records staff-effort/KPI evidence as not measured. Complete the [manual efficiency template](templates/release-evaluation-manual-efficiency.md) with comparable human measurements before making a reduction claim.
 
 KPI-14 remains `NOT PASSED` unless deployment, hosted backup restoration, Render rollback/redeploy, monitoring/alert routing, and RPO/RTO evidence above are checked with reviewed references.
 

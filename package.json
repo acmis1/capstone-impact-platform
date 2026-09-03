@@ -90,6 +90,7 @@
     "verify:scaling-runtime": "npm run verify:scaling-runtime --workspace=apps/admin-cms",
     "verify:bulk-project-review-runtime": "npm run verify:bulk-project-review-runtime --workspace=apps/admin-cms",
     "verify:bulk-project-review-functional-workflow": "npm run verify:bulk-project-review-functional-workflow --workspace=apps/admin-cms",
+    "verify:release-evaluation": "npm run verify:release-evaluation --workspace=apps/admin-cms --",
     "benchmark:local-scaling": "npm run benchmark:local-scaling --workspace=apps/admin-cms --"
   },
   "devDependencies": {

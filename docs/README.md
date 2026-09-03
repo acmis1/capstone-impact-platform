@@ -29,6 +29,8 @@ When verifying system behavior or planning extensions, information must be refer
 *   **[Admin/CMS Operator Guide](admin-operator-guide.md)**: Routine staff operations, controlled failure handling, authority boundaries, and escalation guidance.
 *   **[Developer Handover Guide](developer-handover-guide.md)**: Source-of-truth, maintenance map, local setup, migrations, release evaluation, deployment, and recovery boundaries.
 *   **[Operational Ownership & Training](operational-handover-and-training.md)**: Role ownership matrix, credential-policy transfer record, escalation acceptance, and KPI-15 unaided routine-task instrument.
+*   **[Integrated Release Evaluation Harness](release-evaluation-harness.md)**: Disposable-Local 132-case evaluation, evidence boundaries, cleanup, repeatability, and report interpretation.
+*   **[Manual Efficiency Template](templates/release-evaluation-manual-efficiency.md)**: Unfilled comparison template for later staff-effort measurement.
 
 ---
 

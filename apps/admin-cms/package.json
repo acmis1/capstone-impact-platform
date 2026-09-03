@@ -88,6 +88,7 @@
     "verify:scaling-runtime": "tsx src/scripts/verifyLocalScalingRuntime.ts",
     "verify:bulk-project-review-runtime": "node --conditions=react-server --import tsx src/scripts/verifyBulkProjectReviewRuntime.ts",
     "verify:bulk-project-review-functional-workflow": "node --conditions=react-server --import tsx src/scripts/verifyBulkProjectReviewFunctionalWorkflow.ts",
+    "verify:release-evaluation": "node --conditions=react-server --import tsx src/scripts/verifyReleaseEvaluation.ts",
     "benchmark:local-scaling": "tsx src/scripts/benchmarkLocalScaling.ts",
     "verify:all": "tsx src/scripts/verifyAll.ts",
     "typecheck": "tsc --noEmit",
