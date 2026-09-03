@@ -1,0 +1,52 @@
+name: PP1 Candidate Patch Bootstrap
+
+on:
+  push:
+    branches:
+      - integration/participant-owned-corrections-orchestrator
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'chore(integration): stage verified participant candidate patch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout integration branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: integration/participant-owned-corrections-orchestrator
+
+      - name: Verify bootstrap base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "6125bb56a2c71c16a45cce44851696e8b09a3b4c"
+
+      - name: Reconstruct and verify candidate patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .integration-transfer/part-* > /tmp/candidate.patch.xz.b64
+          base64 -d /tmp/candidate.patch.xz.b64 > /tmp/candidate.patch.xz
+          xz -dc /tmp/candidate.patch.xz > /tmp/candidate.patch
+          test "$(sha256sum /tmp/candidate.patch | awk '{print $1}')" = "a7f5f71ea493e3fb31c7974d690bc5e93afbca6bb8da7bb641fc4a765f9b21f7"
+
+      - name: Apply candidate with three-way reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "PP1 Integration Orchestrator"
+          git config user.email "75743409+acmis1@users.noreply.github.com"
+          git apply --3way --index /tmp/candidate.patch
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo "Merge conflicts detected; refusing automatic resolution."
+            exit 1
+          fi
+          git diff --cached --check
+          test -z "$(git diff --cached --name-only | grep -E '^(\.integration-transfer/|\.github/workflows/pp1-participant-candidate-bootstrap\.yml)$' || true)"
+          git commit -m "feat(workflow): integrate participant-owned corrections [bootstrap]"
+          git push origin HEAD:integration/participant-owned-corrections-orchestrator
