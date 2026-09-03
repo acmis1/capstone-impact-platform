@@ -66,12 +66,12 @@ export function ParticipantCorrectionReview({ publicId, view, canDecide, prePrev
       <details><summary className="cursor-pointer">File identity</summary><p className="break-all text-xs">SHA-256: {file.hash}</p></details>
     </li>)}</ul></div>
     {candidate.state === 'accepted' && <p role="status">{prePreview ? 'Project-team package accepted. Complete normal technical checks and review, then approve and issue the first participant preview.' : 'Participant revision accepted. Run the normal technical and review checks, re-approve, issue the corrected participant preview, and obtain a new confirmation before publication readiness.'}</p>}
-    {candidate.state === 'returned' && <p role="status">{prePreview ? 'Package returned. The current draft is unchanged. Request another complete package from the project team.' : 'Revision returned. The old preview remains revoked. Review the retained draft, re-approve it and issue a new preview so the project team can begin another correction cycle.'}</p>}
+    {candidate.state === 'returned' && <p role="status">{prePreview ? 'Package returned. The current draft is unchanged. Normal project review may continue. Another complete package may be supplied within the normal upload allowance.' : 'Revision returned. The old preview remains revoked. Review the retained draft, re-approve it and issue a new preview so the project team can begin another correction cycle.'}</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {completed && <p role="status">Decision recorded. Refreshing the current evidence…</p>}
     {canDecide && ['submitted', 'frozen'].includes(candidate.state) && <div className="flex flex-wrap gap-2">
       <Button disabled={busy || completed} onClick={() => open(candidate.state === 'submitted' ? 'begin' : 'accept')}>{labels[candidate.state === 'submitted' ? 'begin' : 'accept']}</Button>
-      {candidate.state === 'frozen' && <Button variant="outline" disabled={busy || completed} onClick={() => open('return')}>{labels.return}</Button>}
+      {(candidate.state === 'frozen' || prePreview) && <Button variant="outline" disabled={busy || completed} onClick={() => open('return')}>{labels.return}</Button>}
     </div>}
     <AlertDialog open={action !== null} onOpenChange={(value) => { if (!value && !busy) setAction(null); }}>
       <AlertDialogContent onCloseAutoFocus={(event) => { event.preventDefault(); trigger.current?.focus(); }}>
@@ -79,8 +79,8 @@ export function ParticipantCorrectionReview({ publicId, view, canDecide, prePrev
           <AlertDialogDescription>{action === 'begin'
             ? prePreview ? 'Freeze this exact project-team package for review. The current draft and review state remain unchanged. Approval and further uploads are paused until you accept or return the package.' : 'Freeze this exact participant submission, revoke the original preview and move the project to changes requested. The project team cannot change the frozen package. Review every comparison before accepting it.'
             : action === 'accept'
-              ? 'Apply this complete participant-authored package to the draft. Omitted project media and taxonomy mappings will be retired with complete recovery records. All old files remain in Storage. This does not approve or publish the project.'
-              : prePreview ? 'Keep the current draft and review state. Request another complete package from the project team; no project content will be applied.' : candidate.state === 'frozen'
+              ? `Apply this complete ${prePreview ? 'project-team-authored' : 'participant-authored'} package to the draft. Omitted project media and taxonomy mappings will be retired with complete recovery records. All old files remain in Storage. This does not approve or publish the project.`
+              : prePreview ? 'The current draft and review state remain unchanged. This project-team package will not be applied. Normal project review may continue. Another complete package may later be supplied within the normal upload allowance.' : candidate.state === 'frozen'
                 ? 'Keep the current draft. The original preview stays revoked. Review and re-approve the retained draft, then issue a new preview so the project team can begin another correction cycle.'
                 : 'Keep the current draft. The project team can submit a replacement through the active preview while the submission limit permits.'}</AlertDialogDescription>
         </AlertDialogHeader>

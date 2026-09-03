@@ -444,7 +444,7 @@ export async function parseProjectDetailsWorkbook(
   const demoUrl = processOptionalControlledUrl('demoUrl');
   const repositoryUrl = processOptionalControlledUrl('repositoryUrl');
 
-  // Required accessible poster content. Both values are staff-authored in the workbook — nothing
+  // Required accessible poster content. Both values are project-team-authored in the workbook — nothing
   // here derives, transcribes, or generates them. The only rules applied are presence after trim
   // and a transport/storage safety ceiling; the prose itself is never judged.
   const posterText = processBoundedAccessibleTextField('posterText', ACCESSIBLE_CONTENT_LIMITS.posterText);

@@ -295,7 +295,7 @@ LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$
 $$;
 
 -- Only identity, evidence hashes and a governance decision enter this boundary.
--- All replacement values come from the immutable, participant-submitted package.
+-- All replacement values come from the immutable, project-team-authored package.
 CREATE FUNCTION public.review_participant_correction(
   p_public_id text,p_admin_id uuid,p_submission_id uuid,p_package_hash text,p_expected_version text,p_action text
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
@@ -328,9 +328,11 @@ BEGIN
   IF p_action='accept' AND s.state='accepted' AND s.frozen_version=p_expected_version THEN
     RETURN jsonb_build_object('resultCode','SUCCESS','state','accepted','alreadyApplied',true);
   END IF;
-  -- Returning a frozen pre-preview package never changes content. Permit release
-  -- after governance changes made its base stale, so the project can be reviewed again.
-  IF s.source='staff_pre_preview' AND p_action='return' AND s.state='frozen' AND s.frozen_version=p_expected_version THEN
+  -- Returning a complete pre-preview package never applies content. Match its
+  -- recorded revision identity, even when governance changes made the current draft stale.
+  IF s.source='staff_pre_preview' AND p_action='return' AND
+     ((s.state='submitted' AND s.base_version=p_expected_version) OR
+      (s.state='frozen' AND s.frozen_version=p_expected_version)) THEN
     UPDATE public.participant_correction_submissions SET state='returned',decided_at=now(),decided_by=p_admin_id WHERE id=s.id;
     INSERT INTO public.participant_correction_events(submission_id,event,staff_actor_id) VALUES(s.id,'staff_returned_revision',p_admin_id);
     RETURN jsonb_build_object('resultCode','SUCCESS','state','returned');
@@ -483,7 +485,7 @@ CREATE FUNCTION public.guard_unresolved_participant_candidate() RETURNS trigger
 LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
   IF NEW.status='approved' AND OLD.status IS DISTINCT FROM 'approved' AND EXISTS(
-    SELECT 1 FROM public.participant_correction_submissions WHERE project_id=NEW.id AND source='staff_pre_preview' AND state='frozen')
+    SELECT 1 FROM public.participant_correction_submissions WHERE project_id=NEW.id AND source='staff_pre_preview' AND state IN ('submitted','frozen'))
   THEN RAISE EXCEPTION 'PROJECT_TEAM_PACKAGE_DECISION_REQUIRED'; END IF;
   IF NEW.status='approved' AND OLD.status IS DISTINCT FROM 'approved' AND EXISTS(
     SELECT 1 FROM public.participant_preview_correction_requests r JOIN public.participant_previews pp ON pp.id=r.participant_preview_id

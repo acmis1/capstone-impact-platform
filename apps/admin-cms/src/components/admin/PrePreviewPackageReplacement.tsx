@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '../ui/button';
 import { ParticipantCorrectionReview } from './ParticipantCorrectionReview';
@@ -16,9 +16,11 @@ const roles = [
 export function PrePreviewPackageReplacement({ publicId, view, canSubmit }: { publicId: string; view: CorrectionReviewView; canSubmit: boolean }) {
   const router = useRouter();
   const running = useRef(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => { if (error && !busy) errorRef.current?.focus(); }, [error, busy]);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (running.current || !canSubmit) return;
@@ -51,7 +53,7 @@ export function PrePreviewPackageReplacement({ publicId, view, canSubmit }: { pu
       </fieldset>
       {busy && <p role="status">Validating and uploading the complete package. Keep this page open.</p>}
     </form> : <p role="status">Uploads are paused while a package is frozen or the three-package allowance has been reached. Review the submitted package below.</p>}
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {error && <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm text-destructive">{error}</p>}
     {submitted && <p role="status">Package submitted for comparison. The current project is unchanged until you accept the exact revision.</p>}
     <ParticipantCorrectionReview publicId={publicId} view={view} canDecide prePreview />
   </section>;

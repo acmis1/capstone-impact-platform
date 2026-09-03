@@ -69,7 +69,7 @@ export function projectControlledUrlSatisfiesDatabaseContract(value: string): bo
 }
 
 /**
- * Validates optional staff-authored project links imported from `project-details.xlsx`.
+ * Validates optional project-team-authored links imported from `project-details.xlsx`.
  *
  * Blank is valid because the video/demo/repository links are optional.
  *

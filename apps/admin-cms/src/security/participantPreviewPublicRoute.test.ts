@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+// Load the route and workbook parser before timing individual response assertions.
+import '../app/participant-preview/[token]/route';
 import { createRequire } from 'node:module';
 import { escapeHtml, renderParticipantPreviewPage, renderParticipantPreviewUnavailablePage, isSafeExternalPreviewUrl } from '../previews/participantPreviewHtml';
 import { hashPreviewToken } from '../previews/participantPreviewToken';

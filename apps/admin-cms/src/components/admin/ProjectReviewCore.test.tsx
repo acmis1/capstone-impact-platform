@@ -467,6 +467,14 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       );
     });
 
+    it('explains the database package-decision block without exposing server error text', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 409, json: async () => ({ success: false, code: 'PROJECT_TEAM_PACKAGE_DECISION_REQUIRED', error: 'Untrusted raw detail' }) }));
+      render(<StagingReviewActions publicId="2026-proj-01" currentStatus="changes_requested" allowedActions={['approve']} />);
+      fireEvent.click(screen.getByRole('button', { name: /Approve project/i }));
+      expect(await screen.findByText('Accept or return the pending project-team package before approving this project.')).toBeTruthy();
+      expect(screen.queryByText('Untrusted raw detail')).toBeNull();
+    });
+
     it('renders safe generic error message when review transition fails', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,

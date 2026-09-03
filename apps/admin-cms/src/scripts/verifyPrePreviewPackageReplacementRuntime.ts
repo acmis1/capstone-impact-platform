@@ -61,6 +61,75 @@ export async function verifyPrePreviewPackageReplacementRuntime(client: Supabase
   assert.equal((await rpc('perform_project_review_action', { p_public_id: publicId, p_admin_id: adminId, p_action: 'request_changes', p_comments: 'Project team must correct the submitted content before approval.' })).status, 'changes_requested');
   assert.equal((await data(client.from('participant_previews').select('id').eq('project_id', initial.id))).length, 0);
 
+  // Exercise the decision guard on an otherwise approvable draft, before adding validation errors.
+  const dismissalPackage = await parseParticipantCorrectionPackage(await correctionForm(), publicId);
+  const reservation = await rpc('reserve_participant_correction', {
+    p_token_hash: null, p_public_id: publicId, p_admin_id: adminId,
+    p_package_hash: dismissalPackage.hash, p_metadata: dismissalPackage.metadata,
+    p_validation_checks: dismissalPackage.validationChecks, p_warnings: dismissalPackage.warnings,
+    p_bucket: 'participant-corrections-private',
+    p_files: dismissalPackage.files.map(({ role, position, fileName, mimeType, bytes, sha256, altText }) => ({
+      role, position, fileName, mimeType, bytes, sha256, altText,
+      storageName: `${role}${position === null ? '' : `-${position}`}.${fileName.split('.').pop()!.toLowerCase()}`,
+    })),
+  });
+  assert.equal(reservation.resultCode, 'SUCCESS'); assert.equal(reservation.state, 'preparing');
+  const approve = () => client.rpc('perform_project_review_action', { p_public_id: publicId, p_admin_id: adminId, p_action: 'approve', p_comments: 'Synthetic decision guard review.' });
+  const requestChanges = () => rpc('perform_project_review_action', { p_public_id: publicId, p_admin_id: adminId, p_action: 'request_changes', p_comments: 'Synthetic next pre-preview package.' });
+  assert.equal((await approve()).data?.status, 'approved', 'An abandoned preparing reservation must not block approval');
+  await requestChanges();
+  assert.equal(await stagePrePreviewReplacement(client, publicId, adminId, dismissalPackage), 'submitted');
+  const submitted = (await loadCorrectionReviewView(client, publicId, null, true)).candidate!;
+  assert.equal(submitted.state, 'submitted');
+  const submittedBefore = await project(); const submittedMedia = await media();
+  const blockedApproval = await approve();
+  assert.match(blockedApproval.error?.message ?? '', /PROJECT_TEAM_PACKAGE_DECISION_REQUIRED/);
+  const blockedDirect = await client.from('projects').update({ status: 'approved' }).eq('id', initial.id).select();
+  assert.match(blockedDirect.error?.message ?? '', /PROJECT_TEAM_PACKAGE_DECISION_REQUIRED/);
+  assert.deepEqual(await project(), submittedBefore);
+  const dismiss = { action: 'return' as const, submissionId: submitted.id, packageHash: submitted.hash, expectedVersion: submitted.expectedVersion };
+  const directReturn = (overrides: Record<string, unknown> = {}) => rpc('review_participant_correction', {
+    p_public_id: publicId, p_admin_id: adminId, p_submission_id: dismiss.submissionId,
+    p_package_hash: dismiss.packageHash, p_expected_version: dismiss.expectedVersion, p_action: 'return', ...overrides,
+  });
+  for (const role of ['editor', 'reviewer']) {
+    const staff = await data(client.from('user_roles').select('user_id').eq('role', role).limit(1).single());
+    assert.equal((await directReturn({ p_admin_id: staff.user_id })).resultCode, 'PERMISSION_DENIED');
+  }
+  assert.equal((await directReturn({ p_package_hash: '0'.repeat(64) })).resultCode, 'UNAVAILABLE');
+  assert.notEqual((await directReturn({ p_expected_version: '0'.repeat(64) })).resultCode, 'SUCCESS');
+  const unrelated = await data(client.from('projects').insert({ public_id: `${publicId}-unrelated`, title: 'Unrelated return target', year: 2026, status: 'draft' }).select().single());
+  assert.equal((await directReturn({ p_public_id: unrelated.public_id })).resultCode, 'UNAVAILABLE');
+  assert.equal((await decideParticipantCorrection(client, unrelated.public_id, adminId, dismiss)).success, false);
+  assert.deepEqual(await data(client.from('projects').select('*').eq('id', unrelated.id).single()), unrelated);
+  // A governance-only change must keep acceptance stale but leave dismissal available.
+  await data(client.from('projects').update({ internal_staff_notes: 'Governance changed after submitted package.' }).eq('id', initial.id).select());
+  assert.equal((await decideParticipantCorrection(client, publicId, adminId, { ...dismiss, action: 'begin' })).code, 'STALE_REVISION');
+  const staleBefore = await project();
+  const dismissals = await Promise.all([
+    decideParticipantCorrection(client, publicId, adminId, dismiss),
+    decideParticipantCorrection(client, publicId, adminId, dismiss),
+  ]);
+  assert.equal(dismissals.filter((result) => result.success).length, 1);
+  assert.deepEqual(await project(), staleBefore); assert.deepEqual(await media(), submittedMedia);
+  const returned = await data(client.from('participant_correction_submissions').select('*').eq('id', submitted.id).single());
+  assert.equal(returned.state, 'returned'); assert.equal(returned.frozen_at, null);
+  assert.equal(returned.decided_by, adminId); assert.ok(returned.decided_at);
+  const events = await data(client.from('participant_correction_events').select('*').eq('submission_id', submitted.id).eq('event', 'staff_returned_revision'));
+  assert.equal(events.length, 1); assert.equal(events[0].staff_actor_id, adminId);
+  assert.ok((await client.from('participant_correction_events').update({ event: 'staff_began_review' }).eq('submission_id', submitted.id)).error);
+  assert.ok((await client.from('participant_correction_events').delete().eq('submission_id', submitted.id)).error);
+  assert.deepEqual(await data(client.from('participant_correction_events').select('*').eq('submission_id', submitted.id).eq('event', 'staff_returned_revision')), events);
+  for (const table of ['participant_correction_prior_revisions', 'participant_correction_recovery_rows']) {
+    assert.equal((await data(client.from(table).select('submission_id').eq('submission_id', submitted.id))).length, 0);
+  }
+  assert.equal((await data(client.from('participant_previews').select('id').eq('project_id', initial.id))).length, 0);
+  for (const m of submittedMedia) assert.equal((await data(client.storage.from(m.storage_bucket).download(m.storage_path))).size, m.file_size_bytes);
+  assert.equal((await loadCorrectionReviewView(client, publicId, null, true)).candidate?.state, 'returned', 'Returned candidate files remain verifiable in Storage');
+  assert.equal((await approve()).data?.status, 'approved', 'Returned candidate no longer blocks normal approval');
+  await requestChanges();
+  console.log('PASS: preparing allows approval; submitted blocks RPC/direct approval; stale submitted return preserves draft/media/Storage, records one immutable event, rejects wrong identity/authority and duplicate return; returned allows normal approval');
+
   // Model a legacy package-specific blocker identified after initial import. Its
   // actual source condition (missing description) is corrected by the new workbook.
   const oldGallery = (await media()).find((m) => m.gallery_position === 1)!;
@@ -85,6 +154,8 @@ export async function verifyPrePreviewPackageReplacementRuntime(client: Supabase
   assert.equal((await decideParticipantCorrection(client, publicId, adminId, { ...selection, action: 'begin' })).success, true);
   assert.deepEqual(await project(), before); assert.deepEqual(await media(), oldMedia);
   assert.equal(await stagePrePreviewReplacement(client, publicId, adminId, candidate), 'failed');
+  const frozenDirect = await client.from('projects').update({ status: 'approved' }).eq('id', initial.id).select();
+  assert.match(frozenDirect.error?.message ?? '', /PROJECT_TEAM_PACKAGE_DECISION_REQUIRED/);
   const premature = await client.rpc('perform_project_review_action', { p_public_id: publicId, p_admin_id: adminId, p_action: 'approve', p_comments: 'Must not approve a frozen package.' });
   assert.notEqual(premature.data?.status, 'approved');
   assert.equal((await decideParticipantCorrection(client, publicId, adminId, { ...selection, action: 'accept' })).success, true);

@@ -15,6 +15,34 @@ const candidate: NonNullable<CorrectionReviewView['candidate']> = {
 beforeEach(() => { refresh.mockReset(); vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } }))); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe('staff participant revision comparison', () => {
+  it('returns a submitted pre-preview package by exact identity and restores focus on cancel', async () => {
+    render(<ParticipantCorrectionReview publicId="2026-synthetic" view={{ available: true, candidate }} canDecide prePreview />);
+    expect(screen.getByRole('button', { name: 'Begin review of this revision' })).toBeTruthy();
+    const trigger = screen.getByRole('button', { name: 'Return this revision' });
+    trigger.focus(); fireEvent.click(trigger);
+    let dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/current draft and review state remain unchanged/)).toBeTruthy();
+    expect(dialog.textContent).toMatch(/package will not be applied/);
+    expect(dialog.textContent).toMatch(/Normal project review may continue/);
+    expect(dialog.textContent).toMatch(/normal upload allowance/);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(fetch).not.toHaveBeenCalled();
+    fireEvent.click(trigger);
+    dialog = await screen.findByRole('alertdialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Return this revision' }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string)).toEqual({ action: 'return', submissionId: candidate.id, packageHash: candidate.hash, expectedVersion: candidate.expectedVersion });
+  });
+  it('keeps submitted participant-capability decisions unchanged', () => {
+    render(<ParticipantCorrectionReview publicId="2026-synthetic" view={{ available: true, candidate }} canDecide />);
+    expect(screen.queryByRole('button', { name: 'Return this revision' })).toBeNull();
+  });
+  it('describes pre-preview acceptance as applying project-team-authored content', async () => {
+    render(<ParticipantCorrectionReview publicId="2026-synthetic" view={{ available: true, candidate: { ...candidate, state: 'frozen' } }} canDecide prePreview />);
+    fireEvent.click(screen.getByRole('button', { name: 'Accept this project-team package' }));
+    expect((await screen.findByRole('alertdialog')).textContent).toContain('project-team-authored package');
+  });
   it('explains pre-preview package provenance and freezes without approval or preview side effects', async () => {
     render(<ParticipantCorrectionReview publicId="2026-synthetic" view={{ available: true, candidate }} canDecide prePreview />);
     expect(screen.getByText(/source files were uploaded by authenticated staff/)).toBeTruthy();

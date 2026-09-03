@@ -96,6 +96,11 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 
+  it('maps the database package-decision refusal to a bounded approval error', async () => {
+    const mockSupabase = { rpc: vi.fn().mockResolvedValue({ data: null, error: { message: 'PROJECT_TEAM_PACKAGE_DECISION_REQUIRED' } }) } as unknown as import('@supabase/supabase-js').SupabaseClient;
+    await expect(new SupabaseProjectRepositoryCore(mockSupabase).performReviewAction({ publicId: '2026-proj1', action: 'approve', adminId: '11111111-2222-3333-4444-555555555555' })).rejects.toMatchObject({ code: 'PROJECT_TEAM_PACKAGE_DECISION_REQUIRED' });
+  });
+
   it('3. performReviewAction maps malformed or un-validated RPC response payloads to RESPONSE_INVALID', async () => {
     const mockRpc = vi.fn().mockResolvedValue({
       data: {
@@ -338,6 +343,7 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
 
   it.each([
     ['CORRECTION_RESOLUTION_REQUIRED', 'Resolve the participant correction through the correction-resolution workflow before requesting changes.'],
+    ['PROJECT_TEAM_PACKAGE_DECISION_REQUIRED', 'Accept or return the pending project-team package before approving this project.'],
     ['AMBIGUOUS_ACTIVE_PREVIEW', 'Project preview state is inconsistent. Request changes could not be completed safely.'],
     ['PROJECT_MEDIA_REQUIRED', 'A poster image and poster PDF are required in project media before approval.'],
     ['PROJECT_MEDIA_INVALID', 'Project media is not valid for approval. Review the uploaded poster files, then approve.'],
@@ -347,7 +353,7 @@ describe('Transactional Review Actions Repository & API Route Security Unit Test
     const mockAction = vi.spyOn(SupabaseProjectRepository.prototype, 'performReviewAction').mockRejectedValueOnce(new ReviewActionExecutionError(code));
     const req = new NextRequest('http://localhost:3000/api/projects/2026-proj1/review-action', { method: 'POST', headers: { origin: 'http://localhost:3000' }, body: JSON.stringify({ action: 'request_changes' }) });
     const res = await POST(req, { params: Promise.resolve({ publicId: '2026-proj1' }) });
-    expect(res.status).toBe(409); expect(await res.json()).toEqual({ success: false, error: message });
+    expect(res.status).toBe(409); expect(await res.json()).toEqual({ success: false, error: message, ...(code === 'PROJECT_TEAM_PACKAGE_DECISION_REQUIRED' ? { code } : {}) });
     mockAction.mockRestore();
   });
 

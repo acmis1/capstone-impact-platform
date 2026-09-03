@@ -143,6 +143,7 @@ export async function verifyParticipantOwnedCorrectionsRuntime(repositoryRoot: s
     const current = (await loadCorrectionReviewView(client, publicId, correctionId)).candidate!;
     assert.ok(current); assert.notEqual(current.id, firstSubmission);
     const decision = { action: 'begin' as const, submissionId: current.id, packageHash: current.hash, expectedVersion: current.expectedVersion };
+    assert.equal((await decideParticipantCorrection(client, publicId, staff.admin, { ...decision, action: 'return' })).success, false, 'Participant-capability submissions still require Begin review before return');
     assert.equal((await decideParticipantCorrection(client, publicId, staff.admin, { ...decision, submissionId: firstSubmission, packageHash: candidate.hash })).success, false);
     for (const role of ['editor', 'reviewer'] as const) assert.equal((await decideParticipantCorrection(client, publicId, staff[role], decision)).success, false);
     const frozen = await Promise.all([decideParticipantCorrection(client, publicId, staff.admin, decision), decideParticipantCorrection(client, publicId, staff.admin, decision)]);
