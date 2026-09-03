@@ -411,7 +411,7 @@ async function main(): Promise<void> {
       assert(reviewSource.includes('adminId: adminContext.adminUserId'));
       assert(correctionSource.includes('const admin = await requireAdmin()'));
       assert(correctionSource.includes('canResolveParticipantCorrection(admin.permissions)'));
-      assert(/decideParticipantCorrection\(\s*createSupabaseAdminClientCore\(\),\s*selection\.publicId,\s*admin\.adminUserId,\s*decision\.data\s*\)/s.test(correctionSource));
+      assert(correctionSource.replace(/\s+/g, ' ').includes('decideParticipantCorrection(createSupabaseAdminClientCore(), selection.publicId, admin.adminUserId, decision.data)'));
       assert(!reviewSource.includes('body.admin'));
       assert(!correctionSource.includes('body.admin'));
       assert(!correctionSource.includes('decision.data.actor'));
