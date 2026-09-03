@@ -30,18 +30,42 @@ jobs:
           set -euo pipefail
           git fetch --no-tags origin 'refs/heads/main:refs/remotes/origin/main'
           test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_BASE"
-          test "$(git rev-parse "${GITHUB_SHA}^")" = "$(git rev-parse "${GITHUB_SHA}^")"
           test "$(find .orchestrator/participant-patch -maxdepth 1 -name 'part-[0-9][0-9].b64' -type f | wc -l)" -eq 15
 
+          expected=(
+            0c0fcfaef7f44258c1984d8f8a20512f5c70dcc0ee6459ef90eb9e06902127ec
+            f2c59c5d7a88ad9bc42dbc3113f3d5caad774cef4a8a8e19034b7fd2e10e1eb5
+            8c50a68e40a0351489a6c31ce84cf64999e31823d455aaee2195276d2ed02099
+            e9ae22d81818672f6ad8c657d0dd549aa220ff2537e3b1c3ace8a01e8b72c4ba
+            ab961be7b171d7890c0611b0deef082ecad50e0ca5d96629f059c7a24177938d
+            d4e48b25763f52629b6cba30f69e9bf09b436403a4e71bb4f44c46e5af3f3b9e
+            c130bc2551bf7b170c63ccd7ad8df8ff73eebe518c5c280882f29bcf048439e8
+            6b8e59443b9c8c463659d795e34c9d23625f6a4bde3e8c904fd3b314a25f86dc
+            8adbd2f27bebcf48674ba9a7bda53347bc81bfe35f70a3654e584b802c3a637e
+            bfdfa0dd6821602f1cb02d077ec28c1425a9c16dfbfb6aa74ece570b0f6f1082
+            040108e8a5fd3162204f023f2cbf177ff8e6395aa9fb8ff92518d66e2d5255bf
+            08f199eb2761ba88b33d28037f9b5ce0aa59a1d2623a7875bacdb41d2400c9c2
+            de2df89bf03febb7d865fe05bb84f66698998f3a1a8870b2fa3a97422f5cb2b2
+            c2f48c5c1c90a6a61b3b2dbb6fed8cbee5ced656b91a3da30b06a95b51fdce9f
+            c8f9e5dc7981bc70fcdac608bf2d229f105c3c37ed5df66ae28ad48006f1a737
+          )
+
           : > /tmp/participant.patch.xz
-          for n in $(seq -w 0 14); do
+          bad=0
+          for i in $(seq 0 14); do
+            n=$(printf '%02d' "$i")
             file=".orchestrator/participant-patch/part-${n}.b64"
             test -f "$file"
             encoded="$(tr -d '\r\n\t ' < "$file")"
             while [ $(( ${#encoded} % 4 )) -ne 0 ]; do encoded="${encoded}="; done
-            printf '%s' "$encoded" | base64 --decode >> /tmp/participant.patch.xz
+            printf '%s' "$encoded" | base64 --decode > "/tmp/part-${n}.bin"
+            actual=$(sha256sum "/tmp/part-${n}.bin" | cut -d' ' -f1)
+            bytes=$(wc -c < "/tmp/part-${n}.bin")
+            echo "PART_${n}_BYTES=${bytes} PART_${n}_SHA256=${actual}"
+            if [ "$actual" != "${expected[$i]}" ]; then echo "PART_${n}_MISMATCH"; bad=1; fi
+            cat "/tmp/part-${n}.bin" >> /tmp/participant.patch.xz
           done
-
+          test "$bad" -eq 0
           echo "${EXPECTED_XZ_SHA256}  /tmp/participant.patch.xz" | sha256sum --check -
           xz --decompress --stdout /tmp/participant.patch.xz > /tmp/participant.patch
           echo "${EXPECTED_PATCH_SHA256}  /tmp/participant.patch" | sha256sum --check -
