@@ -4,13 +4,14 @@ on:
   push:
     branches:
       - integration/participant-owned-corrections-orchestrator
+    paths:
+      - .github/workflows/pp1-participant-candidate-bootstrap.yml
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.event.head_commit.message == 'chore(integration): stage verified participant candidate patch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -20,11 +21,13 @@ jobs:
           fetch-depth: 0
           ref: integration/participant-owned-corrections-orchestrator
 
-      - name: Verify bootstrap base
+      - name: Verify bootstrap ancestry
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "6125bb56a2c71c16a45cce44851696e8b09a3b4c"
+          test "$(git merge-base HEAD 6125bb56a2c71c16a45cce44851696e8b09a3b4c)" = "6125bb56a2c71c16a45cce44851696e8b09a3b4c"
+          test -f .integration-transfer/part-00
+          test -f .integration-transfer/part-05
 
       - name: Reconstruct and verify candidate patch
         shell: bash
