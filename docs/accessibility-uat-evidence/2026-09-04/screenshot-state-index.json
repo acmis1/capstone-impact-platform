@@ -1,0 +1,86 @@
+{
+  "generatedAt": "2026-09-04T06:50:00.000Z",
+  "inspectionRule": "Each accepted screenshot was opened visually; context-only captures support no interaction claim.",
+  "entries": [
+    {
+      "filename": "import-workflow-controlled-failure.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Import route with invalid synthetic spreadsheet uploaded; visible Check Failed validation summary and error message displayed with controlled recovery."
+    },
+    {
+      "filename": "import-workflow-mobile-375px.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Import route at 375 x 812 CSS mobile viewport; folder and file preparation guide disclosure has visible keyboard focus without horizontal page overflow or sticky header obstruction."
+    },
+    {
+      "filename": "login-keyboard-focus.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Login route with Sign In button keyboard-focused with visible focus indicator, following invalid email validation error alert display."
+    },
+    {
+      "filename": "long-content-filename.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Import route with long synthetic filename; file input handles long filename without breaking layout container."
+    },
+    {
+      "filename": "participant-preview-browser-zoom-200.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview reflowed at genuine 200% Chrome host zoom; single-column reflow, controls accessible without horizontal page overflow."
+    },
+    {
+      "filename": "participant-preview-mobile-375px.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview layout and touch targets at 375 x 812 CSS mobile viewport with zero horizontal page overflow."
+    },
+    {
+      "filename": "participant-preview-reading-order.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview showing project evidence preceding response section in DOM reading order, with skip link focused."
+    },
+    {
+      "filename": "participant-preview-validation-failure.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Active participant preview with Request corrections disclosure open, empty comment field focused, and visible HTML5 constraint validation bubble ('Please fill out this field.')."
+    },
+    {
+      "filename": "project-detail-browser-zoom-200.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Project detail route reflowed at genuine 200% Chrome host zoom; section navigation and poster disclosure accessible without horizontal page overflow."
+    },
+    {
+      "filename": "project-detail-desktop-keyboard.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Project detail route with keyboard focus on Read full poster text disclosure, merged PR #262 participant section visible."
+    },
+    {
+      "filename": "project-detail-mobile-375px.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Project detail route at 375 x 812 CSS mobile viewport; navigation and project metadata reflow cleanly without horizontal overflow."
+    },
+    {
+      "filename": "projects-index-browser-zoom-200.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Projects dashboard route at genuine 200% Chrome host zoom; table controls, search, sort, and pagination reflow cleanly without horizontal page overflow."
+    },
+    {
+      "filename": "projects-index-desktop-keyboard.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Projects dashboard route with keyboard focus on inline preflight action, multi-page pagination verified, and select-all checkbox toggle exercised."
+    },
+    {
+      "filename": "projects-index-mobile-375px.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Projects dashboard route at 375 x 812 CSS mobile viewport; search, filter, and project table adapt cleanly to narrow viewport."
+    },
+    {
+      "filename": "public-feed-keyboard-focus.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Public feed deployment route with keyboard focus on Choose a project to publish link; advanced publishing details disclosure collapsed."
+    },
+    {
+      "filename": "staff-access-invitation-keyboard.png",
+      "acceptanceUse": "accepted",
+      "visibleFact": "Staff access provisioning route with synthetic invitation email entered, Admin role checkbox toggled via Space, and Send invitation button focused."
+    }
+  ]
+}

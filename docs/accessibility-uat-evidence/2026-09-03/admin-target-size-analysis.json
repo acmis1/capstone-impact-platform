@@ -34,7 +34,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         },
         {
           "tag": "BUTTON",
@@ -47,7 +47,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         },
         {
           "tag": "INPUT",
@@ -60,7 +60,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         },
         {
           "tag": "INPUT",
@@ -190,7 +190,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         },
         {
           "tag": "A",
@@ -203,7 +203,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         },
         {
           "tag": "INPUT",
@@ -216,7 +216,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         },
         {
           "tag": "A",
@@ -229,7 +229,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         },
         {
           "tag": "INPUT",
@@ -242,7 +242,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         },
         {
           "tag": "A",
@@ -255,7 +255,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         },
         {
           "tag": "INPUT",
@@ -268,7 +268,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         },
         {
           "tag": "A",
@@ -281,7 +281,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         }
       ]
     },
@@ -315,7 +315,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         },
         {
           "tag": "A",
@@ -341,7 +341,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         }
       ]
     },
@@ -375,7 +375,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         }
       ]
     },
@@ -409,7 +409,7 @@
             "width": 0,
             "height": 0
           },
-          "exceptionApplicable": "WCAG 2.2 SC 2.5.8 Spacing Exception: 24 CSS px diameter circle centered on bounding box does not intersect adjacent targets (separated by >24 CSS px vertical/horizontal padding)"
+          "exceptionApplicable": "RETRACTED: Invalid spacing exception claim on 0x0 node. Element is hidden/non-pointer on desktop (see 2026-09-04 analysis)."
         },
         {
           "tag": "SUMMARY",
@@ -473,5 +473,6 @@
         }
       ]
     }
-  ]
+  ],
+  "retractionNotice": "HISTORICAL EVIDENCE CORRECTION: Previous claims of Spacing Exception applied to 0x0 dimensions in sub24Targets were invalid because non-rendered / zero-size nodes are not pointer targets under WCAG 2.2 SC 2.5.8. For valid SC 2.5.8 evaluation distinguishing hidden nodes from rendered interactive targets with effective label regions and verified geometric spacing circles, see docs/accessibility-uat-evidence/2026-09-04/admin-target-size-analysis.json."
 }

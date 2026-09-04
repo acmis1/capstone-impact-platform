@@ -1,0 +1,158 @@
+{
+  "collectedAt": "2026-09-04T06:44:44.862Z",
+  "dataPolicy": "Synthetic Local data; no credentials, cookies, tokens or secret URLs retained.",
+  "overallResult": "PASS",
+  "routes": [
+    {
+      "route": "Login",
+      "role": "Administrator",
+      "result": "PASS",
+      "controls": [
+        "Email input",
+        "Forgot password link",
+        "Password input",
+        "Sign in button",
+        "Recovery email input",
+        "Send reset email button",
+        "Back to sign in link"
+      ],
+      "keyboardSequence": "Tab to Email; type synthetic account; Tab to Forgot password; Tab to Password; Tab to Sign in; Shift+Tab back to Forgot password; Enter opens /auth/forgot-password; Tab to recovery email; type invalid email; Enter triggers validation alert with aria-invalid; clear and type synthetic email; Enter triggers success alert; Tab to Back to sign in; Enter returns to /login; Tab to Email; type synthetic account; Tab to Password; type synthetic password; Tab to Sign in; Enter.",
+      "activationResult": "Password recovery validated and submitted safely with controlled alerts; returned cleanly to /login; authenticated sign-in redirected to /admin projects page.",
+      "focusRestoration": "Focus transitioned logically across /login -> /auth/forgot-password -> /login -> /admin without trap.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/login-keyboard-focus.png",
+      "limitations": [
+        "Bounded to login and password recovery request journey. Token consumption and password change screens require email link activation."
+      ]
+    },
+    {
+      "route": "Projects",
+      "role": "Administrator",
+      "result": "PASS",
+      "controls": [
+        "Skip to main content",
+        "Search projects input",
+        "Clear search and filters button",
+        "Title sort button",
+        "Status sort button",
+        "Next page button",
+        "Previous page button",
+        "Select current page checkbox",
+        "Individual row selection checkbox",
+        "Clear selection button",
+        "Bulk review action button (Approve)",
+        "Bulk review inline Cancel button"
+      ],
+      "keyboardSequence": "Tab reveals skip link; Enter moves focus to main; Tab to Search projects; type Medical; Enter executes search; Tab to Clear search and filters; Enter resets search; Tab to Title sort header; Enter sorts title ascending; Enter sorts title descending; Tab to Status sort header; Enter sorts status; Tab to Next page button; Enter navigates to Page 2 (Next becomes disabled, Previous becomes enabled); Tab to Previous page button; Enter navigates back to Page 1; Tab to Select current page checkbox; Space selects all visible rows with focus retained on checkbox; Space deselects; Tab to individual row checkbox; Space selects row; Tab to Bulk review action (Approve); Enter triggers inline preflight check; Tab to Cancel; Enter dismisses inline preflight safely without mutation; focus restored directly to Approve action button; Tab to Clear selection; Enter clears selection; Shift+Tab reverses focus cleanly without keyboard trap.",
+      "activationResult": "Skip link focused main; search filtered and cleared; column headers sorted table; pagination buttons navigated between Page 1 and Page 2 with accurate disabled states; current-page selection toggled all visible rows while retaining focus; inline bulk review preflight executed non-destructively; Cancel unmounted preflight and restored focus to triggering action button; zero state mutation occurred.",
+      "focusRestoration": "Main content received skip-link focus; Select current page maintained focus across selection toggles; Cancel restored focus directly to the triggering Approve button.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/projects-index-desktop-keyboard.png",
+      "limitations": []
+    },
+    {
+      "route": "Import",
+      "role": "Administrator",
+      "result": "PASS — bounded",
+      "controls": [
+        "All imports navigation link",
+        "Folder and file preparation guide disclosure",
+        "Choose School reference spreadsheet file input",
+        "Check spreadsheet button",
+        "Check Failed alert"
+      ],
+      "keyboardSequence": "Tab to All imports link; Tab to Folder and file preparation guide toggle; Enter expands guide; Enter collapses guide; Tab to Choose School reference spreadsheet input; provide synthetic invalid spreadsheet; Tab to Check spreadsheet; Enter executes validation check; controlled Check Failed alert renders with descriptive error message; Shift+Tab traverses backwards cleanly without keyboard trap.",
+      "activationResult": "Guide disclosure expanded and collapsed with focus retention; invalid file triggered controlled Check Failed alert without application crash; long filename verified in file input without layout distortion; reverse traversal confirmed zero keyboard trap.",
+      "focusRestoration": "Focus remained on disclosure toggle across expansion states; Check spreadsheet button retained focus upon validation completion.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/import-workflow-controlled-failure.png",
+      "limitations": [
+        "Automated upload used programmatically supplied file after keyboard focus to cross the OS native dialog boundary; live spreadsheet commit was bounded to preserve existing project state."
+      ]
+    },
+    {
+      "route": "Staff",
+      "role": "Administrator",
+      "result": "PASS",
+      "controls": [
+        "Staff access navigation link",
+        "Account menu button",
+        "Full name input (#staff-full-name)",
+        "Email address input (#staff-email)",
+        "Role checkboxes (#staff-role-admin, #staff-role-reviewer, #staff-role-editor)",
+        "Send invitation submit button"
+      ],
+      "keyboardSequence": "Tab to account menu trigger; Enter opens account dropdown menu; Escape closes menu and returns focus to trigger; Tab to Full name input; type synthetic name; Tab to Email input; type synthetic email; Tab to role checkboxes; Space toggles Reviewer role; Tab to Send invitation button; Enter submits invitation request; confirmation status renders safely; Shift+Tab reverses traversal cleanly.",
+      "activationResult": "Account menu opened and dismissed with focus restoration; staff invitation form exercised across name, email, and role checkboxes; submitted safely to local Mailpit loopback; zero keyboard trap.",
+      "focusRestoration": "Escape returned focus to account menu trigger; form inputs transitioned focus predictably.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/staff-access-invitation-keyboard.png",
+      "limitations": [
+        "Exercised under local loopback with synthetic recipient test-staff@capstone.test and verified local Mailpit transport."
+      ]
+    },
+    {
+      "route": "Admin deployment/history",
+      "role": "Administrator",
+      "result": "PASS — bounded non-consequential scope",
+      "controls": [
+        "Choose a project to publish link",
+        "Advanced publishing details disclosure summary",
+        "Technical setup details disclosure summary",
+        "Publishing status summary cards",
+        "Publishing activity list"
+      ],
+      "keyboardSequence": "Tab to Choose a project to publish link; Tab to Advanced publishing details summary; Enter expands disclosure; Enter collapses disclosure; Tab to Technical setup details summary where present; Enter toggles disclosure; Tab to publishing activity items; Shift+Tab reverses focus cleanly.",
+      "activationResult": "Choose a project to publish link received focus; Advanced publishing details and Technical details disclosures expanded and collapsed with focus retention; status summary cards inspected; non-consequential controls fully operable without calling /api/publish-cloud-feed or mutating public showcase.",
+      "focusRestoration": "Focus remained on disclosure summary across toggle activations; reverse Shift+Tab traversed cleanly without trap.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/public-feed-keyboard-focus.png",
+      "limitations": [
+        "Bounded strictly to non-consequential keyboard scope: live cloud feed publishing (/api/publish-cloud-feed), project removal, and Duda mutations were intentionally not executed per repository safety policy."
+      ]
+    },
+    {
+      "route": "Project Detail",
+      "role": "Administrator",
+      "result": "PASS",
+      "controls": [
+        "Project Detail Section Navigation links",
+        "Go to project information anchor",
+        "Poster full text disclosure summary",
+        "Open full poster PDF link",
+        "External web links",
+        "Participant confirmation panel",
+        "Generate preview link button"
+      ],
+      "keyboardSequence": "Tab through section navigation bar; Enter on Section anchor navigates to target macro-section; Tab to Poster full text disclosure summary; Enter expands disclosure; Enter collapses disclosure; Tab to Open full poster PDF in new tab link; Tab to External web links; Tab through Participant confirmation panel controls; Shift+Tab reverses focus backwards cleanly.",
+      "activationResult": "Section navigation moved focus; Poster full text disclosure expanded and collapsed with focus retention; media summary and PDF links verified; merged #262 participant-correction and package replacement panels inspected; reverse traversal confirmed zero keyboard trap.",
+      "focusRestoration": "Disclosure summary retained focus across states; section anchors preserved predictable traversal.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/project-detail-desktop-keyboard.png",
+      "limitations": [
+        "Bounded to non-consequential inspection; destructive review decisions or metadata mutation were avoided to preserve project fixture state."
+      ]
+    },
+    {
+      "route": "Participant Preview",
+      "role": "Participant",
+      "result": "PASS — integrated post-#262 sampled scope",
+      "controls": [
+        "Skip link (Skip to project review)",
+        "Document link (poster.pdf)",
+        "Confirm project details button",
+        "Request corrections disclosure summary",
+        "Correction comment textarea",
+        "Submit correction request button"
+      ],
+      "keyboardSequence": "Tab reveals Skip link; Enter moves to main review container; Tab to document link; Tab to Confirm project details button; Tab to Request corrections disclosure summary; Space expands disclosure; Tab focuses textarea#correction-comment with visible focus outline; Tab to Submit correction request button; Enter triggers native HTML5 validation message on required textarea; Shift+Tab reverses focus cleanly back through textarea, disclosure summary, confirm button, document link, and skip link.",
+      "activationResult": "Space key toggled disclosure open and closed; submit on empty required textarea triggered constraint validation; reverse Tab sequence traversed backwards cleanly with zero keyboard trap; preview revoked cleanly afterward.",
+      "focusRestoration": "Shift+Tab restored focus backwards through all controls cleanly to skip link.",
+      "keyboardTrapObserved": false,
+      "evidenceScreenshot": "screenshots/participant-preview-reading-order.png",
+      "limitations": [
+        "Validated on legitimately generated active preview for 2026-medical-drone; preview was revoked after test completion; raw token was sanitized and never retained."
+      ]
+    }
+  ]
+}

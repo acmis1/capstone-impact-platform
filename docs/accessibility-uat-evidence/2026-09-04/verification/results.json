@@ -1,0 +1,39 @@
+{
+  "recordedAt": "2026-09-04T07:05:00.000Z",
+  "scope": "Integrated PP1 closure incorporating merged PR #262",
+  "focused": {
+    "command": "npm run test:run --workspace=apps/admin-cms src/components/admin-dashboard/BulkProjectReviewPanel.test.tsx",
+    "exitCode": 0,
+    "testFilesPassed": 1,
+    "testsPassed": 6
+  },
+  "typecheck": {
+    "command": "npm run typecheck:admin",
+    "exitCode": 0
+  },
+  "lint": {
+    "command": "npm run lint --workspace=apps/admin-cms",
+    "exitCode": 0,
+    "errors": 0,
+    "warnings": 6
+  },
+  "build": {
+    "command": "npm run build:admin",
+    "exitCode": 0
+  },
+  "evidenceGate": {
+    "command": "npm run verify:accessibility-uat-evidence",
+    "exitCode": 0,
+    "status": "PASS",
+    "filesScanned": 104,
+    "textFilesScanned": 55,
+    "screenshotCount": 48,
+    "uniqueHashCount": 48,
+    "findings": 0
+  },
+  "diffCheck": {
+    "command": "git diff --check",
+    "exitCode": 0,
+    "status": "PASS"
+  }
+}

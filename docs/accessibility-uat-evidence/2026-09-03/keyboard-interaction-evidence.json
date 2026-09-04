@@ -41,11 +41,12 @@
         "Bulk review cancel button"
       ],
       "keyboardSequence": "Tab reveals skip link; Enter moves focus to main; Tab to Search projects; type synthetic query; Tab to Search; Enter; Tab to Clear search and filters; Enter resets; Tab to Title sort header; Enter sorts asc/desc; Tab to Status sort header; Enter sorts; Tab to Select current page checkbox; Space selects all visible rows; Tab to Clear selection; Enter clears; Tab to row checkbox; Space selects row; Tab to Bulk review; Enter opens preflight confirmation dialog; Tab to Cancel; Enter dismisses dialog safely; Shift+Tab reverses focus without trap.",
-      "activationResult": "Skip link focused main content; search filtered and reset; column headers sorted table; pagination controls navigated; bulk selection and row toggles updated selection counter; non-destructive bulk review preflight dialog opened and safely cancelled via keyboard with zero state mutation.",
-      "focusRestoration": "Bulk review dialog cancellation restored focus safely; skip link restored focus to main content.",
+      "focusRestoration": "HISTORICAL LIMITATION: Bulk review inline preflight cancellation unmounted the Cancel button and dropped focus to document.body in the 2026-09-03 codebase (fixed on 2026-09-04 with trigger refs); skip link restored focus to main content.",
       "keyboardTrapObserved": false,
       "evidenceScreenshot": "screenshots/skip-link-after.png",
-      "limitations": []
+      "limitations": [
+        "HISTORICAL DEFECT NOTE: Cancelling the inline bulk review preflight unmounted the Cancel button without programmatic focus restoration, causing focus to drop to document.body. Resolved in BulkProjectReviewPanel.tsx on 2026-09-04 (see 2026-09-04 evidence)."
+      ]
     },
     {
       "route": "Import",
