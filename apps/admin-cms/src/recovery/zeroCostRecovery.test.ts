@@ -43,6 +43,7 @@ import {
   APPROVED_HOSTED_SOURCE_PROJECT_REF,
   CANONICAL_STORAGE_BUCKETS,
   DATABASE_BACKUP_ARTIFACTS,
+  PRIVATE_STORAGE_BUCKETS,
   RECOVERY_BUNDLE_FORMAT,
   RECOVERY_EVIDENCE_LABEL,
   RecoveryGuardError,
@@ -51,6 +52,10 @@ import {
   resolveClassification,
 } from './zeroCostRecoveryContract';
 import { formatRestoreSummary } from '../scripts/restoreRecoveryBackup';
+import {
+  EXPECTED_REPOSITORY_MIGRATION_COUNT,
+  REQUIRED_STORAGE_BUCKETS,
+} from '../deployment/hostedDeploymentReadiness';
 import { captureRecoveryBackup, repositoryMigrationVersions } from './captureRecoveryBackup';
 import {
   APPLICATION_OWNED_TRIGGER_FUNCTION_SCHEMAS,
@@ -327,7 +332,7 @@ describe('bundle manifest and artifact integrity', () => {
     expect(validateRecoveryBundleManifest({
       ...manifest,
       storage: { ...manifest.storage, buckets: manifest.storage.buckets.slice(1) },
-    })).toContain('Recovery bundle does not cover exactly the three canonical Storage buckets.');
+    })).toContain('Recovery bundle does not cover exactly the 4 canonical release/recovery Storage buckets.');
     expect(validateRecoveryBundleManifest({
       ...manifest,
       executionControl: { ...manifest.executionControl, budgetGuard: null },
@@ -1323,5 +1328,79 @@ describe('disposable ownership and safe summaries', () => {
       new RecoveryGuardError('MANAGED_AUTH_COMPATIBILITY_UNKNOWN_DRIFT'),
     )).toBe('MANAGED_AUTH_COMPATIBILITY_FAILED');
     expect(resolveClassification(['RESTORE_FAILED'])).not.toBe('ZERO_COST_RECOVERY_REHEARSAL_VERIFIED');
+  });
+});
+
+/**
+ * Pre-migration capture boundary.
+ *
+ * The known hosted staging-v2 baseline is 48 migrations through 20260831090000, which predates the
+ * participant correction tables, RPCs and the participant-corrections-private bucket. The hardened
+ * capture derives its expectations from the CURRENT repository checkout, so running it from
+ * 51-migration `main` against that 48-state source must fail closed rather than produce a bundle
+ * that silently records a different schema than the one the contract describes.
+ *
+ * These cases pin that refusal so it cannot be relaxed to make an older source pass. The safe
+ * pre-upgrade capture route is documented in docs/operations/staging-migrations-49-51-rollout.md.
+ */
+describe('pre-migration hosted baseline capture boundary', () => {
+  const repositoryRoot = path.resolve(__dirname, '../../../..');
+  const BASELINE_LATEST_VERSION = '20260831090000';
+  const RELEASE_VERSIONS = ['20260902010606', '20260903120000', '20260903130000'];
+
+  function baselineMigrationVersions(): string[] {
+    return repositoryMigrationVersions(repositoryRoot)
+      .filter((version) => !RELEASE_VERSIONS.includes(version));
+  }
+
+  it('describes the 48-migration baseline as a strict prefix of the 51-migration contract', () => {
+    const repositoryVersions = repositoryMigrationVersions(repositoryRoot);
+    const baselineVersions = baselineMigrationVersions();
+
+    expect(repositoryVersions).toHaveLength(51);
+    expect(repositoryVersions.at(-1)).toBe('20260903130000');
+    expect(baselineVersions).toHaveLength(48);
+    expect(baselineVersions.at(-1)).toBe(BASELINE_LATEST_VERSION);
+    expect(repositoryVersions.slice(0, 48)).toEqual(baselineVersions);
+  });
+
+  it('refuses a 48-migration, three-bucket source against the current repository manifest', () => {
+    const { manifest } = buildBundle();
+    const repositoryVersions = repositoryMigrationVersions(repositoryRoot);
+    const baselineVersions = baselineMigrationVersions();
+
+    const errors = validateRecoveryBundleManifest({
+      ...manifest,
+      migrations: {
+        count: baselineVersions.length,
+        latest: BASELINE_LATEST_VERSION,
+        versions: baselineVersions,
+      },
+      storage: {
+        ...manifest.storage,
+        buckets: manifest.storage.buckets.filter(
+          (bucket) => bucket.id !== 'participant-corrections-private',
+        ),
+      },
+    }, { repositoryMigrationVersions: repositoryVersions });
+
+    expect(errors).toContain(
+      'Recovery bundle records 48 migrations; the reviewed repository declares 51.',
+    );
+    expect(errors).toContain(
+      'Recovery bundle migration history does not match the reviewed repository manifest.',
+    );
+    expect(errors).toContain(
+      'Recovery bundle does not cover exactly the 4 canonical release/recovery Storage buckets.',
+    );
+  });
+
+  it('keeps the migration-owned correction bucket inside the canonical capture inventory', () => {
+    // captureRecoveryBackup refuses with SOURCE_CANONICAL_BUCKET_MISSING before any dump when the
+    // source lacks a canonical bucket, so a pre-0051 source can never reach a manifest.
+    expect(CANONICAL_STORAGE_BUCKETS).toContain('participant-corrections-private');
+    expect(PRIVATE_STORAGE_BUCKETS).toContain('participant-corrections-private');
+    expect([...CANONICAL_STORAGE_BUCKETS].sort()).toEqual([...REQUIRED_STORAGE_BUCKETS].sort());
+    expect(EXPECTED_REPOSITORY_MIGRATION_COUNT).toBe(51);
   });
 });

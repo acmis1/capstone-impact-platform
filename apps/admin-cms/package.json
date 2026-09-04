@@ -62,6 +62,7 @@
     "verify:public-feed-ledger-runtime": "tsx src/scripts/verifyPublicFeedLedgerRuntime.ts",
     "verify:public-feed-ledger-runtime:disposable": "tsx src/scripts/runDisposableLedgerRuntime.ts",
     "verify:gate4-schema-evidence:disposable": "tsx src/scripts/runDisposableGate4SchemaEvidence.ts --local-self-check",
+    "verify:staging-migration-upgrade:disposable": "tsx src/scripts/runDisposableStagingMigrationUpgrade.ts",
     "verify:approval-edit-gate-runtime": "tsx src/scripts/verifyApprovalEditGateRuntime.ts",
     "verify:staff-provisioning-runtime": "tsx src/scripts/verifyStaffProvisioningRuntime.ts",
     "verify:password-recovery-runtime": "node --conditions=react-server --import tsx src/scripts/verifyPasswordRecoveryRuntime.ts",

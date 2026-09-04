@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  assertDeclaredLocalBuckets,
   assertSafeDatabaseProbeSchema,
   assertSafeStorageObjectPath,
   assertSafeStorageProbeBucket,
@@ -13,6 +14,7 @@ import {
   validateRecoveryPreflight,
   type DatabaseProbeCommands,
 } from './verifyLocalRecoveryReadiness';
+import { EXPECTED_BUCKETS, MIGRATION_MANAGED_BUCKETS } from '../local-development/localSupabaseFixtures';
 
 const SCHEMA = 'capstone_recovery_probe_0123456789abcdef';
 const BUCKET = 'capstone-recovery-probe-0123456789abcdef';
@@ -55,6 +57,61 @@ describe('Local recovery readiness safety contract', () => {
     },
   );
 
+
+  it('asserts config-managed and migration-owned buckets read-only and never provisions either', async () => {
+    const calls: string[] = [];
+    const buckets = new Map(
+      [...EXPECTED_BUCKETS, ...MIGRATION_MANAGED_BUCKETS].map((bucket) => [bucket.name, {
+        name: bucket.name,
+        public: bucket.isPublic,
+        file_size_limit: bucket.fileSizeLimit,
+        allowed_mime_types: [...bucket.allowedMimeTypes],
+      }]),
+    );
+    const client = {
+      storage: {
+        getBucket: async (name: string) => {
+          calls.push(`getBucket:${name}`);
+          const found = buckets.get(name);
+          return found ? { data: found, error: null } : { data: null, error: new Error('missing') };
+        },
+        createBucket: async () => { calls.push('createBucket'); return { error: null }; },
+        updateBucket: async () => { calls.push('updateBucket'); return { error: null }; },
+        deleteBucket: async () => { calls.push('deleteBucket'); return { error: null }; },
+      },
+    } as unknown as SupabaseClient;
+
+    await expect(assertDeclaredLocalBuckets(client)).resolves.toBeUndefined();
+    expect(calls).toEqual([
+      ...EXPECTED_BUCKETS.map((bucket) => `getBucket:${bucket.name}`),
+      ...MIGRATION_MANAGED_BUCKETS.map((bucket) => `getBucket:${bucket.name}`),
+    ]);
+
+    // Migration 0051 owns this bucket. The probe reports it missing; it must never create it,
+    // because ON CONFLICT (id) DO NOTHING would then let a broken migration look healthy.
+    const correction = MIGRATION_MANAGED_BUCKETS[0].name;
+    const stored = buckets.get(correction)!;
+    buckets.delete(correction);
+    await expect(assertDeclaredLocalBuckets(client))
+      .rejects.toThrow('MIGRATION_MANAGED_STORAGE_BUCKET_MISSING');
+
+    buckets.set(correction, { ...stored, public: true });
+    await expect(assertDeclaredLocalBuckets(client))
+      .rejects.toThrow('MIGRATION_MANAGED_STORAGE_BUCKET_CONFIG_MISMATCH');
+
+    buckets.set(correction, { ...stored, allowed_mime_types: ['application/pdf'] });
+    await expect(assertDeclaredLocalBuckets(client))
+      .rejects.toThrow('MIGRATION_MANAGED_STORAGE_BUCKET_CONFIG_MISMATCH');
+
+    buckets.set(correction, stored);
+    const draftsPrivate = EXPECTED_BUCKETS[0].name;
+    const draftsStored = buckets.get(draftsPrivate)!;
+    buckets.set(draftsPrivate, { ...draftsStored, file_size_limit: 1 });
+    await expect(assertDeclaredLocalBuckets(client))
+      .rejects.toThrow('CONFIG_MANAGED_STORAGE_BUCKET_CONFIG_MISMATCH');
+
+    expect(calls.filter((call) => !call.startsWith('getBucket:'))).toEqual([]);
+  });
   it('fails closed unless the exact Local stack is running on loopback', () => {
     expect(validateRecoveryPreflight({
       stackState: 'RUNNING',
@@ -309,11 +366,19 @@ describe('Storage backup and restore probe', () => {
     emptiedBuckets: string[];
     deletedBuckets: string[];
   } {
-    const buckets = new Map([
-      ['project-drafts-private', { public: false, file_size_limit: 20 * 1024 * 1024, allowed_mime_types: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'] }],
-      ['project-public-assets', { public: true, file_size_limit: 20 * 1024 * 1024, allowed_mime_types: ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'] }],
-      ['public-feeds', { public: true, file_size_limit: 10 * 1024 * 1024, allowed_mime_types: ['application/json'] }],
-    ]);
+    // Every bucket the probe asserts read-only: the three config-managed baseline buckets from
+    // infra/supabase/config.toml plus the migration-owned participant correction bucket.
+    type FakeBucket = { public: boolean; file_size_limit: number; allowed_mime_types: string[] };
+    const buckets = new Map<string, FakeBucket>(
+      [...EXPECTED_BUCKETS, ...MIGRATION_MANAGED_BUCKETS].map((bucket): [string, FakeBucket] => [
+        bucket.name,
+        {
+          public: bucket.isPublic,
+          file_size_limit: bucket.fileSizeLimit,
+          allowed_mime_types: [...bucket.allowedMimeTypes],
+        },
+      ]),
+    );
     const objects = new Map<string, Map<string, { content: Buffer; contentType: string }>>();
     const mutatedBuckets: string[] = [];
     const emptiedBuckets: string[] = [];
@@ -409,7 +474,7 @@ describe('Storage backup and restore probe', () => {
       backedUpObjects: 2,
       restoredObjects: 2,
       residueAbsent: true,
-      canonicalBucketsUnchanged: true,
+      declaredBucketsUnchanged: true,
     });
     expect(fake.buckets.has(BUCKET)).toBe(false);
     expect(fake.objects.has(BUCKET)).toBe(false);

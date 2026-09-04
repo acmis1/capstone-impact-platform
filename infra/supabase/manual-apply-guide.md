@@ -21,8 +21,12 @@ This guide documents historical manual migration steps for initializing a *new*,
 > * **Destructive Operations Warning:** Database resets, table drops, and destructive SQL teardowns are **STRICTLY PROHIBITED** on active staging projects without explicit project-owner authorization. CLI `supabase db push` and `supabase migration repair` are not authorized.
 
 > [!NOTE]
-> **Current Environment & Staging Status:**
-> In the present staging environment (`capstone-admin-cms-staging-2026` located in Singapore):
+> **Historical Environment & Staging Status (paused project `capstone-admin-cms-staging-2026`):**
+> The facts below are a point-in-time record of the original staging project, which is now paused
+> and is **not** the active target. The active target is `capstone-admin-cms-staging-v2-2026`
+> (ref `sqkpceeltukbzxpsvinb`); see [Admin/CMS Hosted Staging Deployment Guide](../../docs/admin-cms-hosted-deployment.md)
+> for its current evidence and the four-bucket release inventory. In that historical environment
+> (`capstone-admin-cms-staging-2026`, located in Singapore):
 > - migrations 0001 through 0006 have already been manually applied and read-only verified;
 > - the three Storage buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) have already been provisioned and verified;
 > - initial administrator bootstrap linkage has been completed through the guarded CLI script (`CREATED`);

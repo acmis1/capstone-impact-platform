@@ -72,6 +72,7 @@
     "verify:public-feed-ledger-runtime": "npm run verify:public-feed-ledger-runtime --workspace=apps/admin-cms",
     "verify:public-feed-ledger-runtime:disposable": "npm run verify:public-feed-ledger-runtime:disposable --workspace=apps/admin-cms",
     "verify:gate4-schema-evidence:disposable": "npm run verify:gate4-schema-evidence:disposable --workspace=apps/admin-cms",
+    "verify:staging-migration-upgrade:disposable": "npm run verify:staging-migration-upgrade:disposable --workspace=apps/admin-cms",
     "verify:assistive-persistence-runtime": "npm run verify:assistive-persistence-runtime --workspace=apps/admin-cms",
     "verify:assistive-upgrade-runtime": "npm run verify:assistive-upgrade-runtime --workspace=apps/admin-cms",
     "verify:assistive-jobs-runtime": "npm run verify:assistive-jobs-runtime --workspace=apps/admin-cms",

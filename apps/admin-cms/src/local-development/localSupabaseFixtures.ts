@@ -10,6 +10,17 @@ export interface BucketSpec {
   allowedMimeTypes: string[];
 }
 
+/**
+ * The CONFIG-MANAGED baseline buckets. `infra/supabase/config.toml` declares exactly these three,
+ * the Supabase CLI creates them when a stack starts, and this seeder reconciles them.
+ *
+ * This is deliberately NOT the complete release/recovery inventory. The fourth canonical bucket,
+ * `participant-corrections-private`, is created and configured by Migration 0051 with
+ * `ON CONFLICT (id) DO NOTHING`. Pre-creating it here (or in `config.toml`) would let the CLI win
+ * the race and leave the migration's own bucket contract unproven, so nothing outside that
+ * migration may create or update it. See MIGRATION_MANAGED_BUCKETS below, and
+ * REQUIRED_STORAGE_BUCKETS / CANONICAL_STORAGE_BUCKETS for the four-bucket release inventory.
+ */
 export const EXPECTED_BUCKETS: BucketSpec[] = [
   {
     name: 'project-drafts-private',
@@ -28,6 +39,28 @@ export const EXPECTED_BUCKETS: BucketSpec[] = [
     isPublic: true,
     fileSizeLimit: 10 * 1024 * 1024, // 10 MB
     allowedMimeTypes: ['application/json'],
+  },
+];
+
+/**
+ * The MIGRATION-MANAGED bucket. Migration 0051 owns its creation and its exact configuration; this
+ * is a read-only mirror of that authority so verifiers can assert the bucket without provisioning
+ * it. `participantOwnedCorrectionMigration.test.ts` pins this constant to the migration bytes, so
+ * the migration stays the source of truth. Never seed, create, or update this bucket from
+ * application or fixture code.
+ */
+export const MIGRATION_MANAGED_BUCKETS: BucketSpec[] = [
+  {
+    name: 'participant-corrections-private',
+    isPublic: false,
+    fileSizeLimit: 20971520, // 20 MB
+    allowedMimeTypes: [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'image/png',
+      'image/jpeg',
+      'image/webp',
+      'application/pdf',
+    ],
   },
 ];
 

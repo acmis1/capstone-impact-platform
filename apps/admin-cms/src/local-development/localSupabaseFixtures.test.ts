@@ -4,11 +4,13 @@ import {
   seedLocalSupabaseFixtures,
   seedLocalSupabaseFixturesWorker,
   EXPECTED_BUCKETS,
+  MIGRATION_MANAGED_BUCKETS,
 } from './localSupabaseFixtures';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { REQUIRED_STORAGE_BUCKETS } from '../deployment/hostedDeploymentReadiness';
 
 describe('Local Supabase Fixtures Unit Tests', () => {
-  it('1. Exactly 3 local storage buckets are defined with exact visibility and size limits', () => {
+  it('1. Exactly 3 config-managed local storage buckets are defined with exact visibility and size limits', () => {
     expect(EXPECTED_BUCKETS.length).toBe(3);
     const bucketNames = EXPECTED_BUCKETS.map((b) => b.name);
     expect(bucketNames).toEqual(['project-drafts-private', 'project-public-assets', 'public-feeds']);
@@ -24,6 +26,21 @@ describe('Local Supabase Fixtures Unit Tests', () => {
     const publicFeeds = EXPECTED_BUCKETS.find((b) => b.name === 'public-feeds');
     expect(publicFeeds?.isPublic).toBe(true);
     expect(publicFeeds?.fileSizeLimit).toBe(10 * 1024 * 1024);
+  });
+
+  it('never fixture-manages the migration-owned correction bucket', () => {
+    // Migration 0051 creates participant-corrections-private with ON CONFLICT (id) DO NOTHING.
+    // Seeding it here would let the fixture win that race and leave the migration's own bucket
+    // contract unproven, so the three config-managed buckets are deliberately not the complete
+    // release/recovery inventory.
+    const configManaged = EXPECTED_BUCKETS.map((bucket) => bucket.name);
+    const migrationManaged = MIGRATION_MANAGED_BUCKETS.map((bucket) => bucket.name);
+
+    expect(migrationManaged).toEqual(['participant-corrections-private']);
+    expect(configManaged).not.toContain('participant-corrections-private');
+    expect(configManaged.some((name) => migrationManaged.includes(name))).toBe(false);
+    expect([...configManaged, ...migrationManaged].sort())
+      .toEqual([...REQUIRED_STORAGE_BUCKETS].sort());
   });
 
   it('2. Public entry point seedLocalSupabaseFixtures rejects non-loopback Supabase URL with generic error', async () => {

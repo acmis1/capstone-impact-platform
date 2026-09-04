@@ -3,7 +3,11 @@ import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { EXPECTED_BUCKETS } from '../local-development/localSupabaseFixtures';
+import {
+  EXPECTED_BUCKETS,
+  MIGRATION_MANAGED_BUCKETS,
+  type BucketSpec,
+} from '../local-development/localSupabaseFixtures';
 import { isLoopbackUrl, parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
 import {
   classifyLocalStack,
@@ -35,7 +39,7 @@ export interface StorageProbeResult {
   backedUpObjects: number;
   restoredObjects: number;
   residueAbsent: boolean;
-  canonicalBucketsUnchanged: boolean;
+  declaredBucketsUnchanged: boolean;
 }
 
 export interface LocalRecoveryReadinessResult {
@@ -307,18 +311,53 @@ interface ProbeBucketOwnership {
   owned: boolean;
 }
 
-async function assertCanonicalLocalBuckets(client: SupabaseClient): Promise<void> {
+/**
+ * Read-only bucket evidence.
+ *
+ * This probe owns only its own randomly named bucket. It must never create, update, or delete a
+ * declared bucket, and in particular must never provision the migration-owned correction bucket:
+ * Migration 0051 inserts that bucket with ON CONFLICT (id) DO NOTHING, so a bucket provisioned
+ * from anywhere else would let a broken migration appear healthy.
+ *
+ * The three config-managed buckets come from infra/supabase/config.toml. They are the Local
+ * baseline, not the complete canonical release/recovery inventory; that inventory is the four
+ * buckets in REQUIRED_STORAGE_BUCKETS / CANONICAL_STORAGE_BUCKETS, which additionally covers the
+ * migration-owned participant correction bucket asserted below.
+ */
+async function assertDeclaredBucket(
+  client: SupabaseClient,
+  expected: BucketSpec,
+  missingCode: string,
+  mismatchCode: string,
+): Promise<void> {
+  const { data, error } = await client.storage.getBucket(expected.name);
+  if (error || !data) throw new Error(missingCode);
+  const allowedMimeTypes = sorted(data.allowed_mime_types ?? []);
+  if (
+    data.public !== expected.isPublic ||
+    Number(data.file_size_limit) !== expected.fileSizeLimit ||
+    allowedMimeTypes.join('|') !== sorted(expected.allowedMimeTypes).join('|')
+  ) {
+    throw new Error(mismatchCode);
+  }
+}
+
+export async function assertDeclaredLocalBuckets(client: SupabaseClient): Promise<void> {
   for (const expected of EXPECTED_BUCKETS) {
-    const { data, error } = await client.storage.getBucket(expected.name);
-    if (error || !data) throw new Error('CANONICAL_STORAGE_BUCKET_MISSING');
-    const allowedMimeTypes = sorted(data.allowed_mime_types ?? []);
-    if (
-      data.public !== expected.isPublic ||
-      Number(data.file_size_limit) !== expected.fileSizeLimit ||
-      allowedMimeTypes.join('|') !== sorted(expected.allowedMimeTypes).join('|')
-    ) {
-      throw new Error('CANONICAL_STORAGE_BUCKET_CONFIG_MISMATCH');
-    }
+    await assertDeclaredBucket(
+      client,
+      expected,
+      'CONFIG_MANAGED_STORAGE_BUCKET_MISSING',
+      'CONFIG_MANAGED_STORAGE_BUCKET_CONFIG_MISMATCH',
+    );
+  }
+  for (const expected of MIGRATION_MANAGED_BUCKETS) {
+    await assertDeclaredBucket(
+      client,
+      expected,
+      'MIGRATION_MANAGED_STORAGE_BUCKET_MISSING',
+      'MIGRATION_MANAGED_STORAGE_BUCKET_CONFIG_MISMATCH',
+    );
   }
 }
 
@@ -418,7 +457,7 @@ export async function runStorageRecoveryProbe(
   const initialBuckets = await bucketNames(client);
 
   if (initialBuckets.includes(bucketName)) throw new Error('STORAGE_PROBE_COLLISION');
-  await assertCanonicalLocalBuckets(client);
+  await assertDeclaredLocalBuckets(client);
 
   const fixtureEntries: StorageBackupEntry[] = [
     {
@@ -452,7 +491,7 @@ export async function runStorageRecoveryProbe(
       backedUpObjects: backup.length,
       restoredObjects: backup.length,
       residueAbsent: false,
-      canonicalBucketsUnchanged: false,
+      declaredBucketsUnchanged: false,
     };
   } catch {
     failure = new Error('STORAGE_BACKUP_RESTORE_FAILED');
@@ -460,7 +499,7 @@ export async function runStorageRecoveryProbe(
     try {
       await removeOwnedProbeBucket(client, bucketName, ownership);
       cleanupFailure = ownership.owned;
-      await assertCanonicalLocalBuckets(client);
+      await assertDeclaredLocalBuckets(client);
     } catch {
       cleanupFailure = true;
     }
@@ -468,7 +507,7 @@ export async function runStorageRecoveryProbe(
 
   if (cleanupFailure) throw new Error('STORAGE_PROBE_CLEANUP_FAILED');
   if (failure || !result) throw failure ?? new Error('STORAGE_BACKUP_RESTORE_FAILED');
-  return { ...result, residueAbsent: true, canonicalBucketsUnchanged: true };
+  return { ...result, residueAbsent: true, declaredBucketsUnchanged: true };
 }
 
 function localDatabaseCommands(repoRoot: string, databaseContainer: string): DatabaseProbeCommands {
@@ -575,6 +614,9 @@ async function main(): Promise<void> {
     console.log(`DATABASE_BACKUP_RESTORE = PASS (${result.database.restoredRows} synthetic row)`);
     console.log(`DATABASE_BACKUP_BYTES = ${result.database.dumpBytes}`);
     console.log(`STORAGE_BACKUP_RESTORE = PASS (${result.storage.restoredObjects} synthetic objects)`);
+    console.log(
+      `DECLARED_STORAGE_BUCKETS_VERIFIED_READ_ONLY = ${EXPECTED_BUCKETS.length} config-managed + ${MIGRATION_MANAGED_BUCKETS.length} migration-owned`,
+    );
     console.log('CANONICAL_APPLICATION_TABLES_OR_STORAGE_OBJECTS_MUTATED = NO');
     console.log('RECOVERY_PROBE_RESIDUE = NONE');
     console.log('HOSTED_SYSTEMS_CONTACTED = NO');
