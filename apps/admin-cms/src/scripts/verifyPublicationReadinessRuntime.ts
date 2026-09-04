@@ -80,28 +80,8 @@ export async function runPublicationReadinessRuntimeVerification(): Promise<bool
       return proj;
     }
 
-    async function createRequiredApprovalMedia(project: { id: string; public_id: string }) {
-      const { error } = await client.from('media_assets').insert([
-        {
-          project_id: project.id, asset_type: 'poster_image', file_name: 'poster.png',
-          storage_bucket: PRIVATE_DRAFT_BUCKET,
-          storage_path: `drafts/${project.public_id}/poster_image/poster.png`,
-          public_url: null, public_storage_bucket: null, public_storage_path: null,
-          mime_type: 'image/png', file_size_bytes: 128, is_public_approved: false,
-        },
-        {
-          project_id: project.id, asset_type: 'poster_pdf', file_name: 'poster.pdf',
-          storage_bucket: PRIVATE_DRAFT_BUCKET,
-          storage_path: `drafts/${project.public_id}/poster_pdf/poster.pdf`,
-          public_url: null, public_storage_bucket: null, public_storage_path: null,
-          mime_type: 'application/pdf', file_size_bytes: 256, is_public_approved: false,
-        },
-      ]);
-      if (error) throw new Error('Failed to create publication-readiness approval media fixture.');
-    }
-
     // Helper to generate preview
-    async function generatePreview(publicId: string, isReissue = false) {
+    async function generatePreview(publicId: string) {
       const token = `raw-token-${crypto.randomUUID()}`;
       const tokenHash = hashToken(token);
       const res = await repo.generatePreview({
@@ -109,7 +89,7 @@ export async function runPublicationReadinessRuntimeVerification(): Promise<bool
         adminId,
         tokenHash,
         privateBucket: PRIVATE_DRAFT_BUCKET,
-        isCorrectionReissue: isReissue,
+        isCorrectionReissue: false,
       });
       return { token, tokenHash, previewId: res.previewId };
     }
@@ -216,60 +196,58 @@ export async function runPublicationReadinessRuntimeVerification(): Promise<bool
       return false;
     }
 
-    // TEST 8: Correction is in_progress -> NOT READY (CORRECTION_UNRESOLVED)
-    console.log('--- TEST 8: Correction in_progress ---');
+    // TEST 8: The retired shortcut cannot reopen an approved project without a participant package.
+    console.log('--- TEST 8: Retired correction shortcut fails closed without mutation ---');
     const p8 = await createProjectFixture('t8', 'approved');
     const prev8 = await generatePreview(p8.public_id);
     await repo.requestCorrection(prev8.tokenHash, 'Fix background text');
-    await repo.startCorrectionResolution({ publicId: p8.public_id, adminId });
+    const correctionState = async () => {
+      const [project, preview, correction, submissions, audits, snapshots] = await Promise.all([
+        client.from('projects').select('*').eq('id', p8.id).single(),
+        client.from('participant_previews').select('*').eq('project_id', p8.id).single(),
+        client.from('participant_preview_correction_requests').select('*').eq('participant_preview_id', prev8.previewId).single(),
+        client.from('participant_correction_submissions').select('id', { count: 'exact', head: true }).eq('project_id', p8.id),
+        client.from('approval_records').select('id', { count: 'exact', head: true }).eq('project_id', p8.id),
+        client.from('published_snapshots').select('id').order('id'),
+      ]);
+      if ([project, preview, correction, submissions, audits, snapshots].some((result) => result.error)) {
+        throw new Error('Test 8 failed to read correction workflow state.');
+      }
+      return {
+        project: project.data, preview: preview.data, correction: correction.data,
+        submissions: submissions.count, audits: audits.count, snapshots: snapshots.data,
+      };
+    };
+    const beforeShortcut = await correctionState();
+    if (
+      beforeShortcut.project?.status !== 'approved' ||
+      beforeShortcut.preview?.id !== prev8.previewId || beforeShortcut.preview?.status !== 'active' ||
+      beforeShortcut.preview?.revoked_at !== null || beforeShortcut.preview?.revoked_by !== null ||
+      beforeShortcut.correction?.status !== 'open' ||
+      beforeShortcut.correction?.resolution_started_at !== null || beforeShortcut.correction?.resolution_started_by !== null ||
+      beforeShortcut.submissions !== 0 || beforeShortcut.audits !== 0
+    ) throw new Error('Test 8 requires an approved project, active preview and open correction without a package or approval audit.');
+    // The legacy repository wrapper maps this compatibility result to INPUT_INVALID;
+    // exercise the database contract directly so its fail-closed code remains visible.
+    const shortcut = await client.rpc('start_participant_preview_correction_resolution', {
+      p_public_id: p8.public_id, p_admin_id: adminId,
+    });
     const r8 = await repo.getPublicationReadiness({ publicId: p8.public_id, adminId, privateBucket: PRIVATE_DRAFT_BUCKET });
-    if (!r8.ready && r8.resultCode === 'CORRECTION_UNRESOLVED') {
-      console.log('PASS: Test 8 - In_progress correction returned not ready');
+    const afterShortcut = await correctionState();
+    if (
+      !shortcut.error && shortcut.data?.resultCode === 'PARTICIPANT_CANDIDATE_REQUIRED' &&
+      !r8.ready && r8.resultCode === 'CORRECTION_UNRESOLVED' &&
+      JSON.stringify(afterShortcut) === JSON.stringify(beforeShortcut)
+    ) {
+      console.log('PASS: Test 8 - Retired shortcut requires a participant candidate; readiness stays blocked with no workflow, submission, audit or publication mutation');
     } else {
-      console.error('FAIL: Test 8 unexpected result', r8);
+      console.error('FAIL: Test 8 - Retired shortcut changed workflow state or failed to preserve blocked readiness');
       return false;
     }
 
-    // TEST 9: Correction resolved, Preview B active unresponded -> NOT READY (CORRECTED_PREVIEW_AWAITING_CONFIRMATION)
-    console.log('--- TEST 9: Resolved correction + Preview B unresponded ---');
-    const p9 = await createProjectFixture('t9', 'approved');
-    await createRequiredApprovalMedia(p9);
-    const prev9a = await generatePreview(p9.public_id);
-    await repo.requestCorrection(prev9a.tokenHash, 'Fix summary');
-    await repo.startCorrectionResolution({ publicId: p9.public_id, adminId });
-    const reapprove9 = await client.rpc('perform_project_review_action', {
-      p_public_id: p9.public_id, p_action: 'approve', p_comments: 'Reapproved after correction resolution.', p_admin_id: adminId,
-    });
-    if (reapprove9.error || !reapprove9.data?.auditRecordId) throw new Error('Test 9 reapproval failed.');
-    await generatePreview(p9.public_id, true); // Reissue Preview B
-    const r9 = await repo.getPublicationReadiness({ publicId: p9.public_id, adminId, privateBucket: PRIVATE_DRAFT_BUCKET });
-    if (!r9.ready && r9.resultCode === 'CORRECTED_PREVIEW_AWAITING_CONFIRMATION') {
-      console.log('PASS: Test 9 - Corrected Preview B awaiting confirmation returned CORRECTED_PREVIEW_AWAITING_CONFIRMATION');
-    } else {
-      console.error('FAIL: Test 9 unexpected result', r9);
-      return false;
-    }
-
-    // TEST 10: Correction resolved, Preview B active confirmed -> READY
-    console.log('--- TEST 10: Resolved correction + Preview B confirmed ---');
-    const p10 = await createProjectFixture('t10', 'approved');
-    await createRequiredApprovalMedia(p10);
-    const prev10a = await generatePreview(p10.public_id);
-    await repo.requestCorrection(prev10a.tokenHash, 'Fix title');
-    await repo.startCorrectionResolution({ publicId: p10.public_id, adminId });
-    const reapprove10 = await client.rpc('perform_project_review_action', {
-      p_public_id: p10.public_id, p_action: 'approve', p_comments: 'Reapproved after correction resolution.', p_admin_id: adminId,
-    });
-    if (reapprove10.error || !reapprove10.data?.auditRecordId) throw new Error('Test 10 reapproval failed.');
-    const prev10b = await generatePreview(p10.public_id, true);
-    await repo.confirmPreview(prev10b.tokenHash);
-    const r10 = await repo.getPublicationReadiness({ publicId: p10.public_id, adminId, privateBucket: PRIVATE_DRAFT_BUCKET });
-    if (r10.ready && r10.resultCode === 'READY' && r10.confirmedPreviewId === prev10b.previewId) {
-      console.log('PASS: Test 10 - Resolved correction + Preview B confirmed returned READY');
-    } else {
-      console.error('FAIL: Test 10 unexpected result', r10);
-      return false;
-    }
+    // Former Tests 9–10 (corrected package -> reapproval -> Preview B -> reconfirmation -> READY)
+    // belong to verifyParticipantOwnedCorrectionsRuntime.ts on its owned disposable stack.
+    // That lifecycle creates immutable evidence that this shared verifier must not create or delete.
 
     // TEST 11: Confirmed preview then scalar metadata changes -> NOT READY (PROJECT_SNAPSHOT_STALE)
     console.log('--- TEST 11: Scalar metadata drift ---');
