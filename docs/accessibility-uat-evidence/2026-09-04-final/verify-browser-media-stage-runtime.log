@@ -1,0 +1,39 @@
+
+> verify:browser-media-stage-runtime
+> npm run verify:browser-media-stage-runtime --workspace=apps/admin-cms
+
+
+> admin-cms@0.1.0 verify:browser-media-stage-runtime
+> tsx src/scripts/verifyBrowserImportMediaStageRuntime.ts
+
+=== Capstone Impact Platform: Local Supabase Browser Media Staging Runtime Acceptance ===
+
+[Scenario 1] Testing single-project media completion and deep verification...
+  ✓ Scenario 1 PASSED!
+
+[Scenario 2] Testing multi-project completion and idempotent retry...
+  ✓ Scenario 2 PASSED!
+
+[Scenario 3] Testing rejection cases...
+  ✓ Scenario 3 PASSED!
+
+[Scenario 4] Testing storage conflict safety against a pre-existing mismatched object...
+  ✓ Scenario 4 PASSED!
+
+[Scenario 4b] Testing storage conflict safety against a same-size, different-content object...
+  ✓ Scenario 4b PASSED!
+
+[Scenario 5] Testing concurrent first-time submissions for the same metadata_staged batch...
+  ✓ Scenario 5 PASSED!
+
+[Scenario 6] Testing database finalization failure, deletion-safety, and retry convergence...
+[Browser Import Media Stage RPC Error] P0001
+[Browser Import Media Stage] leaving 2 newly uploaded object(s) in private draft storage after a failed attempt (safe: deterministic path, content-verified before reuse): drafts/ms6-pkg-1/poster_pdf/poster.pdf, drafts/ms6-pkg-1/snapshot_image/snapshot-1.png
+  ✓ Scenario 6 PASSED!
+
+[Scenario 7] Testing multi-image gallery persistence, ordering, alt text, and idempotent retry...
+  ✓ Scenario 7 PASSED!
+
+====================================================
+ALL MEDIA STAGE RUNTIME ACCEPTANCE SCENARIOS PASSED!
+====================================================

@@ -1,0 +1,38 @@
+
+> verify:browser-metadata-stage-runtime
+> npm run verify:browser-metadata-stage-runtime --workspace=apps/admin-cms
+
+
+> admin-cms@0.1.0 verify:browser-metadata-stage-runtime
+> tsx src/scripts/verifyBrowserImportMetadataStageRuntime.ts
+
+=== Capstone Impact Platform: Local Supabase Browser Metadata Staging Runtime Acceptance ===
+
+[Scenario 1] Testing single-package staging and deep database row verification...
+  ✓ Scenario 1 PASSED!
+
+[Scenario 2] Testing multi-package selected staging & exact idempotency retry...
+  ✓ Scenario 2 PASSED!
+
+[Scenario 3] Testing real concurrent staging with Promise.all...
+  ✓ Scenario 3 PASSED!
+
+[Scenario 4] Testing controlled failures before mutations and zero row residue...
+  ✓ Scenario 4 PASSED!
+
+[Scenario 5] Testing all post-mutation rollback boundaries...
+[Browser Import Stage RPC Error] P0001
+  ✓ Scenario 5 batch rollback PASSED!
+[Browser Import Stage RPC Error] P0001
+  ✓ Scenario 5 project rollback PASSED!
+[Browser Import Stage RPC Error] P0001
+  ✓ Scenario 5 mapping rollback PASSED!
+[Browser Import Stage RPC Error] P0001
+  ✓ Scenario 5 warning rollback PASSED!
+[Browser Import Stage RPC Error] P0001
+  ✓ Scenario 5 idempotency rollback PASSED!
+  ✓ Scenario 5 PASSED!
+
+====================================================
+ALL RUNTIME STAGING ACCEPTANCE SCENARIOS PASSED!
+====================================================
