@@ -37,7 +37,7 @@ npm run verify:accessibility-uat-evidence -- --committed
 - [admin-target-size-analysis.json](./admin-target-size-analysis.json): Route-by-route analysis under WCAG 2.2 SC 2.5.8 Target Size (Minimum, Level AA).
 - [mobile-measurements.json](./mobile-measurements.json): Viewport measurements at 375 x 812 CSS px across Projects, Import, Project detail, and Participant preview demonstrating zero horizontal overflow.
 - [browser-zoom-200-interaction.json](./browser-zoom-200-interaction.json): Interaction evidence under 200% browser host zoom verifying reflow and keyboard focus visibility.
-- [screenshot-state-index.json](./screenshot-state-index.json): State index for all 16 accepted visual captures.
+- [screenshot-state-index.json](./screenshot-state-index.json): State index for all 16 visual captures (9 accepted, 7 context-only).
 - [screenshots-manifest.json](./screenshots-manifest.json): Canonical PNG dimensions, byte counts, and SHA-256 hashes.
 
 ## Lighthouse 13.4.1 Audit
