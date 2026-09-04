@@ -173,9 +173,11 @@ describe('release evaluation evidence ledger', () => {
       corpus,
       ledger,
       runtime: { seed: corpus.seed, corpusSize: 132, runNumber: 2, runId: 'volatile-run' },
-      timings: { corpusGeneration: 12.5 },
+      timings: { corpusGeneration: 12.5, importAnalysis: 90, packageParsingValidationAndReconciliation: 90, adminReconciliation: 7 },
     });
-    expect(report.timingRuns).toEqual([{ runNumber: 2, timings: { corpusGeneration: 12.5 } }]);
+    expect(report.timingRuns).toEqual([{ runNumber: 2, timings: { corpusGeneration: 12.5, importAnalysis: 90, packageParsingValidationAndReconciliation: 90, adminReconciliation: 7 } }]);
+    expect(JSON.parse(renderReleaseEvaluationJson(report)).timings.adminReconciliation).toBe(7);
+    expect(renderReleaseEvaluationMarkdown(report)).toContain('Parent/child timings overlap: do not sum them');
     expect(report.kpiEvidence).toEqual({
       staffEffortReductionMeasured: false,
       developerRuntimeIsStaffEffortEvidence: false,

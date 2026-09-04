@@ -2,7 +2,63 @@
 
 Date: 2026-09-03. Scope: independent review and local integration of PR #258, **Integrated 120-Project Release-Evaluation Harness and KPI Evidence**. This records Local evaluation acceptance, not release/merge approval.
 
-## Source and integration
+## Final integrated machine closure — 2026-09-04
+
+This section and the requirement matrix supersede the historical observations below for the final Binh machine pass. Base `origin/main` was fetched and exactly matched `5b99382bdb73724540c10f0d0a185442799c44cc`, including the integrated participant corrections and final Huy closure. Work used fresh branch `fix/binh-final-release-evidence` in an isolated worktree; the original dirty checkout was preserved. No PR or merge is authorized by this pass. Resolve the final source SHA from this document's commit; push identity is recorded in the handoff.
+
+**F and G are PASS. KPI-01 remains NOT TESTED / PENDING HUMAN MEASUREMENT; overall release acceptance remains INCOMPLETE.**
+
+Retained sanitized evidence (outside Git):
+
+`C:/Users/Admin/.codex/visualizations/2026/09/04/01a06d01-75f6-7030-b767-8caf9d6b52dd/binh-final`
+
+- `runtime-1/release-evaluation-run-1.json`, `release-evaluation-run-2.json` and the final JSON/Markdown report: two uninterrupted complete runs, both gates PASS; normalized comparison true with no mismatch fields. `runtime-2` contains the fresh single evidence-mode run, which resumed normally, exited zero and passed after browser capture.
+- Each current run: 132 cases, 120 persisted, 12 deliberate rejects, zero unaccounted; critical 32/32, non-critical 20/20, controls 110/110, zero blocking false positives; **180/180 audit rows**, 20 candidates, zero verifier records in the ordinary published feed, no publication. The manifest digest is `5364547f4d39b0835a4d7b888a63558440450a30137e2ba8cd00e375a31264a2`.
+- The difference from historical 185 audits/55 Approved is legitimate integrated behavior, not a relaxed gate: merge `b4f8f16` changed the five participant-correction cases to open requests before package submission, without starting resolution. Each retains two audits (submission and approval), stays Approved, and is excluded by `CORRECTION_UNRESOLVED`. Current final states are Approved 60, archived 10, changes requested 10, draft 20, submitted 20. The fixture and production observations agree; this pass changes neither.
+- `independent-residue-after-two-runs.txt` and `independent-residue-after-browser.txt`: verifier projects, batches and Storage objects zero; all media remains at the four-row ordinary baseline, with four ordinary projects preserved. Evaluator reports independently cover all 13 owned residue scopes at zero and all six baseline checks true, including the forced-failure cleanup probe. `disposable-residue.json` confirms no owned containers, volumes, networks or temporary workdir after owner teardown.
+
+### Independent timing
+
+An optional server-only observer brackets the real synchronous `reconcilePackagesAgainstAdminReference` call within the same `analyzeBrowserImportServer` invocation. It starts after reference worksheet parsing and argument preparation, and ends before projecting results into previews. The observer receives only milliseconds; its clock/observer exceptions cannot alter output. Unused diagnostics read no clock and add no output fields. No HTTP, preview, fingerprint or commit contract changes; no replay or subtraction.
+
+| Observation (milliseconds) | Uninterrupted run 1 | Uninterrupted run 2 |
+| --- | ---: | ---: |
+| `adminReconciliation` | 1.100 | 1.481 |
+| `importAnalysis` / `packageParsingValidationAndReconciliation` (same combined value) | 388.457 | 302.022 |
+| Total | 23259.683 | 16676.244 |
+
+The child field sums actual accepted/rejected batch reconciliation calls, excluding later staging revalidation calls. Parent/child measurements overlap and must not be summed. Evidence-mode total includes its inspection pause and is excluded above. Runtime: Windows x64, Node 24.14.1, npm 11.11.0, pinned Supabase CLI 2.109.1, disposable PostgreSQL 17 and all 51 current migrations. These are Local observations, not a performance SLA or human effort.
+
+### Authenticated annual-scale browser
+
+`browser-complete.json` is the authoritative, uninterrupted browser record; `capture-browser.cjs` and `browser-capture.log` retain the sequence and assertions. A fresh isolated Chromium context attached console, page-error, failed-request and HTTP-response listeners before its first navigation to `http://127.0.0.1:3058/login`, then signed in through the real form with synthetic Local staff credentials. Credentials remained in the disposable provisioning file/in memory and were removed by owner teardown. No cookies, session values, headers, response bodies, preview/recovery tokens, signed Storage URLs or UUIDs are retained in browser evidence. The generic STAGING badge is application wording; the actual app and Supabase endpoints were loopback Local.
+
+- Desktop 1440×1000: cohort search 120; page size 50; 50 selected; next page clears hidden selection; final 20 rows and disabled Next; Previous; sizes 25 and 10 reset to first page with disabled Previous; Approved 60; Approved + 2022 gives 12; compatible program/discipline keeps 12; incompatible program produces the explicit empty state; exact public-ID search yields one.
+- Mobile 375×812: cohort 120, ten cards with intact title/ID/status/validation/program/discipline/year/group/partner/updated/detail data; selection and next-page clearing; Previous boundary; expanded filters, Approved/year/compatible taxonomy, final two-card filtered page and Next boundary, incompatible empty state and restored cohort. All 14 sampled mobile states have document/body width 375, matching the viewport.
+- Console errors **0**; page errors **0**; failed requests **0**; HTTP responses >=400 **0**, including expected controlled errors **0**. Two Supabase SDK session-user advisories were retained as warnings, not suppressed or counted as errors. Source inspection confirms the Projects page calls `requireAdmin` first and authorizes using verified `getClaims()` plus the durable recovery gate; this pass does not alter Auth or claim a separate security audit.
+- Ten retained screenshots: `final-desktop-50-selected.png`, `final-desktop-final-20.png`, `final-desktop-compatible.png`, `final-desktop-empty.png`, `final-desktop-exact-id.png`, `final-mobile-card.png`, `final-mobile-selected.png`, `final-mobile-filters.png`, `final-mobile-pagination.png`, `final-mobile-cohort.png`. Desktop selection and mobile card screenshots were also visually inspected.
+
+The earlier `browser-runtime.json` is explicitly incomplete: its interactive automation runtime reset during mobile inspection. The complete fresh context above reran the entire sequence against the same intentionally paused cohort. No incomplete capture is used to establish G. The evaluator itself was never terminated while paused.
+
+### Final verification and boundaries
+
+| Command | Result |
+| --- | --- |
+| `npm ci --offline --no-audit --no-fund` | PASS; 691 packages, no dependency/lockfile change. |
+| `npm run test:admin -- src/evaluation src/fixtures/releaseEvaluationCorpus.test.ts src/components/admin-dashboard/ProjectTableContainer.integration.test.tsx src/import/__tests__/browserImportAnalysisDiagnostics.test.ts src/import/__tests__/browserImportPreview.test.ts src/import/adminReferenceReconciliation.test.ts` | PASS, 182 tests / 7 files. |
+| `npm run test:admin -- src/import/__tests__/browserImportAnalysisDiagnostics.test.ts` | PASS, five focused production-phase/order/output/unused/observer-failure tests. |
+| `node --conditions=react-server --import tsx apps/admin-cms/src/scripts/verifyReleaseEvaluation.ts --output-dir=<evidence>/runtime-1` | PASS, default uninterrupted pair. This is the executable behind `npm run verify:release-evaluation`; the repository disposable owner passes matching Local configuration in memory. |
+| Same evaluator with `--output-dir=<evidence>/runtime-2 --runs=1 --evidence` | PASS, normal resume/cleanup/exit after authenticated browser evidence. |
+| `node <evidence>/capture-browser.cjs` | PASS, complete desktop/mobile workflow and runtime record. |
+| `node --import tsx <evidence>/inspect-local.cjs after-two-runs` and `after-browser` | PASS, independent SQL residue/baseline checks. |
+| `npm run typecheck:admin` | PASS. |
+| `npm run lint --workspace=apps/admin-cms` | PASS, zero errors; six unchanged warnings. |
+| `npm run build:admin` (telemetry disabled) | PASS; existing worktree-root/file-tracing warnings retained in `build.log`. |
+| `git diff --check` | PASS. |
+
+No full-suite or exact-head CI pass is claimed by this focused final run; historical full-suite observations below remain historical. The manual template now specifies comparable activities/counts, interruptions/exclusions and total-time reduction calculation, without human measurements or a >=50% claim. The release checklist remains unchecked/INCOMPLETE. No migration, schema, RLS, Auth, validation/reconciliation semantics or publication-authority changes; no hosted Supabase, Duda, publication endpoint, public promotion or removal. Hosted capacity/recovery, stakeholder UAT, production SLA, staff-effort reduction and institutional sign-off remain outside this pass.
+
+## Historical source and integration (2026-09-03)
 
 - Audited Binh head: `f004d39d9e4f5744018dd17efd9094afa77acb7f`.
 - Current main used: `6cee51d5a7b4bbf9d6add26726347d0dcedaa699`; common base: `045cce114775c89ea83be59200532ce3641bc6e8`.
@@ -20,13 +76,13 @@ Date: 2026-09-03. Scope: independent review and local integration of PR #258, **
 | C. Real integrated Local workflows | PASS | Production import services/repositories, readiness, bounded bulk review, preview/correction, archive, audit and read-only publication planning. Existing correction authority exercised without redesign. |
 | D. End-to-end accounting | PASS | All 132 cases classified, 120 persisted, 12 deliberate rejects, zero unexpected/unaccounted. Exact cohort identity checks and per-stage ledger. |
 | E. Seeded issues and controls | PASS | Critical 32/32, non-critical 20/20, zero misses; all 110 controls observed, zero blocking false positives. |
-| F. Observational timing | PARTIAL | Two complete uninterrupted runs and runtime context retained. Parsing/validation/reconciliation is one combined measurement; independent reconciliation time is not available. No SLA claim. |
-| G. Annual-scale UI | PARTIAL | Retained authenticated Local desktop/mobile checks cover search, filters, 10/25/50 pages, selection and pagination, but lack a complete clean authenticated browser-console record. Independent review downgraded the original PASS; no new browser session is claimed. |
+| F. Observational timing | PASS | Final integrated pass observes actual reconciliation within the same production analysis call; 1.100 / 1.481 ms. Combined parent timing retained; no SLA claim. |
+| G. Annual-scale UI | PASS | Fresh complete authenticated desktop/mobile record on 120 projects: zero console/page errors, failed requests or HTTP >=400; two SDK advisories retained. See final section above. |
 | H. Repeatability and cleanup | PASS | Independent review changed the original PASS to FAIL for orphaned Storage recovery. The correction below proves namespace-only recovery after DB deletion, all 13 residue scopes zero, ordinary data preservation, and two fresh uninterrupted evaluator runs without reset. |
-| I. Efficiency preparation | PASS | Manual comparison template retained; matching stages present. Human/manual comparison and >=50% reduction remain NOT TESTED. |
+| I. Human efficiency / KPI-01 | NOT TESTED | Timing instrument ready (preparation PASS); comparable real human measurements and >=50% reduction remain pending. |
 | J. Reporting | PASS | JSON and Markdown share the evidence model; per-run JSON retained. Local gate, browser, CI and human acceptance distinguished. |
 
-## Corpus coverage
+## Historical corpus coverage and observations
 
 Case numbers refer to `release-case-NNN` in `releaseEvaluationCorpus.ts`. The default seed is 3557236774. The corrected manifest digest observed in the passing pair is `87ecb079dcafbe508a4d335ebc94d4af5a606873c4644e48021c71633ca2f571`.
 
