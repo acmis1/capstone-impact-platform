@@ -51,6 +51,7 @@ export const projectMetadataInputSchema = z.object({
 export type ProjectMetadataInput = z.infer<typeof projectMetadataInputSchema>;
 
 export type ProjectMetadataErrorCode =
+  | 'PARTICIPANT_CONTENT_OWNED'
   | 'VALIDATION_FAILED'
   | 'PERMISSION_DENIED'
   | 'PROJECT_NOT_FOUND'

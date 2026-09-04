@@ -14,6 +14,10 @@ import {
 } from './projectDetailsWorkbookContract';
 import { validateParticipantContactEmail } from '../domain/participantContactEmail';
 import { ACCESSIBLE_CONTENT_LIMITS } from '../domain/accessibleContent';
+import {
+  PROJECT_CONTROLLED_URL_MAX_LENGTH,
+  validateProjectControlledUrl,
+} from '../domain/projectControlledUrl';
 type WorkbookInternalField =
   (typeof COLUMN_DEFINITIONS)[number]['internalField'];
 
@@ -390,8 +394,57 @@ export async function parseProjectDetailsWorkbook(
   const program = processTextField('program', true);
   const studyProgram = program;
   const discipline = processTextField('discipline', true);
+  const processOptionalControlledUrl = (
+    field: 'videoUrl' | 'demoUrl' | 'repositoryUrl',
+  ): string => {
+    const cell = extractFieldValue(field);
 
-  // Required accessible poster content. Both values are staff-authored in the workbook — nothing
+    if (cell.isFormula && !cell.hasUsableResult) {
+      errors.push({
+        code: 'WORKBOOK_UNUSABLE_FORMULA',
+        message: 'Formula cell does not contain a usable cached result.',
+        severity: 'error',
+        fieldName: field,
+        columnName: cell.colInfo?.rawHeader,
+        rowNumber: projectRowObj.rowNumber,
+      });
+      return '';
+    }
+
+    const raw = cell.rawString;
+    const validation = validateProjectControlledUrl(raw);
+
+    if (!validation.valid && validation.reason === 'BLANK') {
+      return '';
+    }
+
+    if (validation.valid) {
+      return validation.url;
+    }
+
+    errors.push({
+      code:
+        validation.reason === 'TOO_LONG'
+          ? 'WORKBOOK_VALUE_TOO_LONG'
+          : 'WORKBOOK_INVALID_URL',
+      message:
+        validation.reason === 'TOO_LONG'
+          ? `URL exceeds the maximum of ${PROJECT_CONTROLLED_URL_MAX_LENGTH} characters.`
+          : 'URL must be an absolute public HTTP(S) address without embedded credentials.',
+      severity: 'error',
+      fieldName: field,
+      columnName: cell.colInfo?.rawHeader,
+      rowNumber: projectRowObj.rowNumber,
+    });
+
+    return '';
+  };
+
+  const videoUrl = processOptionalControlledUrl('videoUrl');
+  const demoUrl = processOptionalControlledUrl('demoUrl');
+  const repositoryUrl = processOptionalControlledUrl('repositoryUrl');
+
+  // Required accessible poster content. Both values are project-team-authored in the workbook — nothing
   // here derives, transcribes, or generates them. The only rules applied are presence after trim
   // and a transport/storage safety ceiling; the prose itself is never judged.
   const posterText = processBoundedAccessibleTextField('posterText', ACCESSIBLE_CONTENT_LIMITS.posterText);
@@ -645,6 +698,9 @@ export async function parseProjectDetailsWorkbook(
     studyProgram,
     discipline,
     year,
+    videoUrl,
+    demoUrl,
+    repositoryUrl,
     posterText,
     accessibilityText,
     snapshotAltText,

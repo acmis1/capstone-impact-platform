@@ -13,7 +13,6 @@ import { ProjectMetadataEditor } from './ProjectMetadataEditor';
 import { ProjectMetadataNavigationProvider } from './ProjectMetadataNavigation';
 import { Project } from '../../domain/project';
 import { ProjectMetadataView } from '../../projects/projectMetadata';
-import { ProjectMetadataGateway, saveProjectMetadata } from '../../projects/projectMetadataService';
 import { Layers } from 'lucide-react';
 
 vi.mock('next/navigation', () => ({
@@ -99,21 +98,22 @@ describe('PR2B1 Core Project Review Experience Components', () => {
         />
       );
 
-      expect(screen.getByText('Video Showcase')).toBeTruthy();
-      expect(screen.getByText('Interactive Demo')).toBeTruthy();
-      expect(screen.getByText('Git Repository')).toBeTruthy();
+      expect(screen.getByText('Video')).toBeTruthy();
+      expect(screen.getByText('Live demo / prototype')).toBeTruthy();
+      expect(screen.getByText('Repository')).toBeTruthy();
 
-      const videoLink = screen.getByRole('link', { name: /video showcase link/i });
+      const videoLink = screen.getByRole('link', { name: 'Open video' });
       expect(videoLink.getAttribute('href')).toBe('https://video.example.com/watch');
       expect(videoLink.getAttribute('target')).toBe('_blank');
       expect(videoLink.getAttribute('rel')).toBe('noopener noreferrer');
 
-      const demoLink = screen.getByRole('link', { name: /external demo/i });
-      expect(demoLink.getAttribute('href')).toBe('https://demo.example.com');
+      const demoLink = screen.getByRole('link', { name: 'Open live demo / prototype' });
+      // Canonical form: the validator returns parsed.href, so a bare origin gains its path root.
+      expect(demoLink.getAttribute('href')).toBe('https://demo.example.com/');
       expect(demoLink.getAttribute('target')).toBe('_blank');
       expect(demoLink.getAttribute('rel')).toBe('noopener noreferrer');
 
-      const repoLink = screen.getByRole('link', { name: /git repository/i });
+      const repoLink = screen.getByRole('link', { name: 'Open repository' });
       expect(repoLink.getAttribute('href')).toBe('https://github.com/example/drone');
       expect(repoLink.getAttribute('target')).toBe('_blank');
       expect(repoLink.getAttribute('rel')).toBe('noopener noreferrer');
@@ -467,6 +467,14 @@ describe('PR2B1 Core Project Review Experience Components', () => {
       );
     });
 
+    it('explains the database package-decision block without exposing server error text', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 409, json: async () => ({ success: false, code: 'PROJECT_TEAM_PACKAGE_DECISION_REQUIRED', error: 'Untrusted raw detail' }) }));
+      render(<StagingReviewActions publicId="2026-proj-01" currentStatus="changes_requested" allowedActions={['approve']} />);
+      fireEvent.click(screen.getByRole('button', { name: /Approve project/i }));
+      expect(await screen.findByText('Accept or return the pending project-team package before approving this project.')).toBeTruthy();
+      expect(screen.queryByText('Untrusted raw detail')).toBeNull();
+    });
+
     it('renders safe generic error message when review transition fails', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
@@ -543,75 +551,14 @@ describe('PR2B1 Core Project Review Experience Components', () => {
     });
   });
 
-  describe('ProjectMetadataEditor save acknowledgement (regression for #128)', () => {
-    const initialMetadata: ProjectMetadataView = {
-      publicId: '2026-proj-01',
-      title: 'Autonomous Drone Navigation',
-      summary: 'A project exploring drone autonomy.',
-      background: 'Problem background details.',
-      solution: 'Developed solution details.',
-      posterText: 'Full poster text content index.',
-      accessibilityText: 'Poster showing autonomous drone architecture diagram.',
-      year: '2026',
-      programId: 'a0000000-0000-4000-8000-000000000001',
-      disciplineIds: ['b0000000-0000-4000-8000-000000000001'],
-      industryCategoryIds: ['c0000000-0000-4000-8000-000000000001'],
-      expectedUpdatedAt: '2026-01-01T00:00:00.000Z',
-    };
-    const options = {
-      programs: [{ id: initialMetadata.programId, name: 'Program' }],
-      disciplines: [{ id: initialMetadata.disciplineIds[0], name: 'Discipline' }],
-      industryCategories: [{ id: initialMetadata.industryCategoryIds[0], name: 'Industry' }],
-    };
-
-    const renderEditor = (rpcResponse: unknown) => {
-      const gateway: ProjectMetadataGateway = {
-        loadProject: async () => { throw new Error('Persistence must not be reached'); },
-        loadOptions: async () => options,
-        updateMetadataAtomically: async () => rpcResponse,
-      };
-      const saveAction = (input: unknown) => saveProjectMetadata(gateway, input, 'test-admin-user');
-      return render(
-        <ProjectMetadataNavigationProvider>
-          <ProjectMetadataEditor
-            initialMetadata={initialMetadata}
-            programs={options.programs}
-            disciplines={options.disciplines}
-            industryCategories={options.industryCategories}
-            canEdit={true}
-            projectStatus="changes_requested"
-            saveAction={saveAction}
-          />
-        </ProjectMetadataNavigationProvider>,
-      );
-    };
-
-    const enterEditAndChangeTitle = (title: string) => {
-      fireEvent.click(screen.getByRole('button', { name: /edit project information/i }));
-      fireEvent.change(screen.getByLabelText(/project title/i), { target: { value: title } });
-    };
-
-    it('exits edit mode and shows the saved confirmation for a committed save matching the authoritative audited RPC contract', async () => {
-      const revisedMetadata = { ...initialMetadata, title: 'Revised title' };
-      renderEditor({ resultCode: 'SUCCESS', metadata: revisedMetadata, auditRecordId: 'e0000000-0000-4000-8000-000000000001' });
-
-      enterEditAndChangeTitle('Revised title');
-      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
-
-      expect(await screen.findByText('Project information saved.')).toBeTruthy();
-      expect(screen.queryByRole('button', { name: /save changes/i })).toBeNull();
-      expect(screen.getByRole('button', { name: /edit project information/i })).toBeTruthy();
-    });
-
-    it('stays in edit mode when the RPC response omits the audit record the authoritative contract always returns', async () => {
-      const revisedMetadata = { ...initialMetadata, title: 'Revised title' };
-      renderEditor({ resultCode: 'SUCCESS', metadata: revisedMetadata });
-
-      enterEditAndChangeTitle('Revised title');
-      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
-
-      expect(await screen.findByText('We could not save your changes. Please try again.')).toBeTruthy();
-      expect(screen.getByRole('button', { name: /save changes/i })).toBeTruthy();
+  describe('ProjectMetadataEditor participant ownership boundary', () => {
+    it.each(['draft', 'changes_requested'])('offers no staff content mutation while %s', (status) => {
+      const saveAction = vi.fn();
+      render(<ProjectMetadataEditor initialMetadata={{} as ProjectMetadataView} programs={[]} disciplines={[]} industryCategories={[]} canEdit={true} projectStatus={status} saveAction={saveAction} />);
+      expect(screen.getByText(/content is owned by the project team/i)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /edit project information|save changes/i })).toBeNull();
+      expect(screen.queryByRole('textbox')).toBeNull();
+      expect(saveAction).not.toHaveBeenCalled();
     });
   });
 });

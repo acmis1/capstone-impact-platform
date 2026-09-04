@@ -82,14 +82,6 @@ interface RevokeResponse {
   revokedAt?: string;
 }
 
-interface StartResolutionResponse {
-  success: boolean;
-  error?: string;
-  correctionRequestId?: string;
-  resolutionStartedAt?: string;
-  alreadyInProgress?: boolean;
-}
-
 interface ReminderMutationResponse {
   success: boolean;
   code?: string;
@@ -257,33 +249,6 @@ export function ParticipantPreviewPanel({
     }
   };
 
-  const handleStartResolution = async () => {
-    if (!canResolveCorrection || inFlightRef.current || pending) return;
-    inFlightRef.current = true;
-    setPending(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(publicId)}/participant-preview/correction-resolution`, {
-        method: 'POST',
-      });
-      const data: StartResolutionResponse = await response.json().catch(() => ({ success: false, error: 'Invalid server response.' }));
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to start correction resolution.');
-      }
-
-      setActivePreview(null);
-      setJustGeneratedUrl(null);
-      router.refresh();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred while starting correction resolution.');
-    } finally {
-      setPending(false);
-      inFlightRef.current = false;
-    }
-  };
-
   const handleRevoke = async () => {
     if (!canManage || inFlightRef.current || pending) return;
     inFlightRef.current = true;
@@ -414,14 +379,6 @@ export function ParticipantPreviewPanel({
       + 'The link cannot be recovered — you would need to generate a new preview to share this project again.',
     confirmLabel: 'Revoke preview',
     run: handleRevoke,
-  });
-
-  const confirmStartResolution = () => openConfirmation({
-    title: 'Start resolving the requested changes?',
-    description: 'The current preview link is revoked immediately, and the project returns to Changes requested '
-      + 'so its information can be edited. The project must then be approved again before a corrected preview can be sent.',
-    confirmLabel: 'Start resolving changes',
-    run: handleStartResolution,
   });
 
   const confirmCancelReminder = (reference: string) => openConfirmation({
@@ -626,18 +583,7 @@ export function ParticipantPreviewPanel({
                     <div className="text-foreground bg-background p-2 rounded border border-border font-normal whitespace-pre-wrap">
                       {previewResponseState.comment}
                     </div>
-                    {canResolveCorrection && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={confirmStartResolution}
-                        disabled={pending}
-                        className="mt-1 border-border-strong font-semibold"
-                      >
-                        {pending ? 'Starting resolution…' : 'Start correction resolution'}
-                      </Button>
-                    )}
+                    <p>Review the complete participant correction package below. Begin review only after the project team submits it.</p>
                   </div>
                 ) : (
                   <span className="text-sm text-muted-foreground">Not yet responded by the participant.</span>
@@ -754,7 +700,7 @@ export function ParticipantPreviewPanel({
           )}
           {projectStatus === 'changes_requested' ? (
             <p className="text-sm text-muted-foreground">
-              The project is currently marked <strong className="font-semibold text-foreground">Changes requested</strong>. Update the project information in Review &amp; Edit Project Information, then use the review actions to approve the project again before issuing a corrected preview.
+              The project is currently marked <strong className="font-semibold text-foreground">Changes requested</strong>. Review and accept the exact participant-authored package below, complete the normal technical and review checks, then re-approve before issuing a corrected preview.
             </p>
           ) : projectStatus === 'approved' && canResolveCorrection ? (
             <div className="space-y-3">

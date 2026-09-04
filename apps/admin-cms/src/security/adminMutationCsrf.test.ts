@@ -117,11 +117,13 @@ describe('Admin mutation CSRF inventory', () => {
     expect(requireAdmin).not.toHaveBeenCalled();
   });
 
-  it('keeps metadata editing inside the Server Action auth and permission boundary', () => {
+  it('keeps legacy metadata actions authenticated and denies participant-owned writes', () => {
     const source = read('src/app/admin/projects/[publicId]/actions.ts');
     expect(source).toContain("'use server'");
     expect(source).toContain('requireAdmin()');
-    expect(source).toContain('saveAuthorizedProjectMetadata(');
+    expect(source).toContain("hasPermission(context.permissions, 'projects.edit')");
+    expect(source).toContain('return PARTICIPANT_CONTENT_OWNED');
+    expect(source).not.toContain('createSupabase');
   });
 
   it('keeps participant responses token-bound and outside staff authentication', () => {

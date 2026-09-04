@@ -40,6 +40,11 @@ export function buildImportPackageManifestFromWorkbook(
     groupName: metadata.groupName,
     participantContactEmail: metadata.participantContactEmail || '',
     teamMembers: [...metadata.teamMembers],
+    ...(metadata.videoUrl ? { videoUrl: metadata.videoUrl } : {}),
+    ...(metadata.demoUrl ? { demoUrl: metadata.demoUrl } : {}),
+    ...(metadata.repositoryUrl
+      ? { repositoryUrl: metadata.repositoryUrl }
+      : {}),
     ...(resolvedPosterText ? { posterText: resolvedPosterText } : {}),
     ...(metadata.accessibilityText ? { accessibilityText: metadata.accessibilityText } : {}),
     ...(metadata.snapshotAltText ? { snapshotAltText: metadata.snapshotAltText } : {}),

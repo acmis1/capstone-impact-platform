@@ -50,7 +50,7 @@ The safe manifest binds:
   Supabase CLI and PostgreSQL evidence;
 - the exact repository migration manifest and latest migration;
 - byte length and SHA-256 for each database artifact;
-- the three canonical bucket identities, visibility, file-size/MIME policy, object counts, byte
+- the four current repository canonical bucket identities, visibility, file-size/MIME policy, object counts, byte
   totals, and checksum roots;
 - checksummed references to the private object manifest, non-content table evidence, and source
   Gate 4 evidence;
@@ -196,9 +196,12 @@ npm run capture:recovery-backup -- \
   --supabase-workdir=<absolute-parent-containing-supabase-directory>
 ```
 
-Required terminal evidence includes `SOURCE_CAPTURE_COMPLETE`, the exact reviewed SHA, 48
-migrations ending at `20260831090000`, bounded database/Auth/execution-control counts, three bucket
-summaries, `SOURCE_MUTATIONS = NONE`, and `PRIVATE_RECOVERY_EVIDENCE_NEVER_COMMIT`.
+Required terminal evidence includes `SOURCE_CAPTURE_COMPLETE`, the exact reviewed SHA and its
+matching migration manifest, bounded database/Auth/execution-control counts, canonical bucket
+summaries, `SOURCE_MUTATIONS = NONE`, and `PRIVATE_RECOVERY_EVIDENCE_NEVER_COMMIT`. The current
+repository requires 51 migrations through `20260903130000_participant_owned_corrections.sql` and
+four buckets. Historical hosted 48/48 evidence through `20260831090000` does not establish that
+migrations 0049–0051 are deployed; source parity must be separately verified before capture.
 
 Stop if the target guard, migration history, source Gate 4 contract, Auth integrity, cost fence,
 managed-schema customization contract, canonical bucket inventory, dump, source-stability check,
@@ -229,8 +232,8 @@ removes that partial target. Diagnostics distinguish `ROLE_PLATFORM_ACL_COMPATIB
 then restores only approved PP1 managed-schema customizations, restores Storage through the API,
 and checks:
 
-- all 48 migrations and latest migration;
-- 37 public application tables plus three execution-control tables;
+- all 51 migrations and latest migration;
+- the complete public application and execution-control table inventory;
 - safe table row counts and order-independent checksums;
 - Auth user/identity counts and zero orphan identities;
 - exact source/repository/restored managed-schema evidence (`2/2` Auth, `0/0` Storage,
@@ -238,15 +241,15 @@ and checks:
 - provider-global role compatibility (`ROLE_PLATFORM_ACL_COMPATIBILITY`);
 - recovery-only table-grant compatibility (`TABLE_GRANT_PORTABILITY_COMPATIBILITY`);
 - launch guard `staging / 40 / 31 / 1`, reservation count/checksum, and executor registrations;
-- all three bucket configurations and the exact object set, lengths, content types, and SHA-256;
-- current Gate 4 structure: 40 tables, 78 application RPC signatures across 77 names, four
-  dispatcher routines, and three buckets;
+- all canonical bucket configurations and the exact object set, lengths, content types, and SHA-256;
+- current Gate 4 structure: 44 tables, 84 application RPC signatures across 83 names, four
+  dispatcher routines, and four buckets;
 - `/api/health` 200, `/login` 200 with the stable marker, and a truthful non-staging readiness
   classification; and
 - absence of verifier-owned containers, volumes, network, and workdir after cleanup.
 
 Only `ZERO_COST_RECOVERY_REHEARSAL_VERIFIED` is success. Both Gate 4 and the separate managed-schema
-customization gate must pass: 48/48 migration history or `GATE4_MATCH` cannot compensate for a
+customization gate must pass: matching migration history or `GATE4_MATCH` cannot compensate for a
 missing Auth trigger. Invalid/corrupt bundle, source capture, database restore, managed-schema,
 database integrity, Storage, Gate 4, and cleanup failures remain distinct classifications. A real
 bundle remains present on both success and failure.
@@ -322,7 +325,8 @@ source grants and produced exact parity with zero missing grants.
 
 Post-recovery security follow-up: separately review and harden public table default ACLs. Migration
 `20260719003407` narrows existing table access but its default-ACL revocation names only CRUD
-privileges. This recovery change adds no migration and preserves the 48-migration acceptance source.
+privileges. That historical recovery change added no migration and preserved its 48-migration
+acceptance source; this is not a statement of the current repository migration count.
 
 The ordinary Gate 4 comparator remains exact. Recovery accepts only the five fixed, directional
 constraint definition pairs in `constraintRenderingCompatibility.ts`, with no version or source-kind

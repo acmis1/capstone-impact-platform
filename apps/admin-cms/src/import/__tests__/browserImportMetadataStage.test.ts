@@ -4,6 +4,7 @@ import { POST as rawStagePOST } from '../../app/api/imports/stage-metadata/route
 import {
   computeCanonicalIntentHash,
 } from '../browserImportMetadataStageServer';
+import { stageBrowserImportMetadata } from '../stageBrowserImportMetadata';
 import { SelectionManifest } from '../browserImportPreviewContract';
 import { generateUploadKey } from '../browserSelection';
 import type { createSupabaseAdminClientCore } from '../../lib/supabase/adminCore';
@@ -52,6 +53,56 @@ async function createRefFixture(groupName = 'Group A', title = 'Valid Title') {
     reconciliationContractVersion: 'admin-reference-reconciliation-v1' as const,
   };
   return { refBuf, refMapping };
+}
+async function createControlledLinksWorkbook() {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet('Project details');
+
+  sheet.addRow([
+    'Project title',
+    'Short public summary',
+    'Project background',
+    'Solution / impact',
+    'Team members',
+    'Group name',
+    'Academic supervisor',
+    'Industry partner',
+    'Industry sector',
+    'Study program',
+    'Primary discipline',
+    'Project year',
+    'Showcase layout',
+    'Main media to feature',
+    'Poster full text',
+    'Accessibility text',
+    'Project video URL',
+    'Live demo URL',
+    'Source repository URL',
+  ]);
+
+  sheet.addRow([
+    'Valid Title',
+    'Valid Summary',
+    'Valid Background',
+    'Valid Solution',
+    'Alice',
+    'Group A',
+    'Supervisor',
+    'Partner',
+    'Software Industry',
+    'Software Engineering',
+    'Software Engineering',
+    '2026',
+    'Poster showcase',
+    'Poster',
+    'Poster content text',
+    'Accessibility text content',
+    'https://video.example.com/watch',
+    'https://demo.example.com/live',
+    'https://github.com/example/project',
+  ]);
+
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
 describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
@@ -362,6 +413,269 @@ describe('Browser Import Metadata Staging Unit & API Contract Tests', () => {
       p_source_folder: 'pkg1',
       p_imported_by_id: '00000000-0000-0000-0000-000000000001',
     }));
+  });
+  it('8a. stages controlled project links from the authoritative server-reparsed workbook', async () => {
+    const { refBuf, refMapping } = await createRefFixture(
+      'Group A',
+      'Valid Title',
+    );
+
+    const mockRpc = vi.fn().mockResolvedValue({
+      data: {
+        resultCode: 'SUCCESS',
+        result: 'created',
+        batchId: '11111111-1111-1111-1111-111111111111',
+        projectCount: 1,
+        warningCount: 0,
+        batchStatus: 'metadata_staged',
+      },
+      error: null,
+    });
+
+    vi.spyOn(
+      await import('../../lib/supabase/adminCore'),
+      'createSupabaseAdminClientCore',
+    ).mockReturnValue({
+      rpc: mockRpc,
+    } as unknown as ReturnType<typeof createSupabaseAdminClientCore>);
+
+    const workbook = await createControlledLinksWorkbook();
+    const workbookBytes = workbook.length;
+
+    const manifest: SelectionManifest = {
+      selectedRootName: 'pkg1',
+      fileCount: 3,
+      declaredTotalBytes: workbookBytes + 300 + 400,
+      ignoredSystemFilesCount: 0,
+      descriptors: [
+        {
+          uploadKey: generateUploadKey('pkg1/project-details.xlsx'),
+          originalPath: 'pkg1/project-details.xlsx',
+          fileSizeBytes: workbookBytes,
+          browserMimeType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+        {
+          uploadKey: generateUploadKey('pkg1/poster.png'),
+          originalPath: 'pkg1/poster.png',
+          fileSizeBytes: 300,
+          browserMimeType: 'image/png',
+        },
+        {
+          uploadKey: generateUploadKey('pkg1/poster.pdf'),
+          originalPath: 'pkg1/poster.pdf',
+          fileSizeBytes: 400,
+          browserMimeType: 'application/pdf',
+        },
+      ],
+    };
+
+    const { analyzeBrowserImportServer } = await import(
+      '../parseBrowserImportPreview'
+    );
+
+    const metadataFiles = new Map<string, Buffer>([
+      [
+        generateUploadKey('pkg1/project-details.xlsx'),
+        workbook,
+      ],
+    ]);
+
+    const analysis = await analyzeBrowserImportServer(
+      manifest,
+      metadataFiles,
+      {
+        referenceFileBuffer: refBuf,
+        mapping: refMapping,
+      },
+    );
+
+    expect(analysis.packages[0].manifest).toEqual(
+      expect.objectContaining({
+        videoUrl: 'https://video.example.com/watch',
+        demoUrl: 'https://demo.example.com/live',
+        repositoryUrl: 'https://github.com/example/project',
+      }),
+    );
+
+    const { prepareBrowserImportCommitIntent } = await import(
+      '../prepareBrowserImportCommitIntent'
+    );
+
+    const warningPaths =
+      analysis.preview.batch.packages[0].status === 'warning'
+        ? ['pkg1']
+        : [];
+
+    const plannerRes = prepareBrowserImportCommitIntent({
+      manifest,
+      preview: analysis.preview.batch,
+      selectedPackagePaths: ['pkg1'],
+      acknowledgedWarningPackagePaths: warningPaths,
+      expectedPreviewFingerprint:
+        analysis.preview.batch.previewFingerprint,
+    });
+
+    if (!plannerRes.success) {
+      throw new Error(
+        `Planner failed: ${plannerRes.code} - ${plannerRes.message}`,
+      );
+    }
+
+    const formData = new FormData();
+
+    formData.append('manifest', JSON.stringify(manifest));
+    formData.append('intent', JSON.stringify(plannerRes.intent));
+    formData.append(
+      'referenceFile',
+      new File([refBuf], 'ref.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+    );
+    formData.append(
+      'adminReferenceMapping',
+      JSON.stringify(refMapping),
+    );
+    formData.append(
+      generateUploadKey('pkg1/project-details.xlsx'),
+      new File([workbook], 'project-details.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+    );
+
+    const req = new NextRequest(
+      'http://localhost:3000/api/imports/stage-metadata',
+      {
+        method: 'POST',
+        headers: { 'content-length': '20000' },
+        body: formData,
+      },
+    );
+
+    const res = await stagePOST(req);
+
+    expect(res.status).toBe(200);
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+
+    const rpcArgs = mockRpc.mock.calls[0][1] as {
+      p_packages: Array<Record<string, unknown>>;
+    };
+
+    expect(rpcArgs.p_packages).toHaveLength(1);
+
+    expect(rpcArgs.p_packages[0]).toEqual(
+      expect.objectContaining({
+        videoUrl: 'https://video.example.com/watch',
+        demoUrl: 'https://demo.example.com/live',
+        repositoryUrl: 'https://github.com/example/project',
+      }),
+    );
+  });
+
+  it('8b. rejects unsafe controlled links in authoritative server analysis before RPC persistence', async () => {
+    const { refBuf, refMapping } = await createRefFixture(
+      'Group A',
+      'Valid Title',
+    );
+
+    const mockRpc = vi.fn();
+
+    vi.spyOn(
+      await import('../../lib/supabase/adminCore'),
+      'createSupabaseAdminClientCore',
+    ).mockReturnValue({
+      rpc: mockRpc,
+    } as unknown as ReturnType<typeof createSupabaseAdminClientCore>);
+
+    const workbook = await createControlledLinksWorkbook();
+
+    const manifest: SelectionManifest = {
+      selectedRootName: 'pkg1',
+      fileCount: 3,
+      declaredTotalBytes: workbook.length + 300 + 400,
+      ignoredSystemFilesCount: 0,
+      descriptors: [
+        {
+          uploadKey: generateUploadKey('pkg1/project-details.xlsx'),
+          originalPath: 'pkg1/project-details.xlsx',
+          fileSizeBytes: workbook.length,
+          browserMimeType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+        {
+          uploadKey: generateUploadKey('pkg1/poster.png'),
+          originalPath: 'pkg1/poster.png',
+          fileSizeBytes: 300,
+          browserMimeType: 'image/png',
+        },
+        {
+          uploadKey: generateUploadKey('pkg1/poster.pdf'),
+          originalPath: 'pkg1/poster.pdf',
+          fileSizeBytes: 400,
+          browserMimeType: 'application/pdf',
+        },
+      ],
+    };
+
+    const { analyzeBrowserImportServer } = await import(
+      '../parseBrowserImportPreview'
+    );
+
+    const analysis = await analyzeBrowserImportServer(
+      manifest,
+      new Map([
+        [
+          generateUploadKey('pkg1/project-details.xlsx'),
+          workbook,
+        ],
+      ]),
+      {
+        referenceFileBuffer: refBuf,
+        mapping: refMapping,
+      },
+    );
+
+    const { prepareBrowserImportCommitIntent } = await import(
+      '../prepareBrowserImportCommitIntent'
+    );
+
+    const warningPaths =
+      analysis.preview.batch.packages[0].status === 'warning'
+        ? ['pkg1']
+        : [];
+
+    const plannerRes = prepareBrowserImportCommitIntent({
+      manifest,
+      preview: analysis.preview.batch,
+      selectedPackagePaths: ['pkg1'],
+      acknowledgedWarningPackagePaths: warningPaths,
+      expectedPreviewFingerprint:
+        analysis.preview.batch.previewFingerprint,
+    });
+
+    if (!plannerRes.success) {
+      throw new Error(
+        `Planner failed: ${plannerRes.code} - ${plannerRes.message}`,
+      );
+    }
+
+    // Simulates malformed/tampered authoritative state reaching the final staging boundary.
+    analysis.packages[0].manifest!.videoUrl =
+      'javascript:alert(1)';
+
+    const result = await stageBrowserImportMetadata({
+      authContext: makeMockAuthContext(),
+      serverAnalysis: analysis,
+      intent: plannerRes.intent,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      code: 'INVALID_SELECTION',
+      error: 'Project external link metadata is invalid.',
+    });
+
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
   it('9. Idempotent retry returns existing batch without error', async () => {

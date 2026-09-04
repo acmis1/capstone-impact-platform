@@ -248,12 +248,8 @@ describe('ParticipantPreviewPanel core workflow', () => {
     ));
   });
 
-  it('requires an explicit accessible confirmation before starting correction resolution via POST', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
-      success: true,
-      resolutionStartedAt: '2026-08-16T10:00:00.000Z',
-    }), { status: 200, headers: { 'content-type': 'application/json' } }));
-
+  it('requires a participant package instead of offering the old direct resolution action', () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
     render(<ParticipantPreviewPanel
       {...BASE_PROPS}
       initialActivePreview={{
@@ -267,22 +263,10 @@ describe('ParticipantPreviewPanel core workflow', () => {
       }}
     />);
 
-    const resolveBtn = screen.getByRole('button', { name: 'Start correction resolution' });
-    fireEvent.click(resolveBtn);
 
-    const dialog = await screen.findByRole('alertdialog');
-    expect(within(dialog).getByText('Start resolving the requested changes?')).toBeTruthy();
-    // The consequence is stated in ordinary words, never as a raw status token.
-    expect(within(dialog).getByText(/Changes requested/)).toBeTruthy();
-    expect(within(dialog).queryByText(/changes_requested/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Start correction resolution' })).toBeNull();
+    expect(screen.getByText(/Review the complete participant correction package below/i)).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
-
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Start resolving changes' }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('/api/projects/2026-agri-iot/participant-preview/correction-resolution');
-    expect(init?.method).toBe('POST');
-    expect(refresh).toHaveBeenCalled();
   });
 
   it('renders just-generated link ephemeral copy button with clipboard copy and accessible status', async () => {

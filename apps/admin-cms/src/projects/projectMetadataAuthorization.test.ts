@@ -6,11 +6,11 @@ import { saveAuthorizedProjectMetadata } from './projectMetadataAuthorization';
 const gateway = { loadProject: async () => { throw new Error('Persistence must not be reached'); } } as unknown as ProjectMetadataGateway;
 
 describe('project metadata authorization boundary', () => {
-  it('accepts admin and editor permissions', async () => {
+  it('denies direct content writes for admin and editor permissions', async () => {
     const adminResult = await saveAuthorizedProjectMetadata(getPermissionsForRoles(['admin']), gateway, {}, 'test-admin-user');
     const editorResult = await saveAuthorizedProjectMetadata(getPermissionsForRoles(['editor']), gateway, {}, 'test-admin-user');
-    if (!adminResult.ok) expect(adminResult.code).not.toBe('PERMISSION_DENIED');
-    if (!editorResult.ok) expect(editorResult.code).not.toBe('PERMISSION_DENIED');
+    expect(adminResult).toMatchObject({ ok: false, code: 'PARTICIPANT_CONTENT_OWNED' });
+    expect(editorResult).toMatchObject({ ok: false, code: 'PARTICIPANT_CONTENT_OWNED' });
   });
   it('denies reviewers before the persistence gateway is invoked', async () => {
     const result = await saveAuthorizedProjectMetadata(getPermissionsForRoles(['reviewer']), gateway, {}, 'test-admin-user');

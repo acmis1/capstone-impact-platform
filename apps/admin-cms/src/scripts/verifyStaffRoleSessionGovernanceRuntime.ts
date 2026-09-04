@@ -409,9 +409,12 @@ async function main(): Promise<void> {
       const reviewSource = readSource('apps/admin-cms/src/app/api/projects/[publicId]/review-action/route.ts');
       const correctionSource = readSource('apps/admin-cms/src/app/api/projects/[publicId]/participant-preview/correction-resolution/route.ts');
       assert(reviewSource.includes('adminId: adminContext.adminUserId'));
-      assert(correctionSource.includes('adminId: adminContext.adminUserId'));
+      assert(correctionSource.includes('const admin = await requireAdmin()'));
+      assert(correctionSource.includes('canResolveParticipantCorrection(admin.permissions)'));
+      assert(correctionSource.replace(/\s+/g, ' ').includes('decideParticipantCorrection(createSupabaseAdminClientCore(), selection.publicId, admin.adminUserId, decision.data)'));
       assert(!reviewSource.includes('body.admin'));
       assert(!correctionSource.includes('body.admin'));
+      assert(!correctionSource.includes('decision.data.actor'));
     });
 
     await scenario(37, 'cleanup restores exact verifier-owned role, Auth, project, and audit baseline', async () => {

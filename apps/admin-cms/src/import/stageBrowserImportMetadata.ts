@@ -17,6 +17,7 @@ import {
 import { computeCanonicalIntentHash } from './browserImportMetadataStageServerCore';
 import { BrowserImportServerAnalysis } from './parseBrowserImportPreview';
 import { validateFolderDerivedPublicId } from './publicIdValidation';
+import { validateProjectControlledUrl } from '../domain/projectControlledUrl';
 import { normalizeParticipantContactEmail } from '../domain/participantContactEmail';
 import {
   adminReferenceIntentsSemanticallyEqual,
@@ -24,6 +25,21 @@ import {
 } from './adminReferenceReconciliationCore';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Canonical form of an optional controlled project link, or null when it is absent.
+ *
+ * An invalid value also yields null. That is unreachable in the payload builder — the validation
+ * pass rejects the whole staging request first — and keeps this fail-closed if that ever changes,
+ * so a value the validator refuses can never be persisted verbatim.
+ */
+function canonicalControlledProjectUrl(value: string | undefined): string | null {
+  if (!value) return null;
+
+  const validation = validateProjectControlledUrl(value);
+
+  return validation.valid ? validation.url : null;
+}
 
 export async function stageBrowserImportMetadata(params: {
   authContext: AuthenticatedAdminContext;
@@ -167,6 +183,21 @@ export async function stageBrowserImportMetadata(params: {
     publicIdsSeen.add(pkg.proposedPublicId);
 
     const m = pkg.manifest;
+    for (const field of ['videoUrl', 'demoUrl', 'repositoryUrl'] as const) {
+      const value = m[field];
+
+      if (!value) continue;
+
+      const validation = validateProjectControlledUrl(value);
+
+      if (!validation.valid) {
+        return {
+          success: false,
+          code: 'INVALID_SELECTION',
+          error: 'Project external link metadata is invalid.',
+        };
+      }
+    }
     if (!m.title || m.title.trim() === '' || m.title.length > 200) {
       return { success: false, code: 'INVALID_SELECTION', error: 'Title is invalid.' };
     }
@@ -247,6 +278,12 @@ export async function stageBrowserImportMetadata(params: {
       // never reach persistence, and the database normalizes a third time as the final authority.
       participantContactEmail: normalizeParticipantContactEmail(m.participantContactEmail),
       teamMembers: m.teamMembers.map((t) => String(t).trim()).filter((t) => t !== ''),
+      // Optional controlled project links. The canonical form is persisted, never the raw cell
+      // text, so the string the database re-validates, the participant later confirms and the
+      // public feed emits are all one and the same value.
+      videoUrl: canonicalControlledProjectUrl(m.videoUrl),
+      demoUrl: canonicalControlledProjectUrl(m.demoUrl),
+      repositoryUrl: canonicalControlledProjectUrl(m.repositoryUrl),
       posterText: m.posterText ? m.posterText.trim() : null,
       accessibilityText: m.accessibilityText ? m.accessibilityText.trim() : null,
       layoutConfig: m.layoutConfig,

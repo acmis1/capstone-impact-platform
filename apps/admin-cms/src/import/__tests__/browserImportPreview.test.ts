@@ -737,6 +737,58 @@ describe('Browser Import Preview Suite', () => {
       expect(res.batch.packages[0].errors.some((e) => e.code === 'FILE_MISSING_POSTER_PDF')).toBe(true);
     });
 
+    it('32a. A wrong-extension file cannot satisfy the required poster PDF role', async () => {
+      const xlsxBuf = await buildTestWorkbookBuffer();
+
+      const descXlsx = makeDesc(
+        'solar-monitor/project-details.xlsx',
+        xlsxBuf.length,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+
+      const descPng = makeDesc(
+        'solar-monitor/poster.png',
+        500,
+        'image/png'
+      );
+
+      const descWrongPdf = makeDesc(
+        'solar-monitor/poster.txt',
+        500,
+        'application/pdf'
+      );
+
+      const manifest: SelectionManifest = {
+        selectedRootName: 'solar-monitor',
+        fileCount: 3,
+        declaredTotalBytes:
+          descXlsx.fileSizeBytes +
+          descPng.fileSizeBytes +
+          descWrongPdf.fileSizeBytes,
+        ignoredSystemFilesCount: 0,
+        descriptors: [
+          descXlsx,
+          descPng,
+          descWrongPdf,
+        ],
+      };
+
+      const uploads = new Map<string, Buffer>();
+      uploads.set(descXlsx.uploadKey, xlsxBuf);
+
+      const res = await parseBrowserImportPreview(manifest, uploads);
+
+      const pkg = res.batch.packages[0];
+
+      expect(pkg.status).toBe('invalid');
+      expect(pkg.filePresence.posterPdfPresent).toBe(false);
+      expect(
+        pkg.errors.some(
+          (e) => e.code === 'FILE_MISSING_POSTER_PDF'
+        )
+      ).toBe(true);
+    });
+
     it('33. Missing snapshot warning', async () => {
       const xlsxBuf = await buildTestWorkbookBuffer();
       const descXlsx = makeDesc(

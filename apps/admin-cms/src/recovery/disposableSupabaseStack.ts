@@ -172,27 +172,37 @@ export function createDisposableStackIdentity(
   assertDisposableProjectId(projectId);
 
   const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'capstone-recovery-'));
-  fs.chmodSync(workdir, 0o700);
-  fs.writeFileSync(path.join(workdir, OWNERSHIP_MARKER), `${projectId}\n`, { mode: 0o600 });
-  const supabaseDirectory = path.join(workdir, 'supabase');
-  const source = path.join(options.repositoryRoot, 'infra', 'supabase');
-  fs.mkdirSync(supabaseDirectory, { recursive: true });
-  fs.cpSync(path.join(source, 'templates'), path.join(supabaseDirectory, 'templates'), { recursive: true });
-  if (options.mode === 'migrated-source') {
-    fs.cpSync(path.join(source, 'migrations'), path.join(supabaseDirectory, 'migrations'), { recursive: true });
-    fs.copyFileSync(path.join(source, 'seed.sql'), path.join(supabaseDirectory, 'seed.sql'));
+  try {
+    fs.chmodSync(workdir, 0o700);
+    fs.writeFileSync(path.join(workdir, OWNERSHIP_MARKER), `${projectId}\n`, { mode: 0o600 });
+    const supabaseDirectory = path.join(workdir, 'supabase');
+    const source = path.join(options.repositoryRoot, 'infra', 'supabase');
+    fs.mkdirSync(supabaseDirectory, { recursive: true });
+    fs.cpSync(path.join(source, 'templates'), path.join(supabaseDirectory, 'templates'), { recursive: true });
+    if (options.mode === 'migrated-source') {
+      fs.cpSync(path.join(source, 'migrations'), path.join(supabaseDirectory, 'migrations'), { recursive: true });
+      fs.copyFileSync(path.join(source, 'seed.sql'), path.join(supabaseDirectory, 'seed.sql'));
+    }
+    fs.writeFileSync(
+      path.join(supabaseDirectory, 'config.toml'),
+      buildDisposableSupabaseConfig({
+        baseConfig: fs.readFileSync(path.join(source, 'config.toml'), 'utf8'),
+        projectId,
+        portBase: options.portBase,
+        postgresMajorVersion: options.postgresMajorVersion,
+        mode: options.mode,
+      }),
+      'utf8',
+    );
+  } catch {
+    try {
+      fs.rmSync(workdir, { recursive: true, force: true });
+      if (fs.existsSync(workdir)) throw new Error('DISPOSABLE_STACK_SETUP_CLEANUP_INCOMPLETE');
+    } catch {
+      throw new Error('DISPOSABLE_STACK_SETUP_CLEANUP_FAILED');
+    }
+    throw new Error('DISPOSABLE_STACK_SETUP_FAILED');
   }
-  fs.writeFileSync(
-    path.join(supabaseDirectory, 'config.toml'),
-    buildDisposableSupabaseConfig({
-      baseConfig: fs.readFileSync(path.join(source, 'config.toml'), 'utf8'),
-      projectId,
-      portBase: options.portBase,
-      postgresMajorVersion: options.postgresMajorVersion,
-      mode: options.mode,
-    }),
-    'utf8',
-  );
 
   return {
     projectId,

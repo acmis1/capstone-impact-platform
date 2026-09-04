@@ -221,6 +221,32 @@ jobs:
         env:
           SUPABASE_START_TIMEOUT_MS: '900000'
 
+  participant-owned-corrections:
+    name: Disposable Participant-Owned Corrections Runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 24.14.1
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+
+      - name: Install npm 11.11.0 (pinned)
+        run: npm install -g npm@11.11.0
+
+      - name: Install dependencies
+        run: npm ci
+
+      # This mutation-heavy verifier owns its stack and verifies cleanup on success and failure.
+      # It must never share the Local Integration stack or consume hosted credentials.
+      - name: Verify participant-owned corrections on an owned disposable stack
+        run: npm exec --workspace=apps/admin-cms -- tsx src/scripts/runDisposableParticipantCorrectionsRuntime.ts
+
   local-integration:
     name: Disposable Local Supabase Integration
     runs-on: ubuntu-latest
@@ -270,10 +296,10 @@ jobs:
       - name: Confirm Local Supabase Stack Running
         run: npm run supabase:assert-running
 
-      - name: Verify forty-eight migrations and local integrity
+      - name: Verify fifty-one migrations and local integrity
         run: |
           npm run supabase:verify:local
-          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 48
+          test "$(find infra/supabase/migrations -name '*.sql' | wc -l)" -eq 51
 
       - name: Verify exact Gate 4 schema evidence from the migrated Local catalog
         run: npm run check:gate4-schema-evidence:local --workspace=apps/admin-cms -- --local-self-check

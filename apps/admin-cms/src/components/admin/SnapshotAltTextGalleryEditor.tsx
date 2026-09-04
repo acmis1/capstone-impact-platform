@@ -1,7 +1,5 @@
 'use client';
 
-import { useState } from 'react';
-
 import type { ProjectMediaPreviewItem } from '../admin-media/mediaPreviewTypes';
 import type { SnapshotAltTextActionResult } from '../../projects/snapshotAltText';
 import { SnapshotAltTextEditor } from './SnapshotAltTextEditor';
@@ -16,8 +14,7 @@ interface SnapshotAltTextGalleryEditorProps {
 }
 
 /**
- * Small client boundary for the snapshot editing surface. Every editor acts on the same project
- * version, so a successful save advances the expected version for all of its sibling editors.
+ * Read-only project-team descriptions in authoritative gallery order.
  */
 export function SnapshotAltTextGalleryEditor({
   publicId,
@@ -27,8 +24,6 @@ export function SnapshotAltTextGalleryEditor({
   projectStatus,
   saveAction,
 }: SnapshotAltTextGalleryEditorProps) {
-  const [currentExpectedUpdatedAt, setCurrentExpectedUpdatedAt] = useState(initialExpectedUpdatedAt);
-
   return (
     <div className="border-t border-border pt-4">
       <div className="flex flex-col gap-4">
@@ -42,11 +37,10 @@ export function SnapshotAltTextGalleryEditor({
               publicId={publicId}
               mediaAssetId={media.id}
               initialAltText={media.altText ?? ''}
-              expectedUpdatedAt={currentExpectedUpdatedAt}
+              expectedUpdatedAt={initialExpectedUpdatedAt}
               canEdit={canEdit}
               projectStatus={projectStatus}
               saveAction={saveAction}
-              onSavedExpectedUpdatedAt={setCurrentExpectedUpdatedAt}
             />
           </div>
         ))}

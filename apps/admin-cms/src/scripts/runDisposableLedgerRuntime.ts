@@ -41,16 +41,16 @@ const PSQL_COMMAND_TIMEOUT_MS = 45_000;
 const RUNTIME_TIMEOUT_MS = 600_000;
 
 /**
- * The sole correction migration. Removing exactly this file reproduces current main's
- * pre-correction state (one fewer than current main); restoring it proves the supported
- * forward-only upgrade back to the full current-main migration set.
+ * The sole correction migration. Removing exactly this file reproduces the
+ * pre-correction state (one fewer than the integrated repository migration set);
+ * restoring it proves the supported forward-only upgrade back to the full set.
  */
 const CORRECTION_MIGRATIONS = [
   '20260826090000_public_feed_activation_authority_guard.sql',
 ];
 
-const PRE_CORRECTION_MIGRATION_COUNT = 47;
-const CURRENT_MAIN_MIGRATION_COUNT = 48;
+const PRE_CORRECTION_MIGRATION_COUNT = 50;
+const CURRENT_MAIN_MIGRATION_COUNT = 51;
 const UPGRADE_MODE = 'upgrade';
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');

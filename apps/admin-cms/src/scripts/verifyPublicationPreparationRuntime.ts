@@ -54,7 +54,47 @@ export async function runPublicationPreparationRuntimeVerification(): Promise<bo
     console.log('Scenario 5: reviewer blocked'); assert((await plan(target.project.public_id, 'reviewer')).resultCode === 'PERMISSION_DENIED', 'Reviewer permitted'); console.log('PASS: Scenario 5');
     console.log('Scenario 6: editor blocked'); assert((await plan(target.project.public_id, 'editor')).resultCode === 'PERMISSION_DENIED', 'Editor permitted'); console.log('PASS: Scenario 6');
     console.log('Scenario 7: unconfirmed target'); const unconfirmed = await create('unconfirmed'); await previews.generatePreview({ publicId: unconfirmed.public_id, adminId, tokenHash: hash(crypto.randomUUID()), privateBucket: BUCKET }); const p7 = await plan(unconfirmed.public_id); assert(p7.resultCode === 'NOT_READY' && p7.readinessCode === 'PREVIEW_NOT_CONFIRMED', 'Unconfirmed readiness incorrect'); console.log('PASS: Scenario 7');
-    console.log('Scenario 8: correction unresolved'); const correction = await create('correction'); const correctionToken = hash(crypto.randomUUID()); await previews.generatePreview({ publicId: correction.public_id, adminId, tokenHash: correctionToken, privateBucket: BUCKET }); await previews.requestCorrection(correctionToken, 'Synthetic correction'); const p8open = await plan(correction.public_id); assert(p8open.resultCode === 'NOT_READY' && p8open.readinessCode === 'CORRECTION_UNRESOLVED', 'Open correction readiness incorrect'); await previews.startCorrectionResolution({ publicId: correction.public_id, adminId }); const p8progress = await plan(correction.public_id); assert(p8progress.resultCode === 'NOT_READY' && p8progress.readinessCode === 'CORRECTION_UNRESOLVED', 'In-progress correction readiness incorrect'); console.log('PASS: Scenario 8');
+    console.log('Scenario 8: open correction remains blocked after retired shortcut');
+    const correction = await create('correction');
+    const correctionToken = hash(crypto.randomUUID());
+    const correctionPreview = await previews.generatePreview({ publicId: correction.public_id, adminId, tokenHash: correctionToken, privateBucket: BUCKET });
+    await previews.requestCorrection(correctionToken, 'Synthetic correction');
+    const correctionState = async () => {
+      const [project, preview, request, submissions, audits, snapshots] = await Promise.all([
+        db.from('projects').select('*').eq('id', correction.id).single(),
+        db.from('participant_previews').select('*').eq('project_id', correction.id).single(),
+        db.from('participant_preview_correction_requests').select('*').eq('participant_preview_id', correctionPreview.previewId).single(),
+        db.from('participant_correction_submissions').select('id', { count: 'exact', head: true }).eq('project_id', correction.id),
+        db.from('approval_records').select('id', { count: 'exact', head: true }).eq('project_id', correction.id),
+        db.from('published_snapshots').select('id').order('id'),
+      ]);
+      assert(![project, preview, request, submissions, audits, snapshots].some((result) => result.error), 'Scenario 8 workflow state unavailable');
+      return {
+        project: project.data, preview: preview.data, request: request.data,
+        submissions: submissions.count, audits: audits.count, snapshots: snapshots.data,
+      };
+    };
+    const beforeCorrectionPlan = await correctionState();
+    assert(
+      beforeCorrectionPlan.project?.status === 'approved' &&
+      beforeCorrectionPlan.preview?.id === correctionPreview.previewId && beforeCorrectionPlan.preview?.status === 'active' &&
+      beforeCorrectionPlan.preview?.revoked_at === null && beforeCorrectionPlan.preview?.revoked_by === null &&
+      beforeCorrectionPlan.request?.status === 'open' &&
+      beforeCorrectionPlan.request?.resolution_started_at === null && beforeCorrectionPlan.request?.resolution_started_by === null &&
+      beforeCorrectionPlan.submissions === 0 && beforeCorrectionPlan.audits === 0,
+      'Scenario 8 requires an approved project, active preview and open correction without a package or approval audit',
+    );
+    const p8open = await plan(correction.public_id);
+    assert(p8open.resultCode === 'NOT_READY' && p8open.readinessCode === 'CORRECTION_UNRESOLVED', 'Open correction readiness incorrect');
+    // Use the raw compatibility RPC: the old wrapper hides its current rejection code.
+    // Package/reapproval/reconfirmation coverage creates immutable evidence and belongs to
+    // verifyParticipantOwnedCorrectionsRuntime.ts on its owned disposable stack.
+    const shortcut = await db.rpc('start_participant_preview_correction_resolution', { p_public_id: correction.public_id, p_admin_id: adminId });
+    assert(!shortcut.error && shortcut.data?.resultCode === 'PARTICIPANT_CANDIDATE_REQUIRED', 'Retired correction shortcut did not require a participant candidate');
+    const p8after = await plan(correction.public_id);
+    assert(p8after.resultCode === 'NOT_READY' && p8after.readinessCode === 'CORRECTION_UNRESOLVED' && JSON.stringify(p8after) === JSON.stringify(p8open), 'Retired shortcut changed the blocked publication plan');
+    assert(JSON.stringify(await correctionState()) === JSON.stringify(beforeCorrectionPlan), 'Correction planning or retired shortcut mutated workflow, submissions, audit or publication state');
+    console.log('PASS: Scenario 8');
     console.log('Scenario 9: metadata drift'); const metadata = await ready('metadata'); await db.from('projects').update({ title: 'Drifted' }).eq('id', metadata.project.id); const p9 = await plan(metadata.project.public_id); assert(p9.resultCode === 'NOT_READY' && p9.readinessCode === 'PROJECT_SNAPSHOT_STALE', 'Metadata drift readiness incorrect'); console.log('PASS: Scenario 9');
     console.log('Scenario 10: private-media drift'); const media = await ready('media'); const insertMedia = await db.from('media_assets').insert({ project_id: media.project.id, asset_type: 'poster', file_name: 'extra.png', storage_bucket: BUCKET, storage_path: `${prefix}/media/extra.png`, public_url: null, mime_type: 'image/png', file_size_bytes: 1, is_public_approved: false }); assert(!insertMedia.error, `Media fixture failed: ${insertMedia.error?.message}`); const p10 = await plan(media.project.public_id); assert(p10.resultCode === 'NOT_READY' && p10.readinessCode === 'MEDIA_SNAPSHOT_STALE', 'Media drift readiness incorrect'); console.log('PASS: Scenario 10');
     console.log('Scenario 11: revoked preview freshness'); const revoked = await ready('revoked'); await previews.revokePreview({ publicId: revoked.project.public_id, adminId }); const p11 = await plan(revoked.project.public_id); assert(p11.resultCode === 'NOT_READY' && p11.readinessCode === 'NO_ACTIVE_PREVIEW', 'Revoked readiness incorrect'); console.log('PASS: Scenario 11');
