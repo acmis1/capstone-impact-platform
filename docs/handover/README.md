@@ -59,6 +59,9 @@ Read in this order:
 4. **[M6 Operational Readiness and Recovery](../m6-operational-readiness.md)** — backup and restore
    scope, recovery evidence, monitoring, incident handling, deployment and rollback.
 5. **[Environment Matrix](environment-matrix.md)** — which environment may do what.
+6. **[Tan — Poster PDF and Controlled Project Links Integration Record](tan-poster-pdf-controlled-links-integration.md)** —
+   contribution provenance for PR #255, every integration/hardening change applied through PR #262,
+   final migration lineage, verification, and guidance for continuing the work from current `main`.
 
 ### I need to deploy, operate, or troubleshoot assistive processing
 
