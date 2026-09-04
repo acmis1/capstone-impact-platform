@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+// Load the route and workbook parser before timing individual response assertions.
+import '../app/participant-preview/[token]/route';
 import { createRequire } from 'node:module';
 import { escapeHtml, renderParticipantPreviewPage, renderParticipantPreviewUnavailablePage, isSafeExternalPreviewUrl } from '../previews/participantPreviewHtml';
 import { hashPreviewToken } from '../previews/participantPreviewToken';
@@ -10,6 +12,7 @@ const { JSDOM } = require('jsdom') as {
   JSDOM: new (html: string) => { window: { document: Document } };
 };
 
+vi.mock('../previews/participantCorrectionService', () => ({ getParticipantCorrectionContext: vi.fn().mockResolvedValue({ submitted: false, canSubmit: true }), stageParticipantCorrection: vi.fn() }));
 vi.mock('server-only', () => ({}));
 vi.mock('../lib/supabase/admin', () => ({
   createSupabaseAdminClient: vi.fn(),
@@ -712,7 +715,7 @@ describe('Public participant-preview route', () => {
     responseStateSpy.mockRestore();
   });
 
-  it('renders the confirmed state with the recorded timestamp and no confirmation/correction form once already confirmed', async () => {
+  it('renders the confirmed state with the recorded timestamp and no correction upload form', async () => {
     const { GET } = await import('../app/participant-preview/[token]/route');
     const { SupabaseParticipantPreviewRepository } = await import('../repositories/SupabaseParticipantPreviewRepository');
 
@@ -739,7 +742,8 @@ describe('Public participant-preview route', () => {
 
     expect(res.status).toBe(200);
     expect(html).toContain('You confirmed that');
-    expect(html).not.toContain('<form method="POST">');
+    expect(html).not.toContain('<form');
+    expect(html).not.toContain('type="file"');
     expect(html).not.toContain('Confirm project details');
     expect(html).not.toContain('Correction request submitted');
 

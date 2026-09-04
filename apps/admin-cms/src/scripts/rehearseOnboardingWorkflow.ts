@@ -39,8 +39,8 @@ export function runOnboardingWorkflowRehearsal(repoRoot = path.resolve(__dirname
     if (!branch && !headSha) throw new Error('Disposable clone has no active branch or HEAD SHA.');
     stepsCompleted.push('checkout_verified');
 
-    // 3. Install dependencies cleanly (180s deadline)
-    runCmd('npm ci', cloneDir, 180_000, 'npm_ci_completed');
+    // 3. Install dependencies cleanly (480s deadline)
+    runCmd('npm ci', cloneDir, 480_000, 'npm_ci_completed');
     stepsCompleted.push('npm_ci_completed');
 
     // 4. Run onboarding documentation contract check (30s deadline)

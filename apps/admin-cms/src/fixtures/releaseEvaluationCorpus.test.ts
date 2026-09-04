@@ -80,6 +80,33 @@ describe('release evaluation corpus', () => {
     expect(corpus.cases.every((item) => item.seededIssueIds.every((issueId) => corpus.seededIssues.some((issue) => issue.issueId === issueId)))).toBe(true);
   });
 
+  it('keeps five approved, unresolved participant corrections before package submission', () => {
+    const corpus = buildReleaseEvaluationCorpus();
+    const corrections = corpus.cases.filter((item) => item.lifecycleProfile === 'participant-correction');
+    expect(corrections).toHaveLength(5);
+    for (const item of corrections) {
+      expect(item.expected).toMatchObject({
+        finalStatus: 'approved',
+        reviewActions: [
+          { action: 'submit_for_review', fromStatus: 'draft', toStatus: 'submitted' },
+          { action: 'approve', fromStatus: 'submitted', toStatus: 'approved' },
+        ],
+        publicationReadiness: 'CORRECTION_UNRESOLVED',
+        candidatePlan: 'excluded', ordinaryFeed: 'excluded', archiveRemoval: 'not_applicable',
+      });
+      expect(item.expected.reviewActions).toHaveLength(2);
+      expect(item.expected.reviewActions.every((action) => action.comment === undefined)).toBe(true);
+    }
+    expect(corpus.cases.reduce((total, item) => total + item.expected.reviewActions.length, 0)).toBe(180);
+    const statuses = corpus.cases.filter((item) => item.expected.persistence === 'persisted')
+      .reduce<Record<string, number>>((counts, item) => {
+        const status = item.expected.finalStatus!;
+        counts[status] = (counts[status] || 0) + 1;
+        return counts;
+      }, {});
+    expect(statuses).toEqual({ draft: 20, submitted: 20, approved: 60, changes_requested: 10, archived: 10 });
+  });
+
   it('materializes accepted and rejected packages using real browser previews', async () => {
     const corpus = await materializeReleaseEvaluationCorpus({ seed: DEFAULT_SYNTHETIC_SEED, runNamespace: 'test' });
     expect(corpus.acceptedBatches.every((batch) => batch.materialized.packages.length <= 24)).toBe(true);

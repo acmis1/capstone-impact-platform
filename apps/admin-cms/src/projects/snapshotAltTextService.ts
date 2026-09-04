@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { AdminPermission } from '../auth/authTypes';
 import { hasPermission } from '../auth/permissions';
+import { PARTICIPANT_CONTENT_OWNED } from './contentOwnership';
 import {
   SnapshotAltTextActionResult,
   SnapshotAltTextErrorCode,
@@ -90,12 +91,13 @@ export async function saveSnapshotAltText(
  */
 export async function saveAuthorizedSnapshotAltText(
   permissions: AdminPermission[],
-  gateway: SnapshotAltTextGateway,
-  rawInput: unknown,
-  actorAdminUserId: string,
+  _gateway: SnapshotAltTextGateway,
+  _rawInput: unknown,
+  _actorAdminUserId: string,
 ): Promise<SnapshotAltTextActionResult> {
+  void _gateway; void _rawInput; void _actorAdminUserId;
   if (!hasPermission(permissions, 'projects.edit')) return failure('PERMISSION_DENIED');
-  return saveSnapshotAltText(gateway, rawInput, actorAdminUserId);
+  return PARTICIPANT_CONTENT_OWNED;
 }
 
 export class SupabaseSnapshotAltTextGateway implements SnapshotAltTextGateway {

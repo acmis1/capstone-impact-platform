@@ -1055,528 +1055,450 @@ export async function runParticipantPreviewRuntimeVerification(options?: Runtime
     }
 
     // ============================================================
-    // Test 35 (Scenario A): Start Resolution Happy Path
+    // Tests 35-43: the retired staff correction-resolution shortcut.
+    //
+    // Migration 0051 (20260903130000_participant_owned_corrections.sql) deliberately retires
+    // start_participant_preview_correction_resolution. It is now a constant-returning SQL
+    // function that always answers PARTICIPANT_CANDIDATE_REQUIRED: staff may no longer push an
+    // approved project into an editable changes_requested state merely because a participant
+    // asked for a correction. An exact, participant-authored correction package must exist
+    // first, and the authoritative Begin/freeze/Accept/Return workflow now lives in
+    // review_participant_correction.
+    //
+    // The scenarios below therefore prove the retired shortcut fails closed and mutates nothing,
+    // rather than asserting the transition it used to perform. Coverage that genuinely belongs
+    // to the new workflow -- package staging and idempotency, exact package selection,
+    // Begin/freeze, combined edit+review authority on the review decision, Accept/Return,
+    // stale-selection fencing, immutable correction evidence, the corrected-preview reissue
+    // lifecycle and its concurrency -- is owned by
+    // src/scripts/verifyParticipantOwnedCorrectionsRuntime.ts and is deliberately not
+    // duplicated here.
     // ============================================================
-    console.log('--- Test 35 (Scenario A): Start Resolution Happy Path ---');
+    const legacyStart = (publicId: string, actorId: string) =>
+      client.rpc('start_participant_preview_correction_resolution', { p_public_id: publicId, p_admin_id: actorId });
+
+    const correctionRow = async (correctionRequestId: string) => {
+      const { data } = await client
+        .from('participant_preview_correction_requests')
+        .select('status, resolution_started_at, resolution_started_by, resolved_at, resolved_by, replacement_preview_id, correction_comment, requested_at')
+        .eq('id', correctionRequestId)
+        .single();
+      return data as Record<string, unknown> | null;
+    };
+
+    const previewStateRow = async (previewId: string) => {
+      const { data } = await client
+        .from('participant_previews')
+        .select('status, revoked_at, revoked_by')
+        .eq('id', previewId)
+        .single();
+      return data as Record<string, unknown> | null;
+    };
+
+    const projectStatus = async (projectId: string) => {
+      const { data } = await client.from('projects').select('status').eq('id', projectId).single();
+      return data?.status as string | undefined;
+    };
+
+    const approvalRecordCount = async (projectId: string) => {
+      const { count } = await client.from('approval_records').select('id', { count: 'exact', head: true }).eq('project_id', projectId);
+      return count ?? -1;
+    };
+
+    // Migration 0051 keeps participant_correction_submissions service_role SELECT-only, so a
+    // count is the strongest read this verifier can make -- and the only one it needs: the
+    // retired shortcut must never bring a correction package into existence.
+    const submissionCount = async (projectId: string) => {
+      const { count } = await client.from('participant_correction_submissions').select('id', { count: 'exact', head: true }).eq('project_id', projectId);
+      return count ?? -1;
+    };
+
+    const previewCount = async (projectId: string) => {
+      const { count } = await client.from('participant_previews').select('id', { count: 'exact', head: true }).eq('project_id', projectId);
+      return count ?? -1;
+    };
+
+    const mediaStaysPrivate = async (projectId: string) => {
+      const { data } = await client
+        .from('media_assets')
+        .select('public_url, is_public_approved, storage_bucket, public_storage_bucket, public_storage_path')
+        .eq('project_id', projectId);
+      return (data || []).every(
+        (m) =>
+          m.public_url === null &&
+          m.is_public_approved === false &&
+          m.storage_bucket === PRIVATE_DRAFT_BUCKET &&
+          m.public_storage_bucket === null &&
+          m.public_storage_path === null
+      );
+    };
+
+    // ============================================================
+    // Test 35: For a genuine approved project + active participant preview + open correction
+    // request and no participant correction package, the retired shortcut fails closed and
+    // performs zero mutation. (Replaces the old "start resolution happy path".)
+    // ============================================================
+    console.log('--- Test 35: Retired correction-resolution shortcut fails closed with zero mutation ---');
     const t35Proj = await createProject('t35', 'approved');
     await createRequiredApprovalMedia(String(t35Proj.id), 't35');
     const t35A = await generate(String(t35Proj.public_id), adminId);
     const t35Comment = 'Please update team members list.';
     const t35Correction = await requestCorrection(t35A.hash, t35Comment);
-    const t35Start = await client.rpc('start_participant_preview_correction_resolution', {
-      p_public_id: String(t35Proj.public_id),
-      p_admin_id: adminId,
-    });
+    const t35CorrectionId = String(t35Correction.data?.correctionRequestId);
+    const t35Start = await legacyStart(String(t35Proj.public_id), adminId);
 
-    const { data: t35PreviewRow } = await client.from('participant_previews').select('status').eq('id', t35A.res.data?.previewId).single();
-    const { data: t35ProjRow } = await client.from('projects').select('status').eq('id', t35Proj.id).single();
-    const { data: t35CorrRow } = await client.from('participant_preview_correction_requests').select('status, resolution_started_at, resolution_started_by, correction_comment, requested_at').eq('id', t35Correction.data?.correctionRequestId).single();
-    const { data: t35AuditRows } = await client.from('approval_records').select('*').eq('project_id', t35Proj.id).eq('from_status', 'approved').eq('to_status', 'changes_requested');
+    const t35PreviewRow = await previewStateRow(String(t35A.res.data?.previewId));
+    const t35ProjStatus = await projectStatus(String(t35Proj.id));
+    const t35CorrRow = await correctionRow(t35CorrectionId);
+    const { data: t35LegacyAuditRows } = await client
+      .from('approval_records')
+      .select('id')
+      .eq('project_id', t35Proj.id)
+      .eq('from_status', 'approved')
+      .eq('to_status', 'changes_requested');
+    const t35Resolve = await resolve(t35A.hash);
 
     if (
       !t35Start.error &&
-      t35Start.data?.resultCode === 'SUCCESS' &&
-      t35PreviewRow?.status === 'revoked' &&
-      t35ProjRow?.status === 'changes_requested' &&
-      t35CorrRow?.status === 'in_progress' &&
-      t35CorrRow?.resolution_started_at &&
-      t35CorrRow?.resolution_started_by === adminId &&
+      t35Start.data?.resultCode === 'PARTICIPANT_CANDIDATE_REQUIRED' &&
+      t35ProjStatus === 'approved' &&
+      t35PreviewRow?.status === 'active' &&
+      t35PreviewRow?.revoked_at === null &&
+      t35PreviewRow?.revoked_by === null &&
+      t35CorrRow?.status === 'open' &&
+      t35CorrRow?.resolution_started_at === null &&
+      t35CorrRow?.resolution_started_by === null &&
+      t35CorrRow?.resolved_at === null &&
+      t35CorrRow?.resolved_by === null &&
+      t35CorrRow?.replacement_preview_id === null &&
       t35CorrRow?.correction_comment === t35Comment &&
       t35CorrRow?.requested_at === t35Correction.data?.requestedAt &&
-      (t35AuditRows || []).length === 1
+      (t35LegacyAuditRows || []).length === 0 &&
+      (await approvalRecordCount(String(t35Proj.id))) === 0 &&
+      (await submissionCount(String(t35Proj.id))) === 0 &&
+      (await mediaStaysPrivate(String(t35Proj.id))) &&
+      t35Resolve.data?.resultCode === 'SUCCESS'
     ) {
-      console.log('PASS: Test 35 - Start resolution happy path succeeded as expected.');
+      console.log('PASS: Test 35 - Retired shortcut returned PARTICIPANT_CANDIDATE_REQUIRED and left project, preview, correction, audit, package and media state untouched.');
     } else {
-      console.error('FAIL: Test 35 - Start resolution happy path failed.', t35Start.data, t35PreviewRow, t35ProjRow, t35CorrRow, t35AuditRows);
+      console.error('FAIL: Test 35 - Retired shortcut fail-closed assertion failed.', t35Start.data, t35PreviewRow, t35ProjStatus, t35CorrRow, t35LegacyAuditRows, t35Resolve.data);
       success = false;
     }
 
     // ============================================================
-    // Test 36 (Scenario B): Start Resolution Idempotency
+    // Test 36: A repeated call stays fail-closed and mutation-free -- no retry, replay or
+    // second attempt can resurrect the retired transition.
     // ============================================================
-    console.log('--- Test 36 (Scenario B): Start Resolution Idempotency ---');
-    const t36StartAgain = await client.rpc('start_participant_preview_correction_resolution', {
+    console.log('--- Test 36: Repeated retired-shortcut calls stay fail-closed and mutation-free ---');
+    const t36Before = JSON.stringify([t35ProjStatus, t35PreviewRow, t35CorrRow]);
+    const t36Second = await legacyStart(String(t35Proj.public_id), adminId);
+    const t36Third = await legacyStart(String(t35Proj.public_id), adminId);
+    const t36After = JSON.stringify([
+      await projectStatus(String(t35Proj.id)),
+      await previewStateRow(String(t35A.res.data?.previewId)),
+      await correctionRow(t35CorrectionId),
+    ]);
+
+    if (
+      !t36Second.error &&
+      !t36Third.error &&
+      t36Second.data?.resultCode === 'PARTICIPANT_CANDIDATE_REQUIRED' &&
+      t36Third.data?.resultCode === 'PARTICIPANT_CANDIDATE_REQUIRED' &&
+      t36After === t36Before &&
+      (await approvalRecordCount(String(t35Proj.id))) === 0 &&
+      (await submissionCount(String(t35Proj.id))) === 0
+    ) {
+      console.log('PASS: Test 36 - Repeat calls remained PARTICIPANT_CANDIDATE_REQUIRED with a byte-identical workflow state.');
+    } else {
+      console.error('FAIL: Test 36 - Repeat retired-shortcut assertion failed.', t36Second.data, t36Third.data, t36Before, t36After);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 37: No caller can use the retired shortcut. Migration 0051 replaced the function body
+    // outright, so it no longer evaluates roles or workflow state at all -- every staff identity
+    // receives the same fail-closed answer, and the service_role-only EXECUTE grant established
+    // by the earlier migration survives CREATE OR REPLACE, so a browser anon key is still
+    // refused outright. (Replaces the start-resolution half of the old Test 43; the combined
+    // edit+review authority that actually governs a correction decision is proven against
+    // review_participant_correction in verifyParticipantOwnedCorrectionsRuntime.ts.)
+    // ============================================================
+    console.log('--- Test 37: Retired shortcut is refused for every staff role and for the anon key ---');
+    const t37Reviewer = await legacyStart(String(t35Proj.public_id), reviewerId);
+    const t37Editor = await legacyStart(String(t35Proj.public_id), editorId);
+    const t37Unknown = await legacyStart(String(t35Proj.public_id), crypto.randomUUID());
+    const t37Anon = await anonClient.rpc('start_participant_preview_correction_resolution', {
       p_public_id: String(t35Proj.public_id),
       p_admin_id: adminId,
     });
-    const { data: t36AuditRows } = await client.from('approval_records').select('*').eq('project_id', t35Proj.id).eq('from_status', 'approved').eq('to_status', 'changes_requested');
-    const { data: t36CorrRow } = await client.from('participant_preview_correction_requests').select('resolution_started_at, resolution_started_by').eq('id', t35Correction.data?.correctionRequestId).single();
+    const t37After = JSON.stringify([
+      await projectStatus(String(t35Proj.id)),
+      await previewStateRow(String(t35A.res.data?.previewId)),
+      await correctionRow(t35CorrectionId),
+    ]);
 
     if (
-      !t36StartAgain.error &&
-      t36StartAgain.data?.resultCode === 'ALREADY_IN_PROGRESS' &&
-      (t36AuditRows || []).length === 1 &&
-      t36CorrRow?.resolution_started_at === t35CorrRow?.resolution_started_at &&
-      t36CorrRow?.resolution_started_by === adminId
+      t37Reviewer.data?.resultCode === 'PARTICIPANT_CANDIDATE_REQUIRED' &&
+      t37Editor.data?.resultCode === 'PARTICIPANT_CANDIDATE_REQUIRED' &&
+      t37Unknown.data?.resultCode === 'PARTICIPANT_CANDIDATE_REQUIRED' &&
+      Boolean(t37Anon.error) &&
+      t37After === t36Before &&
+      (await approvalRecordCount(String(t35Proj.id))) === 0 &&
+      (await submissionCount(String(t35Proj.id))) === 0
     ) {
-      console.log('PASS: Test 36 - Start resolution repeat call was cleanly idempotent.');
+      console.log('PASS: Test 37 - Reviewer, editor and unknown identities all fail closed; the anon key cannot execute the retired RPC at all.');
     } else {
-      console.error('FAIL: Test 36 - Start resolution idempotency failed.', t36StartAgain.data, t36AuditRows, t36CorrRow);
+      console.error('FAIL: Test 37 - Retired-shortcut caller boundary assertion failed.', t37Reviewer.data, t37Editor.data, t37Unknown.data, t37Anon.error, t37After);
       success = false;
     }
 
     // ============================================================
-    // Test 37 (Scenario C): Wrong Active Preview Protection
+    // Test 38: The corrected-reissue path is not an alternative bypass. With an open (never
+    // begun) correction request, generation with p_is_correction_reissue = true fails closed as
+    // NO_CORRECTION_IN_PROGRESS for a fully-authorized admin, and still fails on authority alone
+    // for review-only and edit-only staff. Only accepting a participant-authored package can
+    // move a correction request to in_progress. (Replaces the old Tests 38/39 reapproval and
+    // corrected-reissue sequence, which depended entirely on the retired shortcut.)
     // ============================================================
-    console.log('--- Test 37 (Scenario C): Wrong Active Preview Protection ---');
-    const t37Proj = await createProject('t37', 'approved');
-    const t37A = await generate(String(t37Proj.public_id), adminId);
-    if (!t37A.res.data?.previewId || t37A.res.data.resultCode !== 'SUCCESS') {
-      console.error('FAIL: Test 37 setup - Preview A generation failed.', t37A.res.data);
-      success = false;
-    }
-    const t37Correction = await requestCorrection(t37A.hash, 'Correction on Preview A.');
-    if (t37Correction.data?.resultCode !== 'SUCCESS') {
-      console.error('FAIL: Test 37 setup - Correction request failed.', t37Correction.data);
-      success = false;
-    }
-    // Revoke Preview A manually
-    const t37Revoke = await client.rpc('revoke_participant_preview', { p_public_id: t37Proj.public_id, p_admin_id: adminId });
-    if (t37Revoke.data?.resultCode !== 'SUCCESS') {
-      console.error('FAIL: Test 37 setup - Revoke Preview A failed.', t37Revoke.data);
-      success = false;
-    }
-    // Manually insert Preview B (active) directly with explicit valid future expires_at
-    const t37BHash = hashToken(newRawToken());
-    const t37FutureExpiry = new Date(Date.now() + 7 * 86400 * 1000).toISOString();
-    const t37InsertRes = await client.from('participant_previews').insert({
-      project_id: t37Proj.id,
-      token_hash: t37BHash,
-      snapshot: { title: t37Proj.title, summary: null, background: null, solution: null, year: 2026, program: null, studyProgram: null, discipline: null, disciplines: [], industry: null, industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [], posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [] },
-      media_snapshot: [],
-      status: 'active',
-      created_by: adminId,
-      expires_at: t37FutureExpiry,
-    }).select().single();
-
-    if (t37InsertRes.error) {
-      console.error('FAIL: Test 37 setup - Manual Preview B insertion error.', t37InsertRes.error);
-      success = false;
-    } else {
-      const t37BRow = t37InsertRes.data;
-      // Now attempt to start resolution of Preview A's open correction request
-      const t37StartAttempt = await client.rpc('start_participant_preview_correction_resolution', {
-        p_public_id: String(t37Proj.public_id),
-        p_admin_id: adminId,
-      });
-      const { data: t37ActiveRows } = await client.from('participant_previews').select('id, status').eq('id', t37BRow.id);
-      const { data: t37ProjRow } = await client.from('projects').select('status').eq('id', t37Proj.id).single();
-      const { data: t37CorrRow } = await client.from('participant_preview_correction_requests').select('status, resolution_started_at').eq('id', t37Correction.data?.correctionRequestId).single();
-      const { count: t37AuditCount } = await client.from('approval_records').select('id', { count: 'exact', head: true }).eq('project_id', t37Proj.id);
-
-      if (
-        t37StartAttempt.data?.resultCode === 'CONFLICTING_ACTIVE_PREVIEW' &&
-        t37ActiveRows?.[0]?.status === 'active' &&
-        t37ProjRow?.status === 'approved' &&
-        t37CorrRow?.status === 'open' &&
-        t37CorrRow?.resolution_started_at === null &&
-        t37AuditCount === 0
-      ) {
-        console.log('PASS: Test 37 - Conflicting active preview correctly blocked start_resolution and preserved all state.');
-      } else {
-        console.error('FAIL: Test 37 - Wrong active preview protection failed.', t37StartAttempt.data, t37ActiveRows, t37ProjRow, t37CorrRow, t37AuditCount);
-        success = false;
-      }
-    }
-
-    // ============================================================
-    // Test 38 (Scenario D): Reapproval Gate & Review RPC Call
-    // ============================================================
-    console.log('--- Test 38 (Scenario D): Reapproval Gate & perform_project_review_action ---');
-    // Using t35Proj (currently changes_requested)
-    const t38AttemptReissue = await generate(String(t35Proj.public_id), adminId, true);
-    const { data: t38CorrBefore } = await client.from('participant_preview_correction_requests').select('status, resolved_at').eq('id', t35Correction.data?.correctionRequestId).single();
-
-    // Reapprove project using existing authoritative review RPC (p_public_id, p_action, p_comments, p_admin_id)
-    const t38ReapproveRpc = await client.rpc('perform_project_review_action', {
-      p_public_id: String(t35Proj.public_id),
-      p_action: 'approve',
-      p_comments: 'Reapproved following correction resolution edits.',
-      p_admin_id: adminId,
-    });
-    const { data: t38ProjAfterReapprove } = await client.from('projects').select('status').eq('id', t35Proj.id).single();
+    console.log('--- Test 38: Corrected reissue cannot bypass the participant package requirement ---');
+    const t38Proj = await createProject('t38', 'approved');
+    await createRequiredApprovalMedia(String(t38Proj.id), 't38');
+    const t38A = await generate(String(t38Proj.public_id), adminId);
+    const t38Correction = await requestCorrection(t38A.hash, 'Correction awaiting a participant-authored package.');
+    await client.rpc('revoke_participant_preview', { p_public_id: t38Proj.public_id, p_admin_id: adminId });
+    const t38Admin = await generate(String(t38Proj.public_id), adminId, true);
+    const t38Reviewer = await generate(String(t38Proj.public_id), reviewerId, true);
+    const t38Editor = await generate(String(t38Proj.public_id), editorId, true);
+    const t38CorrRow = await correctionRow(String(t38Correction.data?.correctionRequestId));
 
     if (
-      t38AttemptReissue.res.data?.resultCode === 'INVALID_PROJECT_STATE' &&
-      t38CorrBefore?.status === 'in_progress' &&
-      t38CorrBefore?.resolved_at === null &&
-      !t38ReapproveRpc.error &&
-      t38ReapproveRpc.data?.status === 'approved' &&
-      t38ReapproveRpc.data?.publicId === String(t35Proj.public_id) &&
-      t38ReapproveRpc.data?.auditRecordId &&
-      t38ProjAfterReapprove?.status === 'approved'
+      t38Admin.res.data?.resultCode === 'NO_CORRECTION_IN_PROGRESS' &&
+      t38Reviewer.res.data?.resultCode === 'PREVIEW_PERMISSION_DENIED' &&
+      t38Editor.res.data?.resultCode === 'PREVIEW_PERMISSION_DENIED' &&
+      (await projectStatus(String(t38Proj.id))) === 'approved' &&
+      t38CorrRow?.status === 'open' &&
+      t38CorrRow?.resolution_started_at === null &&
+      t38CorrRow?.replacement_preview_id === null &&
+      (await previewCount(String(t38Proj.id))) === 1 &&
+      (await approvalRecordCount(String(t38Proj.id))) === 0 &&
+      (await submissionCount(String(t38Proj.id))) === 0
     ) {
-      console.log('PASS: Test 38 - Reissue blocked in changes_requested state; project reapproved cleanly via perform_project_review_action.');
+      console.log('PASS: Test 38 - Corrected reissue stayed blocked for admin, reviewer and editor; no preview, audit or package was created.');
     } else {
-      console.error('FAIL: Test 38 - Reapproval gate assertion failed.', t38AttemptReissue.res.data, t38CorrBefore, t38ReapproveRpc.data, t38ProjAfterReapprove);
+      console.error('FAIL: Test 38 - Corrected-reissue bypass assertion failed.', t38Admin.res.data, t38Reviewer.res.data, t38Editor.res.data, t38CorrRow);
       success = false;
     }
 
     // ============================================================
-    // Test 39 (Scenario E): Corrected Preview B Generation
+    // Test 39: Concurrency cannot resurrect the retired transition. Three simultaneous calls all
+    // fail closed and, between them, create zero approval audits, zero packages and zero
+    // duplicate workflow state. (Replaces the old Test 41, which expected exactly one SUCCESS.)
     // ============================================================
-    console.log('--- Test 39 (Scenario E): Corrected Preview B Generation ---');
-    const t39Reissue = await generate(String(t35Proj.public_id), adminId, true);
-    const t39PreviewBId = t39Reissue.res.data?.previewId;
-    const { data: t39ActivePreviews } = await client.from('participant_previews').select('id').eq('project_id', t35Proj.id).eq('status', 'active');
-    const { data: t39CorrAfter } = await client.from('participant_preview_correction_requests').select('status, resolved_at, resolved_by, replacement_preview_id, correction_comment, requested_at').eq('id', t35Correction.data?.correctionRequestId).single();
-    const { count: t39BConfirmCount } = await client.from('participant_preview_confirmations').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t39PreviewBId);
-    const { count: t39BCorrCount } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t39PreviewBId);
+    console.log('--- Test 39: Concurrent retired-shortcut calls create no state at all ---');
+    const t39Proj = await createProject('t39', 'approved');
+    await createRequiredApprovalMedia(String(t39Proj.id), 't39');
+    const t39A = await generate(String(t39Proj.public_id), adminId);
+    const t39Correction = await requestCorrection(t39A.hash, 'Concurrent retired-shortcut comment.');
+    const t39Results = await Promise.all([
+      legacyStart(String(t39Proj.public_id), adminId),
+      legacyStart(String(t39Proj.public_id), adminId),
+      legacyStart(String(t39Proj.public_id), adminId),
+    ]);
+    const t39CorrRow = await correctionRow(String(t39Correction.data?.correctionRequestId));
+    const t39PreviewRow = await previewStateRow(String(t39A.res.data?.previewId));
 
     if (
-      !t39Reissue.res.error &&
-      t39Reissue.res.data?.resultCode === 'SUCCESS' &&
-      t39PreviewBId !== t35A.res.data?.previewId &&
-      (t39ActivePreviews || []).length === 1 &&
-      t39ActivePreviews?.[0]?.id === t39PreviewBId &&
-      t39CorrAfter?.status === 'resolved' &&
-      t39CorrAfter?.resolved_at &&
-      t39CorrAfter?.resolved_by === adminId &&
-      t39CorrAfter?.replacement_preview_id === t39PreviewBId &&
-      t39CorrAfter?.correction_comment === t35Comment &&
-      t39CorrAfter?.requested_at === t35Correction.data?.requestedAt &&
-      t39BConfirmCount === 0 &&
-      t39BCorrCount === 0
+      t39Results.every((r) => !r.error && r.data?.resultCode === 'PARTICIPANT_CANDIDATE_REQUIRED') &&
+      (await projectStatus(String(t39Proj.id))) === 'approved' &&
+      t39PreviewRow?.status === 'active' &&
+      t39PreviewRow?.revoked_at === null &&
+      t39CorrRow?.status === 'open' &&
+      t39CorrRow?.resolution_started_at === null &&
+      t39CorrRow?.resolution_started_by === null &&
+      (await approvalRecordCount(String(t39Proj.id))) === 0 &&
+      (await submissionCount(String(t39Proj.id))) === 0 &&
+      (await previewCount(String(t39Proj.id))) === 1
     ) {
-      console.log('PASS: Test 39 - Corrected Preview B generated; correction request resolved; Preview B starts unresponded.');
+      console.log('PASS: Test 39 - All concurrent calls failed closed; no audit, package or duplicate preview was produced.');
     } else {
-      console.error('FAIL: Test 39 - Corrected Preview B generation failed.', t39Reissue.res.data, t39CorrAfter, t39ActivePreviews);
+      console.error('FAIL: Test 39 - Concurrent retired-shortcut assertion failed.', t39Results.map((r) => r.data), t39CorrRow, t39PreviewRow);
       success = false;
     }
 
     // ============================================================
-    // Test 40 (Scenario F): Immutable Version History
+    // Test 40: Contradictory unresolved-correction state still fails closed.
+    //
+    // Under Migration 0051 an in_progress correction request implies a frozen, participant-
+    // authored package, so the old scenario's two manually fabricated in_progress rows now
+    // describe a state the supported workflow can never reach, and manufacturing one here would
+    // misrepresent the new contract. The generation ambiguity guard is still live code, so this
+    // scenario keeps that defense-in-depth coverage using the ambiguity that remains expressible
+    // without inventing correction evidence: two unresolved open requests, one per revoked
+    // preview. Ordinary generation, corrected reissue and the retired shortcut must all refuse.
     // ============================================================
-    console.log('--- Test 40 (Scenario F): Immutable Version History ---');
+    console.log('--- Test 40: Contradictory multi-open-correction state fails closed ---');
     const t40Proj = await createProject('t40', 'approved');
     await createRequiredApprovalMedia(String(t40Proj.id), 't40');
-    const t40A = await generate(String(t40Proj.public_id), adminId);
-    await requestCorrection(t40A.hash, 'Fix title typo.');
-    await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t40Proj.public_id, p_admin_id: adminId });
-    // Update project title while in changes_requested
-    await client.from('projects').update({ title: 'Corrected Project Title F' }).eq('id', t40Proj.id);
-    // Reapprove using authoritative review RPC
-    await client.rpc('perform_project_review_action', {
-      p_public_id: String(t40Proj.public_id),
-      p_action: 'approve',
-      p_comments: 'Reapproved for Scenario F',
-      p_admin_id: adminId,
-    });
-    // Reissue Preview B
-    const t40B = await generate(String(t40Proj.public_id), adminId, true);
-
-    const t40AResolve = await resolve(t40A.hash);
-    const t40BResolve = await resolve(t40B.hash);
-
-    if (
-      t40AResolve.data?.resultCode === 'NOT_FOUND' && // Preview A was revoked during start_resolution
-      t40BResolve.data?.resultCode === 'SUCCESS' &&
-      t40BResolve.data?.snapshot?.title === 'Corrected Project Title F'
-    ) {
-      // Check stored snapshot in DB for Preview A directly
-      const { data: t40ARow } = await client.from('participant_previews').select('snapshot').eq('id', t40A.res.data?.previewId).single();
-      if (t40ARow?.snapshot?.title === t40Proj.title && t40ARow?.snapshot?.title !== 'Corrected Project Title F') {
-        console.log('PASS: Test 40 - Preview A stored snapshot remained untouched; Preview B captured corrected title.');
-      } else {
-        console.error('FAIL: Test 40 - Preview A stored snapshot mutated unexpectedly.', t40ARow);
-        success = false;
-      }
-    } else {
-      console.error('FAIL: Test 40 - Immutable version history failed.', t40AResolve.data, t40BResolve.data);
-      success = false;
-    }
-
-    // ============================================================
-    // Test 41 (Scenario G): Concurrent Start Resolution
-    // ============================================================
-    console.log('--- Test 41 (Scenario G): Concurrent Start Resolution ---');
-    const t41Proj = await createProject('t41', 'approved');
-    await createRequiredApprovalMedia(String(t41Proj.id), 't41');
-    const t41A = await generate(String(t41Proj.public_id), adminId);
-    await requestCorrection(t41A.hash, 'Concurrent resolution comment.');
-    const [t41Start1, t41Start2] = await Promise.all([
-      client.rpc('start_participant_preview_correction_resolution', { p_public_id: t41Proj.public_id, p_admin_id: adminId }),
-      client.rpc('start_participant_preview_correction_resolution', { p_public_id: t41Proj.public_id, p_admin_id: adminId }),
+    const t40A1 = await generate(String(t40Proj.public_id), adminId);
+    await client.rpc('revoke_participant_preview', { p_public_id: t40Proj.public_id, p_admin_id: adminId });
+    const t40A2 = await generate(String(t40Proj.public_id), adminId);
+    await client.rpc('revoke_participant_preview', { p_public_id: t40Proj.public_id, p_admin_id: adminId });
+    const { error: t40InsertError } = await client.from('participant_preview_correction_requests').insert([
+      { participant_preview_id: t40A1.res.data?.previewId, correction_comment: 'Contradictory unresolved 1', status: 'open' },
+      { participant_preview_id: t40A2.res.data?.previewId, correction_comment: 'Contradictory unresolved 2', status: 'open' },
     ]);
-
-    const t41Codes = [t41Start1.data?.resultCode, t41Start2.data?.resultCode].sort();
-    const { count: t41AuditCount } = await client.from('approval_records').select('id', { count: 'exact', head: true }).eq('project_id', t41Proj.id).eq('action_taken', 'request_changes');
-
-    if (
-      !t41Start1.error && !t41Start2.error &&
-      t41Codes[0] === 'ALREADY_IN_PROGRESS' &&
-      t41Codes[1] === 'SUCCESS' &&
-      t41AuditCount === 1
-    ) {
-      console.log('PASS: Test 41 - Concurrent start resolution converged to exactly one SUCCESS and one ALREADY_IN_PROGRESS.');
-    } else {
-      console.error('FAIL: Test 41 - Concurrent start resolution failed.', t41Start1.data, t41Start2.data, t41AuditCount);
-      success = false;
-    }
-
-    // ============================================================
-    // Test 42 (Scenario H): Concurrent Corrected Reissue
-    // ============================================================
-    console.log('--- Test 42 (Scenario H): Concurrent Corrected Reissue ---');
-    // Reapprove t41Proj using authoritative review RPC
-    await client.rpc('perform_project_review_action', {
-      p_public_id: String(t41Proj.public_id),
-      p_action: 'approve',
-      p_comments: 'Reapproved for Scenario H',
-      p_admin_id: adminId,
-    });
-    const [t42Reissue1, t42Reissue2] = await Promise.all([
-      generate(String(t41Proj.public_id), adminId, true),
-      generate(String(t41Proj.public_id), adminId, true),
-    ]);
-
-    const t42Codes = [t42Reissue1.res.data?.resultCode, t42Reissue2.res.data?.resultCode].sort();
-    const { data: t42ActivePreviews } = await client.from('participant_previews').select('id').eq('project_id', t41Proj.id).eq('status', 'active');
-    const { data: t42CorrRow } = await client.from('participant_preview_correction_requests').select('status, replacement_preview_id').eq('participant_preview_id', t41A.res.data?.previewId).single();
-
-    if (
-      !t42Reissue1.res.error && !t42Reissue2.res.error &&
-      t42Codes[0] === 'ACTIVE_PREVIEW_EXISTS' &&
-      t42Codes[1] === 'SUCCESS' &&
-      (t42ActivePreviews || []).length === 1 &&
-      t42CorrRow?.status === 'resolved' &&
-      t42CorrRow?.replacement_preview_id === t42ActivePreviews?.[0]?.id
-    ) {
-      console.log('PASS: Test 42 - Concurrent corrected reissue converged to exactly one active Preview B and one ACTIVE_PREVIEW_EXISTS.');
-    } else {
-      console.error('FAIL: Test 42 - Concurrent corrected reissue failed.', t42Reissue1.res.data, t42Reissue2.res.data, t42ActivePreviews, t42CorrRow);
-      success = false;
-    }
-
-    // ============================================================
-    // Test 43 (Scenario I): Authorization Boundaries
-    // ============================================================
-    console.log('--- Test 43 (Scenario I): Authorization Boundaries ---');
-    const t43Proj = await createProject('t43', 'approved');
-    await createRequiredApprovalMedia(String(t43Proj.id), 't43');
-    const t43A = await generate(String(t43Proj.public_id), adminId);
-    await requestCorrection(t43A.hash, 'Auth test comment.');
-
-    // Start resolution role attempts:
-    const t43StartReviewer = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t43Proj.public_id, p_admin_id: reviewerId });
-    const t43StartEditor = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t43Proj.public_id, p_admin_id: editorId });
-    const t43StartAdmin = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t43Proj.public_id, p_admin_id: adminId });
-
-    // Reapprove t43Proj using authoritative review RPC
-    await client.rpc('perform_project_review_action', {
-      p_public_id: String(t43Proj.public_id),
-      p_action: 'approve',
-      p_comments: 'Reapproved for Scenario I',
-      p_admin_id: adminId,
-    });
-
-    // Reissue role attempts:
-    const t43ReissueReviewer = await generate(String(t43Proj.public_id), reviewerId, true);
-    const t43ReissueEditor = await generate(String(t43Proj.public_id), editorId, true);
-    const t43ReissueAdmin = await generate(String(t43Proj.public_id), adminId, true);
-
-    if (
-      t43StartReviewer.data?.resultCode === 'PERMISSION_DENIED' &&
-      t43StartEditor.data?.resultCode === 'PERMISSION_DENIED' &&
-      t43StartAdmin.data?.resultCode === 'SUCCESS' &&
-      t43ReissueReviewer.res.data?.resultCode === 'PREVIEW_PERMISSION_DENIED' &&
-      t43ReissueEditor.res.data?.resultCode === 'PREVIEW_PERMISSION_DENIED' &&
-      t43ReissueAdmin.res.data?.resultCode === 'SUCCESS'
-    ) {
-      console.log('PASS: Test 43 - Start resolution and corrected reissue both strictly require combined authority (admin).');
-    } else {
-      console.error('FAIL: Test 43 - Authorization boundary assertion failed.', t43StartReviewer.data, t43StartEditor.data, t43StartAdmin.data, t43ReissueReviewer.res.data, t43ReissueEditor.res.data, t43ReissueAdmin.res.data);
-      success = false;
-    }
-
-    // ============================================================
-    // Test 44 (Scenario J): Ambiguous State (Multiple in_progress + Mixed open + in_progress)
-    // ============================================================
-    console.log('--- Test 44 (Scenario J): Ambiguous State ---');
-    const t44Proj1 = await createProject('t44a', 'approved');
-    const t44A1 = await generate(String(t44Proj1.public_id), adminId);
-    await client.rpc('revoke_participant_preview', { p_public_id: t44Proj1.public_id, p_admin_id: adminId });
-    const t44A2 = await generate(String(t44Proj1.public_id), adminId);
-    await client.rpc('revoke_participant_preview', { p_public_id: t44Proj1.public_id, p_admin_id: adminId });
-
-    // Manually insert TWO in_progress correction requests for t44Proj1
-    const now = new Date().toISOString();
-    await client.from('participant_preview_correction_requests').insert([
-      { participant_preview_id: t44A1.res.data?.previewId, correction_comment: 'Ambiguous in_progress 1', status: 'in_progress', resolution_started_at: now, resolution_started_by: adminId },
-      { participant_preview_id: t44A2.res.data?.previewId, correction_comment: 'Ambiguous in_progress 2', status: 'in_progress', resolution_started_at: now, resolution_started_by: adminId },
-    ]);
-
-    const t44aReissueAttempt = await generate(String(t44Proj1.public_id), adminId, true);
-    const t44aStartAttempt = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t44Proj1.public_id, p_admin_id: adminId });
-
-    // Mixed unresolved test (one open + one in_progress for t44Proj2)
-    const t44Proj2 = await createProject('t44b', 'approved');
-    const t44B1 = await generate(String(t44Proj2.public_id), adminId);
-    await client.rpc('revoke_participant_preview', { p_public_id: t44Proj2.public_id, p_admin_id: adminId });
-    const t44B2 = await generate(String(t44Proj2.public_id), adminId);
-    await client.rpc('revoke_participant_preview', { p_public_id: t44Proj2.public_id, p_admin_id: adminId });
-
-    await client.from('participant_preview_correction_requests').insert([
-      { participant_preview_id: t44B1.res.data?.previewId, correction_comment: 'Mixed open 1', status: 'open' },
-      { participant_preview_id: t44B2.res.data?.previewId, correction_comment: 'Mixed in_progress 2', status: 'in_progress', resolution_started_at: now, resolution_started_by: adminId },
-    ]);
-
-    const t44bReissueAttempt = await generate(String(t44Proj2.public_id), adminId, true);
-    const t44bStartAttempt = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: t44Proj2.public_id, p_admin_id: adminId });
-
-    if (
-      t44aReissueAttempt.res.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST' &&
-      t44aStartAttempt.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST' &&
-      t44bReissueAttempt.res.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST' &&
-      t44bStartAttempt.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST'
-    ) {
-      console.log('PASS: Test 44 - Multiple in_progress and mixed open+in_progress correction requests both correctly failed closed as AMBIGUOUS_CORRECTION_REQUEST.');
-    } else {
-      console.error('FAIL: Test 44 - Ambiguous state assertion failed.', t44aReissueAttempt.res.data, t44aStartAttempt.data, t44bReissueAttempt.res.data, t44bStartAttempt.data);
-      success = false;
-    }
-
-    // ============================================================
-    // Test 45 (Scenario K): Zero Publication Side Effects
-    // ============================================================
-    console.log('--- Test 45 (Scenario K): Zero Publication Side Effects Across Entire Flow ---');
-    const { data: t45ProjRow } = await client.from('projects').select('status').eq('id', t35Proj.id).single();
-    const { data: t45MediaRows } = await client.from('media_assets').select('public_url, is_public_approved, storage_bucket').eq('project_id', t35Proj.id);
-    const t45MediaClean = (t45MediaRows || []).every((m) => m.public_url === null && m.is_public_approved === false && m.storage_bucket === PRIVATE_DRAFT_BUCKET);
-
-    if (t45ProjRow?.status !== 'published' && t45MediaClean) {
-      console.log('PASS: Test 45 - Zero publication side effects across complete correction-resolution lifecycle.');
-    } else {
-      console.error('FAIL: Test 45 - Zero publication side effects assertion failed.', t45ProjRow, t45MediaRows);
-      success = false;
-    }
-
-    // ============================================================
-    // Test 46: Fully-Resolved Lifecycle Deletion Semantics (Independent Block & Atomic Project Cascade)
-    // ============================================================
-    console.log('--- Test 46: Fully-Resolved Lifecycle Deletion Semantics ---');
-    const t46Proj = await createProject('t46', 'approved');
-    await createRequiredApprovalMedia(String(t46Proj.id), 't46');
-    const t46A = await generate(String(t46Proj.public_id), adminId);
-    if (!t46A.res.data?.previewId || t46A.res.data.resultCode !== 'SUCCESS') {
-      console.error('FAIL: Test 46 setup - Preview A generation failed.', t46A.res.data);
-      success = false;
-    }
-    const t46Correction = await requestCorrection(t46A.hash, 'Fully resolved lifecycle comment.');
-    if (t46Correction.data?.resultCode !== 'SUCCESS' || !t46Correction.data.correctionRequestId) {
-      console.error('FAIL: Test 46 setup - Correction request failed.', t46Correction.data);
-      success = false;
-    }
-    const t46Start = await client.rpc('start_participant_preview_correction_resolution', { p_public_id: String(t46Proj.public_id), p_admin_id: adminId });
-    if (t46Start.data?.resultCode !== 'SUCCESS') {
-      console.error('FAIL: Test 46 setup - Start resolution failed.', t46Start.data);
-      success = false;
-    }
-    const t46Reapprove = await client.rpc('perform_project_review_action', {
-      p_public_id: String(t46Proj.public_id),
-      p_action: 'approve',
-      p_comments: 'Reapproved for Scenario 46',
-      p_admin_id: adminId,
-    });
-    if (t46Reapprove.error || t46Reapprove.data?.status !== 'approved') {
-      console.error('FAIL: Test 46 setup - Reapproval failed.', t46Reapprove.error, t46Reapprove.data);
-      success = false;
-    }
-    const t46B = await generate(String(t46Proj.public_id), adminId, true);
-    if (!t46B.res.data?.previewId || t46B.res.data.resultCode !== 'SUCCESS' || t46B.res.data.previewId === t46A.res.data?.previewId) {
-      console.error('FAIL: Test 46 setup - Corrected Preview B generation failed.', t46B.res.data);
-      success = false;
-    }
-
-    const { data: t46CorrRowBefore } = await client
+    const t40Ordinary = await generate(String(t40Proj.public_id), adminId);
+    const t40Reissue = await generate(String(t40Proj.public_id), adminId, true);
+    const t40Start = await legacyStart(String(t40Proj.public_id), adminId);
+    const { data: t40CorrRows } = await client
       .from('participant_preview_correction_requests')
-      .select('status, resolved_at, resolved_by, replacement_preview_id, participant_preview_id')
-      .eq('id', t46Correction.data?.correctionRequestId)
-      .single();
+      .select('status')
+      .in('participant_preview_id', [t40A1.res.data?.previewId, t40A2.res.data?.previewId]);
 
     if (
-      t46CorrRowBefore?.status !== 'resolved' ||
-      !t46CorrRowBefore.resolved_at ||
-      t46CorrRowBefore.resolved_by !== adminId ||
-      t46CorrRowBefore.replacement_preview_id !== t46B.res.data?.previewId ||
-      t46CorrRowBefore.participant_preview_id !== t46A.res.data?.previewId
+      !t40InsertError &&
+      t40Ordinary.res.data?.resultCode === 'CORRECTION_RESOLUTION_REQUIRED' &&
+      t40Reissue.res.data?.resultCode === 'AMBIGUOUS_CORRECTION_REQUEST' &&
+      t40Start.data?.resultCode === 'PARTICIPANT_CANDIDATE_REQUIRED' &&
+      (t40CorrRows || []).length === 2 &&
+      (t40CorrRows || []).every((r) => r.status === 'open') &&
+      (await projectStatus(String(t40Proj.id))) === 'approved' &&
+      (await previewCount(String(t40Proj.id))) === 2 &&
+      (await approvalRecordCount(String(t40Proj.id))) === 0 &&
+      (await submissionCount(String(t40Proj.id))) === 0
     ) {
-      console.error('FAIL: Test 46 setup - Correction request pre-deletion assertions failed.', t46CorrRowBefore);
-      success = false;
-    }
-
-    // A. Attempt independent deletion of Preview B ONLY (must be BLOCKED by 23503 FK error)
-    const t46BDeleteAttempt = await client.from('participant_previews').delete().eq('id', t46B.res.data?.previewId);
-    const { data: t46BStillExists } = await client.from('participant_previews').select('id').eq('id', t46B.res.data?.previewId).single();
-    const { data: t46CorrStillExists } = await client.from('participant_preview_correction_requests').select('status, replacement_preview_id').eq('id', t46Correction.data?.correctionRequestId).single();
-
-    if (
-      t46BDeleteAttempt.error?.code === '23503' &&
-      t46BStillExists?.id === t46B.res.data?.previewId &&
-      t46CorrStillExists?.status === 'resolved' &&
-      t46CorrStillExists.replacement_preview_id === t46B.res.data?.previewId
-    ) {
-      console.log('PASS: Test 46 Part A - Independent deletion of Preview B was correctly BLOCKED with FK error 23503, preserving correction history.');
+      console.log('PASS: Test 40 - Ordinary generation, corrected reissue and the retired shortcut all failed closed on contradictory unresolved corrections.');
     } else {
-      console.error('FAIL: Test 46 Part A - Independent Preview B deletion blocking failed.', t46BDeleteAttempt.error, t46BStillExists, t46CorrStillExists);
-      success = false;
-    }
-
-    // B. Direct atomic PROJECT deletion (must SUCCEED via project -> previews -> correction cascade under deferred FK)
-    const t46ProjDelete = await client.from('projects').delete().eq('id', t46Proj.id);
-    const { count: t46ProjCountAfter } = await client.from('projects').select('id', { count: 'exact', head: true }).eq('id', t46Proj.id);
-    const { count: t46PreviewsCountAfter } = await client.from('participant_previews').select('id', { count: 'exact', head: true }).eq('project_id', t46Proj.id);
-    const { count: t46CorrCountAfter } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('participant_preview_id', t46A.res.data?.previewId);
-
-    if (
-      !t46ProjDelete.error &&
-      t46ProjCountAfter === 0 &&
-      t46PreviewsCountAfter === 0 &&
-      t46CorrCountAfter === 0
-    ) {
-      console.log('PASS: Test 46 Part B - Direct atomic project deletion succeeded cleanly under DEFERRABLE INITIALLY DEFERRED FK.');
-    } else {
-      console.error('FAIL: Test 46 Part B - Direct atomic project deletion failed.', t46ProjDelete.error, t46ProjCountAfter, t46PreviewsCountAfter, t46CorrCountAfter);
+      console.error('FAIL: Test 40 - Contradictory-state assertion failed.', t40InsertError, t40Ordinary.res.data, t40Reissue.res.data, t40Start.data, t40CorrRows);
       success = false;
     }
 
     // ============================================================
-    // Test 47: Multi-Project Deletion Order-Independence Regression Test
+    // Test 41: Zero publication side effects across every retired-shortcut scenario. Nothing in
+    // this block may publish a project, approve media for the public, or write a public URL,
+    // bucket or path.
     // ============================================================
-    console.log('--- Test 47: Multi-Project Deletion Order-Independence Regression Test ---');
-    const t47ProjX = await createProject('t47x', 'approved');
-    await createRequiredApprovalMedia(String(t47ProjX.id), 't47x');
-    const t47XA = await generate(String(t47ProjX.public_id), adminId);
-    await requestCorrection(t47XA.hash, 'Multi-project regression X');
-    await client.rpc('start_participant_preview_correction_resolution', { p_public_id: String(t47ProjX.public_id), p_admin_id: adminId });
-    await client.rpc('perform_project_review_action', { p_public_id: String(t47ProjX.public_id), p_action: 'approve', p_comments: 'Reapproved X', p_admin_id: adminId });
-    const t47XB = await generate(String(t47ProjX.public_id), adminId, true);
+    console.log('--- Test 41: Zero publication side effects across the retired-shortcut scenarios ---');
+    const t41ProjectIds = [String(t35Proj.id), String(t38Proj.id), String(t39Proj.id), String(t40Proj.id)];
+    const { data: t41ProjRows } = await client.from('projects').select('id, status').in('id', t41ProjectIds);
+    const t41StatusesClean = (t41ProjRows || []).every((p) => p.status === 'approved');
+    const t41MediaClean = (await Promise.all(t41ProjectIds.map((id) => mediaStaysPrivate(id)))).every(Boolean);
 
-    const t47ProjY = await createProject('t47y', 'approved');
-    await createRequiredApprovalMedia(String(t47ProjY.id), 't47y');
-    const t47YA = await generate(String(t47ProjY.public_id), adminId);
-    await requestCorrection(t47YA.hash, 'Multi-project regression Y');
-    await client.rpc('start_participant_preview_correction_resolution', { p_public_id: String(t47ProjY.public_id), p_admin_id: adminId });
-    await client.rpc('perform_project_review_action', { p_public_id: String(t47ProjY.public_id), p_action: 'approve', p_comments: 'Reapproved Y', p_admin_id: adminId });
-    const t47YB = await generate(String(t47ProjY.public_id), adminId, true);
+    if ((t41ProjRows || []).length === t41ProjectIds.length && t41StatusesClean && t41MediaClean) {
+      console.log('PASS: Test 41 - Every scenario project stayed approved with entirely private, unpublished media.');
+    } else {
+      console.error('FAIL: Test 41 - Publication side-effect assertion failed.', t41ProjRows, t41MediaClean);
+      success = false;
+    }
 
-    // Delete both projects atomically in one request
-    const t47MultiDelete = await client.from('projects').delete().in('id', [t47ProjX.id, t47ProjY.id]);
-    const { count: t47RemainingProjs } = await client.from('projects').select('id', { count: 'exact', head: true }).in('id', [t47ProjX.id, t47ProjY.id]);
-    const { count: t47RemainingPreviews } = await client.from('participant_previews').select('id', { count: 'exact', head: true }).in('project_id', [t47ProjX.id, t47ProjY.id]);
-    const { count: t47RemainingCorrs } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).in('participant_preview_id', [t47XA.res.data?.previewId, t47YA.res.data?.previewId]);
+    // ============================================================
+    // Test 42: Deletion semantics for preview and correction rows that carry no participant
+    // correction evidence.
+    //
+    // Scope note: Migration 0051 gives participant_correction_submissions a plain projects(id)
+    // reference with no cascade, and its evidence tables reject DELETE outright, so a project
+    // that carries an immutable participant correction package is deliberately NOT freely
+    // deletable. This verifier creates no correction packages and therefore makes no claim
+    // about that case; it covers only the preview/correction cleanup contract that predates and
+    // survives Migration 0051.
+    //
+    // Part A pins the replacement_preview_id contract (ON DELETE NO ACTION DEFERRABLE INITIALLY
+    // DEFERRED): a preview referenced as a correction's replacement cannot be deleted on its
+    // own. The resolved end state is written directly here because the only supported route to
+    // it now runs through accepting a participant-authored package, which
+    // verifyParticipantOwnedCorrectionsRuntime.ts owns; the assertions below are purely about
+    // foreign-key wiring, and no correction submission or evidence row is created.
+    // ============================================================
+    console.log('--- Test 42: Deletion semantics without participant correction evidence ---');
+    const stageReplacementLifecycle = async (suffix: string) => {
+      const proj = await createProject(suffix, 'approved');
+      await createRequiredApprovalMedia(String(proj.id), suffix);
+      const previewA = await generate(String(proj.public_id), adminId);
+      const correction = await requestCorrection(previewA.hash, `Replacement lifecycle ${suffix}`);
+      await client.rpc('revoke_participant_preview', { p_public_id: proj.public_id, p_admin_id: adminId });
+      const insertedB = await client
+        .from('participant_previews')
+        .insert({
+          project_id: proj.id,
+          token_hash: hashToken(newRawToken()),
+          snapshot: { title: proj.title, summary: null, background: null, solution: null, year: 2026, program: null, studyProgram: null, discipline: null, disciplines: [], industry: null, industryPartner: null, academicSupervisor: null, groupName: null, teamMembers: [], posterText: null, accessibilityText: null, citations: [], externalLinks: [], industryCategories: [] },
+          media_snapshot: [],
+          status: 'active',
+          created_by: adminId,
+          expires_at: new Date(Date.now() + 7 * 86400 * 1000).toISOString(),
+        })
+        .select()
+        .single();
+      if (insertedB.error || !insertedB.data) throw new Error(`Failed to stage replacement preview for ${suffix}: ${insertedB.error?.message}`);
+      const resolvedAt = new Date().toISOString();
+      const resolvedUpdate = await client
+        .from('participant_preview_correction_requests')
+        .update({
+          status: 'resolved',
+          resolution_started_at: resolvedAt,
+          resolution_started_by: adminId,
+          resolved_at: resolvedAt,
+          resolved_by: adminId,
+          replacement_preview_id: insertedB.data.id,
+        })
+        .eq('id', correction.data?.correctionRequestId);
+      if (resolvedUpdate.error) throw new Error(`Failed to stage resolved correction for ${suffix}: ${resolvedUpdate.error.message}`);
+      return {
+        projectId: String(proj.id),
+        previewAId: String(previewA.res.data?.previewId),
+        previewBId: String(insertedB.data.id),
+        correctionId: String(correction.data?.correctionRequestId),
+      };
+    };
+
+    const t42 = await stageReplacementLifecycle('t42');
+    const t42DeleteB = await client.from('participant_previews').delete().eq('id', t42.previewBId);
+    const { data: t42BStillExists } = await client.from('participant_previews').select('id').eq('id', t42.previewBId).single();
+    const t42CorrStillExists = await correctionRow(t42.correctionId);
 
     if (
-      !t47MultiDelete.error &&
-      t47RemainingProjs === 0 &&
-      t47RemainingPreviews === 0 &&
-      t47RemainingCorrs === 0 &&
-      t47XB.res.data?.previewId &&
-      t47YB.res.data?.previewId
+      t42DeleteB.error?.code === '23503' &&
+      t42BStillExists?.id === t42.previewBId &&
+      t42CorrStillExists?.status === 'resolved' &&
+      t42CorrStillExists?.replacement_preview_id === t42.previewBId
     ) {
-      console.log('PASS: Test 47 - Multi-project atomic deletion succeeded cleanly regardless of row ordering.');
+      console.log('PASS: Test 42 Part A - Independent deletion of the replacement preview was correctly BLOCKED with FK error 23503, preserving correction history.');
     } else {
-      console.error('FAIL: Test 47 - Multi-project atomic deletion failed.', t47MultiDelete.error, t47RemainingProjs, t47RemainingPreviews, t47RemainingCorrs);
+      console.error('FAIL: Test 42 Part A - Replacement-preview deletion blocking failed.', t42DeleteB.error, t42BStillExists, t42CorrStillExists);
+      success = false;
+    }
+
+    // Part B: atomic project deletion still cascades project -> previews -> correction requests
+    // cleanly under the deferred replacement foreign key.
+    const t42ProjDelete = await client.from('projects').delete().eq('id', t42.projectId);
+    const { count: t42ProjCountAfter } = await client.from('projects').select('id', { count: 'exact', head: true }).eq('id', t42.projectId);
+    const { count: t42PreviewsCountAfter } = await client.from('participant_previews').select('id', { count: 'exact', head: true }).eq('project_id', t42.projectId);
+    const { count: t42CorrCountAfter } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).eq('id', t42.correctionId);
+
+    if (!t42ProjDelete.error && t42ProjCountAfter === 0 && t42PreviewsCountAfter === 0 && t42CorrCountAfter === 0) {
+      console.log('PASS: Test 42 Part B - Direct atomic project deletion succeeded cleanly under DEFERRABLE INITIALLY DEFERRED FK.');
+    } else {
+      console.error('FAIL: Test 42 Part B - Direct atomic project deletion failed.', t42ProjDelete.error, t42ProjCountAfter, t42PreviewsCountAfter, t42CorrCountAfter);
+      success = false;
+    }
+
+    // ============================================================
+    // Test 43: Multi-project deletion order-independence regression test. Two projects whose
+    // previews and correction requests interlock through the deferred replacement foreign key
+    // must delete cleanly in a single statement regardless of row ordering.
+    // ============================================================
+    console.log('--- Test 43: Multi-project deletion order-independence regression test ---');
+    const t43X = await stageReplacementLifecycle('t43x');
+    const t43Y = await stageReplacementLifecycle('t43y');
+    const t43MultiDelete = await client.from('projects').delete().in('id', [t43X.projectId, t43Y.projectId]);
+    const { count: t43RemainingProjs } = await client.from('projects').select('id', { count: 'exact', head: true }).in('id', [t43X.projectId, t43Y.projectId]);
+    const { count: t43RemainingPreviews } = await client.from('participant_previews').select('id', { count: 'exact', head: true }).in('project_id', [t43X.projectId, t43Y.projectId]);
+    const { count: t43RemainingCorrs } = await client.from('participant_preview_correction_requests').select('id', { count: 'exact', head: true }).in('id', [t43X.correctionId, t43Y.correctionId]);
+
+    if (!t43MultiDelete.error && t43RemainingProjs === 0 && t43RemainingPreviews === 0 && t43RemainingCorrs === 0) {
+      console.log('PASS: Test 43 - Multi-project atomic deletion succeeded cleanly regardless of row ordering.');
+    } else {
+      console.error('FAIL: Test 43 - Multi-project atomic deletion failed.', t43MultiDelete.error, t43RemainingProjs, t43RemainingPreviews, t43RemainingCorrs);
       success = false;
     }
   } catch (err: unknown) {

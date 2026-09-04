@@ -8,7 +8,8 @@ assertPublicSupabaseCredentialsAreSafe({
 });
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Preview capabilities must never enter development request logs.
+  logging: { incomingRequests: { ignore: [/^\/participant-preview\//] } },
 };
 
 export default nextConfig;

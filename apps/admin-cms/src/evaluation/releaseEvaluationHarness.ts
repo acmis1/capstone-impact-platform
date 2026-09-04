@@ -332,7 +332,7 @@ async function fingerprintRows(supabase: SupabaseClient, table: string, columns:
   return createHash('sha256').update(JSON.stringify(rows), 'utf8').digest('hex');
 }
 
-async function captureSharedBaseline(supabase: SupabaseClient, admin: AuthenticatedAdminContext): Promise<ReleaseSharedBaseline> {
+export async function captureSharedBaseline(supabase: SupabaseClient, admin: AuthenticatedAdminContext): Promise<ReleaseSharedBaseline> {
   const [adminFingerprint, adminRolesFingerprint, programFingerprint, disciplineFingerprint, industryFingerprint, snapshotsFingerprint, attemptsFingerprint, operationsFingerprint, versionsFingerprint, membersFingerprint, headFingerprint, rollbackFingerprint, eventsFingerprint] = await Promise.all([
     fingerprintRows(supabase, 'admin_users', 'id,email,full_name'),
     fingerprintRows(supabase, 'user_roles', 'user_id,role'),
@@ -354,6 +354,8 @@ async function captureSharedBaseline(supabase: SupabaseClient, admin: Authentica
       'projects', 'import_batches', 'browser_import_commits', 'browser_import_media_commits', 'media_assets',
       'approval_records', 'validation_flags', 'project_disciplines', 'project_industry_categories',
       'participant_previews', 'participant_preview_confirmations', 'participant_preview_correction_requests',
+      'participant_correction_submissions', 'participant_correction_prior_revisions',
+      'participant_correction_recovery_rows', 'participant_correction_events',
     ].map(async (table) => [table, await fingerprintRows(supabase, table, '*')]))),
     adminRoles: adminRolesFingerprint,
     reference: { programs: programFingerprint, disciplines: disciplineFingerprint, industryCategories: industryFingerprint, adminIdentity: createHash('sha256').update(`${admin.adminUserId}:${admin.email}:${admin.fullName}`, 'utf8').digest('hex') },
@@ -653,9 +655,9 @@ async function updateStaleProjects(supabase: SupabaseClient, publicIds: string[]
   if (result.error) throw new Error('The deterministic stale-version mutation failed.');
 }
 
-async function runParticipantEvidence(
+export async function runParticipantEvidence(
   corpus: MaterializedReleaseEvaluationCorpus,
-  runtime: ReleaseEvaluationRuntimeContext,
+  runtime: Pick<ReleaseEvaluationRuntimeContext, 'admin' | 'privateBucket' | 'previewIds'>,
   supabase: SupabaseClient,
   approvedCases: ReleaseEvaluationCase[],
 ): Promise<{ ready: number; unconfirmed: number; noPreview: number; corrections: number }> {
@@ -680,7 +682,7 @@ async function runParticipantEvidence(
     runtime.previewIds.add(preview.previewId);
     const correction = await previews.requestCorrection(tokenHash, 'Synthetic participant correction request.');
     if (!correction) throw new Error(`Participant correction request failed for ${item.caseId}.`);
-    await previews.startCorrectionResolution({ publicId, adminId: runtime.admin.adminUserId });
+    // Keep this cleanup-owned namespace before immutable correction-package submission.
   }
   return { ready: Math.min(20, regularCases.length), unconfirmed: Math.max(0, Math.min(10, regularCases.length - 20)), noPreview: Math.max(0, regularCases.length - 30) + approvedCases.filter((item) => item.lifecycleProfile === 'already-approved').length, corrections: correctionCases.length };
 }

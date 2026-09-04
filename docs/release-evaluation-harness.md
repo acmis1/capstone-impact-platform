@@ -32,6 +32,8 @@ The corpus is input-only evidence, not production data. Runtime IDs, UUIDs, time
 
 It demonstrates deterministic corpus generation, parser/package validation, Admin reference reconciliation, Local import/media staging, review workflow and audit evidence, publication-readiness/candidate/feed distinctions, bounded repository pagination, observational Local timings, cleanup, and repeatability.
 
+The five `participant-correction` cases model an approved project with an active participant preview and an open correction request, before package submission. Their audit history contains only submission for review and approval; readiness remains `CORRECTION_UNRESOLVED`, excluding publication candidates and the ordinary feed. This cleanup-safe namespace intentionally creates no immutable correction-package evidence. The four participant correction evidence tables are baseline-protected, never cleanup targets. The full package/freeze/accept/return lifecycle is verified separately by the Disposable Participant-Owned Corrections Runtime.
+
 It does not demonstrate hosted Supabase, Render, Duda, production SLA, high-concurrency capacity, institutional UAT, production infrastructure throughput, or a staff-effort/KPI reduction. Local machine timing is not staff-effort evidence.
 
 ## Reading the evidence

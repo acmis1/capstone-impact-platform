@@ -111,6 +111,11 @@ export async function POST(
             { success: false, error: 'Validation failed.' },
             { status: 400 }
           );
+        case 'PROJECT_TEAM_PACKAGE_DECISION_REQUIRED':
+          return NextResponse.json(
+            { success: false, error: 'Accept or return the pending project-team package before approving this project.', code: 'PROJECT_TEAM_PACKAGE_DECISION_REQUIRED' },
+            { status: 409 }
+          );
         case 'CORRECTION_RESOLUTION_REQUIRED':
           return NextResponse.json(
             { success: false, error: 'Resolve the participant correction through the correction-resolution workflow before requesting changes.' },

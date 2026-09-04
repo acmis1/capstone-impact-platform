@@ -119,7 +119,7 @@ async function main(): Promise<void> {
     const snapshotsBefore = psql('SELECT count(*) FROM public.published_snapshots;');
 
     await scenario(1, 'migrations 0031-0033 and all three assistive tables are live', () => {
-      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '48');
+      assert.equal(psql('SELECT count(*) FROM supabase_migrations.schema_migrations;'), '51');
       assert.equal(
         psql("SELECT string_agg(table_name, ',' ORDER BY table_name) FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'assistive_validation_%';"),
         'assistive_validation_findings,assistive_validation_jobs,assistive_validation_runs',

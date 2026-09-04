@@ -513,7 +513,7 @@ export async function runParticipantPreviewNotificationRuntimeVerification(
     );
 
     // ============================================================================================
-    console.log('\n--- Correction reissue: Preview A and Preview B are independent ---');
+    console.log('\n--- Reissue: Preview A and Preview B are independent ---');
     // ============================================================================================
 
     const t16Recipient = recipientFor('t16');
@@ -551,21 +551,16 @@ export async function runParticipantPreviewNotificationRuntimeVerification(
     const t16A = await sendFor(String(t16Project.public_id), adminId);
     const t16APreviewId = t16A.generated.resultCode === 'SUCCESS' ? t16A.generated.value.previewId : '';
 
-    await client.rpc('request_participant_preview_correction', {
-      p_token_hash: hashToken(t16A.raw),
-      p_comment: 'Runtime verification correction request.',
-    });
-    await client.rpc('start_participant_preview_correction_resolution', {
+    // Migration 0051 retires start_participant_preview_correction_resolution, so a superseding
+    // Preview B is staged here through the ordinary revoke-and-reissue lifecycle. The
+    // correction-package route to a corrected Preview B is owned by
+    // verifyParticipantOwnedCorrectionsRuntime.ts; what this scenario proves is only that each
+    // preview owns an independent delivery lifecycle.
+    await client.rpc('revoke_participant_preview', {
       p_public_id: String(t16Project.public_id),
       p_admin_id: adminId,
     });
-    await client.rpc('perform_project_review_action', {
-      p_public_id: String(t16Project.public_id),
-      p_action: 'approve',
-      p_comments: 'Runtime verification re-approval.',
-      p_admin_id: adminId,
-    });
-    const t16B = await sendFor(String(t16Project.public_id), adminId, true);
+    const t16B = await sendFor(String(t16Project.public_id), adminId);
     const t16BPreviewId = t16B.generated.resultCode === 'SUCCESS' ? t16B.generated.value.previewId : '';
 
     check(
@@ -598,14 +593,26 @@ export async function runParticipantPreviewNotificationRuntimeVerification(
     console.log('\n--- Email notification never mutates surrounding workflow state ---');
     // ============================================================================================
 
+    // A participant requests a correction against the already-notified Preview B: the correction
+    // stays exactly where the correction workflow left it (open, awaiting a participant-authored
+    // package), and Preview B's delivery record is untouched by that request.
+    await client.rpc('request_participant_preview_correction', {
+      p_token_hash: hashToken(t16B.raw),
+      p_comment: 'Runtime verification correction request.',
+    });
     const { data: t17CorrectionRows } = await client
       .from('participant_preview_correction_requests')
-      .select('status, resolved_at, replacement_preview_id')
-      .eq('participant_preview_id', t16APreviewId);
+      .select('status, resolution_started_at, resolved_at, replacement_preview_id')
+      .eq('participant_preview_id', t16BPreviewId);
     const t17Correction = (t17CorrectionRows ?? [])[0] as Record<string, unknown> | undefined;
+    const t17BRow = await notificationRow(t16BPreviewId);
     check(
-      t17Correction?.status === 'resolved' && t17Correction?.replacement_preview_id === t16BPreviewId,
-      'Correction resolution state is exactly what the correction workflow left, not what email did',
+      t17Correction?.status === 'open' &&
+        t17Correction?.resolution_started_at === null &&
+        t17Correction?.resolved_at === null &&
+        t17Correction?.replacement_preview_id === null &&
+        t17BRow?.status === 'sent',
+      'Correction state is exactly what the correction workflow left, not what email did',
     );
 
     const { data: t18Confirmation } = await client

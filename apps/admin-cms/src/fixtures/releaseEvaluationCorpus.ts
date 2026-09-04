@@ -245,11 +245,10 @@ function workflowForLifecycle(profile: ReleaseLifecycleProfile | undefined): {
       };
     case 'participant-correction':
       return {
-        finalStatus: 'changes_requested',
+        finalStatus: 'approved',
         actions: [
           { action: 'submit_for_review', fromStatus: 'draft', toStatus: 'submitted' },
           { action: 'approve', fromStatus: 'submitted', toStatus: 'approved' },
-          { action: 'request_changes', fromStatus: 'approved', toStatus: 'changes_requested', comment: 'Resolution started for participant correction request' },
         ],
         readiness: 'CORRECTION_UNRESOLVED', candidatePlan: 'excluded', archiveRemoval: 'not_applicable',
       };

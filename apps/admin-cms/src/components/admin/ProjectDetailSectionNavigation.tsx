@@ -1,5 +1,5 @@
 export const PROJECT_DETAIL_SECTION_LINKS = [
-  { id: 'review-and-edit', label: 'Review and edit' },
+  { id: 'review-and-edit', label: 'Review project content' },
   { id: 'content-and-media', label: 'Content and media' },
   { id: 'participant-and-publication', label: 'Participant and publication' },
   { id: 'technical-and-history', label: 'Technical details and history' },

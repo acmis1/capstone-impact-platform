@@ -29,6 +29,20 @@ export interface ParticipantPreviewSnapshot {
   citations: string[];
   externalLinks: ParticipantPreviewExternalLink[];
   industryCategories: string[];
+  /**
+   * Controlled project links, captured as immutable participant evidence because publication
+   * conditionally emits them to the public showcase. Snapshots issued from migration 0050 onward
+   * always carry all three keys; `null` means the project had no such link when the preview was
+   * issued.
+   *
+   * Optional because previews issued before that migration have none of the keys, and stored
+   * snapshots are never rewritten or backfilled. `undefined` therefore means "this preview
+   * predates the contract", which the readiness gates treat as equivalent only while the project
+   * still has no controlled link at all — any populated value makes such a preview stale.
+   */
+  videoUrl?: string | null;
+  demoUrl?: string | null;
+  repositoryUrl?: string | null;
 }
 
 /**

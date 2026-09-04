@@ -6,9 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { AssistiveInspectionFinding, AssistiveInspectionView } from '../../../assistive-validation';
 import * as assistiveActions from '../../../app/admin/projects/[publicId]/assistiveActions';
 import { ProjectAssistiveChecks } from '../ProjectAssistiveChecks';
-import { ProjectMetadataEditor } from '../ProjectMetadataEditor';
 import { ProjectMetadataNavigationProvider } from '../ProjectMetadataNavigation';
-import type { ProjectMetadataActionResult, ProjectMetadataView } from '../../../projects/projectMetadata';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -389,10 +387,10 @@ describe('ProjectAssistiveChecks Component', () => {
     expect(screen.getByText('<b>typo')).toBeTruthy();
     expect(document.querySelector('b')).toBeNull();
     expect(screen.getByText(/LanguageTool 6.6 · rule MORFOLOGIK_RULE_EN_AU/i)).toBeTruthy();
-    const receive = screen.getByRole('button', { name: 'Apply “receive” to draft' });
-    const review = screen.getByRole('button', { name: 'Apply “review” to draft' });
-    expect(receive.hasAttribute('disabled')).toBe(true);
-    expect(review.hasAttribute('disabled')).toBe(true);
+    const receive = screen.getByRole('button', { name: 'Copy suggestion: receive' });
+    const review = screen.getByRole('button', { name: 'Copy suggestion: review' });
+    expect(receive.hasAttribute('disabled')).toBe(false);
+    expect(review.hasAttribute('disabled')).toBe(false);
     expect(screen.queryByText(/confidence/i)).toBeNull();
   });
 
@@ -406,7 +404,7 @@ describe('ProjectAssistiveChecks Component', () => {
       />,
     );
 
-    expect(screen.getByText(/No safe automatic replacement was provided/i)).toBeTruthy();
+    expect(screen.getByText(/request a corrected package from the project team/i)).toBeTruthy();
     expect(screen.queryByLabelText('Language suggestions')).toBeNull();
     expect(screen.queryByRole('button', { name: /Apply .* to draft/i })).toBeNull();
   });
@@ -887,102 +885,11 @@ describe('Stale Prop Synchronization Tests (Blocker 3)', () => {
   });
 });
 
-describe('Assistive title suggestion reports success only after the draft actually changes', () => {
-  const APPLIED_MESSAGE = 'Suggestion applied to the metadata editor draft.';
-  const CANDIDATE_TITLE = 'Smart Urban Analytics & AI';
-
-  const editorMetadata: ProjectMetadataView = {
-    publicId: PUBLIC_ID,
-    expectedUpdatedAt: '2026-08-21T09:00:00.000Z',
-    title: 'Smart Urban Analytics',
-    summary: 'A short summary of the project.',
-    background: 'Background information goes here.',
-    solution: 'Solution details go here.',
-    posterText: 'Poster text here.',
-    accessibilityText: 'Alt text for poster.',
-    year: '2026',
-    programId: 'prog-1',
-    disciplineIds: ['disc-1'],
-    industryCategoryIds: ['cat-1'],
-  };
-
-  function renderWorkspace() {
-    const saveAction = vi
-      .fn()
-      .mockResolvedValue({ ok: true, metadata: editorMetadata } as ProjectMetadataActionResult);
-    return render(
-      <ProjectMetadataNavigationProvider>
-        <ProjectMetadataEditor
-          initialMetadata={editorMetadata}
-          programs={[{ id: 'prog-1', name: 'Bachelor of Software Engineering' }]}
-          disciplines={[{ id: 'disc-1', name: 'Software Engineering' }]}
-          industryCategories={[{ id: 'cat-1', name: 'Information Technology' }]}
-          canEdit={true}
-          projectStatus="draft"
-          saveAction={saveAction}
-        />
-        <ProjectAssistiveChecks
-          publicId={PUBLIC_ID}
-          canEditMetadata={true}
-          canReview={true}
-          initialInspection={sampleInspection()}
-        />
-      </ProjectMetadataNavigationProvider>,
-    );
-  }
-
-  function makeTitleDraftDirty(typedTitle: string) {
-    fireEvent.click(screen.getByRole('button', { name: /Edit project information/i }));
-    fireEvent.change(screen.getByLabelText(/Project title/i), { target: { value: typedTitle } });
-  }
-
-  it('reports success for a suggestion that needs no confirmation', async () => {
-    renderWorkspace();
-
-    fireEvent.click(screen.getByRole('button', { name: /Apply to draft/i }));
-
-    expect(await screen.findByText(APPLIED_MESSAGE)).toBeTruthy();
-    expect(screen.queryByText('Replace unsaved title?')).toBeNull();
-  });
-
-  it('reports no success while the replacement confirmation is still pending', async () => {
-    renderWorkspace();
-    makeTitleDraftDirty('A title the reviewer typed');
-
-    fireEvent.click(screen.getByRole('button', { name: /Apply to draft/i }));
-
-    expect(await screen.findByText('Replace unsaved title?')).toBeTruthy();
-    expect(screen.queryByText(APPLIED_MESSAGE)).toBeNull();
-    expect((screen.getByLabelText(/Project title/i) as HTMLInputElement).value).toBe(
-      'A title the reviewer typed',
-    );
-  });
-
-  it('reports no success and leaves the draft alone when the current title is kept', async () => {
-    renderWorkspace();
-    makeTitleDraftDirty('A title the reviewer typed');
-
-    fireEvent.click(screen.getByRole('button', { name: /Apply to draft/i }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Keep current title' }));
-
-    await waitFor(() => expect(screen.queryByText('Replace unsaved title?')).toBeNull());
-    expect(screen.queryByText(APPLIED_MESSAGE)).toBeNull();
-    expect((screen.getByLabelText(/Project title/i) as HTMLInputElement).value).toBe(
-      'A title the reviewer typed',
-    );
-  });
-
-  it('reports success only once the replacement has changed the draft', async () => {
-    renderWorkspace();
-    makeTitleDraftDirty('A title the reviewer typed');
-
-    fireEvent.click(screen.getByRole('button', { name: /Apply to draft/i }));
-    expect(await screen.findByText('Replace unsaved title?')).toBeTruthy();
-    expect(screen.queryByText(APPLIED_MESSAGE)).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Replace title' }));
-
-    expect(await screen.findByText(APPLIED_MESSAGE)).toBeTruthy();
-    expect((screen.getByLabelText(/Project title/i) as HTMLInputElement).value).toBe(CANDIDATE_TITLE);
+describe('Assistive suggestions preserve participant authorship', () => {
+  it('offers copy and review controls without a content-apply control', () => {
+    renderWithNavigation(<ProjectAssistiveChecks publicId={PUBLIC_ID} canEditMetadata canReview initialInspection={sampleInspection()} />);
+    expect(screen.queryByRole('button', { name: /apply|edit project/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /Copy text/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Mark reviewed/i })).toBeTruthy();
   });
 });
