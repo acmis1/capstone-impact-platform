@@ -1,6 +1,6 @@
 # Controlled Staging Authentication & Authorization Runbook
 
-This guide outlines the manual verification checklist to audit and validate the Next.js Admin/CMS authentication and Role-Based Access Control (RBAC) gates in the isolated staging environment (`capstone-admin-cms-staging-2026`).
+This guide outlines the manual verification checklist to audit and validate the Next.js Admin/CMS authentication and Role-Based Access Control (RBAC) gates in an explicitly authorized isolated staging environment. Observations naming `capstone-admin-cms-staging-2026` are historical legacy evidence; establish the active staging-v2 target through the [staging reconciliation runbook](staging-reconciliation-runbook.md).
 
 ---
 
@@ -47,7 +47,7 @@ The `npm run check:admin-auth` script is strictly SELECT-only and performs zero 
 
 ## Phase B: Manual Migration Guidance (Historical & Setup)
 
-*Note for Current Staging:* The active staging environment (`capstone-admin-cms-staging-2026`) already has migrations `0001` through `0006` applied. Do not rerun migrations on current staging. Refer to [staging-reconciliation-runbook.md](./staging-reconciliation-runbook.md) and [manual-apply-guide.md](./manual-apply-guide.md) when auditing or setting up an isolated environment.
+*Historical legacy evidence:* The legacy environment (`capstone-admin-cms-staging-2026`) was verified with migrations `0001` through `0006` applied. This is not current staging-v2 migration evidence. Do not rerun migrations from this observation. Refer to [staging-reconciliation-runbook.md](./staging-reconciliation-runbook.md) and [manual-apply-guide.md](./manual-apply-guide.md) when auditing or setting up an isolated environment.
 
 ---
 
@@ -59,7 +59,7 @@ The `npm run check:admin-auth` script is strictly SELECT-only and performs zero 
 4. The recipient privately sets a password on `/auth/set-password`.
 5. No password, token, UUID, email, or identity value is disclosed to agents or committed.
 6. See [auth-invitation-setup.md](./auth-invitation-setup.md) for full protocol details.
-7. *Note:* For the current staging environment, initial administrator Auth setup is already complete; do not create another invitation for the initial administrator.
+7. *Historical note:* Initial administrator Auth setup was completed on legacy staging; do not create another invitation based on this record. Revalidate current target state separately.
 
 ---
 
@@ -105,7 +105,7 @@ To link an authenticated Supabase Auth user to the administrative schema in a ne
 4. Run `npm run check:admin-auth` to confirm readiness status `READY_FOR_MANUAL_LOGIN_TEST`.
 5. **Security Invariant:** Never paste Auth UUIDs into SQL queries or manually modify administrator/role rows directly in the database.
 6. See [staging-admin-bootstrap.md](./staging-admin-bootstrap.md).
-7. *Note for Current Staging:* Initial administrator linkage has already completed (`CREATED`, 1 linked admin, 1 recognized role) and should not be rerun.
+7. *Historical legacy evidence:* Initial administrator linkage completed (`CREATED`, 1 linked admin, 1 recognized role) and should not be rerun based on this record. Revalidate current target state separately.
 
 ---
 

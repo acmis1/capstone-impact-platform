@@ -784,7 +784,7 @@ export function validateCurrentRepositoryGate4Contract(
   const errors: string[] = [];
   const tableNames = evidence.tables.filter((table) => table.schema === 'public').map((table) => table.name).sort();
   const requiredTables = [...ALL_REQUIRED_TABLES].sort();
-  if (JSON.stringify(tableNames) !== JSON.stringify(requiredTables)) errors.push('Local table set does not match the authoritative 37-table inventory.');
+  if (JSON.stringify(tableNames) !== JSON.stringify(requiredTables)) errors.push(`Local table set does not match the authoritative ${ALL_REQUIRED_TABLES.length}-table inventory.`);
   const executionControlTables = evidence.tables
     .filter((table) => table.schema === EXECUTION_CONTROL_SCHEMA)
     .map((table) => table.name)
@@ -840,7 +840,7 @@ export function validateCurrentRepositoryGate4Contract(
   }
 
   const bucketNames = evidence.storageBuckets.map((bucket) => bucket.id).sort();
-  if (JSON.stringify(bucketNames) !== JSON.stringify([...REQUIRED_STORAGE_BUCKETS].sort())) errors.push('Local Storage buckets do not match the authoritative three-bucket inventory.');
+  if (JSON.stringify(bucketNames) !== JSON.stringify([...REQUIRED_STORAGE_BUCKETS].sort())) errors.push(`Local Storage buckets do not match the authoritative ${REQUIRED_STORAGE_BUCKETS.length}-bucket release inventory.`);
   if (evidence.roles.some((role) => !role.exists)) errors.push('A required runtime role is missing from Local Supabase.');
   const dispatcher = evidence.roles.find((role) => role.name === DISPATCHER_ROLE);
   if (!dispatcher || !dispatcher.canLogin || dispatcher.inherits || dispatcher.bypassRls || dispatcher.superuser) {

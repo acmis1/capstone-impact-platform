@@ -13,7 +13,7 @@ npm run verify:zero-cost-recovery-rehearsal
 ```
 
 This creates a fresh PostgreSQL 15 synthetic source, captures the five-artifact logical backup and
-all three canonical Storage buckets plus the two repository-owned Auth triggers excluded from the
+all four canonical Storage buckets plus the two repository-owned Auth triggers excluded from the
 standard managed-schema dump, restores them to a fresh PostgreSQL 17 target, and separately
 requires Gate 4 and `MANAGED_SCHEMA_CUSTOMIZATIONS = MATCH`. It then verifies
 database/Auth/execution-control/Storage integrity and application health/login before cleaning only
@@ -41,7 +41,7 @@ The drill proves that the pinned Local toolchain can:
 8. recreate it, restore every object, and verify the exact object set, byte length, and SHA-256 checksums; and
 9. attempt cleanup on every outcome, verify that all verifier-owned residue is absent, and fail with a dedicated cleanup code if it is not.
 
-The drill reads the three canonical Local bucket configurations but never uploads, overwrites, removes, or restores their objects. Schema and bucket cleanup is authorized only after the current execution proves ownership of that exact probe resource; a matching name alone never grants deletion authority. The database backup contains a separate random per-execution ownership marker. Authority is revoked immediately after simulated schema loss and is restored only when that exact marker is observed after a full or partial restore. An unmarked or differently marked schema is never deleted. The drill never resets the Local database. Backup bytes remain in memory and are not written into the repository or an operator-selected path.
+The drill reads the declared Local bucket configurations but never creates, updates, uploads to, overwrites, removes, or restores them. Those are the three config-managed baseline buckets declared in `infra/supabase/config.toml` plus the migration-owned `participant-corrections-private` bucket created by Migration 0051; together they are the four canonical release/recovery buckets. The migration-owned bucket is asserted read-only and is never provisioned by the drill, because Migration 0051 inserts it with `ON CONFLICT (id) DO NOTHING` and a bucket pre-created from anywhere else would let a broken migration appear healthy. Schema and bucket cleanup is authorized only after the current execution proves ownership of that exact probe resource; a matching name alone never grants deletion authority. The database backup contains a separate random per-execution ownership marker. Authority is revoked immediately after simulated schema loss and is restored only when that exact marker is observed after a full or partial restore. An unmarked or differently marked schema is never deleted. The drill never resets the Local database. Backup bytes remain in memory and are not written into the repository or an operator-selected path.
 
 ## Safety preconditions
 
@@ -100,6 +100,7 @@ Required evidence:
 LOCAL_RECOVERY_CLASSIFICATION = VERIFIED
 DATABASE_BACKUP_RESTORE = PASS (1 synthetic row)
 STORAGE_BACKUP_RESTORE = PASS (2 synthetic objects)
+DECLARED_STORAGE_BUCKETS_VERIFIED_READ_ONLY = 3 config-managed + 1 migration-owned
 CANONICAL_APPLICATION_TABLES_OR_STORAGE_OBJECTS_MUTATED = NO
 RECOVERY_PROBE_RESIDUE = NONE
 HOSTED_SYSTEMS_CONTACTED = NO
@@ -167,7 +168,7 @@ This bounded verifier is recovery-mechanics evidence, not a production backup sy
 
 - an institutionally approved hosted database backup cadence, retention period, encryption/access policy, and restore target;
 - hosted database restore rehearsal and recovery-point/recovery-time measurements;
-- complete export and restore of the three canonical Storage buckets and their object metadata;
+- complete export and restore of the four canonical Storage buckets and their object metadata;
 - provider configuration, environment-variable, DNS, and secret inventory recovery from an institution-owned secret manager;
 - Render deployment/redeployment and rollback rehearsal;
 - external uptime monitoring, alert routing, escalation ownership, and retained health evidence;

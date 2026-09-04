@@ -2,8 +2,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { EXPECTED_BUCKETS, MIGRATION_MANAGED_BUCKETS } from '../local-development/localSupabaseFixtures';
+import { REQUIRED_STORAGE_BUCKETS } from '../deployment/hostedDeploymentReadiness';
+import { CANONICAL_STORAGE_BUCKETS } from '../recovery/zeroCostRecoveryContract';
 
 const sql = readFileSync(resolve(__dirname, '../../../../infra/supabase/migrations/20260903130000_participant_owned_corrections.sql'), 'utf8');
+const configToml = readFileSync(resolve(__dirname, '../../../../infra/supabase/config.toml'), 'utf8');
 describe('participant correction migration authority', () => {
   it('limits retirement to project media and project taxonomy mappings', () => {
     const targets = [...sql.matchAll(/DELETE FROM\s+([\w.]+)/g)].map((match) => match[1]);
@@ -47,5 +51,28 @@ describe('participant correction migration authority', () => {
     expect(sql).not.toMatch(/UPDATE public\.participant_previews SET[^;]*(?:snapshot|token_hash)/i);
     expect(sql).not.toMatch(/(?:UPDATE|DELETE FROM) public\.participant_preview_confirmations/i);
     expect(sql).not.toMatch(/UPDATE public\.participant_preview_correction_requests SET[^;]*\bcomment\s*=/i);
+  });
+  it('owns the correction bucket contract that config and fixtures deliberately never provision', () => {
+    // The migration is the sole authority for this bucket. Pinning the read-only repository mirror
+    // to its bytes lets a verifier assert the bucket without any repository code path being able to
+    // create or reconfigure it.
+    const insert = /INSERT INTO storage\.buckets\(id,name,public,file_size_limit,allowed_mime_types\)\s*VALUES\('([a-z-]+)','([a-z-]+)',(true|false),(\d+),\s*ARRAY\[([^\]]+)\]\)\s*ON CONFLICT\(id\) DO NOTHING;/.exec(sql);
+    expect(insert).not.toBeNull();
+    const [, id, name, isPublic, fileSizeLimit, mimeTypes] = insert as RegExpExecArray;
+    expect(name).toBe(id);
+    expect(MIGRATION_MANAGED_BUCKETS).toEqual([{
+      name: id,
+      isPublic: isPublic === 'true',
+      fileSizeLimit: Number(fileSizeLimit),
+      allowedMimeTypes: mimeTypes.split(',').map((value) => value.trim().replace(/^'|'$/g, '')),
+    }]);
+
+    // ON CONFLICT DO NOTHING means a pre-created bucket silently wins, so config-managed or
+    // fixture-managed creation of this id would hide a broken Migration 0051 instead of exposing
+    // it. The bucket still belongs to the four-bucket release/recovery inventory.
+    expect(EXPECTED_BUCKETS.map((bucket) => bucket.name)).not.toContain(id);
+    expect(configToml).not.toContain(id);
+    expect(REQUIRED_STORAGE_BUCKETS).toContain(id);
+    expect(CANONICAL_STORAGE_BUCKETS).toContain(id);
   });
 });

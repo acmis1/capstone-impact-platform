@@ -238,7 +238,7 @@ function validateStorage(manifest: RecoveryBundleManifest, errors: string[]): vo
   const observed = buckets.map((bucket) => bucket?.id).sort();
   const expected = [...CANONICAL_STORAGE_BUCKETS].sort();
   if (JSON.stringify(observed) !== JSON.stringify(expected)) {
-    errors.push('Recovery bundle does not cover exactly the three canonical Storage buckets.');
+    errors.push(`Recovery bundle does not cover exactly the ${CANONICAL_STORAGE_BUCKETS.length} canonical release/recovery Storage buckets.`);
   }
   for (const bucket of buckets) {
     if (!bucket) continue;

@@ -21,8 +21,12 @@ This guide documents historical manual migration steps for initializing a *new*,
 > * **Destructive Operations Warning:** Database resets, table drops, and destructive SQL teardowns are **STRICTLY PROHIBITED** on active staging projects without explicit project-owner authorization. CLI `supabase db push` and `supabase migration repair` are not authorized.
 
 > [!NOTE]
-> **Current Environment & Staging Status:**
-> In the present staging environment (`capstone-admin-cms-staging-2026` located in Singapore):
+> **Historical Environment & Staging Status (paused project `capstone-admin-cms-staging-2026`):**
+> The facts below are a point-in-time record of the original staging project, which is now paused
+> and is **not** the active target. The active target is `capstone-admin-cms-staging-v2-2026`
+> (ref `sqkpceeltukbzxpsvinb`); see [Admin/CMS Hosted Staging Deployment Guide](../../docs/admin-cms-hosted-deployment.md)
+> for its current evidence and the four-bucket release inventory. In that historical environment
+> (`capstone-admin-cms-staging-2026`, located in Singapore):
 > - migrations 0001 through 0006 have already been manually applied and read-only verified;
 > - the three Storage buckets (`project-drafts-private`, `project-public-assets`, `public-feeds`) have already been provisioned and verified;
 > - initial administrator bootstrap linkage has been completed through the guarded CLI script (`CREATED`);
@@ -130,7 +134,7 @@ Initial administrator provisioning in a fresh isolated environment must use the 
 
 [./staging-auth-verification.md](./staging-auth-verification.md)
 
-*Note for Current Staging:* Current staging (`capstone-admin-cms-staging-2026`) has already completed its initial administrator bootstrap (`CREATED`). Do not rerun the initial bootstrap to add another person. Provisioning additional university staff remains a separate future workflow.
+*Historical bootstrap evidence:* The legacy staging project (`capstone-admin-cms-staging-2026`) completed its initial administrator bootstrap (`CREATED`). This is not a current staging-v2 reading; obtain fresh evidence through the [staging reconciliation runbook](staging-reconciliation-runbook.md). Do not rerun initial bootstrap to add another person; use the separately governed staff provisioning workflow.
 
 > [!WARNING]
 > * **DO NOT** paste the Auth UUID directly into manual SQL editor queries.
