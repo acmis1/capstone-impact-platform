@@ -39,7 +39,20 @@ export function BulkProjectReviewPanel({
   const [error, setError] = React.useState<string | null>(null);
   const inFlight = React.useRef(false);
   const resultRef = React.useRef<HTMLDivElement>(null);
+  const actionTriggerRefs = React.useRef<Record<BulkReviewAction, HTMLButtonElement | null>>({
+    submit_for_review: null,
+    approve: null,
+    request_changes: null,
+  });
   const selectionKey = selectedProjects.map((project) => project.publicId || '').join('|');
+
+  const handleCancel = React.useCallback(() => {
+    const triggerAction = activeAction;
+    setPreflight(null);
+    if (triggerAction && actionTriggerRefs.current[triggerAction]) {
+      actionTriggerRefs.current[triggerAction]?.focus();
+    }
+  }, [activeAction]);
 
   React.useEffect(() => {
     if (inFlight.current) return;
@@ -135,18 +148,42 @@ export function BulkProjectReviewPanel({
 
       <div className="flex flex-wrap gap-2" aria-label="Bulk project actions">
         {canSubmitBulk && (
-          <Button type="button" variant="outline" disabled={loading} onClick={() => runPreflight('submit_for_review')}>
+          <Button
+            ref={(el) => {
+              actionTriggerRefs.current.submit_for_review = el;
+            }}
+            type="button"
+            variant="outline"
+            disabled={loading}
+            onClick={() => runPreflight('submit_for_review')}
+          >
             {loading && activeAction === 'submit_for_review' ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
             {actionLabel('submit_for_review')}
           </Button>
         )}
         {canReviewBulk && (
           <>
-            <Button type="button" variant="outline" disabled={loading} onClick={() => runPreflight('approve')}>
+            <Button
+              ref={(el) => {
+                actionTriggerRefs.current.approve = el;
+              }}
+              type="button"
+              variant="outline"
+              disabled={loading}
+              onClick={() => runPreflight('approve')}
+            >
               {loading && activeAction === 'approve' ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
               Approve
             </Button>
-            <Button type="button" variant="outline" disabled={loading} onClick={() => runPreflight('request_changes')}>
+            <Button
+              ref={(el) => {
+                actionTriggerRefs.current.request_changes = el;
+              }}
+              type="button"
+              variant="outline"
+              disabled={loading}
+              onClick={() => runPreflight('request_changes')}
+            >
               {loading && activeAction === 'request_changes' ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
               Request changes
             </Button>
@@ -158,7 +195,15 @@ export function BulkProjectReviewPanel({
       {loading && <p role="status" className="text-sm text-muted-foreground">Checking the selected projects…</p>}
 
       {preflight && activeAction && (
-        <div className="flex flex-col gap-3 border-t border-border pt-3">
+        <div
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              handleCancel();
+            }
+          }}
+          className="flex flex-col gap-3 border-t border-border pt-3"
+        >
           <p className="text-sm text-foreground">
             Checked {preflight.summary.total} project{preflight.summary.total === 1 ? '' : 's'}:{' '}
             <strong>{preflight.summary.eligible}</strong> ready,{' '}
@@ -185,7 +230,7 @@ export function BulkProjectReviewPanel({
               {loading ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : null}
               Confirm and {actionLabel(activeAction).toLowerCase()}
             </Button>
-            <Button type="button" variant="ghost" disabled={loading} onClick={() => setPreflight(null)}>
+            <Button type="button" variant="ghost" disabled={loading} onClick={handleCancel}>
               Cancel
             </Button>
           </div>

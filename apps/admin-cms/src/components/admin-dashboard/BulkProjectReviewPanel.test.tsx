@@ -116,4 +116,74 @@ describe('BulkProjectReviewPanel', () => {
     expect(screen.queryByText(/changes_requested/)).toBeNull();
     expect(screen.getByText(/Changes requested — Needs refresh or cannot continue/)).toBeTruthy();
   });
+
+  it('restores focus to the triggering bulk action button when Cancel is clicked', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          action: 'approve',
+          summary: { total: 1, eligible: 1, blocked: 0, alreadyComplete: 0, invalidOrStale: 0 },
+          items: [
+            {
+              publicId: project.publicId,
+              title: project.title,
+              status: 'submitted',
+              updatedAt: '2026-08-24T00:00:00.000Z',
+              disposition: 'eligible',
+              reasons: [],
+              additionalReasonCount: 0,
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    render(<BulkProjectReviewPanel selectedProjects={[project]} canSubmitBulk={false} canReviewBulk />);
+    const approveBtn = screen.getAllByRole('button', { name: 'Approve' })[0];
+    approveBtn.focus();
+    fireEvent.click(approveBtn);
+
+    const cancelBtn = await screen.findByRole('button', { name: 'Cancel' });
+    cancelBtn.focus();
+    fireEvent.click(cancelBtn);
+
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(document.activeElement).toBe(approveBtn);
+  });
+
+  it('restores focus to the triggering bulk action button when Escape is pressed inside preflight', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          action: 'approve',
+          summary: { total: 1, eligible: 1, blocked: 0, alreadyComplete: 0, invalidOrStale: 0 },
+          items: [
+            {
+              publicId: project.publicId,
+              title: project.title,
+              status: 'submitted',
+              updatedAt: '2026-08-24T00:00:00.000Z',
+              disposition: 'eligible',
+              reasons: [],
+              additionalReasonCount: 0,
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    render(<BulkProjectReviewPanel selectedProjects={[project]} canSubmitBulk={false} canReviewBulk />);
+    const approveBtn = screen.getAllByRole('button', { name: 'Approve' })[0];
+    approveBtn.focus();
+    fireEvent.click(approveBtn);
+
+    const cancelBtn = await screen.findByRole('button', { name: 'Cancel' });
+    cancelBtn.focus();
+    fireEvent.keyDown(cancelBtn, { key: 'Escape' });
+
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(document.activeElement).toBe(approveBtn);
+  });
 });
