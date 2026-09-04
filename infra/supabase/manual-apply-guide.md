@@ -134,7 +134,7 @@ Initial administrator provisioning in a fresh isolated environment must use the 
 
 [./staging-auth-verification.md](./staging-auth-verification.md)
 
-*Note for Current Staging:* Current staging (`capstone-admin-cms-staging-2026`) has already completed its initial administrator bootstrap (`CREATED`). Do not rerun the initial bootstrap to add another person. Provisioning additional university staff remains a separate future workflow.
+*Historical bootstrap evidence:* The legacy staging project (`capstone-admin-cms-staging-2026`) completed its initial administrator bootstrap (`CREATED`). This is not a current staging-v2 reading; obtain fresh evidence through the [staging reconciliation runbook](staging-reconciliation-runbook.md). Do not rerun initial bootstrap to add another person; use the separately governed staff provisioning workflow.
 
 > [!WARNING]
 > * **DO NOT** paste the Auth UUID directly into manual SQL editor queries.

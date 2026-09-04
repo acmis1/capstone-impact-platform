@@ -54,6 +54,14 @@ Readiness failures return HTTP 503 with one of two bounded classifications:
 
 Every readiness body includes the repository's expected migration count and latest expected migration identifier. This is version evidence from the deployed application bundle, not proof that those migrations are applied to the hosted database. `RENDER_GIT_COMMIT` is returned only when it is exactly a valid 40-character hexadecimal commit identifier; otherwise `deploymentCommit.state` is truthfully `missing` or `invalid` and no untrusted value is echoed.
 
+Gates 3 and 4 provide migration-history and exact schema evidence. `/api/readiness` checks runtime
+configuration, target identity, credential shape and bounded service-role HEAD access to
+`public.programs`; it does not inspect correction tables, RPC signatures, grants, RLS/policies or
+bucket inventory. A green response can coexist with a database still at 48 migrations. For the
+48→51 transition, enforce the controlled migration window and the separate database/application
+verification stages in the [release rollout plan](operations/staging-migrations-49-51-rollout.md)
+before restoring normal staff mutation access.
+
 Both endpoints support `HEAD` with the same status contract and no response body. All liveness and readiness responses use `Cache-Control: no-store` and `Pragma: no-cache` so a prior response is not durable evidence of current state. Configure Render to use `/api/readiness`, not `/api/health`, for the service health-check path.
 
 ### D. Read-Only Hosted UAT Smoke Verifier

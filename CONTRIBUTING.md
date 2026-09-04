@@ -74,7 +74,7 @@ npm run supabase:stop
 
 ## E. Database & Migration Governance
 
-1. **Append-Only Migrations**: Migrations are append-only after merge. Never edit, rename, or delete existing migrations `0001` through `0009`.
+1. **Append-Only Migrations**: Migrations are append-only after merge. Never edit, rename, or delete existing migrations `0001` through `0051`.
 2. **New Schema Changes**: Any schema, policy, or grant change requires a new 14-digit timestamped migration file in `infra/supabase/migrations/` (`YYYYMMDDHHMMSS_description.sql`).
 3. **Local Replay & Reset Verification**: Verify all schema changes locally by running `npm run supabase:reset` to replay migrations from zero in strict timestamp order.
 4. **Static Contract Tests**: Add static contract tests in `apps/admin-cms/src/security/` for any new database migration file.
@@ -84,7 +84,13 @@ npm run supabase:stop
    - New postgres-owned functions are private by default; execution privileges must be explicitly revoked from `PUBLIC`, `anon`, and `authenticated`, and granted only to intended roles (e.g. `service_role`).
    - Do not alter `supabase_admin` default privileges.
 
-### Migration Inventory (9 Timestamped Migrations)
+### Migration Inventory (51 Timestamped Migrations)
+
+The current repository contains 51 migrations through
+`20260903130000_participant_owned_corrections.sql`. See the
+[selected migration inventory](infra/supabase/README.md#selected-migration-inventory-51-migrations-total)
+and [local development guide](infra/supabase/local-development.md) for current replay and bucket
+ownership. The first nine migrations below are historical milestones, not the complete inventory.
 
 1. `20260601035138_staging_schema.sql` — Schema baseline and constraints
 2. `20260601035139_staging_rls_policies.sql` — Row-Level Security policies
@@ -92,21 +98,23 @@ npm run supabase:stop
 4. `20260719003407_explicit_data_api_grants.sql` — Data API table grants
 5. `20260719165118_initial_admin_bootstrap.sql` — Guarded admin bootstrap function
 6. `20260719165119_fix_initial_admin_bootstrap_runtime.sql` — Bootstrap runtime correction
-7. `20260803174000_harden_function_execute_defaults.sql` — Function default execute ACL revokes and RLS helper guard *(Committed in repository; local/repository-only; not yet applied to hosted staging)*
-8. `20260803180000_transactional_review_actions.sql` — Atomic project review action PostgreSQL RPC and audit logging *(Committed in repository; local/repository-only; not yet applied to hosted staging)*
+7. `20260803174000_harden_function_execute_defaults.sql` — Function default execute ACL revokes and RLS helper guard
+8. `20260803180000_transactional_review_actions.sql` — Atomic project review action PostgreSQL RPC and audit logging
 
 ---
 
-9. `20260808170000_transactional_project_metadata_update.sql` — Atomic, service-role-only project metadata update RPC *(repository/local-only; not applied to hosted staging)*
+9. `20260808170000_transactional_project_metadata_update.sql` — Atomic, service-role-only project metadata update RPC
 
-Migrations `0001` through `0008` remain unchanged. Migration `0009` introduced the atomic, service-role-only project metadata transaction; it remains repository/local-only and must not be represented as hosted-ready or deployed.
+Migration `0009` introduced the atomic, service-role-only project metadata transaction. Repository
+inventory does not prove hosted deployment; obtain fresh migration/schema evidence through the
+[staging reconciliation runbook](infra/supabase/staging-reconciliation-runbook.md).
 
 ## F. Definition of Done
 
 A contribution is complete when:
 - The work requires zero hosted resource or dashboard access for local execution.
 - `npm run onboarding:check` passes (12/12 automated checks).
-- All 9 database migrations replay cleanly via `npm run supabase:reset`.
+- All 51 database migrations replay cleanly via `npm run supabase:reset`.
 - `npm run check:feed` passes schema validation.
 - `npm run lint --workspace=apps/admin-cms` reports 0 errors and 0 warnings.
 - `npm run test:admin` passes all unit and security tests.

@@ -6,18 +6,18 @@ This document describes the configuration and operational workflow for administr
 
 ## ⚠️ Staging Status & Scope Guidance
 
-### A. Current Staging Environment
-In the active staging environment (`capstone-admin-cms-staging-2026` located in Singapore):
+### A. Historical Legacy Staging Evidence
+The following observations refer to the legacy staging environment (`capstone-admin-cms-staging-2026` located in Singapore). They are not current staging-v2 evidence; revalidate the target and state through the [staging reconciliation runbook](staging-reconciliation-runbook.md) before any authorized operation:
 * **Verification Complete:** Initial administrator invitation, password establishment, bootstrap linkage, readiness checks, and login/logout verification have already been completed and verified.
 * **Do Not Resend:** Do not resend or regenerate invitations for the active administrator.
 * **Do Not Delete:** Never delete the active staging administrator.
 * **Do Not Rerun Bootstrap:** Do not rerun the initial bootstrap operation.
-* **Future Provisioning:** Onboarding additional school staff or testing reviewer/editor roles requires a separately designed, reviewed, and approved multi-user provisioning workflow.
+* **Separate Provisioning:** Onboarding additional school staff or testing reviewer/editor roles requires the separately reviewed and authorized staff provisioning workflow.
 
 ### C. Staging-only UAT test accounts (separate workflow)
 The Admin/CMS also contains a separate, fail-closed staging UAT capability for creating a ready-to-use Reviewer and/or Editor account without sending an invitation or setup email. It does **not** replace the invitation onboarding documented below and it must never be treated as a production account-creation path.
 
-The control and API are available only to an authenticated `staff.manage` administrator when `STAFF_PROVISIONING_ENABLED=true`, `CAPSTONE_RUNTIME_ENV=staging`, the expected Supabase hostname is configured, and the actual Supabase URL is non-loopback HTTPS with an exact hostname match. The staff manager establishes the password during creation; the password must never be copied into repository files, documentation, issues, logs, screenshots, or other retained evidence. Only `reviewer` and `editor` are permitted; `admin` is rejected. Disable `STAFF_PROVISIONING_ENABLED` after the authorized creation window. Migration `0027` and this feature remain repository/local-only until a separately authorized hosted migration and deployment occurs.
+The control and API are available only to an authenticated `staff.manage` administrator when `STAFF_PROVISIONING_ENABLED=true`, `CAPSTONE_RUNTIME_ENV=staging`, the expected Supabase hostname is configured, and the actual Supabase URL is non-loopback HTTPS with an exact hostname match. The staff manager establishes the password during creation; the password must never be copied into repository files, documentation, issues, logs, screenshots, or other retained evidence. Only `reviewer` and `editor` are permitted; `admin` is rejected. Disable `STAFF_PROVISIONING_ENABLED` after the authorized creation window. Repository implementation alone does not prove hosted availability; obtain fresh migration and deployment evidence before separately authorizing use.
 
 ### B. New Isolated Setup (Operational Sequencing)
 When configuring a genuinely fresh isolated staging or production environment, follow this safe sequence to provision the initial administrator:

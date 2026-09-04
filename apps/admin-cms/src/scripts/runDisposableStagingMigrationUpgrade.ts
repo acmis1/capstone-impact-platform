@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { ALL_REQUIRED_TABLES } from '../deployment/hostedDeploymentReadiness';
+import { parseSupabaseCliEnv } from '../local-development/localEnvironmentFile';
 import {
   dockerProxyCustomHeaders,
   startDockerLoopbackProxy,
@@ -71,21 +74,20 @@ const CORRECTION_RPC_SIGNATURES = [
  * Rows that must survive 0049, 0050 and 0051 byte-identically. Shared taxonomy, publication and
  * deployment-ledger state are included because a release migration must never quietly touch them.
  */
-const PRESERVED_TABLES = [
-  'admin_users', 'user_roles',
-  'programs', 'disciplines', 'industry_categories',
-  'import_batches', 'projects', 'project_disciplines', 'project_industry_categories',
-  'media_assets', 'validation_flags', 'approval_records', 'published_snapshots',
-  'browser_import_commits', 'browser_import_media_commits',
-  'participant_previews', 'participant_preview_confirmations',
-  'participant_preview_correction_requests',
-  'participant_preview_notifications', 'participant_preview_reminder_schedules',
-  'publication_attempts', 'public_removal_attempts',
-  'public_feed_operations', 'public_feed_versions', 'public_feed_version_members',
-  'public_feed_head', 'feed_rollback_preparations', 'public_feed_operation_events',
-  'public_feed_activation_authority',
-  'public_feed_project_projection_authority', 'public_feed_discipline_projection_authority',
+// The 41-table release inventory minus the four tables first created by 0051 is the exact
+// 37-table public contract at 6125bb56 (0048). Assert the live baseline set before fingerprinting.
+export const PRESERVED_PUBLIC_TABLES = ALL_REQUIRED_TABLES.filter(
+  (table) => !(CORRECTION_TABLES as readonly string[]).includes(table),
+);
+export const PRESERVED_EXECUTION_CONTROL_TABLES = [
+  'assistive_execution_control.launch_budget_guard',
+  'assistive_execution_control.launch_reservations',
+  'assistive_execution_control.executor_registrations',
 ] as const;
+const PRESERVED_TABLES = [
+  ...PRESERVED_PUBLIC_TABLES.map((table) => `public.${table}`),
+  ...PRESERVED_EXECUTION_CONTROL_TABLES,
+];
 
 /** Exact overloads of the participant-preview issuance authority and its legacy wrapper. */
 const PREVIEW_ISSUANCE_IDENTITY = 'p_public_id text, p_admin_id uuid, p_token_hash text, p_expires_in_seconds integer, p_private_bucket text, p_is_correction_reissue boolean';
@@ -213,8 +215,9 @@ function psql(sql: string): string {
 /** Order-independent content digest for one table; never prints row content. */
 function tableFingerprint(table: string): string {
   return psql(
-    "SELECT pg_catalog.md5(COALESCE(pg_catalog.string_agg(row_text, chr(10) ORDER BY row_text), ''))"
-    + ` FROM (SELECT pg_catalog.to_jsonb(t)::text AS row_text FROM public.${table} AS t) AS s;`,
+    "SELECT pg_catalog.count(*)::text || ':' || pg_catalog.encode(pg_catalog.sha256("
+    + "pg_catalog.convert_to(COALESCE(pg_catalog.string_agg(row_text, chr(10) ORDER BY row_text), ''), 'UTF8')), 'hex')"
+    + ` FROM (SELECT pg_catalog.to_jsonb(t)::text AS row_text FROM ${table} AS t) AS s;`,
   );
 }
 
@@ -232,7 +235,7 @@ function assertPreservedTablesUnchanged(
     assert.equal(
       tableFingerprint(table),
       before[table],
-      `${stage} changed existing rows in public.${table}.`,
+      `${stage} changed existing rows in ${table}.`,
     );
   }
 }
@@ -317,15 +320,96 @@ function appliedMigrations(): string[] {
   return output ? output.split(/\r?\n/).filter(Boolean) : [];
 }
 
-function storageObjectCount(): string {
-  return psql('SELECT pg_catalog.count(*)::text FROM storage.objects;');
+function localStorageClient(workdir: string): SupabaseClient {
+  let raw: string;
+  try {
+    raw = execFileSync(process.execPath, [
+      path.join(repositoryRoot, 'node_modules', 'supabase', 'dist', 'supabase.js'),
+      'status', '--workdir', workdir, '-o', 'env',
+    ], {
+      cwd: repositoryRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000,
+      env: { ...process.env, SUPABASE_TELEMETRY_DISABLED: '1' },
+    });
+  } catch {
+    // Child-process errors can contain CLI output with local credentials.
+    throw new Error('UPGRADE_LOCAL_STORAGE_ENV_UNAVAILABLE');
+  }
+  const env = parseSupabaseCliEnv(raw);
+  assert.ok(
+    env.API_URL === `http://127.0.0.1:${portBase + 1}` && env.SERVICE_ROLE_KEY,
+    'UPGRADE_STORAGE_TARGET_MUST_MATCH_OWNED_LOOPBACK_STACK',
+  );
+  return createClient(env.API_URL, env.SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}
+
+interface StorageObjectEvidence {
+  bucket: string;
+  key: string;
+  byteLength: number;
+  sha256: string;
+}
+
+function byteEvidence(bytes: Uint8Array): Pick<StorageObjectEvidence, 'byteLength' | 'sha256'> {
+  return { byteLength: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex') };
+}
+
+export async function readStorageEvidence(
+  client: SupabaseClient,
+  objects: Array<{ bucket: string; key: string }>,
+): Promise<StorageObjectEvidence[]> {
+  const evidence: StorageObjectEvidence[] = [];
+  for (const object of objects) {
+    const { data, error } = await client.storage.from(object.bucket).download(object.key);
+    if (error || !data) throw new Error('UPGRADE_STORAGE_DOWNLOAD_FAILED');
+    evidence.push({ ...object, ...byteEvidence(new Uint8Array(await data.arrayBuffer())) });
+  }
+  return evidence;
+}
+
+function storageInventory(): Array<{ bucket: string; key: string }> {
+  return JSON.parse(psql(
+    "SELECT COALESCE(jsonb_agg(jsonb_build_object('bucket', bucket_id, 'key', name)"
+    + " ORDER BY bucket_id, name), '[]'::jsonb)::text FROM storage.objects;",
+  ));
+}
+
+async function seedStorageEvidence(client: SupabaseClient): Promise<StorageObjectEvidence[]> {
+  // A fixed, synthetic 1x1 PNG in a pre-0051 bucket; never pre-create the correction bucket.
+  const bytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+    'base64',
+  );
+  const object = { bucket: 'project-drafts-private', key: `upgrade-rehearsal/${projectId}/sentinel.png` };
+  const previous = await readStorageEvidence(client, storageInventory());
+  const { error } = await client.storage.from(object.bucket).upload(object.key, bytes, {
+    contentType: 'image/png', upsert: false,
+  });
+  if (error) throw new Error('UPGRADE_STORAGE_UPLOAD_FAILED');
+  const expected = [...previous, { ...object, ...byteEvidence(bytes) }]
+    .sort((left, right) => left.bucket.localeCompare(right.bucket) || left.key.localeCompare(right.key));
+  const actual = await readStorageEvidence(client, storageInventory());
+  assert.deepEqual(actual, expected, 'The supported Storage upload did not preserve the exact object set and bytes.');
+  console.log(`PASS: nonzero synthetic Storage object: ${bytes.length} bytes, SHA-256 ${byteEvidence(bytes).sha256}`);
+  return actual;
+}
+
+async function assertStorageUnchanged(client: SupabaseClient, baseline: BaselineEvidence, stage: string): Promise<void> {
+  assert.deepEqual(
+    await readStorageEvidence(client, storageInventory()), baseline.storageObjects,
+    `${stage} changed the Storage object set or bytes.`,
+  );
+  assert.equal(tableFingerprint('storage.objects'), baseline.storageRows, `${stage} changed Storage metadata.`);
+  console.log(`PASS: ${stage} preserved all Storage keys, byte lengths, SHA-256 checksums and metadata`);
 }
 
 /**
  * The minimum representative 48-state evidence: staff identity and roles, shared taxonomy links,
- * projects with and without controlled links, an import ledger row, review/audit history, a
- * published snapshot, and confirmed participant previews issued by the pre-0050 authority so their
- * stored snapshots genuinely carry no controlled-link keys.
+ * projects with and without controlled links, an import batch, approval/audit rows and confirmed
+ * participant previews issued by the pre-0050 authority without controlled-link keys. Taxonomy,
+ * base projects and media metadata come from seed.sql. No import-commit ledger or published
+ * snapshot fixture is inserted; empty tables are still covered by count/content fingerprints.
  */
 function seedBaselineEvidence(): void {
   psql(`
@@ -436,6 +520,14 @@ function gate4ContractErrors(): string[] {
 }
 
 function assertBaseline(): void {
+  assert.equal(PRESERVED_PUBLIC_TABLES.length, 37, 'The pre-0051 inventory must contain 37 public tables.');
+  const liveTables = psql(
+    "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' ORDER BY tablename;",
+  ).split(/\r?\n/);
+  assert.deepEqual(liveTables, [...PRESERVED_PUBLIC_TABLES].sort(), 'The live 0048 public inventory differs.');
+  for (const table of PRESERVED_TABLES) {
+    assert.equal(psql(`SELECT pg_catalog.to_regclass('${table}') IS NOT NULL;`), 't', `${table} is missing.`);
+  }
   const applied = appliedMigrations();
   assert.equal(
     applied.length,
@@ -482,7 +574,8 @@ interface BaselineEvidence {
   tables: Record<string, string>;
   untrustedRoutineGrants: string;
   publicTableGrants: string;
-  storageObjects: string;
+  storageObjects: StorageObjectEvidence[];
+  storageRows: string;
   controlledLinkReadinessBefore50: string;
   absentLinkReadinessBefore50: string;
 }
@@ -522,7 +615,6 @@ function assertAfter49(baseline: BaselineEvidence): void {
     baseline.publicTableGrants,
     'Migration 0049 changed the public-schema table grant matrix.',
   );
-  assert.equal(storageObjectCount(), baseline.storageObjects, 'Migration 0049 changed Storage objects.');
   console.log('PASS: Migration 0049 added the controlled-link intake contract without touching existing rows or grants');
 }
 
@@ -606,7 +698,6 @@ function assertAfter50(baseline: BaselineEvidence): void {
     baseline.publicTableGrants,
     'Migration 0050 changed the public-schema table grant matrix.',
   );
-  assert.equal(storageObjectCount(), baseline.storageObjects, 'Migration 0050 changed Storage objects.');
   console.log('PASS: Migration 0050 made controlled links participant evidence without rewriting a stored snapshot');
 }
 
@@ -726,13 +817,14 @@ function assertAfter51(baseline: BaselineEvidence): void {
     baseline.untrustedRoutineGrants,
     'Migration 0051 introduced an unsafe direct routine grant.',
   );
-  assert.equal(storageObjectCount(), baseline.storageObjects, 'Migration 0051 removed or added a Storage object.');
   console.log('PASS: Migration 0051 added fail-closed, immutable, service-only correction authority');
 }
 
-function verifyUpgrade(workdir: string, networkId: string): void {
+async function verifyUpgrade(workdir: string, networkId: string): Promise<void> {
   assertBaseline();
   seedBaselineEvidence();
+  const storageClient = localStorageClient(workdir);
+  const storageObjects = await seedStorageEvidence(storageClient);
 
   const baselineGate4Errors = gate4ContractErrors();
   assert.ok(
@@ -749,16 +841,22 @@ function verifyUpgrade(workdir: string, networkId: string): void {
     tables: fingerprintPreservedTables(),
     untrustedRoutineGrants: untrustedRoutineExecuteGrants(),
     publicTableGrants: publicTableGrants(),
-    storageObjects: storageObjectCount(),
+    storageObjects,
+    storageRows: tableFingerprint('storage.objects'),
   };
-  console.log('PASS: seeded and fingerprinted representative synthetic 48-state evidence');
+  console.log('PASS: fingerprinted counts/content for all 37 public and 3 execution-control baseline tables');
 
   applyRelease(workdir, networkId, 49);
   assertAfter49(baseline);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0049');
+  assert.equal(psql("SELECT count(*) FROM storage.buckets WHERE id = 'participant-corrections-private';"), '0');
   applyRelease(workdir, networkId, 50);
   assertAfter50(baseline);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0050');
+  assert.equal(psql("SELECT count(*) FROM storage.buckets WHERE id = 'participant-corrections-private';"), '0');
   applyRelease(workdir, networkId, 51);
   assertAfter51(baseline);
+  await assertStorageUnchanged(storageClient, baseline, 'Migration 0051');
 
   const applied = appliedMigrations();
   assert.equal(applied.length, RELEASE_MIGRATION_COUNT, 'The upgraded head is not the full release migration set.');
@@ -785,7 +883,7 @@ function removeOwnedDockerResidue(): void {
   if (networks.includes(networkName)) docker(['network', 'rm', networkName]);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const migrationFiles = repositoryMigrationFiles();
   if (migrationFiles.length !== RELEASE_MIGRATION_COUNT) {
     console.error(`Repository has ${migrationFiles.length} migrations; this rehearsal targets ${RELEASE_MIGRATION_COUNT}.`);
@@ -804,7 +902,7 @@ function main(): void {
     ]);
     startAttempted = true;
     runSupabase('start', workdir, networkId);
-    verifyUpgrade(workdir, networkId);
+    await verifyUpgrade(workdir, networkId);
     console.log('PASS: staging migration 0048 -> 0051 upgrade rehearsal');
     console.log('HOSTED_SYSTEMS_CONTACTED = NO');
     exitCode = 0;
@@ -843,4 +941,4 @@ function main(): void {
   process.exitCode = exitCode;
 }
 
-if (require.main === module) main();
+if (require.main === module) void main();

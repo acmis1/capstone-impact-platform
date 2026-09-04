@@ -182,7 +182,13 @@ The real hosted capture is a separately authorized operation and has not been ex
 
 > **NO migration is applied until explicit project-owner authorization occurs, after the complete
 > read-only evidence in section C and the verified recovery precondition in section D have been
-> reviewed together.**
+> independently reviewed together with the controlled migration-window procedure below.**
+
+Record the exact currently deployed application SHA before entering the window. An approved
+hosting/access procedure capable of preventing normal staff mutation traffic is a precondition
+for authorization. The operator must enforce and verify that restriction **before applying 0049**
+and maintain it through successful H2 completion. This repository does not supply a maintenance-mode
+feature. If no approved mechanism exists, the hosted rollout is **BLOCKED** until one is defined.
 
 Authorization is per-release and does not carry over. If any gate reading is stale, missing, or
 disagrees with section A, this rollout stops.
@@ -204,7 +210,9 @@ Deterministic, forward-only, one migration at a time:
 - No `supabase migration repair` is used to force a count to match.
 - No historical migration file is edited, renamed, or deleted. Migrations 1–51 are immutable.
 - After each migration, confirm the recorded head advanced by exactly one and that the expected
-  effects for that migration (section B) are observable before applying the next.
+  effects for that migration (section B) are observable using database-only evidence before
+  applying the next. Compare existing row counts/content, stored snapshots, Storage inventory and
+  byte checksums, and grants to the pre-migration evidence. Do not exercise staff mutation workflows.
 
 ---
 
@@ -214,34 +222,55 @@ Compatibility of the current application (`main` at the source SHA) against each
 
 | Database state | Current application | Notes |
 | :--- | :--- | :--- |
-| Pre-migration 48 | **Incompatible** | The application expects the four correction tables, the six correction RPCs and `participant-corrections-private`. Correction and pre-preview package surfaces fail; `/api/readiness` and Gate 4 report the missing contract. |
+| Pre-migration 48 | **Incompatible** | The application expects the four correction tables, the six correction RPCs and `participant-corrections-private`. Correction and pre-preview package surfaces fail. Gates 3 and 4 establish the missing migration/schema contract; `/api/readiness` cannot detect it. |
 | After 0049 | **Still incompatible** | Controlled-link intake works, but the correction contract is still absent. |
 | After 0050 | **Still incompatible** | Snapshot authorities are current; the correction contract is still absent. |
 | After 0051 | **Compatible** | The full 51-migration contract the application targets exists. |
 
-Therefore the safe order is **database first, application second**:
+The old application is also behaviorally incompatible with the 0051 database. At historical
+commit `6125bb56a2c71c16a45cce44851696e8b09a3b4c`, `ParticipantPreviewPanel.tsx` offers a POST to
+`/api/projects/[publicId]/participant-preview/correction-resolution`; that route calls
+`SupabaseParticipantPreviewRepositoryCore.startCorrectionResolution`, which expects `SUCCESS` or
+`ALREADY_IN_PROGRESS` from `start_participant_preview_correction_resolution`. Migration 0051
+instead always returns `PARTICIPANT_CANDIDATE_REQUIRED`, so that old workflow fails. The addition
+of new objects does not make 0051 backward compatible.
 
-1. Apply 0049, 0050 and 0051 in order against the hosted database.
-2. Verify the post-migration evidence in section H.
-3. Only then deploy the application build at the reviewed SHA and re-verify deployment identity.
+The safe order is **controlled window, database, application, verified reopening**:
 
-Leaving the previously deployed application running during the migration window is acceptable and
-expected: migrations 0049 and 0050 only replace function bodies whose call contracts the older
-build already uses, and 0051 only adds new objects. Schedule a quiet window regardless.
+1. Complete fresh read-only Gates 1–5 (section C).
+2. Complete and independently verify the 48-state recovery bundle and isolated restore (section D).
+3. Record the exact currently deployed application SHA.
+4. Obtain explicit authorization for the controlled migration window and enforce the approved
+   hosting/access restriction. Verify that normal staff mutation workflows are unavailable.
+5. Apply 0049, then perform its database-only verification (sections B and F).
+6. Apply 0050, then perform its database-only verification (sections B and F).
+7. Apply 0051, then complete H1, including the exact Gate 4 match and fail-closed legacy shortcut.
+8. Only after H1 passes, deploy the exact reviewed 51-compatible application SHA.
+9. Complete H2 against that deployed application.
+10. Restore normal staff workflow access only after **every H2 check passes**.
+11. Stakeholder UAT / Duda TEST remains a later, separately governed step (section I).
+
+The new 51-contract application must not become active before the database reaches 0051. Normal
+staff mutation access stays unavailable for the entire window, including deployment or verification
+failures. Green database verification alone never authorizes reopening.
 
 **Never roll the application backward across this transition.** Migrations 0049–0051 are
 forward-only. An older build cannot un-create the correction tables, cannot restore the retired
 `start_participant_preview_correction_resolution` shortcut, and would present a stale contract
-against a database that has already advanced. If the application must be reverted, revert the
-application only, and treat the database state as the fixed forward baseline; a database rollback
+against a database that has already advanced. Any application revert must retain a reviewed
+51-compatible build and pass H2 before reopening; keep access blocked if none is available.
+Treat the database state as the fixed forward baseline; a database rollback
 is a restore from the section D bundle into an isolated target plus a separately authorized
 cutover decision, never an in-place downgrade.
 
 ---
 
-## H. Post-migration verification
+## H. Verification stages
 
-All of the following must hold before staging acceptance is claimed:
+### H1. Post-database / pre-application verification
+
+Complete these database-only checks before deploying the new application. Keep normal staff
+mutation workflows unavailable:
 
 - **Migration history**: 51 / 51 rows, latest `20260903130000`, matching the repository manifest
   exactly.
@@ -257,13 +286,35 @@ All of the following must hold before staging acceptance is claimed:
   carrying its exact size and MIME contract.
 - **Grants, RLS and policies**: exact. In particular `PUBLIC`, `anon` and `authenticated` hold no
   authority on any correction table, and `service_role` holds `SELECT` only.
+- **Legacy shortcut**: verify the definition of `start_participant_preview_correction_resolution`
+  unconditionally returns `PARTICIPANT_CANDIDATE_REQUIRED`. Use read-only definition inspection;
+  the disposable rehearsal separately tests the return value.
+- **Preservation**: existing rows in all 37 baseline public tables and all 3 execution-control
+  tables, historical snapshots, and existing Storage object keys/bytes/checksums are unchanged
+  through each migration. Never clear cost-fence reservations to obtain a match.
+
+Gates 3 and 4 supply migration/schema evidence. `/api/readiness` supplies application
+configuration, target identity, credential-shape and dependency-liveness evidence via a bounded
+service-role HEAD query to `public.programs`. It reports the migration manifest the **bundle
+expects**, plus valid commit metadata when available; it does not inspect migration history,
+correction tables, exact RPC signatures, grants, RLS, policies or bucket inventory. It can be
+green on a 48-state database and cannot replace H1.
+
+### H2. Post-application deployment verification
+
+After H1 passes and the exact reviewed 51-compatible build is deployed, verify:
+
+- **Deployment identity**: the deployed commit equals the exact reviewed SHA.
 - **`/api/health`**: HTTP 200.
 - **`/api/readiness`**: expected readiness classification for the staging target.
-- **Deployment identity**: the deployed commit equals the exact reviewed SHA.
+- **`/login`**: the login surface returns the expected HTML.
 - **Read-only hosted smoke**: the existing GET/HEAD-only verifier passes — health, readiness,
   login, deployment SHA, redirects, timeouts and migration expectation.
 
-Any single failure stops acceptance. Do not relax a contract to make a check pass.
+Any single failure stops acceptance and keeps normal staff mutation access unavailable. Restore
+normal staff workflow access only after H2 passes. Do not relax a contract to make a check pass.
+
+### Repository rehearsal preconditions
 
 Repository-side evidence that must already be green before hosted work begins:
 
@@ -281,8 +332,11 @@ npm run verify:zero-cost-recovery-rehearsal
 
 The first provisions exactly the 48-migration baseline on a disposable owned stack, seeds
 representative synthetic 48-state evidence, applies 0049, 0050 and 0051 one at a time, and asserts
-after each step that existing rows, snapshots, grants and Storage objects are untouched and that
-the new authority is exactly what the migration declares. It contacts no hosted system.
+after each step that counts/content in all 37 baseline public tables and all 3 execution-control
+tables, snapshots and grants are unchanged. It uploads a nonzero synthetic object into an existing
+pre-0051 bucket through the supported Local Storage API, then verifies the complete object set,
+metadata, byte lengths and SHA-256 checksums after each migration. Migration 0051 alone creates the
+correction bucket. The rehearsal contacts no hosted system.
 
 ---
 

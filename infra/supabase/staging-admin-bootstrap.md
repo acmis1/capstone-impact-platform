@@ -3,13 +3,13 @@
 This guide documents the secure, manual sequence to link the initial Supabase Auth user to the first Admin/CMS administrator profile.
 
 > [!WARNING]
-> * **Confirm Project Scope:** The script must be executed only after the human confirms they are targeting the correct, isolated Admin/CMS staging project (`capstone-admin-cms-staging-2026`).
+> * **Confirm Project Scope:** The script must be executed only after the human confirms the exact authorized isolated target using the [staging reconciliation runbook](staging-reconciliation-runbook.md). The legacy project named in the historical evidence below is not the active staging-v2 target.
 > * **No Password Input:** No password is ever accepted or passed to this linking script.
 > * **No Bearer Token Reuse:** The prior invitation whose URL exposed a bearer token is compromised and must never be reused.
 
-## Current Staging Status
+## Historical Legacy Staging Status
 
-In the present staging environment (`capstone-admin-cms-staging-2026` located in Singapore):
+The following was recorded for the legacy staging environment (`capstone-admin-cms-staging-2026` located in Singapore); it is not current staging-v2 evidence:
 - migrations 0001 through 0006 have already been manually applied and read-only verified;
 - `bootstrap_initial_admin` exists with `service_role`-only execution using standard `pg_catalog.btrim`;
 - one initial administrator is linked in `admin_users`;
@@ -28,7 +28,7 @@ In the present staging environment (`capstone-admin-cms-staging-2026` located in
 ## Manual Sequencing
 
 > [!NOTE]
-> **Initial Bootstrap Scope:** The initial administrator bootstrap on current staging (`capstone-admin-cms-staging-2026`) is complete (`CREATED`). The manual sequence below is documented for setting up a genuinely new isolated environment or an explicitly approved same-identity recovery. It is restricted to the first administrator and is not an additional-user onboarding procedure.
+> **Initial Bootstrap Scope:** The historical legacy staging bootstrap completed (`CREATED`). The manual sequence below is documented for setting up a genuinely new isolated environment or an explicitly approved same-identity recovery. It is restricted to the first administrator and is not an additional-user onboarding procedure. Revalidate current target identity and state before authorization.
 
 Follow these steps once the replacement invitation flow has been completed and verified:
 
