@@ -9,13 +9,13 @@
     },
     {
       "filename": "import-workflow-mobile-375px.png",
-      "acceptanceUse": "accepted",
-      "visibleFact": "Import route at 375 x 812 CSS mobile viewport; folder and file preparation guide disclosure has visible keyboard focus without horizontal page overflow or sticky header obstruction."
+      "acceptanceUse": "context-only",
+      "visibleFact": "Import projects in a narrow mobile layout with a visible focus ring on the account-menu button; the preparation guide is collapsed and the School spreadsheet step is shown."
     },
     {
       "filename": "login-keyboard-focus.png",
-      "acceptanceUse": "accepted",
-      "visibleFact": "Login route with Sign In button keyboard-focused with visible focus indicator, following invalid email validation error alert display."
+      "acceptanceUse": "context-only",
+      "visibleFact": "Staff sign-in form with a synthetic email and masked password entered; no visible Sign in focus ring or validation alert."
     },
     {
       "filename": "long-content-filename.png",
@@ -34,13 +34,13 @@
     },
     {
       "filename": "participant-preview-reading-order.png",
-      "acceptanceUse": "accepted",
-      "visibleFact": "Active participant preview showing project evidence preceding response section in DOM reading order, with skip link focused."
+      "acceptanceUse": "context-only",
+      "visibleFact": "Participant Preview showing the Smart Medical Drone Delivery heading, project metadata, private-preview notice, Project overview and Your Response sections; no focused skip link is visible."
     },
     {
       "filename": "participant-preview-validation-failure.png",
-      "acceptanceUse": "accepted",
-      "visibleFact": "Active participant preview with Request corrections disclosure open, empty comment field focused, and visible HTML5 constraint validation bubble ('Please fill out this field.')."
+      "acceptanceUse": "context-only",
+      "visibleFact": "Participant Preview with Request corrections expanded and the empty comment textarea visibly focused; no native validation bubble is visible."
     },
     {
       "filename": "project-detail-browser-zoom-200.png",
@@ -64,8 +64,8 @@
     },
     {
       "filename": "projects-index-desktop-keyboard.png",
-      "acceptanceUse": "accepted",
-      "visibleFact": "Projects dashboard route with keyboard focus on inline preflight action, multi-page pagination verified, and select-all checkbox toggle exercised."
+      "acceptanceUse": "context-only",
+      "visibleFact": "Projects dashboard with a visible focus ring on the Year filter (All years), no selected rows or bulk-review panel, and the first-page range Showing 1–10 of 12 projects."
     },
     {
       "filename": "projects-index-mobile-375px.png",
@@ -74,13 +74,13 @@
     },
     {
       "filename": "public-feed-keyboard-focus.png",
-      "acceptanceUse": "accepted",
-      "visibleFact": "Public feed deployment route with keyboard focus on Choose a project to publish link; advanced publishing details disclosure collapsed."
+      "acceptanceUse": "context-only",
+      "visibleFact": "Showcase publishing history with the collapsed Advanced publishing details summary visibly focused; the activity section says No publishing activity recorded yet."
     },
     {
       "filename": "staff-access-invitation-keyboard.png",
-      "acceptanceUse": "accepted",
-      "visibleFact": "Staff access provisioning route with synthetic invitation email entered, Admin role checkbox toggled via Space, and Send invitation button focused."
+      "acceptanceUse": "context-only",
+      "visibleFact": "Staff invitation form with synthetic name and email entered, Reviewer checked, Administrator unchecked, and no visible focus ring on Send invitation."
     }
   ]
 }

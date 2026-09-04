@@ -1,6 +1,6 @@
 # Integrated Accessibility/UAT Evidence (2026-09-04)
 
-Overall acceptance: **PASS (Integrated PP1 scoped automated gates; Native screen readers & stakeholder UAT remain PENDING human verification)**.
+Overall acceptance: **PARTIAL (Integrated PP1 scoped automated gates pass; Import and deployment/history remain PARTIAL; native screen readers and stakeholder UAT remain PENDING human verification)**.
 
 This directory records the final machine-verifiable Accessibility and User Acceptance Testing (UAT) evidence on the integrated PP1 application (`acmis1/capstone-impact-platform`), incorporating merged PR #262 (`feat(participant): integrate owned correction workflow (#262)`).
 
@@ -12,10 +12,10 @@ This evidence pass directly addresses and closes all four independent review fin
 
 | Finding | Defect / Ambiguity | Resolution & Proof |
 | --- | --- | --- |
-| 1. Preflight Cancel Focus Restoration | Cancelling inline preflight in `BulkProjectReviewPanel.tsx` unmounted the Cancel button without restoring focus to the triggering action button, reverting focus to `body`. | **FIXED**: In `apps/admin-cms/src/components/admin-dashboard/BulkProjectReviewPanel.tsx`, added trigger button refs, `handleCancel` focus restoration, and Escape key listener. Verified in unit tests [BulkProjectReviewPanel.test.tsx](../../../apps/admin-cms/src/components/admin-dashboard/BulkProjectReviewPanel.test.tsx) (passing 6/6 tests) and automated browser keyboard test in [keyboard-interaction-evidence.json](./keyboard-interaction-evidence.json). |
-| 2. Projects Multi-Page Pagination & Selection | 2026-09-03 evidence did not exercise real multi-page pagination or current-page selection with >10 records. | **FIXED**: Seeded synthetic projects in local database (12 total); navigated Page 1 -> Page 2 -> Page 1 verifying Next/Previous button disabled states and row changes. Exercised select-all checkbox toggling all 10 visible rows with focus retained. Captured in [projects-index-desktop-keyboard.png](./screenshots/projects-index-desktop-keyboard.png) and recorded in [keyboard-interaction-evidence.json](./keyboard-interaction-evidence.json). |
-| 3. Target Size SC 2.5.8 Analysis | Historical evidence made invalid "spacing exception" claims on 0x0 nodes and keyboard-only disclosures. | **FIXED**: Rigorous route-by-route audit in [admin-target-size-analysis.json](./admin-target-size-analysis.json). Delineates displayed controls (e.g. skip link 164x36px) vs hidden nodes; evaluates effective clickable regions (e.g. `<label>` elements >=24x24px for 16px checkboxes); evaluates neighbor distances/circles without misapplying spacing exceptions to non-pointer elements. |
-| 4. Integrated Participant Workflow Post-#262 | Participant correction workflow was merged in PR #262; required verification under integrated authority. | **FIXED**: Generated legitimate active preview via local API with `{ sendEmail: false }`; validated reading order (project evidence preceding response controls); expanded Request corrections disclosure via keyboard; submitted empty textarea to capture HTML5 constraint validation bubble; verified single-column reflow at 375x812 mobile and 200% zoom. Retained in [participant-preview-reading-order.png](./screenshots/participant-preview-reading-order.png) and [participant-preview-validation-failure.png](./screenshots/participant-preview-validation-failure.png). Revoked preview cleanly via DELETE API. |
+| 1. Preflight Cancel Focus Restoration | Cancelling inline preflight in `BulkProjectReviewPanel.tsx` unmounted the Cancel button without restoring focus to the triggering action button, reverting focus to `body`. | **FIXED**: In `apps/admin-cms/src/components/admin-dashboard/BulkProjectReviewPanel.tsx`, added trigger button refs, `handleCancel` focus restoration, and Escape key listener. Verified in unit tests [BulkProjectReviewPanel.test.tsx](../../../apps/admin-cms/src/components/admin-dashboard/BulkProjectReviewPanel.test.tsx) (passing 8/8 tests, including Request changes Cancel/Escape after a prior Approve preflight) and automated browser keyboard test in [keyboard-interaction-evidence.json](./keyboard-interaction-evidence.json). |
+| 2. Projects Multi-Page Pagination & Selection | 2026-09-03 evidence did not exercise real multi-page pagination or current-page selection with >10 records. | **FIXED**: Seeded synthetic projects in local database (12 total); multi-page Next/Previous navigation and boundary states were exercised against the 12-record Local dataset. Select current page selected all visible rows with focus retained. No per-page row identities or explicit numeric selected-row count are retained. The [Projects screenshot](./screenshots/projects-index-desktop-keyboard.png) is context-only; operational facts are recorded in [keyboard-interaction-evidence.json](./keyboard-interaction-evidence.json). |
+| 3. Target Size SC 2.5.8 Analysis | Historical evidence made invalid "spacing exception" claims on 0x0 nodes and keyboard-only disclosures. | **FIXED**: Rigorous route-by-route audit in [admin-target-size-analysis.json](./admin-target-size-analysis.json). Delineates displayed controls (e.g. skip link 122x36 CSS px) vs hidden nodes; evaluates effective clickable regions (e.g. `<label>` elements >=24x24px for 16px checkboxes); evaluates neighbor distances/circles without misapplying spacing exceptions to non-pointer elements. |
+| 4. Integrated Participant Workflow Post-#262 | Participant correction workflow was merged in PR #262; required verification under integrated authority. | **FIXED**: Generated legitimate active preview via local API with `{ sendEmail: false }`; validated reading order (project evidence preceding response controls); expanded Request corrections disclosure via keyboard; submitted empty textarea and observed native constraint validation in the interaction record; verified single-column reflow at 375x812 mobile and 200% zoom. Visible context (without a focused skip link or validation bubble) retained in [participant-preview-reading-order.png](./screenshots/participant-preview-reading-order.png) and [participant-preview-validation-failure.png](./screenshots/participant-preview-validation-failure.png). Revoked preview cleanly via DELETE API. |
 
 ## Machine-Verifiable Reproduction Gates
 
@@ -33,7 +33,7 @@ npm run verify:accessibility-uat-evidence -- --committed
 
 ## Retained Evidence Inventory
 
-- [keyboard-interaction-evidence.json](./keyboard-interaction-evidence.json): Comprehensive keyboard traversal, role, key sequence, and focus restoration records across Login, Projects (including multi-page pagination and bulk review cancel restoration), Import, Staff access, Public feed deployment, Project detail, and Participant preview.
+- [keyboard-interaction-evidence.json](./keyboard-interaction-evidence.json): Sampled keyboard interactions, role, key sequence, and focus restoration records across Login, Projects (including multi-page pagination and bulk review cancel restoration), Import, Staff access, Public feed deployment, Project detail, and Participant preview.
 - [admin-target-size-analysis.json](./admin-target-size-analysis.json): Route-by-route analysis under WCAG 2.2 SC 2.5.8 Target Size (Minimum, Level AA).
 - [mobile-measurements.json](./mobile-measurements.json): Viewport measurements at 375 x 812 CSS px across Projects, Import, Project detail, and Participant preview demonstrating zero horizontal overflow.
 - [browser-zoom-200-interaction.json](./browser-zoom-200-interaction.json): Interaction evidence under 200% browser host zoom verifying reflow and keyboard focus visibility.
@@ -52,3 +52,13 @@ Audit results:
 - **Heading Order**: 1 (PASS)
 - **Run Warnings**: 0
 - **Runtime Errors**: None
+
+## Final route scope
+
+Login and Projects: **PASS — bounded**. Project Detail and Participant Preview: **PASS — integrated post-#262 sampled scope**. Staff: **PASS**.
+
+Import: **PARTIAL**. All imports navigation, preparation-guide disclosure, file input, Check spreadsheet, controlled Check Failed alert and mobile state were sampled. Full traversal through School spreadsheet, Project folder, Check files, Confirm & save and Import media is not established.
+
+Admin deployment/history: **PARTIAL**. The publish-project link received focus; **PASS** applies only to the tested Advanced publishing details expand/collapse interaction. No publishing activity existed. Technical setup details, Advanced rollback tools (Local test only) and version-detail rows/history controls when data exists remain untested. Publication and removal were not executed.
+
+Long filename: **PARTIAL**. Long validation, native screen reader and stakeholder UAT: **PENDING**. Seven corrected screenshots are context-only in the state index; interaction/DOM records support operational conclusions. Historical 2026-09-03 results do not raise this final route scope.

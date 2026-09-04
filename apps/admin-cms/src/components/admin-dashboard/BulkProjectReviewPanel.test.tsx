@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BulkProjectReviewPanel } from './BulkProjectReviewPanel';
 import type { ProjectIndexRow } from './projectDashboardHelpers';
 
@@ -19,6 +19,7 @@ const project: ProjectIndexRow = {
 
 describe('BulkProjectReviewPanel', () => {
   beforeEach(() => vi.restoreAllMocks());
+  afterEach(cleanup);
 
   it('performs one preflight and one bounded execution with the expected version', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
@@ -115,6 +116,45 @@ describe('BulkProjectReviewPanel', () => {
     expect(screen.queryByText(/already_complete/)).toBeNull();
     expect(screen.queryByText(/changes_requested/)).toBeNull();
     expect(screen.getByText(/Changes requested — Needs refresh or cannot continue/)).toBeTruthy();
+  });
+
+  it.each(['Cancel', 'Escape'])('restores Request changes focus after a prior Approve preflight on %s', async (dismissal) => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    for (const action of ['approve', 'request_changes']) {
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+        action,
+        summary: { total: 1, eligible: 1, blocked: 0, alreadyComplete: 0, invalidOrStale: 0 },
+        items: [{ publicId: project.publicId, title: project.title, status: 'submitted', updatedAt: '2026-08-24T00:00:00.000Z', disposition: 'eligible', reasons: [], additionalReasonCount: 0 }],
+      }), { status: 200 }));
+    }
+
+    render(<BulkProjectReviewPanel selectedProjects={[project]} canSubmitBulk canReviewBulk />);
+    expect(screen.getByRole('button', { name: 'Submit for review' })).toBeTruthy();
+    const approve = screen.getByRole('button', { name: 'Approve' });
+    const requestChanges = screen.getByRole('button', { name: 'Request changes' });
+    approve.focus();
+    fireEvent.click(approve);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(approve);
+
+    requestChanges.focus();
+    fireEvent.click(requestChanges);
+    const cancel = await screen.findByRole('button', { name: 'Cancel' });
+    const comment = screen.getByLabelText(/Shared review comment/);
+    if (dismissal === 'Cancel') {
+      cancel.focus();
+      fireEvent.click(cancel);
+    } else {
+      comment.focus();
+      fireEvent.keyDown(comment, { key: 'Escape' });
+    }
+
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(document.activeElement).toBe(requestChanges);
+    expect(document.activeElement).not.toBe(approve);
+    expect(document.activeElement).not.toBe(document.body);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({ action: 'request_changes' });
   });
 
   it('restores focus to the triggering bulk action button when Cancel is clicked', async () => {

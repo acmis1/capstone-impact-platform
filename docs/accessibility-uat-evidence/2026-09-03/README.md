@@ -1,6 +1,6 @@
 # Local Accessibility/UAT correction evidence
 
-Overall acceptance: **PARTIAL**. This directory contains current correction measurements and explicitly labelled historical captures. It is not a WCAG-compliance or project-wide UAT sign-off. Testing used synthetic Local data. The UI's “Staging” label is not a hosted-environment claim: the application connection was checked as loopback before browser work.
+Overall acceptance: **PARTIAL**. This directory retains the 2026-09-03 correction measurements and captures. The [2026-09-04 final route scope](../2026-09-04/README.md#final-route-scope) supersedes these dated route summaries; Import and Admin deployment/history remain PARTIAL in the final matrix. It is not a WCAG-compliance or project-wide UAT sign-off. Testing used synthetic Local data. The UI's “Staging” label is not a hosted-environment claim: the application connection was checked as loopback before browser work.
 
 ## Reproduce the publication gate
 

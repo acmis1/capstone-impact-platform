@@ -1,12 +1,12 @@
 {
   "collectedAt": "2026-09-04T06:44:44.862Z",
   "dataPolicy": "Synthetic Local data; no credentials, cookies, tokens or secret URLs retained.",
-  "overallResult": "PASS",
+  "overallResult": "PARTIAL",
   "routes": [
     {
       "route": "Login",
       "role": "Administrator",
-      "result": "PASS",
+      "result": "PASS — bounded",
       "controls": [
         "Email input",
         "Forgot password link",
@@ -23,12 +23,13 @@
       "evidenceScreenshot": "screenshots/login-keyboard-focus.png",
       "limitations": [
         "Bounded to login and password recovery request journey. Token consumption and password change screens require email link activation."
-      ]
+      ],
+      "screenshotUse": "Context-only visible state; keyboard sequence and activation claims are supported by this interaction record, not by the static PNG."
     },
     {
       "route": "Projects",
       "role": "Administrator",
-      "result": "PASS",
+      "result": "PASS — bounded",
       "controls": [
         "Skip to main content",
         "Search projects input",
@@ -48,12 +49,15 @@
       "focusRestoration": "Main content received skip-link focus; Select current page maintained focus across selection toggles; Cancel restored focus directly to the triggering Approve button.",
       "keyboardTrapObserved": false,
       "evidenceScreenshot": "screenshots/projects-index-desktop-keyboard.png",
-      "limitations": []
+      "limitations": [
+        "Retained record supports the 12-record dataset premise, Next/Previous navigation and boundary states, and selection of all visible rows; it does not retain per-page row identities or an explicit numeric selected-row count."
+      ],
+      "screenshotUse": "Context-only visible state; keyboard sequence and activation claims are supported by this interaction record, not by the static PNG."
     },
     {
       "route": "Import",
       "role": "Administrator",
-      "result": "PASS — bounded",
+      "result": "PARTIAL",
       "controls": [
         "All imports navigation link",
         "Folder and file preparation guide disclosure",
@@ -67,7 +71,8 @@
       "keyboardTrapObserved": false,
       "evidenceScreenshot": "screenshots/import-workflow-controlled-failure.png",
       "limitations": [
-        "Automated upload used programmatically supplied file after keyboard focus to cross the OS native dialog boundary; live spreadsheet commit was bounded to preserve existing project state."
+        "Automated upload used a programmatically supplied file after keyboard focus to cross the OS native dialog boundary.",
+        "Full keyboard traversal through School spreadsheet, Project folder, Check files, Confirm & save, and Import media was not established; no import was committed."
       ]
     },
     {
@@ -89,32 +94,32 @@
       "evidenceScreenshot": "screenshots/staff-access-invitation-keyboard.png",
       "limitations": [
         "Exercised under local loopback with synthetic recipient test-staff@capstone.test and verified local Mailpit transport."
-      ]
+      ],
+      "screenshotUse": "Context-only visible state; keyboard sequence and activation claims are supported by this interaction record, not by the static PNG."
     },
     {
       "route": "Admin deployment/history",
       "role": "Administrator",
-      "result": "PASS — bounded non-consequential scope",
+      "result": "PARTIAL",
       "controls": [
         "Choose a project to publish link",
-        "Advanced publishing details disclosure summary",
-        "Technical setup details disclosure summary",
-        "Publishing status summary cards",
-        "Publishing activity list"
+        "Advanced publishing details disclosure summary"
       ],
-      "keyboardSequence": "Tab to Choose a project to publish link; Tab to Advanced publishing details summary; Enter expands disclosure; Enter collapses disclosure; Tab to Technical setup details summary where present; Enter toggles disclosure; Tab to publishing activity items; Shift+Tab reverses focus cleanly.",
-      "activationResult": "Choose a project to publish link received focus; Advanced publishing details and Technical details disclosures expanded and collapsed with focus retention; status summary cards inspected; non-consequential controls fully operable without calling /api/publish-cloud-feed or mutating public showcase.",
+      "keyboardSequence": "Tab to Choose a project to publish link; Tab to Advanced publishing details summary; Enter expands disclosure; Enter collapses disclosure; Shift+Tab reverses focus cleanly.",
+      "activationResult": "Choose a project to publish link received focus; Advanced publishing details expanded and collapsed with focus retention (PASS for this exact interaction). The tested activity section showed No publishing activity recorded yet.",
       "focusRestoration": "Focus remained on disclosure summary across toggle activations; reverse Shift+Tab traversed cleanly without trap.",
       "keyboardTrapObserved": false,
       "evidenceScreenshot": "screenshots/public-feed-keyboard-focus.png",
       "limitations": [
-        "Bounded strictly to non-consequential keyboard scope: live cloud feed publishing (/api/publish-cloud-feed), project removal, and Duda mutations were intentionally not executed per repository safety policy."
-      ]
+        "Technical setup details existed but was not exercised. Advanced rollback tools (Local test only) and version-detail rows/history controls when data exists remain untested.",
+        "Live cloud feed publishing, project removal, and Duda mutations were not executed."
+      ],
+      "screenshotUse": "Context-only visible state; keyboard sequence and activation claims are supported by this interaction record, not by the static PNG."
     },
     {
       "route": "Project Detail",
       "role": "Administrator",
-      "result": "PASS",
+      "result": "PASS — integrated post-#262 sampled scope",
       "controls": [
         "Project Detail Section Navigation links",
         "Go to project information anchor",
@@ -152,7 +157,8 @@
       "evidenceScreenshot": "screenshots/participant-preview-reading-order.png",
       "limitations": [
         "Validated on legitimately generated active preview for 2026-medical-drone; preview was revoked after test completion; raw token was sanitized and never retained."
-      ]
+      ],
+      "screenshotUse": "Context-only visible state; keyboard sequence and activation claims are supported by this interaction record, not by the static PNG."
     }
   ]
 }
