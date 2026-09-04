@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useId, useState, useRef } from 'react';
 import Link from 'next/link';
 import {
   FolderOpen,
@@ -67,7 +67,33 @@ export default function BrowserImportPreviewClient() {
   const [selectionState, setRawSelectionState] = useState<BrowserImportSelectionState>(resetSelectionState());
   const [manifestCache, setManifestCache] = useState<SelectionManifest | null>(null);
 
+  const issuesId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderButtonRef = useRef<HTMLButtonElement>(null);
+  const checkButtonRef = useRef<HTMLButtonElement>(null);
+  const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const metadataButtonRef = useRef<HTMLButtonElement>(null);
+  const mediaButtonRef = useRef<HTMLButtonElement>(null);
+  const completedLinkRef = useRef<HTMLAnchorElement>(null);
+  const [focusRequest, setFocusRequest] = useState<{
+    origin: Element | null;
+    action: 'folder' | 'check' | 'confirm' | 'metadata' | 'media';
+  } | null>(null);
+
+  useEffect(() => {
+    // A disabled or unmounted action can drop browser focus to body. Restore it after the
+    // result commits, but respect a user who moved elsewhere while the request was pending.
+    if (!focusRequest || (document.activeElement !== document.body && document.activeElement !== focusRequest.origin)) return;
+    const targets = {
+      folder: folderButtonRef.current,
+      check: resultsHeadingRef.current ?? checkButtonRef.current,
+      confirm: metadataButtonRef.current ?? confirmButtonRef.current,
+      metadata: mediaButtonRef.current ?? metadataButtonRef.current,
+      media: completedLinkRef.current ?? mediaButtonRef.current,
+    };
+    targets[focusRequest.action]?.focus();
+  }, [focusRequest]);
 
   const [isStaging, setIsStaging] = useState(false);
   const [stagingError, setStagingError] = useState<string | null>(null);
@@ -195,6 +221,7 @@ export default function BrowserImportPreviewClient() {
 
   const handleRequestPreview = async () => {
     if (selectedFiles.length === 0 || !selectedRootName || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
+    const origin = document.activeElement;
 
     setIsLoading(true);
     setApiError(null);
@@ -305,6 +332,7 @@ export default function BrowserImportPreviewClient() {
       setApiError('The preview request could not be completed. Please try again.');
     } finally {
       setIsLoading(false);
+      setFocusRequest({ origin, action: 'check' });
     }
   };
 
@@ -321,6 +349,7 @@ export default function BrowserImportPreviewClient() {
     updateSelectionState(resetSelectionState());
     setManifestCache(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    setFocusRequest({ origin: document.activeElement, action: 'folder' });
   };
 
   const handleToggleValid = (pkgPath: string) => {
@@ -343,6 +372,7 @@ export default function BrowserImportPreviewClient() {
 
   const handlePrepareImport = async () => {
     if (!previewResult || !manifestCache || preparationLockRef.current || stagingLockRef.current || selectionStateRef.current.isPreparing || isStaging || isCompletingMedia) return;
+    const origin = document.activeElement;
     invalidateStagingResult();
 
     await runBrowserImportPreparation({
@@ -353,9 +383,11 @@ export default function BrowserImportPreviewClient() {
       getCurrentState: () => selectionStateRef.current,
       setSelectionState: updateSelectionState,
     });
+    setFocusRequest({ origin, action: 'confirm' });
   };
 
   const handleStageMetadata = async () => {
+    const origin = document.activeElement;
     await runBrowserImportMetadataStaging({
       lock: stagingLockRef,
       isStaging,
@@ -368,10 +400,12 @@ export default function BrowserImportPreviewClient() {
       setStagingError,
       setStagedResult,
     });
+    setFocusRequest({ origin, action: 'metadata' });
   };
 
   const handleCompleteMedia = async () => {
     if (!stagedResult) return;
+    const origin = document.activeElement;
     await runBrowserImportMediaStaging({
       lock: mediaCompleteLockRef,
       isCompletingMedia,
@@ -386,6 +420,7 @@ export default function BrowserImportPreviewClient() {
       setMediaCompleteError,
       setMediaCompleteResult,
     });
+    setFocusRequest({ origin, action: 'media' });
   };
 
   const togglePackageExpand = (pkgPath: string) => {
@@ -459,6 +494,7 @@ export default function BrowserImportPreviewClient() {
       {/* Step 2: Admin Reference Dataset Section */}
       <AdminReferenceDatasetSection
         onMappingConfigured={(data) => {
+          if (data) setFocusRequest({ origin: document.activeElement, action: 'folder' });
           setAdminReferenceData(data);
           setPreviewResult(null);
           setManifestCache(null);
@@ -497,6 +533,7 @@ export default function BrowserImportPreviewClient() {
             <Button
               type="button"
               onClick={() => fileInputRef.current?.click()}
+              ref={folderButtonRef}
               disabled={isLoading || !isSupported || isPreparingOrLocked}
               className="font-semibold"
             >
@@ -509,6 +546,7 @@ export default function BrowserImportPreviewClient() {
                 <Button
                   type="button"
                   onClick={handleRequestPreview}
+                  ref={checkButtonRef}
                   disabled={isLoading || isPreparingOrLocked}
                   className="bg-primary hover:bg-primary font-semibold shadow-xs hover:shadow-md"
                 >
@@ -586,7 +624,7 @@ export default function BrowserImportPreviewClient() {
             <CardHeader className="py-3 px-4 sm:px-6 border-b border-border">
               <div className="flex items-center gap-2">
                 <FileCheck className="h-4 w-4 text-primary" aria-hidden="true" />
-                <CardTitle className="text-sm font-semibold text-foreground">
+                <CardTitle ref={resultsHeadingRef} tabIndex={-1} className="text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   Validation results
                 </CardTitle>
               </div>
@@ -678,7 +716,7 @@ export default function BrowserImportPreviewClient() {
             </h3>
 
             <div className="flex flex-col gap-3">
-              {previewResult.packages.map((pkg) => {
+              {previewResult.packages.map((pkg, packageIndex) => {
                 const isExpanded = expandedPackages[pkg.packagePath] || false;
                 const isSelected = selectionState.selectedPackagePaths.includes(pkg.packagePath);
                 const isAcked = selectionState.acknowledgedWarningPackagePaths.includes(pkg.packagePath);
@@ -809,6 +847,8 @@ export default function BrowserImportPreviewClient() {
                             variant="ghost"
                             size="sm"
                             onClick={() => togglePackageExpand(pkg.packagePath)}
+                            aria-expanded={isExpanded}
+                            aria-controls={isExpanded ? `${issuesId}-${packageIndex}` : undefined}
                             className="h-8 text-xs text-muted-foreground hover:text-foreground shrink-0"
                           >
                             {isExpanded ? (
@@ -883,7 +923,7 @@ export default function BrowserImportPreviewClient() {
 
                       {/* Expandable Issues Drawer */}
                       {isExpanded && (
-                        <div className="flex flex-col gap-2 pt-2 border-t border-border text-xs">
+                        <div id={`${issuesId}-${packageIndex}`} role="region" aria-label={`Issues for ${pkg.folderName}`} className="flex flex-col gap-2 pt-2 border-t border-border text-xs">
                           {pkg.errors.map((err, idx) => (
                             <div
                               key={`err-${idx}`}
@@ -891,7 +931,7 @@ export default function BrowserImportPreviewClient() {
                             >
                               <strong className="text-destructive-strong">Issue:</strong> {err.message}
                               {err.fieldName && <span className="text-muted-foreground"> (field: {err.fieldName})</span>}
-                              {err.fileName && <span className="text-muted-foreground"> (file: {err.fileName})</span>}
+                              {err.fileName && <span className="break-all text-muted-foreground"> (file: {err.fileName})</span>}
                             </div>
                           ))}
                           {pkg.warnings.map((warn, idx) => (
@@ -901,7 +941,7 @@ export default function BrowserImportPreviewClient() {
                             >
                               <strong className="text-warning-strong">Warning:</strong> {warn.message}
                               {warn.fieldName && <span className="text-muted-foreground"> (field: {warn.fieldName})</span>}
-                              {warn.fileName && <span className="text-muted-foreground"> (file: {warn.fileName})</span>}
+                              {warn.fileName && <span className="break-all text-muted-foreground"> (file: {warn.fileName})</span>}
                             </div>
                           ))}
                         </div>
@@ -932,6 +972,7 @@ export default function BrowserImportPreviewClient() {
               type="button"
               size="sm"
               onClick={handlePrepareImport}
+              ref={confirmButtonRef}
               disabled={selectionState.isPreparing || totalSelectedCount === 0}
               className="font-semibold shrink-0"
             >
@@ -996,6 +1037,7 @@ export default function BrowserImportPreviewClient() {
                   type="button"
                   size="sm"
                   onClick={handleStageMetadata}
+                  ref={metadataButtonRef}
                   disabled={isStaging || selectionState.isPreparing || isCompletingMedia}
                   className="font-semibold shrink-0"
                 >
@@ -1045,6 +1087,7 @@ export default function BrowserImportPreviewClient() {
                   type="button"
                   size="sm"
                   onClick={handleCompleteMedia}
+                  ref={mediaButtonRef}
                   disabled={isCompletingMedia}
                   className="font-semibold shrink-0"
                 >
@@ -1080,7 +1123,7 @@ export default function BrowserImportPreviewClient() {
 
               <div className="flex items-center gap-3 pt-1">
                 <Button asChild className="font-semibold">
-                  <Link href={`/admin/imports/${mediaCompleteResult.batchId}`}>
+                  <Link ref={completedLinkRef} href={`/admin/imports/${mediaCompleteResult.batchId}`}>
                     Open import details
                     <ArrowRight className="h-4 w-4 ml-1.5" aria-hidden="true" />
                   </Link>

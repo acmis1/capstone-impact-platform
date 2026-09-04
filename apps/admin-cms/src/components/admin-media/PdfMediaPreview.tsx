@@ -44,9 +44,9 @@ export function PdfMediaPreview({
           href={media.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex min-h-[32px] items-center gap-1.5 text-sm font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="inline-flex max-w-full min-h-[32px] items-center gap-1.5 text-sm font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
-          Open {media.fileName} in a new tab
+          <span className="min-w-0 break-words">Open <span className="break-all">{media.fileName}</span> in a new tab</span>
           <ExternalLink className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden="true" />
         </a>
       </div>

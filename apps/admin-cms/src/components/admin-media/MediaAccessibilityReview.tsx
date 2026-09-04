@@ -39,7 +39,7 @@ export function MediaAccessibilityReview({
       className="rounded-lg border border-border bg-surface-inset p-3"
     >
       <h4 id={headingId} className="text-xs font-semibold uppercase tracking-wider text-foreground-subtle">
-        Accessibility review — {assetLabel}: <span className="normal-case tracking-normal">{media.fileName}</span>
+        Accessibility review — {assetLabel}: <span className="break-all normal-case tracking-normal">{media.fileName}</span>
       </h4>
 
       {incomplete && (

@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   PublicFeedHistoryControls,
@@ -42,6 +42,42 @@ describe('publicFeedRecoveryOutcome', () => {
 });
 
 describe('PublicFeedHistoryControls', () => {
+  it('focuses the acknowledgement after preparation while execution remains disabled', async () => {
+    const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      success: true, result: { targetVersionNumber: 1, targetRecordCount: 0,
+        currentVersionNumber: 2, currentRecordCount: 0, diff: {}, lifecycleDrift: {},
+        requiredAcknowledgement: 'Fixture acknowledgement',
+      },
+    })));
+    render(<PublicFeedHistoryControls {...BASE_PROPS} rollbackAvailable targetVersionNumber={1} />);
+    const summary = screen.getByText('Advanced rollback tools (Local test only)');
+    summary.closest('details')!.open = true;
+    const prepare = screen.getByRole('button', { name: 'Prepare rollback to version 1' });
+    prepare.focus();
+    fireEvent.click(prepare);
+    const acknowledgement = await screen.findByLabelText('Type the exact acknowledgement');
+    await waitFor(() => expect(document.activeElement).toBe(acknowledgement));
+    expect(screen.getByRole('button', { name: 'Execute prepared Local rollback' }).hasAttribute('disabled')).toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0][0]).toBe('/api/public-feed/rollback/prepare');
+  });
+
+  it.each([false, true])('returns failed preparation focus without stealing another control (moved: %s)', async (moved) => {
+    let resolveResponse!: (value: Response) => void;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(resolve => { resolveResponse = resolve; }));
+    render(<><button type="button">Another control</button><PublicFeedHistoryControls {...BASE_PROPS} rollbackAvailable targetVersionNumber={1} /></>);
+    screen.getByText('Advanced rollback tools (Local test only)').closest('details')!.open = true;
+    const prepare = screen.getByRole('button', { name: 'Prepare rollback to version 1' });
+    prepare.focus();
+    fireEvent.click(prepare);
+    prepare.blur();
+    const other = screen.getByRole('button', { name: 'Another control' });
+    if (moved) other.focus();
+    await act(async () => resolveResponse(new Response(JSON.stringify({ success: false, code: 'PREPARATION_FAILED' }))));
+    expect(document.activeElement).toBe(moved ? other : prepare);
+    expect(screen.getByRole('status').textContent).toContain('Nothing was published or changed');
+  });
+
   it('shows setup only for inactive history with an idle writer', () => {
     const { rerender } = render(<PublicFeedHistoryControls
       {...BASE_PROPS} historyActive={false} publishingActivity="IDLE"

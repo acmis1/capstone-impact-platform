@@ -71,6 +71,15 @@ export function PublicFeedHistoryControls(props: {
   const [message, setMessage] = React.useState<PublicFeedControlOutcome | null>(null);
   const [preparation, setPreparation] = React.useState<Preparation | null>(null);
   const [acknowledgement, setAcknowledgement] = React.useState('');
+  const prepareButtonRef = React.useRef<HTMLButtonElement>(null);
+  const acknowledgementRef = React.useRef<HTMLInputElement>(null);
+  const [preparationFocus, setPreparationFocus] = React.useState<{ origin: Element | null } | null>(null);
+
+  React.useEffect(() => {
+    if (preparationFocus && (document.activeElement === document.body || document.activeElement === preparationFocus.origin)) {
+      (acknowledgementRef.current ?? prepareButtonRef.current)?.focus();
+    }
+  }, [preparationFocus]);
 
   if (!props.canPublish) return null;
 
@@ -96,6 +105,7 @@ export function PublicFeedHistoryControls(props: {
 
   async function prepareRollback() {
     if (!props.targetVersionNumber) return;
+    const origin = document.activeElement;
     setPending(true);
     setMessage(null);
     setPreparation(null);
@@ -118,6 +128,7 @@ export function PublicFeedHistoryControls(props: {
       setMessage({ text: 'The restore could not be prepared. Nothing was published or changed. Check your connection and try again.' });
     } finally {
       setPending(false);
+      setPreparationFocus({ origin });
     }
   }
 
@@ -242,7 +253,7 @@ export function PublicFeedHistoryControls(props: {
             <p className="text-sm leading-relaxed text-muted-foreground">
               Preparation performs no public write. Rollback execution is available only in an explicitly enabled disposable Local runtime.
             </p>
-            <Button type="button" variant="outline" onClick={prepareRollback} disabled={pending || !props.rollbackAvailable}>
+            <Button type="button" variant="outline" onClick={prepareRollback} ref={prepareButtonRef} disabled={pending || !props.rollbackAvailable}>
               {pending ? 'Preparing…' : `Prepare rollback to version ${props.targetVersionNumber}`}
             </Button>
             {preparation && (
@@ -265,7 +276,7 @@ export function PublicFeedHistoryControls(props: {
                   </label>
                   <p className="mt-1 break-all rounded bg-muted p-2 font-mono text-xs text-foreground">{preparation.requiredAcknowledgement}</p>
                   <input
-                    id="rollback-acknowledgement" value={acknowledgement}
+                    id="rollback-acknowledgement" ref={acknowledgementRef} value={acknowledgement}
                     onChange={(event) => setAcknowledgement(event.target.value)}
                     autoComplete="off"
                     className="mt-2 min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

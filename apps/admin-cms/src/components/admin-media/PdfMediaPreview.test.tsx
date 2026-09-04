@@ -28,6 +28,15 @@ const validPdf: MediaPreviewItem = {
 };
 
 describe('PdfMediaPreview', () => {
+  it('keeps a long filename complete in the wrapping PDF action and file facts', () => {
+    const fileName = 'syntheticfilename'.repeat(5) + '.pdf';
+    render(<PdfMediaPreview media={{ ...validPdf, fileName }} />);
+    const link = screen.getByRole('link', { name: 'Open ' + fileName + ' in a new tab' });
+    expect(link.classList.contains('max-w-full')).toBe(true);
+    expect(link.querySelector('.break-all')?.textContent).toBe(fileName);
+    expect(screen.getByText(fileName, { selector: 'dd' })).toBeTruthy();
+  });
+
   it('keeps the titled inline preview out of sequential focus and provides a keyboard-accessible link', () => {
     render(<PdfMediaPreview media={validPdf} />);
 
@@ -87,7 +96,7 @@ describe('PdfMediaPreview', () => {
   it('displays file metadata', () => {
     render(<PdfMediaPreview media={validPdf} />);
 
-    expect(screen.getByText('project.pdf')).toBeTruthy();
+    expect(screen.getByText('project.pdf', { selector: 'dd' })).toBeTruthy();
     expect(screen.getByText('application/pdf')).toBeTruthy();
     expect(screen.getByText('1.0 MB')).toBeTruthy();
   });

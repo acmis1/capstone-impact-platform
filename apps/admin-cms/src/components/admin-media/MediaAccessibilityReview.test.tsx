@@ -27,6 +27,12 @@ function media(
 }
 
 describe('MediaAccessibilityReview', () => {
+  it('wraps the complete filename in its accessibility review label', () => {
+    const fileName = 'syntheticfilename'.repeat(5) + '.png';
+    render(<MediaAccessibilityReview media={media({ fileName })} />);
+    expect(screen.getByText(fileName).classList.contains('break-all')).toBe(true);
+  });
+
   it('reports an available text alternative without duplicating text shown by a valid image preview', () => {
     render(
       <MediaAccessibilityReview
