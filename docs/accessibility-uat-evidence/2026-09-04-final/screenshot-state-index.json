@@ -1,0 +1,35 @@
+{
+  "visualInspection": "Every image opened and inspected individually; no sensitive values observed.",
+  "screenshots": [
+    {
+      "file": "screenshots/history-preparation-keyboard.png",
+      "status": "accepted",
+      "scope": "Non-writing Local preparation with incorrect acknowledgement and disabled execution."
+    },
+    {
+      "file": "screenshots/import-completed-mobile.png",
+      "status": "accepted",
+      "scope": "Named state only; operational acceptance uses the interaction record."
+    },
+    {
+      "file": "screenshots/import-long-filename-mobile.png",
+      "status": "context-only",
+      "scope": "Wrapping context; developer indicator overlaps lower-left edge. Full filename and geometry retained in keyboard-interactions.json."
+    },
+    {
+      "file": "screenshots/import-long-validation-mobile.png",
+      "status": "accepted",
+      "scope": "Named state only; operational acceptance uses the interaction record."
+    },
+    {
+      "file": "screenshots/import-media-mobile.png",
+      "status": "accepted",
+      "scope": "Named state only; operational acceptance uses the interaction record."
+    },
+    {
+      "file": "screenshots/media-long-filename-mobile.png",
+      "status": "accepted",
+      "scope": "Complete wrapping PDF action and file facts; developer indicator overlaps the lower-left MIME-label margin."
+    }
+  ]
+}

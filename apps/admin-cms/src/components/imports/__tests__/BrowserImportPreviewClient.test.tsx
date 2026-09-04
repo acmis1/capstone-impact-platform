@@ -241,6 +241,24 @@ describe('PR2A Guided Import Workflow Components', () => {
   });
 
   describe('AdminReferenceDatasetSection', () => {
+    it.each([false, true])('restores inspection failure focus without stealing another control (moved: %s)', async (moved) => {
+      let resolveResponse!: (value: unknown) => void;
+      vi.stubGlobal('fetch', vi.fn(() => new Promise(resolve => { resolveResponse = resolve; })));
+      render(<><button type="button">Another control</button><AdminReferenceDatasetSection onMappingConfigured={vi.fn()} /></>);
+      const input = screen.getByLabelText(/Choose School reference spreadsheet/i);
+      fireEvent.change(input, { target: { files: [new File(['invalid'], 'reference.xlsx')] } });
+      const check = screen.getByRole('button', { name: 'Check spreadsheet' });
+      check.focus();
+      fireEvent.click(check);
+      // In Chromium disabling the active button drops focus to body.
+      check.blur();
+      const other = screen.getByRole('button', { name: 'Another control' });
+      if (moved) other.focus();
+      await act(async () => resolveResponse({ ok: false, json: async () => ({ success: false }) }));
+      expect(screen.getByRole('alert').textContent).toContain('Check Failed');
+      expect(document.activeElement).toBe(moved ? other : check);
+    });
+
     it('renders file selection and initial helper copy', () => {
       const onConfigured = vi.fn();
       render(<AdminReferenceDatasetSection onMappingConfigured={onConfigured} />);
@@ -284,7 +302,9 @@ describe('PR2A Guided Import Workflow Components', () => {
       fireEvent.change(input, { target: { files: [file] } });
 
       const checkButton = screen.getByRole('button', { name: /Check spreadsheet/i });
+      checkButton.focus();
       fireEvent.click(checkButton);
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('Worksheet:')));
 
       // Wait for automatic recognition box to render
       expect(await screen.findByText('Columns recognised automatically')).toBeTruthy();
@@ -736,6 +756,53 @@ describe('PR2A Guided Import Workflow Components', () => {
 
     beforeEach(() => {
       controllerStubs.reset();
+    });
+
+    it('associates package issues with an expanded disclosure and wraps long filenames', async () => {
+      await renderThroughValidationResults();
+      const response = buildPreviewResponse();
+      const fileName = 'syntheticfilename'.repeat(4) + '.txt';
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({
+        ...response, batch: { ...response.batch, totalWarnings: 1, warningPackageCount: 1, validPackageCount: 0, packages: response.batch.packages.map(pkg => ({
+          ...pkg, status: 'warning', warnings: [{ code: 'PACKAGE_UNKNOWN_FILE', severity: 'warning', message: 'Unrecognized file in package root will be ignored.', fileName }],
+        })) },
+      }) }));
+      fireEvent.click(screen.getByRole('button', { name: /Check files and continue/i }));
+      const toggle = await screen.findByRole('button', { name: /Show issues/ });
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      toggle.focus();
+      fireEvent.click(toggle);
+      const region = screen.getByRole('region', { name: 'Issues for demo-project' });
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+      expect(toggle.getAttribute('aria-controls')).toBe(region.id);
+      expect(screen.getByText('(file: ' + fileName + ')').classList.contains('break-all')).toBe(true);
+      expect(document.activeElement).toBe(toggle);
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByRole('region', { name: 'Issues for demo-project' })).toBeNull();
+      expect(document.activeElement).toBe(toggle);
+    });
+
+    it('moves focus through results, confirmation, saved metadata and completed media', async () => {
+      await renderThroughValidationResults();
+      expect(document.activeElement).toBe(screen.getByText('Validation results'));
+      screen.getByRole('button', { name: /Confirm selected projects/i }).focus();
+      await confirmSelection();
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: STAGE_METADATA_ACTION }));
+      await stageMetadata();
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: STAGE_MEDIA_ACTION }));
+      await completeMedia();
+      expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Open import details' }));
+    });
+
+    it('restores focus to Choose project folder when Clear selection disappears', async () => {
+      Object.defineProperty(HTMLInputElement.prototype, 'webkitdirectory', { configurable: true, value: false });
+      await renderThroughValidationResults();
+      delete (HTMLInputElement.prototype as Partial<HTMLInputElement>).webkitdirectory;
+      const clear = screen.getByRole('button', { name: 'Clear selection' });
+      clear.focus();
+      fireEvent.click(clear);
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Choose project folder' }));
     });
 
     it('shows only the prepared surface after preparation succeeds', async () => {

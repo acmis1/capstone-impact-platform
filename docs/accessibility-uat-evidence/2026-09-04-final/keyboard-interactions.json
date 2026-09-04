@@ -1,0 +1,2186 @@
+{
+  "scope": "Local synthetic browser interactions; native file choosers supplied programmatically only after keyboard activation",
+  "base": "e57604f48ef0b65945260901804f4752e22c94fc",
+  "import": {
+    "preparationGuideAndMapping": [
+      {
+        "action": "Reverse to worksheet after spreadsheet response",
+        "trail": [
+          {
+            "tag": "INPUT",
+            "name": "Choose School reference spreadsheet",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) solid 2px",
+            "shadow": "none",
+            "visible": true,
+            "rect": {
+              "x": 313,
+              "y": 553,
+              "width": 1070,
+              "height": 28
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Show folder and file preparation guide",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1282.96875,
+              "y": 322,
+              "width": 100.03125,
+              "height": 40
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "All imports",
+            "focusVisible": true,
+            "outline": "rgb(17, 23, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.008) 0px 0px 0px 0.0146662px, rgba(230, 30, 42, 0.008) 0px 0px 0px 0.0293325px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1321.90625,
+              "y": 141,
+              "width": 86.09375,
+              "height": 32
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Open account menu for Local Synthetic Admin",
+            "focusVisible": true,
+            "outline": "rgb(15, 23, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0) 0px 0px 0px 0.00345499px, rgba(230, 30, 42, 0) 0px 0px 0px 0.00690997px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1233.109375,
+              "y": 9.5,
+              "width": 182.890625,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Imports",
+            "focusVisible": true,
+            "outline": "rgb(71, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 1px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 280,
+              "y": 10.5,
+              "width": 40.953125,
+              "height": 16
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Staff access",
+            "focusVisible": true,
+            "outline": "rgb(71, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 222,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Publishing",
+            "focusVisible": true,
+            "outline": "rgb(71, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 174,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Imports",
+            "focusVisible": true,
+            "outline": "rgb(17, 23, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 126,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Projects",
+            "focusVisible": true,
+            "outline": "rgb(72, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 78,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Skip to main content",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0.07) 0px 4px 6px -1px, rgba(0, 0, 0, 0.05) 0px 2px 4px -2px",
+            "visible": true,
+            "rect": {
+              "x": 12,
+              "y": 12,
+              "width": 164.234375,
+              "height": 36
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BODY",
+            "name": "Skip to main contentCapstone ImpactAdmin CMSProjectsImportsPublishingStaff accessImportsImport projectsImport projectsStagingLocal Synthetic AdminADMI",
+            "focusVisible": false,
+            "outline": "rgb(15, 23, 42) none 3px",
+            "shadow": "none",
+            "visible": false,
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 1440,
+              "height": 1114.65625
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "NEXTJS-PORTAL",
+            "name": "",
+            "focusVisible": false,
+            "outline": "rgb(117, 117, 117) none 3px",
+            "shadow": "none",
+            "visible": false,
+            "rect": {
+              "x": 0,
+              "y": 1114.65625,
+              "width": 0,
+              "height": 0
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Choose project folder",
+            "focusVisible": true,
+            "outline": "rgb(255, 253, 253) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.008) 0px 0px 0px 0.0146662px, rgba(230, 30, 42, 0.008) 0px 0px 0px 0.0293325px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 313,
+              "y": 902.65625,
+              "width": 201.234375,
+              "height": 40
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Change column matching",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1198.390625,
+              "y": 690.65625,
+              "width": 169.609375,
+              "height": 32
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Use these matches",
+            "focusVisible": true,
+            "outline": "rgb(255, 255, 255) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0) 0px 0px 0px 0.00345499px, rgba(230, 30, 42, 0) 0px 0px 0px 0.00690997px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 328,
+              "y": 690.65625,
+              "width": 125.140625,
+              "height": 32
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "SELECT",
+            "name": "Worksheet:",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) solid 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1169,
+              "y": 506,
+              "width": 203,
+              "height": 40
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          }
+        ]
+      },
+      {
+        "action": "Tab to column disclosure",
+        "trail": [
+          {
+            "tag": "SELECT",
+            "name": "Worksheet:",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) solid 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1169,
+              "y": 506,
+              "width": 203,
+              "height": 40
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Use these matches",
+            "focusVisible": true,
+            "outline": "rgb(255, 255, 255) none 3px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 328,
+              "y": 690.65625,
+              "width": 125.140625,
+              "height": 32
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Change column matching",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1198.390625,
+              "y": 690.65625,
+              "width": 169.609375,
+              "height": 32
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          }
+        ]
+      },
+      {
+        "action": "Expand column matching",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Hide column matching",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 1214.140625,
+            "y": 690.65625,
+            "width": 153.859375,
+            "height": 32
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Collapse column matching Space",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Change column matching",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 1198.390625,
+            "y": 690.65625,
+            "width": 169.609375,
+            "height": 32
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Reverse to Use these matches",
+        "trail": [
+          {
+            "tag": "BUTTON",
+            "name": "Use these matches",
+            "focusVisible": true,
+            "outline": "rgb(255, 255, 255) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0) 0px 0px 0px 0.0032879px, rgba(230, 30, 42, 0) 0px 0px 0px 0.00657581px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 328,
+              "y": 690.65625,
+              "width": 125.140625,
+              "height": 32
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          }
+        ]
+      }
+    ],
+    "initialControls": [
+      {
+        "action": "Tab to All imports",
+        "trail": [
+          {
+            "tag": "A",
+            "name": "Skip to main content",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0.07) 0px 4px 6px -1px, rgba(0, 0, 0, 0.05) 0px 2px 4px -2px",
+            "visible": true,
+            "rect": {
+              "x": 12,
+              "y": 12,
+              "width": 164.234375,
+              "height": 36
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Projects",
+            "focusVisible": true,
+            "outline": "rgb(74, 84, 104) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 78,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Imports",
+            "focusVisible": true,
+            "outline": "rgb(15, 23, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 126,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Publishing",
+            "focusVisible": true,
+            "outline": "rgb(71, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 174,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Staff access",
+            "focusVisible": true,
+            "outline": "rgb(71, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 222,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Imports",
+            "focusVisible": true,
+            "outline": "rgb(71, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 1px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 280,
+              "y": 10.5,
+              "width": 40.953125,
+              "height": 16
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Open account menu for Local Synthetic Admin",
+            "focusVisible": true,
+            "outline": "rgb(15, 23, 42) none 3px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1233.109375,
+              "y": 9.5,
+              "width": 182.890625,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "All imports",
+            "focusVisible": true,
+            "outline": "rgb(15, 23, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0) 0px 0px 0px 0.0032879px, rgba(230, 30, 42, 0) 0px 0px 0px 0.00657581px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1321.90625,
+              "y": 141,
+              "width": 86.09375,
+              "height": 32
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          }
+        ]
+      },
+      {
+        "action": "Tab to guide",
+        "trail": [
+          {
+            "tag": "BUTTON",
+            "name": "Show folder and file preparation guide",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1282.96875,
+              "y": 322,
+              "width": 100.03125,
+              "height": 40
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          }
+        ]
+      },
+      {
+        "action": "Expand guide Enter",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Hide folder and file preparation guide",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 1287.15625,
+            "y": 322,
+            "width": 95.84375,
+            "height": 40
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        },
+        "expanded": "true"
+      },
+      {
+        "action": "Collapse guide Space",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Show folder and file preparation guide",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 1282.96875,
+            "y": 322,
+            "width": 100.03125,
+            "height": 40
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        },
+        "expanded": "false"
+      },
+      {
+        "action": "Tab to reference file",
+        "trail": [
+          {
+            "tag": "INPUT",
+            "name": "Choose School reference spreadsheet",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) solid 2px",
+            "shadow": "none",
+            "visible": true,
+            "rect": {
+              "x": 313,
+              "y": 553,
+              "width": 1070,
+              "height": 28
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          }
+        ]
+      },
+      {
+        "action": "Tab to Check spreadsheet",
+        "trail": [
+          {
+            "tag": "BUTTON",
+            "name": "Check spreadsheet",
+            "focusVisible": true,
+            "outline": "rgb(255, 255, 255) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0) 0px 0px 0px 0.00345499px, rgba(230, 30, 42, 0) 0px 0px 0px 0.00690997px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1227.09375,
+              "y": 553,
+              "width": 155.90625,
+              "height": 32
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          }
+        ]
+      }
+    ],
+    "correctedSpreadsheetFlow": [
+      {
+        "action": "Controlled invalid workbook feedback",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Check spreadsheet",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 1227.09375,
+            "y": 553,
+            "width": 155.90625,
+            "height": 32
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        },
+        "alert": "Check Failed\nThe reference spreadsheet could not be checked. Check the file and try again."
+      },
+      {
+        "action": "Successful spreadsheet inspection",
+        "focus": {
+          "tag": "SELECT",
+          "name": "Worksheet:",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) solid 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 1169,
+            "y": 621,
+            "width": 203,
+            "height": 40
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Mapping confirmed",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Choose project folder",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 313,
+            "y": 902.65625,
+            "width": 201.234375,
+            "height": 40
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      }
+    ],
+    "finalWorkflow": [
+      {
+        "action": "Validation result focus",
+        "focus": {
+          "tag": "H3",
+          "name": "Validation results",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 57,
+            "y": 435.96875,
+            "width": 102.578125,
+            "height": 20
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Expand filename issues",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Hide issues",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 33,
+            "y": 429.96875,
+            "width": 309,
+            "height": 32
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "filename measurement",
+        "region": {
+          "text": "Issue: Required asset file \"poster.pdf\" is missing from the package.Warning: Unrecognized file in package root will be ignored. (file: huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.txt)",
+          "label": "Issues for huy-final-machine-long-filename",
+          "width": 309,
+          "scrollWidth": 309,
+          "height": 158,
+          "controllerExpanded": "true"
+        }
+      },
+      {
+        "action": "Collapse issues Space",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Show issues (1 error, 1 warning)",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 33,
+            "y": 445.96875,
+            "width": 309,
+            "height": 32
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Expand issues Enter",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Hide issues",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 33,
+            "y": 429.96875,
+            "width": 309,
+            "height": 32
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Reverse from issues",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Clear selection",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 33,
+            "y": 425.96875,
+            "width": 156.53125,
+            "height": 40
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Validation result focus",
+        "focus": {
+          "tag": "H3",
+          "name": "Validation results",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 57,
+            "y": 435.96875,
+            "width": 102.578125,
+            "height": 20
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Expand validation issues",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Hide issues",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 33,
+            "y": 429.96875,
+            "width": 309,
+            "height": 32
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "validation measurement",
+        "region": {
+          "text": "Issue: Folder-derived public ID is invalid. Public ID must contain only lowercase alphanumeric characters and single hyphens.",
+          "label": "Issues for huy_final_machine_long_validation",
+          "width": 309,
+          "scrollWidth": 309,
+          "height": 89,
+          "controllerExpanded": "true"
+        }
+      },
+      {
+        "action": "Collapse issues Space",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Show issues (1 error, 0 warnings)",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 33,
+            "y": 445.96875,
+            "width": 309,
+            "height": 32
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Expand issues Enter",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Hide issues",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 33,
+            "y": 429.96875,
+            "width": 309,
+            "height": 32
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Reverse from issues",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Clear selection",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 33,
+            "y": 425.96875,
+            "width": 156.53125,
+            "height": 40
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Validation result focus",
+        "focus": {
+          "tag": "H3",
+          "name": "Validation results",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 337,
+            "y": 529.65625,
+            "width": 102.578125,
+            "height": 20
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Forward to package selection",
+        "trail": [
+          {
+            "tag": "INPUT",
+            "name": "Select package huy-final-machine-20260904-keyboard for import",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) solid 2px",
+            "shadow": "none",
+            "visible": true,
+            "rect": {
+              "x": 309,
+              "y": 857.65625,
+              "width": 16,
+              "height": 16
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          }
+        ]
+      },
+      {
+        "action": "Deselect package",
+        "checked": false
+      },
+      {
+        "action": "Reverse from confirm",
+        "focus": {
+          "tag": "INPUT",
+          "name": "Select package huy-final-machine-20260904-keyboard for import",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) solid 2px",
+          "shadow": "none",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 754.65625,
+            "width": 16,
+            "height": 16
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "After confirm selected projects",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Import selected project details",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 1171.015625,
+            "y": 919.15625,
+            "width": 219.984375,
+            "height": 32
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Reverse from save",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Confirm selected projects",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 1200.46875,
+            "y": 692.65625,
+            "width": 192.53125,
+            "height": 32
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "After save project details",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Import media and finish",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 1192.75,
+            "y": 905.15625,
+            "width": 185.25,
+            "height": 32
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Mobile reverse from media",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Confirm selected projects",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 31,
+            "y": 463.96875,
+            "width": 313,
+            "height": 32
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Mobile media primary action",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Import media and finish",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 46,
+            "y": 733.96875,
+            "width": 283,
+            "height": 32
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Mobile focus unobscured",
+        "hitTest": true
+      },
+      {
+        "action": "After media completion",
+        "focus": {
+          "tag": "A",
+          "name": "Open import details",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 37,
+            "y": 735.46875,
+            "width": 189.421875,
+            "height": 40
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Reverse from completed link",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Confirm selected projects",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 31,
+            "y": 524.96875,
+            "width": 313,
+            "height": 32
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Forward returns to completed link",
+        "focus": {
+          "tag": "A",
+          "name": "Open import details",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 37,
+            "y": 735.46875,
+            "width": 189.421875,
+            "height": 40
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      }
+    ],
+    "correctedClearSelection": [
+      {
+        "action": "Clear selection returns focus after control unmounts",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Choose project folder",
+          "focusVisible": true,
+          "outline": "rgb(255, 255, 255) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0) 0px 0px 0px 0.00345499px, rgba(230, 30, 42, 0) 0px 0px 0px 0.00690997px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 33,
+            "y": 739,
+            "width": 201.234375,
+            "height": 40
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Reverse from restored folder button",
+        "focus": {
+          "tag": "INPUT",
+          "name": "Choose School reference spreadsheet",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) solid 2px",
+          "shadow": "none",
+          "visible": true,
+          "rect": {
+            "x": 33,
+            "y": 570,
+            "width": 309,
+            "height": 28
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      },
+      {
+        "action": "Forward returns to folder button",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Choose project folder",
+          "focusVisible": true,
+          "outline": "rgb(242, 140, 146) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.514) 0px 0px 0px 1.02602px, rgba(230, 30, 42, 0.514) 0px 0px 0px 2.05204px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 33,
+            "y": 739,
+            "width": 201.234375,
+            "height": 40
+          },
+          "pageWidth": 375,
+          "viewport": 375
+        }
+      }
+    ]
+  },
+  "history": {
+    "emptyHistory": [
+      {
+        "action": "Tab to Advanced publishing details",
+        "trail": [
+          {
+            "tag": "A",
+            "name": "Skip to main content",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0.07) 0px 4px 6px -1px, rgba(0, 0, 0, 0.05) 0px 2px 4px -2px",
+            "visible": true,
+            "rect": {
+              "x": 12,
+              "y": 12,
+              "width": 164.234375,
+              "height": 36
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Projects",
+            "focusVisible": true,
+            "outline": "rgb(72, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 78,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Imports",
+            "focusVisible": true,
+            "outline": "rgb(71, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 126,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Publishing",
+            "focusVisible": true,
+            "outline": "rgb(33, 24, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 174,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Staff access",
+            "focusVisible": true,
+            "outline": "rgb(76, 83, 103) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 222,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Open account menu for Local Synthetic Admin",
+            "focusVisible": true,
+            "outline": "rgb(15, 23, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0) 0px 0px 0px 0.00312519px, rgba(230, 30, 42, 0) 0px 0px 0px 0.00625037px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1233.109375,
+              "y": 9.5,
+              "width": 182.890625,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Choose a project to publish",
+            "focusVisible": true,
+            "outline": "rgb(33, 24, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.086) 0px 0px 0px 0.17188px, rgba(230, 30, 42, 0.086) 0px 0px 0px 0.343759px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1175.78125,
+              "y": 129,
+              "width": 232.21875,
+              "height": 40
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "SUMMARY",
+            "name": "Advanced publishing details",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 305,
+              "y": 381.5,
+              "width": 1086,
+              "height": 20
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          }
+        ]
+      },
+      {
+        "action": "Enter expands Advanced publishing details",
+        "open": true,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Advanced publishing details",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 305,
+            "y": 381.5,
+            "width": 1086,
+            "height": 20
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Space collapses Advanced publishing details",
+        "open": false,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Advanced publishing details",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 305,
+            "y": 381.5,
+            "width": 1086,
+            "height": 20
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Reverse from Advanced publishing details",
+        "focus": {
+          "tag": "A",
+          "name": "Choose a project to publish",
+          "focusVisible": true,
+          "outline": "rgb(17, 23, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.008) 0px 0px 0px 0.0142983px, rgba(230, 30, 42, 0.008) 0px 0px 0px 0.0285965px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 1175.78125,
+            "y": 129,
+            "width": 232.21875,
+            "height": 40
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Tab to Technical setup details",
+        "trail": [
+          {
+            "tag": "SUMMARY",
+            "name": "Advanced publishing details",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 305,
+              "y": 381.5,
+              "width": 1086,
+              "height": 20
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Set up showcase publishing",
+            "focusVisible": true,
+            "outline": "rgb(255, 253, 253) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.008) 0px 0px 0px 0.0142983px, rgba(230, 30, 42, 0.008) 0px 0px 0px 0.0285965px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 309,
+              "y": 538.25,
+              "width": 207.515625,
+              "height": 40
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "SUMMARY",
+            "name": "Technical setup details",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 309,
+              "y": 590.25,
+              "width": 1078,
+              "height": 16
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          }
+        ]
+      },
+      {
+        "action": "Enter expands Technical setup details",
+        "open": true,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Technical setup details",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 590.25,
+            "width": 1078,
+            "height": 16
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Space collapses Technical setup details",
+        "open": false,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Technical setup details",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 590.25,
+            "width": 1078,
+            "height": 16
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Reverse from Technical setup details",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Set up showcase publishing",
+          "focusVisible": true,
+          "outline": "rgb(255, 255, 255) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0) 0px 0px 0px 0.00312519px, rgba(230, 30, 42, 0) 0px 0px 0px 0.00625037px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 538.25,
+            "width": 207.515625,
+            "height": 40
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      }
+    ],
+    "populatedHistory": [
+      {
+        "action": "Tab to v2",
+        "trail": [
+          {
+            "tag": "A",
+            "name": "Skip to main content",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0.07) 0px 4px 6px -1px, rgba(0, 0, 0, 0.05) 0px 2px 4px -2px",
+            "visible": true,
+            "rect": {
+              "x": 12,
+              "y": 12,
+              "width": 164.234375,
+              "height": 36
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Projects",
+            "focusVisible": true,
+            "outline": "rgb(71, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 78,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Imports",
+            "focusVisible": true,
+            "outline": "rgb(71, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 126,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Publishing",
+            "focusVisible": true,
+            "outline": "rgb(15, 23, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 174,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Staff access",
+            "focusVisible": true,
+            "outline": "rgb(71, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 222,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Open account menu for Local Synthetic Admin",
+            "focusVisible": true,
+            "outline": "rgb(15, 23, 42) none 3px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1233.109375,
+              "y": 9.5,
+              "width": 182.890625,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Choose a project to publish",
+            "focusVisible": true,
+            "outline": "rgb(15, 23, 42) none 3px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1175.78125,
+              "y": 129,
+              "width": 232.21875,
+              "height": 40
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "SUMMARY",
+            "name": "Advanced publishing details",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 305,
+              "y": 381.5,
+              "width": 1086,
+              "height": 20
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "v2",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) solid 2px",
+            "shadow": "none",
+            "visible": true,
+            "rect": {
+              "x": 1273.046875,
+              "y": 547.5,
+              "width": 12.21875,
+              "height": 16
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          }
+        ]
+      },
+      {
+        "action": "Open v2",
+        "focus": {
+          "tag": "BODY",
+          "name": "Skip to main contentCapstone ImpactAdmin CMSProjectsImportsPublishingStaff accessShowcase publishing historyStagingLocal Synthetic AdminADMINTest envi",
+          "focusVisible": false,
+          "outline": "rgb(15, 23, 42) none 3px",
+          "shadow": "none",
+          "visible": false,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1440,
+            "height": 1235.5
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Tab to v1",
+        "trail": [
+          {
+            "tag": "A",
+            "name": "Skip to main content",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0.07) 0px 4px 6px -1px, rgba(0, 0, 0, 0.05) 0px 2px 4px -2px",
+            "visible": true,
+            "rect": {
+              "x": 12,
+              "y": 12,
+              "width": 164.234375,
+              "height": 36
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Projects",
+            "focusVisible": true,
+            "outline": "rgb(72, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 78,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Imports",
+            "focusVisible": true,
+            "outline": "rgb(71, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 126,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Publishing",
+            "focusVisible": true,
+            "outline": "rgb(15, 23, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 174,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Staff access",
+            "focusVisible": true,
+            "outline": "rgb(71, 85, 105) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 14,
+              "y": 222,
+              "width": 227,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Open account menu for Local Synthetic Admin",
+            "focusVisible": true,
+            "outline": "rgb(15, 23, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0) 0px 0px 0px 0.00380231px, rgba(230, 30, 42, 0) 0px 0px 0px 0.00760463px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1233.109375,
+              "y": 9.5,
+              "width": 182.890625,
+              "height": 44
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "Choose a project to publish",
+            "focusVisible": true,
+            "outline": "rgb(15, 23, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0) 0px 0px 0px 0.00362645px, rgba(230, 30, 42, 0) 0px 0px 0px 0.0072529px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+            "visible": true,
+            "rect": {
+              "x": 1175.78125,
+              "y": 129,
+              "width": 232.21875,
+              "height": 40
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "SUMMARY",
+            "name": "Advanced publishing details",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) none 2px",
+            "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+            "visible": true,
+            "rect": {
+              "x": 305,
+              "y": 381.5,
+              "width": 1086,
+              "height": 20
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "v2",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) solid 2px",
+            "shadow": "none",
+            "visible": true,
+            "rect": {
+              "x": 1273.046875,
+              "y": 547.5,
+              "width": 12.21875,
+              "height": 16
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          },
+          {
+            "tag": "A",
+            "name": "v1",
+            "focusVisible": true,
+            "outline": "rgb(230, 30, 42) solid 2px",
+            "shadow": "none",
+            "visible": true,
+            "rect": {
+              "x": 1273.046875,
+              "y": 593.5,
+              "width": 12.21875,
+              "height": 16
+            },
+            "pageWidth": 1440,
+            "viewport": 1440
+          }
+        ]
+      },
+      {
+        "action": "Open v1",
+        "focus": {
+          "tag": "A",
+          "name": "v1",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) solid 2px",
+          "shadow": "none",
+          "visible": true,
+          "rect": {
+            "x": 1273.046875,
+            "y": 687.5,
+            "width": 12.21875,
+            "height": 16
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Advanced publishing details Space",
+        "initial": false,
+        "open": true,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Advanced publishing details",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 305,
+            "y": 381.5,
+            "width": 1086,
+            "height": 20
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Advanced publishing details Enter",
+        "open": false,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Advanced publishing details",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 305,
+            "y": 381.5,
+            "width": 1086,
+            "height": 20
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Activity details Space",
+        "initial": true,
+        "open": false,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Activity detailsInitial showcase setup",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 771.5,
+            "width": 1078,
+            "height": 52
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Activity details Enter",
+        "open": true,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Activity detailsInitial showcase setup",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 771.5,
+            "width": 1078,
+            "height": 52
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Technical details Space",
+        "initial": false,
+        "open": true,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Technical details",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 884.5,
+            "width": 1078,
+            "height": 16
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Technical details Enter",
+        "open": false,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Technical details",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 884.5,
+            "width": 1078,
+            "height": 16
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Advanced rollback tools Space",
+        "initial": false,
+        "open": true,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Advanced rollback tools (Local test only)",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 471.5,
+            "width": 1078,
+            "height": 20
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Advanced rollback tools Enter",
+        "open": false,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Advanced rollback tools (Local test only)",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 471.5,
+            "width": 1078,
+            "height": 20
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Preparation focuses acknowledgement",
+        "focus": {
+          "tag": "INPUT",
+          "name": "Type the exact acknowledgement",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 326,
+            "y": 851.25,
+            "width": 1044,
+            "height": 44
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Incorrect acknowledgement and Escape",
+        "focus": {
+          "tag": "INPUT",
+          "name": "Type the exact acknowledgement",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 326,
+            "y": 851.25,
+            "width": 1044,
+            "height": 44
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        },
+        "executeDisabled": true
+      },
+      {
+        "action": "Reverse to preparation",
+        "focus": {
+          "tag": "BUTTON",
+          "name": "Prepare rollback to version 1",
+          "focusVisible": true,
+          "outline": "rgb(53, 24, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.176) 0px 0px 0px 0.354836px, rgba(230, 30, 42, 0.176) 0px 0px 0px 0.709672px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 546.25,
+            "width": 213.296875,
+            "height": 40
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Forward to acknowledgement",
+        "focus": {
+          "tag": "INPUT",
+          "name": "Type the exact acknowledgement",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 326,
+            "y": 851.25,
+            "width": 1044,
+            "height": 44
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Close preparation disclosure Space",
+        "open": false,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Advanced rollback tools (Local test only)",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 471.5,
+            "width": 1078,
+            "height": 20
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Reopen preparation disclosure Enter",
+        "open": true,
+        "focus": {
+          "tag": "SUMMARY",
+          "name": "Advanced rollback tools (Local test only)",
+          "focusVisible": true,
+          "outline": "rgb(230, 30, 42) none 2px",
+          "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "visible": true,
+          "rect": {
+            "x": 309,
+            "y": 471.5,
+            "width": 1078,
+            "height": 20
+          },
+          "pageWidth": 1440,
+          "viewport": 1440
+        }
+      },
+      {
+        "action": "Bounded safe control inventory",
+        "controls": [
+          {
+            "tag": "A",
+            "name": "Choose a project to publish",
+            "disabled": false
+          },
+          {
+            "tag": "SUMMARY",
+            "name": "Advanced publishing details",
+            "disabled": false
+          },
+          {
+            "tag": "SUMMARY",
+            "name": "Advanced rollback tools (Local test only)",
+            "disabled": false
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Prepare rollback to version 1",
+            "disabled": false
+          },
+          {
+            "tag": "INPUT",
+            "name": "rollback-acknowledgement",
+            "disabled": false
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Execute prepared Local rollback",
+            "disabled": true
+          },
+          {
+            "tag": "A",
+            "name": "v2",
+            "disabled": false
+          },
+          {
+            "tag": "A",
+            "name": "v1",
+            "disabled": false
+          },
+          {
+            "tag": "SUMMARY",
+            "name": "Activity detailsInitial showcase setup",
+            "disabled": false
+          },
+          {
+            "tag": "SUMMARY",
+            "name": "Technical details",
+            "disabled": false
+          },
+          {
+            "tag": "A",
+            "name": "2026-traffic-engine",
+            "disabled": false
+          },
+          {
+            "tag": "BUTTON",
+            "name": "Repair showcase status",
+            "disabled": false
+          }
+        ],
+        "postRequests": [
+          "/api/public-feed/rollback/prepare"
+        ]
+      },
+      {
+        "action": "Navigate away from preparation",
+        "preparationVisible": 0
+      }
+    ]
+  }
+}

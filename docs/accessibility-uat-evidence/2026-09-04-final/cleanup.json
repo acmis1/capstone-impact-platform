@@ -1,0 +1,100 @@
+{
+  "canonicalLocal": {
+    "deletedProjects": 0,
+    "deletedPrivateObjects": 0,
+    "remainingPrivateObjects": 0,
+    "tables": {
+      "projects": {
+        "before": 4,
+        "after": 4,
+        "baselineUnchanged": true
+      },
+      "import_batches": {
+        "before": 1,
+        "after": 1,
+        "baselineUnchanged": true
+      },
+      "media_assets": {
+        "before": 4,
+        "after": 4,
+        "baselineUnchanged": true
+      },
+      "browser_import_commits": {
+        "before": 0,
+        "after": 0,
+        "baselineUnchanged": true
+      },
+      "browser_import_media_commits": {
+        "before": 0,
+        "after": 0,
+        "baselineUnchanged": true
+      },
+      "participant_previews": {
+        "before": 17,
+        "after": 17,
+        "baselineUnchanged": true
+      },
+      "participant_preview_confirmations": {
+        "before": 0,
+        "after": 0,
+        "baselineUnchanged": true
+      },
+      "participant_preview_correction_requests": {
+        "before": 0,
+        "after": 0,
+        "baselineUnchanged": true
+      },
+      "admin_users": {
+        "before": 3,
+        "after": 3,
+        "baselineUnchanged": true
+      },
+      "public_feed_head": {
+        "before": 0,
+        "after": 0,
+        "baselineUnchanged": true
+      },
+      "public_feed_versions": {
+        "before": 0,
+        "after": 0,
+        "baselineUnchanged": true
+      },
+      "public_feed_operations": {
+        "before": 0,
+        "after": 0,
+        "baselineUnchanged": true
+      },
+      "public_feed_version_members": {
+        "before": 0,
+        "after": 0,
+        "baselineUnchanged": true
+      },
+      "feed_rollback_preparations": {
+        "before": 0,
+        "after": 0,
+        "baselineUnchanged": true
+      }
+    }
+  },
+  "disposableHistory": {
+    "clean": true,
+    "errors": [],
+    "residue": {
+      "containers": [],
+      "volumes": [],
+      "networkPresent": false,
+      "workdirPresent": false
+    }
+  },
+  "browserRuns": {
+    "completedImports": 2,
+    "projectsPerImport": 1,
+    "privateObjectsPerImport": 3,
+    "allDeleted": true
+  },
+  "notes": [
+    "Canonical baseline counts and complete-row hashes match for all 14 inspected tables after both native import verifiers finished.",
+    "No browser review submission, participant preview creation, or staff account creation occurred in the canonical Local stack.",
+    "Three synthetic staff/auth fixtures, two empty history versions, preparations and one empty feed Storage fixture existed only in the removed disposable stack."
+  ]
+}

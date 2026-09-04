@@ -1,0 +1,227 @@
+{
+  "importFocus": [
+    {
+      "action": "After spreadsheet checked",
+      "focus": {
+        "tag": "BODY",
+        "name": "Skip to main contentCapstone ImpactAdmin CMSProjectsImportsPublishingStaff accessImportsImport projectsImport projectsStagingLocal Synthetic AdminADMI",
+        "focusVisible": false,
+        "outline": "rgb(15, 23, 42) none 3px",
+        "shadow": "none",
+        "visible": false,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 1440,
+          "height": 1114.65625
+        },
+        "pageWidth": 1440,
+        "viewport": 1440
+      }
+    },
+    {
+      "action": "After selection confirmed",
+      "focus": {
+        "tag": "BUTTON",
+        "name": "Confirm selected projects",
+        "focusVisible": true,
+        "outline": "rgb(237, 97, 105) none 2px",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.7) 0px 0px 0px 1.40465px, rgba(230, 30, 42, 0.7) 0px 0px 0px 2.8093px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+        "visible": true,
+        "rect": {
+          "x": 1200.46875,
+          "y": 919.65625,
+          "width": 192.53125,
+          "height": 32
+        },
+        "pageWidth": 1440,
+        "viewport": 1440
+      }
+    },
+    {
+      "action": "After metadata saved",
+      "focus": {
+        "tag": "BODY",
+        "name": "Skip to main contentCapstone ImpactAdmin CMSProjectsImportsPublishingStaff accessImportsImport projectsImport projectsStagingLocal Synthetic AdminADMI",
+        "focusVisible": false,
+        "outline": "rgb(15, 23, 42) none 3px",
+        "shadow": "none",
+        "visible": false,
+        "rect": {
+          "x": 0,
+          "y": -978,
+          "width": 1440,
+          "height": 1978.15625
+        },
+        "pageWidth": 1440,
+        "viewport": 1440
+      }
+    },
+    {
+      "action": "After media import completed",
+      "focus": {
+        "tag": "BODY",
+        "name": "Skip to main contentCapstone ImpactAdmin CMSProjectsImportsPublishingStaff accessImportsImport projectsImport projectsStagingLocal Synthetic AdminADMI",
+        "focusVisible": false,
+        "outline": "rgb(15, 23, 42) none 3px",
+        "shadow": "none",
+        "visible": false,
+        "rect": {
+          "x": 0,
+          "y": -2107,
+          "width": 375,
+          "height": 2919.46875
+        },
+        "pageWidth": 375,
+        "viewport": 375
+      }
+    }
+  ],
+  "packageFilenameOverflow": {
+    "before": {
+      "tag": "H3",
+      "name": "Validation results",
+      "focusVisible": true,
+      "outline": "rgb(230, 30, 42) none 2px",
+      "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(230, 30, 42) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+      "visible": true,
+      "rect": {
+        "x": 337,
+        "y": 529.65625,
+        "width": 102.578125,
+        "height": 20
+      },
+      "pageWidth": 1440,
+      "viewport": 1440
+    },
+    "after": {
+      "tag": "BUTTON",
+      "name": "Hide issues",
+      "focusVisible": true,
+      "outline": "rgb(230, 30, 42) none 2px",
+      "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+      "visible": false,
+      "rect": {
+        "x": 33,
+        "y": 1668.96875,
+        "width": 309,
+        "height": 32
+      },
+      "pageWidth": 476,
+      "viewport": 375
+    },
+    "issues": " the School's reference spreadsheet to match and cross-check the projects you are importing. A confirmed column match is required before a selection can be confirmed or saved.\n\nChoose School reference spreadsheet\nSpreadsheet checked: 1 worksheet(s)\nWorksheet:\nSchool reference (1 rows)\nColumns recognised automatically\nGROUP NAME\n→ Group name\nPROJECT TITLE\n→ Project title\nPROGRAM\n→ Program\nMatches confirmed\nChange column matching\nChoose project folder\n\nChoose one project folder, or choose a parent folder that contains several project folders.\n\nChange project folder\nCheck files and continue\nClear selection\nSELECTED FOLDER\nhuy-final-machine-long-filename\nPROJECTS DETECTED\n1\nFILES SELECTED\n4\nTOTAL SIZE\n0.01 MB\nValidation results\n\nReview check results below. Projects with blocking issues cannot be imported until resolved.\n\nTOTAL PROJECTS\n1\nREADY TO IMPORT\n0\nWITH WARNINGS\n0\nNEEDS ATTENTION\n1\nStatus key:\nReady:\nNo blocking issues found\nWarning:\nImportable after acknowledgement\nNeeds attention:\nBlocking issues must be fixed\nProjects in this folder (1)\nCannot import\nhuy-final-machine-long-filename\nNeeds attention\nINVALID\nMatched in reference (Row #2)\nHide issues\nTitle:\nHuy final synthetic keyboard import\nProgram & Discipline:\nBachelor of Software Engineering · Software Engineering\nGroup name:\nHuy final verifier group\nRoster:\n1 member(s)\nMedia files:\nposter.png\nposter.pdf\ngallery snapshots (1–10)\nIssue: Required asset file \"poster.pdf\" is missing from the package.\nWarning: Unrecognized file in package root will be ignored. (file: huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.txt)\nProject selection: 0 of 1 selected (0 ready, 0 warning)\nConfirming does not save these projects yet — it locks in your selection for the next step.\nConfirm selected projects",
+    "filenameLength": 80
+  },
+  "mediaFilenameOverflow": [
+    {
+      "tag": "LI",
+      "cls": "shrink-0",
+      "width": 205,
+      "scroll": 205,
+      "x": 293.890625,
+      "right": 498.890625,
+      "top": 113
+    },
+    {
+      "tag": "A",
+      "cls": "inline-flex min-h-10 items-center whitespace-nowrap rounded-md border border-border bg-card px-3 py-2 text-sm font-medium leading-snug text-foreground-subtle transition-colors hover:border-border-strong hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "width": 203,
+      "scroll": 203,
+      "x": 293.890625,
+      "right": 498.890625,
+      "top": 113
+    },
+    {
+      "tag": "SPAN",
+      "cls": "normal-case tracking-normal",
+      "width": 0,
+      "scroll": 0,
+      "x": 46,
+      "right": 594.84375,
+      "top": 522.5
+    },
+    {
+      "tag": "A",
+      "cls": "inline-flex min-h-[32px] items-center gap-1.5 text-sm font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "width": 657,
+      "scroll": 657,
+      "x": 46,
+      "right": 702.984375,
+      "top": 773
+    },
+    {
+      "tag": "svg",
+      "cls": {},
+      "width": 14,
+      "scroll": 14,
+      "x": 688.984375,
+      "right": 702.984375,
+      "top": 796
+    },
+    {
+      "tag": "path",
+      "cls": {},
+      "width": 0,
+      "scroll": 0,
+      "x": 697.734375,
+      "right": 701.234375,
+      "top": 797.75
+    },
+    {
+      "tag": "path",
+      "cls": {},
+      "width": 0,
+      "scroll": 0,
+      "x": 694.8176879882812,
+      "right": 701.234375,
+      "top": 797.75
+    },
+    {
+      "tag": "path",
+      "cls": {},
+      "width": 0,
+      "scroll": 0,
+      "x": 690.734375,
+      "right": 699.484375,
+      "top": 799.5
+    },
+    {
+      "tag": "SPAN",
+      "cls": "normal-case tracking-normal",
+      "width": 0,
+      "scroll": 0,
+      "x": 46,
+      "right": 591.984375,
+      "top": 1054
+    },
+    {
+      "tag": "SPAN",
+      "cls": "normal-case tracking-normal",
+      "width": 0,
+      "scroll": 0,
+      "x": 46,
+      "right": 594.84375,
+      "top": 1511
+    }
+  ],
+  "rollbackPreparationFocus": {
+    "action": "After non-writing rollback preparation",
+    "focus": {
+      "tag": "BODY",
+      "name": "Skip to main contentCapstone ImpactAdmin CMSProjectsImportsPublishingStaff accessShowcase publishing historyStagingLocal Synthetic AdminADMINTest envi",
+      "focusVisible": false,
+      "outline": "rgb(15, 23, 42) none 3px",
+      "shadow": "none",
+      "visible": false,
+      "rect": {
+        "x": 0,
+        "y": -437,
+        "width": 375,
+        "height": 2954.5
+      },
+      "pageWidth": 375,
+      "viewport": 375
+    }
+  }
+}

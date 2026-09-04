@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   FileSpreadsheet,
   Plus,
@@ -79,6 +79,15 @@ export function AdminReferenceDatasetSection({
   ]);
 
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const checkButtonRef = useRef<HTMLButtonElement>(null);
+  const worksheetRef = useRef<HTMLSelectElement>(null);
+  const [inspectionFocus, setInspectionFocus] = useState<{ origin: Element | null } | null>(null);
+
+  useEffect(() => {
+    if (inspectionFocus && (document.activeElement === document.body || document.activeElement === inspectionFocus.origin)) {
+      (worksheetRef.current ?? checkButtonRef.current)?.focus();
+    }
+  }, [inspectionFocus]);
 
   const unconfirm = () => {
     setIsConfirmed(false);
@@ -124,6 +133,7 @@ export function AdminReferenceDatasetSection({
 
   const handleInspect = async () => {
     if (!selectedFile) return;
+    const origin = document.activeElement;
     setIsInspecting(true);
     setInspectError(null);
     unconfirm();
@@ -155,6 +165,7 @@ export function AdminReferenceDatasetSection({
       setInspectError('The reference spreadsheet could not be checked. Check the network connection and try again.');
     } finally {
       setIsInspecting(false);
+      setInspectionFocus({ origin });
     }
   };
 
@@ -297,6 +308,7 @@ export function AdminReferenceDatasetSection({
               type="button"
               size="sm"
               onClick={handleInspect}
+              ref={checkButtonRef}
               disabled={isControlDisabled}
               className="shrink-0 font-medium"
             >
@@ -329,6 +341,7 @@ export function AdminReferenceDatasetSection({
                 </label>
                 <select
                   id="worksheet-selector"
+                  ref={worksheetRef}
                   value={selectedWorksheet}
                   disabled={isControlDisabled}
                   onChange={(e) => handleWorksheetChange(e.target.value)}

@@ -1,0 +1,186 @@
+{
+  "fixture": {
+    "source": "Verifier-owned Local draft media file_name fields; Storage paths and contents unchanged",
+    "names": {
+      "poster_image": "huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.png",
+      "poster_pdf": "huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.pdf",
+      "snapshot_image": "huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.png"
+    }
+  },
+  "measurements": [
+    {
+      "type": "poster_image",
+      "text": "huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.png",
+      "width": 283,
+      "scrollWidth": 283,
+      "height": 39,
+      "wordBreak": "break-all",
+      "pageWidth": 375,
+      "viewport": 375
+    },
+    {
+      "type": "poster_pdf",
+      "text": "huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.pdf",
+      "width": 283,
+      "scrollWidth": 283,
+      "height": 39,
+      "wordBreak": "break-all",
+      "pageWidth": 375,
+      "viewport": 375
+    },
+    {
+      "type": "snapshot_image",
+      "text": "huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.png",
+      "width": 283,
+      "scrollWidth": 283,
+      "height": 39,
+      "wordBreak": "break-all",
+      "pageWidth": 375,
+      "viewport": 375
+    }
+  ],
+  "focusAndAccessibilityLabels": {
+    "focus": {
+      "tag": "A",
+      "name": "Open huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.pdf in a new tab",
+      "focusVisible": true,
+      "outline": "rgb(230, 30, 42) none 2px",
+      "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+      "visible": true,
+      "rect": {
+        "x": 46,
+        "y": 600,
+        "width": 283,
+        "height": 60
+      },
+      "pageWidth": 375,
+      "viewport": 375
+    },
+    "labels": [
+      {
+        "text": "huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.png",
+        "width": 283.015625,
+        "wordBreak": "break-all"
+      },
+      {
+        "text": "huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.pdf",
+        "width": 282.765625,
+        "wordBreak": "break-all"
+      },
+      {
+        "text": "huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.png",
+        "width": 282.328125,
+        "wordBreak": "break-all"
+      }
+    ]
+  },
+  "nativeReferenceFilename": "Long synthetic reference workbook was successfully inspected; native input ellipsis is intentional browser behavior.",
+  "packageIssues": [
+    {
+      "action": "Expand filename issues",
+      "focus": {
+        "tag": "BUTTON",
+        "name": "Hide issues",
+        "focusVisible": true,
+        "outline": "rgb(230, 30, 42) none 2px",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "visible": true,
+        "rect": {
+          "x": 33,
+          "y": 429.96875,
+          "width": 309,
+          "height": 32
+        },
+        "pageWidth": 375,
+        "viewport": 375
+      }
+    },
+    {
+      "action": "filename measurement",
+      "region": {
+        "text": "Issue: Required asset file \"poster.pdf\" is missing from the package.Warning: Unrecognized file in package root will be ignored. (file: huyfinalsyntheticfilenamesyntheticfilenamesyntheticfilenamesyntheticfilename.txt)",
+        "label": "Issues for huy-final-machine-long-filename",
+        "width": 309,
+        "scrollWidth": 309,
+        "height": 158,
+        "controllerExpanded": "true"
+      }
+    },
+    {
+      "action": "Collapse issues Space",
+      "focus": {
+        "tag": "BUTTON",
+        "name": "Show issues (1 error, 1 warning)",
+        "focusVisible": true,
+        "outline": "rgb(230, 30, 42) none 2px",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "visible": true,
+        "rect": {
+          "x": 33,
+          "y": 445.96875,
+          "width": 309,
+          "height": 32
+        },
+        "pageWidth": 375,
+        "viewport": 375
+      }
+    },
+    {
+      "action": "Expand issues Enter",
+      "focus": {
+        "tag": "BUTTON",
+        "name": "Hide issues",
+        "focusVisible": true,
+        "outline": "rgb(230, 30, 42) none 2px",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "visible": true,
+        "rect": {
+          "x": 33,
+          "y": 429.96875,
+          "width": 309,
+          "height": 32
+        },
+        "pageWidth": 375,
+        "viewport": 375
+      }
+    },
+    {
+      "action": "Reverse from issues",
+      "focus": {
+        "tag": "BUTTON",
+        "name": "Clear selection",
+        "focusVisible": true,
+        "outline": "rgb(230, 30, 42) none 2px",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0.03) 0px 1px 2px 0px",
+        "visible": true,
+        "rect": {
+          "x": 33,
+          "y": 425.96875,
+          "width": 156.53125,
+          "height": 40
+        },
+        "pageWidth": 375,
+        "viewport": 375
+      }
+    },
+    {
+      "action": "Expand validation issues",
+      "focus": {
+        "tag": "BUTTON",
+        "name": "Hide issues",
+        "focusVisible": true,
+        "outline": "rgb(230, 30, 42) none 2px",
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(255, 255, 255) 0px 0px 0px 2px, rgb(230, 30, 42) 0px 0px 0px 4px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+        "visible": true,
+        "rect": {
+          "x": 33,
+          "y": 429.96875,
+          "width": 309,
+          "height": 32
+        },
+        "pageWidth": 375,
+        "viewport": 375
+      }
+    }
+  ]
+}
