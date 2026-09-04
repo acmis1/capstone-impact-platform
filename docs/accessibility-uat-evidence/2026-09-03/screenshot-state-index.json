@@ -34,8 +34,8 @@
     },
     {
       "filename": "import-workflow-mobile-375px.png",
-      "acceptanceUse": "context-only",
-      "visibleFact": "Historical visual context only. This screenshot is not evidence of a complete keyboard sequence, precise measurement, or hidden application state."
+      "acceptanceUse": "accepted",
+      "visibleFact": "Current Import mobile workflow at 375 x 812 CSS px; folder and file preparation guide disclosure has visible keyboard focus without horizontal page overflow or sticky header obstruction."
     },
     {
       "filename": "import-workflow-new-keyboard.png",

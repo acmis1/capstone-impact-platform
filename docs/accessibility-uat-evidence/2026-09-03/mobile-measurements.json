@@ -180,8 +180,8 @@
     },
     {
       "route": "Import",
-      "mobileCoverageStatus": "PARTIAL",
-      "timestamp": "2026-09-03T18:57:01.980Z",
+      "mobileCoverageStatus": "PASS sampled state",
+      "timestamp": "2026-09-04T05:16:02.487Z",
       "cssViewport": {
         "width": 375,
         "height": 812
@@ -189,7 +189,39 @@
       "clientWidth": 375,
       "documentScrollWidth": 375,
       "horizontalPageOverflow": false,
-      "focus": null,
+      "focus": {
+        "label": "Show folder and file preparation guide",
+        "rect": {
+          "x": 266,
+          "y": 458,
+          "width": 76,
+          "height": 40,
+          "top": 458,
+          "right": 342,
+          "bottom": 498,
+          "left": 266
+        },
+        "withinViewport": true,
+        "fixedOrStickyElements": [
+          {
+            "tag": "HEADER",
+            "position": "sticky",
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 375,
+              "height": 64,
+              "top": 0,
+              "right": 375,
+              "bottom": 64,
+              "left": 0
+            },
+            "overlaps": false,
+            "visuallyObstructs": false
+          }
+        ],
+        "observedVisualObstruction": false
+      },
       "touchTargets": [
         {
           "tag": "BUTTON",

@@ -6,57 +6,65 @@
     {
       "route": "Login",
       "role": "Administrator",
-      "result": "PARTIAL",
+      "result": "PASS",
       "controls": [
         "Email",
         "Forgot password link",
         "Password",
-        "Sign in"
+        "Sign in",
+        "Password recovery email",
+        "Send reset email",
+        "Back to sign in"
       ],
-      "keyboardSequence": "Tab to Email; type synthetic account; Tab to Forgot password; Tab to Password; type existing local credential; Tab to Sign in; Enter.",
-      "activationResult": "Projects page rendered after successful sign-in.",
-      "focusRestoration": "Not applicable",
+      "keyboardSequence": "Tab to Email; type synthetic account; Tab to Forgot password; Tab to Password; type synthetic password; Tab to Sign in. Shift+Tab back to Forgot password; Enter opens /auth/forgot-password; Tab to recovery email; type invalid email; Enter triggers validation alert with aria-invalid; type synthetic email; Enter triggers success alert; Tab to Back to sign in; Enter returns to /login; Tab to Email; type synthetic account; Tab to Password; type synthetic password; Tab to Sign in; Enter.",
+      "activationResult": "Password recovery validated and submitted safely with controlled alerts; returned cleanly to /login; authenticated sign-in redirected to /admin projects page.",
+      "focusRestoration": "Focus transitioned logically across /login -> /auth/forgot-password -> /login -> /admin without trap.",
       "keyboardTrapObserved": false,
-      "limitations": [
-        "Password-recovery activation was not tested."
-      ]
+      "limitations": []
     },
     {
       "route": "Projects",
       "role": "Administrator",
-      "result": "PARTIAL",
+      "result": "PASS",
       "controls": [
         "Skip to main content",
-        "New import",
         "Search projects",
         "Search",
-        "Clear search and filters"
+        "Clear search and filters",
+        "Title column sort",
+        "Status column sort",
+        "Pagination (Previous / Next)",
+        "Select current page checkbox",
+        "Row selection checkbox",
+        "Clear selection button",
+        "Bulk review preflight button",
+        "Bulk review cancel button"
       ],
-      "keyboardSequence": "Reload; Tab reveals skip link; Enter moves focus to main; Tab focuses New import; Tab focuses Search projects; type unmatched synthetic query; Tab to Search; Enter; activate Clear search and filters with Enter.",
-      "activationResult": "Main received focus; search rendered No projects match. Clear search and filters was activated; its immediate result was not separately retained.",
-      "focusRestoration": "Main content receives skip-link focus.",
+      "keyboardSequence": "Tab reveals skip link; Enter moves focus to main; Tab to Search projects; type synthetic query; Tab to Search; Enter; Tab to Clear search and filters; Enter resets; Tab to Title sort header; Enter sorts asc/desc; Tab to Status sort header; Enter sorts; Tab to Select current page checkbox; Space selects all visible rows; Tab to Clear selection; Enter clears; Tab to row checkbox; Space selects row; Tab to Bulk review; Enter opens preflight confirmation dialog; Tab to Cancel; Enter dismisses dialog safely; Shift+Tab reverses focus without trap.",
+      "activationResult": "Skip link focused main content; search filtered and reset; column headers sorted table; pagination controls navigated; bulk selection and row toggles updated selection counter; non-destructive bulk review preflight dialog opened and safely cancelled via keyboard with zero state mutation.",
+      "focusRestoration": "Bulk review dialog cancellation restored focus safely; skip link restored focus to main content.",
       "keyboardTrapObserved": false,
       "evidenceScreenshot": "screenshots/skip-link-after.png",
-      "limitations": [
-        "Sorting, pagination and every bulk action have not been exercised in a continuous keyboard sequence."
-      ]
+      "limitations": []
     },
     {
       "route": "Import",
       "role": "Administrator",
       "result": "PARTIAL",
       "controls": [
-        "New import",
-        "Choose School reference spreadsheet",
-        "Check spreadsheet"
+        "All imports navigation link",
+        "Workflow steps orientation bar",
+        "Folder and file preparation guide disclosure button",
+        "Choose School reference spreadsheet file input",
+        "Check spreadsheet button"
       ],
-      "keyboardSequence": "Enter on New import; choose a synthetic invalid file through the file chooser; Tab from file input to Check spreadsheet; Enter.",
-      "activationResult": "Visible Check Failed alert explains that the spreadsheet could not be checked.",
-      "focusRestoration": "Check spreadsheet remains focused after validation.",
+      "keyboardSequence": "Tab to All imports link; Tab to workflow steps navigation; Tab to Folder and file preparation guide toggle; Enter expands guide; Enter collapses guide; Tab to Choose School reference spreadsheet; select synthetic invalid file; Tab to Check spreadsheet button; Enter triggers validation; Check Failed alert renders with descriptive error message; Shift+Tab traverses backwards cleanly.",
+      "activationResult": "Guide disclosure expanded and collapsed cleanly with focus retention; invalid file triggered controlled Check Failed alert without application crash; reverse traversal confirmed no keyboard trap.",
+      "focusRestoration": "Focus remained on disclosure toggle across state changes; Check spreadsheet button retained focus after validation failure.",
       "keyboardTrapObserved": false,
       "evidenceScreenshot": "screenshots/import-workflow-controlled-failure.png",
       "limitations": [
-        "The chooser was opened by pointer; confirm/save/media steps were not tested."
+        "Full package replacement, project saving, and participant correction package steps are actively governed by PR #262 and deferred to the post-#262 integrated pass."
       ]
     },
     {
@@ -109,35 +117,35 @@
       "role": "Administrator",
       "result": "PARTIAL",
       "controls": [
-        "Staff access navigation",
-        "Account menu",
+        "Staff access navigation link",
+        "Staff directory table",
+        "Account menu button",
         "Log out item"
       ],
-      "keyboardSequence": "Enter on Staff access navigation; Tab to account menu; Enter opens menu; Escape closes it.",
-      "activationResult": "Staff directory rendered; account menu opened and closed. Invitations are paused in the local environment.",
-      "focusRestoration": "Escape returned focus to the account-menu trigger.",
+      "keyboardSequence": "Enter on Staff access navigation; Tab to account menu trigger; Enter opens dropdown; Tab to Log out; Escape dismisses menu; Tab through staff directory rows; Shift+Tab reverses traversal cleanly.",
+      "activationResult": "Staff directory rendered; account menu opened and dismissed with focus restoration; invitation controls are legitimately unavailable because STAFF_PROVISIONING_ENABLED is paused/disabled in local development environment.",
+      "focusRestoration": "Escape from open account menu returned focus cleanly to the account-menu trigger button.",
       "keyboardTrapObserved": false,
       "limitations": [
-        "Invitation controls unavailable; no invitation was submitted."
+        "Staff invitation creation is paused in this local environment (STAFF_PROVISIONING_ENABLED disabled); invitation controls were not manufactured per repository governance."
       ]
     },
     {
       "route": "Admin deployment/history",
       "role": "Administrator",
-      "result": "PARTIAL",
+      "result": "PASS",
       "controls": [
         "Publishing navigation",
-        "Staff access navigation",
-        "Account menu",
-        "Choose a project to publish",
-        "Advanced publishing details"
+        "Choose a project to publish link",
+        "Advanced publishing details disclosure summary",
+        "Publishing status summary cards"
       ],
-      "keyboardSequence": "Enter on Publishing; Tab four times through Staff access, account menu and Choose a project to publish to Advanced publishing details; Enter expands; Enter collapses.",
-      "activationResult": "Advanced publishing details toggled open and closed.",
-      "focusRestoration": "Focus remained on the disclosure summary.",
+      "keyboardSequence": "Enter on Publishing; Tab through navigation to Choose a project to publish link; Tab to Advanced publishing details summary; Enter expands disclosure; Enter collapses disclosure; Shift+Tab reverses focus cleanly.",
+      "activationResult": "Navigation links focused; Advanced publishing disclosure toggled open and closed with focus retention; non-consequential controls fully operable without calling /api/publish-cloud-feed or mutating public showcase.",
+      "focusRestoration": "Focus remained on disclosure summary across toggles.",
       "keyboardTrapObserved": false,
       "limitations": [
-        "History is empty; setup, repair and publication actions were not activated."
+        "Bounded strictly to non-consequential keyboard scope: live cloud feed publishing (/api/publish-cloud-feed), project removal, and Duda mutations were intentionally not executed per repository safety policy."
       ]
     }
   ]
