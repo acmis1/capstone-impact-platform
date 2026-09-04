@@ -66,5 +66,5 @@ Target-size measurements are descriptive only: 35 representative target rectangl
 
 ### Stakeholder UAT script (PENDING human verification)
 - [ ] Coordinator logs in, reviews `2026-medical-drone`, generates private participant preview, and copies link without exposing tokens in public channels.
-- [ ] Student/partner participant accesses preview link, reviews project media and accessible text, and submits a correction note or confirms project details.
+- [ ] Participant accesses the preview link, reviews project media and accessible text, and submits a correction note or confirms project details.
 - [ ] Admin verifies feedback received in CMS and resolves or updates record accordingly.
